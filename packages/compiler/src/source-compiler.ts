@@ -1,6 +1,6 @@
-import ts from 'typescript'
-import { dirname } from 'node:path'
-import type { Class, TokenLike } from '@loutrefw/core'
+import { API, type Program } from 'typescript/unstable/sync'
+import * as ts from 'typescript/unstable/ast'
+import { dirname, extname, isAbsolute, resolve } from 'node:path'
 import type { Diagnostic, LayerIR } from './ir.js'
 
 export interface SourceLocationIR {
@@ -100,38 +100,45 @@ export interface SourceImplementationIR {
 
 export interface SourceCompilerOptions {
   readonly tsconfigPath: string
+  readonly entry?: string
   readonly includeDeclarationFiles?: boolean
 }
 
 export function compileTypeScriptSource(
   options: SourceCompilerOptions,
 ): SourceApplicationManifest {
-  const config = ts.readConfigFile(options.tsconfigPath, ts.sys.readFile)
-  if (config.error) {
-    throw new Error(formatTypeScriptDiagnostic(config.error))
-  }
-  const parsed = ts.parseJsonConfigFileContent(
-    config.config,
-    ts.sys,
-    dirname(options.tsconfigPath),
-    undefined,
-    options.tsconfigPath,
-  )
-  if (parsed.errors.length > 0) {
-    throw new Error(parsed.errors.map(formatTypeScriptDiagnostic).join('\n'))
-  }
-  const program = ts.createProgram({
-    rootNames: parsed.fileNames,
-    options: parsed.options,
+  const api = new API()
+  const snapshot = api.updateSnapshot({
+    openProjects: [options.tsconfigPath],
   })
-  const sourceFiles = program
-    .getSourceFiles()
+  const project = snapshot
+    .getProjects()
+    .find(({ configFileName }) => resolve(configFileName) === resolve(options.tsconfigPath))
+  if (!project) {
+    snapshot.dispose()
+    api.close()
+    throw new Error(`TypeScript projectを開けませんでした: ${options.tsconfigPath}`)
+  }
+  const program = project.program
+  const candidateSourceFiles = program
+    .getSourceFileNames()
+    .map((fileName) => program.getSourceFile(fileName))
+    .filter((sourceFile): sourceFile is ts.SourceFile => sourceFile !== undefined)
     .filter(
       (sourceFile) =>
         (options.includeDeclarationFiles === true || !sourceFile.isDeclarationFile) &&
         !sourceFile.fileName.includes('/node_modules/') &&
         !sourceFile.fileName.includes('/tests/'),
     )
+  const sourceFiles = options.entry
+    ? collectReachableSourceFiles(
+        program,
+        candidateSourceFiles,
+        isAbsolute(options.entry)
+          ? options.entry
+          : resolve(dirname(options.tsconfigPath), options.entry),
+      )
+    : candidateSourceFiles
   const modules: SourceModuleIR[] = []
   const contracts: SourceContractIR[] = []
   const constructors: SourceConstructorIR[] = []
@@ -223,7 +230,7 @@ export function compileTypeScriptSource(
     }
   }
 
-  return {
+  const manifest: SourceApplicationManifest = {
     version: 1,
     files: sourceFiles.map((sourceFile) => sourceFile.fileName),
     modules,
@@ -247,6 +254,77 @@ export function compileTypeScriptSource(
     ),
     diagnostics,
   }
+  snapshot.dispose()
+  api.close()
+  return manifest
+}
+
+function collectReachableSourceFiles(
+  program: Program,
+  candidates: readonly ts.SourceFile[],
+  entry: string,
+): ts.SourceFile[] {
+  const byPath = new Map(
+    candidates.map((sourceFile) => [resolve(sourceFile.fileName), sourceFile]),
+  )
+  const first = byPath.get(resolve(entry)) ?? program.getSourceFile(entry)
+  if (!first) {
+    throw new Error(`Application entryがTypeScript Programにありません: ${entry}`)
+  }
+
+  const reachable: ts.SourceFile[] = []
+  const visited = new Set<string>()
+  const visit = (sourceFile: ts.SourceFile) => {
+    const path = resolve(sourceFile.fileName)
+    if (visited.has(path)) return
+    visited.add(path)
+    if (!sourceFile.isDeclarationFile && !sourceFile.fileName.includes('/node_modules/')) {
+      reachable.push(sourceFile)
+    }
+
+    for (const statement of sourceFile.statements) {
+      const specifier =
+        (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
+        statement.moduleSpecifier &&
+        ts.isStringLiteral(statement.moduleSpecifier)
+          ? statement.moduleSpecifier.text
+          : undefined
+      if (!specifier) continue
+      if (!specifier.startsWith('.')) continue
+      const dependency = resolveRelativeSourceFile(
+        byPath,
+        sourceFile.fileName,
+        specifier,
+      )
+      if (dependency) visit(dependency)
+    }
+  }
+  visit(first)
+  return reachable
+}
+
+function resolveRelativeSourceFile(
+  sourceFiles: ReadonlyMap<string, ts.SourceFile>,
+  importer: string,
+  specifier: string,
+): ts.SourceFile | undefined {
+  const requested = resolve(dirname(importer), specifier)
+  const extension = extname(requested)
+  const stem = extension ? requested.slice(0, -extension.length) : requested
+  const candidates = [
+    requested,
+    `${stem}.ts`,
+    `${stem}.tsx`,
+    `${stem}.mts`,
+    `${stem}.cts`,
+    resolve(requested, 'index.ts'),
+    resolve(requested, 'index.tsx'),
+  ]
+  for (const candidate of candidates) {
+    const sourceFile = sourceFiles.get(resolve(candidate))
+    if (sourceFile) return sourceFile
+  }
+  return undefined
 }
 
 interface VisitState {
@@ -318,7 +396,7 @@ function visitSourceFile(sourceFile: ts.SourceFile, state: VisitState): void {
         key: node.arguments[0].text,
       })
     }
-    ts.forEachChild(node, visit)
+    node.forEachChild(visit)
   }
   visit(sourceFile)
 }
@@ -473,8 +551,8 @@ function readConstructor(
   const constructor = declaration.members.find(ts.isConstructorDeclaration)
   const dependencies: ConstructorDependencyIR[] = []
   for (const [index, parameter] of (constructor?.parameters ?? []).entries()) {
-    const inject = ts
-      .getDecorators(parameter)
+    const inject = parameter.modifiers
+      ?.filter(ts.isDecorator)
       ?.map((decorator) => decorator.expression)
       .find(
         (expression): expression is ts.CallExpression =>
@@ -522,37 +600,11 @@ function readContextPropertyUses(
           location: locationOf(node, sourceFile),
         })
       }
-      ts.forEachChild(node, visit)
+      node.forEachChild(visit)
     }
     visit(member.body)
   }
   return uses
-}
-
-export interface RuntimeConstructorRegistry {
-  readonly [name: string]: Class | TokenLike
-}
-
-export function bindRuntimeConstructorManifest(
-  manifest: SourceApplicationManifest,
-  registry: RuntimeConstructorRegistry,
-): ReadonlyMap<Function, readonly TokenLike[]> {
-  const result = new Map<Function, readonly TokenLike[]>()
-  for (const constructor of manifest.constructors) {
-    const target = registry[constructor.className]
-    if (typeof target !== 'function') continue
-    const dependencies = constructor.dependencies.map((dependency) => {
-      const token = registry[dependency.reference]
-      if (!token) {
-        throw new Error(
-          `${constructor.className}.${dependency.parameter}の依存${dependency.reference}がruntime registryにありません`,
-        )
-      }
-      return token
-    })
-    result.set(target, dependencies)
-  }
-  return result
 }
 
 function sourceLayer(
@@ -1005,8 +1057,4 @@ function locationOf(node: ts.Node, sourceFile: ts.SourceFile): SourceLocationIR 
     line: position.line + 1,
     column: position.character + 1,
   }
-}
-
-function formatTypeScriptDiagnostic(diagnostic: ts.Diagnostic): string {
-  return ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
 }

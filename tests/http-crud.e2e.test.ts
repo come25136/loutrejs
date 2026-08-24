@@ -1,11 +1,11 @@
 import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
-import { createUsersApplication } from '../fixtures/http-crud/src/index.js'
 import { createNodeHttpServer } from '@loutrefw/runtime-node'
+import { createLinkedUsersApplication } from './helpers/linked-applications.js'
 
 describe('canonical Fixture A', () => {
   it('runs Contract -> HTTP -> Pipeline -> validation -> Controller -> finalization', async () => {
-    const application = createUsersApplication()
+    const application = createLinkedUsersApplication()
     const server = createNodeHttpServer(application)
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')

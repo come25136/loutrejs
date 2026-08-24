@@ -1,11 +1,10 @@
 import { app, MessageChannelMain } from 'electron'
 import { attachElectronMessagePort } from '@loutrefw/runtime-electron'
-import { createEventsMessagePortApplication } from '../fixtures/streaming/src/index.js'
+import application from '../dist/conformance/streaming-message-port/application.mjs'
 
 async function main(): Promise<void> {
   await app.whenReady()
   try {
-  const application = createEventsMessagePortApplication()
   const { port1, port2 } = new MessageChannelMain()
   attachElectronMessagePort(application, port1)
   const messages: unknown[] = []

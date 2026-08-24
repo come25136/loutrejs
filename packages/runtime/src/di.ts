@@ -1,6 +1,5 @@
 import {
   asModuleInstance,
-  getExplicitInjections,
   normalizeProvider,
   tokenName,
   type Class,
@@ -10,6 +9,10 @@ import {
   type TokenLike,
 } from '@loutrefw/core'
 import { ConsoleLoggerBackend, Logger } from './logger.js'
+import {
+  runtimeLinkageTarget,
+  type RuntimeLinkageArtifact,
+} from './linkage.js'
 
 export class DependencyResolutionError extends Error {
   constructor(message: string) {
@@ -49,18 +52,13 @@ export class Container {
   readonly #applicationCache = new Map<TokenLike, unknown>()
   readonly #implementationCache = new Map<Class, Promise<unknown>>()
 
-  readonly #constructorDependencies: ReadonlyMap<Function, readonly TokenLike[]>
+  readonly #linkedDependencies = new Map<Function, readonly TokenLike[]>()
+  #linkageAttached = false
+  #resolutionStarted = false
 
   constructor(
     providers: readonly ProviderDescriptor[],
-    options: {
-      readonly constructorDependencies?: ReadonlyMap<
-        Function,
-        readonly TokenLike[]
-      >
-    } = {},
   ) {
-    this.#constructorDependencies = options.constructorDependencies ?? new Map()
     for (const provider of providers) {
       if (this.#providers.has(provider.provide)) {
         throw new DependencyResolutionError(
@@ -71,11 +69,35 @@ export class Container {
     }
   }
 
+  /** @internal Compilerが生成したbootstrapだけが呼び出す。 */
+  [runtimeLinkageTarget](artifact: RuntimeLinkageArtifact): void {
+    if (this.#linkageAttached) {
+      throw new DependencyResolutionError(
+        'Runtime Linkage ArtifactはApplicationへ1回だけ関連付けできます',
+      )
+    }
+    if (this.#resolutionStarted) {
+      throw new DependencyResolutionError(
+        'Provider解決開始後にRuntime Linkage Artifactを関連付けることはできません',
+      )
+    }
+    for (const [target, dependencies] of artifact.bindings) {
+      if (this.#linkedDependencies.has(target)) {
+        throw new DependencyResolutionError(
+          `${target.name}のconstructor linkageが重複しています`,
+        )
+      }
+      this.#linkedDependencies.set(target, dependencies)
+    }
+    this.#linkageAttached = true
+  }
+
   async resolve<T>(token: TokenLike<T>): Promise<T> {
     return this.#resolve(token)
   }
 
   async resolveImplementation<T>(target: Class<T>): Promise<T> {
+    this.#resolutionStarted = true
     const cached = this.#implementationCache.get(target)
     if (cached) return cached as Promise<T>
 
@@ -95,6 +117,7 @@ export class Container {
     token: TokenLike<T>,
     source?: string,
   ): Promise<T> {
+    this.#resolutionStarted = true
     const provider = this.#providers.get(token)
     if (!provider) {
       if (
@@ -152,29 +175,14 @@ export class Container {
   async #instantiate<T>(
     target: Class<T>,
   ): Promise<T> {
-    const explicit = getExplicitInjections(target)
-    const manifested = this.#constructorDependencies.get(target)
-    const parameterCount = target.length
-    const missing = Array.from({ length: parameterCount }, (_, index) => index).filter(
-      (index) => !explicit.has(index) && manifested?.[index] === undefined,
-    )
-
-    if (missing.length > 0) {
+    const manifested = this.#linkedDependencies.get(target)
+    if (!manifested && target.length > 0) {
       throw new DependencyResolutionError(
-        `${target.name} constructor parameters ${missing.join(', ')} are absent from the compiler manifest; custom tokens require @Inject(TOKEN)`,
+        `${target.name}のconstructor DI linkageがありません。loutre dev/start/buildでCompilerを通して起動してください`,
       )
     }
-
     const dependencies = await Promise.all(
-      Array.from({ length: parameterCount }, (_, index) => {
-        const token = explicit.get(index) ?? manifested?.[index]
-        if (!token) {
-          throw new DependencyResolutionError(
-            `No constructor token for ${target.name} parameter ${index}`,
-          )
-        }
-        return this.#resolve(token, target.name)
-      }),
+      (manifested ?? []).map((token) => this.#resolve(token, target.name)),
     )
     return new target(...dependencies)
   }

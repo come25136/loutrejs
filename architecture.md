@@ -52,7 +52,8 @@ Loutre application は TypeScript source から Compiler により解析され�
 - Contract ↔ Controller / Resolver / Handler binding
 - Controller 等の application DI requirement
 
-Compiler は runtime より前に Graph を検証し、runtime adapter が利用する Manifest を生成する。
+Compilerはruntimeより前にGraphを検証し、inspection用のGraph Manifestと、
+runtime adapterが利用するRuntime Linkage Artifactを同じGraph IRから生成する。
 
 Loutre は **Node-first ではない**。
 Node.js / Bun / Deno / Cloudflare Workers(workerd) / AWS Lambda / Electron 等を、同じ application model から adapter 経由で動かす。
@@ -94,7 +95,11 @@ Filesystem helper を将来 tooling として追加することは MAY だが、
 
 Runtime reflection を DI/Application Graph 構築の主手段にしない。
 
-Compiler が TypeScript AST / type information と Loutre declaration を解析し、Graph/Manifest を生成する。
+CompilerがTypeScript AST / type informationとLoutre declarationを解析し、
+Graph ManifestとRuntime Linkage Artifactを生成する。
+
+通常のconstructor型から得たDI依存辺はCompilerがRuntimeへ自動接続する。
+利用者にCompilerの解析結果と同じ依存mapを再記述させてはならない。
 
 ## 3.3 Contract-first
 
@@ -157,7 +162,7 @@ Phase 1 に含めるもの:
 17. Short circuit
 18. Error normalization / Protocol finalization
 19. Structured contextual Logger
-20. Compiler Graph IR / static validation / Manifest
+20. Compiler Graph IR / static validation / Graph Manifest / Runtime Linkage Artifact
 21. Runtime Capability
 22. Runtime conformance suite
 23. CLI / Graph inspection
@@ -190,9 +195,13 @@ Loutre Graph IR
       │
       ├── static validation
       ├── diagnostics
-      └── manifest generation
-      │
-      ▼
+      ├── Graph Manifest generation
+      └── Runtime Linkage Artifact generation
+              │
+              ▼
+      Application Bootstrap
+              │
+              ▼
 Runtime Adapter
       │
       ├── Node.js
@@ -340,7 +349,7 @@ Capability metadata の exact property name は OPEN。
 
 ## 7.1 `@Injectable()` は不要
 
-通常 class dependency は constructor から解析する。
+通常class dependencyはCompilerがconstructorの型から解析する。
 
 ```ts
 export class UserService {
@@ -351,6 +360,30 @@ export class UserService {
 ```
 
 `@Injectable()` を必須にしない。
+
+`providers: [UserRepository]`はProvider bindingを宣言し、constructorの
+`users: UserRepository`は依存辺を宣言する。この2つは役割が異なる。
+Moduleは利用可能なProviderを列挙するが、constructor parameterとProviderを
+位置や個数から推測しない。
+
+CompilerはTypeScript Type Checkerでconstructor parameterのsymbolを解決し、
+DI Graphに次の辺を記録する。
+
+```text
+UserService.constructor[0] -> UserRepository
+```
+
+通常class tokenで解決できないinterface、custom token、同一型の複数binding等は
+`@Inject(TOKEN)`でCompiler-visibleなtokenを明示する。
+
+Runtimeは次の方法でconstructor tokenを推測してはならない。
+
+- `constructor.length`だけを使ったparameter位置合わせ
+- parameter名やclass名の文字列比較
+- 登録Providerが1つだけであることを根拠にした自動選択
+- `emitDecoratorMetadata`やruntime reflectionへの必須依存
+
+Compilerが依存を一意に解決できない場合はcompile/check time diagnosticとする。
 
 ## 7.2 Arbitrary custom token は first-class
 
@@ -456,6 +489,85 @@ Execution Context
 
 Pipeline の途中で生成された値を constructor DI してはならない。
 それらは terminal method の `ctx` から読む。
+
+## 7.6 Compiler outputからRuntimeへのDI接続 — FROZEN
+
+利用者が書くApplication entryは、Moduleだけを渡す形を基準とする。
+
+```ts
+export default createHttpApplication({
+  modules: [AppModule()],
+})
+```
+
+`createHttpApplication()`、`createMessagePortApplication()`および将来の
+Protocol application factoryは、利用者向けoptionとして
+`constructorDependencies`、constructor registry、手書きDI manifestを
+受け取ってはならない。
+
+Compiler outputは役割の異なる次の2 artifactに分ける。
+
+### Graph Manifest
+
+- JSON等へserialize可能
+- class/tokenをsymbolic identityで表現
+- Graph表示、diagnostic、deployment検証、cacheに利用
+- function object、secret、実行時のProvider valueを含めない
+
+### Runtime Linkage Artifact
+
+- Compilerが生成する実行可能な内部artifact
+- constructor本体と依存tokenのlive referenceを保持
+- Graph IRのconstructor DI edgeと一対一に対応
+- Runtime containerがinstance生成時に直接利用
+- 利用者が編集・列挙するPublic APIではない
+
+概念上は次の情報を持つ。exactな生成module形式や内部symbol名はPublic APIではない。
+
+```text
+GreetingController -> [GreetingService]
+UserRepository     -> [PRIMARY_DB]
+```
+
+CompilerはGraph ManifestとRuntime Linkage Artifactに同じGraph version/fingerprintを
+付与し、組み合わせが一致しないartifactの起動を拒否しなければならない。
+
+### Bootstrap flow
+
+```text
+Application entry
+      ↓
+Compiler parse/type-check/validate
+      ├─ Graph Manifest
+      └─ Runtime Linkage Artifact
+              ↓
+linked Application entry
+              ↓
+Runtime Adapter
+```
+
+`loutre dev`、`loutre start`、`loutre build`はApplication entryを直接実行する前に
+このcompile/link処理を行う。deployment artifactもCompilerが生成したlinked entryを
+起点にする。raw TypeScript entryをCompilerを通さず直接実行する経路はcanonicalな
+起動方法ではない。
+
+Runtime Linkage Artifactがない状態で通常constructor dependencyを持つclassを
+instantiateしようとした場合、Runtimeは曖昧なfallbackを行わず、Compiler経由の
+起動が必要であることを示すactionable errorで停止する。
+
+Runtime package内部でlinkage tableを受け取るnarrow interfaceを持つことはMAY。
+ただし、そのinterfaceをApplication authorが手書きするPublic APIにしてはならない。
+
+### Ownershipとlifecycle
+
+- Runtime Linkage Artifactはprocess-global registryではなくApplication instanceに属する。
+- linked bootstrapはApplicationの`initialize()`および最初のProvider解決より前に、
+  internal runtime boundaryを通してartifactを1回だけ関連付ける。
+- 関連付け後のDI Graphはimmutableとし、起動後の差し替えを許可しない。
+- 同一processで複数Applicationを起動してもlinkage tableを共有・衝突させない。
+- Protocol application factoryはCompiler、filesystem、Node.js APIへ依存しない。
+- CLI/build toolingがCompilerを呼び出し、generated bootstrapがRuntimeのinternal boundaryを
+  利用し、Runtime Adapterはlink済みApplicationだけを受け取る。
 
 ---
 
@@ -1709,10 +1821,10 @@ Implementation Binding Graph
 Loutre IR
    ↓
 Validation
-   ↓
-Manifest
-   ↓
-Runtime
+   ├─ Graph Manifest
+   └─ Runtime Linkage Artifact
+              ↓
+           Runtime
 ```
 
 ## 25.1 Compiler Responsibilities
@@ -1723,7 +1835,9 @@ Runtime
 - Module imports / exports
 - Provider binding
 - Custom token
-- Constructor DI
+- Constructor parameter symbolの解決とDI edge生成
+- DI edgeからRuntime Linkage Artifactを生成
+- Graph ManifestとRuntime Linkage Artifactの整合性保証
 - Scope
 - Context Key / Pipeline Context typing
 - Env symbolic key
@@ -1781,11 +1895,30 @@ UsersController requires UsersService,
 but UsersService is not visible in the Module DI Graph.
 ```
 
+### Runtime linkageの欠落
+
+```text
+UsersController.constructor[0] resolves to UsersService,
+but no runtime linkage was emitted for this DI edge.
+```
+
 Diagnostic は dependency/path を含む actionable なものにする。
 
 ## 25.3 Conditional Graph
 
 Finite Env branch は可能な限りすべて validate し、developer の current env だけを検証して終わらない。
+
+## 25.4 Manifest / Runtime Linkage Boundary — FROZEN
+
+Graph Manifestはinspection向けのserializable artifact、Runtime Linkage Artifactは
+実行時参照を保持するexecutable artifactとする。Compilerは片方だけを更新してはならない。
+
+Runtime Linkage Artifactの生成では、source上で`import type`になっている依存も、
+実行に必要ならCompilerが安全なvalue referenceとしてemitする。利用者にlinkageのためだけの
+不要なexport、side-effect import、registry記述を要求してはならない。
+
+Bundler/minifier後もconstructor/token identityが維持されるよう、class名の文字列を
+runtime identityに使ってはならない。
 
 ---
 
@@ -1864,10 +1997,10 @@ Runtime target の version 方針:
 
 重要:
 
-- 2026-08-23 時点の Node.js 26.x は **Current** で、LTS 入りは 2026-10 予定。
+- 2026-08-24 時点の Node.js 26.x は **Current** で、LTS 入りは 2026-10 予定。
 - それでも Loutre の primary Node runtime baseline は **Node.js 26.x** とする。
 
-## 27.2 2026-08-23 時点の Phase 1 Conformance Matrix
+## 27.2 2026-08-24 時点の Phase 1 Conformance Matrix
 
 | Target | Baseline | Policy | Phase 1 |
 |---|---|---|---:|
@@ -1881,7 +2014,7 @@ Runtime target の version 方針:
 
 ### AWS Lambda Node.js 26 について
 
-2026-08-23 時点では AWS Lambda managed runtime の Node.js 26 はまだ提供されていない。
+2026-08-24 時点では AWS Lambda managed runtime の Node.js 26 はまだ提供されていない。
 AWS の公開予定は **2026-11**。
 
 したがって Phase 1 では:
@@ -1901,7 +2034,7 @@ Custom runtime/container で Node 26 を動かす余地はあるが、Phase 1 �
 
 ## 27.3 Deno
 
-2026-08-23 時点の LTS channel は **Deno 2.9**。
+2026-08-24 時点の LTS channel は **Deno 2.9**。
 Conformance は 2.9.x LTS の最新 patch を使用する。
 
 ## 27.4 Bun
@@ -1912,7 +2045,7 @@ CI では supported range をむやみに固定せず、最新 Stable への追�
 ## 27.5 Electron
 
 Electron は LTS ではなく active stable majors を更新する model。
-2026-08-23 時点の最新 Stable は **Electron 43.x**。
+2026-08-24 時点の最新 Stable は **Electron 43.x**。
 
 Phase 1 baseline:
 
@@ -1959,9 +2092,9 @@ v0.1 conformance target には含めない。
 Phase 1 commands:
 
 ```text
-loutre dev
-loutre build
-loutre start
+loutre dev <entry>
+loutre build <entry> --out-dir <directory>
+loutre start <entry>
 
 loutre check
 loutre doctor
@@ -1975,6 +2108,10 @@ loutre explain <target>
 ```
 
 Phase 1 output は terminal text でよい。
+
+`dev`、`build`、`start`のentryはfilesystem discoveryを行わず明示的に指定する。
+これらのcommandはSection 7.6のcompile/link/bootstrap flowを共有し、同一sourceから
+同一Graph versionのGraph ManifestとRuntime Linkage Artifactを生成する。
 
 将来 MAY:
 
@@ -2027,6 +2164,8 @@ UsersContract.update [http]
 - `ControllerOf` / `ContextOf`
 - Module implementation binding
 - normal Provider DI
+- Compilerが生成したRuntime Linkage Artifactによるdecorator不要のconstructor DI
+- Application entryに手書きconstructor dependency mapが存在しないこと
 
 概念:
 
@@ -2154,6 +2293,8 @@ implement(...).for(...).procedures(...).with(...)
 - custom token
 - application/transient scope
 - Controller application-scope instantiate
+- Compiler生成linkageを受け取るinternal runtime boundary
+- linkage欠落時のactionable error
 
 ## Stage 3 — Compiler Graph IR
 
@@ -2164,7 +2305,10 @@ implement(...).for(...).procedures(...).with(...)
 - Pipeline Graph
 - Implementation Binding Graph
 - basic diagnostic
-- Manifest shape
+- serializable Graph Manifest
+- executable Runtime Linkage Artifact
+- Graph version/fingerprint整合性
+- constructor parameter symbolからruntime token referenceへのlink
 
 ## Stage 4 — Pipeline Engine
 
@@ -2221,7 +2365,14 @@ graph di
 graph contracts
 graph runtime
 explain
+dev <entry>
+start <entry>
+build <entry> --out-dir <directory>
 ```
+
+`dev`、`start`、`build`はGraph検査だけでなくRuntime Linkage Artifactを生成し、
+linked Application entryを実行または出力する。CLIがraw entryをそのままimportしてから
+DI情報を後付けする順序にはしない。
 
 ---
 
@@ -2238,6 +2389,14 @@ Application structure は explicit Module/Graph。
 ## 31.3 `@Inject(TOKEN)` を完全排除 — REJECTED
 
 Custom token では普通に使用する。
+
+## 31.3.1 手書きconstructor dependency map — REJECTED
+
+`createHttpApplication({ constructorDependencies: ... })`のように、Compilerが解析した
+通常constructor依存をApplication authorへ再記述させない。
+
+一時的な実装scaffoldingとしてRuntime内部に存在してもよいが、canonical fixture、
+example、Public APIへ露出させてはならず、Phase 1完成前に除去する。
 
 ## 31.4 Global `env` — REJECTED
 
@@ -2470,7 +2629,9 @@ Protocol Pipeline は routing 後の procedure/protocol-local execution を表�
 - [ ] Graph IR schema
 - [ ] Graph IR versioning
 - [ ] Diagnostic code namespace
-- [ ] Manifest serialization format
+- [ ] Graph Manifest serialization format
+- [ ] Runtime Linkage Artifactのgenerated module形式
+- [ ] linked entryのemit方式とsource map
 - [ ] `defineModule()` 内の arbitrary TypeScript をどこまで static evaluate するか
 - [ ] Symbolic expression representation
 - [ ] Incremental/watch compile strategy
@@ -2480,6 +2641,8 @@ Protocol Pipeline は routing 後の procedure/protocol-local execution を表�
 - [x] Phase 1 DI scope は `application` / `transient` のみ
 - [x] Controller / Resolver / Handler は application-scoped
 - [x] execution-specific data は DI ではなく `ctx`
+- [x] 通常constructor dependencyはCompilerがRuntimeへ自動接続
+- [x] 手書きconstructor dependency mapはPublic APIにしない
 - [ ] Factory Provider exact syntax
 - [ ] `.select()` exact syntax
 - [ ] finite union exhaustiveness rule
@@ -2659,7 +2822,7 @@ https://nodejs.org/about/previous-releases
 https://nodejs.org/en/blog/release/v26.0.0
 ```
 
-2026-08-23 時点:
+2026-08-24 時点:
 
 ```text
 Node.js 26.x = Current
@@ -2675,7 +2838,7 @@ Loutre は user 指定により Node.js 26.x を primary baseline とする。
 https://docs.deno.com/runtime/fundamentals/stability_and_releases/
 ```
 
-2026-08-23 baseline:
+2026-08-24 baseline:
 
 ```text
 Deno 2.9.x LTS
@@ -2687,7 +2850,7 @@ Deno 2.9.x LTS
 https://bun.com/
 ```
 
-2026-08-23 baseline:
+2026-08-24 baseline:
 
 ```text
 Bun 1.4.x Stable
@@ -2700,7 +2863,7 @@ https://releases.electronjs.org/
 https://releases.electronjs.org/schedule
 ```
 
-2026-08-23 baseline:
+2026-08-24 baseline:
 
 ```text
 Electron 43.x Stable
@@ -2734,7 +2897,7 @@ Response Streaming:
 https://docs.aws.amazon.com/lambda/latest/dg/configuration-response-streaming.html
 ```
 
-2026-08-23 baseline:
+2026-08-24 baseline:
 
 ```text
 Latest managed Node runtime = nodejs24.x
@@ -2759,71 +2922,29 @@ v0.1 architecture が実装済みとみなせる条件:
 10. Superseded architecture が明示的 design change なしに復活していない。
 11. Node.js 26.x で primary Node conformance が通る。
 12. Deno 2.9 LTS / Bun latest stable / workerd current / Electron latest stable / Lambda latest managed Node runtime でも対象 fixture が通る。
+13. canonical fixtureとexampleのApplication entryが手書きconstructor dependency mapを持たず、Compiler生成のRuntime Linkage Artifactだけで通常class DIを実行できる。
+14. Graph ManifestとRuntime Linkage Artifactの不一致が起動前に検出される。
 
 ---
 
 # 37. Codex Immediate Next Action
 
-最初に minimal monorepo を作り、**Fixture A を end-to-end vertical slice として完成させる**。
-ただし primitive は Fixture B〜D を redesign なしで追加できる shape にする。
+2026-08-24にCompiler生成Runtime Linkage Artifactへの移行を完了した。
 
-最初の checkpoint:
+- 通常constructorと`@Inject(TOKEN)`からDI edgeを生成
+- Graph ManifestとRuntime Linkage Artifactを同じGraph IRから生成
+- `loutre dev/start/build`をcompile/link/bootstrap flowへ統一
+- version/fingerprint検証とlinkage欠落diagnosticを実装
+- Protocol application factoryから手書きdependency optionを削除
+- canonical fixtureと`examples/`から手書きdependency mapを削除
+- Node.js、Deno、Bun、workerd、Electron、Lambdaでlinked artifactをconformance検証
 
-```text
-@loutrefw/core
-  token<T>('id')
-  contextKey('name').of<T>()
-  @Inject()
-  defineModule()
-  provide()
-  contract()
-  procedure()
-  http()
-  validate.params/query/headers/body descriptor
-  http.controller terminal descriptor
-  ControllerOf / ContextOf
-  implement(...).for(...).procedures(...).with(...)
+次の優先課題は、Section 32.7でOPENのgenerated module形式、source map、
+incremental/watch compileを詰め、`loutre dev`が同じGraph/linkage invariantを保ったまま
+差分再生成できるようにすることである。
 
-@loutrefw/compiler
-  minimal Graph model
-  terminal-last validation
-  implementation coverage validation
-  validation-order metadata scaffolding
-  Pipeline Context shape propagation scaffolding
-
-@loutrefw/runtime + @loutrefw/http
-  application/transient DI scope
-  Execution Context propagation
-  Context Key requires/provides
-  Layer stack
-  HTTP unary adapter
-  Protocol Finalization
-```
-
-Reference runtime は **Node.js 26.x** から始める。
-
-Fixture A が通ったら、surface area を増やす前に **Fixture B を即追加**する。
-
-Fixture B が証明すべきこと:
-
-```text
-Pipeline は飾りではない
-Layer ordering は static model されている
-requires/provides は Pipeline Context Graph に効いている
-ContextOf は terminal 到達時点の Context shape を表す
-Controller は application-scoped のまま public/authenticated procedure を共存できる
-invalid order は Compiler が説明できる
-```
-
-その後:
-
-```text
-Fixture C
-  → parameterized Module / multiple instance / lifecycle
-
-Fixture D
-  → server-stream / Protocol portability / runtime conformance
-```
+Compilerを通さないunit test用の低水準linkage注入はtest/internal boundaryへ隔離し、
+今後もPublic APIやexampleへ露出させない。
 
 ---
 
@@ -2848,6 +2969,8 @@ DI
   @Injectable() 不要
   custom typed token first-class
   custom token は @Inject(TOKEN)
+  通常constructor依存はCompilerが自動link
+  手書きconstructor dependency mapは禁止
 
 DI Scopes
   application
@@ -2955,6 +3078,11 @@ Logger
 
 Compiler
   Phase 1 core feature
+  Graph Manifest + Runtime Linkage Artifact
+
+Application bootstrap
+  loutre dev/start/buildがcompile/link後のentryを実行
+  raw entryの直接実行はcanonicalではない
 
 Runtime architecture
   not Node-first
@@ -2966,20 +3094,20 @@ Other runtimes
   latest LTS if official LTS exists
   otherwise latest Stable
 
-Deno baseline 2026-08-23
+Deno baseline 2026-08-24
   2.9.x LTS
 
-Bun baseline 2026-08-23
+Bun baseline 2026-08-24
   1.4.x Stable
 
-Electron baseline 2026-08-23
+Electron baseline 2026-08-24
   43.x Stable
 
 Cloudflare/workerd
   latest compatibility_date
   v0.1 minimum >= 2026-08-04
 
-AWS Lambda baseline 2026-08-23
+AWS Lambda baseline 2026-08-24
   managed nodejs24.x
   nodejs26.x 公開後に更新
 ```

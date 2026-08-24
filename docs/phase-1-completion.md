@@ -16,7 +16,9 @@
 | Lifecycle / Capabilityの可視化 | Fixture C、Capability test、Manifest、`loutre doctor` |
 | Rejected設計を復活させない | filesystem discovery、`@Injectable`、route decorator、`next()`を不使用 |
 | Node.js 26.x | `test:node`がmajor versionを検証してHTTP fixtureを実行 |
-| Deno/Bun/workerd/Electron/Lambda | 2.9.5 / 1.4.0 / 2026-08-23 / 43.4.1 / Node 24.19.0で実行 |
+| Deno/Bun/workerd/Electron/Lambda | 2.9.5 / 1.4.0 / 2026-08-24 / 43.4.1 / Node 24.19.0で実行 |
+| constructor DIの自動link | Compiler生成のRuntime Linkage Artifactでfixtureとexampleを起動し、Public APIに手書きdependency mapを持たない |
+| Artifact整合性 | Graph ManifestとRuntime Linkage Artifactのversion/fingerprintを起動前に検証 |
 
 ## 一括検証
 

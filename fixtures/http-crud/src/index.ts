@@ -91,13 +91,8 @@ export const UsersModule = defineModule(() => ({
   ],
 }))
 
-const constructorDependencies = new Map<Function, readonly [typeof UsersService]>([
-  [UsersController, [UsersService]],
-])
-
 export function createUsersApplication() {
   return createHttpApplication({
     modules: [UsersModule()],
-    constructorDependencies,
   })
 }

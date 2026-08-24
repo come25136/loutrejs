@@ -1,11 +1,11 @@
 import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
 import { createNodeHttpServer } from '@loutrefw/runtime-node'
-import { createEventsApplication } from '../fixtures/streaming/src/index.js'
+import { createLinkedEventsApplication } from './helpers/linked-applications.js'
 
 describe('canonical Fixture D HTTP server-stream', () => {
   it('各itemをschema validationしてSSEとして逐次serializeする', async () => {
-    const application = createEventsApplication()
+    const application = createLinkedEventsApplication()
     const server = createNodeHttpServer(application)
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')

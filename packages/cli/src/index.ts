@@ -1,7 +1,14 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, extname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { compileTypeScriptSource } from '@loutrefw/compiler'
+import {
+  compileTypeScriptSource,
+  createRuntimeLinkageBootstrap,
+  createRuntimeLinkagePlan,
+  transformSourceForRuntimeLinkage,
+  type RuntimeLinkagePlan,
+} from '@loutrefw/compiler'
 import { checkCapabilities, type RuntimeCapabilities } from '@loutrefw/runtime'
 import { bunRuntime } from '@loutrefw/runtime-bun'
 import { denoRuntime } from '@loutrefw/runtime-deno'
@@ -11,6 +18,7 @@ import { nodeRuntime } from '@loutrefw/runtime-node'
 import { createNodeHttpServer } from '@loutrefw/runtime-node'
 import type { HttpApplication } from '@loutrefw/http'
 import { workerdRuntime } from '@loutrefw/runtime-workerd'
+import { build as buildWithEsbuild, type Loader, type Plugin } from 'esbuild'
 
 export interface CliIO {
   readonly cwd: string
@@ -31,7 +39,7 @@ export async function runCli(
   args: readonly string[],
   io: CliIO,
 ): Promise<number> {
-  const [command, subject, target] = args
+  const [command, subject] = args
   if (!command || command === 'help' || command === '--help') {
     io.stdout(helpText())
     return 0
@@ -152,15 +160,29 @@ export async function runCli(
       return 0
     }
     case 'build': {
-      const result = manifest()
-      if (result.diagnostics.length > 0) {
-        for (const diagnostic of result.diagnostics) io.stderr(diagnostic.message)
-        return 1
+      if (!subject) {
+        io.stderr('buildには明示的なApplication entryが必要です。')
+        return 2
       }
-      const output = resolve(io.cwd, subject ?? 'dist/loutre.manifest.json')
-      await mkdir(dirname(output), { recursive: true })
-      await writeFile(output, `${JSON.stringify(result, null, 2)}\n`, 'utf8')
-      io.stdout(`Manifestを出力しました: ${output}`)
+      const outputDirectory = resolve(
+        io.cwd,
+        readOption(args, '--out-dir') ?? 'dist/loutre',
+      )
+      const plan = createRuntimeLinkagePlan({
+        tsconfigPath: resolve(io.cwd, 'tsconfig.json'),
+        entry: resolve(io.cwd, subject),
+      })
+      await mkdir(outputDirectory, { recursive: true })
+      const entryOutput = join(outputDirectory, 'application.mjs')
+      await emitLinkedApplication(plan, entryOutput)
+      const manifestOutput = join(outputDirectory, 'loutre.manifest.json')
+      await writeFile(
+        manifestOutput,
+        `${JSON.stringify({ ...plan.manifest, fingerprint: plan.fingerprint }, null, 2)}\n`,
+        'utf8',
+      )
+      io.stdout(`Applicationを出力しました: ${entryOutput}`)
+      io.stdout(`Graph Manifestを出力しました: ${manifestOutput}`)
       return 0
     }
     case 'dev':
@@ -172,7 +194,10 @@ export async function runCli(
         return 2
       }
       const port = readPort(args)
-      const application = await loadHttpApplication(resolve(io.cwd, subject))
+      const application = await loadLinkedHttpApplication(
+        resolve(io.cwd, subject),
+        resolve(io.cwd, 'tsconfig.json'),
+      )
       await application.initialize()
       const server = createNodeHttpServer(application)
       server.listen(port, '127.0.0.1')
@@ -200,20 +225,92 @@ export async function runCli(
   }
 }
 
-async function loadHttpApplication(entry: string): Promise<HttpApplication> {
-  const module = await import(`${pathToFileURL(entry).href}?loutre=${Date.now()}`)
-  const application = module.default ?? module.application
-  if (
-    !application ||
-    typeof application.initialize !== 'function' ||
-    typeof application.shutdown !== 'function' ||
-    typeof application.handle !== 'function'
-  ) {
-    throw new Error(
-      'Application entryはdefaultまたはapplication named exportとしてHttpApplicationを公開する必要があります。',
-    )
+async function loadLinkedHttpApplication(
+  entry: string,
+  tsconfigPath: string,
+): Promise<HttpApplication> {
+  const plan = createRuntimeLinkagePlan({ tsconfigPath, entry })
+  const directory = await mkdtemp(join(tmpdir(), 'loutre-bootstrap-'))
+  const output = join(directory, 'application.mjs')
+  try {
+    await emitLinkedApplication(plan, output)
+    const module = await import(`${pathToFileURL(output).href}?loutre=${Date.now()}`)
+    const application = module.default ?? module.application
+    if (
+      !application ||
+      typeof application.initialize !== 'function' ||
+      typeof application.shutdown !== 'function' ||
+      typeof application.handle !== 'function'
+    ) {
+      throw new Error(
+        'Application entryはdefaultまたはapplication named exportとしてHttpApplicationを公開する必要があります。',
+      )
+    }
+    return application as HttpApplication
+  } finally {
+    await rm(directory, { recursive: true, force: true })
   }
-  return application as HttpApplication
+}
+
+async function emitLinkedApplication(
+  plan: RuntimeLinkagePlan,
+  output: string,
+): Promise<void> {
+  await buildWithEsbuild({
+    stdin: {
+      contents: createRuntimeLinkageBootstrap(plan),
+      loader: 'ts',
+      resolveDir: dirname(plan.entry),
+      sourcefile: 'loutre-generated-bootstrap.ts',
+    },
+    outfile: output,
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    target: 'node24',
+    sourcemap: 'inline',
+    plugins: [runtimeLinkagePlugin(plan)],
+  })
+}
+
+function runtimeLinkagePlugin(plan: RuntimeLinkagePlan): Plugin {
+  const fragments = new Map(
+    plan.fragments.map((fragment) => [resolve(fragment.file), fragment]),
+  )
+  return {
+    name: 'loutre-runtime-linkage',
+    setup(build) {
+      build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async (args) => {
+        const fragment = fragments.get(resolve(args.path))
+        if (!fragment) return undefined
+        const source = await readFile(args.path, 'utf8')
+        return {
+          contents: transformSourceForRuntimeLinkage(source, fragment),
+          loader: loaderFor(args.path),
+        }
+      })
+    },
+  }
+}
+
+function loaderFor(path: string): Loader {
+  switch (extname(path)) {
+    case '.tsx':
+      return 'tsx'
+    case '.jsx':
+      return 'jsx'
+    case '.js':
+    case '.mjs':
+    case '.cjs':
+      return 'js'
+    default:
+      return 'ts'
+  }
+}
+
+function readOption(args: readonly string[], name: string): string | undefined {
+  const index = args.indexOf(name)
+  return index < 0 ? undefined : args[index + 1]
 }
 
 function readPort(args: readonly string[]): number {
@@ -249,7 +346,7 @@ function helpText(): string {
     '  loutre doctor [node|deno|bun|workerd|electron|lambda]',
     '  loutre graph modules|di|contracts|runtime',
     '  loutre explain <target>',
-    '  loutre build [manifest出力先]',
+    '  loutre build <明示entry> [--out-dir <directory>]',
     '  loutre dev <明示entry> [--port <port>]',
     '  loutre start <明示entry> [--port <port>]',
   ].join('\n')

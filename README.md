@@ -19,7 +19,7 @@ Contract -> HTTP decode -> ordered Pipeline -> validate.*
 
 - `@loutrefw/core`: Standard Schema型、DI用typed token、Context Key、`@Inject`、
   Provider、parameterized Module、Contract/Procedure宣言、requires/provides型付きLayer descriptor
-- `@loutrefw/compiler`: TypeScript AST解析、version付きGraph IR / Manifest、および
+- `@loutrefw/compiler`: TypeScript AST解析、version付きGraph Manifest、Runtime Linkage Artifact、および
   terminal、coverage、duplicate binding、validation順序、Context Key、Controller DIの診断
 - `@loutrefw/runtime`: `application` / `transient` scopeのDI、Execution Context伝播、
   inbound・FILO outboundのPipeline engine
@@ -65,8 +65,12 @@ CLIはfilesystem discoveryを行いません。Server起動時は明示entryを�
 npx loutre check
 npx loutre doctor node
 npx loutre graph contracts
+npx loutre build fixtures/http-crud/src/app.ts --out-dir dist/loutre
 npx loutre start fixtures/http-crud/src/app.ts --port 3000
 ```
+
+通常classのconstructor依存はCompilerが解析し、Runtime Linkage Artifactとして
+自動接続します。Application codeでdependency mapを手書きする必要はありません。
 
 Architecture完成条件と証拠の対応は
 [docs/phase-1-completion.md](./docs/phase-1-completion.md)に記録しています。

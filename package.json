@@ -15,11 +15,12 @@
     "check": "tsc --noEmit --pretty false",
     "test": "vitest run",
     "test:types": "tsc -p tests/types/tsconfig.json --pretty false",
-    "test:deno": "deno run -A --unstable-sloppy-imports conformance/deno.ts",
-    "test:bun": "bun run conformance/bun.ts",
-    "test:workerd": "node conformance/run-workerd.mjs",
-    "test:electron": "node conformance/run-electron.mjs",
-    "test:lambda": "npx --yes --package node@24.19.0 --package tsx@4.20.5 tsx conformance/lambda.ts",
+    "build:conformance-apps": "loutre build fixtures/http-crud/src/app.ts --out-dir dist/conformance/http-crud && loutre build fixtures/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http && loutre build fixtures/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port",
+    "test:deno": "npm run build:conformance-apps && deno run -A conformance/deno.ts",
+    "test:bun": "npm run build:conformance-apps && bun run conformance/bun.ts",
+    "test:workerd": "npm run build:conformance-apps && node conformance/run-workerd.mjs",
+    "test:electron": "npm run build:conformance-apps && node conformance/run-electron.mjs",
+    "test:lambda": "npm run build:conformance-apps && npx --yes --package node@24.19.0 node conformance/lambda.mjs",
     "test:cli-start": "node conformance/run-cli-start.mjs",
     "test:node": "node -e \"if (!process.version.startsWith('v26.')) process.exit(1); console.log('Node.js 26 conformance: 成功')\" && vitest run tests/http-crud.e2e.test.ts tests/http-stream.fixture.test.ts tests/runtime-conformance.test.ts",
     "test:conformance": "npm run test:node && npm run test:deno && npm run test:bun && npm run test:workerd && npm run test:electron && npm run test:lambda && npm run test:cli-start",
@@ -29,10 +30,10 @@
     "@types/node": "^26.2.0",
     "bun": "^1.4.0",
     "electron": "^43.4.1",
-    "esbuild": "^0.25.12",
-    "typescript": "^5.9.2",
-    "vitest": "^3.2.4",
-    "workerd": "^1.20260823.1",
-    "zod": "^4.1.5"
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11",
+    "workerd": "^1.20260824.1",
+    "zod": "^4.4.3"
   }
 }

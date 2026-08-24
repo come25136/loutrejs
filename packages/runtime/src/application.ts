@@ -11,10 +11,10 @@ import {
   Container,
   type RuntimeModuleGraph,
 } from './di.js'
-
-export interface ApplicationRuntimeOptions {
-  readonly constructorDependencies?: ReadonlyMap<Function, readonly import('@loutrefw/core').TokenLike[]>
-}
+import {
+  runtimeLinkageTarget,
+  type RuntimeLinkageArtifact,
+} from './linkage.js'
 
 export class ApplicationRuntime {
   readonly graph: RuntimeModuleGraph
@@ -25,10 +25,14 @@ export class ApplicationRuntime {
 
   constructor(
     roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
-    options: ApplicationRuntimeOptions = {},
   ) {
     this.graph = collectRuntimeModuleGraph(roots)
-    this.container = new Container(this.graph.providers, options)
+    this.container = new Container(this.graph.providers)
+  }
+
+  /** @internal Compilerが生成したbootstrapだけが呼び出す。 */
+  [runtimeLinkageTarget](artifact: RuntimeLinkageArtifact): void {
+    this.container[runtimeLinkageTarget](artifact)
   }
 
   async initialize(): Promise<void> {
@@ -97,9 +101,8 @@ export class ApplicationRuntime {
 
 export function createApplicationRuntime(
   roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
-  options: ApplicationRuntimeOptions = {},
 ): ApplicationRuntime {
-  return new ApplicationRuntime(roots, options)
+  return new ApplicationRuntime(roots)
 }
 
 async function callLifecycle(

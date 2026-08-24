@@ -1,9 +1,8 @@
 import { createBunFetchHandler } from '@loutrefw/runtime-bun'
-import { createUsersApplication } from '../fixtures/http-crud/src/index.js'
-import { createEventsApplication } from '../fixtures/streaming/src/index.js'
+import usersApplication from '../dist/conformance/http-crud/application.mjs'
+import eventsApplication from '../dist/conformance/streaming-http/application.mjs'
 
-const application = createUsersApplication()
-const handler = createBunFetchHandler(application)
+const handler = createBunFetchHandler(usersApplication)
 const response = await handler(
   new Request('https://bun.fixture/users/bun-user'),
 )
@@ -14,14 +13,13 @@ const body = (await response.json()) as {
 if (response.status !== 200 || body.id !== 'bun-user' || body.name !== 'test') {
   throw new Error(`Bun conformanceに失敗しました: ${JSON.stringify(body)}`)
 }
-await application.shutdown('conformance')
+await usersApplication.shutdown('conformance')
 
-const events = createEventsApplication()
-const streamResponse = await createBunFetchHandler(events)(
+const streamResponse = await createBunFetchHandler(eventsApplication)(
   new Request('https://bun.fixture/events'),
 )
 if (!(await streamResponse.text()).includes('"sequence":3')) {
   throw new Error('Bun server-stream conformanceに失敗しました')
 }
-await events.shutdown('conformance')
+await eventsApplication.shutdown('conformance')
 console.log('Bun 1.4 Stable conformance: 成功')

@@ -1,13 +1,8 @@
 import { resolve } from 'node:path'
 import {
-  bindRuntimeConstructorManifest,
   compileTypeScriptSource,
+  createRuntimeLinkagePlan,
 } from '@loutrefw/compiler'
-import { Container } from '@loutrefw/runtime'
-import {
-  Repository,
-  Service,
-} from '../fixtures/compiler-manifest/src/index.js'
 
 describe('TypeScript AST Compiler', () => {
   const manifest = compileTypeScriptSource({
@@ -53,18 +48,38 @@ describe('TypeScript AST Compiler', () => {
     expect(JSON.stringify(manifest)).not.toContain('analytics://fixture')
   })
 
-  it('decoratorなしの通常class constructor依存をManifest経由で解決する', async () => {
-    const dependencies = bindRuntimeConstructorManifest(manifest, {
-      Repository,
-      Service,
+  it('decoratorなしの通常class constructor依存からRuntime Linkage Artifactを計画する', () => {
+    const plan = createRuntimeLinkagePlan({
+      tsconfigPath: resolve('tsconfig.json'),
+      entry: resolve('fixtures/http-crud/src/app.ts'),
     })
-    const container = new Container([], {
-      constructorDependencies: dependencies,
+    expect(plan.fragments.flatMap(({ bindings }) => bindings)).toContainEqual({
+      target: 'UsersController',
+      dependencies: ['UsersService'],
+    })
+    expect(plan.fingerprint).toMatch(/^[a-f0-9]{64}$/)
+  })
+
+  it('非export classとcustom tokenのRuntime Linkage Artifactを計画する', () => {
+    const example = createRuntimeLinkagePlan({
+      tsconfigPath: resolve('examples/hello-http/tsconfig.json'),
+      entry: resolve('examples/hello-http/src/app.ts'),
+    })
+    expect(example.fragments.flatMap(({ bindings }) => bindings)).toContainEqual({
+      target: 'GreetingController',
+      dependencies: ['GreetingService'],
     })
 
-    const service = await container.resolve(Service)
-    expect(service.repository).toBeInstanceOf(Repository)
-    expect(service.repository.value).toBe('repository')
+    const customToken = createRuntimeLinkagePlan({
+      tsconfigPath: resolve('tsconfig.json'),
+      entry: resolve('fixtures/compiler-manifest/src/custom-token-linkage.ts'),
+    })
+    expect(
+      customToken.fragments.flatMap(({ bindings }) => bindings),
+    ).toContainEqual({
+      target: 'CustomTokenService',
+      dependencies: ['REPOSITORY'],
+    })
   })
 
   it('ControllerのContext property参照をconstructor DIと区別して抽出する', () => {

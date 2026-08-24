@@ -12,8 +12,10 @@ import {
   workerdRuntime,
 } from '@loutrefw/runtime-workerd'
 import { checkCapabilities } from '@loutrefw/runtime'
-import { createUsersApplication } from '../fixtures/http-crud/src/index.js'
-import { createEventsApplication } from '../fixtures/streaming/src/index.js'
+import {
+  createLinkedEventsApplication,
+  createLinkedUsersApplication,
+} from './helpers/linked-applications.js'
 
 describe('Runtime conformance harness', () => {
   it.each([
@@ -21,7 +23,7 @@ describe('Runtime conformance harness', () => {
     ['Bun 1.4 Stable', createBunFetchHandler],
     ['workerd', createWorkerdFetchHandler],
   ])('%s adapterで同じFixture Aを実行する', async (_name, createHandler) => {
-    const application = createUsersApplication()
+    const application = createLinkedUsersApplication()
     const handler = createHandler(application)
     const response = await handler(
       new Request('https://runtime.fixture/users/runtime-user'),
@@ -35,7 +37,7 @@ describe('Runtime conformance harness', () => {
   })
 
   it('AWS Lambda nodejs24.x managed形状へunary responseをadaptする', async () => {
-    const application = createUsersApplication()
+    const application = createLinkedUsersApplication()
     const handler = createLambdaHandler(application)
     const response = await handler({
       rawPath: '/users/lambda-user',
@@ -50,7 +52,7 @@ describe('Runtime conformance harness', () => {
   })
 
   it('AWS Lambda response streaming境界へSSE chunkを逐次出力する', async () => {
-    const application = createEventsApplication()
+    const application = createLinkedEventsApplication()
     const chunks: Uint8Array[] = []
     let ended = false
     let metadata: unknown

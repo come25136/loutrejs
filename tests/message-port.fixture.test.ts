@@ -1,10 +1,10 @@
 import { MessageChannel } from 'node:worker_threads'
 import { attachMessagePort } from '@loutrefw/message-port'
-import { createEventsMessagePortApplication } from '../fixtures/streaming/src/index.js'
+import { createLinkedEventsMessagePortApplication } from './helpers/linked-applications.js'
 
 describe('canonical Fixture D MessagePort/Electron', () => {
   it('同じdomain streamをMessagePortの複数messageへadaptする', async () => {
-    const application = createEventsMessagePortApplication()
+    const application = createLinkedEventsMessagePortApplication()
     const channel = new MessageChannel()
     attachMessagePort(application, channel.port1)
     const messages: unknown[] = []

@@ -95,21 +95,14 @@ export const EventsModule = defineModule(() => ({
   ],
 }))
 
-const constructorDependencies = new Map<Function, readonly [typeof EventStreamService]>([
-  [EventsController, [EventStreamService]],
-  [EventsMessageHandler, [EventStreamService]],
-])
-
 export function createEventsApplication() {
   return createHttpApplication({
     modules: [EventsModule()],
-    constructorDependencies,
   })
 }
 
 export function createEventsMessagePortApplication() {
   return createMessagePortApplication({
     modules: [EventsModule()],
-    constructorDependencies,
   })
 }

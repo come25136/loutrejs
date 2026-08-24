@@ -22,6 +22,10 @@ import {
   executePipeline,
   Logger,
 } from '@loutrefw/runtime'
+import {
+  runtimeLinkageTarget,
+  type RuntimeLinkableApplication,
+} from '@loutrefw/runtime/internal'
 
 export interface MessagePortResponseDefinition {
   readonly body: StandardSchemaV1
@@ -143,7 +147,7 @@ interface Route {
   readonly implementation: import('@loutrefw/core').Class
 }
 
-export interface MessagePortApplication {
+export interface MessagePortApplication extends RuntimeLinkableApplication {
   initialize(): Promise<void>
   shutdown(signal?: string): Promise<void>
   invoke(procedure: string, input?: unknown): Promise<LogicalMessagePortResult>
@@ -151,19 +155,15 @@ export interface MessagePortApplication {
 
 export function createMessagePortApplication(options: {
   readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
-  readonly constructorDependencies?: ReadonlyMap<Function, readonly import('@loutrefw/core').TokenLike[]>
 }): MessagePortApplication {
   const roots = options.modules.map(asModuleInstance)
   assertValidCompilation(compileApplication(roots))
-  const runtime = new ApplicationRuntime(roots, {
-    ...(options.constructorDependencies === undefined
-      ? {}
-      : { constructorDependencies: options.constructorDependencies }),
-  })
+  const runtime = new ApplicationRuntime(roots)
   const routes = collectRoutes(runtime.graph.modules)
   let initialization: Promise<void> | undefined
   const initialize = () => (initialization ??= runtime.initialize())
   return {
+    [runtimeLinkageTarget]: (artifact) => runtime[runtimeLinkageTarget](artifact),
     initialize,
     shutdown: (signal) => runtime.shutdown(signal),
     async invoke(procedure, input) {

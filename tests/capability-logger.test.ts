@@ -5,6 +5,7 @@ import {
   type LogRecord,
   type LoggerBackend,
 } from '@loutrefw/runtime'
+import { runtimeLinkageTarget } from '@loutrefw/runtime/internal'
 
 describe('CapabilityとLogger', () => {
   it('Application requirementとRuntime capabilityの差分を返す', () => {
@@ -42,11 +43,11 @@ describe('CapabilityとLogger', () => {
       constructor(readonly logger: Logger) {}
     }
     const records: LogRecord[] = []
-    const dependencies = new Map<Function, readonly [typeof Logger]>([
-      [Consumer, [Logger]],
-    ])
-    const container = new Container([], {
-      constructorDependencies: dependencies,
+    const container = new Container([])
+    container[runtimeLinkageTarget]({
+      version: 1,
+      fingerprint: 'test',
+      bindings: [[Consumer, [Logger]]],
     })
     const consumer = await container.resolve(Consumer)
     const contextual = new Logger(

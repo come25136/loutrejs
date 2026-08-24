@@ -18,6 +18,10 @@ import {
   Logger,
   normalizeUnknownError,
 } from '@loutrefw/runtime'
+import {
+  runtimeLinkageTarget,
+  type RuntimeLinkableApplication,
+} from '@loutrefw/runtime/internal'
 import type {
   HttpControllerContext,
   HttpProtocol,
@@ -34,7 +38,7 @@ interface HttpRoute {
   readonly procedure: string
 }
 
-export interface HttpApplication {
+export interface HttpApplication extends RuntimeLinkableApplication {
   readonly graph: ApplicationGraphIR
   initialize(): Promise<void>
   shutdown(signal?: string): Promise<void>
@@ -43,18 +47,10 @@ export interface HttpApplication {
 
 export function createHttpApplication(options: {
   readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
-  readonly constructorDependencies?: ReadonlyMap<
-    Function,
-    readonly import('@loutrefw/core').TokenLike[]
-  >
 }): HttpApplication {
   const roots = options.modules.map(asModuleInstance)
   const graph = assertValidCompilation(compileApplication(roots))
-  const runtime = new ApplicationRuntime(roots, {
-    ...(options.constructorDependencies === undefined
-      ? {}
-      : { constructorDependencies: options.constructorDependencies }),
-  })
+  const runtime = new ApplicationRuntime(roots)
   const runtimeGraph = runtime.graph
   const container = runtime.container
   const routes = collectRoutes(runtimeGraph.modules)
@@ -62,6 +58,7 @@ export function createHttpApplication(options: {
   const initialize = () => (initialization ??= runtime.initialize())
 
   return {
+    [runtimeLinkageTarget]: (artifact) => runtime[runtimeLinkageTarget](artifact),
     graph,
     initialize,
     shutdown: (signal) => runtime.shutdown(signal),

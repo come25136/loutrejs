@@ -9,6 +9,7 @@ import {
   Container,
   DependencyResolutionError,
 } from '@loutrefw/runtime'
+import { runtimeLinkageTarget } from '@loutrefw/runtime/internal'
 
 interface Clock {
   readonly id: number
@@ -28,6 +29,11 @@ describe('DI container', () => {
     }))()
     const graph = collectRuntimeModuleGraph([module])
     const container = new Container(graph.providers)
+    container[runtimeLinkageTarget]({
+      version: 1,
+      fingerprint: 'test',
+      bindings: [[ClockReader, [CLOCK]]],
+    })
 
     const first = await container.resolve(ClockReader)
     const second = await container.resolve(ClockReader)

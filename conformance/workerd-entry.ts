@@ -1,9 +1,9 @@
 import { createWorkerdFetchHandler } from '@loutrefw/runtime-workerd'
-import { createUsersApplication } from '../fixtures/http-crud/src/index.js'
-import { createEventsApplication } from '../fixtures/streaming/src/index.js'
+import usersApplication from '../dist/conformance/http-crud/application.mjs'
+import eventsApplication from '../dist/conformance/streaming-http/application.mjs'
 
-const users = createWorkerdFetchHandler(createUsersApplication())
-const events = createWorkerdFetchHandler(createEventsApplication())
+const users = createWorkerdFetchHandler(usersApplication)
+const events = createWorkerdFetchHandler(eventsApplication)
 
 export default {
   fetch(request: Request) {

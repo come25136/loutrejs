@@ -20,7 +20,7 @@ await writeFile(
   `using Workerd = import "/workerd/workerd.capnp";
 const config :Workerd.Config = (
   services = [(name = "main", worker = (
-    compatibilityDate = "2026-08-23",
+    compatibilityDate = "2026-08-24",
     modules = [(name = "worker.js", esModule = embed "worker.js")],
   ))],
   sockets = [(name = "http", address = "127.0.0.1:18787", http = (), service = "main")],
@@ -56,7 +56,7 @@ try {
   if (!(await streamed.text()).includes('"sequence":3')) {
     throw new Error('workerd server-stream conformanceに失敗しました')
   }
-  console.log('workerd 2026-08-23 conformance: 成功')
+  console.log('workerd 2026-08-24 conformance: 成功')
 } finally {
   child.kill('SIGTERM')
 }
