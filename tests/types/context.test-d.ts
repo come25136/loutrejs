@@ -1,6 +1,7 @@
 import {
   contract,
   contextKey,
+  defineError,
   defineEnv,
   implement,
   layer,
@@ -36,11 +37,17 @@ const Contract = contract({
       http: http({
         method: 'GET',
         path: '/users/{id}',
-        input: { params: z.object({ id: z.string() }) },
+        request: { params: z.object({ id: z.string() }) },
         responses: {
           found: {
             status: 200,
             body: z.object({ id: z.string(), name: z.string() }),
+            headers: z
+              .object({
+                etag: z.string().optional(),
+                vary: z.union([z.string(), z.array(z.string())]).optional(),
+              })
+              .optional(),
           },
         },
         pipeline: [validate.params, sessionLayer, http.controller],
@@ -62,7 +69,7 @@ const Contract = contract({
       http: http({
         method: 'GET',
         path: '/raw/{id}',
-        input: { params: z.object({ id: z.string() }) },
+        request: { params: z.object({ id: z.string() }) },
         responses: { ok: { status: 200, body: z.string() } },
         pipeline: [http.controller],
       }),
@@ -82,6 +89,8 @@ context.response.found({
 })
 // @ts-expect-error response headerの値はstringまたはreadonly string[]のみ
 context.response.found({ body: { id: '1', name: 'Ada' }, headers: { etag: 1 } })
+// @ts-expect-error response schemaにないheaderは返せない
+context.response.found({ body: { id: '1', name: 'Ada' }, headers: { location: '/users/1' } })
 
 const session: Session = context.session
 void session
@@ -107,6 +116,31 @@ class GetController {
 }
 
 implement(Contract).for(http).procedures('get').with(GetController)
+
+class DirectGetController {
+  get() {
+    return {
+      kind: 'http-result' as const,
+      variant: 'found' as const,
+      body: { id: '1', name: 'Ada' },
+    }
+  }
+}
+
+implement(Contract).for(http).procedures('get').with(DirectGetController)
+
+class UndeclaredResultController {
+  get() {
+    return {
+      kind: 'http-result' as const,
+      variant: 'missing' as const,
+      body: { id: '1', name: 'Ada' },
+    }
+  }
+}
+
+// @ts-expect-error Controllerが直接返すresultもContractのresponse variantと一致する必要がある
+implement(Contract).for(http).procedures('get').with(UndeclaredResultController)
 
 class InvalidController {
   get() {
@@ -138,10 +172,10 @@ declare const afterTerminalContext: ContextOf<AfterTerminalHttp, 'run'>
 // @ts-expect-error terminalより後ろのLayerがprovideするpropertyは取得できない
 afterTerminalContext.session
 
-// @ts-expect-error Layerが宣言していないContext propertyは返せない
 layer({
   name: 'invalid-provide',
   provides: [SESSION],
+  // @ts-expect-error Layerが宣言していないContext propertyは返せない
   inbound: () => ({ otherSession: { accountId: 'account-2' } }),
 })
 
@@ -159,10 +193,10 @@ layer({
 interface HeadersContext {
   readonly headers: { readonly authorization: string }
 }
-layer<HeadersContext>({
+layer({
   name: 'typed-headers',
   provides: [OTHER_SESSION],
-  inbound: (ctx) => {
+  inbound: (ctx: HeadersContext) => {
     const authorization: string = ctx.headers.authorization
     return { otherSession: { accountId: authorization } }
   },
@@ -180,6 +214,26 @@ interface Storage {}
 class MemoryStorage implements Storage {}
 class S3Storage implements Storage {}
 const STORAGE = token<Storage>('storage.type-test')
+
+const MappedError = defineError({
+  code: 'MAPPED_ERROR',
+  data: z.object({ message: z.string() }),
+})
+
+http({
+  method: 'GET',
+  path: '/invalid-error-mapping',
+  // @ts-expect-error 必須header schemaを持つerror mappingはheaderを返す必要がある
+  responses: {
+    failed: {
+      status: 400,
+      body: z.object({ message: z.string() }),
+      headers: z.object({ 'x-error-code': z.string() }),
+      error: http.error(MappedError),
+    },
+  },
+  pipeline: [http.controller],
+})
 
 provide(STORAGE).select(TestEnv.key('DRIVER'), {
   memory: MemoryStorage,

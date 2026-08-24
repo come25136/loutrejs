@@ -54,7 +54,11 @@ export function createNodeHttpServer(
       const request = new Request(new URL(incoming.url ?? '/', origin), init)
       const response = await application.handle(request)
       outgoing.statusCode = response.status
-      response.headers.forEach((value, name) => outgoing.setHeader(name, value))
+      response.headers.forEach((value, name) => {
+        if (name !== 'set-cookie') outgoing.setHeader(name, value)
+      })
+      const cookies = response.headers.getSetCookie()
+      if (cookies.length > 0) outgoing.setHeader('set-cookie', cookies)
       if (!response.body) {
         outgoing.end()
         return

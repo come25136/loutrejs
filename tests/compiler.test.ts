@@ -5,6 +5,7 @@ import {
   defineModule,
   implement,
   layer,
+  type PipelineItem,
   provide,
   procedure,
   token,
@@ -16,13 +17,15 @@ import { z } from 'zod'
 
 const Body = z.object({ ok: z.boolean() })
 
-function protocol(pipeline: Parameters<typeof http>[0]['pipeline']) {
-  return http({
-    method: 'GET',
-    path: '/fixture',
-    responses: { ok: { status: 200, body: Body } },
-    pipeline,
-  })
+function protocol(pipeline: readonly PipelineItem[]) {
+  return http(
+    {
+      method: 'GET',
+      path: '/fixture',
+      responses: { ok: { status: 200, body: Body } },
+      pipeline,
+    } as never,
+  )
 }
 
 describe('minimal Compiler IR and static validation', () => {

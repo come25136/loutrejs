@@ -4,10 +4,11 @@ import {
   defineModule,
   implement,
   isShortCircuit,
+  layer,
   procedure,
 } from '@loutrefw/core'
 import { compileApplication } from '@loutrefw/compiler'
-import { basicAuth, http } from '@loutrefw/http'
+import { basicAuth, http, type HttpProtocolDefinition } from '@loutrefw/http'
 import { z } from 'zod'
 
 describe('basicAuth', () => {
@@ -180,8 +181,8 @@ describe('basicAuth', () => {
   })
 
   it.each([
-    { status: undefined, code: 'LUTRE_AUTH_001' },
-    { status: 403, code: 'LUTRE_AUTH_002' },
+    { status: undefined, code: 'LUTRE_SHORT_CIRCUIT_001' },
+    { status: 403, code: 'LUTRE_SHORT_CIRCUIT_002' },
   ])(
     'unauthorized responseの不整合を$codeで診断する',
     ({ status, code }) => {
@@ -194,7 +195,7 @@ describe('basicAuth', () => {
           body: { error: '認証が必要です' },
         },
       })
-      const responses =
+      const responses: HttpProtocolDefinition['responses'] =
         status === undefined
           ? {
               ok: { status: 200, body: z.object({ ok: z.boolean() }) },
@@ -208,12 +209,14 @@ describe('basicAuth', () => {
       const Contract = contract({
         get: procedure({
           protocols: {
-            http: http({
-              method: 'GET',
-              path: '/auth-diagnostic',
-              responses,
-              pipeline: [authentication, http.controller],
-            }),
+            http: http(
+              {
+                method: 'GET',
+                path: '/auth-diagnostic',
+                responses,
+                pipeline: [authentication, http.controller],
+              } as never,
+            ),
           },
         }),
       })
@@ -231,4 +234,48 @@ describe('basicAuth', () => {
       )
     },
   )
+
+  it('ユーザー定義Layerのresponse制約を診断する', () => {
+    const authentication = layer({
+      name: 'customAuthentication',
+      role: 'authentication',
+      shortCircuits: [
+        {
+          protocol: 'http',
+          variant: 'unauthorized',
+          response: { status: 401 },
+        },
+      ],
+    })
+    const status: number = 403
+    const Contract = contract({
+      get: procedure({
+        protocols: {
+          http: http({
+            method: 'GET',
+            path: '/custom-auth-diagnostic',
+            responses: {
+              unauthorized: {
+                status,
+                body: z.object({ error: z.string() }),
+              },
+            },
+            pipeline: [authentication, http.controller],
+          }),
+        },
+      }),
+    })
+    class Implementation {
+      get(): never {
+        throw new Error('実行対象ではありません')
+      }
+    }
+    const Module = defineModule(() => ({
+      implementations: [implement(Contract).for(http).with(Implementation)],
+    }))
+
+    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_SHORT_CIRCUIT_002' }),
+    )
+  })
 })

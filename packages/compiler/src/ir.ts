@@ -38,6 +38,7 @@ export interface LayerIR {
   readonly shortCircuits?: readonly {
     readonly protocol: string
     readonly variant: string
+    readonly response?: Readonly<Record<string, unknown>>
   }[]
 }
 

@@ -26,6 +26,7 @@ export interface LambdaHttpEvent {
 export interface LambdaHttpResult {
   readonly statusCode: number
   readonly headers: Readonly<Record<string, string>>
+  readonly cookies?: readonly string[]
   readonly body: string
   readonly isBase64Encoded: boolean
 }
@@ -33,9 +34,10 @@ export interface LambdaHttpResult {
 export function createLambdaHandler(application: HttpApplication) {
   return async (event: LambdaHttpEvent): Promise<LambdaHttpResult> => {
     const response = await application.handle(toRequest(event))
+    const metadata = responseMetadata(response)
     return {
       statusCode: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
+      ...metadata,
       body: Buffer.from(await response.arrayBuffer()).toString('base64'),
       isBase64Encoded: true,
     }
@@ -49,6 +51,7 @@ export interface LambdaResponseStream {
   setMetadata?(metadata: {
     readonly statusCode: number
     readonly headers: Readonly<Record<string, string>>
+    readonly cookies?: readonly string[]
   }): void
 }
 
@@ -58,9 +61,10 @@ export function createLambdaStreamingHandler(application: HttpApplication) {
     output: LambdaResponseStream,
   ): Promise<void> => {
     const response = await application.handle(toRequest(event))
+    const metadata = responseMetadata(response)
     output.setMetadata?.({
       statusCode: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
+      ...metadata,
     })
     const reader = response.body?.getReader()
     if (reader) {
@@ -75,6 +79,20 @@ export function createLambdaStreamingHandler(application: HttpApplication) {
       }
     }
     output.end()
+  }
+}
+
+function responseMetadata(response: Response): Pick<
+  LambdaHttpResult,
+  'headers' | 'cookies'
+> {
+  const headers = Object.fromEntries(
+    [...response.headers.entries()].filter(([name]) => name !== 'set-cookie'),
+  )
+  const cookies = response.headers.getSetCookie()
+  return {
+    headers,
+    ...(cookies.length === 0 ? {} : { cookies }),
   }
 }
 

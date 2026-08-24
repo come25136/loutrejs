@@ -39,17 +39,38 @@ export interface BasicAuthOptions<
   readonly name?: string
 }
 
-export interface BasicAuthLayerDescriptor<TPrincipal extends ContextKey>
+type BasicAuthShortCircuits<TVariant extends string> = readonly [
+  {
+    readonly protocol: 'http'
+    readonly variant: TVariant
+    readonly response: { readonly status: 401 }
+  },
+]
+
+type BasicAuthResponseHeaders = {
+  readonly 'www-authenticate': string
+}
+
+export interface BasicAuthLayerDescriptor<
+  TPrincipal extends ContextKey,
+  TVariant extends string,
+  TUnauthorizedBody,
+>
   extends LayerDescriptor<
     BasicAuthContext,
     void,
     readonly [],
-    readonly [TPrincipal]
+    readonly [TPrincipal],
+    string extends TVariant
+      ? unknown
+      : LogicalHttpResult<
+          TVariant,
+          TUnauthorizedBody,
+          BasicAuthResponseHeaders
+        >,
+    BasicAuthShortCircuits<TVariant>
   > {
-  readonly basicAuth: {
-    readonly realm: string
-    readonly unauthorizedVariant: string
-  }
+  readonly role: 'authentication'
 }
 
 export interface BasicAuthContext {
@@ -66,13 +87,20 @@ export function basicAuth<
   TUnauthorizedBody,
 >(
   options: BasicAuthOptions<TPrincipal, TVariant, TUnauthorizedBody>,
-): BasicAuthLayerDescriptor<TPrincipal> {
+): BasicAuthLayerDescriptor<TPrincipal, TVariant, TUnauthorizedBody> {
   const challenge = formatBasicChallenge(options.realm)
-  const descriptor = layer<readonly [], readonly [TPrincipal], BasicAuthContext>({
+  const descriptor = layer({
     name: options.name ?? 'basicAuth',
     role: 'authentication',
     provides: [options.principal],
-    inbound: async (ctx) => {
+    shortCircuits: [
+      {
+        protocol: 'http',
+        variant: options.unauthorized.variant,
+        response: { status: 401 },
+      },
+    ],
+    inbound: async (ctx: BasicAuthContext) => {
       const credentials = decodeBasicCredentials(ctx.headers.authorization)
       if (!credentials) {
         return unauthorizedResult(options.unauthorized, challenge)
@@ -88,20 +116,16 @@ export function basicAuth<
       } as ContextProperties<readonly [TPrincipal]>
     },
   })
-  return Object.freeze({
-    ...descriptor,
-    basicAuth: Object.freeze({
-      realm: options.realm,
-      unauthorizedVariant: options.unauthorized.variant,
-    }),
-  })
+  return Object.freeze(descriptor)
 }
 
 function unauthorizedResult<TVariant extends string, TBody>(
   unauthorized: BasicAuthUnauthorized<TVariant, TBody>,
   challenge: string,
 ) {
-  return shortCircuit<LogicalHttpResult<TVariant, TBody>>({
+  return shortCircuit<
+    LogicalHttpResult<TVariant, TBody, BasicAuthResponseHeaders>
+  >({
     kind: 'http-result',
     variant: unauthorized.variant,
     body: unauthorized.body,

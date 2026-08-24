@@ -703,7 +703,7 @@ procedure({
       method: "PATCH",
       path: "/articles/{id}",
 
-      input: {
+      request: {
         params: ArticleParamsSchema,
         query: UpdateQuerySchema,
         headers: RequestHeadersSchema,
@@ -719,7 +719,7 @@ procedure({
         notFound: {
           status: 404,
           body: NotFoundSchema,
-          error: ArticleNotFound,
+          error: http.error(ArticleNotFound),
         },
       },
 
@@ -746,7 +746,10 @@ responses: {
   updated: {
     status: 200,
     body: UserSchema,
-    headers: {
+    headers: z.object({
+      etag: z.string().optional(),
+    }),
+    staticHeaders: {
       'cache-control': 'private',
     },
   },
@@ -754,7 +757,7 @@ responses: {
   notFound: {
     status: 404,
     body: UserNotFoundSchema,
-    error: UserNotFound,
+    error: http.error(UserNotFound),
   },
 }
 ```
@@ -773,9 +776,19 @@ return ctx.response.updated({
 });
 ```
 
+response定義の`headers`はStandard Schemaであり、resultが返すdynamic headerを型検査し、
+Protocol Finalizationでも出力を検証する。schemaがないresponse variantからdynamic headerは
+返せない。固定headerは`staticHeaders`へ定義する。
+
 response定義のstatic headerとresultのdynamic headerが同名の場合はdynamicを優先する。
 `content-type`等、Protocol Finalizationが所有するheaderは最後にframeworkが設定する。
 複数値を持つheaderは`readonly string[]`で宣言できる。
+`Set-Cookie`はNode adapterでは複数header fieldとして、Lambda adapterではpayload v2の
+`cookies`として保持する。
+
+Controllerがresponse helperを使わずlogical resultを直接返す場合も、戻り値はContractの
+named response unionと照合する。`responses`や`pipeline`をindex signatureまたは
+`PipelineItem[]`へ広げると検査情報が失われるため、`http()`はliteral objectとtupleを要求する。
 
 ## 11.2 Protocol Decode は内部処理
 
@@ -1133,6 +1146,17 @@ export const basicAuthentication = basicAuth({
 short circuitする。Protocol Finalizationはbody schemaを検証し、HTTP 401と
 `WWW-Authenticate: Basic realm="...", charset="UTF-8"`を生成する。
 Compilerは`principal`をLayerの`provides`としてGraph化する。
+
+`LayerDescriptor`は`inbound`が生成し得るshort circuit resultの型を保持する。
+HTTP ContractはPipelineに配置された各Layerのshort circuit resultを`responses`と
+照合する。この検査は`basicAuth`固有ではなく、`layer()`と`shortCircuit()`で作成した
+ユーザー定義Layerにも同じように適用される。variantに加えてstatusなどのresponse制約を
+必要とするLayerは、`shortCircuits`でprotocolごとの制約を宣言する。Compilerもこの
+汎用メタデータをresponse整合性の検査に使用し、特定のLayer factory名には依存しない。
+`layer()`はname、role、requires/provides、requiresValidated、shortCircuitsをliteral型の
+まま`LayerDescriptor`へ保持する。Source CompilerはAST上のfactory名や引数形状ではなく、
+この型メタデータをApplication Graphの主情報源として使用する。Context型を明示する場合は
+`layer<Context>()`ではなく、`inbound`の引数へ型注釈を付ける。
 
 ```ts
 export const bearerAuthentication = authentication({
@@ -1606,11 +1630,19 @@ HTTP status は HTTP protocol 側:
 notFound: {
   status: 404,
   body: UserNotFoundSchema,
-  error: UserNotFound,
+  error: http.error(UserNotFound),
 }
 ```
 
 Domain Error に 404 を持たせない。
+response headerが必要なmappingはbodyとheadersを明示的に生成する。
+
+```ts
+error: http.error(UserNotFound, (error) => ({
+  body: error.data,
+  headers: { 'x-error-code': error.code },
+})),
+```
 
 ## 22.2 Unknown Error
 
@@ -2606,7 +2638,7 @@ Output validation/encode は Finalization。
 - [x] `requires` / `provides` は Context Key 配列を使う
 - [ ] Context Key object の exact runtime representation / branding
 - [ ] `shortCircuit(...)` exact API
-- [x] `ctx.response.created({ body, headers? })` response helper API
+- [x] `ctx.response.created({ body, headers })` response helper API（headersの省略可否はschemaから導出）
 - [ ] `defineError()` exact syntax
 - [ ] Application Error Handler registration API
 - [ ] Protocol Error Handler registration API

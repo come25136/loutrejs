@@ -35,7 +35,7 @@ interface HeadersContext {
   readonly headers: { readonly authorization: string }
 }
 
-export const bearerAuthentication = layer<HeadersContext>({
+export const bearerAuthentication = layer({
   name: 'bearerAuthentication',
   role: 'authentication',
   requiresValidated: ['headers'],
@@ -77,7 +77,7 @@ export const AccountContract = contract({
       http: http({
         method: 'GET',
         path: '/account',
-        input: {
+        request: {
           headers: z.object({ authorization: z.string() }),
         },
         responses: {

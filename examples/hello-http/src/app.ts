@@ -22,7 +22,7 @@ const GreetingContract = contract({
       http: http({
         method: 'GET',
         path: '/greetings/{name}',
-        input: {
+        request: {
           params: GreetingParams,
         },
         responses: {

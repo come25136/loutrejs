@@ -11,6 +11,7 @@ import {
   type ModuleTemplate,
   type PipelineItem,
   type ProviderDescriptor,
+  type ShortCircuitDeclaration,
   type TokenLike,
 } from '@loutrefw/core'
 import type {
@@ -422,19 +423,25 @@ function validatePipeline(
       }
       available.add(provided)
     }
-    const basicAuth = readBasicAuthMetadata(item)
-    if (basicAuth) {
-      const response = target.responses?.[basicAuth.unauthorizedVariant]
+    for (const shortCircuit of item.shortCircuits) {
+      if (shortCircuit.protocol !== target.protocol) continue
+      const response = target.responses?.[shortCircuit.variant]
       if (!response) {
         diagnostics.push({
-          code: 'LUTRE_AUTH_001',
-          message: `${item.name}のunauthorized variant ${basicAuth.unauthorizedVariant}がresponseに宣言されていません`,
+          code: 'LUTRE_SHORT_CIRCUIT_001',
+          message: `${item.name}のshort circuit variant ${shortCircuit.variant}がresponseに宣言されていません`,
           path,
         })
-      } else if (response.status !== 401) {
+        continue
+      }
+      const expectedStatus = shortCircuit.response?.status
+      if (
+        typeof expectedStatus === 'number' &&
+        response.status !== expectedStatus
+      ) {
         diagnostics.push({
-          code: 'LUTRE_AUTH_002',
-          message: `${item.name}のunauthorized variant ${basicAuth.unauthorizedVariant}はHTTP 401である必要があります`,
+          code: 'LUTRE_SHORT_CIRCUIT_002',
+          message: `${item.name}のshort circuit variant ${shortCircuit.variant}はHTTP ${expectedStatus}である必要があります`,
           path,
         })
       }
@@ -454,7 +461,6 @@ function validatePipeline(
 }
 
 function toLayerIR(item: PipelineItem, index: number): LayerIR {
-  const basicAuth = item.kind === 'layer' ? readBasicAuthMetadata(item) : undefined
   return {
     index,
     name: item.name,
@@ -465,28 +471,18 @@ function toLayerIR(item: PipelineItem, index: number): LayerIR {
       item.kind === 'layer' ? item.provides.map(contextKeyName) : [],
     requiresValidated:
       item.kind === 'layer' ? item.requiresValidated : [],
-    ...(basicAuth === undefined
+    ...(item.kind !== 'layer' || item.shortCircuits.length === 0
       ? {}
       : {
-          shortCircuits: [
-            { protocol: 'http', variant: basicAuth.unauthorizedVariant },
-          ],
+          shortCircuits: item.shortCircuits.map(
+            (shortCircuit: ShortCircuitDeclaration) => ({
+              protocol: shortCircuit.protocol,
+              variant: shortCircuit.variant,
+              ...(shortCircuit.response === undefined
+                ? {}
+                : { response: shortCircuit.response }),
+            }),
+          ),
         }),
   }
-}
-
-function readBasicAuthMetadata(
-  item: PipelineItem,
-): { readonly unauthorizedVariant: string } | undefined {
-  if (
-    item.kind !== 'layer' ||
-    !('basicAuth' in item) ||
-    typeof item.basicAuth !== 'object' ||
-    item.basicAuth === null ||
-    !('unauthorizedVariant' in item.basicAuth) ||
-    typeof item.basicAuth.unauthorizedVariant !== 'string'
-  ) {
-    return undefined
-  }
-  return { unauthorizedVariant: item.basicAuth.unauthorizedVariant }
 }

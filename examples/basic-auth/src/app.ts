@@ -52,6 +52,7 @@ const ProfileContract = contract({
           unauthorized: {
             status: 401,
             body: UnauthorizedBody,
+            headers: z.object({ 'www-authenticate': z.string() }),
           },
         },
         pipeline: [basicAuthentication, http.controller],

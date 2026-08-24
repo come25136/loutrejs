@@ -130,7 +130,11 @@ describe('TypeScript AST Compiler', () => {
         provides: ['currentUser'],
         requiresValidated: [],
         shortCircuits: [
-          { protocol: 'http', variant: 'unauthorized' },
+          {
+            protocol: 'http',
+            variant: 'unauthorized',
+            response: { status: 401 },
+          },
         ],
       }),
     )

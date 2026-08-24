@@ -39,7 +39,7 @@ describe('streaming validate.body', () => {
           http: http({
             method: 'POST',
             path: '/upload',
-            input: { body: BodyStreamSchema },
+            request: { body: BodyStreamSchema },
             responses: {
               accepted: {
                 status: 202,

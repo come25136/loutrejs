@@ -1,9 +1,14 @@
 import {
   API,
+  type Checker,
   DiagnosticCategory,
   type Diagnostic as TypeScriptDiagnostic,
+  type NumberLiteralType,
   type Program,
   type Snapshot,
+  type StringLiteralType,
+  type Type,
+  type TypeReference,
 } from 'typescript/unstable/sync'
 import * as ts from 'typescript/unstable/ast'
 import { dirname, extname, isAbsolute, resolve } from 'node:path'
@@ -178,6 +183,7 @@ function compileTypeScriptSnapshot(
     throw new Error(`TypeScript projectを開けませんでした: ${options.tsconfigPath}`)
   }
   const program = project.program
+  const checker = project.checker
   const candidateSourceFiles = program
     .getSourceFileNames()
     .map((fileName) => program.getSourceFile(fileName))
@@ -214,6 +220,7 @@ function compileTypeScriptSnapshot(
 
   for (const sourceFile of sourceFiles) {
     visitSourceFile(sourceFile, {
+      checker,
       modules,
       contracts,
       constructors,
@@ -442,6 +449,7 @@ function resolveRelativeSourceFile(
 }
 
 interface VisitState {
+  readonly checker: Checker
   readonly modules: SourceModuleIR[]
   readonly contracts: SourceContractIR[]
   readonly constructors: SourceConstructorIR[]
@@ -457,17 +465,24 @@ interface VisitState {
 function visitSourceFile(sourceFile: ts.SourceFile, state: VisitState): void {
   const visit = (node: ts.Node) => {
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
-      if (isFactoryInvocation(node.initializer, 'layer')) {
-        state.layerDefinitions.set(
-          node.name.text,
-          readLayerDefinition(node.name.text, node.initializer, sourceFile),
-        )
-      }
-      if (isFactoryInvocation(node.initializer, 'basicAuth')) {
-        state.layerDefinitions.set(
-          node.name.text,
-          readBasicAuthDefinition(node.name.text, node.initializer, sourceFile),
-        )
+      const typedLayer = readLayerTypeDefinition(
+        node.name.text,
+        node.initializer,
+        state.checker,
+      )
+      if (typedLayer) state.layerDefinitions.set(node.name.text, typedLayer)
+      if (typedLayer && isFactoryInvocation(node.initializer, 'layer')) {
+        const definition = node.initializer.arguments[0]
+        const returns =
+          definition && ts.isObjectLiteralExpression(definition)
+            ? readInboundReturnedProperties(definition)
+            : undefined
+        if (returns) {
+          state.layerDefinitions.set(node.name.text, {
+            ...typedLayer,
+            returns,
+          })
+        }
       }
       const declaredToken = readTokenDeclaration(
         node.name.text,
@@ -494,6 +509,7 @@ function visitSourceFile(sourceFile: ts.SourceFile, state: VisitState): void {
             sourceFile,
             state.diagnostics,
             state.layerDefinitions,
+            state.checker,
           ),
         )
       }
@@ -607,6 +623,7 @@ function readContract(
   sourceFile: ts.SourceFile,
   diagnostics: Diagnostic[],
   layerDefinitions: ReadonlyMap<string, Omit<LayerIR, 'index'>>,
+  checker: Checker,
 ): SourceContractIR {
   const definition = call.arguments[0]
   const procedures: SourceContractProcedureIR[] = []
@@ -647,7 +664,13 @@ function readContract(
           const pipeline =
             pipelineExpression && ts.isArrayLiteralExpression(pipelineExpression)
               ? pipelineExpression.elements.map((element, index) =>
-                  sourceLayer(element, index, sourceFile, layerDefinitions),
+                  sourceLayer(
+                    element,
+                    index,
+                    sourceFile,
+                    layerDefinitions,
+                    checker,
+                  ),
                 )
             : []
           validateSourceTerminal(
@@ -664,7 +687,7 @@ function readContract(
             pipeline,
             diagnostics,
           )
-          validateSourceBasicAuthResponses(
+          validateSourceShortCircuitResponses(
             name,
             procedureName,
             protocolName,
@@ -758,16 +781,13 @@ function sourceLayer(
   index: number,
   sourceFile: ts.SourceFile,
   layerDefinitions: ReadonlyMap<string, Omit<LayerIR, 'index'>>,
+  checker: Checker,
 ): LayerIR {
   const name = element.getText(sourceFile)
   const declared = layerDefinitions.get(name)
   if (declared) return { index, ...declared }
-  if (isFactoryInvocation(element, 'basicAuth')) {
-    return {
-      index,
-      ...readBasicAuthDefinition(name, element, sourceFile),
-    }
-  }
+  const inferred = readLayerTypeDefinition(name, element, checker)
+  if (inferred) return { index, ...inferred }
   const role = name.startsWith('validate.')
     ? 'validation'
     : /\.(controller|resolver|handler)$/.test(name)
@@ -783,45 +803,170 @@ function sourceLayer(
   }
 }
 
-function readBasicAuthDefinition(
+function readLayerTypeDefinition(
   name: string,
-  call: ts.CallExpression,
-  sourceFile: ts.SourceFile,
-): Omit<LayerIR, 'index'> {
-  const definition = call.arguments[0]
-  if (!definition || !ts.isObjectLiteralExpression(definition)) {
-    return {
-      name,
-      role: 'authentication',
-      requires: [],
-      provides: [],
-      requiresValidated: [],
-    }
+  expression: ts.Expression,
+  checker: Checker,
+): Omit<LayerIR, 'index'> | undefined {
+  const type = checker.getTypeAtLocation(expression)
+  if (!type) return undefined
+  if (readStringLiteralType(type, 'kind', expression, checker) !== 'layer') {
+    return undefined
   }
-  const declaredName = readObjectProperty(definition, 'name')
-  const principal = readObjectProperty(definition, 'principal')
-  const unauthorized = readObjectProperty(definition, 'unauthorized')
-  const variant =
-    unauthorized && ts.isObjectLiteralExpression(unauthorized)
-      ? readObjectProperty(unauthorized, 'variant')
-      : undefined
-  const variantName =
-    variant && ts.isStringLiteral(variant) ? variant.text : undefined
+  const role = readStringLiteralType(type, 'role', expression, checker)
+  const declaredName = readStringLiteralType(type, 'name', expression, checker)
   return {
-    name:
-      declaredName && ts.isStringLiteral(declaredName)
-        ? declaredName.text
-        : name,
-    role: 'authentication',
-    requires: [],
-    provides: principal ? [principal.getText(sourceFile)] : [],
-    requiresValidated: [],
-    ...(variantName === undefined
-      ? {}
-      : {
-          shortCircuits: [{ protocol: 'http', variant: variantName }],
-        }),
+    name: declaredName ?? name,
+    role: isLayerRole(role) ? role : 'generic',
+    requires: readContextKeyNames(type, 'requires', expression, checker),
+    provides: readContextKeyNames(type, 'provides', expression, checker),
+    requiresValidated: readStringTuple(
+      type,
+      'requiresValidated',
+      expression,
+      checker,
+    ),
+    ...readTypedShortCircuits(type, expression, checker),
   }
+}
+
+function readStringTuple(
+  type: Type,
+  property: string,
+  expression: ts.Expression,
+  checker: Checker,
+): string[] {
+  const propertyType = readTypeProperty(type, property, expression, checker)
+  if (!propertyType) return []
+  return readTupleElementTypes(propertyType, checker).flatMap((element) =>
+    element.isStringLiteralType() ? [element.value] : [],
+  )
+}
+
+function readContextKeyNames(
+  type: Type,
+  property: 'requires' | 'provides',
+  expression: ts.Expression,
+  checker: Checker,
+): string[] {
+  const propertyType = readTypeProperty(type, property, expression, checker)
+  if (!propertyType) return []
+  return readTupleElementTypes(propertyType, checker).flatMap((element) => {
+    const name = readStringLiteralType(element, 'name', expression, checker)
+    return name === undefined ? [] : [name]
+  })
+}
+
+function readTypedShortCircuits(
+  type: Type,
+  expression: ts.Expression,
+  checker: Checker,
+): Pick<LayerIR, 'shortCircuits'> | {} {
+  const declarations = readTypeProperty(
+    type,
+    'shortCircuits',
+    expression,
+    checker,
+  )
+  if (!declarations) return {}
+  const shortCircuits = readTupleElementTypes(declarations, checker).flatMap(
+    (declaration) => {
+      const protocol = readStringLiteralType(
+        declaration,
+        'protocol',
+        expression,
+        checker,
+      )
+      const variant = readStringLiteralType(
+        declaration,
+        'variant',
+        expression,
+        checker,
+      )
+      if (protocol === undefined || variant === undefined) return []
+      const response = readTypeProperty(
+        declaration,
+        'response',
+        expression,
+        checker,
+      )
+      const status = response
+        ? readNumberLiteralType(response, 'status', expression, checker)
+        : undefined
+      return [
+        {
+          protocol,
+          variant,
+          ...(status === undefined ? {} : { response: { status } }),
+        },
+      ]
+    },
+  )
+  return shortCircuits.length === 0 ? {} : { shortCircuits }
+}
+
+function readTupleElementTypes(
+  type: Type,
+  checker: Checker,
+): readonly Type[] {
+  const value = checker.getNonNullableType(type) ?? type
+  if (value.isTupleType()) {
+    return checker.getTypeArguments(value as TypeReference)
+  }
+  if (value.isTypeReference() && value.getTarget().isTupleType()) {
+    return checker.getTypeArguments(value)
+  }
+  return []
+}
+
+function readStringLiteralType(
+  type: Type,
+  property: string,
+  expression: ts.Expression,
+  checker: Checker,
+): string | undefined {
+  const value = readTypeProperty(type, property, expression, checker)
+  return value?.isStringLiteralType()
+    ? (value as StringLiteralType).value
+    : undefined
+}
+
+function readNumberLiteralType(
+  type: Type,
+  property: string,
+  expression: ts.Expression,
+  checker: Checker,
+): number | undefined {
+  const value = readTypeProperty(type, property, expression, checker)
+  return value?.isNumberLiteralType()
+    ? (value as NumberLiteralType).value
+    : undefined
+}
+
+function readTypeProperty(
+  type: Type,
+  property: string,
+  expression: ts.Expression,
+  checker: Checker,
+): Type | undefined {
+  const value = checker.getNonNullableType(type) ?? type
+  const symbol = checker.getPropertyOfType(value, property)
+  return symbol
+    ? checker.getNonNullableType(
+        checker.getTypeOfSymbolAtLocation(symbol, expression),
+      )
+    : undefined
+}
+
+function isLayerRole(value: string | undefined): value is LayerIR['role'] {
+  return (
+    value === 'generic' ||
+    value === 'authentication' ||
+    value === 'guard' ||
+    value === 'validation' ||
+    value === 'framework' ||
+    value === 'terminal'
+  )
 }
 
 function readSourceResponses(
@@ -844,7 +989,7 @@ function readSourceResponses(
   })
 }
 
-function validateSourceBasicAuthResponses(
+function validateSourceShortCircuitResponses(
   contract: string,
   procedure: string,
   protocol: string,
@@ -859,58 +1004,24 @@ function validateSourceBasicAuthResponses(
       const response = responses.find(({ name }) => name === shortCircuit.variant)
       if (!response) {
         diagnostics.push({
-          code: 'LUTRE_AUTH_001',
-          message: `${layer.name}のunauthorized variant ${shortCircuit.variant}がresponseに宣言されていません`,
+          code: 'LUTRE_SHORT_CIRCUIT_001',
+          message: `${layer.name}のshort circuit variant ${shortCircuit.variant}がresponseに宣言されていません`,
           path,
         })
-      } else if (response.status !== 401) {
+        continue
+      }
+      const expectedStatus = shortCircuit.response?.status
+      if (
+        typeof expectedStatus === 'number' &&
+        response.status !== expectedStatus
+      ) {
         diagnostics.push({
-          code: 'LUTRE_AUTH_002',
-          message: `${layer.name}のunauthorized variant ${shortCircuit.variant}はHTTP 401である必要があります`,
+          code: 'LUTRE_SHORT_CIRCUIT_002',
+          message: `${layer.name}のshort circuit variant ${shortCircuit.variant}はHTTP ${expectedStatus}である必要があります`,
           path,
         })
       }
     }
-  }
-}
-
-function readLayerDefinition(
-  name: string,
-  call: ts.CallExpression,
-  sourceFile: ts.SourceFile,
-): Omit<LayerIR, 'index'> {
-  const definition = call.arguments[0]
-  if (!definition || !ts.isObjectLiteralExpression(definition)) {
-    return {
-      name,
-      role: 'generic',
-      requires: [],
-      provides: [],
-      requiresValidated: [],
-    }
-  }
-  const declaredName = readObjectProperty(definition, 'name')
-  const role = readObjectProperty(definition, 'role')
-  const returnedProperties = readInboundReturnedProperties(definition)
-  return {
-    name:
-      declaredName && ts.isStringLiteral(declaredName)
-        ? declaredName.text
-        : name,
-    role:
-      role && ts.isStringLiteral(role)
-        ? (role.text as LayerIR['role'])
-        : 'generic',
-    requires: readArrayProperty(definition, 'requires', sourceFile),
-    provides: readArrayProperty(definition, 'provides', sourceFile),
-    ...(returnedProperties === undefined
-      ? {}
-      : { returns: returnedProperties }),
-    requiresValidated: readArrayProperty(
-      definition,
-      'requiresValidated',
-      sourceFile,
-    ).map((value) => value.replace(/^['"]|['"]$/g, '')),
   }
 }
 

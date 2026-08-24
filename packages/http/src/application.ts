@@ -106,7 +106,7 @@ export function createHttpApplication(options: {
           {
             context: raw,
             validate: async (layer, context) => {
-              const schema = routeMatch.route.protocol.definition.input?.[
+              const schema = routeMatch.route.protocol.definition.request?.[
                 layer.part
               ] as StandardSchemaV1 | undefined
               if (schema) {
@@ -132,10 +132,15 @@ export function createHttpApplication(options: {
         if (isValidationError(error)) {
           return jsonResponse(400, { error: 'Validation failed' })
         }
-        const mapped = mapDeclaredError(
-          routeMatch.route.protocol.definition,
-          error,
-        )
+        let mapped: LogicalHttpResult | undefined
+        try {
+          mapped = await mapDeclaredError(
+            routeMatch.route.protocol.definition,
+            error,
+          )
+        } catch {
+          return jsonResponse(500, { error: 'Internal Server Error' })
+        }
         if (mapped) {
           try {
             return await finalizeResponse(
@@ -186,7 +191,7 @@ async function decodeRequest(
 
   const headers = Object.fromEntries(request.headers.entries())
   let body: unknown = undefined
-  if (definition.input?.body) {
+  if (definition.request?.body) {
     const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim()
     if (mediaType === 'application/json') {
       body = await request.json()
@@ -231,7 +236,7 @@ async function invokeController(
   const context = {
     ...raw,
     response,
-  } as HttpControllerContext<HttpProtocol>
+  } as unknown as HttpControllerContext<HttpProtocol>
   return Reflect.apply(method, controller, [context]) as Promise<LogicalHttpResult>
 }
 
@@ -246,6 +251,10 @@ async function finalizeResponse(
   if (!response) {
     throw new Error(`Undeclared HTTP response variant: ${result.variant}`)
   }
+  const responseHeaders = await validateResponseHeaders(
+    response.headers,
+    result.headers,
+  )
   if (response.stream === 'server') {
     if (!isAsyncIterable(result.body)) {
       throw new Error('server-stream responseにはAsyncIterableが必要です')
@@ -273,8 +282,8 @@ async function finalizeResponse(
     return new Response(stream, {
       status: response.status,
       headers: mergeResponseHeaders(
-        response.headers,
-        result.headers,
+        response.staticHeaders,
+        responseHeaders,
         {
           'content-type': 'text/event-stream; charset=utf-8',
           'cache-control': 'no-cache',
@@ -286,7 +295,39 @@ async function finalizeResponse(
   return jsonResponse(
     response.status,
     body,
-    mergeResponseHeaders(response.headers, result.headers),
+    mergeResponseHeaders(response.staticHeaders, responseHeaders),
+  )
+}
+
+async function validateResponseHeaders(
+  schema: StandardSchemaV1 | undefined,
+  headers: HttpHeaders | undefined,
+): Promise<HttpHeaders | undefined> {
+  if (!schema) {
+    if (headers !== undefined) {
+      throw new Error('未宣言のHTTP response headerが返されました')
+    }
+    return undefined
+  }
+
+  const validated = await validateSchema(schema, headers)
+  if (validated === undefined) return undefined
+  if (!isHttpHeaders(validated)) {
+    throw new Error('HTTP response header schemaの出力が不正です')
+  }
+  return validated
+}
+
+function isHttpHeaders(value: unknown): value is HttpHeaders {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+  return Object.values(value).every(
+    (header) =>
+      header === undefined ||
+      typeof header === 'string' ||
+      (Array.isArray(header) &&
+        header.every((item) => typeof item === 'string')),
   )
 }
 
@@ -372,6 +413,7 @@ function applyResponseHeaders(
 ): void {
   if (!source) return
   for (const [name, value] of Object.entries(source)) {
+    if (value === undefined) continue
     headers.delete(name)
     if (typeof value === 'string') {
       headers.set(name, value)
@@ -385,21 +427,22 @@ function isValidationError(error: unknown): boolean {
   return error instanceof HttpInputValidationError
 }
 
-function mapDeclaredError(
+async function mapDeclaredError(
   definition: HttpProtocolDefinition,
   error: unknown,
-): LogicalHttpResult | undefined {
+): Promise<LogicalHttpResult | undefined> {
   for (const [variant, response] of Object.entries(definition.responses)) {
-    const errorDefinition = response.error as
-      | {
-          readonly is?: (error: unknown) => boolean
-        }
-      | undefined
-    if (errorDefinition?.is?.(error)) {
+    const errorMapping = response.error
+    if (errorMapping?.definition.is(error)) {
+      const result = await errorMapping.map(error)
+      if (typeof result !== 'object' || result === null || !('body' in result)) {
+        throw new Error('HTTP error mappingはbodyを返す必要があります')
+      }
       return {
         kind: 'http-result',
         variant,
-        body: (error as { readonly data: unknown }).data,
+        body: result.body,
+        ...('headers' in result ? { headers: result.headers as HttpHeaders } : {}),
       }
     }
   }

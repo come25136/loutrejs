@@ -27,7 +27,7 @@ export const UsersContract = contract({
       http: http({
         method: 'GET',
         path: '/users/{id}',
-        input: {
+        request: {
           params: UserParams,
         },
         responses: {
@@ -45,7 +45,7 @@ export const UsersContract = contract({
       http: http({
         method: 'POST',
         path: '/users',
-        input: {
+        request: {
           body: CreateUser,
         },
         responses: {

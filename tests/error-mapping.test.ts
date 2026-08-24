@@ -29,7 +29,11 @@ describe('Domain ErrorとProtocol mapping', () => {
               notFound: {
                 status: 404,
                 body: z.object({ userId: z.string() }),
-                error: UserNotFound,
+                headers: z.object({ 'x-error-code': z.string() }),
+                error: http.error(UserNotFound, (error) => ({
+                  body: error.data,
+                  headers: { 'x-error-code': error.code },
+                })),
               },
             },
             pipeline: [http.controller],
@@ -52,6 +56,7 @@ describe('Domain ErrorとProtocol mapping', () => {
     )
 
     expect(response.status).toBe(404)
+    expect(response.headers.get('x-error-code')).toBe('USER_NOT_FOUND')
     expect(await response.json()).toEqual({ userId: 'missing-user' })
     const error = UserNotFound({ userId: 'one' })
     expect(error).not.toHaveProperty('status')

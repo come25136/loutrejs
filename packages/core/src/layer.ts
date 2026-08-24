@@ -29,7 +29,7 @@ export interface ShortCircuit<TResult = unknown, TState = undefined> {
  * 残りのinbound Layerとterminalを実行せず、Logical ResultをProtocol
  * Finalizationへ送る。現在のLayerは正常にenteredとなり、outboundの対象になる。
  */
-export function shortCircuit<TResult, TState = undefined>(
+export function shortCircuit<const TResult, TState = undefined>(
   result: TResult,
   state?: TState,
 ): ShortCircuit<TResult, TState | undefined> {
@@ -53,27 +53,48 @@ export function isShortCircuit(value: unknown): value is ShortCircuit {
 type ProvidedResult<
   TProvides extends readonly ContextKey[],
   TState,
+  TShortCircuitResult,
 > = number extends TProvides['length']
-  ? TState | void | ContextProperties<TProvides> | ShortCircuit<unknown, TState>
+  ? TState | void | ContextProperties<TProvides> | ShortCircuit<TShortCircuitResult, TState>
   : TProvides extends readonly []
-    ? TState | void | ShortCircuit<unknown, TState>
-    : ContextProperties<TProvides> | ShortCircuit<unknown, TState>
+    ? TState | void | ShortCircuit<TShortCircuitResult, TState>
+    : ContextProperties<TProvides> | ShortCircuit<TShortCircuitResult, TState>
+
+declare const shortCircuitResultType: unique symbol
+
+export interface ShortCircuitDeclaration {
+  readonly protocol: string
+  readonly variant: string
+  readonly response?: Readonly<Record<string, unknown>>
+}
 
 export interface LayerDescriptor<
   TContext = unknown,
   TState = unknown,
   TRequires extends readonly ContextKey[] = readonly ContextKey[],
   TProvides extends readonly ContextKey[] = readonly ContextKey[],
+  TShortCircuitResult = unknown,
+  TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly ShortCircuitDeclaration[],
+  TName extends string = string,
+  TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = Exclude<
+    LayerRole,
+    'terminal' | 'validation'
+  >,
+  TRequiresValidated extends readonly ValidatedInputPart[] = readonly ValidatedInputPart[],
 > {
   readonly kind: 'layer'
-  readonly name: string
-  readonly role: Exclude<LayerRole, 'terminal' | 'validation'>
+  readonly name: TName
+  readonly role: TRole
   readonly requires: TRequires
   readonly provides: TProvides
-  readonly requiresValidated: readonly ValidatedInputPart[]
+  readonly requiresValidated: TRequiresValidated
+  readonly shortCircuits: TShortCircuits
+  readonly [shortCircuitResultType]?: TShortCircuitResult
   readonly inbound?: (
     context: TContext & ContextProperties<TRequires>,
-  ) => ProvidedResult<TProvides, TState> | Promise<ProvidedResult<TProvides, TState>>
+  ) =>
+    | ProvidedResult<TProvides, TState, TShortCircuitResult>
+    | Promise<ProvidedResult<TProvides, TState, TShortCircuitResult>>
   readonly outbound?: (
     context: TContext & ContextProperties<TRequires> & ContextProperties<TProvides>,
     outcome: Outcome,
@@ -98,9 +119,21 @@ export interface TerminalLayerDescriptor<TProtocol extends string = string> {
 }
 
 export type PipelineItem =
-  | LayerDescriptor<any, any, any, any>
+  | LayerDescriptor<any, any, any, any, any, any, any, any, any>
   | ValidationLayerDescriptor
   | TerminalLayerDescriptor
+
+export type ShortCircuitResultOf<TItem> = TItem extends {
+  readonly [shortCircuitResultType]?: infer TResult
+}
+  ? TResult
+  : never
+
+export type ShortCircuitDeclarationsOf<TItem> = TItem extends {
+  readonly shortCircuits: infer TShortCircuits
+}
+  ? TShortCircuits
+  : never
 
 export type ContextProvidedBeforeTerminal<
   TPipeline extends readonly PipelineItem[],
@@ -110,7 +143,17 @@ export type ContextProvidedBeforeTerminal<
   : TPipeline extends readonly [infer THead, ...infer TTail]
     ? THead extends TerminalLayerDescriptor
       ? TContext
-      : THead extends LayerDescriptor<any, any, any, infer TProvides>
+      : THead extends LayerDescriptor<
+            any,
+            any,
+            any,
+            infer TProvides,
+            any,
+            any,
+            any,
+            any,
+            any
+          >
         ? ContextProvidedBeforeTerminal<
             Extract<TTail, readonly PipelineItem[]>,
             TContext & ContextProperties<TProvides>
@@ -141,17 +184,24 @@ export interface LayerDefinition<
   TState,
   TRequires extends readonly ContextKey[] = readonly [],
   TProvides extends readonly ContextKey[] = readonly [],
+  TShortCircuitResult = unknown,
+  TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
+  TName extends string = string,
+  TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = 'generic',
+  TRequiresValidated extends readonly ValidatedInputPart[] = readonly [],
 > {
-  readonly name: string
-  readonly role?: Exclude<LayerRole, 'terminal' | 'validation'>
+  readonly name: TName
+  readonly role?: TRole
   readonly requires?: TRequires
   readonly provides?: TProvides
-  readonly requiresValidated?: readonly ValidatedInputPart[]
+  readonly requiresValidated?: TRequiresValidated
+  readonly shortCircuits?: TShortCircuits
   readonly inbound?: LayerDescriptor<
     TContext,
     TState,
     TRequires,
-    TProvides
+    TProvides,
+    TShortCircuitResult
   >['inbound']
   readonly outbound?: LayerDescriptor<
     TContext,
@@ -161,41 +211,59 @@ export interface LayerDefinition<
   >['outbound']
 }
 
-type IsUnknown<T> = unknown extends T
-  ? [keyof T] extends [never]
-    ? true
-    : false
-  : false
+type EffectiveLayerState<
+  TProvides extends readonly ContextKey[],
+  TState,
+> = number extends TProvides['length']
+  ? TState
+  : TProvides extends readonly []
+    ? TState
+    : void
 
 export function layer<
   const TRequires extends readonly ContextKey[] = readonly [],
   const TProvides extends readonly ContextKey[] = readonly [],
   TContext = unknown,
   TState = void,
+  TShortCircuitResult = unknown,
+  const TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
+  const TName extends string = string,
+  const TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = 'generic',
+  const TRequiresValidated extends readonly ValidatedInputPart[] = readonly [],
 >(
-  definition: LayerDefinition<TContext, TState, TRequires, TProvides>,
-): LayerDescriptor<TContext, TState, TRequires, TProvides>
-export function layer<TContext, TState = void>(
-  definition: IsUnknown<TContext> extends true
-    ? never
-    : LayerDefinition<
-        TContext,
-        TState,
-        readonly ContextKey[],
-        readonly ContextKey[]
-      >,
+  definition: LayerDefinition<
+    TContext,
+    EffectiveLayerState<TProvides, TState>,
+    TRequires,
+    TProvides,
+    TShortCircuitResult,
+    TShortCircuits,
+    TName,
+    TRole,
+    TRequiresValidated
+  >,
 ): LayerDescriptor<
   TContext,
-  TState,
-  readonly ContextKey[],
-  readonly ContextKey[]
+  EffectiveLayerState<TProvides, TState>,
+  TRequires,
+  TProvides,
+  TShortCircuitResult,
+  TShortCircuits,
+  TName,
+  TRole,
+  TRequiresValidated
 >
 export function layer(
   definition: LayerDefinition<
     unknown,
     unknown,
     readonly ContextKey[],
-    readonly ContextKey[]
+    readonly ContextKey[],
+    unknown,
+    readonly ShortCircuitDeclaration[],
+    string,
+    Exclude<LayerRole, 'terminal' | 'validation'>,
+    readonly ValidatedInputPart[]
   >,
 ): LayerDescriptor {
   return {
@@ -205,6 +273,7 @@ export function layer(
     requires: definition.requires ?? [],
     provides: definition.provides ?? [],
     requiresValidated: definition.requiresValidated ?? [],
+    shortCircuits: definition.shortCircuits ?? [],
     ...(definition.inbound === undefined ? {} : { inbound: definition.inbound }),
     ...(definition.outbound === undefined ? {} : { outbound: definition.outbound }),
   }

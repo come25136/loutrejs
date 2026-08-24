@@ -38,7 +38,7 @@ describe('canonical Fixture B', () => {
           http: http({
             method: 'GET',
             path: '/invalid-account',
-            input: {
+            request: {
               headers: z.object({ authorization: z.string() }),
             },
             responses: {

@@ -34,7 +34,7 @@ describe('HTTP application boundary', () => {
           http: http({
             method: 'POST',
             path: '/things/{id}',
-            input: {
+            request: {
               params: z.object({ id: z.string().min(2) }),
               query: z.object({ page: z.coerce.number().int() }),
               headers: z.object({ 'x-kind': z.literal('fixture') }),
@@ -43,7 +43,12 @@ describe('HTTP application boundary', () => {
             responses: {
               updated: {
                 status: 200,
-                headers: {
+                headers: z.object({
+                  'x-dynamic': z.string(),
+                  'x-overridden': z.string(),
+                  'content-type': z.string(),
+                }),
+                staticHeaders: {
                   'x-declared': 'static',
                   'x-overridden': 'static',
                 },
@@ -187,6 +192,91 @@ describe('HTTP application boundary', () => {
       new Request('http://fixture.test/invalid-output'),
     )
     expect(response.status).toBe(500)
+  })
+
+  it('response header schema failuresをinternal finalization errorにする', async () => {
+    const Contract = contract({
+      run: procedure({
+        protocols: {
+          http: http({
+            method: 'GET',
+            path: '/invalid-output-header',
+            responses: {
+              ok: {
+                status: 200,
+                body: z.object({ value: z.string() }),
+                headers: z.object({ etag: z.string().startsWith('"') }),
+              },
+            },
+            pipeline: [http.controller],
+          }),
+        },
+      }),
+    })
+    type Controller = ControllerOf<typeof Contract, 'http'>
+    class Implementation implements Controller {
+      run(ctx: ContextOf<Controller, 'run'>) {
+        return ctx.response.ok({
+          body: { value: 'invalid' },
+          headers: { etag: 'invalid' },
+        })
+      }
+    }
+    const Module = defineModule(() => ({
+      implementations: [implement(Contract).for(http).with(Implementation)],
+    }))
+    const application = createHttpApplication({ modules: [Module()] })
+
+    const response = await application.handle(
+      new Request('http://fixture.test/invalid-output-header'),
+    )
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual(
+      expect.objectContaining({ error: 'Internal Server Error' }),
+    )
+  })
+
+  it('schema未宣言のdynamic response headerを拒否する', async () => {
+    const Contract = contract({
+      run: procedure({
+        protocols: {
+          http: http({
+            method: 'GET',
+            path: '/undeclared-output-header',
+            responses: {
+              ok: {
+                status: 200,
+                body: z.object({ value: z.string() }),
+              },
+            },
+            pipeline: [http.controller],
+          }),
+        },
+      }),
+    })
+    type Controller = ControllerOf<typeof Contract, 'http'>
+    class Implementation implements Controller {
+      run(ctx: ContextOf<Controller, 'run'>) {
+        return ctx.response.ok({
+          body: { value: 'invalid' },
+          headers: { etag: 'undeclared' },
+        } as never)
+      }
+    }
+    const Module = defineModule(() => ({
+      implementations: [implement(Contract).for(http).with(Implementation)],
+    }))
+    const application = createHttpApplication({ modules: [Module()] })
+
+    const response = await application.handle(
+      new Request('http://fixture.test/undeclared-output-header'),
+    )
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual(
+      expect.objectContaining({ error: 'Internal Server Error' }),
+    )
   })
 
   it('short circuit resultもoutbound後にProtocol Finalizationを通す', async () => {
