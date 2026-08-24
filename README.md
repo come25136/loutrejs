@@ -17,8 +17,8 @@
 </p>
 
 > [!WARNING]
-> Loutreは現在、初期開発段階です。Phase 1のApplication Graphはend-to-endで動作しますが、
-> Public APIは安定版ではなく、予告なく変更される可能性があります。
+> Loutreは現在開発初期の実験的なプロジェクトです。Public APIは安定しておらず、
+> バージョン間で予告なく変更される可能性があります。
 
 ## Loutreとは
 
@@ -49,6 +49,7 @@ Filesystem規約やruntime reflectionに依存せず、依存関係、実行順�
 - **マルチランタイム** — application codeを保ったまま、adapterを介して複数の
   JavaScript runtimeへ展開
 - **複数protocol** — HTTPとMessagePortを備え、unaryおよびserver streamingに対応
+- **構造化ログ** — 開発向けのカラー表示とログ収集向けのJSON Linesに対応
 
 ## クイックスタート
 
@@ -122,19 +123,11 @@ npx loutre start fixtures/http-crud/src/app.ts --port 3000
 | `@loutrejs/runtime-*` | 各JavaScript runtimeとの境界adapter |
 | `@loutrejs/cli` | `check`、`doctor`、`graph`、`explain`、`build`、`dev`、`start` |
 
-## アーキテクチャと現在の実装範囲
+## 設計ドキュメント
 
-Phase 1では、次のcanonical fixtureをend-to-endで実行できます。
-
-- [`fixtures/http-crud`](./fixtures/http-crud): HTTP GET / POST、params / body検証、Provider DI
-- [`fixtures/http-auth`](./fixtures/http-auth): Authentication / Guard、Context Key
-- [`fixtures/database-modules`](./fixtures/database-modules): Module複数instance、Env、Lifecycle
-- [`fixtures/streaming`](./fixtures/streaming): 同じdomain streamのHTTP SSE / MessagePort公開
-
-Phase 1の規範的な設計は[`architecture.md`](./architecture.md)をsource of truthとします。
-実装時の暫定的な選択は
-[`docs/phase-1-decisions.md`](./docs/phase-1-decisions.md)、完成条件と検証の対応は
-[`docs/phase-1-completion.md`](./docs/phase-1-completion.md)に記録しています。
+Application Graph、DI、Pipeline、Protocolなどの詳しい設計は
+[`architecture.md`](./architecture.md)を参照してください。実装上の補足は
+[`docs/phase-1-decisions.md`](./docs/phase-1-decisions.md)にまとめています。
 
 ## 開発
 
@@ -163,7 +156,7 @@ IssueやPull Requestを歓迎します。大きな変更やPublic APIに関わ�
 [Issue](https://github.com/come25136/loutrejs/issues)で目的と設計方針を共有してください。
 
 Pull Requestでは、変更に対応するtestを追加し、可能な範囲で`npm run verify`を通して
-ください。Phase 1のFROZEN要件と衝突する変更は、先に`architecture.md`上の合意が必要です。
+ください。設計やPublic APIへ影響する変更は、先にIssueで方向性を相談してください。
 
 ## ライセンス
 

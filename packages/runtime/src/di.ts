@@ -8,7 +8,7 @@ import {
   type ProviderDescriptor,
   type TokenLike,
 } from '@loutrejs/core'
-import { ConsoleLoggerBackend, Logger } from './logger.js'
+import { Logger } from './logger.js'
 import {
   runtimeLinkageTarget,
   type RuntimeLinkageArtifact,
@@ -53,12 +53,15 @@ export class Container {
   readonly #implementationCache = new Map<Class, Promise<unknown>>()
 
   readonly #linkedDependencies = new Map<Function, readonly TokenLike[]>()
+  readonly #logger: Logger
   #linkageAttached = false
   #resolutionStarted = false
 
   constructor(
     providers: readonly ProviderDescriptor[],
+    logger: Logger = new Logger(),
   ) {
+    this.#logger = logger
     for (const provider of providers) {
       if (this.#providers.has(provider.provide)) {
         throw new DependencyResolutionError(
@@ -123,7 +126,7 @@ export class Container {
       if (
         (token as TokenLike) === (Logger as unknown as TokenLike)
       ) {
-        return new Logger(new ConsoleLoggerBackend(), {
+        return this.#logger.child({
           ...(source === undefined ? {} : { source }),
         }) as T
       }

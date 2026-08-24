@@ -18,9 +18,9 @@ import {
 } from '@loutrejs/compiler/runtime'
 import {
   ApplicationRuntime,
-  ConsoleLoggerBackend,
   executePipeline,
   Logger,
+  normalizeUnknownError,
 } from '@loutrejs/runtime'
 import {
   runtimeLinkageTarget,
@@ -155,10 +155,13 @@ export interface MessagePortApplication extends RuntimeLinkableApplication {
 
 export function createMessagePortApplication(options: {
   readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
+  readonly logger?: Logger
 }): MessagePortApplication {
   const roots = options.modules.map(asModuleInstance)
   assertValidCompilation(compileApplication(roots))
-  const runtime = new ApplicationRuntime(roots)
+  const applicationLogger = options.logger ?? new Logger()
+  const runtime = new ApplicationRuntime(roots, { logger: applicationLogger })
+  const logger = applicationLogger.child({ protocol: 'messagePort' })
   const routes = collectRoutes(runtime.graph.modules)
   let initialization: Promise<void> | undefined
   const initialize = () => (initialization ??= runtime.initialize())
@@ -167,45 +170,70 @@ export function createMessagePortApplication(options: {
     initialize,
     shutdown: (signal) => runtime.shutdown(signal),
     async invoke(procedure, input) {
-      await initialize()
-      const route = routes.find((candidate) => candidate.procedure === procedure)
-      if (!route) throw new Error(`MessagePort procedureがありません: ${procedure}`)
-      const message = Object.fromEntries(
-        Object.keys(route.protocol.definition.responses).map((variant) => [
-          variant,
-          (value: unknown) => ({
-            kind: 'message-port-result',
-            variant,
-            value,
-          }),
-        ]),
-      )
-      const context = {
-        input,
-        message,
-        logger: new Logger(new ConsoleLoggerBackend(), {
-          protocol: 'messagePort',
-          procedure: route.procedure,
-          source: `${route.implementation.name}.${route.procedure}`,
-          executionId: crypto.randomUUID(),
-        }),
-      }
-      const result = await executePipeline<
-        Record<string, unknown>,
-        LogicalMessagePortResult
-      >(route.protocol.definition.pipeline, {
-        context,
-        validate: () => undefined,
-        terminal: async (_layer, terminalContext) => {
-          const target = await runtime.container.resolveImplementation(
-            route.implementation,
-          ) as Record<string, unknown>
-          const method = target[route.procedure]
-          if (typeof method !== 'function') throw new Error('Handler methodがありません')
-          return Reflect.apply(method, target, [terminalContext]) as Promise<LogicalMessagePortResult>
-        },
+      const startedAt = Date.now()
+      let invocationLogger = logger.child({
+        procedure,
+        executionId: crypto.randomUUID(),
       })
-      return finalize(route.protocol.definition, result)
+      try {
+        await initialize()
+        const route = routes.find((candidate) => candidate.procedure === procedure)
+        if (!route) throw new Error(`MessagePort procedureがありません: ${procedure}`)
+        invocationLogger = invocationLogger.child({
+          source: `${route.implementation.name}.${route.procedure}`,
+        })
+        const message = Object.fromEntries(
+          Object.keys(route.protocol.definition.responses).map((variant) => [
+            variant,
+            (value: unknown) => ({
+              kind: 'message-port-result',
+              variant,
+              value,
+            }),
+          ]),
+        )
+        const context = {
+          input,
+          message,
+          logger: invocationLogger,
+        }
+        const result = await executePipeline<
+          Record<string, unknown>,
+          LogicalMessagePortResult
+        >(route.protocol.definition.pipeline, {
+          context,
+          validate: () => undefined,
+          terminal: async (_layer, terminalContext) => {
+            const target = await runtime.container.resolveImplementation(
+              route.implementation,
+            ) as Record<string, unknown>
+            const method = target[route.procedure]
+            if (typeof method !== 'function') throw new Error('Handler methodがありません')
+            return Reflect.apply(method, target, [terminalContext]) as Promise<LogicalMessagePortResult>
+          },
+        })
+        const finalized = await finalize(route.protocol.definition, result)
+        invocationLogger.info('MessagePort invocation completed', {
+          event: 'message_port.invocation.completed',
+          durationMs: Math.max(0, Date.now() - startedAt),
+        })
+        return finalized
+      } catch (error) {
+        const normalized = normalizeUnknownError(error, invocationLogger.context)
+        invocationLogger.error('Unhandled application error', {
+          event: 'application.error',
+          durationMs: Math.max(0, Date.now() - startedAt),
+          error: {
+            code: normalized.code,
+            id: normalized.errorId,
+            name: error instanceof Error ? error.name : typeof error,
+            message: normalized.message,
+            ...(normalized.stack === undefined ? {} : { stack: normalized.stack }),
+            ...(normalized.cause === undefined ? {} : { cause: normalized.cause }),
+          },
+        })
+        throw error
+      }
     },
   }
 }

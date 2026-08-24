@@ -1745,6 +1745,14 @@ Execution Context 上の一時データは application lifecycle resource では
 Phase 1 から structured Logger を含める。
 ただし **static application context** と **execution context** を分離する。
 
+すべてのrecordは最低限、ISO 8601 UTCの`timestamp`、`level`、`message`を持つ。この3 fieldは
+予約fieldとし、Logger contextから上書きできない。既定の`ConsoleLoggerBackend`はNestJS風の
+人間向け1行表示とし、TTYではlevel、source、contextをANSI colorで区別する。non-TTY、
+`NO_COLOR`、`NODE_DISABLE_COLORS`ではcolorを無効にし、`FORCE_COLOR`を尊重する。
+JSON Linesは`JsonConsoleLoggerBackend`アダプタで選択できる。`Error`、`bigint`、循環参照を
+含むcontextも、formatまたはJSON serialization failureでlogging対象のApplication処理を
+失敗させず出力可能な値へ変換する。
+
 ## 24.1 Constructor-injected Logger = static source context
 
 Application-scoped Provider / Controller / Service は Logger を constructor DI できる。
@@ -1767,6 +1775,9 @@ Compiler/Container は injection site から最低以下の static metadata を�
 module
 source/provider/service
 ```
+
+Applicationへroot `Logger`が指定された場合、constructor Loggerとexecution Loggerは
+そのbackendおよびapplication contextを共有する。
 
 この Logger に `requestId` / `traceId` / `procedure` 等の execution-specific metadata が自動で入ることを保証してはならない。
 Core は AsyncLocalStorage 等の ambient runtime context に依存しない。
@@ -1794,6 +1805,15 @@ requestId (HTTP 等で存在する場合)
 traceId (存在する場合)
 ```
 
+HTTPはroute未一致を含む各requestについて`http.request.completed`を出力し、`method`、
+`path`、`status`、`durationMs`を記録する。MessagePortは各invokeについて
+`message_port.invocation.completed`を出力する。どちらも`executionId`で同じ実行中の
+developer logと関連付ける。自動ログにHTTPのquery、headers、bodyを含めない。
+
+未処理例外は`application.error`として構造化し、client responseの`errorId`と同じ値を
+`error.id`へ記録する。Domain Errorから宣言済みresponseへの正常なmappingは未処理例外に
+含めない。
+
 例:
 
 ```json
@@ -1815,7 +1835,7 @@ Constructor Logger と `ctx.logger` は別責務。
 Application Service 内で execution correlation が必要な場合、Phase 1 は ambient magic を前提にしない。
 必要なら caller が execution Logger または明示的な observability context を Service API に渡す。
 
-`ctx.logger.child(...)` 等の exact child/binding API は OPEN。
+追加contextは`ctx.logger.child(context)`で派生Loggerへbindingする。
 OpenTelemetry integration も adapter として後から追加する。
 
 Phase 1 は console backend で十分。
@@ -2687,7 +2707,7 @@ Protocol Pipeline は routing 後の procedure/protocol-local execution を表�
 
 未確定:
 
-- [ ] route 未一致 404 等を含む access logging をどこで行うか
+- [x] route 未一致 404 等を含むaccess logはProtocol Application境界で出力する
 - [ ] Application/Adapter-level outer Pipeline/Layer を持つか
 - [ ] それを Protocol Pipeline と同じ Layer model にするか、別 hook concept にするか
 
@@ -2739,8 +2759,10 @@ Protocol Pipeline は routing 後の procedure/protocol-local execution を表�
 - [x] Constructor `Logger` は static source context (`module` / `source`)
 - [x] `ctx.logger` は execution context (`procedure` / `protocol` / ids)
 - [x] Core は AsyncLocalStorage 等の ambient propagation を必須にしない
-- [ ] `ctx.logger.child(...)` / binding API exact shape
-- [ ] Stable field name set
+- [x] `ctx.logger.child(context)` で追加contextをbindingする
+- [x] `timestamp` / `level` / `message`を予約fieldとする
+- [x] 既定のカラーconsole backendとJSON Lines adapterを分離する
+- [x] HTTP / MessagePortの完了eventと未処理例外event
 - [ ] Trace/span integration
 - [ ] OpenTelemetry adapter timing
 

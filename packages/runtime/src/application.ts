@@ -15,6 +15,11 @@ import {
   runtimeLinkageTarget,
   type RuntimeLinkageArtifact,
 } from './linkage.js'
+import { Logger } from './logger.js'
+
+export interface ApplicationRuntimeOptions {
+  readonly logger?: Logger
+}
 
 export class ApplicationRuntime {
   readonly graph: RuntimeModuleGraph
@@ -25,9 +30,10 @@ export class ApplicationRuntime {
 
   constructor(
     roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
+    options: ApplicationRuntimeOptions = {},
   ) {
     this.graph = collectRuntimeModuleGraph(roots)
-    this.container = new Container(this.graph.providers)
+    this.container = new Container(this.graph.providers, options.logger)
   }
 
   /** @internal Compilerが生成したbootstrapだけが呼び出す。 */
@@ -101,8 +107,9 @@ export class ApplicationRuntime {
 
 export function createApplicationRuntime(
   roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
+  options: ApplicationRuntimeOptions = {},
 ): ApplicationRuntime {
-  return new ApplicationRuntime(roots)
+  return new ApplicationRuntime(roots, options)
 }
 
 async function callLifecycle(

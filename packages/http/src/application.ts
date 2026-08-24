@@ -13,7 +13,6 @@ import {
 } from '@loutrejs/compiler/runtime'
 import {
   ApplicationRuntime,
-  ConsoleLoggerBackend,
   executePipeline,
   Logger,
   normalizeUnknownError,
@@ -54,14 +53,16 @@ export interface HttpApplicationLifecycle {
 export function createHttpApplication(options: {
   readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
   readonly lifecycle?: HttpApplicationLifecycle
+  readonly logger?: Logger
 }): HttpApplication {
   const roots = options.modules.map(asModuleInstance)
   const graph = assertValidCompilation(compileApplication(roots))
-  const runtime = new ApplicationRuntime(roots)
+  const applicationLogger = options.logger ?? new Logger()
+  const runtime = new ApplicationRuntime(roots, { logger: applicationLogger })
   const runtimeGraph = runtime.graph
   const container = runtime.container
   const routes = collectRoutes(runtimeGraph.modules)
-  const logger = new Logger(new ConsoleLoggerBackend(), { protocol: 'http' })
+  const logger = applicationLogger.child({ protocol: 'http' })
   let initialization: Promise<void> | undefined
   const initialize = () => (initialization ??= runtime.initialize())
 
@@ -72,8 +73,22 @@ export function createHttpApplication(options: {
     shutdown: (signal) => runtime.shutdown(signal),
     onServerListening: (url) => options.lifecycle?.onServerListening?.(url),
     async handle(request) {
-      await initialize()
+      const startedAt = Date.now()
       const url = new URL(request.url)
+      let requestLogger = logger.child({
+        executionId: crypto.randomUUID(),
+        method: request.method.toUpperCase(),
+        path: url.pathname,
+      })
+      try {
+        await initialize()
+      } catch (error) {
+        return logHttpResponse(
+          requestLogger,
+          startedAt,
+          createInternalErrorResponse(error, requestLogger),
+        )
+      }
       const routeMatch = routes
         .map((route) => ({ route, params: route.match(url.pathname) }))
         .find(
@@ -83,8 +98,17 @@ export function createHttpApplication(options: {
         )
 
       if (!routeMatch?.params) {
-        return jsonResponse(404, { error: 'Not Found' })
+        return logHttpResponse(
+          requestLogger,
+          startedAt,
+          jsonResponse(404, { error: 'Not Found' }),
+        )
       }
+
+      requestLogger = requestLogger.child({
+        procedure: routeMatch.route.procedure,
+        source: `${routeMatch.route.binding.implementation.name}.${routeMatch.route.procedure}`,
+      })
 
       try {
         const decoded = await decodeRequest(
@@ -95,11 +119,7 @@ export function createHttpApplication(options: {
         )
         const raw: MutableHttpContext = {
           ...decoded,
-          logger: logger.child({
-            procedure: routeMatch.route.procedure,
-            source: `${routeMatch.route.binding.implementation.name}.${routeMatch.route.procedure}`,
-            executionId: crypto.randomUUID(),
-          }),
+          logger: requestLogger,
         }
         const logical = await executePipeline<MutableHttpContext, LogicalHttpResult>(
           routeMatch.route.protocol.definition.pipeline,
@@ -124,13 +144,21 @@ export function createHttpApplication(options: {
               invokeController(routeMatch.route, context, container),
           },
         )
-        return await finalizeResponse(
-          routeMatch.route.protocol.definition,
-          logical,
+        return logHttpResponse(
+          requestLogger,
+          startedAt,
+          await finalizeResponse(
+            routeMatch.route.protocol.definition,
+            logical,
+          ),
         )
       } catch (error) {
         if (isValidationError(error)) {
-          return jsonResponse(400, { error: 'Validation failed' })
+          return logHttpResponse(
+            requestLogger,
+            startedAt,
+            jsonResponse(400, { error: 'Validation failed' }),
+          )
         }
         let mapped: LogicalHttpResult | undefined
         try {
@@ -138,30 +166,71 @@ export function createHttpApplication(options: {
             routeMatch.route.protocol.definition,
             error,
           )
-        } catch {
-          return jsonResponse(500, { error: 'Internal Server Error' })
+        } catch (mappingError) {
+          return logHttpResponse(
+            requestLogger,
+            startedAt,
+            createInternalErrorResponse(mappingError, requestLogger),
+          )
         }
         if (mapped) {
           try {
-            return await finalizeResponse(
-              routeMatch.route.protocol.definition,
-              mapped,
+            return logHttpResponse(
+              requestLogger,
+              startedAt,
+              await finalizeResponse(
+                routeMatch.route.protocol.definition,
+                mapped,
+              ),
             )
-          } catch {
-            return jsonResponse(500, { error: 'Internal Server Error' })
+          } catch (finalizationError) {
+            return logHttpResponse(
+              requestLogger,
+              startedAt,
+              createInternalErrorResponse(finalizationError, requestLogger),
+            )
           }
         }
-        const normalized = normalizeUnknownError(error, {
-          protocol: 'http',
-          procedure: routeMatch.route.procedure,
-        })
-        return jsonResponse(500, {
-          error: 'Internal Server Error',
-          errorId: normalized.errorId,
-        })
+        return logHttpResponse(
+          requestLogger,
+          startedAt,
+          createInternalErrorResponse(error, requestLogger),
+        )
       }
     },
   }
+}
+
+function logHttpResponse(
+  logger: Logger,
+  startedAt: number,
+  response: Response,
+): Response {
+  logger.info('HTTP request completed', {
+    event: 'http.request.completed',
+    status: response.status,
+    durationMs: Math.max(0, Date.now() - startedAt),
+  })
+  return response
+}
+
+function createInternalErrorResponse(error: unknown, logger: Logger): Response {
+  const normalized = normalizeUnknownError(error, logger.context)
+  logger.error('Unhandled application error', {
+    event: 'application.error',
+    error: {
+      code: normalized.code,
+      id: normalized.errorId,
+      name: error instanceof Error ? error.name : typeof error,
+      message: normalized.message,
+      ...(normalized.stack === undefined ? {} : { stack: normalized.stack }),
+      ...(normalized.cause === undefined ? {} : { cause: normalized.cause }),
+    },
+  })
+  return jsonResponse(500, {
+    error: 'Internal Server Error',
+    errorId: normalized.errorId,
+  })
 }
 
 interface MutableHttpContext extends Record<string, unknown> {

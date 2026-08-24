@@ -29,6 +29,7 @@ describe('CapabilityとLogger', () => {
 
     expect(records).toEqual([
       {
+        timestamp: expect.any(String),
         level: 'info',
         message: 'ユーザーを取得しました',
         module: 'UsersModule',
@@ -62,5 +63,31 @@ describe('CapabilityとLogger', () => {
       }),
     )
     expect(records[0]).not.toHaveProperty('executionId')
+  })
+
+  it('Containerへ渡したLogger backendをconstructor Loggerでも共有する', async () => {
+    class Consumer {
+      constructor(readonly logger: Logger) {}
+    }
+    const records: LogRecord[] = []
+    const rootLogger = new Logger(
+      { write: (record) => records.push(record) },
+      { application: 'fixture' },
+    )
+    const container = new Container([], rootLogger)
+    container[runtimeLinkageTarget]({
+      version: 1,
+      fingerprint: 'test',
+      bindings: [[Consumer, [Logger]]],
+    })
+
+    const consumer = await container.resolve(Consumer)
+    consumer.logger.info('DIから出力しました')
+
+    expect(records[0]).toEqual(expect.objectContaining({
+      application: 'fixture',
+      source: 'Consumer',
+      message: 'DIから出力しました',
+    }))
   })
 })

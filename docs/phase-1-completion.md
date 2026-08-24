@@ -14,6 +14,7 @@
 | CLI Graph | `cli.test.ts`と`loutre graph modules/di/contracts/runtime` |
 | Env secretをGraphへ含めない | symbolic `EnvKey` testとManifest構造 |
 | Lifecycle / Capabilityの可視化 | Fixture C、Capability test、Manifest、`loutre doctor` |
+| Structured contextual Logger | `structured-logging.test.ts`、カラーconsole / JSON adapter、HTTP / MessagePort完了event、error ID相関、共通backend注入 |
 | Rejected設計を復活させない | filesystem discovery、`@Injectable`、route decorator、`next()`を不使用 |
 | Node.js 26.x | `test:node`がmajor versionを検証してHTTP fixtureを実行 |
 | Deno/Bun/workerd/Electron/Lambda | 2.9.5 / 1.4.0 / 2026-08-24 / 43.4.1 / Node 24.19.0で実行 |
