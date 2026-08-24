@@ -1,0 +1,8 @@
+{
+  "name": "@loutrefw/runtime-electron",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": { "@loutrefw/message-port": "0.1.0" }
+}

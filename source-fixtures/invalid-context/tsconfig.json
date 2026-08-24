@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/source-fixtures-invalid-context",
+    "tsBuildInfoFile": "../../dist/source-fixtures-invalid-context.tsbuildinfo"
+  },
+  "include": ["index.ts"]
+}

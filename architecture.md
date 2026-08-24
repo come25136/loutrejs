@@ -1,7 +1,7 @@
 # Loutre Architecture v0.1
 
 > **状態:** Phase 1 アーキテクチャの FROZEN ベースライン  
-> **日付:** 2026-08-23 (JST)  
+> **日付:** 2026-08-24 (JST)  
 > **プロジェクト / ブランド:** **Loutre** 🦦  
 > **npm scope:** `@loutrefw/*`  
 > **対象読者:** Loutre の初期実装を引き継ぐ Codex / 開発者
@@ -45,12 +45,12 @@ Loutre application は TypeScript source から Compiler により解析され�
 - Protocol ごとの ordered Pipeline
 - Pipeline 内の Layer
 - Validation の位置
-- Layer が require / provide する execution-scoped Token
+- Layer が require / provide する Execution Context Key
 - Lifecycle hook
 - Env による条件分岐
 - Runtime capability requirement
 - Contract ↔ Controller / Resolver / Handler binding
-- Controller 等の DI requirement
+- Controller 等の application DI requirement
 
 Compiler は runtime より前に Graph を検証し、runtime adapter が利用する Manifest を生成する。
 
@@ -143,7 +143,7 @@ Phase 1 に含めるもの:
 3. Constructor DI
 4. Arbitrary typed token
 5. Class / Value / Factory / Conditional Provider
-6. `application` / `execution` / `transient` scope
+6. `application` / `transient` scope
 7. Standard Schema integration
 8. Injectable typed Env
 9. Env schema 由来の symbolic key
@@ -153,7 +153,7 @@ Phase 1 に含めるもの:
 13. HTTP Protocol
 14. HTTP Validation Layer (`params/query/headers/body`)
 15. Authentication Layer / Guard Layer
-16. 任意 developer-defined Token の provide による refinement
+16. 任意 developer-defined Context Key の provide による Execution Context 拡張/refinement
 17. Short circuit
 18. Error normalization / Protocol finalization
 19. Structured contextual Logger
@@ -419,38 +419,43 @@ Env key の型が finite union の場合、Compiler は mapping exhaustiveness �
 
 ## 7.5 Scope
 
-Phase 1 の scope 名は FROZEN:
+Phase 1 の DI scope 名は FROZEN:
 
 ```text
 application
-execution
 transient
 ```
 
-HTTP 固有の `request` ではなく `execution` を使う。
-WebSocket / MessagePort / Electron / Lambda 等でも同じ語彙を使えるため。
-
-### Protocol Implementation の Scope
-
-Controller / Resolver / Handler は **Phase 1 では execution-scoped**。
+**`execution` DI scope は Phase 1 では提供しない。**
 
 理由:
 
+- request/session/tenant/permission 等の実行途中で得られるデータは DI ではなく **Execution Context (`ctx`)** に置く。
+- Controller / Resolver / Handler を execution ごとに再生成する必要をなくす。
+- HTTP の request scope を WebSocket / MessagePort / Electron 等へ一般化するためだけの DI scope を持たない。
+- DI Graph と Pipeline Context Graph を明確に分離する。
+
+### Protocol Implementation の Scope
+
+Controller / Resolver / Handler は **application-scoped** を基本とする。
+
 ```text
-Pipeline Layer
-  └─ SESSION を provide
-        ↓
-terminal 到達
-        ↓
-Controller instantiate
-        ↓
-@Inject(SESSION)
+Application Scope
+  ├─ Controller / Resolver / Handler
+  ├─ Service
+  ├─ Repository
+  └─ Logger (static source context)
+
+Execution Context
+  ├─ validated params/query/headers/body
+  ├─ auth/session
+  ├─ currentTenant / permissions
+  ├─ requestId / executionId / traceId
+  └─ execution Logger
 ```
 
-Pipeline の途中で作られた execution-scoped Token を constructor DI できる必要がある。
-
-Stateless Controller の application-scope 最適化は将来 MAY。
-Phase 1 の基本挙動にはしない。
+Pipeline の途中で生成された値を constructor DI してはならない。
+それらは terminal method の `ctx` から読む。
 
 ---
 
@@ -882,104 +887,254 @@ User approval なしに恒久仕様を決めない。
 
 ---
 
-# 15. Authentication / Guard / Arbitrary Refinement — FROZEN
+# 15. Execution Context / Authentication / Guard / Arbitrary Refinement — FROZEN
 
-Loutre は `Auth` shape を framework 固定しない。
+## 15.1 DI と Execution Context を分離する
 
-例えば以下だけを前提にしない。
-
-```ts
-{ user: User | null }
-→
-{ user: User }
-```
-
-Application ごとに必要な execution data は異なる。
-
-一般化した仕組み:
-
-> **Layer は既存 Token を require/inject し、新しい execution-scoped Token を provide できる。**
-
-これを型 refinement の一般機構とする。
-
-例:
-
-```ts
-interface AuthState {
-  user: User | null
-}
-
-export const AUTH = token<AuthState>('auth')
-```
-
-Authentication Layer:
+Loutre は以下を別物として扱う。
 
 ```text
-bearerAuthentication
-  provides AUTH
+Constructor DI
+  = Application Graph 上の長寿命 dependency
+
+Execution Context (`ctx`)
+  = その1回の Protocol execution の途中で得られたデータ
 ```
 
-Application-defined stronger token:
+したがって、以下は **禁止する設計**。
 
 ```ts
-interface AuthenticatedSession {
-  user: User
-}
+constructor(
+  @Inject(SESSION) readonly session: Session,
+  @Inject(CURRENT_TENANT) readonly tenant: CurrentTenant,
+) {}
+```
 
-export const SESSION = token<AuthenticatedSession>('session')
+認証情報、tenant、permission、resource resolution 等は `ctx` に入れる。
+
+```ts
+async update(
+  ctx: ContextOf<ArticlesHttp, 'update'>,
+) {
+  ctx.session.user
+  ctx.currentTenant
+  ctx.permissions
+}
+```
+
+これにより、同じ application-scoped Controller に public procedure と authenticated procedure を共存させられる。
+
+```ts
+export class UsersController {
+  constructor(
+    private readonly users: UsersService,
+  ) {}
+
+  async getPublic(
+    ctx: ContextOf<UsersHttp, 'getPublic'>,
+  ) {
+    // ctx.session は存在しない
+  }
+
+  async getMe(
+    ctx: ContextOf<UsersHttp, 'getMe'>,
+  ) {
+    ctx.session.user.id // User
+  }
+}
+```
+
+## 15.2 Context Key API — FROZEN
+
+Application ごとに必要な execution data は異なるため、Loutre は Auth/Tenant 等の shape を固定しない。
+
+Developer は任意の Context Key を宣言できる。
+
+基準 API:
+
+```ts
+export const AUTH =
+  contextKey('auth').of<AuthState>()
+
+export const SESSION =
+  contextKey('session').of<Session>()
+
+export const CURRENT_TENANT =
+  contextKey('currentTenant').of<CurrentTenant>()
+
+export const PERMISSIONS =
+  contextKey('permissions').of<PermissionSet>()
+```
+
+`ContextKey<Name, T>` は DI Token ではない。
+Execution Context の property 名・型・Graph identity を表す Compiler-visible descriptor である。
+
+`contextKey('session').of<Session>()` の形を採用する理由:
+
+1. property 名の string literal (`'session'`) を TypeScript 型に保持できる。
+2. 値の型 `Session` を明示できる。
+3. `requires/provides` を静的に Graph 化できる。
+4. Controller では `ctx.session` と普通の property access になる。
+5. application-wide registry を必須にしない。
+
+### 比較して採用しなかった案
+
+**案B: Layer の return object だけから Context shape を推論**
+
+```ts
+return { session }
+```
+
+DX は短いが、Layer declaration だけでは依存関係が分からず、Graph/diagnostic/static ordering validation が弱くなるため primary API にしない。
+
+**案C: `defineContext({...})` で全 Context slot を registry 化**
+
+型安全だが、application-wide registry の管理と boilerplate が増える。必要になれば将来 helper として追加 MAY。
+
+## 15.3 Layer の `requires / provides`
+
+Layer は Context Key を明示的に require/provide する。
+
+```ts
+export const bearerAuthentication = authentication({
+  provides: [AUTH],
+
+  async inbound(ctx) {
+    const user = await verifyBearer(
+      ctx.headers.authorization,
+    )
+
+    return {
+      auth: { user },
+    }
+  },
+})
+```
+
+後段では:
+
+```ts
+ctx.auth // AuthState
 ```
 
 Guard:
 
-```text
-authenticated
-  requires AUTH
-  provides SESSION
+```ts
+export const authenticated = guard({
+  requires: [AUTH],
+  provides: [SESSION],
+
+  inbound(ctx) {
+    if (!ctx.auth.user) {
+      throw Unauthorized()
+    }
+
+    return {
+      session: {
+        user: ctx.auth.user,
+      },
+    }
+  },
+})
 ```
 
-さらに:
+Tenant Layer:
 
-```text
-tenantAccess
-  requires SESSION
-  requires validated params
-  provides CURRENT_TENANT
-  provides TENANT_PERMISSIONS
+```ts
+export const resolveTenant = layer({
+  requires: [SESSION],
+  provides: [CURRENT_TENANT, PERMISSIONS],
+
+  async inbound(ctx) {
+    const tenant = await findTenant(
+      ctx.session.user,
+      ctx.params.tenantId,
+    )
+
+    return {
+      currentTenant: tenant,
+      permissions: permissionsFor(ctx.session.user, tenant),
+    }
+  },
+})
 ```
 
-Developer は任意の型を define できる。
+`provides` に宣言した Key と `inbound` の返却 object は TypeScript と Compiler の両方で整合性を検証 MUST。
 
-例:
+Phase 1 では同名 Context Key の暗黙 overwrite を禁止する。
+既存 property をより強い型へ置き換える専用 `refines` API は OPEN とし、まずは `auth → session` のように別 Key で状態遷移を表す。
+
+## 15.4 Pipeline は Context の型変換列
+
+Pipeline の本質は、Layer の列によって Execution Context を段階的に拡張/refineすることである。
 
 ```text
-CurrentTenant
-LoadedArticle
-AdminPrincipal
-FeatureAvailability
-ValidatedLicense
-ResolvedWorkspace
-PermissionSet
+C0
+  headers: unknown
+  params: unknown
+  body: unknown
+
+  ↓ validate.headers
+
+C1
+  headers: AuthHeaders
+
+  ↓ bearerAuthentication
+
+C2
+  auth: AuthState
+
+  ↓ authenticated
+
+C3
+  session: Session
+
+  ↓ validate.params
+
+C4
+  params: ArticleParams
+
+  ↓ resolveTenant
+
+C5
+  currentTenant: CurrentTenant
+  permissions: PermissionSet
+
+  ↓ validate.body
+
+C6
+  body: UpdateArticle
+
+  ↓ http.controller
 ```
 
-Framework は generic Token/Provider mechanism のみ提供し、application shape を決めない。
+`ContextOf<ImplementationType, Procedure>` は terminal 到達時点の Context 型を表す。
 
-## 15.1 Compiler Validation
+Validation Layer も同じ Context refinement model の built-in specialization とみなす。
+
+## 15.5 Compiler Validation
 
 Invalid:
 
 ```text
 1 authenticated
-   requires AUTH   ← unavailable
+   requires ctx.auth   ← unavailable
 
 2 bearerAuthentication
-   provides AUTH
+   provides ctx.auth
 
 3 http.controller
 ```
 
-Compiler は「必要 Token が後段で provide されている」ことまで含めて path-aware diagnostic を出す SHOULD。
+Compiler は以下を検証 MUST。
 
----
+- `requires` Key がその位置で存在すること
+- `provides` Key の返却型が宣言型に一致すること
+- duplicate Context Key が暗黙 overwrite されないこと
+- validated params/query/headers/body の必要条件
+- terminal method の `ContextOf` が Pipeline 最終 Context と一致すること
+
+Diagnostic は「必要な Key が後段で provide されている」ことまで含む path-aware explanation を SHOULD 出す。
 
 # 16. Short Circuit — FROZEN concept
 
@@ -1255,7 +1410,7 @@ Compiler MUST detect:
 - duplicate coverage
 - implementation type mismatch
 - terminal/protocol mismatch
-- terminal 到達時に unavailable な execution-scoped constructor DI token
+- implementation constructor が application DI Graph 上で解決不能
 
 例:
 
@@ -1444,13 +1599,18 @@ Capability 例:
 runtime.shutdownHook
 ```
 
-Execution-scoped object は application lifecycle resource ではない。
+Execution Context 上の一時データは application lifecycle resource ではない。
 
 ---
 
 # 24. Logger — FROZEN
 
-Phase 1 から structured contextual Logger を含める。
+Phase 1 から structured Logger を含める。
+ただし **static application context** と **execution context** を分離する。
+
+## 24.1 Constructor-injected Logger = static source context
+
+Application-scoped Provider / Controller / Service は Logger を constructor DI できる。
 
 ```ts
 export class UserService {
@@ -1466,17 +1626,37 @@ export class UserService {
 new Logger(UserService.name)
 ```
 
-DI / Compiler / Runtime が自動 context を付与する。
-
-候補 metadata:
+Compiler/Container は injection site から最低以下の static metadata を付与する。
 
 ```text
 module
-provider/service
-procedure
+source/provider/service
+```
+
+この Logger に `requestId` / `traceId` / `procedure` 等の execution-specific metadata が自動で入ることを保証してはならない。
+Core は AsyncLocalStorage 等の ambient runtime context に依存しない。
+
+## 24.2 `ctx.logger` = execution Logger
+
+Base Execution Context は execution-aware Logger を持つ。
+
+```ts
+async create(
+  ctx: ContextOf<UsersHttp, 'create'>,
+) {
+  ctx.logger.info('Creating user')
+}
+```
+
+`ctx.logger` の候補 metadata:
+
+```text
 protocol
-executionId / requestId
-traceId
+procedure
+implementation/method
+executionId
+requestId (HTTP 等で存在する場合)
+traceId (存在する場合)
 ```
 
 例:
@@ -1485,13 +1665,23 @@ traceId
 {
   "level": "info",
   "message": "Creating user",
-  "module": "UsersModule",
-  "source": "UsersService",
+  "protocol": "http",
   "procedure": "users.create",
+  "source": "UsersController.create",
+  "executionId": "exec_xxx",
   "requestId": "req_xxx",
   "traceId": "..."
 }
 ```
+
+## 24.3 Propagation rule
+
+Constructor Logger と `ctx.logger` は別責務。
+Application Service 内で execution correlation が必要な場合、Phase 1 は ambient magic を前提にしない。
+必要なら caller が execution Logger または明示的な observability context を Service API に渡す。
+
+`ctx.logger.child(...)` 等の exact child/binding API は OPEN。
+OpenTelemetry integration も adapter として後から追加する。
 
 Phase 1 は console backend で十分。
 OpenTelemetry/backend adapter は後から追加可能。
@@ -1535,6 +1725,7 @@ Runtime
 - Custom token
 - Constructor DI
 - Scope
+- Context Key / Pipeline Context typing
 - Env symbolic key
 - Conditional provider
 - Contract / Procedure
@@ -1543,23 +1734,24 @@ Runtime
 - Pipeline order
 - Layer role
 - Validation position
-- Layer `requires` / `provides`
+- Layer Context `requires` / `provides`
+- Context shape propagation/refinement
 - Terminal placement
 - Implementation coverage
-- Controller/Resolver constructor requirement
+- Controller/Resolver application constructor requirement
 - Lifecycle dependency/order
 - Runtime Capability requirement
 
 ## 25.2 Static Diagnostics
 
-### Token が未提供
+### Context Key が未提供
 
 ```text
 Pipeline:
 1 authenticated
-   requires AUTH      ← error
+   requires ctx.auth      ← error
 2 bearerAuthentication
-   provides AUTH
+   provides ctx.auth
 ```
 
 ### Validation order
@@ -1575,11 +1767,18 @@ but validate.params appears later.
 http.controller must be the final Pipeline item.
 ```
 
-### Controller DI vs Pipeline
+### Controller Context vs Pipeline
 
 ```text
-AccountController requires SESSION,
-but SESSION is not available when http.controller is reached.
+AccountController.getMe expects ctx.session,
+but the HTTP Pipeline does not provide SESSION before http.controller.
+```
+
+### Controller application DI
+
+```text
+UsersController requires UsersService,
+but UsersService is not visible in the Module DI Graph.
 ```
 
 Diagnostic は dependency/path を含む actionable なものにする。
@@ -1796,14 +1995,14 @@ UsersContract.update [http]
 1 accessLogging             generic
 2 validate.headers          validation
 3 bearerAuthentication      authentication
-   └─ provides AUTH
+   └─ provides ctx.auth
 4 validate.params           validation
 5 authenticated             guard
-   ├─ requires AUTH
-   └─ provides SESSION
+   ├─ requires ctx.auth
+   └─ provides ctx.session
 6 canEditArticle            guard
    ├─ requires validated params
-   └─ provides CURRENT_ARTICLE
+   └─ provides ctx.currentArticle
 7 validate.body             validation
 8 http.controller           terminal
    └─ UsersController.update
@@ -1836,35 +2035,45 @@ GET  /users/{id}
 POST /users
 ```
 
-## Fixture B — Bearer Auth + Guard + Arbitrary Execution State
+## Fixture B — Bearer Auth + Guard + Arbitrary Execution Context
 
 検証対象:
 
 - `validate.headers`
 - Authentication Layer
 - Guard Layer
-- developer-defined Token
+- developer-defined Context Key
 - `requires` / `provides`
-- execution-scoped DI
-- Controller instantiate at terminal
+- Pipeline Context の段階的型拡張
+- application-scoped Controller
+- public/authenticated procedure の同一 Controller 共存
 - invalid Pipeline order diagnostic
 
 例:
 
 ```text
 bearerAuthentication
-  provides AUTH
+  provides ctx.auth
 
 authenticated
-  requires AUTH
-  provides SESSION
+  requires ctx.auth
+  provides ctx.session
 
 tenantAccess
-  requires SESSION
-  provides CURRENT_TENANT
+  requires ctx.session
+  provides ctx.currentTenant
 ```
 
-この fixture は **Pipeline Graph と execution-scoped DI が実体を伴うことの証明**。
+Controller は constructor DI ではなく:
+
+```ts
+ctx.session
+ctx.currentTenant
+```
+
+から execution data を読む。
+
+この fixture は **DI Graph と Pipeline Context Graph が分離され、ContextOf が terminal 時点の型を表すことの証明**。
 
 ## Fixture C — DatabaseModule 2 Instance + Lifecycle
 
@@ -1918,7 +2127,8 @@ Node toolchain baseline は **Node.js 26.x**。
 最初に shape を作る:
 
 ```text
-token<T>()
+token<T>('id')
+contextKey('name').of<T>()
 @Inject()
 defineModule()
 provide()
@@ -1942,9 +2152,8 @@ implement(...).for(...).procedures(...).with(...)
 - imports/exports
 - Provider resolution
 - custom token
-- application/execution/transient scope
-- contextual Provider
-- Controller execution-scope instantiate
+- application/transient scope
+- Controller application-scope instantiate
 
 ## Stage 3 — Compiler Graph IR
 
@@ -2117,7 +2326,32 @@ ContextOf
 
 ## 31.20 Auth-specific refinement primitive — REJECTED
 
-Generic `requires/provides` + arbitrary typed execution Token にする。
+Auth 固有 API にはしない。Generic `requires/provides` + developer-defined Context Key にする。
+
+## 31.20a Layer-provided execution data を DI Token にする — SUPERSEDED / CRITICAL FIX
+
+以下は撤回:
+
+```ts
+constructor(
+  @Inject(SESSION) session: Session,
+  @Inject(CURRENT_TENANT) tenant: CurrentTenant,
+) {}
+```
+
+Authentication / Session / Tenant / Permission 等は Execution Context (`ctx`) に置く。
+
+```ts
+ctx.session
+ctx.currentTenant
+```
+
+DI Graph と Pipeline Context Graph を混ぜない。
+
+## 31.20b Controller を execution-scoped にする — SUPERSEDED / CRITICAL FIX
+
+Controller / Resolver / Handler は Phase 1 では application-scoped。
+`execution` DI scope 自体を Phase 1 から削除する。
 
 ## 31.21 Node-first architecture — REJECTED
 
@@ -2173,7 +2407,9 @@ Output validation/encode は Finalization。
 - [ ] `contract()` / `procedure()` builder signature
 - [ ] Layer factory signature
 - [ ] Authentication/Guard role factory の exact API
-- [ ] `requires` / `provides` declaration syntax
+- [x] Context Key の基準形: `contextKey('name').of<T>()`
+- [x] `requires` / `provides` は Context Key 配列を使う
+- [ ] Context Key object の exact runtime representation / branding
 - [ ] `shortCircuit(...)` exact API
 - [ ] `ctx.response.created(...)` 等 response helper exact API
 - [ ] `defineError()` exact syntax
@@ -2241,13 +2477,16 @@ Protocol Pipeline は routing 後の procedure/protocol-local execution を表�
 
 ## 32.8 DI / Scope
 
+- [x] Phase 1 DI scope は `application` / `transient` のみ
+- [x] Controller / Resolver / Handler は application-scoped
+- [x] execution-specific data は DI ではなく `ctx`
 - [ ] Factory Provider exact syntax
 - [ ] `.select()` exact syntax
 - [ ] finite union exhaustiveness rule
 - [ ] Circular dependency policy
 - [ ] Lazy Provider/reference を持つか
-- [ ] Long-lived WebSocket/duplex の `execution` scope ownership
-- [ ] Execution cleanup timing
+- [ ] Long-lived WebSocket/duplex の Execution Context lifetime/ownership
+- [ ] Execution Context cleanup timing
 
 ## 32.9 Module Graph
 
@@ -2266,10 +2505,13 @@ Protocol Pipeline は routing 後の procedure/protocol-local execution を表�
 
 ## 32.11 Logger / Observability
 
-- [ ] Stable context field name
+- [x] Constructor `Logger` は static source context (`module` / `source`)
+- [x] `ctx.logger` は execution context (`procedure` / `protocol` / ids)
+- [x] Core は AsyncLocalStorage 等の ambient propagation を必須にしない
+- [ ] `ctx.logger.child(...)` / binding API exact shape
+- [ ] Stable field name set
 - [ ] Trace/span integration
 - [ ] OpenTelemetry adapter timing
-- [ ] Logger が class/token/internal contextual provider のどれとして表面化するか
 
 ## 32.12 Runtime / Conformance
 
@@ -2316,7 +2558,8 @@ Fixture に必要でない限り、Phase 1 で以下へ scope を広げない。
 
 ```text
 @loutrefw/core
-  Token
+  DI Token
+  ContextKey
   Module definition
   Provider descriptor
   Contract/Procedure type
@@ -2330,8 +2573,8 @@ Fixture に必要でない限り、Phase 1 で以下へ scope を広げない。
   manifest
 
 @loutrefw/runtime
-  DI runtime
-  execution scope
+  DI runtime (application/transient)
+  Execution Context runtime
   Pipeline engine
   lifecycle
   error normalization
@@ -2509,7 +2752,7 @@ v0.1 architecture が実装済みとみなせる条件:
 3. 同一 core fixture logic が declared runtime conformance suite を通る。
 4. HTTP unary + server-stream が Node-only Core assumption なしで動く。
 5. Custom Token と same Module multiple instance が動く。
-6. Pipeline order / validation position / arbitrary Layer-provided Token / short circuit / terminal placement / Controller DI availability が static model される。
+6. Pipeline order / validation position / arbitrary Layer-provided Context Key / short circuit / terminal placement / final `ContextOf` shape が static model される。
 7. Contract ↔ Protocol ↔ Pipeline ↔ Implementation binding を CLI graph で確認できる。
 8. Env secret value が compile-time graph に不要。
 9. Lifecycle / Capability limitation が visible で、暗黙 assumption になっていない。
@@ -2528,7 +2771,8 @@ v0.1 architecture が実装済みとみなせる条件:
 
 ```text
 @loutrefw/core
-  token<T>()
+  token<T>('id')
+  contextKey('name').of<T>()
   @Inject()
   defineModule()
   provide()
@@ -2545,9 +2789,12 @@ v0.1 architecture が実装済みとみなせる条件:
   terminal-last validation
   implementation coverage validation
   validation-order metadata scaffolding
+  Pipeline Context shape propagation scaffolding
 
 @loutrefw/runtime + @loutrefw/http
-  application/execution scope
+  application/transient DI scope
+  Execution Context propagation
+  Context Key requires/provides
   Layer stack
   HTTP unary adapter
   Protocol Finalization
@@ -2562,8 +2809,9 @@ Fixture B が証明すべきこと:
 ```text
 Pipeline は飾りではない
 Layer ordering は static model されている
-requires/provides は execution graph に効いている
-execution-scoped DI が Controller terminal と接続している
+requires/provides は Pipeline Context Graph に効いている
+ContextOf は terminal 到達時点の Context shape を表す
+Controller は application-scoped のまま public/authenticated procedure を共存できる
 invalid order は Compiler が説明できる
 ```
 
@@ -2601,10 +2849,13 @@ DI
   custom typed token first-class
   custom token は @Inject(TOKEN)
 
-Scopes
+DI Scopes
   application
-  execution
   transient
+
+Execution data
+  DI に入れない
+  ctx に保持
 
 Schema
   Standard Schema
@@ -2642,9 +2893,15 @@ Streaming body
   validate.body を使用可能
   必ず全量 consume する意味ではない
 
+Execution Context
+  Layer が ctx を段階的に拡張/refine
+  developer-defined Context Key
+  contextKey('name').of<T>()
+  requires/provides は Context Key を使う
+
 Refinement
   auth-specific API にしない
-  Layer requires/provides arbitrary typed execution Token
+  auth/session/tenant/permission は ctx data
 
 Terminal
   pipeline の最後に必須
@@ -2675,7 +2932,8 @@ Implementation identity
   Contract × Procedure × Protocol → exactly one implementation
 
 Controller scope
-  Phase 1 execution-scoped
+  Phase 1 application-scoped
+  execution-specific data は ContextOf 経由
 
 Protocol decode
   internal
@@ -2691,7 +2949,9 @@ Lifecycle
   Nest-like semantics
 
 Logger
-  structured contextual logger
+  constructor Logger = static source context
+  ctx.logger = execution context
+  ambient AsyncLocalStorage は Core requirement にしない
 
 Compiler
   Phase 1 core feature

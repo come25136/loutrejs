@@ -1,0 +1,76 @@
+import {
+  contract,
+  defineModule,
+  implement,
+  procedure,
+} from '@loutrefw/core'
+import { compileApplication } from '@loutrefw/compiler'
+import { http, validate } from '@loutrefw/http'
+import {
+  AccountController,
+  authenticated,
+  bearerAuthentication,
+  createAccountApplication,
+  tenantAccess,
+} from '../fixtures/http-auth/src/index.js'
+import { z } from 'zod'
+
+describe('canonical Fixture B', () => {
+  it('Layerが生成したContext propertyをControllerのctxから取得する', async () => {
+    const application = createAccountApplication()
+    const response = await application.handle(
+      new Request('http://fixture.test/account', {
+        headers: { authorization: 'Bearer fixture-token' },
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      userId: 'user-1',
+      tenantId: 'tenant-user-1',
+    })
+  })
+
+  it('validationとtoken生成の不正な順序を静的診断する', () => {
+    const InvalidContract = contract({
+      get: procedure({
+        protocols: {
+          http: http({
+            method: 'GET',
+            path: '/invalid-account',
+            input: {
+              headers: z.object({ authorization: z.string() }),
+            },
+            responses: {
+              found: {
+                status: 200,
+                body: z.object({
+                  userId: z.string(),
+                  tenantId: z.string(),
+                }),
+              },
+            },
+            pipeline: [
+              authenticated,
+              bearerAuthentication,
+              validate.headers,
+              tenantAccess,
+              http.controller,
+            ],
+          }),
+        },
+      }),
+    })
+    const InvalidModule = defineModule(() => ({
+      implementations: [
+        implement(InvalidContract).for(http).with(AccountController as any),
+      ],
+    }))
+    const codes = compileApplication([InvalidModule()]).diagnostics.map(
+      ({ code }) => code,
+    )
+
+    expect(codes).toContain('LUTRE_PIPELINE_004')
+    expect(codes).toContain('LUTRE_VALIDATION_001')
+  })
+})

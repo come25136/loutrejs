@@ -1,0 +1,12 @@
+{
+  "name": "@loutrefw/message-port",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@loutrefw/compiler": "0.1.0",
+    "@loutrefw/core": "0.1.0",
+    "@loutrefw/runtime": "0.1.0"
+  }
+}
