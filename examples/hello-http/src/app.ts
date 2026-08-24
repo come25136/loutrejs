@@ -1,4 +1,4 @@
-import { contract, defineModule, implement, procedure } from '@loutrejs/core'
+import { contract, defineModule, implement, inject, procedure } from '@loutrejs/core'
 import {
   type ContextOf,
   type ControllerOf,
@@ -46,7 +46,7 @@ class GreetingService {
 }
 
 class GreetingController implements GreetingHttp {
-  constructor(readonly greetings: GreetingService) {}
+  constructor(readonly greetings = inject(GreetingService)) {}
 
   async greet(ctx: ContextOf<GreetingHttp, 'greet'>) {
     return ctx.response.ok({
@@ -56,6 +56,7 @@ class GreetingController implements GreetingHttp {
 }
 
 const GreetingModule = defineModule(() => ({
+  name: 'GreetingModule',
   description: '挨拶HTTP APIのサンプル',
   providers: [GreetingService],
   implementations: [

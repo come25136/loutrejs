@@ -5,7 +5,7 @@ import {
   type LogRecord,
   type LoggerBackend,
 } from '@loutrejs/runtime'
-import { runtimeLinkageTarget } from '@loutrejs/runtime/internal'
+import { inject, normalizeProvider } from '@loutrejs/core'
 
 describe('CapabilityとLogger', () => {
   it('Application requirementとRuntime capabilityの差分を返す', () => {
@@ -39,18 +39,13 @@ describe('CapabilityとLogger', () => {
     ])
   })
 
-  it('constructor Loggerにはstatic sourceだけをDI時に付与する', async () => {
+  it('constructor Loggerにはstatic sourceだけをDI時に付与する', () => {
     class Consumer {
-      constructor(readonly logger: Logger) {}
+      constructor(readonly logger = inject(Logger)) {}
     }
     const records: LogRecord[] = []
-    const container = new Container([])
-    container[runtimeLinkageTarget]({
-      version: 1,
-      fingerprint: 'test',
-      bindings: [[Consumer, [Logger]]],
-    })
-    const consumer = await container.resolve(Consumer)
+    const container = new Container([normalizeProvider(Consumer)])
+    const consumer = container.resolve(Consumer)
     const contextual = new Logger(
       { write: (record) => records.push(record) },
       consumer.logger.context,
@@ -65,23 +60,18 @@ describe('CapabilityとLogger', () => {
     expect(records[0]).not.toHaveProperty('executionId')
   })
 
-  it('Containerへ渡したLogger backendをconstructor Loggerでも共有する', async () => {
+  it('Containerへ渡したLogger backendをconstructor Loggerでも共有する', () => {
     class Consumer {
-      constructor(readonly logger: Logger) {}
+      constructor(readonly logger = inject(Logger)) {}
     }
     const records: LogRecord[] = []
     const rootLogger = new Logger(
       { write: (record) => records.push(record) },
       { application: 'fixture' },
     )
-    const container = new Container([], rootLogger)
-    container[runtimeLinkageTarget]({
-      version: 1,
-      fingerprint: 'test',
-      bindings: [[Consumer, [Logger]]],
-    })
+    const container = new Container([normalizeProvider(Consumer)], rootLogger)
 
-    const consumer = await container.resolve(Consumer)
+    const consumer = container.resolve(Consumer)
     consumer.logger.info('DIから出力しました')
 
     expect(records[0]).toEqual(expect.objectContaining({

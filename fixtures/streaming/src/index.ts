@@ -2,6 +2,7 @@ import {
   contract,
   defineModule,
   implement,
+  inject,
   procedure,
 } from '@loutrejs/core'
 import {
@@ -64,12 +65,12 @@ export const EventsContract = contract({
       }),
     },
   }),
-})
+}, { name: 'EventsContract' })
 
 type EventsHttp = ControllerOf<typeof EventsContract, 'http'>
 
 export class EventsController implements EventsHttp {
-  constructor(readonly streams: EventStreamService) {}
+  constructor(readonly streams = inject(EventStreamService)) {}
 
   subscribe(ctx: ContextOf<EventsHttp, 'subscribe'>) {
     return ctx.response.events({
@@ -81,7 +82,7 @@ export class EventsController implements EventsHttp {
 type EventsMessagePort = HandlerOf<typeof EventsContract, 'messagePort'>
 
 export class EventsMessageHandler implements EventsMessagePort {
-  constructor(readonly streams: EventStreamService) {}
+  constructor(readonly streams = inject(EventStreamService)) {}
 
   subscribe(ctx: MessageContextOf<EventsMessagePort, 'subscribe'>) {
     return ctx.message.events(this.streams.events())
@@ -89,6 +90,7 @@ export class EventsMessageHandler implements EventsMessagePort {
 }
 
 export const EventsModule = defineModule(() => ({
+  name: 'EventsModule',
   description: 'HTTP server-stream canonical fixture',
   providers: [EventStreamService],
   implementations: [

@@ -9,8 +9,8 @@
   "sideEffects": false,
   "publishConfig": { "access": "public", "provenance": true },
   "dependencies": {
-    "@loutrejs/compiler": "^0.1.0",
     "@loutrejs/core": "^0.1.0",
+    "@loutrejs/graph": "^0.1.0",
     "@loutrejs/runtime": "^0.1.0"
   }
 }

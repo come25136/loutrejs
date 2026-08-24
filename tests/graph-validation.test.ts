@@ -1,16 +1,16 @@
 import {
-  Inject,
   contract,
   contextKey,
   defineModule,
   implement,
+  inject,
   layer,
   type PipelineItem,
   provide,
   procedure,
   token,
 } from '@loutrejs/core'
-import { compileApplication } from '@loutrejs/compiler'
+import { compileApplication } from '@loutrejs/graph'
 import { http } from '@loutrejs/http'
 import { messagePort } from '@loutrejs/message-port'
 import { z } from 'zod'
@@ -28,7 +28,7 @@ function protocol(pipeline: readonly PipelineItem[]) {
   )
 }
 
-describe('minimal Compiler IR and static validation', () => {
+describe('Application Graph IRとsemantic validation', () => {
   it('rejects a terminal that is not last', () => {
     const Contract = contract({
       run: procedure({
@@ -103,7 +103,7 @@ describe('minimal Compiler IR and static validation', () => {
     const SESSION = token<{ id: string }>('session')
     const SESSION_CONTEXT = contextKey('session').of<{ id: string }>()
     class Controller {
-      constructor(@Inject(SESSION) readonly session: { id: string }) {}
+      constructor(readonly session = inject(SESSION)) {}
       run() {}
     }
     const Contract = contract({
@@ -114,7 +114,7 @@ describe('minimal Compiler IR and static validation', () => {
     }))
     expect(
       compileApplication([InvalidModule()]).diagnostics.map(({ code }) => code),
-    ).toContain('LUTRE_DI_001')
+    ).toContain('LUTRE_DI_UNRESOLVED')
 
     const sessionLayer = layer({
       name: 'session',
@@ -134,7 +134,7 @@ describe('minimal Compiler IR and static validation', () => {
     }))
     expect(
       compileApplication([LayerOnlyModule()]).diagnostics.map(({ code }) => code),
-    ).toContain('LUTRE_DI_001')
+    ).toContain('LUTRE_DI_UNRESOLVED')
 
     const ValidModule = defineModule(() => ({
       providers: [provide(SESSION).useValue({ id: 'application' })],
@@ -151,12 +151,14 @@ describe('minimal Compiler IR and static validation', () => {
       run: procedure({ protocols: { http: protocol([http.controller]) } }),
     })
     const Module = defineModule(() => ({
+      name: 'GraphFixtureModule',
       description: 'graph fixture',
       implementations: [implement(Contract).for(http).with(Controller as any)],
     }))
     const { graph } = compileApplication([Module()])
 
     expect(graph.modules).toHaveLength(1)
+    expect(graph.modules[0]?.name).toBe('GraphFixtureModule')
     expect(graph.providers).toEqual([])
     expect(graph.contracts).toHaveLength(1)
     expect(graph.pipelines[0]?.layers[0]?.role).toBe('terminal')

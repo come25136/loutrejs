@@ -7,7 +7,7 @@ import {
   layer,
   procedure,
 } from '@loutrejs/core'
-import { compileApplication } from '@loutrejs/compiler'
+import { compileApplication } from '@loutrejs/graph'
 import { basicAuth, http, type HttpProtocolDefinition } from '@loutrejs/http'
 import { z } from 'zod'
 

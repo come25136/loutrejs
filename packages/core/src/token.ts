@@ -31,28 +31,6 @@ export function token<T>(id: string, options: TokenOptions = {}): Token<T> {
   })
 }
 
-const injectionMetadata = new WeakMap<Function, Map<number, TokenLike>>()
-
-/**
- * ランタイムには、明示されたcustom tokenの注釈だけを保持する。
- * すべてのconstructor依存辺のsource of truthはCompiler IRであり、この限定的な
- * registryは、manifest出力を実装する前の最初のvertical sliceを実行するために使う。
- */
-export function Inject<T>(dependency: TokenLike<T>): ParameterDecorator {
-  return (target, _propertyKey, parameterIndex) => {
-    const constructor = target as Function
-    const dependencies = injectionMetadata.get(constructor) ?? new Map()
-    dependencies.set(parameterIndex, dependency)
-    injectionMetadata.set(constructor, dependencies)
-  }
-}
-
-export function getExplicitInjections(
-  target: Function,
-): ReadonlyMap<number, TokenLike> {
-  return injectionMetadata.get(target) ?? new Map()
-}
-
 export function tokenName(value: TokenLike): string {
   return typeof value === 'function' ? value.name : value.id
 }

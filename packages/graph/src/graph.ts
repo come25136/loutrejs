@@ -1,7 +1,6 @@
 import {
   asModuleInstance,
   contextKeyName,
-  getExplicitInjections,
   normalizeProvider,
   tokenName,
   type ContractDefinition,
@@ -14,9 +13,12 @@ import {
   type ShortCircuitDeclaration,
   type TokenLike,
 } from '@loutrejs/core'
+import { Container, Logger, type DependencyRecorder } from '@loutrejs/runtime'
 import type {
   ApplicationGraphIR,
   CompilationResult,
+  DependencyEdgeIR,
+  DependencyNodeIR,
   Diagnostic,
   ImplementationIR,
   LayerIR,
@@ -34,7 +36,10 @@ interface BindingTarget {
 }
 
 export class StaticValidationError extends Error {
-  constructor(readonly diagnostics: readonly Diagnostic[]) {
+  constructor(
+    readonly diagnostics: readonly Diagnostic[],
+    readonly graph?: ApplicationGraphIR,
+  ) {
     super(diagnostics.map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`).join('\n'))
     this.name = 'StaticValidationError'
   }
@@ -53,7 +58,7 @@ export function compileApplication(
   const nameContract = (contract: ContractDefinition) => {
     const current = contractNames.get(contract)
     if (current) return current
-    const name = `Contract${++contractSequence}`
+    const name = contract.name ?? `Contract${++contractSequence}`
     contractNames.set(contract, name)
     return name
   }
@@ -110,16 +115,13 @@ export function compileApplication(
   validateCoverage(bindings, contractNames, diagnostics)
   validateDuplicateProviders(modules, diagnostics)
 
-  const tokensById = collectCustomTokens(providers, targets, diagnostics)
+  const tokensById = collectCustomTokens(providers, diagnostics)
   const contextKeysByName = collectContextKeys(targets, diagnostics)
 
-  const providersByToken = new Map<TokenLike, ProviderDescriptor>(
-    providers.map((provider) => [provider.provide, provider]),
-  )
   const pipelines: PipelineIR[] = []
   const implementations: ImplementationIR[] = []
   for (const target of targets) {
-    validatePipeline(target, providersByToken, diagnostics)
+    validatePipeline(target, diagnostics)
     const method = target.binding.implementation.prototype[target.procedure] as unknown
     if (typeof method !== 'function') {
       diagnostics.push({
@@ -148,6 +150,9 @@ export function compileApplication(
     version: 1,
     modules: modules.map((module, index) => ({
       id: `module:${index + 1}`,
+      ...(module.definition.name === undefined
+        ? {}
+        : { name: module.definition.name }),
       ...(module.definition.description === undefined
         ? {}
         : { description: module.definition.description }),
@@ -155,6 +160,9 @@ export function compileApplication(
         const importedIndex = modules.indexOf(imported)
         return `module:${importedIndex + 1}`
       }),
+      providers: (module.definition.providers ?? []).map((provider) =>
+        tokenName(normalizeProvider(provider).provide),
+      ),
       exports: (module.definition.exports ?? []).map((value) =>
         typeof value === 'function'
           ? value.name
@@ -166,6 +174,7 @@ export function compileApplication(
             ? String(value.id)
             : String(value),
       ),
+      lifecycle: Object.keys(module.definition.lifecycle ?? {}),
       requires: module.definition.requires ?? [],
     })),
     providers: providers.map((provider) => ({
@@ -175,9 +184,7 @@ export function compileApplication(
       dependencies:
         provider.kind === 'factory'
           ? provider.inject.map(tokenName)
-          : provider.kind === 'class'
-            ? [...getExplicitInjections(provider.useClass).values()].map(tokenName)
-            : provider.kind === 'conditional'
+          : provider.kind === 'conditional'
               ? [provider.select.env.name]
               : [],
     })),
@@ -217,9 +224,230 @@ export function compileApplication(
         })),
       ),
     ],
+    ...buildDependencyGraph(modules, bindings, diagnostics),
+    diagnostics,
   }
 
   return { graph, diagnostics }
+}
+
+export const buildApplicationGraph = compileApplication
+
+export function validateGraph(graph: ApplicationGraphIR): readonly Diagnostic[] {
+  return graph.diagnostics
+}
+
+function buildDependencyGraph(
+  modules: readonly ModuleInstance[],
+  bindings: readonly ImplementationBinding[],
+  diagnostics: Diagnostic[],
+): Pick<ApplicationGraphIR, 'nodes' | 'edges'> {
+  const nodes: DependencyNodeIR[] = []
+  const edges: DependencyEdgeIR[] = []
+  const ids = new Map<TokenLike, string>()
+  const modulesByProvider = new Map<TokenLike, string>()
+  const providersByToken = new Map<TokenLike, ProviderDescriptor>()
+  const implementationClasses = new Set(
+    bindings.map((binding) => binding.implementation as TokenLike),
+  )
+  const customTokensById = new Map<string, TokenLike>()
+
+  modules.forEach((module, index) => {
+    const moduleId = `module:${index + 1}`
+    for (const declaration of module.definition.providers ?? []) {
+      const provider = normalizeProvider(declaration)
+      modulesByProvider.set(provider.provide, moduleId)
+      if (!providersByToken.has(provider.provide)) {
+        providersByToken.set(provider.provide, provider)
+      }
+    }
+  })
+
+  const ensureNode = (
+    token: TokenLike,
+    overrides: Partial<Omit<DependencyNodeIR, 'id' | 'label'>> = {},
+  ): string => {
+    if (typeof token !== 'function') {
+      const registered = customTokensById.get(token.id)
+      if (registered && registered !== token && !diagnostics.some(
+        (diagnostic) => diagnostic.code === 'LUTRE_TOKEN_001' && diagnostic.message.includes(token.id),
+      )) {
+        diagnostics.push({
+          code: 'LUTRE_TOKEN_001',
+          message: `Token ID ${token.id}が異なるtoken declarationで重複しています`,
+          path: `dependency:${token.id}`,
+        })
+      } else if (!registered) {
+        customTokensById.set(token.id, token)
+      }
+    }
+    const current = ids.get(token)
+    if (current) return current
+    const base = typeof token === 'function' ? `class:${token.name}` : `token:${token.id}`
+    let id = base
+    let sequence = 2
+    while (nodes.some((node) => node.id === id)) id = `${base}:${sequence++}`
+    ids.set(token, id)
+    const provider = providersByToken.get(token)
+    const scope = overrides.scope ?? provider?.scope
+    const module = overrides.module ?? modulesByProvider.get(token)
+    nodes.push({
+      id,
+      label: tokenName(token),
+      kind:
+        overrides.kind ??
+        (implementationClasses.has(token)
+          ? 'implementation'
+          : typeof token === 'function'
+            ? 'class'
+            : 'token'),
+      ...(scope === undefined ? {} : { scope }),
+      ...(module === undefined ? {} : { module }),
+    })
+    return id
+  }
+
+  const addEdge = (edge: DependencyEdgeIR) => {
+    if (
+      !edges.some(
+        (candidate) =>
+          candidate.from === edge.from &&
+          candidate.to === edge.to &&
+          candidate.kind === edge.kind &&
+          candidate.source === edge.source &&
+          candidate.condition?.key === edge.condition?.key &&
+          candidate.condition?.equals === edge.condition?.equals,
+      )
+    ) {
+      edges.push(edge)
+    }
+  }
+
+  const validateDeclaredDependency = (dependency: TokenLike, path: string) => {
+    if (
+      providersByToken.has(dependency) ||
+      dependency === (Logger as unknown as TokenLike)
+    ) return
+    diagnostics.push({
+      code: 'LUTRE_DI_UNRESOLVED',
+      message: `${path} requires ${tokenName(dependency)}, but no provider is declared for ${tokenName(dependency)}.`,
+      path,
+    })
+  }
+
+  for (const provider of providersByToken.values()) {
+    const providerId = ensureNode(provider.provide)
+    if (provider.kind === 'class' && provider.provide !== provider.useClass) {
+      addEdge({
+        from: providerId,
+        to: ensureNode(provider.useClass, { scope: provider.scope }),
+        kind: 'framework',
+        source: 'declared',
+      })
+    }
+    if (provider.kind === 'factory') {
+      for (const dependency of provider.inject) {
+        validateDeclaredDependency(dependency, tokenName(provider.provide))
+        addEdge({
+          from: providerId,
+          to: ensureNode(dependency),
+          kind: 'factory',
+          source: 'declared',
+        })
+      }
+      if (provider.useFactory.constructor.name === 'AsyncFunction') {
+        diagnostics.push({
+          code: 'LUTRE_DI_ASYNC_FACTORY',
+          message: 'Async factory providers are not supported. Move asynchronous resource initialization to application lifecycle.',
+          path: tokenName(provider.provide),
+        })
+      }
+    }
+    if (provider.kind === 'conditional') {
+      validateDeclaredDependency(provider.select.env, tokenName(provider.provide))
+      addEdge({
+        from: providerId,
+        to: ensureNode(provider.select.env),
+        kind: 'conditional',
+        source: 'declared',
+      })
+      for (const equals of Reflect.ownKeys(provider.mapping)) {
+        const candidate = provider.mapping[equals]
+        if (!candidate) continue
+        addEdge({
+          from: providerId,
+          to: ensureNode(candidate, { scope: provider.scope }),
+          kind: 'conditional',
+          source: 'declared',
+          condition: { key: provider.select.key, equals },
+        })
+      }
+    }
+  }
+
+  for (const binding of bindings) {
+    ensureNode(binding.implementation, { kind: 'implementation', scope: 'application' })
+  }
+
+  modules.forEach((module, index) => {
+    const lifecycle = module.definition.lifecycle
+    if (!lifecycle) return
+    for (const [hookName, hook] of Object.entries(lifecycle)) {
+      if (!hook) continue
+      const hookId = `lifecycle:module:${index + 1}:${hookName}`
+      nodes.push({ id: hookId, label: `${hookName} (module:${index + 1})`, kind: 'framework' })
+      for (const dependency of hook.inject) {
+        validateDeclaredDependency(dependency, hookId)
+        addEdge({
+          from: hookId,
+          to: ensureNode(dependency),
+          kind: 'lifecycle',
+          source: 'declared',
+        })
+      }
+    }
+  })
+
+  const recorder: DependencyRecorder = {
+    record(consumer, dependency) {
+      addEdge({
+        from: ensureNode(consumer),
+        to: ensureNode(dependency),
+        kind: 'inject',
+        source: 'probed',
+      })
+    },
+  }
+  const container = new Container([...providersByToken.values()], { recorder })
+  const managedClasses = new Set<import('@loutrejs/core').Class>()
+  for (const provider of providersByToken.values()) {
+    if (provider.kind === 'class') managedClasses.add(provider.useClass)
+    if (provider.kind === 'conditional') {
+      for (const key of Reflect.ownKeys(provider.mapping)) {
+        const candidate = provider.mapping[key]
+        if (candidate) managedClasses.add(candidate)
+      }
+    }
+  }
+  for (const binding of bindings) managedClasses.add(binding.implementation)
+
+  for (const target of managedClasses) {
+    try {
+      container.probeClass(target)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      diagnostics.push({
+        code: message.includes('LUTRE_DI_CYCLE') ? 'LUTRE_DI_CYCLE' :
+          message.includes('LUTRE_DI_ASYNC_FACTORY') ? 'LUTRE_DI_ASYNC_FACTORY' :
+          message.includes('LUTRE_DI_CONSTRUCTOR') ? 'LUTRE_DI_CONSTRUCTOR' :
+          'LUTRE_DI_UNRESOLVED',
+        message,
+        path: target.name,
+      })
+    }
+  }
+
+  return { nodes, edges }
 }
 
 function validateDuplicateProviders(
@@ -258,7 +486,6 @@ function describeModule(module: ModuleInstance, index: number): string {
 
 function collectCustomTokens(
   providers: readonly ProviderDescriptor[],
-  targets: readonly BindingTarget[],
   diagnostics: Diagnostic[],
 ): ReadonlyMap<string, TokenLike> {
   const tokens = new Map<string, TokenLike>()
@@ -282,14 +509,6 @@ function collectCustomTokens(
       for (const dependency of provider.inject) {
         register(dependency, `provider:${tokenName(provider.provide)}`)
       }
-    }
-  }
-  for (const target of targets) {
-    const path = `${target.contractName}.${target.procedure}.${target.protocol}`
-    for (const dependency of getExplicitInjections(
-      target.binding.implementation,
-    ).values()) {
-      register(dependency, path)
     }
   }
   return tokens
@@ -323,7 +542,7 @@ function collectContextKeys(
 
 export function assertValidCompilation(result: CompilationResult): ApplicationGraphIR {
   if (result.diagnostics.length > 0) {
-    throw new StaticValidationError(result.diagnostics)
+    throw new StaticValidationError(result.diagnostics, result.graph)
   }
   return result.graph
 }
@@ -387,7 +606,6 @@ function validateCoverage(
 
 function validatePipeline(
   target: BindingTarget,
-  providers: ReadonlyMap<TokenLike, ProviderDescriptor>,
   diagnostics: Diagnostic[],
 ) {
   const path = `${target.contractName}.${target.procedure}.${target.protocol}`
@@ -483,16 +701,6 @@ function validatePipeline(
     }
   }
 
-  for (const dependency of getExplicitInjections(target.binding.implementation).values()) {
-    const provider = providers.get(dependency)
-    if (!provider) {
-      diagnostics.push({
-        code: 'LUTRE_DI_001',
-        message: `${target.binding.implementation.name}のconstructor依存${tokenName(dependency)}を提供するProviderがありません。execution dataはContextOfから取得してください`,
-        path,
-      })
-    }
-  }
 }
 
 function toLayerIR(item: PipelineItem, index: number): LayerIR {

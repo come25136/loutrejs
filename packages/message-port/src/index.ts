@@ -15,17 +15,14 @@ import {
 import {
   assertValidCompilation,
   compileApplication,
-} from '@loutrejs/compiler/runtime'
+  type ApplicationGraphIR,
+} from '@loutrejs/graph'
 import {
   ApplicationRuntime,
   executePipeline,
   Logger,
   normalizeUnknownError,
 } from '@loutrejs/runtime'
-import {
-  runtimeLinkageTarget,
-  type RuntimeLinkableApplication,
-} from '@loutrejs/runtime/internal'
 
 export interface MessagePortResponseDefinition {
   readonly body: StandardSchemaV1
@@ -147,7 +144,8 @@ interface Route {
   readonly implementation: import('@loutrejs/core').Class
 }
 
-export interface MessagePortApplication extends RuntimeLinkableApplication {
+export interface MessagePortApplication {
+  readonly graph: ApplicationGraphIR
   initialize(): Promise<void>
   shutdown(signal?: string): Promise<void>
   invoke(procedure: string, input?: unknown): Promise<LogicalMessagePortResult>
@@ -158,7 +156,7 @@ export function createMessagePortApplication(options: {
   readonly logger?: Logger
 }): MessagePortApplication {
   const roots = options.modules.map(asModuleInstance)
-  assertValidCompilation(compileApplication(roots))
+  const graph = assertValidCompilation(compileApplication(roots))
   const applicationLogger = options.logger ?? new Logger()
   const runtime = new ApplicationRuntime(roots, { logger: applicationLogger })
   const logger = applicationLogger.child({ protocol: 'messagePort' })
@@ -166,7 +164,7 @@ export function createMessagePortApplication(options: {
   let initialization: Promise<void> | undefined
   const initialize = () => (initialization ??= runtime.initialize())
   return {
-    [runtimeLinkageTarget]: (artifact) => runtime[runtimeLinkageTarget](artifact),
+    graph,
     initialize,
     shutdown: (signal) => runtime.shutdown(signal),
     async invoke(procedure, input) {
@@ -204,7 +202,7 @@ export function createMessagePortApplication(options: {
           context,
           validate: () => undefined,
           terminal: async (_layer, terminalContext) => {
-            const target = await runtime.container.resolveImplementation(
+            const target = runtime.container.resolveImplementation(
               route.implementation,
             ) as Record<string, unknown>
             const method = target[route.procedure]

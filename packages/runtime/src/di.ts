@@ -1,6 +1,7 @@
 import {
   asModuleInstance,
   normalizeProvider,
+  runInInjectionContext,
   tokenName,
   type Class,
   type ModuleInstance,
@@ -9,10 +10,6 @@ import {
   type TokenLike,
 } from '@loutrejs/core'
 import { Logger } from './logger.js'
-import {
-  runtimeLinkageTarget,
-  type RuntimeLinkageArtifact,
-} from './linkage.js'
 
 export class DependencyResolutionError extends Error {
   constructor(message: string) {
@@ -24,6 +21,15 @@ export class DependencyResolutionError extends Error {
 export interface RuntimeModuleGraph {
   readonly modules: readonly ModuleInstance[]
   readonly providers: readonly ProviderDescriptor[]
+}
+
+export interface DependencyRecorder {
+  record(consumer: TokenLike, dependency: TokenLike): void
+}
+
+export interface ContainerOptions {
+  readonly logger?: Logger
+  readonly recorder?: DependencyRecorder
 }
 
 export function collectRuntimeModuleGraph(
@@ -49,85 +55,56 @@ export function collectRuntimeModuleGraph(
 
 export class Container {
   readonly #providers = new Map<TokenLike, ProviderDescriptor>()
-  readonly #applicationCache = new Map<TokenLike, Promise<unknown>>()
-  readonly #implementationCache = new Map<Class, Promise<unknown>>()
-
-  readonly #linkedDependencies = new Map<Function, readonly TokenLike[]>()
+  readonly #applicationCache = new Map<TokenLike, unknown>()
+  readonly #implementationCache = new Map<Class, unknown>()
   readonly #logger: Logger
-  #linkageAttached = false
-  #resolutionStarted = false
+  readonly #recorder: DependencyRecorder | undefined
 
   constructor(
     providers: readonly ProviderDescriptor[],
-    logger: Logger = new Logger(),
+    options: Logger | ContainerOptions = {},
   ) {
-    this.#logger = logger
+    this.#logger = options instanceof Logger ? options : options.logger ?? new Logger()
+    this.#recorder = options instanceof Logger ? undefined : options.recorder
     for (const provider of providers) {
       if (this.#providers.has(provider.provide)) {
         throw new DependencyResolutionError(
-          `Duplicate provider for ${tokenName(provider.provide)}`,
+          `LUTRE_DI_DUPLICATE: Duplicate provider for ${tokenName(provider.provide)}`,
         )
       }
       this.#providers.set(provider.provide, provider)
     }
   }
 
-  /** @internal Compilerが生成したbootstrapだけが呼び出す。 */
-  [runtimeLinkageTarget](artifact: RuntimeLinkageArtifact): void {
-    if (this.#linkageAttached) {
-      throw new DependencyResolutionError(
-        'Runtime Linkage ArtifactはApplicationへ1回だけ関連付けできます',
-      )
-    }
-    if (this.#resolutionStarted) {
-      throw new DependencyResolutionError(
-        'Provider解決開始後にRuntime Linkage Artifactを関連付けることはできません',
-      )
-    }
-    for (const [target, dependencies] of artifact.bindings) {
-      if (this.#linkedDependencies.has(target)) {
-        throw new DependencyResolutionError(
-          `${target.name}のconstructor linkageが重複しています`,
-        )
-      }
-      this.#linkedDependencies.set(target, dependencies)
-    }
-    this.#linkageAttached = true
-  }
-
-  async resolve<T>(token: TokenLike<T>): Promise<T> {
+  resolve<T>(token: TokenLike<T>): T {
     return this.#resolve(token)
   }
 
-  async resolveImplementation<T>(target: Class<T>): Promise<T> {
-    this.#resolutionStarted = true
+  resolveImplementation<T>(target: Class<T>): T {
     const cached = this.#implementationCache.get(target)
-    if (cached) return cached as Promise<T>
+    if (this.#implementationCache.has(target)) return cached as T
 
-    const pending = this.#instantiate(target, [target])
-    this.#implementationCache.set(target, pending)
-    try {
-      return await pending
-    } catch (error) {
-      if (this.#implementationCache.get(target) === pending) {
-        this.#implementationCache.delete(target)
-      }
-      throw error
-    }
+    const instance = this.#instantiate(target, [target])
+    this.#implementationCache.set(target, instance)
+    return instance
   }
 
-  async #resolve<T>(
+  /** @internal Graph Probe が managed implementation class を construction する。 */
+  probeClass<T>(target: Class<T>): T {
+    return this.#instantiate(target, [target])
+  }
+
+  #resolve<T>(
     token: TokenLike<T>,
     source?: string,
     lineage: readonly TokenLike[] = [],
-  ): Promise<T> {
-    this.#resolutionStarted = true
+  ): T {
     const cycleStart = lineage.indexOf(token)
     if (cycleStart >= 0) {
       const cycle = [...lineage.slice(cycleStart), token]
         .map(tokenName)
         .join(' -> ')
-      throw new DependencyResolutionError(`循環依存を検出しました: ${cycle}`)
+      throw new DependencyResolutionError(`LUTRE_DI_CYCLE: 循環依存を検出しました: ${cycle}`)
     }
     const provider = this.#providers.get(token)
     if (!provider) {
@@ -138,51 +115,50 @@ export class Container {
           ...(source === undefined ? {} : { source }),
         }) as T
       }
-      if (typeof token === 'function') {
-        return this.#instantiate(token as Class<T>, [...lineage, token])
-      }
-      throw new DependencyResolutionError(`No provider for ${tokenName(token)}`)
+      throw new DependencyResolutionError(
+        `LUTRE_DI_UNRESOLVED: ${source ?? 'Application'} requires ${tokenName(token)}, but no provider is declared for ${tokenName(token)}.`,
+      )
     }
 
     const nextLineage = [...lineage, token]
     if (provider.scope !== 'application') {
-      return await this.#create(provider, nextLineage) as T
+      return this.#create(provider, nextLineage) as T
     }
 
     const cached = this.#applicationCache.get(token)
-    if (cached) return await cached as T
+    if (this.#applicationCache.has(token)) return cached as T
 
-    const pending = this.#create(provider, nextLineage)
-    this.#applicationCache.set(token, pending)
-    try {
-      return await pending as T
-    } catch (error) {
-      if (this.#applicationCache.get(token) === pending) {
-        this.#applicationCache.delete(token)
-      }
-      throw error
-    }
+    const instance = this.#create(provider, nextLineage)
+    this.#applicationCache.set(token, instance)
+    return instance as T
   }
 
-  async #create(
+  #create(
     provider: ProviderDescriptor,
     lineage: readonly TokenLike[],
-  ): Promise<unknown> {
-    switch (provider.kind) {
+  ): unknown {
+    try {
+      switch (provider.kind) {
       case 'value':
         return provider.useValue
       case 'class':
         return this.#instantiate(provider.useClass, lineage)
       case 'factory': {
-        const dependencies = await Promise.all(
-          provider.inject.map((token) => this.#resolve(token, undefined, lineage)),
+        const dependencies = provider.inject.map((token) =>
+          this.#resolve(token, tokenName(provider.provide), lineage),
         )
-        return provider.useFactory(...dependencies)
+        const value = provider.useFactory(...dependencies)
+        if (isThenable(value)) {
+          throw new DependencyResolutionError(
+            'LUTRE_DI_ASYNC_FACTORY: Async factory providers are not supported. Move asynchronous resource initialization to application lifecycle.',
+          )
+        }
+        return value
       }
       case 'conditional': {
-        const env = await this.#resolve(
+        const env = this.#resolve(
           provider.select.env,
-          undefined,
+          tokenName(provider.provide),
           lineage,
         ) as Record<
           string,
@@ -197,24 +173,42 @@ export class Container {
         }
         return this.#instantiate(implementation, lineage)
       }
+      }
+    } catch (error) {
+      if (provider.scope === 'application') {
+        this.#applicationCache.delete(provider.provide)
+      }
+      throw error
     }
   }
 
-  async #instantiate<T>(
+  #instantiate<T>(
     target: Class<T>,
     lineage: readonly TokenLike[],
-  ): Promise<T> {
-    const manifested = this.#linkedDependencies.get(target)
-    if (!manifested && target.length > 0) {
+  ): T {
+    if (target.length > 0) {
       throw new DependencyResolutionError(
-        `${target.name}のconstructor DI linkageがありません。loutre dev/start/buildでCompilerを通して起動してください`,
+        `LUTRE_DI_CONSTRUCTOR: ${target.name} has required constructor parameters. Declare framework dependencies with constructor default parameters using inject().`,
       )
     }
-    const dependencies = await Promise.all(
-      (manifested ?? []).map((token) =>
-        this.#resolve(token, target.name, lineage),
-      ),
+    return runInInjectionContext(
+      {
+        consumer: target,
+        resolve: (token) => this.#resolve(token, target.name, lineage),
+        ...(this.#recorder === undefined
+          ? {}
+          : {
+              record: (consumer: TokenLike, dependency: TokenLike) =>
+                this.#recorder!.record(consumer, dependency),
+            }),
+      },
+      () => new target(),
     )
-    return new target(...dependencies)
   }
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    (typeof value === 'object' && value !== null) || typeof value === 'function'
+  ) && typeof (value as { readonly then?: unknown }).then === 'function'
 }

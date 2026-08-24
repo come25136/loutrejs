@@ -99,6 +99,7 @@ describe('HTTP application boundary', () => {
       implementations: [implement(Contract).for(http).with(Implementation)],
     }))
     const application = createHttpApplication({ modules: [Module()] })
+    controllerInstances = 0
 
     const response = await application.handle(
       new Request('http://fixture.test/things/t1?page=2', {

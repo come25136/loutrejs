@@ -41,13 +41,21 @@ export interface ContractDefinition<
   >,
 > {
   readonly kind: 'contract'
+  readonly name?: string
   readonly procedures: TProcedures
 }
 
 export function contract<
   const TProcedures extends Record<string, ProcedureDefinition>,
->(procedures: TProcedures): ContractDefinition<TProcedures> {
-  return { kind: 'contract', procedures }
+>(
+  procedures: TProcedures,
+  options: { readonly name?: string } = {},
+): ContractDefinition<TProcedures> {
+  return {
+    kind: 'contract',
+    ...(options.name === undefined ? {} : { name: options.name }),
+    procedures,
+  }
 }
 
 export type ContractProcedures<TContract extends ContractDefinition> =

@@ -21,33 +21,51 @@ describe('Loutre CLI', () => {
 
   it('Contract/Pipeline Graphを表示する', async () => {
     const output = io()
-    expect(await runCli(['graph', 'contracts'], output.value)).toBe(0)
+    expect(await runCli([
+      'graph',
+      'contracts',
+      '--entry',
+      'fixtures/http-crud/src/app.ts',
+    ], output.value)).toBe(0)
     expect(output.stdout.join('\n')).toContain('UsersContract.get [http]')
     expect(output.stdout.join('\n')).toContain('http.controller terminal')
   })
 
   it('Runtime capability mismatchをdoctorで説明する', async () => {
     const output = io()
-    const code = await runCli(['doctor', 'electron'], output.value)
+    const code = await runCli([
+      'doctor',
+      'electron',
+      '--entry',
+      'fixtures/http-crud/src/app.ts',
+    ], output.value)
     expect(code).toBe(1)
     expect(output.stdout.join('\n')).toContain('Missing: http.server')
   })
 
   it('constructor dependencyをexplainする', async () => {
     const output = io()
-    expect(await runCli(['explain', 'Service'], output.value)).toBe(0)
-    expect(output.stdout.join('\n')).toContain('repository <- Repository')
+    expect(await runCli([
+      'explain',
+      'UsersController',
+      '--entry',
+      'fixtures/http-crud/src/app.ts',
+    ], output.value)).toBe(0)
+    expect(output.stdout.join('\n')).toContain('UsersService')
   })
 
-  it('Module description、lifecycle、exportsをGraphへ表示する', async () => {
+  it('Module descriptionをGraphへ表示する', async () => {
     const output = io()
-    expect(await runCli(['graph', 'modules'], output.value)).toBe(0)
+    expect(await runCli([
+      'graph',
+      'modules',
+      '--entry',
+      'fixtures/http-crud/src/app.ts',
+    ], output.value)).toBe(0)
     const graph = output.stdout.join('\n')
-    expect(graph).toContain('DatabaseModule')
-    expect(graph).toContain('description: `${args.name} database`')
-    expect(graph).toContain('description: Database fixture application')
-    expect(graph).toContain('lifecycle: onModuleInit')
-    expect(graph).toContain('exports: args.provide')
+    expect(graph).toContain('UsersModule')
+    expect(graph).toContain('module:1')
+    expect(graph).toContain('description: Canonical HTTP CRUD fixture')
   })
 
   it('Graphをmachine-readable JSONで出力する', async () => {
@@ -58,6 +76,8 @@ describe('Loutre CLI', () => {
       'contracts',
       '--format',
       'json',
+      '--entry',
+      'fixtures/http-crud/src/app.ts',
     ], output.value)).toBe(0)
 
     const graph = JSON.parse(output.stdout.join('\n'))
@@ -69,28 +89,72 @@ describe('Loutre CLI', () => {
     }))
   })
 
-  it('GraphをDOTで出力する', async () => {
+  it('GraphをMermaidで出力する', async () => {
     const output = io()
 
     expect(await runCli([
       'graph',
       'di',
       '--format',
-      'dot',
+      'mermaid',
+      '--entry',
+      'fixtures/http-crud/src/app.ts',
     ], output.value)).toBe(0)
 
     const graph = output.stdout.join('\n')
-    expect(graph).toContain('digraph Loutre')
-    expect(graph).toContain('"UsersController" -> "UsersService"')
+    expect(graph).toContain('flowchart LR')
+    expect(graph).toContain('UsersController [implementation, application]')
+    expect(graph).toContain('UsersService [class, application]')
+    expect(graph).toContain('inject/probed')
   })
 
-  it('複雑なtype-only importを持つRuntime Linkage Artifactをbuildして起動する', async () => {
+  it('Module名をMermaid nodeへ出力する', async () => {
+    const output = io()
+    expect(await runCli([
+      'graph',
+      'modules',
+      '--format',
+      'mermaid',
+      '--entry',
+      'fixtures/http-crud/src/app.ts',
+    ], output.value)).toBe(0)
+
+    expect(output.stdout.join('\n')).toContain('m0["UsersModule"]')
+  })
+
+  it('DOT formatを受け付けない', async () => {
+    const output = io()
+    expect(await runCli([
+      'graph',
+      'modules',
+      '--format',
+      'dot',
+      '--entry',
+      'fixtures/http-crud/src/app.ts',
+    ], output.value)).toBe(2)
+    expect(output.stderr.join('\n')).toContain('text、json、mermaid')
+  })
+
+  it('broken DIでもpartial graphとdiagnosticを返す', async () => {
+    const output = io()
+    expect(await runCli([
+      'graph',
+      'di',
+      '--entry',
+      'fixtures/graph-probe/src/app.ts',
+    ], output.value)).toBe(1)
+    expect(output.stdout.join('\n')).toContain('BrokenStorage')
+    expect(output.stdout.join('\n')).toContain('UNRESOLVED')
+    expect(output.stderr.join('\n')).toContain('LUTRE_DI_UNRESOLVED')
+  })
+
+  it('複雑なimportを持つApplicationをCompiler linkageなしでbuildして起動する', async () => {
     const output = io()
     const directory = await mkdtemp(join(tmpdir(), 'loutre-linkage-'))
     try {
       expect(await runCli([
         'build',
-        'fixtures/compiler-manifest/src/runtime-linkage/app.ts',
+        'fixtures/application-build/src/app.ts',
         '--out-dir',
         directory,
       ], output.value)).toBe(0)

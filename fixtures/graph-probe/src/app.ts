@@ -1,0 +1,30 @@
+import { defineEnv, defineModule, inject, provide, token } from '@loutrejs/core'
+import { createHttpApplication } from '@loutrejs/http'
+import { z } from 'zod'
+
+interface MissingDependency {
+  readonly value: string
+}
+
+const MISSING = token<MissingDependency>('graph-probe.missing')
+const STORAGE = token<MemoryStorage | BrokenStorage>('graph-probe.storage')
+
+class AppEnv extends defineEnv(z.object({ DRIVER: z.enum(['memory', 'broken']) })) {}
+
+class MemoryStorage {}
+
+class BrokenStorage {
+  constructor(readonly missing = inject(MISSING)) {}
+}
+
+const Module = defineModule(() => ({
+  providers: [
+    provide(AppEnv).useValue(new AppEnv({ DRIVER: 'memory' })),
+    provide(STORAGE).select(AppEnv.key('DRIVER'), {
+      memory: MemoryStorage,
+      broken: BrokenStorage,
+    }),
+  ],
+}))
+
+export default createHttpApplication({ modules: [Module()] })

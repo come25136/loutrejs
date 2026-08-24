@@ -21,7 +21,7 @@ describe('canonical Fixture A', () => {
       expect(await response.json()).toEqual({ id: 'user-1', name: 'test' })
       expect(application.graph.capabilities).toContainEqual({
         name: 'http.server',
-        requiredBy: 'Contract1.get',
+        requiredBy: 'UsersContract.get',
       })
 
       const created = await fetch(`http://127.0.0.1:${port}/users`, {

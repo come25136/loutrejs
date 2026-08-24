@@ -58,3 +58,6 @@ Fixture Aを実行するために必要だった最小の選択だけを記録�
 - Runtime LinkageはASTとTypeChecker Symbolからconstructor、Provider、implementation、importを
   接続します。type-only importは元sourceを書き換えず、生成fragmentに必要なvalue importだけを
   追加します。
+> [!NOTE]
+> 本文書はPhase 1完了時点の履歴である。Source Compiler / Runtime Linkageに関する決定は
+> `loutre_source_compiler_removal_architecture_amendment.md`と現行`architecture.md`で上書きされた。

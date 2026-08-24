@@ -10,17 +10,13 @@ import {
   assertValidCompilation,
   compileApplication,
   type ApplicationGraphIR,
-} from '@loutrejs/compiler/runtime'
+} from '@loutrejs/graph'
 import {
   ApplicationRuntime,
   executePipeline,
   Logger,
   normalizeUnknownError,
 } from '@loutrejs/runtime'
-import {
-  runtimeLinkageTarget,
-  type RuntimeLinkableApplication,
-} from '@loutrejs/runtime/internal'
 import type {
   HttpControllerContext,
   HttpHeaders,
@@ -38,7 +34,7 @@ interface HttpRoute {
   readonly procedure: string
 }
 
-export interface HttpApplication extends RuntimeLinkableApplication {
+export interface HttpApplication {
   readonly graph: ApplicationGraphIR
   initialize(): Promise<void>
   shutdown(signal?: string): Promise<void>
@@ -67,7 +63,6 @@ export function createHttpApplication(options: {
   const initialize = () => (initialization ??= runtime.initialize())
 
   return {
-    [runtimeLinkageTarget]: (artifact) => runtime[runtimeLinkageTarget](artifact),
     graph,
     initialize,
     shutdown: (signal) => runtime.shutdown(signal),
@@ -316,7 +311,7 @@ async function invokeController(
   raw: MutableHttpContext,
   container: import('@loutrejs/runtime').Container,
 ): Promise<LogicalHttpResult> {
-  const controller = await container.resolveImplementation(
+  const controller = container.resolveImplementation(
     route.binding.implementation,
   ) as Record<PropertyKey, unknown>
   const method = controller[route.procedure as keyof typeof controller]

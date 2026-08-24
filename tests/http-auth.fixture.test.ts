@@ -4,7 +4,7 @@ import {
   implement,
   procedure,
 } from '@loutrejs/core'
-import { compileApplication } from '@loutrejs/compiler'
+import { compileApplication } from '@loutrejs/graph'
 import { http, validate } from '@loutrejs/http'
 import {
   AccountController,

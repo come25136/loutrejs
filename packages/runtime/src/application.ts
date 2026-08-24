@@ -11,10 +11,6 @@ import {
   Container,
   type RuntimeModuleGraph,
 } from './di.js'
-import {
-  runtimeLinkageTarget,
-  type RuntimeLinkageArtifact,
-} from './linkage.js'
 import { Logger } from './logger.js'
 
 export interface ApplicationRuntimeOptions {
@@ -33,12 +29,9 @@ export class ApplicationRuntime {
     options: ApplicationRuntimeOptions = {},
   ) {
     this.graph = collectRuntimeModuleGraph(roots)
-    this.container = new Container(this.graph.providers, options.logger)
-  }
-
-  /** @internal Compilerが生成したbootstrapだけが呼び出す。 */
-  [runtimeLinkageTarget](artifact: RuntimeLinkageArtifact): void {
-    this.container[runtimeLinkageTarget](artifact)
+    this.container = new Container(this.graph.providers, {
+      ...(options.logger === undefined ? {} : { logger: options.logger }),
+    })
   }
 
   async initialize(): Promise<void> {
@@ -89,17 +82,15 @@ export class ApplicationRuntime {
     const applicationProviders = providers.filter(
       (provider): provider is ProviderDescriptor => provider.scope === 'application',
     )
-    return Promise.all(
-      applicationProviders.map((provider) =>
-        this.container.resolve(provider.provide),
-      ),
+    return applicationProviders.map((provider) =>
+      this.container.resolve(provider.provide),
     )
   }
 
   async #runHook(hook: LifecycleHook<any> | undefined): Promise<void> {
     if (!hook) return
-    const dependencies = await Promise.all(
-      hook.inject.map((token: TokenLike) => this.container.resolve(token)),
+    const dependencies = hook.inject.map((token: TokenLike) =>
+      this.container.resolve(token),
     )
     await hook.run(...dependencies)
   }

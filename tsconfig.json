@@ -6,7 +6,6 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "experimentalDecorators": true,
     "useDefineForClassFields": true,
     "declaration": true,
     "declarationMap": true,
@@ -18,11 +17,9 @@
     "skipLibCheck": true,
     "paths": {
       "@loutrejs/core": ["./packages/core/src/index.ts"],
-      "@loutrejs/compiler": ["./packages/compiler/src/index.ts"],
-      "@loutrejs/compiler/runtime": ["./packages/compiler/src/runtime.ts"],
+      "@loutrejs/graph": ["./packages/graph/src/index.ts"],
       "@loutrejs/cli": ["./packages/cli/src/index.ts"],
       "@loutrejs/runtime": ["./packages/runtime/src/index.ts"],
-      "@loutrejs/runtime/internal": ["./packages/runtime/src/internal.ts"],
       "@loutrejs/http": ["./packages/http/src/index.ts"],
       "@loutrejs/message-port": ["./packages/message-port/src/index.ts"],
       "@loutrejs/runtime-node": ["./packages/runtime-node/src/index.ts"]

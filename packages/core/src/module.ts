@@ -3,6 +3,7 @@ import type { ProviderDeclaration } from './provider.js'
 import type { ModuleLifecycle } from './lifecycle.js'
 
 export interface ModuleDefinition {
+  readonly name?: string
   readonly description?: string
   readonly imports?: readonly ModuleInstance[]
   readonly providers?: readonly ProviderDeclaration[]

@@ -1,4 +1,4 @@
-import { contract, defineModule, implement, procedure } from '@loutrejs/core'
+import { contract, defineModule, implement, inject, procedure } from '@loutrejs/core'
 import {
   ContextOf,
   ControllerOf,
@@ -58,7 +58,7 @@ export const UsersContract = contract({
       }),
     },
   }),
-})
+}, { name: 'UsersContract' })
 
 export type UsersHttp = ControllerOf<typeof UsersContract, 'http'>
 
@@ -69,7 +69,7 @@ export class UsersService {
 }
 
 export class UsersController implements UsersHttp {
-  constructor(readonly users: UsersService) {}
+  constructor(readonly users = inject(UsersService)) {}
 
   async get(ctx: ContextOf<UsersHttp, 'get'>) {
     return ctx.response.found({
@@ -88,6 +88,7 @@ export class UsersController implements UsersHttp {
 }
 
 export const UsersModule = defineModule(() => ({
+  name: 'UsersModule',
   description: 'Canonical HTTP CRUD fixture',
   providers: [UsersService],
   implementations: [

@@ -6,7 +6,7 @@
 
 <p align="center">
   明示的なApplication Graphから、型安全でポータブルなアプリケーションを構築する<br>
-  Compiler-firstのTypeScriptフレームワーク
+  Graph-firstのTypeScriptフレームワーク
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 
 Loutreは、Contract、Module、Provider、Pipeline、Controllerの関係を明示的な
 Application Graphとして表現するTypeScriptアプリケーションフレームワークです。
-CompilerがGraphを静的に検証し、同じapplication modelをNode.js、Bun、Deno、
+Graph Engineがruntime descriptorとGraph ProbeからGraphを構築・検証し、同じapplication modelをNode.js、Bun、Deno、
 Cloudflare Workers、AWS Lambda、Electronなどのランタイムへ接続します。
 
 ```text
@@ -33,18 +33,18 @@ Contract → Protocol decode → ordered Pipeline → Controller
 ```
 
 Filesystem規約やruntime reflectionに依存せず、依存関係、実行順序、Contextの変化を
-コードとCompiler diagnosticsから追えることを目指しています。
+コードとGraph diagnosticsから追えることを目指しています。
 
 ## 特徴
 
-- **Compiler-first** — TypeScript ASTからversion付きGraph ManifestとRuntime Linkage
-  Artifactを生成し、binding、coverage、pipeline順序などを静的に検証
+- **Graph-first** — runtime descriptorとlifecycleを実行しないGraph Probeからversion付き
+  Application Graphを生成し、binding、coverage、pipeline順序、DIを一つのvalidatorで検証
 - **Contract-first** — 入出力schema、response variant、protocolごとのwire modelを
   Contractに集約
 - **型付きPipeline** — `requires` / `provides`でLayer間のContext変化を表現し、
   Controllerが受け取る最終Context shapeを導出
 - **明示的なDI** — class、typed token、`application` / `transient` scope、
-  parameterized Module、conditional Providerに対応
+  parameterized Module、conditional Provider、`inject()` dependency edgeに対応
 - **Schema相互運用** — Standard Schema互換のvalidatorを利用可能
 - **マルチランタイム** — application codeを保ったまま、adapterを介して複数の
   JavaScript runtimeへ展開
@@ -89,18 +89,29 @@ curl http://127.0.0.1:3000/greetings/Loutre
 CLIはfilesystem discoveryを行いません。buildやserver起動ではentry fileを明示します。
 
 ```sh
-npx loutre check
-npx loutre doctor node
-npx loutre graph contracts
-npx loutre graph di --format json
-npx loutre graph modules --format dot
-npx loutre explain <diagnostic-code>
+npx loutre check --entry fixtures/http-crud/src/app.ts
+npx loutre doctor node --entry fixtures/http-crud/src/app.ts
+npx loutre graph contracts --entry fixtures/http-crud/src/app.ts
+npx loutre graph di --entry fixtures/http-crud/src/app.ts --format json
+npx loutre graph modules --entry fixtures/http-crud/src/app.ts --format mermaid
+npx loutre explain UsersController --entry fixtures/http-crud/src/app.ts
 npx loutre build fixtures/http-crud/src/app.ts --out-dir dist/loutre
 npx loutre start fixtures/http-crud/src/app.ts --port 3000
 ```
 
-通常classのconstructor依存はCompilerが解析し、Runtime Linkage Artifactとして
-自動接続します。application codeでdependency mapを手書きする必要はありません。
+通常classとcustom tokenのdependencyは、constructor default parameterで宣言します。
+
+```ts
+class UsersService {
+  constructor(
+    readonly repository = inject(UserRepository),
+  ) {}
+}
+```
+
+`inject()`はframework-managed class construction中だけ利用でき、Runtime解決と
+Graph Probeによるdependency edge収集のsource of truthになります。DI constructionは同期で、
+非同期resourceの初期化と終了はLifecycle hookへ分離します。
 
 ## 対応ランタイム
 
@@ -118,7 +129,7 @@ npx loutre start fixtures/http-crud/src/app.ts --port 3000
 | Package | 役割 |
 | --- | --- |
 | `@loutrejs/core` | Contract、Module、Provider、typed token、Context Key、Layer descriptor |
-| `@loutrejs/compiler` | AST解析、Graph Manifest、Runtime Linkage Artifact、静的診断 |
+| `@loutrejs/graph` | Application Graph IR、Graph Builder、Graph Probe、semantic validation |
 | `@loutrejs/runtime` | DI container、Execution Context、Pipeline engine |
 | `@loutrejs/http` | HTTP Contract、validation、authentication、Request / Response adapter |
 | `@loutrejs/message-port` | MessagePort protocol、server-stream finalization |

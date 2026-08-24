@@ -29,3 +29,6 @@ npm run verify
 
 このcommandはTypeScript check、type-level test、全unit/E2E test、build、全runtime
 conformance、CLI server起動を順に実行します。
+> [!NOTE]
+> 本文書はPhase 1完了時点の履歴である。Source Compiler / Runtime Linkageに関する項目は
+> `loutre_source_compiler_removal_architecture_amendment.md`と現行`architecture.md`で上書きされた。
