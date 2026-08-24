@@ -82,7 +82,11 @@ export async function runCli(
       switch (subject) {
         case 'modules':
           for (const module of result.modules) {
-            io.stdout(`${module.name}\n  imports: ${module.imports.join(', ') || '(なし)'}`)
+            io.stdout(`${module.name}`)
+            if (module.description !== undefined) {
+              io.stdout(`  description: ${module.description}`)
+            }
+            io.stdout(`  imports: ${module.imports.join(', ') || '(なし)'}`)
             io.stdout(`  providers: ${module.providers.join(', ') || '(なし)'}`)
             io.stdout(`  exports: ${module.exports.join(', ') || '(なし)'}`)
             io.stdout(`  lifecycle: ${module.lifecycle.join(', ') || '(なし)'}`)

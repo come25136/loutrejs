@@ -12,6 +12,18 @@ describe('TypeScript AST Compiler', () => {
   it('Module、Provider、Contract、Pipeline、Capability Graphをsourceから抽出する', () => {
     expect(manifest.version).toBe(1)
     expect(manifest.modules.some(({ name }) => name === 'UsersModule')).toBe(true)
+    expect(manifest.modules).toContainEqual(
+      expect.objectContaining({
+        name: 'UsersModule',
+        description: 'Canonical HTTP CRUD fixture',
+      }),
+    )
+    expect(manifest.modules).toContainEqual(
+      expect.objectContaining({
+        name: 'DatabaseModule',
+        description: '`${args.name} database`',
+      }),
+    )
     expect(manifest.providers).toContain('EventStreamService')
     expect(manifest.contextKeys).toContainEqual({
       name: 'SESSION',

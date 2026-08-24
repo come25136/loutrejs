@@ -11,6 +11,7 @@ export interface SourceLocationIR {
 
 export interface SourceModuleIR {
   readonly name: string
+  readonly description?: string
   readonly location: SourceLocationIR
   readonly imports: readonly string[]
   readonly providers: readonly string[]
@@ -461,8 +462,20 @@ function readModule(
 ): SourceModuleIR {
   const factory = call.arguments[0]
   const definition = factory && getReturnedObject(factory)
+  const description = definition
+    ? readObjectProperty(definition, 'description')
+    : undefined
   return {
     name,
+    ...(description === undefined
+      ? {}
+      : {
+          description:
+            ts.isStringLiteral(description) ||
+            ts.isNoSubstitutionTemplateLiteral(description)
+              ? description.text
+              : description.getText(sourceFile),
+        }),
     location: locationOf(call, sourceFile),
     imports: readArrayProperty(definition, 'imports', sourceFile),
     providers: readArrayProperty(definition, 'providers', sourceFile),

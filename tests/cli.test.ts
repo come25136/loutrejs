@@ -35,11 +35,13 @@ describe('Loutre CLI', () => {
     expect(output.stdout.join('\n')).toContain('repository <- Repository')
   })
 
-  it('Module lifecycleとexportsをGraphへ表示する', async () => {
+  it('Module description、lifecycle、exportsをGraphへ表示する', async () => {
     const output = io()
     expect(await runCli(['graph', 'modules'], output.value)).toBe(0)
     const graph = output.stdout.join('\n')
     expect(graph).toContain('DatabaseModule')
+    expect(graph).toContain('description: `${args.name} database`')
+    expect(graph).toContain('description: Database fixture application')
     expect(graph).toContain('lifecycle: onModuleInit')
     expect(graph).toContain('exports: args.provide')
   })
