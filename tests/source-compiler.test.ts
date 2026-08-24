@@ -101,6 +101,32 @@ describe('TypeScript AST Compiler', () => {
     )
   })
 
+  it('basicAuth Layerのauthentication roleとprincipal提供を抽出する', () => {
+    const basicAuth = compileTypeScriptSource({
+      tsconfigPath: resolve('examples/basic-auth/tsconfig.json'),
+      entry: resolve('examples/basic-auth/src/app.ts'),
+    })
+    const pipeline = basicAuth.pipelines.find(
+      ({ contract, procedure }) =>
+        contract === 'ProfileContract' && procedure === 'get',
+    )
+
+    expect(pipeline?.layers).toContainEqual(
+      expect.objectContaining({
+        name: 'basicAuthentication',
+        role: 'authentication',
+        provides: ['currentUser'],
+        requiresValidated: [],
+        shortCircuits: [
+          { protocol: 'http', variant: 'unauthorized' },
+        ],
+      }),
+    )
+    expect(basicAuth.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_CONTEXT_001' }),
+    )
+  })
+
   it('PipelineがprovideしないContext propertyを静的診断する', () => {
     const invalid = compileTypeScriptSource({
       tsconfigPath: resolve('source-fixtures/invalid-context/tsconfig.json'),

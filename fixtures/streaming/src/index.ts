@@ -72,7 +72,9 @@ export class EventsController implements EventsHttp {
   constructor(readonly streams: EventStreamService) {}
 
   subscribe(ctx: ContextOf<EventsHttp, 'subscribe'>) {
-    return ctx.response.events(this.streams.events())
+    return ctx.response.events({
+      body: this.streams.events(),
+    })
   }
 }
 

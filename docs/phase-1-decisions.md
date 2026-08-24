@@ -4,9 +4,10 @@
 architectureでexact syntaxまたは挙動が意図的にOPENとされている項目のうち、
 Fixture Aを実行するために必要だった最小の選択だけを記録します。
 
-- Response helperには`ctx.response.<variant>(body)`を採用しました。これはlogical
-  HTTP resultを生成するだけで、validationとserializationは引き続き内部の
-  Protocol Finalizationが担当します。
+- Response helperには`ctx.response.<variant>({ body, headers? })`を採用しました。
+  static headerはresponse定義、requestごとのdynamic headerはresult objectに置きます。
+  これはlogical HTTP resultを生成するだけで、validation、header merge、serializationは
+  引き続き内部のProtocol Finalizationが担当します。
 - HTTP decodeでは、同じquery keyが複数ある場合を`string[]`、1つの場合を
   `string`で表し、headerを小文字keyのrecordで表します。これはadapter内部の
   暫定的な表現であり、恒久的なPublic Schema APIとしてFROZENにするものではありません。

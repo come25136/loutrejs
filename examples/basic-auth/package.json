@@ -1,0 +1,26 @@
+{
+  "name": "@loutrefw/example-basic-auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "26.x"
+  },
+  "scripts": {
+    "check": "loutre check",
+    "dev": "loutre dev src/app.ts --port 3001",
+    "start": "loutre start src/app.ts --port 3001",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@loutrefw/core": "0.1.0",
+    "@loutrefw/http": "0.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@loutrefw/cli": "0.1.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

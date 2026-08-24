@@ -35,6 +35,10 @@ export interface LayerIR {
   readonly provides: readonly string[]
   readonly returns?: readonly string[]
   readonly requiresValidated: readonly string[]
+  readonly shortCircuits?: readonly {
+    readonly protocol: string
+    readonly variant: string
+  }[]
 }
 
 export interface PipelineIR {

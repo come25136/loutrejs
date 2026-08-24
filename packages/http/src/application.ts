@@ -24,6 +24,7 @@ import {
 } from '@loutrefw/runtime/internal'
 import type {
   HttpControllerContext,
+  HttpHeaders,
   HttpProtocol,
   HttpProtocolDefinition,
   LogicalHttpResult,
@@ -210,10 +211,13 @@ async function invokeController(
   const response = Object.fromEntries(
     Object.keys(route.protocol.definition.responses).map((variant) => [
       variant,
-      (body: unknown): LogicalHttpResult => ({
+      (
+        result: { readonly body: unknown; readonly headers?: HttpHeaders },
+      ): LogicalHttpResult => ({
         kind: 'http-result',
         variant,
-        body,
+        body: result.body,
+        ...(result.headers === undefined ? {} : { headers: result.headers }),
       }),
     ]),
   )
@@ -261,14 +265,22 @@ async function finalizeResponse(
     })
     return new Response(stream, {
       status: response.status,
-      headers: {
-        'content-type': 'text/event-stream; charset=utf-8',
-        'cache-control': 'no-cache',
-      },
+      headers: mergeResponseHeaders(
+        response.headers,
+        result.headers,
+        {
+          'content-type': 'text/event-stream; charset=utf-8',
+          'cache-control': 'no-cache',
+        },
+      ),
     })
   }
   const body = await validateSchema(response.body, result.body)
-  return jsonResponse(response.status, body)
+  return jsonResponse(
+    response.status,
+    body,
+    mergeResponseHeaders(response.headers, result.headers),
+  )
 }
 
 function collectRoutes(modules: readonly ModuleInstance[]): HttpRoute[] {
@@ -323,11 +335,43 @@ function compilePath(path: string) {
   }
 }
 
-function jsonResponse(status: number, body: unknown): Response {
+function jsonResponse(
+  status: number,
+  body: unknown,
+  headers: Headers = new Headers(),
+): Response {
+  headers.set('content-type', 'application/json; charset=utf-8')
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
+    headers,
   })
+}
+
+function mergeResponseHeaders(
+  declared: HttpHeaders | undefined,
+  dynamic: HttpHeaders | undefined,
+  framework: HttpHeaders | undefined = undefined,
+): Headers {
+  const headers = new Headers()
+  applyResponseHeaders(headers, declared)
+  applyResponseHeaders(headers, dynamic)
+  applyResponseHeaders(headers, framework)
+  return headers
+}
+
+function applyResponseHeaders(
+  headers: Headers,
+  source: HttpHeaders | undefined,
+): void {
+  if (!source) return
+  for (const [name, value] of Object.entries(source)) {
+    headers.delete(name)
+    if (typeof value === 'string') {
+      headers.set(name, value)
+      continue
+    }
+    for (const item of value) headers.append(name, item)
+  }
 }
 
 function isValidationError(error: unknown): boolean {

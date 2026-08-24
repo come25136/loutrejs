@@ -23,7 +23,7 @@ Contract -> HTTP decode -> ordered Pipeline -> validate.*
   terminal、coverage、duplicate binding、validation順序、Context Key、Controller DIの診断
 - `@loutrefw/runtime`: `application` / `transient` scopeのDI、Execution Context伝播、
   inbound・FILO outboundのPipeline engine
-- `@loutrefw/http`: HTTP Contract descriptor、4種類の`validate.*` Layer、
+- `@loutrefw/http`: HTTP Contract descriptor、4種類の`validate.*` Layer、`basicAuth()`、
   Pipelineから最終Context shapeを導出するController型、portableなRequest/Response
   application adapter、Protocol Finalization
 - `@loutrefw/runtime-node`: Node.js 26向けHTTP server boundary
@@ -41,6 +41,7 @@ Canonical fixture:
 利用者向けのサンプルアプリは`examples/`にあります。
 
 - `examples/hello-http`: HTTP API、入力検証、Controller、Provider DIの最小例
+- `examples/basic-auth`: Basic認証、authentication Layer、Context Key、HTTP 401の例
 
 ```sh
 npm run dev --workspace @loutrefw/example-hello-http

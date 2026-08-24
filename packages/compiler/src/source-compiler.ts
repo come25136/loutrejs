@@ -26,6 +26,10 @@ export interface SourceContractProcedureIR {
     readonly name: string
     readonly interaction: 'unary' | 'server-stream' | 'client-stream' | 'duplex'
     readonly pipeline: readonly LayerIR[]
+    readonly responses: readonly {
+      readonly name: string
+      readonly status?: number
+    }[]
   }[]
 }
 
@@ -349,6 +353,12 @@ function visitSourceFile(sourceFile: ts.SourceFile, state: VisitState): void {
           readLayerDefinition(node.name.text, node.initializer, sourceFile),
         )
       }
+      if (isFactoryInvocation(node.initializer, 'basicAuth')) {
+        state.layerDefinitions.set(
+          node.name.text,
+          readBasicAuthDefinition(node.name.text, node.initializer, sourceFile),
+        )
+      }
       const declaredToken = readTokenDeclaration(
         node.name.text,
         node.initializer,
@@ -507,6 +517,11 @@ function readContract(
             interactionExpression && ts.isStringLiteral(interactionExpression)
               ? interactionExpression.text
               : 'unary'
+          const responsesExpression =
+            protocolDefinition && ts.isObjectLiteralExpression(protocolDefinition)
+              ? readObjectProperty(protocolDefinition, 'responses')
+              : undefined
+          const responses = readSourceResponses(responsesExpression)
           const pipeline =
             pipelineExpression && ts.isArrayLiteralExpression(pipelineExpression)
               ? pipelineExpression.elements.map((element, index) =>
@@ -527,6 +542,14 @@ function readContract(
             pipeline,
             diagnostics,
           )
+          validateSourceBasicAuthResponses(
+            name,
+            procedureName,
+            protocolName,
+            pipeline,
+            responses,
+            diagnostics,
+          )
           protocols.push({
             name: protocolName,
             interaction: interaction as
@@ -535,6 +558,7 @@ function readContract(
               | 'client-stream'
               | 'duplex',
             pipeline,
+            responses,
           })
         }
       }
@@ -616,6 +640,12 @@ function sourceLayer(
   const name = element.getText(sourceFile)
   const declared = layerDefinitions.get(name)
   if (declared) return { index, ...declared }
+  if (isFactoryInvocation(element, 'basicAuth')) {
+    return {
+      index,
+      ...readBasicAuthDefinition(name, element, sourceFile),
+    }
+  }
   const role = name.startsWith('validate.')
     ? 'validation'
     : /\.(controller|resolver|handler)$/.test(name)
@@ -628,6 +658,97 @@ function sourceLayer(
     requires: [],
     provides: [],
     requiresValidated: [],
+  }
+}
+
+function readBasicAuthDefinition(
+  name: string,
+  call: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+): Omit<LayerIR, 'index'> {
+  const definition = call.arguments[0]
+  if (!definition || !ts.isObjectLiteralExpression(definition)) {
+    return {
+      name,
+      role: 'authentication',
+      requires: [],
+      provides: [],
+      requiresValidated: [],
+    }
+  }
+  const declaredName = readObjectProperty(definition, 'name')
+  const principal = readObjectProperty(definition, 'principal')
+  const unauthorized = readObjectProperty(definition, 'unauthorized')
+  const variant =
+    unauthorized && ts.isObjectLiteralExpression(unauthorized)
+      ? readObjectProperty(unauthorized, 'variant')
+      : undefined
+  const variantName =
+    variant && ts.isStringLiteral(variant) ? variant.text : undefined
+  return {
+    name:
+      declaredName && ts.isStringLiteral(declaredName)
+        ? declaredName.text
+        : name,
+    role: 'authentication',
+    requires: [],
+    provides: principal ? [principal.getText(sourceFile)] : [],
+    requiresValidated: [],
+    ...(variantName === undefined
+      ? {}
+      : {
+          shortCircuits: [{ protocol: 'http', variant: variantName }],
+        }),
+  }
+}
+
+function readSourceResponses(
+  expression: ts.Expression | undefined,
+): { readonly name: string; readonly status?: number }[] {
+  if (!expression || !ts.isObjectLiteralExpression(expression)) return []
+  return expression.properties.flatMap((property) => {
+    if (!ts.isPropertyAssignment(property)) return []
+    const name = propertyName(property.name)
+    if (!name || !ts.isObjectLiteralExpression(property.initializer)) return []
+    const status = readObjectProperty(property.initializer, 'status')
+    return [
+      {
+        name,
+        ...(status && ts.isNumericLiteral(status)
+          ? { status: Number(status.text) }
+          : {}),
+      },
+    ]
+  })
+}
+
+function validateSourceBasicAuthResponses(
+  contract: string,
+  procedure: string,
+  protocol: string,
+  pipeline: readonly LayerIR[],
+  responses: readonly { readonly name: string; readonly status?: number }[],
+  diagnostics: Diagnostic[],
+): void {
+  const path = `${contract}.${procedure}.${protocol}`
+  for (const layer of pipeline) {
+    for (const shortCircuit of layer.shortCircuits ?? []) {
+      if (shortCircuit.protocol !== 'http') continue
+      const response = responses.find(({ name }) => name === shortCircuit.variant)
+      if (!response) {
+        diagnostics.push({
+          code: 'LUTRE_AUTH_001',
+          message: `${layer.name}のunauthorized variant ${shortCircuit.variant}がresponseに宣言されていません`,
+          path,
+        })
+      } else if (response.status !== 401) {
+        diagnostics.push({
+          code: 'LUTRE_AUTH_002',
+          message: `${layer.name}のunauthorized variant ${shortCircuit.variant}はHTTP 401である必要があります`,
+          path,
+        })
+      }
+    }
   }
 }
 

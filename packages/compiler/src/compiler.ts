@@ -29,6 +29,7 @@ interface BindingTarget {
   readonly protocol: string
   readonly pipeline: readonly PipelineItem[]
   readonly interaction: string
+  readonly responses?: Readonly<Record<string, { readonly status: number }>>
 }
 
 export class StaticValidationError extends Error {
@@ -76,6 +77,9 @@ export function compileApplication(
             readonly definition?: {
               readonly pipeline?: readonly PipelineItem[]
               readonly interaction?: string
+              readonly responses?: Readonly<
+                Record<string, { readonly status: number }>
+              >
             }
           })
         | undefined
@@ -95,6 +99,9 @@ export function compileApplication(
         pipeline: protocol.pipeline ?? protocol.definition?.pipeline ?? [],
         interaction:
           protocol.interaction ?? protocol.definition?.interaction ?? 'unary',
+        ...(protocol.definition?.responses === undefined
+          ? {}
+          : { responses: protocol.definition.responses }),
       })
     }
   }
@@ -415,6 +422,23 @@ function validatePipeline(
       }
       available.add(provided)
     }
+    const basicAuth = readBasicAuthMetadata(item)
+    if (basicAuth) {
+      const response = target.responses?.[basicAuth.unauthorizedVariant]
+      if (!response) {
+        diagnostics.push({
+          code: 'LUTRE_AUTH_001',
+          message: `${item.name}のunauthorized variant ${basicAuth.unauthorizedVariant}がresponseに宣言されていません`,
+          path,
+        })
+      } else if (response.status !== 401) {
+        diagnostics.push({
+          code: 'LUTRE_AUTH_002',
+          message: `${item.name}のunauthorized variant ${basicAuth.unauthorizedVariant}はHTTP 401である必要があります`,
+          path,
+        })
+      }
+    }
   }
 
   for (const dependency of getExplicitInjections(target.binding.implementation).values()) {
@@ -430,6 +454,7 @@ function validatePipeline(
 }
 
 function toLayerIR(item: PipelineItem, index: number): LayerIR {
+  const basicAuth = item.kind === 'layer' ? readBasicAuthMetadata(item) : undefined
   return {
     index,
     name: item.name,
@@ -440,5 +465,28 @@ function toLayerIR(item: PipelineItem, index: number): LayerIR {
       item.kind === 'layer' ? item.provides.map(contextKeyName) : [],
     requiresValidated:
       item.kind === 'layer' ? item.requiresValidated : [],
+    ...(basicAuth === undefined
+      ? {}
+      : {
+          shortCircuits: [
+            { protocol: 'http', variant: basicAuth.unauthorizedVariant },
+          ],
+        }),
   }
+}
+
+function readBasicAuthMetadata(
+  item: PipelineItem,
+): { readonly unauthorizedVariant: string } | undefined {
+  if (
+    item.kind !== 'layer' ||
+    !('basicAuth' in item) ||
+    typeof item.basicAuth !== 'object' ||
+    item.basicAuth === null ||
+    !('unauthorizedVariant' in item.basicAuth) ||
+    typeof item.basicAuth.unauthorizedVariant !== 'string'
+  ) {
+    return undefined
+  }
+  return { unauthorizedVariant: item.basicAuth.unauthorizedVariant }
 }

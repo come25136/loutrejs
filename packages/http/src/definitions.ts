@@ -19,9 +19,13 @@ export interface HttpInputDefinition {
   readonly body?: StandardSchemaV1
 }
 
+export type HttpHeaderValue = string | readonly string[]
+export type HttpHeaders = Readonly<Record<string, HttpHeaderValue>>
+
 export interface HttpResponseDefinition {
   readonly status: number
   readonly body: StandardSchemaV1
+  readonly headers?: HttpHeaders
   readonly error?: unknown
   readonly stream?: 'server'
 }
@@ -129,21 +133,28 @@ type PartOutput<
     : unknown
   : unknown
 
+export interface HttpResponseResult<TBody> {
+  readonly body: TBody
+  readonly headers?: HttpHeaders
+}
+
 export interface LogicalHttpResult<TVariant extends string = string, TBody = unknown> {
   readonly kind: 'http-result'
   readonly variant: TVariant
   readonly body: TBody
+  readonly headers?: HttpHeaders
 }
 
 type ResponseHelpers<TDefinition extends HttpProtocolDefinition> = {
   [TVariant in keyof TDefinition['responses'] & string]: (
-    body: TDefinition['responses'][TVariant] extends {
+    result: HttpResponseResult<TDefinition['responses'][TVariant] extends {
       readonly stream: 'server'
     }
       ? AsyncIterable<
           SchemaOutput<TDefinition['responses'][TVariant]['body']>
         >
-      : SchemaOutput<TDefinition['responses'][TVariant]['body']>,
+      : SchemaOutput<TDefinition['responses'][TVariant]['body']>
+    >,
   ) => LogicalHttpResult<
     TVariant,
     TDefinition['responses'][TVariant] extends {

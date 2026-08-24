@@ -43,6 +43,10 @@ describe('HTTP application boundary', () => {
             responses: {
               updated: {
                 status: 200,
+                headers: {
+                  'x-declared': 'static',
+                  'x-overridden': 'static',
+                },
                 body: z.object({
                   id: z.string(),
                   page: z.number(),
@@ -72,10 +76,17 @@ describe('HTTP application boundary', () => {
 
       update(ctx: ContextOf<Controller, 'update'>) {
         return ctx.response.updated({
-          id: ctx.params.id,
-          page: ctx.query.page,
-          name: ctx.body.name,
-          executionId: ctx.executionId,
+          body: {
+            id: ctx.params.id,
+            page: ctx.query.page,
+            name: ctx.body.name,
+            executionId: ctx.executionId,
+          },
+          headers: {
+            'x-dynamic': 'request',
+            'x-overridden': 'dynamic',
+            'content-type': 'text/plain',
+          },
         })
       }
     }
@@ -96,6 +107,12 @@ describe('HTTP application boundary', () => {
     )
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('x-declared')).toBe('static')
+    expect(response.headers.get('x-dynamic')).toBe('request')
+    expect(response.headers.get('x-overridden')).toBe('dynamic')
+    expect(response.headers.get('content-type')).toBe(
+      'application/json; charset=utf-8',
+    )
     expect(await response.json()).toEqual({
       id: 't1',
       page: 2,
@@ -156,7 +173,9 @@ describe('HTTP application boundary', () => {
     type Controller = ControllerOf<typeof Contract, 'http'>
     class Implementation implements Controller {
       run(ctx: ContextOf<Controller, 'run'>) {
-        return ctx.response.ok({ value: 42 as unknown as string })
+        return ctx.response.ok({
+          body: { value: 42 as unknown as string },
+        })
       }
     }
     const Module = defineModule(() => ({

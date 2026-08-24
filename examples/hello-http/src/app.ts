@@ -49,7 +49,9 @@ class GreetingController implements GreetingHttp {
   constructor(readonly greetings: GreetingService) {}
 
   async greet(ctx: ContextOf<GreetingHttp, 'greet'>) {
-    return ctx.response.ok(this.greetings.greet(ctx.params.name))
+    return ctx.response.ok({
+      body: this.greetings.greet(ctx.params.name),
+    })
   }
 }
 

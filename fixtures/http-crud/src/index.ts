@@ -73,13 +73,17 @@ export class UsersController implements UsersHttp {
 
   async get(ctx: ContextOf<UsersHttp, 'get'>) {
     return ctx.response.found({
-      id: ctx.params.id,
-      name: 'test',
+      body: {
+        id: ctx.params.id,
+        name: 'test',
+      },
     })
   }
 
   async create(ctx: ContextOf<UsersHttp, 'create'>) {
-    return ctx.response.created(this.users.create(ctx.body.name))
+    return ctx.response.created({
+      body: this.users.create(ctx.body.name),
+    })
   }
 }
 

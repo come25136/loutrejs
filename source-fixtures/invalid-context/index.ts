@@ -31,7 +31,9 @@ type InvalidContextHttp = ControllerOf<typeof InvalidContextContract, 'http'>
 
 class InvalidContextController implements InvalidContextHttp {
   get(ctx: ContextOf<InvalidContextHttp, 'get'>) {
-    return ctx.response.ok({ userId: ctx.session.userId })
+    return ctx.response.ok({
+      body: { userId: ctx.session.userId },
+    })
   }
 }
 

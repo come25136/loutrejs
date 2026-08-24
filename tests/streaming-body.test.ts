@@ -61,7 +61,9 @@ describe('streaming validate.body', () => {
           if (chunk.done) break
           bytes += chunk.value.byteLength
         }
-        return ctx.response.accepted({ bytes })
+        return ctx.response.accepted({
+          body: { bytes },
+        })
       }
     }
     const Module = defineModule(() => ({

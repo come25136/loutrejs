@@ -75,7 +75,13 @@ declare const context: ContextOf<HttpController, 'get'>
 
 const id: string = context.params.id
 void id
-context.response.found({ id: '1', name: 'Ada' })
+context.response.found({ body: { id: '1', name: 'Ada' } })
+context.response.found({
+  body: { id: '1', name: 'Ada' },
+  headers: { etag: 'user-1', vary: ['accept', 'authorization'] },
+})
+// @ts-expect-error response headerの値はstringまたはreadonly string[]のみ
+context.response.found({ body: { id: '1', name: 'Ada' }, headers: { etag: 1 } })
 
 const session: Session = context.session
 void session
@@ -92,11 +98,11 @@ const invalidId: number = context.params.id
 void invalidId
 
 // @ts-expect-error named responseのbody型はschemaから導出される
-context.response.found({ id: '1' })
+context.response.found({ body: { id: '1' } })
 
 class GetController {
   get(_context: ContextOf<HttpController, 'get'>) {
-    return context.response.found({ id: '1', name: 'Ada' })
+    return context.response.found({ body: { id: '1', name: 'Ada' } })
   }
 }
 

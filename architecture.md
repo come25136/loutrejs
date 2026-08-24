@@ -749,6 +749,9 @@ responses: {
   updated: {
     status: 200,
     body: UserSchema,
+    headers: {
+      'cache-control': 'private',
+    },
   },
 
   notFound: {
@@ -760,6 +763,22 @@ responses: {
 ```
 
 Domain Error 自体に HTTP status を埋め込まない。
+
+Controllerのresponse helperは単一result objectを受け取る。`body`は必須、requestごとに
+変わるheaderは`headers`へ指定する。
+
+```ts
+return ctx.response.updated({
+  body: user,
+  headers: {
+    etag: `"${user.version}"`,
+  },
+})
+```
+
+response定義のstatic headerとresultのdynamic headerが同名の場合はdynamicを優先する。
+`content-type`等、Protocol Finalizationが所有するheaderは最後にframeworkが設定する。
+複数値を持つheaderは`readonly string[]`で宣言できる。
 
 ## 11.2 Protocol Decode は内部処理
 
@@ -1107,6 +1126,29 @@ DX は短いが、Layer declaration だけでは依存関係が分からず、Gr
 
 Layer は Context Key を明示的に require/provide する。
 
+HTTP Basic認証では`@loutrefw/http`の`basicAuth()`を使用できる。HTTP adapterが
+decodeしたAuthorization headerの解析、Basic schemeの検証、credentialsのdecodeは
+Layerが担当し、applicationは資格情報の検証とprincipalのContext Keyだけを指定する。
+
+```ts
+export const basicAuthentication = basicAuth({
+  realm: 'Loutre Admin',
+  principal: CURRENT_USER,
+  async authenticate({ username, password }) {
+    return await users.verifyPassword(username, password)
+  },
+  unauthorized: {
+    variant: 'unauthorized',
+    body: { message: '認証が必要です' },
+  },
+})
+```
+
+`authenticate`が`null`または`undefined`を返した場合、Layerは`unauthorized.variant`へ
+short circuitする。Protocol Finalizationはbody schemaを検証し、HTTP 401と
+`WWW-Authenticate: Basic realm="...", charset="UTF-8"`を生成する。
+Compilerは`principal`をLayerの`provides`としてGraph化する。
+
 ```ts
 export const bearerAuthentication = authentication({
   provides: [AUTH],
@@ -1385,7 +1427,7 @@ export class UsersController implements UsersHttp {
       throw UserNotFound({ id: ctx.params.id })
     }
 
-    return ctx.response.found(user)
+    return ctx.response.found({ body: user })
   }
 }
 ```
@@ -1567,7 +1609,7 @@ HTTP Finalizer:
 候補:
 
 ```ts
-return ctx.response.created(user)
+return ctx.response.created({ body: user })
 ```
 
 Named response variant が static check されることは FROZEN。
@@ -2570,7 +2612,7 @@ Output validation/encode は Finalization。
 - [x] `requires` / `provides` は Context Key 配列を使う
 - [ ] Context Key object の exact runtime representation / branding
 - [ ] `shortCircuit(...)` exact API
-- [ ] `ctx.response.created(...)` 等 response helper exact API
+- [x] `ctx.response.created({ body, headers? })` response helper API
 - [ ] `defineError()` exact syntax
 - [ ] Application Error Handler registration API
 - [ ] Protocol Error Handler registration API

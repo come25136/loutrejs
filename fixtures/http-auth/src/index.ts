@@ -106,8 +106,10 @@ type AccountHttp = ControllerOf<typeof AccountContract, 'http'>
 export class AccountController implements AccountHttp {
   get(ctx: ContextOf<AccountHttp, 'get'>) {
     return ctx.response.found({
-      userId: ctx.session.principal.id,
-      tenantId: ctx.currentTenant.id,
+      body: {
+        userId: ctx.session.principal.id,
+        tenantId: ctx.currentTenant.id,
+      },
     })
   }
 }

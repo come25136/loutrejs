@@ -2,7 +2,6 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    globals: true,
-    include: ['tests/**/*.test.ts', 'examples/**/*.test.ts'],
+    include: ['src/**/*.test.ts'],
   },
 })
