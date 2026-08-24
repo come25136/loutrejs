@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality-gate:
+    name: Node.js 26 品質ゲート
+    runs-on: ubuntu-latest
+    steps:
+      - name: ソースを取得
+        uses: actions/checkout@v6
+
+      - name: Node.js 26を準備
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.x
+          cache: npm
+
+      - name: 依存関係をインストール
+        run: npm ci
+
+      - name: TypeScriptを検査
+        run: npm run check
+
+      - name: Public型を検査
+        run: npm run test:types
+
+      - name: Unit・E2E testを実行
+        run: npm test
+
+      - name: packageをbuild
+        run: npm run build
+
+      - name: 公開tarballを検査
+        run: node scripts/verify-packages.mjs
+
+      - name: Node.js conformanceを実行
+        run: npm run test:node
+
+  runtime-conformance:
+    name: 全runtime conformance
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    steps:
+      - name: ソースを取得
+        uses: actions/checkout@v6
+
+      - name: Node.js 26を準備
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.x
+          cache: npm
+
+      - name: Deno baselineを準備
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.5
+
+      - name: 依存関係をインストール
+        run: npm ci
+
+      - name: Deno conformanceを実行
+        run: npm run test:deno
+
+      - name: Bun conformanceを実行
+        run: npm run test:bun
+
+      - name: workerd conformanceを実行
+        run: npm run test:workerd
+
+      - name: Electron conformanceを実行
+        run: xvfb-run --auto-servernum npm run test:electron
+
+      - name: Lambda managed Node baselineを実行
+        run: npm run test:lambda
+
+      - name: CLI start conformanceを実行
+        run: npm run test:cli-start
+
+      - name: CLI dev conformanceを実行
+        run: npm run test:cli-dev
