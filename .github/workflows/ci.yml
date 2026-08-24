@@ -65,6 +65,9 @@ jobs:
       - name: 依存関係をインストール
         run: npm ci
 
+      - name: packageをbuild
+        run: npm run build
+
       - name: Deno conformanceを実行
         run: npm run test:deno
 
