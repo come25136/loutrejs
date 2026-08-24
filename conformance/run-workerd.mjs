@@ -58,5 +58,22 @@ try {
   }
   console.log('workerd 2026-08-24 conformance: 成功')
 } finally {
+  await terminateChild(child)
+}
+
+async function terminateChild(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return
+  const exited = new Promise((resolveExit) => child.once('exit', resolveExit))
   child.kill('SIGTERM')
+  let timeout
+  const terminated = await Promise.race([
+    exited.then(() => true),
+    new Promise((resolveTimeout) => {
+      timeout = setTimeout(() => resolveTimeout(false), 1_000)
+    }),
+  ])
+  clearTimeout(timeout)
+  if (terminated || child.exitCode !== null || child.signalCode !== null) return
+  child.kill('SIGKILL')
+  await exited
 }
