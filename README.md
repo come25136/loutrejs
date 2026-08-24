@@ -38,6 +38,20 @@ Canonical fixture:
 - `fixtures/database-modules`: Module 2 instance、Env、conditional Provider、Lifecycle
 - `fixtures/streaming`: 同じdomain streamのHTTP SSE / MessagePort公開
 
+利用者向けのサンプルアプリは`examples/`にあります。
+
+- `examples/hello-http`: HTTP API、入力検証、Controller、Provider DIの最小例
+
+```sh
+npm run dev --workspace @loutrefw/example-hello-http
+```
+
+別のターミナルからリクエストします。
+
+```sh
+curl http://127.0.0.1:3000/greetings/Loutre
+```
+
 Fixture Aの実行に必要だったOPEN項目の最小選択は、
 [docs/phase-1-decisions.md](./docs/phase-1-decisions.md)に記録しています。
 これらはFROZEN APIではありません。
