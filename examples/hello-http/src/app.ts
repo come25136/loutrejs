@@ -1,11 +1,11 @@
-import { contract, defineModule, implement, procedure } from '@loutrefw/core'
+import { contract, defineModule, implement, procedure } from '@loutrejs/core'
 import {
   type ContextOf,
   type ControllerOf,
   createHttpApplication,
   http,
   validate,
-} from '@loutrefw/http'
+} from '@loutrejs/http'
 import { z } from 'zod'
 
 const GreetingParams = z.object({

@@ -9,10 +9,10 @@ import {
   provide,
   procedure,
   token,
-} from '@loutrefw/core'
-import { compileApplication } from '@loutrefw/compiler'
-import { http } from '@loutrefw/http'
-import { messagePort } from '@loutrefw/message-port'
+} from '@loutrejs/core'
+import { compileApplication } from '@loutrejs/compiler'
+import { http } from '@loutrejs/http'
+import { messagePort } from '@loutrejs/message-port'
 import { z } from 'zod'
 
 const Body = z.object({ ok: z.boolean() })

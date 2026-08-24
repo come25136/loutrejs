@@ -1,5 +1,5 @@
 {
-  "name": "@loutrefw/fixture-compiler-manifest",
+  "name": "@loutrejs/fixture-compiler-manifest",
   "version": "0.1.0",
   "private": true,
   "type": "module"

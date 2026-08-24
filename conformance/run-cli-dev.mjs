@@ -10,8 +10,8 @@ const sourceDirectory = join(project, 'src')
 await mkdir(sourceDirectory)
 
 const appSource = `
-import { contract, defineModule, hook, implement, procedure } from '@loutrefw/core'
-import { type ContextOf, type ControllerOf, createHttpApplication, http } from '@loutrefw/http'
+import { contract, defineModule, hook, implement, procedure } from '@loutrejs/core'
+import { type ContextOf, type ControllerOf, createHttpApplication, http } from '@loutrejs/http'
 import { z } from 'zod'
 import { failInitialization, message } from './message.js'
 

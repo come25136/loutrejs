@@ -1,19 +1,19 @@
 {
-  "name": "@loutrefw/cli",
+  "name": "@loutrejs/cli",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": { "loutre": "./bin/loutre.js" },
   "exports": "./src/index.ts",
   "dependencies": {
-    "@loutrefw/compiler": "0.1.0",
-    "@loutrefw/runtime": "0.1.0",
-    "@loutrefw/runtime-bun": "0.1.0",
-    "@loutrefw/runtime-deno": "0.1.0",
-    "@loutrefw/runtime-electron": "0.1.0",
-    "@loutrefw/runtime-lambda": "0.1.0",
-    "@loutrefw/runtime-node": "0.1.0",
-    "@loutrefw/runtime-workerd": "0.1.0",
+    "@loutrejs/compiler": "0.1.0",
+    "@loutrejs/runtime": "0.1.0",
+    "@loutrejs/runtime-bun": "0.1.0",
+    "@loutrejs/runtime-deno": "0.1.0",
+    "@loutrejs/runtime-electron": "0.1.0",
+    "@loutrejs/runtime-lambda": "0.1.0",
+    "@loutrejs/runtime-node": "0.1.0",
+    "@loutrejs/runtime-workerd": "0.1.0",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.12"
   }

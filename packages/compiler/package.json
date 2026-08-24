@@ -1,5 +1,5 @@
 {
-  "name": "@loutrefw/compiler",
+  "name": "@loutrejs/compiler",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
     "./runtime": "./src/runtime.ts"
   },
   "dependencies": {
-    "@loutrefw/core": "0.1.0",
+    "@loutrejs/core": "0.1.0",
     "typescript": "^7.0.2"
   }
 }

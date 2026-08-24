@@ -3,8 +3,8 @@ import {
   layer,
   shortCircuit,
   type TerminalLayerDescriptor,
-} from '@loutrefw/core'
-import { LayerContractError, executePipeline } from '@loutrefw/runtime'
+} from '@loutrejs/core'
+import { LayerContractError, executePipeline } from '@loutrejs/runtime'
 
 const terminal: TerminalLayerDescriptor<'test'> = {
   kind: 'terminal',

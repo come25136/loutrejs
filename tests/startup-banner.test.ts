@@ -3,7 +3,7 @@ import {
   printStartupBanner,
   renderStartupBanner,
   type StartupBannerInfo,
-} from '@loutrefw/cli'
+} from '@loutrejs/cli'
 
 const baseInfo: StartupBannerInfo = {
   application: 'api',

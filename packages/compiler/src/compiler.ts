@@ -13,7 +13,7 @@ import {
   type ProviderDescriptor,
   type ShortCircuitDeclaration,
   type TokenLike,
-} from '@loutrefw/core'
+} from '@loutrejs/core'
 import type {
   ApplicationGraphIR,
   CompilationResult,

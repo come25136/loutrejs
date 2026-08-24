@@ -1,7 +1,7 @@
 import {
   linkApplication,
   type CompiledApplicationArtifacts,
-} from '@loutrefw/runtime/internal'
+} from '@loutrejs/runtime/internal'
 import {
   createUsersApplication,
   UsersController,

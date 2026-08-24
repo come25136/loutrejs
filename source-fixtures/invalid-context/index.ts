@@ -4,8 +4,8 @@ import {
   defineModule,
   implement,
   procedure,
-} from '@loutrefw/core'
-import { ContextOf, ControllerOf, http } from '@loutrefw/http'
+} from '@loutrejs/core'
+import { ContextOf, ControllerOf, http } from '@loutrejs/http'
 import { z } from 'zod'
 
 const SESSION = contextKey('session').of<{

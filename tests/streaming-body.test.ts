@@ -4,18 +4,18 @@ import {
   implement,
   procedure,
   type StandardSchemaV1,
-} from '@loutrefw/core'
+} from '@loutrejs/core'
 import {
   ContextOf,
   ControllerOf,
   createHttpApplication,
   http,
   validate,
-} from '@loutrefw/http'
+} from '@loutrejs/http'
 import { z } from 'zod'
 import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
-import { createNodeHttpServer } from '@loutrefw/runtime-node'
+import { createNodeHttpServer } from '@loutrejs/runtime-node'
 
 const BodyStreamSchema: StandardSchemaV1<
   unknown,

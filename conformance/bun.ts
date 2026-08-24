@@ -1,4 +1,4 @@
-import { createBunFetchHandler } from '@loutrefw/runtime-bun'
+import { createBunFetchHandler } from '@loutrejs/runtime-bun'
 import usersApplication from '../dist/conformance/http-crud/application.mjs'
 import eventsApplication from '../dist/conformance/streaming-http/application.mjs'
 

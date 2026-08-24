@@ -7,7 +7,7 @@ import {
   type ModuleTemplate,
   type ProviderDescriptor,
   type TokenLike,
-} from '@loutrefw/core'
+} from '@loutrejs/core'
 import { ConsoleLoggerBackend, Logger } from './logger.js'
 import {
   runtimeLinkageTarget,

@@ -1,5 +1,5 @@
 {
-  "name": "@loutrefw/fixture-database-modules",
+  "name": "@loutrejs/fixture-database-modules",
   "version": "0.1.0",
   "private": true,
   "type": "module"

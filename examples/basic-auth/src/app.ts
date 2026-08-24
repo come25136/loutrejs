@@ -1,11 +1,11 @@
-import { contextKey, contract, defineModule, implement, procedure } from '@loutrefw/core'
+import { contextKey, contract, defineModule, implement, procedure } from '@loutrejs/core'
 import {
   type ContextOf,
   type ControllerOf,
   basicAuth,
   createHttpApplication,
   http,
-} from '@loutrefw/http'
+} from '@loutrejs/http'
 import { z } from 'zod'
 
 const User = z.object({

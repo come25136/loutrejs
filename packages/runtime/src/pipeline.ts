@@ -7,7 +7,7 @@ import {
   type PipelineItem,
   type TerminalLayerDescriptor,
   type ValidationLayerDescriptor,
-} from '@loutrefw/core'
+} from '@loutrejs/core'
 
 export interface PipelineHooks<TContext extends object, TResult> {
   readonly context: TContext

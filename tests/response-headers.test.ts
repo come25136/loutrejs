@@ -1,8 +1,8 @@
 import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
-import type { HttpApplication } from '@loutrefw/http'
-import { createLambdaHandler } from '@loutrefw/runtime-lambda'
-import { createNodeHttpServer } from '@loutrefw/runtime-node'
+import type { HttpApplication } from '@loutrejs/http'
+import { createLambdaHandler } from '@loutrejs/runtime-lambda'
+import { createNodeHttpServer } from '@loutrejs/runtime-node'
 
 describe('複数値HTTP response header', () => {
   it('Node adapterが複数のSet-Cookieを別々に保持する', async () => {

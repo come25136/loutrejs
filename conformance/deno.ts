@@ -1,4 +1,4 @@
-import { createDenoFetchHandler } from '@loutrefw/runtime-deno'
+import { createDenoFetchHandler } from '@loutrejs/runtime-deno'
 import usersApplication from '../dist/conformance/http-crud/application.mjs'
 import eventsApplication from '../dist/conformance/streaming-http/application.mjs'
 

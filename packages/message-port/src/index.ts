@@ -11,21 +11,21 @@ import {
   type SchemaOutput,
   type StandardSchemaV1,
   type TerminalLayerDescriptor,
-} from '@loutrefw/core'
+} from '@loutrejs/core'
 import {
   assertValidCompilation,
   compileApplication,
-} from '@loutrefw/compiler/runtime'
+} from '@loutrejs/compiler/runtime'
 import {
   ApplicationRuntime,
   ConsoleLoggerBackend,
   executePipeline,
   Logger,
-} from '@loutrefw/runtime'
+} from '@loutrejs/runtime'
 import {
   runtimeLinkageTarget,
   type RuntimeLinkableApplication,
-} from '@loutrefw/runtime/internal'
+} from '@loutrejs/runtime/internal'
 
 export interface MessagePortResponseDefinition {
   readonly body: StandardSchemaV1
@@ -144,7 +144,7 @@ export type MessageContextOf<
 interface Route {
   readonly procedure: string
   readonly protocol: MessagePortProtocol
-  readonly implementation: import('@loutrefw/core').Class
+  readonly implementation: import('@loutrejs/core').Class
 }
 
 export interface MessagePortApplication extends RuntimeLinkableApplication {

@@ -1,8 +1,8 @@
 import {
   linkApplication,
   runtimeLinkageTarget,
-} from '@loutrefw/runtime/internal'
-import { Container, DependencyResolutionError } from '@loutrefw/runtime'
+} from '@loutrejs/runtime/internal'
+import { Container, DependencyResolutionError } from '@loutrejs/runtime'
 
 describe('Runtime Linkage Artifact', () => {
   it('Graph Manifestとfingerprintが異なるartifactを拒否する', () => {

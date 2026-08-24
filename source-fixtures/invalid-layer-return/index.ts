@@ -5,8 +5,8 @@ import {
   implement,
   layer,
   procedure,
-} from '@loutrefw/core'
-import { http } from '@loutrefw/http'
+} from '@loutrejs/core'
+import { http } from '@loutrejs/http'
 import { z } from 'zod'
 
 const SESSION = contextKey('session').of<string>()

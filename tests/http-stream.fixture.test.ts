@@ -1,6 +1,6 @@
 import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
-import { createNodeHttpServer } from '@loutrefw/runtime-node'
+import { createNodeHttpServer } from '@loutrejs/runtime-node'
 import { createLinkedEventsApplication } from './helpers/linked-applications.js'
 
 describe('canonical Fixture D HTTP server-stream', () => {

@@ -6,7 +6,7 @@ Loutre本体に認証方式を追加せず、公開されている`layer()`、`s
 リポジトリルートで依存関係をインストールしたあと、次のコマンドで起動します。
 
 ```sh
-npm run dev --workspace @loutrefw/example-bearer-auth
+npm run dev --workspace @loutrejs/example-bearer-auth
 ```
 
 認証せずにアクセスするとHTTP 401を返します。
@@ -31,7 +31,7 @@ curl -i -H 'Authorization: Bearer loutre-token' http://127.0.0.1:3002/profile
 型、Application Graph、動作を検証する場合は次のコマンドを実行します。
 
 ```sh
-npm run typecheck --workspace @loutrefw/example-bearer-auth
-npm run check --workspace @loutrefw/example-bearer-auth
-npm test --workspace @loutrefw/example-bearer-auth
+npm run typecheck --workspace @loutrejs/example-bearer-auth
+npm run check --workspace @loutrejs/example-bearer-auth
+npm test --workspace @loutrejs/example-bearer-auth
 ```

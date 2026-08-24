@@ -1,5 +1,5 @@
 {
-  "name": "@loutrefw/example-basic-auth",
+  "name": "@loutrejs/example-basic-auth",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,12 +14,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@loutrefw/core": "0.1.0",
-    "@loutrefw/http": "0.1.0",
+    "@loutrejs/core": "0.1.0",
+    "@loutrejs/http": "0.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@loutrefw/cli": "0.1.0",
+    "@loutrejs/cli": "0.1.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   }

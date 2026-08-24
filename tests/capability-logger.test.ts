@@ -4,8 +4,8 @@ import {
   checkCapabilities,
   type LogRecord,
   type LoggerBackend,
-} from '@loutrefw/runtime'
-import { runtimeLinkageTarget } from '@loutrefw/runtime/internal'
+} from '@loutrejs/runtime'
+import { runtimeLinkageTarget } from '@loutrejs/runtime/internal'
 
 describe('CapabilityとLogger', () => {
   it('Application requirementとRuntime capabilityの差分を返す', () => {

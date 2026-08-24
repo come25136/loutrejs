@@ -3,19 +3,19 @@ import {
   defineModule,
   implement,
   procedure,
-} from '@loutrefw/core'
+} from '@loutrejs/core'
 import {
   ContextOf,
   ControllerOf,
   createHttpApplication,
   http,
-} from '@loutrefw/http'
+} from '@loutrejs/http'
 import {
   HandlerOf,
   MessageContextOf,
   createMessagePortApplication,
   messagePort,
-} from '@loutrefw/message-port'
+} from '@loutrejs/message-port'
 import { z } from 'zod'
 
 export interface DomainEvent {

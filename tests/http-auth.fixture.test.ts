@@ -3,9 +3,9 @@ import {
   defineModule,
   implement,
   procedure,
-} from '@loutrefw/core'
-import { compileApplication } from '@loutrefw/compiler'
-import { http, validate } from '@loutrefw/http'
+} from '@loutrejs/core'
+import { compileApplication } from '@loutrejs/compiler'
+import { http, validate } from '@loutrejs/http'
 import {
   AccountController,
   authenticated,

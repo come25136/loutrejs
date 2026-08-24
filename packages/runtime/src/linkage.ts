@@ -1,4 +1,4 @@
-import type { Class, TokenLike } from '@loutrefw/core'
+import type { Class, TokenLike } from '@loutrejs/core'
 
 export interface RuntimeLinkageHeader {
   readonly version: 1

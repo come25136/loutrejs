@@ -1,7 +1,7 @@
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import { Readable } from 'node:stream'
-import type { HttpApplication } from '@loutrefw/http'
+import type { HttpApplication } from '@loutrejs/http'
 
 export const nodeRuntime = {
   runtime: 'node-26',

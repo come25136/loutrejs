@@ -6,14 +6,14 @@ import {
   layer,
   procedure,
   shortCircuit,
-} from '@loutrefw/core'
+} from '@loutrejs/core'
 import {
   ContextOf,
   ControllerOf,
   createHttpApplication,
   http,
   validate,
-} from '@loutrefw/http'
+} from '@loutrejs/http'
 import { z } from 'zod'
 
 describe('HTTP application boundary', () => {

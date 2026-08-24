@@ -1,4 +1,4 @@
-import { Inject, defineModule, provide, token } from '@loutrefw/core'
+import { Inject, defineModule, provide, token } from '@loutrejs/core'
 
 interface RepositoryPort {
   readonly value: string

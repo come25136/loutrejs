@@ -1,12 +1,12 @@
 {
-  "name": "@loutrefw/http",
+  "name": "@loutrejs/http",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@loutrefw/compiler": "0.1.0",
-    "@loutrefw/core": "0.1.0",
-    "@loutrefw/runtime": "0.1.0"
+    "@loutrejs/compiler": "0.1.0",
+    "@loutrejs/core": "0.1.0",
+    "@loutrejs/runtime": "0.1.0"
   }
 }

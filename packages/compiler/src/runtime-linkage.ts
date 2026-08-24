@@ -139,7 +139,7 @@ export function createRuntimeLinkageBootstrap(plan: RuntimeLinkagePlan): string 
     .join(', ')
   return `
 import * as __loutreEntry from ${JSON.stringify(plan.entry)}
-import { linkApplication as __loutreLinkApplication } from '@loutrefw/runtime/internal'
+import { linkApplication as __loutreLinkApplication } from '@loutrejs/runtime/internal'
 ${fragmentImports}
 
 const __loutreExports = __loutreEntry as Record<string, unknown>

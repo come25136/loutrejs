@@ -6,9 +6,9 @@ import {
   isShortCircuit,
   layer,
   procedure,
-} from '@loutrefw/core'
-import { compileApplication } from '@loutrefw/compiler'
-import { basicAuth, http, type HttpProtocolDefinition } from '@loutrefw/http'
+} from '@loutrejs/core'
+import { compileApplication } from '@loutrejs/compiler'
+import { basicAuth, http, type HttpProtocolDefinition } from '@loutrejs/http'
 import { z } from 'zod'
 
 describe('basicAuth', () => {

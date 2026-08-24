@@ -1,5 +1,5 @@
 import { MessageChannel } from 'node:worker_threads'
-import { attachMessagePort } from '@loutrefw/message-port'
+import { attachMessagePort } from '@loutrejs/message-port'
 import { createLinkedEventsMessagePortApplication } from './helpers/linked-applications.js'
 
 describe('canonical Fixture D MessagePort/Electron', () => {

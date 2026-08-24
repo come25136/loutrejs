@@ -1,17 +1,17 @@
-import { createBunFetchHandler, bunRuntime } from '@loutrefw/runtime-bun'
-import { createDenoFetchHandler, denoRuntime } from '@loutrefw/runtime-deno'
-import { electronRuntime } from '@loutrefw/runtime-electron'
+import { createBunFetchHandler, bunRuntime } from '@loutrejs/runtime-bun'
+import { createDenoFetchHandler, denoRuntime } from '@loutrejs/runtime-deno'
+import { electronRuntime } from '@loutrejs/runtime-electron'
 import {
   createLambdaHandler,
   createLambdaStreamingHandler,
   lambdaRuntime,
-} from '@loutrefw/runtime-lambda'
-import { nodeRuntime } from '@loutrefw/runtime-node'
+} from '@loutrejs/runtime-lambda'
+import { nodeRuntime } from '@loutrejs/runtime-node'
 import {
   createWorkerdFetchHandler,
   workerdRuntime,
-} from '@loutrefw/runtime-workerd'
-import { checkCapabilities } from '@loutrefw/runtime'
+} from '@loutrejs/runtime-workerd'
+import { checkCapabilities } from '@loutrejs/runtime'
 import {
   createLinkedEventsApplication,
   createLinkedUsersApplication,

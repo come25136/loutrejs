@@ -1,7 +1,7 @@
 import {
   createLambdaHandler,
   createLambdaStreamingHandler,
-} from '@loutrefw/runtime-lambda'
+} from '@loutrejs/runtime-lambda'
 import usersApplication from '../dist/conformance/http-crud/application.mjs'
 import eventsApplication from '../dist/conformance/streaming-http/application.mjs'
 

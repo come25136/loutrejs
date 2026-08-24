@@ -3,13 +3,13 @@ import {
   defineModule,
   provide,
   token,
-} from '@loutrefw/core'
+} from '@loutrejs/core'
 import {
   collectRuntimeModuleGraph,
   Container,
   DependencyResolutionError,
-} from '@loutrefw/runtime'
-import { runtimeLinkageTarget } from '@loutrefw/runtime/internal'
+} from '@loutrejs/runtime'
+import { runtimeLinkageTarget } from '@loutrejs/runtime/internal'
 
 interface Clock {
   readonly id: number

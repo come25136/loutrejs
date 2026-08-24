@@ -11,8 +11,8 @@ import type {
   StandardSchemaV1,
   TerminalLayerDescriptor,
   ValidationLayerDescriptor,
-} from '@loutrefw/core'
-import type { Logger } from '@loutrefw/runtime'
+} from '@loutrejs/core'
+import type { Logger } from '@loutrejs/runtime'
 
 export interface HttpRequestDefinition {
   readonly params?: StandardSchemaV1

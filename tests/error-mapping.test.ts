@@ -4,13 +4,13 @@ import {
   defineModule,
   implement,
   procedure,
-} from '@loutrefw/core'
+} from '@loutrejs/core'
 import {
   ContextOf,
   ControllerOf,
   createHttpApplication,
   http,
-} from '@loutrefw/http'
+} from '@loutrejs/http'
 import { z } from 'zod'
 
 describe('Domain ErrorとProtocol mapping', () => {

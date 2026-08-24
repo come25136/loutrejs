@@ -5,7 +5,7 @@ import {
   type ContextKeyValue,
   type ContextProperties,
   type LayerDescriptor,
-} from '@loutrefw/core'
+} from '@loutrejs/core'
 import type { LogicalHttpResult } from './definitions.js'
 
 export interface BasicAuthCredentials {

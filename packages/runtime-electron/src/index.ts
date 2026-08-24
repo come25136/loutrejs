@@ -2,7 +2,7 @@ import {
   attachMessagePort,
   type MessagePortApplication,
   type MessagePortLike,
-} from '@loutrefw/message-port'
+} from '@loutrejs/message-port'
 
 export const electronRuntime = {
   runtime: 'electron-43',

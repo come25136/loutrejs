@@ -1,9 +1,9 @@
 {
-  "name": "@loutrefw/runtime-lambda",
+  "name": "@loutrejs/runtime-lambda",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "engines": { "node": ">=24 <27" },
   "exports": "./src/index.ts",
-  "dependencies": { "@loutrefw/http": "0.1.0" }
+  "dependencies": { "@loutrejs/http": "0.1.0" }
 }

@@ -1,4 +1,4 @@
-import type { HttpApplication } from '@loutrefw/http'
+import type { HttpApplication } from '@loutrejs/http'
 
 export const denoRuntime = {
   runtime: 'deno-2.9-lts',

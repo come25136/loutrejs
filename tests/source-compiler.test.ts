@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import {
   compileTypeScriptSource,
   createRuntimeLinkagePlan,
-} from '@loutrefw/compiler'
+} from '@loutrejs/compiler'
 
 describe('TypeScript AST Compiler', () => {
   const manifest = compileTypeScriptSource({

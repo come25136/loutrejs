@@ -17,20 +17,20 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "skipLibCheck": true,
     "paths": {
-      "@loutrefw/core": ["./packages/core/src/index.ts"],
-      "@loutrefw/compiler": ["./packages/compiler/src/index.ts"],
-      "@loutrefw/compiler/runtime": ["./packages/compiler/src/runtime.ts"],
-      "@loutrefw/cli": ["./packages/cli/src/index.ts"],
-      "@loutrefw/runtime": ["./packages/runtime/src/index.ts"],
-      "@loutrefw/runtime/internal": ["./packages/runtime/src/internal.ts"],
-      "@loutrefw/http": ["./packages/http/src/index.ts"],
-      "@loutrefw/message-port": ["./packages/message-port/src/index.ts"],
-      "@loutrefw/runtime-node": ["./packages/runtime-node/src/index.ts"]
-      ,"@loutrefw/runtime-deno": ["./packages/runtime-deno/src/index.ts"]
-      ,"@loutrefw/runtime-bun": ["./packages/runtime-bun/src/index.ts"]
-      ,"@loutrefw/runtime-workerd": ["./packages/runtime-workerd/src/index.ts"]
-      ,"@loutrefw/runtime-electron": ["./packages/runtime-electron/src/index.ts"]
-      ,"@loutrefw/runtime-lambda": ["./packages/runtime-lambda/src/index.ts"]
+      "@loutrejs/core": ["./packages/core/src/index.ts"],
+      "@loutrejs/compiler": ["./packages/compiler/src/index.ts"],
+      "@loutrejs/compiler/runtime": ["./packages/compiler/src/runtime.ts"],
+      "@loutrejs/cli": ["./packages/cli/src/index.ts"],
+      "@loutrejs/runtime": ["./packages/runtime/src/index.ts"],
+      "@loutrejs/runtime/internal": ["./packages/runtime/src/internal.ts"],
+      "@loutrejs/http": ["./packages/http/src/index.ts"],
+      "@loutrejs/message-port": ["./packages/message-port/src/index.ts"],
+      "@loutrejs/runtime-node": ["./packages/runtime-node/src/index.ts"]
+      ,"@loutrejs/runtime-deno": ["./packages/runtime-deno/src/index.ts"]
+      ,"@loutrejs/runtime-bun": ["./packages/runtime-bun/src/index.ts"]
+      ,"@loutrejs/runtime-workerd": ["./packages/runtime-workerd/src/index.ts"]
+      ,"@loutrejs/runtime-electron": ["./packages/runtime-electron/src/index.ts"]
+      ,"@loutrejs/runtime-lambda": ["./packages/runtime-lambda/src/index.ts"]
     },
     "types": ["node", "vitest/globals"]
   },

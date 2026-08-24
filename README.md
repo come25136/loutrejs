@@ -17,19 +17,19 @@ Contract -> HTTP decode -> ordered Pipeline -> validate.*
 
 主なpackageは次のとおりです。
 
-- `@loutrefw/core`: Standard Schema型、DI用typed token、Context Key、`@Inject`、
+- `@loutrejs/core`: Standard Schema型、DI用typed token、Context Key、`@Inject`、
   Provider、parameterized Module、Contract/Procedure宣言、requires/provides型付きLayer descriptor
-- `@loutrefw/compiler`: TypeScript AST解析、version付きGraph Manifest、Runtime Linkage Artifact、および
+- `@loutrejs/compiler`: TypeScript AST解析、version付きGraph Manifest、Runtime Linkage Artifact、および
   terminal、coverage、duplicate binding、validation順序、Context Key、Controller DIの診断
-- `@loutrefw/runtime`: `application` / `transient` scopeのDI、Execution Context伝播、
+- `@loutrejs/runtime`: `application` / `transient` scopeのDI、Execution Context伝播、
   inbound・FILO outboundのPipeline engine
-- `@loutrefw/http`: HTTP Contract descriptor、4種類の`validate.*` Layer、`basicAuth()`、
+- `@loutrejs/http`: HTTP Contract descriptor、4種類の`validate.*` Layer、`basicAuth()`、
   Pipelineから最終Context shapeを導出するController型、portableなRequest/Response
   application adapter、Protocol Finalization
-- `@loutrefw/runtime-node`: Node.js 26向けHTTP server boundary
-- `@loutrefw/message-port`: MessagePort protocol、server-stream finalization
-- `@loutrefw/runtime-{deno,bun,workerd,electron,lambda}`: 各runtime adapter
-- `@loutrefw/cli`: `check`、`doctor`、`graph`、`explain`、`build`、`dev`、`start`
+- `@loutrejs/runtime-node`: Node.js 26向けHTTP server boundary
+- `@loutrejs/message-port`: MessagePort protocol、server-stream finalization
+- `@loutrejs/runtime-{deno,bun,workerd,electron,lambda}`: 各runtime adapter
+- `@loutrejs/cli`: `check`、`doctor`、`graph`、`explain`、`build`、`dev`、`start`
 
 Canonical fixture:
 
@@ -44,7 +44,7 @@ Canonical fixture:
 - `examples/basic-auth`: Basic認証、authentication Layer、Context Key、HTTP 401の例
 
 ```sh
-npm run dev --workspace @loutrefw/example-hello-http
+npm run dev --workspace @loutrejs/example-hello-http
 ```
 
 別のターミナルからリクエストします。

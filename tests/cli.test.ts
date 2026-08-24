@@ -1,4 +1,4 @@
-import { runCli } from '@loutrefw/cli'
+import { runCli } from '@loutrejs/cli'
 
 describe('Loutre CLI', () => {
   function io() {

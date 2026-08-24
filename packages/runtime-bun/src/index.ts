@@ -1,4 +1,4 @@
-import type { HttpApplication } from '@loutrefw/http'
+import type { HttpApplication } from '@loutrejs/http'
 
 export const bunRuntime = {
   runtime: 'bun-1.4-stable',

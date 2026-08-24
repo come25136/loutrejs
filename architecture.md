@@ -3,7 +3,7 @@
 > **状態:** Phase 1 アーキテクチャの FROZEN ベースライン  
 > **日付:** 2026-08-24 (JST)  
 > **プロジェクト / ブランド:** **Loutre** 🦦  
-> **npm scope:** `@loutrefw/*`  
+> **npm scope:** `@loutrejs/*`
 > **対象読者:** Loutre の初期実装を引き継ぐ Codex / 開発者
 
 ---
@@ -63,18 +63,18 @@ Node.js / Bun / Deno / Cloudflare Workers(workerd) / AWS Lambda / Electron 等�
 # 2. ブランドと namespace — FROZEN
 
 - Framework 名: **Loutre**
-- Framework 自体を「LoutreFW」とは呼ばない。
-- npm organization / scope: **`@loutrefw/*`**
+- Frameworkの表示名は**Loutre**、npm namespaceには**LoutreJS**を使用する。
+- npm organization / scope: **`@loutrejs/*`**
 - 専用 domain は必須ではない。Momizicode 配下で問題ない。
 
 例:
 
 ```text
-@loutrefw/core
-@loutrefw/compiler
-@loutrefw/http
-@loutrefw/runtime-node
-@loutrefw/runtime-lambda
+@loutrejs/core
+@loutrejs/compiler
+@loutrejs/http
+@loutrejs/runtime-node
+@loutrejs/runtime-lambda
 ```
 
 package 分割そのものは DRAFT だが、npm scope は FROZEN。
@@ -1124,7 +1124,7 @@ DX は短いが、Layer declaration だけでは依存関係が分からず、Gr
 
 Layer は Context Key を明示的に require/provide する。
 
-HTTP Basic認証では`@loutrefw/http`の`basicAuth()`を使用できる。HTTP adapterが
+HTTP Basic認証では`@loutrejs/http`の`basicAuth()`を使用できる。HTTP adapterが
 decodeしたAuthorization headerの解析、Basic schemeの検証、credentialsのdecodeは
 Layerが担当し、applicationは資格情報の検証とprincipalのContext Keyだけを指定する。
 
@@ -2788,7 +2788,7 @@ Fixture に必要でない限り、Phase 1 で以下へ scope を広げない。
 # 34. 推奨初期 Package Boundary — DRAFT / NOT FROZEN
 
 ```text
-@loutrefw/core
+@loutrejs/core
   DI Token
   ContextKey
   Module definition
@@ -2797,13 +2797,13 @@ Fixture に必要でない限り、Phase 1 で以下へ scope を広げない。
   Layer descriptor
   shared IR-facing type
 
-@loutrefw/compiler
+@loutrejs/compiler
   TypeScript analysis
   Graph IR
   validation
   manifest
 
-@loutrefw/runtime
+@loutrejs/runtime
   DI runtime (application/transient)
   Execution Context runtime
   Pipeline engine
@@ -2811,21 +2811,21 @@ Fixture に必要でない限り、Phase 1 で以下へ scope を広げない。
   error normalization
   logger context
 
-@loutrefw/http
+@loutrejs/http
   HTTP protocol descriptor
   validate.* token
   http.controller terminal
   finalizer
   adapter interface
 
-@loutrefw/runtime-node
-@loutrefw/runtime-bun
-@loutrefw/runtime-deno
-@loutrefw/runtime-workerd
-@loutrefw/runtime-lambda
-@loutrefw/runtime-electron
+@loutrejs/runtime-node
+@loutrejs/runtime-bun
+@loutrejs/runtime-deno
+@loutrejs/runtime-workerd
+@loutrejs/runtime-lambda
+@loutrejs/runtime-electron
 
-@loutrefw/cli
+@loutrejs/cli
 ```
 
 Codex は初期段階で package 数を減らしてもよい。
@@ -3025,7 +3025,7 @@ Framework name
   Loutre
 
 npm scope
-  @loutrefw/*
+  @loutrejs/*
 
 Module
   defineModule<Args>(args => definition)

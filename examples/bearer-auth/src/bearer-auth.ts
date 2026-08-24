@@ -4,8 +4,8 @@ import {
   type ContextKey,
   type ContextKeyValue,
   type ContextProperties,
-} from '@loutrefw/core'
-import type { LogicalHttpResult } from '@loutrefw/http'
+} from '@loutrejs/core'
+import type { LogicalHttpResult } from '@loutrejs/http'
 
 type BearerAuthResponseHeaders = {
   readonly 'www-authenticate': string

@@ -5,23 +5,23 @@ import {
   type ModuleInstance,
   type ModuleTemplate,
   type StandardSchemaV1,
-} from '@loutrefw/core'
+} from '@loutrejs/core'
 import {
   assertValidCompilation,
   compileApplication,
   type ApplicationGraphIR,
-} from '@loutrefw/compiler/runtime'
+} from '@loutrejs/compiler/runtime'
 import {
   ApplicationRuntime,
   ConsoleLoggerBackend,
   executePipeline,
   Logger,
   normalizeUnknownError,
-} from '@loutrefw/runtime'
+} from '@loutrejs/runtime'
 import {
   runtimeLinkageTarget,
   type RuntimeLinkableApplication,
-} from '@loutrefw/runtime/internal'
+} from '@loutrejs/runtime/internal'
 import type {
   HttpControllerContext,
   HttpHeaders,
@@ -208,7 +208,7 @@ async function decodeRequest(
 async function invokeController(
   route: HttpRoute,
   raw: MutableHttpContext,
-  container: import('@loutrefw/runtime').Container,
+  container: import('@loutrejs/runtime').Container,
 ): Promise<LogicalHttpResult> {
   const controller = await container.resolveImplementation(
     route.binding.implementation,
