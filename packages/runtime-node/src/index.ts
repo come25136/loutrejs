@@ -30,6 +30,16 @@ export function createNodeHttpServer(
   options: NodeHttpServerOptions = {},
 ): Server {
   const server = createServer(async (incoming, outgoing) => {
+    const abortController = new AbortController()
+    const abort = () => {
+      if (!abortController.signal.aborted) {
+        abortController.abort(new Error('HTTP client connectionが切断されました'))
+      }
+    }
+    incoming.once('aborted', abort)
+    outgoing.once('close', () => {
+      if (!outgoing.writableEnded) abort()
+    })
     try {
       const origin = `http://${incoming.headers.host ?? 'localhost'}`
       const headers = new Headers()
@@ -44,6 +54,7 @@ export function createNodeHttpServer(
       const init: RequestInit & { duplex?: 'half' } = {
         method: incoming.method ?? 'GET',
         headers,
+        signal: abortController.signal,
         ...(hasBody
           ? {
               body: Readable.toWeb(incoming) as ReadableStream<Uint8Array>,

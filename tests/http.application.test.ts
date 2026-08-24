@@ -157,6 +157,47 @@ describe('HTTP application boundary', () => {
     expect(invalid.status).toBe(400)
   })
 
+  it('malformed JSONを内部情報を含まない400 responseへ変換する', async () => {
+    const application = createInputDecodeFixture()
+
+    const response = await application.handle(
+      new Request('http://fixture.test/decode/item', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{',
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Invalid request' })
+  })
+
+  it('malformed path percent encodingをthrowせず400 responseへ変換する', async () => {
+    const application = createInputDecodeFixture()
+
+    const response = await application.handle(
+      new Request('http://fixture.test/decode/%E0%A4%A', { method: 'POST' }),
+    )
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Invalid request' })
+  })
+
+  it('有効なUTF-8 percent encodingをpath parameterとしてdecodeする', async () => {
+    const application = createInputDecodeFixture()
+
+    const response = await application.handle(
+      new Request('http://fixture.test/decode/%E3%82%AB%E3%83%AF%E3%82%A6%E3%82%BD', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ value: 'カワウソ' })
+  })
+
   it('treats output schema failures as internal finalization errors', async () => {
     const Contract = contract({
       run: procedure({
@@ -341,3 +382,37 @@ describe('HTTP application boundary', () => {
     expect(urls).toEqual(['http://127.0.0.1:3000'])
   })
 })
+
+function createInputDecodeFixture() {
+  const Contract = contract({
+    decode: procedure({
+      protocols: {
+        http: http({
+          method: 'POST',
+          path: '/decode/{value}',
+          request: {
+            params: z.object({ value: z.string() }),
+            body: z.object({}).optional(),
+          },
+          responses: {
+            ok: {
+              status: 200,
+              body: z.object({ value: z.string() }),
+            },
+          },
+          pipeline: [validate.params, validate.body, http.controller],
+        }),
+      },
+    }),
+  })
+  type Controller = ControllerOf<typeof Contract, 'http'>
+  class Implementation implements Controller {
+    decode(ctx: ContextOf<Controller, 'decode'>) {
+      return ctx.response.ok({ body: { value: ctx.params.value } })
+    }
+  }
+  const Module = defineModule(() => ({
+    implementations: [implement(Contract).for(http).with(Implementation)],
+  }))
+  return createHttpApplication({ modules: [Module()] })
+}

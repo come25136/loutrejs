@@ -108,6 +108,7 @@ export function compileApplication(
   }
 
   validateCoverage(bindings, contractNames, diagnostics)
+  validateDuplicateProviders(modules, diagnostics)
 
   const tokensById = collectCustomTokens(providers, targets, diagnostics)
   const contextKeysByName = collectContextKeys(targets, diagnostics)
@@ -219,6 +220,40 @@ export function compileApplication(
   }
 
   return { graph, diagnostics }
+}
+
+function validateDuplicateProviders(
+  modules: readonly ModuleInstance[],
+  diagnostics: Diagnostic[],
+): void {
+  const declarations = new Map<
+    TokenLike,
+    { readonly module: string }
+  >()
+
+  modules.forEach((module, moduleIndex) => {
+    const moduleName = describeModule(module, moduleIndex)
+    for (const declaration of module.definition.providers ?? []) {
+      const provider = normalizeProvider(declaration)
+      const existing = declarations.get(provider.provide)
+      if (existing) {
+        diagnostics.push({
+          code: 'LUTRE_DI_003',
+          message: `Provider ${tokenName(provider.provide)}が${existing.module}と${moduleName}で重複しています`,
+          path: `${moduleName}.providers.${tokenName(provider.provide)}`,
+        })
+        continue
+      }
+      declarations.set(provider.provide, { module: moduleName })
+    }
+  })
+}
+
+function describeModule(module: ModuleInstance, index: number): string {
+  const id = `module:${index + 1}`
+  return module.definition.description === undefined
+    ? id
+    : `${id} (${module.definition.description})`
 }
 
 function collectCustomTokens(

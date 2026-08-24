@@ -2201,7 +2201,7 @@ compile成功の判定にはTypeScriptのsyntax、bind、semantic diagnosticを�
 JavaScript変換だけを行うbundlerが成功しても、TypeScript errorが残っている場合は
 Applicationを起動せず、file、line、column、diagnostic codeとmessageをterminalへ表示する。
 
-将来 MAY:
+現行CLIで試験提供するmachine-readable形式（exact schemaは引き続きOPEN）:
 
 ```text
 JSON
@@ -3030,8 +3030,10 @@ v0.1 architecture が実装済みとみなせる条件:
 - Node.js、Deno、Bun、workerd、Electron、Lambdaでlinked artifactをconformance検証
 
 `loutre dev`のincremental/watch compileを実装し、同じGraph/linkage invariantを保ったまま
-last-good Applicationへfallbackするhot reloadを追加した。次の優先課題は、Section 32.7で
-OPENのgenerated module形式とsource mapを詰めることである。
+Section 28.1の順序でApplicationを再起動するhot reloadを追加した。compile、bundle、import、
+initialize、listenのいずれかが失敗した場合はApplicationを停止したままwatchを継続する。
+stale Compiler API handleは新しいhandleによるfull buildで復旧する。次の優先課題は、
+Section 32.7でOPENのgenerated module形式とsource mapを詰めることである。
 
 Compilerを通さないunit test用の低水準linkage注入はtest/internal boundaryへ隔離し、
 今後もPublic APIやexampleへ露出させない。

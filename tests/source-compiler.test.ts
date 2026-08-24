@@ -70,6 +70,14 @@ describe('TypeScript AST Compiler', () => {
       dependencies: ['UsersService'],
     })
     expect(plan.fingerprint).toMatch(/^[a-f0-9]{64}$/)
+    expect(JSON.stringify(plan.graphManifest)).not.toMatch(
+      /"(?:symbol|implementationSymbol|rootReference|runtimeImports|managedProviders)"/,
+    )
+    const repeated = createRuntimeLinkagePlan({
+      tsconfigPath: resolve('tsconfig.json'),
+      entry: resolve('fixtures/http-crud/src/app.ts'),
+    })
+    expect(repeated.fingerprint).toBe(plan.fingerprint)
   })
 
   it('非export classとcustom tokenのRuntime Linkage Artifactを計画する', () => {
@@ -92,6 +100,33 @@ describe('TypeScript AST Compiler', () => {
       target: 'CustomTokenService',
       dependencies: ['REPOSITORY'],
     })
+  })
+
+  it('alias・namespace・re-export・default importとProvider expressionをSymbolで解決する', () => {
+    const plan = createRuntimeLinkagePlan({
+      tsconfigPath: resolve('tsconfig.json'),
+      entry: resolve('fixtures/compiler-manifest/src/runtime-linkage/app.ts'),
+    })
+    const bindings = plan.fragments.flatMap((fragment) => fragment.bindings)
+
+    expect(bindings.map(({ target }) => target)).toEqual(expect.arrayContaining([
+      'AliasService',
+      'DefaultService',
+      'NamespaceService',
+      'ReexportService',
+      'UseClassService',
+      'MemoryService',
+      'DiskService',
+    ]))
+    const fragment = plan.fragments.find(({ bindings: candidates }) =>
+      candidates.some(({ target }) => target === 'AliasService'),
+    )
+    expect(fragment?.imports).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'named', imported: 'NamedRepository' }),
+      expect.objectContaining({ kind: 'default' }),
+      expect.objectContaining({ kind: 'namespace' }),
+      expect.objectContaining({ kind: 'named', imported: 'ReexportedRepository' }),
+    ]))
   })
 
   it('ControllerのContext property参照をconstructor DIと区別して抽出する', () => {
@@ -186,6 +221,28 @@ describe('TypeScript AST Compiler', () => {
       tsconfigPath: resolve('source-fixtures/duplicate-token/tsconfig.json'),
     })
     expect(invalid.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_TOKEN_001' }),
+    )
+  })
+
+  it('source上のdirectおよびimported duplicate Providerを静的診断する', () => {
+    const invalid = compileTypeScriptSource({
+      tsconfigPath: resolve('source-fixtures/duplicate-provider/tsconfig.json'),
+    })
+    const duplicateProviders = invalid.diagnostics.filter(
+      ({ code }) => code === 'LUTRE_DI_003',
+    )
+
+    expect(duplicateProviders).toHaveLength(2)
+    expect(duplicateProviders).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        message: expect.stringContaining('DIRECT'),
+      }),
+      expect.objectContaining({
+        message: expect.stringMatching(/FirstModule.*SecondModule/u),
+      }),
+    ]))
+    expect(invalid.diagnostics).not.toContainEqual(
       expect.objectContaining({ code: 'LUTRE_TOKEN_001' }),
     )
   })

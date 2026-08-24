@@ -178,6 +178,48 @@ describe('minimal Compiler IR and static validation', () => {
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_TOKEN_001' }),
     )
+    expect(result.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_DI_003' }),
+    )
+  })
+
+  it('同じModule内のduplicate Providerを静的に拒否する', () => {
+    const VALUE = token<string>('duplicate-provider.direct')
+    const Module = defineModule(() => ({
+      providers: [
+        provide(VALUE).useValue('first'),
+        provide(VALUE).useValue('second'),
+      ],
+    }))
+
+    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 'LUTRE_DI_003',
+        message: expect.stringContaining('duplicate-provider.direct'),
+      }),
+    )
+  })
+
+  it('importされたModule間のduplicate Providerを静的に拒否する', () => {
+    const VALUE = token<string>('duplicate-provider.imported')
+    const FirstModule = defineModule(() => ({
+      description: 'FirstModule',
+      providers: [provide(VALUE).useValue('first')],
+    }))
+    const SecondModule = defineModule(() => ({
+      description: 'SecondModule',
+      providers: [provide(VALUE).useValue('second')],
+    }))
+    const RootModule = defineModule(() => ({
+      imports: [FirstModule(), SecondModule()],
+    }))
+
+    expect(compileApplication([RootModule()]).diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 'LUTRE_DI_003',
+        message: expect.stringMatching(/FirstModule.*SecondModule/u),
+      }),
+    )
   })
 
   it('未提供のContext Key requirementを拒否する', () => {

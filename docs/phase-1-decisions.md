@@ -47,6 +47,14 @@ Fixture Aを実行するために必要だった最小の選択だけを記録�
   必須とします。entryは`default`または`application` named exportとして
   `HttpApplication`を公開します。Config fileの名前や形式は引き続きOPENのままです。
 - HTTP body decodeではJSONと`text/*`だけを内部parseし、それ以外のmedia typeは
-  `ReadableStream`のownershipを`validate.body`へ渡します。Standard Schemaはstreamを
+  `ReadableStream`のownershipを`validate.body`へ渡します。`multipart/form-data`だけは
+  Web標準の`FormData`へdecodeし、malformed bodyは400へ変換します。Standard Schemaはstreamを
   検証またはtransformして返せるため、Controllerまでの経路でframeworkが暗黙に
   bufferしたり複数回consumeしたりしません。
+- HTTP Controller Contextの`signal`は元の`Request.signal`です。Node adapterはclient切断を
+  同じsignalへ接続し、server-stream finalizationはabort時に`iterator.return()`を呼びます。
+- linked Applicationは`platform: neutral`、ES2024 ESM、default conditional exportでbundleし、
+  Node固有のconditional exportを他runtime用artifactへ焼き込みません。
+- Runtime LinkageはASTとTypeChecker Symbolからconstructor、Provider、implementation、importを
+  接続します。type-only importは元sourceを書き換えず、生成fragmentに必要なvalue importだけを
+  追加します。

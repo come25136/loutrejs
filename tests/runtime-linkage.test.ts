@@ -5,6 +5,10 @@ import {
 import { Container, DependencyResolutionError } from '@loutrejs/runtime'
 
 describe('Runtime Linkage Artifact', () => {
+  it('bundle内でruntimeが重複しても同じlinkage targetを共有する', () => {
+    expect(Symbol.keyFor(runtimeLinkageTarget)).toBe('loutre.runtime-linkage-target')
+  })
+
   it('Graph Manifestとfingerprintが異なるartifactを拒否する', () => {
     let linked = false
     const application = {

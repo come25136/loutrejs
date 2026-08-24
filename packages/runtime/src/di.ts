@@ -49,7 +49,7 @@ export function collectRuntimeModuleGraph(
 
 export class Container {
   readonly #providers = new Map<TokenLike, ProviderDescriptor>()
-  readonly #applicationCache = new Map<TokenLike, unknown>()
+  readonly #applicationCache = new Map<TokenLike, Promise<unknown>>()
   readonly #implementationCache = new Map<Class, Promise<unknown>>()
 
   readonly #linkedDependencies = new Map<Function, readonly TokenLike[]>()
@@ -104,7 +104,7 @@ export class Container {
     const cached = this.#implementationCache.get(target)
     if (cached) return cached as Promise<T>
 
-    const pending = this.#instantiate(target)
+    const pending = this.#instantiate(target, [target])
     this.#implementationCache.set(target, pending)
     try {
       return await pending
@@ -119,8 +119,16 @@ export class Container {
   async #resolve<T>(
     token: TokenLike<T>,
     source?: string,
+    lineage: readonly TokenLike[] = [],
   ): Promise<T> {
     this.#resolutionStarted = true
+    const cycleStart = lineage.indexOf(token)
+    if (cycleStart >= 0) {
+      const cycle = [...lineage.slice(cycleStart), token]
+        .map(tokenName)
+        .join(' -> ')
+      throw new DependencyResolutionError(`循環依存を検出しました: ${cycle}`)
+    }
     const provider = this.#providers.get(token)
     if (!provider) {
       if (
@@ -131,35 +139,52 @@ export class Container {
         }) as T
       }
       if (typeof token === 'function') {
-        return this.#instantiate(token as Class<T>)
+        return this.#instantiate(token as Class<T>, [...lineage, token])
       }
       throw new DependencyResolutionError(`No provider for ${tokenName(token)}`)
     }
 
-    if (provider.scope === 'application' && this.#applicationCache.has(token)) {
-      return this.#applicationCache.get(token) as T
+    const nextLineage = [...lineage, token]
+    if (provider.scope !== 'application') {
+      return await this.#create(provider, nextLineage) as T
     }
-    const value = await this.#create(provider)
-    if (provider.scope === 'application') this.#applicationCache.set(token, value)
-    return value as T
+
+    const cached = this.#applicationCache.get(token)
+    if (cached) return await cached as T
+
+    const pending = this.#create(provider, nextLineage)
+    this.#applicationCache.set(token, pending)
+    try {
+      return await pending as T
+    } catch (error) {
+      if (this.#applicationCache.get(token) === pending) {
+        this.#applicationCache.delete(token)
+      }
+      throw error
+    }
   }
 
   async #create(
     provider: ProviderDescriptor,
+    lineage: readonly TokenLike[],
   ): Promise<unknown> {
     switch (provider.kind) {
       case 'value':
         return provider.useValue
       case 'class':
-        return this.#instantiate(provider.useClass)
+        return this.#instantiate(provider.useClass, lineage)
       case 'factory': {
         const dependencies = await Promise.all(
-          provider.inject.map((token) => this.#resolve(token)),
+          provider.inject.map((token) => this.#resolve(token, undefined, lineage)),
         )
         return provider.useFactory(...dependencies)
       }
       case 'conditional': {
-        const env = await this.#resolve(provider.select.env) as Record<
+        const env = await this.#resolve(
+          provider.select.env,
+          undefined,
+          lineage,
+        ) as Record<
           string,
           unknown
         >
@@ -170,13 +195,14 @@ export class Container {
             `${provider.select.key}=${String(selected)}に対応するconditional Providerがありません`,
           )
         }
-        return this.#instantiate(implementation)
+        return this.#instantiate(implementation, lineage)
       }
     }
   }
 
   async #instantiate<T>(
     target: Class<T>,
+    lineage: readonly TokenLike[],
   ): Promise<T> {
     const manifested = this.#linkedDependencies.get(target)
     if (!manifested && target.length > 0) {
@@ -185,7 +211,9 @@ export class Container {
       )
     }
     const dependencies = await Promise.all(
-      (manifested ?? []).map((token) => this.#resolve(token, target.name)),
+      (manifested ?? []).map((token) =>
+        this.#resolve(token, target.name, lineage),
+      ),
     )
     return new target(...dependencies)
   }

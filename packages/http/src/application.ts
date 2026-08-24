@@ -89,13 +89,29 @@ export function createHttpApplication(options: {
           createInternalErrorResponse(error, requestLogger),
         )
       }
-      const routeMatch = routes
-        .map((route) => ({ route, params: route.match(url.pathname) }))
-        .find(
-          (candidate) =>
-            candidate.params !== undefined &&
-            candidate.route.method === request.method.toUpperCase(),
+      let routeMatch:
+        | { readonly route: HttpRoute; readonly params: Record<string, string> }
+        | undefined
+      try {
+        const candidate = routes
+          .map((route) => ({ route, params: route.match(url.pathname) }))
+          .find(
+            (candidate) =>
+              candidate.params !== undefined &&
+              candidate.route.method === request.method.toUpperCase(),
+          )
+        routeMatch = candidate?.params === undefined
+          ? undefined
+          : { route: candidate.route, params: candidate.params }
+      } catch (error) {
+        return logHttpResponse(
+          requestLogger,
+          startedAt,
+          isDecodeError(error)
+            ? jsonResponse(400, { error: 'Invalid request' })
+            : createInternalErrorResponse(error, requestLogger),
         )
+      }
 
       if (!routeMatch?.params) {
         return logHttpResponse(
@@ -120,6 +136,7 @@ export function createHttpApplication(options: {
         const raw: MutableHttpContext = {
           ...decoded,
           logger: requestLogger,
+          signal: request.signal,
         }
         const logical = await executePipeline<MutableHttpContext, LogicalHttpResult>(
           routeMatch.route.protocol.definition.pipeline,
@@ -150,9 +167,17 @@ export function createHttpApplication(options: {
           await finalizeResponse(
             routeMatch.route.protocol.definition,
             logical,
+            request.signal,
           ),
         )
       } catch (error) {
+        if (isDecodeError(error)) {
+          return logHttpResponse(
+            requestLogger,
+            startedAt,
+            jsonResponse(400, { error: 'Invalid request' }),
+          )
+        }
         if (isValidationError(error)) {
           return logHttpResponse(
             requestLogger,
@@ -181,6 +206,7 @@ export function createHttpApplication(options: {
               await finalizeResponse(
                 routeMatch.route.protocol.definition,
                 mapped,
+                request.signal,
               ),
             )
           } catch (finalizationError) {
@@ -239,6 +265,7 @@ interface MutableHttpContext extends Record<string, unknown> {
   headers: unknown
   body: unknown
   logger: Logger
+  signal: AbortSignal
 }
 
 type DecodedHttpContext = Pick<
@@ -263,7 +290,17 @@ async function decodeRequest(
   if (definition.request?.body) {
     const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim()
     if (mediaType === 'application/json') {
-      body = await request.json()
+      try {
+        body = await request.json()
+      } catch (error) {
+        throw new HttpInputDecodeError(error)
+      }
+    } else if (mediaType === 'multipart/form-data') {
+      try {
+        body = await request.formData()
+      } catch (error) {
+        throw new HttpInputDecodeError(error)
+      }
     } else if (mediaType?.startsWith('text/')) {
       body = await request.text()
     } else {
@@ -312,6 +349,7 @@ async function invokeController(
 async function finalizeResponse(
   definition: HttpProtocolDefinition,
   result: LogicalHttpResult,
+  signal: AbortSignal,
 ): Promise<Response> {
   if (result?.kind !== 'http-result') {
     throw new Error('Controller returned a non-HTTP logical result')
@@ -330,21 +368,43 @@ async function finalizeResponse(
     }
     const encoder = new TextEncoder()
     const iterator = result.body[Symbol.asyncIterator]()
+    let finished = false
+    let abort: (() => void) | undefined
     const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        abort = () => {
+          if (finished) return
+          finished = true
+          signal.removeEventListener('abort', abort!)
+          void iterator.return?.(signal.reason).finally(() => {
+            controller.error(signal.reason ?? new Error('HTTP requestが中断されました'))
+          })
+        }
+        if (signal.aborted) abort()
+        else signal.addEventListener('abort', abort, { once: true })
+      },
       async pull(controller) {
+        if (finished) return
         try {
           const next = await iterator.next()
           if (next.done) {
+            finished = true
+            if (abort) signal.removeEventListener('abort', abort)
             controller.close()
             return
           }
           const value = await validateSchema(response.body, next.value)
           controller.enqueue(encoder.encode(`data:${JSON.stringify(value)}\n\n`))
         } catch (error) {
+          finished = true
+          if (abort) signal.removeEventListener('abort', abort)
           controller.error(error)
         }
       },
       async cancel(reason) {
+        if (finished) return
+        finished = true
+        if (abort) signal.removeEventListener('abort', abort)
         await iterator.return?.(reason)
       },
     })
@@ -446,9 +506,13 @@ function compilePath(path: string) {
   return (pathname: string): Record<string, string> | undefined => {
     const match = pattern.exec(pathname)
     if (!match) return undefined
-    return Object.fromEntries(
-      names.map((name, index) => [name, decodeURIComponent(match[index + 1]!)]),
-    )
+    try {
+      return Object.fromEntries(
+        names.map((name, index) => [name, decodeURIComponent(match[index + 1]!)]),
+      )
+    } catch (error) {
+      throw new HttpInputDecodeError(error)
+    }
   }
 }
 
@@ -496,6 +560,10 @@ function isValidationError(error: unknown): boolean {
   return error instanceof HttpInputValidationError
 }
 
+function isDecodeError(error: unknown): boolean {
+  return error instanceof HttpInputDecodeError
+}
+
 async function mapDeclaredError(
   definition: HttpProtocolDefinition,
   error: unknown,
@@ -531,5 +599,12 @@ class HttpInputValidationError extends Error {
   constructor(readonly cause: unknown) {
     super('HTTP input validation failed', { cause })
     this.name = 'HttpInputValidationError'
+  }
+}
+
+class HttpInputDecodeError extends Error {
+  constructor(readonly cause: unknown) {
+    super('HTTP input decode failed', { cause })
+    this.name = 'HttpInputDecodeError'
   }
 }

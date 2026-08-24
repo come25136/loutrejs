@@ -6,6 +6,7 @@ import {
   type NumberLiteralType,
   type Program,
   type Snapshot,
+  SymbolFlags,
   type StringLiteralType,
   type Type,
   type TypeReference,
@@ -13,6 +14,14 @@ import {
 import * as ts from 'typescript/unstable/ast'
 import { dirname, extname, isAbsolute, resolve } from 'node:path'
 import type { Diagnostic, LayerIR } from './ir.js'
+import {
+  validateSourceConstructorDependencies,
+  validateSourceContextKeyNames,
+  validateSourceContextProperties,
+  validateSourceCoverage,
+  validateSourceLayerReturns,
+  validateSourceTokenIds,
+} from './source-validation.js'
 
 export interface SourceLocationIR {
   readonly file: string
@@ -55,13 +64,30 @@ export interface ConstructorDependencyIR {
   readonly index: number
   readonly parameter: string
   readonly reference: string
+  readonly rootReference: string
+  readonly symbol?: number
   readonly explicitInject: boolean
 }
 
 export interface SourceConstructorIR {
   readonly className: string
+  readonly symbol?: number
   readonly location: SourceLocationIR
   readonly dependencies: readonly ConstructorDependencyIR[]
+}
+
+export interface SourceRuntimeImportIR {
+  readonly file: string
+  readonly module: string
+  readonly kind: 'named' | 'default' | 'namespace'
+  readonly local: string
+  readonly imported?: string
+  readonly typeOnly: boolean
+}
+
+export interface SourceManagedProviderIR {
+  readonly reference: string
+  readonly symbol: number
 }
 
 export interface ContextPropertyUseIR {
@@ -100,6 +126,8 @@ export interface SourceApplicationManifest {
   readonly contextKeys: readonly SourceContextKeyIR[]
   readonly contextProperties: readonly ContextPropertyUseIR[]
   readonly implementations: readonly SourceImplementationIR[]
+  readonly runtimeImports: readonly SourceRuntimeImportIR[]
+  readonly managedProviders: readonly SourceManagedProviderIR[]
   readonly capabilities: readonly string[]
   readonly envKeys: readonly { readonly env: string; readonly key: string }[]
   readonly conditions: readonly { readonly module: string; readonly source: string }[]
@@ -112,6 +140,7 @@ export interface SourceImplementationIR {
   readonly protocol: string
   readonly procedures?: readonly string[]
   readonly implementation: string
+  readonly implementationSymbol?: number
 }
 
 export interface SourceCompilerOptions {
@@ -233,6 +262,9 @@ function compileTypeScriptSnapshot(
   )
   const envKeys: { env: string; key: string }[] = []
   const layerDefinitions = new Map<string, Omit<LayerIR, 'index'>>()
+  const sourceModules: SourceModuleDeclaration[] = []
+  const implementations: SourceImplementationIR[] = []
+  const runtimeImports: SourceRuntimeImportIR[] = []
 
   for (const sourceFile of sourceFiles) {
     visitSourceFile(sourceFile, {
@@ -247,13 +279,17 @@ function compileTypeScriptSnapshot(
       diagnostics,
       envKeys,
       layerDefinitions,
+      sourceModules,
+      implementations,
+      runtimeImports,
     })
   }
 
-  const implementations = modules.flatMap((module) =>
-    module.implementations.flatMap(parseImplementation),
+  const managedProviders = sourceModules.flatMap((module) =>
+    module.providers.flatMap((provider) => provider.managedClasses),
   )
   validateSourceTokenIds(tokens, diagnostics)
+  validateSourceDuplicateProviders(sourceModules, diagnostics)
   validateSourceContextKeyNames(contextKeys, diagnostics)
   validateSourceCoverage(contracts, implementations, diagnostics)
   validateSourceConstructorDependencies(
@@ -327,6 +363,8 @@ function compileTypeScriptSnapshot(
     contextKeys,
     contextProperties,
     implementations,
+    runtimeImports,
+    managedProviders,
     capabilities: [...capabilities],
     envKeys,
     conditions: modules.flatMap((module) =>
@@ -480,9 +518,29 @@ interface VisitState {
   readonly diagnostics: Diagnostic[]
   readonly envKeys: { env: string; key: string }[]
   readonly layerDefinitions: Map<string, Omit<LayerIR, 'index'>>
+  readonly sourceModules: SourceModuleDeclaration[]
+  readonly implementations: SourceImplementationIR[]
+  readonly runtimeImports: SourceRuntimeImportIR[]
+}
+
+interface SourceProviderDeclaration {
+  readonly id: string
+  readonly tokenSymbol: number
+  readonly reference: string
+  readonly module: string
+  readonly location: SourceLocationIR
+  readonly managedClasses: readonly SourceManagedProviderIR[]
+}
+
+interface SourceModuleDeclaration {
+  readonly symbol: number
+  readonly name: string
+  readonly imports: readonly number[]
+  readonly providers: readonly SourceProviderDeclaration[]
 }
 
 function visitSourceFile(sourceFile: ts.SourceFile, state: VisitState): void {
+  state.runtimeImports.push(...readRuntimeImports(sourceFile, state.checker))
   const visit = (node: ts.Node) => {
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
       const typedLayer = readLayerTypeDefinition(
@@ -520,6 +578,20 @@ function visitSourceFile(sourceFile: ts.SourceFile, state: VisitState): void {
         const module = readModule(node.name.text, node.initializer, sourceFile)
         state.modules.push(module)
         for (const provider of module.providers) state.providers.add(provider)
+        const sourceModule = readSourceModuleDeclaration(
+          node.name,
+          node.initializer,
+          sourceFile,
+          state.checker,
+        )
+        if (sourceModule) state.sourceModules.push(sourceModule)
+        state.implementations.push(
+          ...readSourceImplementations(
+            node.initializer,
+            sourceFile,
+            state.checker,
+          ),
+        )
       }
       if (isNamedCall(node.initializer, 'contract')) {
         state.contracts.push(
@@ -535,7 +607,7 @@ function visitSourceFile(sourceFile: ts.SourceFile, state: VisitState): void {
       }
     }
     if (ts.isClassDeclaration(node) && node.name) {
-      const constructor = readConstructor(node, sourceFile)
+      const constructor = readConstructor(node, sourceFile, state.checker)
       state.constructors.push(constructor)
       state.contextProperties.push(...readContextPropertyUses(node, sourceFile))
     }
@@ -555,6 +627,58 @@ function visitSourceFile(sourceFile: ts.SourceFile, state: VisitState): void {
     node.forEachChild(visit)
   }
   visit(sourceFile)
+}
+
+function readRuntimeImports(
+  sourceFile: ts.SourceFile,
+  _checker: Checker,
+): SourceRuntimeImportIR[] {
+  const imports: SourceRuntimeImportIR[] = []
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !statement.importClause
+    ) {
+      continue
+    }
+    const module = statement.moduleSpecifier.text
+    const clause = statement.importClause
+    if (clause.name) {
+      imports.push({
+        file: sourceFile.fileName,
+        module,
+        kind: 'default',
+        local: clause.name.text,
+        typeOnly: clause.phaseModifier === ts.SyntaxKind.TypeKeyword,
+      })
+    }
+    const bindings = clause.namedBindings
+    if (!bindings) continue
+    if (ts.isNamespaceImport(bindings)) {
+      imports.push({
+        file: sourceFile.fileName,
+        module,
+        kind: 'namespace',
+        local: bindings.name.text,
+        typeOnly: clause.phaseModifier === ts.SyntaxKind.TypeKeyword,
+      })
+      continue
+    }
+    for (const element of bindings.elements) {
+      imports.push({
+        file: sourceFile.fileName,
+        module,
+        kind: 'named',
+        local: element.name.text,
+        imported: element.propertyName?.text ?? element.name.text,
+        typeOnly:
+          clause.phaseModifier === ts.SyntaxKind.TypeKeyword ||
+          element.isTypeOnly,
+      })
+    }
+  }
+  return imports
 }
 
 function readTokenDeclaration(
@@ -635,6 +759,200 @@ function readModule(
     ),
     requires: readArrayProperty(definition, 'requires', sourceFile),
   }
+}
+
+function readSourceModuleDeclaration(
+  name: ts.Identifier,
+  call: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+  checker: Checker,
+): SourceModuleDeclaration | undefined {
+  const moduleSymbol = resolveSourceSymbol(name, checker)
+  if (moduleSymbol === undefined) return undefined
+  const factory = call.arguments[0]
+  const definition = factory && getReturnedObject(factory)
+  const imports = definition
+    ? readObjectProperty(definition, 'imports')
+    : undefined
+  const providers = definition
+    ? readObjectProperty(definition, 'providers')
+    : undefined
+
+  return {
+    symbol: moduleSymbol,
+    name: name.text,
+    imports:
+      imports && ts.isArrayLiteralExpression(imports)
+        ? imports.elements.flatMap((element) => {
+            if (ts.isSpreadElement(element)) return []
+            const target = readModuleImportTarget(element)
+            const symbol = target && resolveSourceSymbol(target, checker)
+            return symbol === undefined ? [] : [symbol]
+          })
+        : [],
+    providers:
+      providers && ts.isArrayLiteralExpression(providers)
+        ? providers.elements.flatMap((element) => {
+            if (ts.isSpreadElement(element)) return []
+            const token = readProviderTokenExpression(element)
+            const tokenSymbol = token && resolveSourceSymbol(token, checker)
+            if (!token || tokenSymbol === undefined) return []
+            const location = locationOf(element, sourceFile)
+            return [{
+              id: `${location.file}:${location.line}:${location.column}`,
+              tokenSymbol,
+              reference: token.getText(sourceFile),
+              module: name.text,
+              location,
+              managedClasses: readManagedProviderExpressions(element)
+                .flatMap((managed) => {
+                  const symbol = resolveSourceSymbol(managed, checker)
+                  return symbol === undefined
+                    ? []
+                    : [{ reference: managed.getText(sourceFile), symbol }]
+                }),
+            }]
+          })
+        : [],
+  }
+}
+
+function readManagedProviderExpressions(
+  expression: ts.Expression,
+): ts.Expression[] {
+  const unwrapped = unwrapExpression(expression)
+  if (ts.isIdentifier(unwrapped) || ts.isPropertyAccessExpression(unwrapped)) {
+    return [unwrapped]
+  }
+  if (!ts.isCallExpression(unwrapped)) return []
+  const called = unwrapped.expression
+  if (!ts.isPropertyAccessExpression(called)) return []
+  if (called.name.text === 'useClass') {
+    const implementation = unwrapped.arguments[0]
+    return implementation ? [implementation] : []
+  }
+  if (called.name.text !== 'select') return []
+  const mapping = unwrapped.arguments[1]
+  if (!mapping || !ts.isObjectLiteralExpression(mapping)) return []
+  return mapping.properties.flatMap((property) => {
+    if (ts.isPropertyAssignment(property)) return [property.initializer]
+    if (ts.isShorthandPropertyAssignment(property)) {
+      return ts.isIdentifier(property.name) ? [property.name] : []
+    }
+    return []
+  })
+}
+
+function readSourceImplementations(
+  moduleCall: ts.CallExpression,
+  sourceFile: ts.SourceFile,
+  checker: Checker,
+): SourceImplementationIR[] {
+  const factory = moduleCall.arguments[0]
+  const definition = factory && getReturnedObject(factory)
+  const implementations = definition
+    ? readObjectProperty(definition, 'implementations')
+    : undefined
+  if (!implementations || !ts.isArrayLiteralExpression(implementations)) {
+    return []
+  }
+  return implementations.elements.flatMap((element) => {
+    if (ts.isSpreadElement(element)) return []
+    const parsed = readSourceImplementation(element, sourceFile, checker)
+    return parsed ? [parsed] : []
+  })
+}
+
+function readSourceImplementation(
+  expression: ts.Expression,
+  sourceFile: ts.SourceFile,
+  checker: Checker,
+): SourceImplementationIR | undefined {
+  const withCall = unwrapExpression(expression)
+  if (
+    !ts.isCallExpression(withCall) ||
+    !ts.isPropertyAccessExpression(withCall.expression) ||
+    withCall.expression.name.text !== 'with'
+  ) {
+    return undefined
+  }
+  const implementation = withCall.arguments[0]
+  if (!implementation) return undefined
+  let chain = unwrapExpression(withCall.expression.expression)
+  let procedures: string[] | undefined
+  if (
+    ts.isCallExpression(chain) &&
+    ts.isPropertyAccessExpression(chain.expression) &&
+    chain.expression.name.text === 'procedures'
+  ) {
+    procedures = chain.arguments.flatMap((argument) =>
+      ts.isStringLiteral(argument) ? [argument.text] : [],
+    )
+    chain = unwrapExpression(chain.expression.expression)
+  }
+  if (
+    !ts.isCallExpression(chain) ||
+    !ts.isPropertyAccessExpression(chain.expression) ||
+    chain.expression.name.text !== 'for'
+  ) {
+    return undefined
+  }
+  const protocol = chain.arguments[0]
+  const implementCall = unwrapExpression(chain.expression.expression)
+  if (!protocol || !isNamedCall(implementCall, 'implement')) return undefined
+  const contract = implementCall.arguments[0]
+  if (!contract) return undefined
+  const implementationSymbol = resolveSourceSymbol(implementation, checker)
+  return {
+    contract: contract.getText(sourceFile),
+    protocol: protocol.getText(sourceFile),
+    ...(procedures === undefined ? {} : { procedures }),
+    implementation: implementation.getText(sourceFile),
+    ...(implementationSymbol === undefined ? {} : { implementationSymbol }),
+  }
+}
+
+function readModuleImportTarget(
+  expression: ts.Expression,
+): ts.Expression | undefined {
+  const unwrapped = unwrapExpression(expression)
+  if (!ts.isCallExpression(unwrapped)) return undefined
+  return ts.isExpression(unwrapped.expression)
+    ? unwrapped.expression
+    : undefined
+}
+
+function readProviderTokenExpression(
+  expression: ts.Expression,
+): ts.Expression | undefined {
+  const unwrapped = unwrapExpression(expression)
+  if (ts.isIdentifier(unwrapped) || ts.isPropertyAccessExpression(unwrapped)) {
+    return unwrapped
+  }
+  if (!ts.isCallExpression(unwrapped)) return undefined
+  const called = unwrapped.expression
+  if (
+    (ts.isIdentifier(called) && called.text === 'provide') ||
+    (ts.isPropertyAccessExpression(called) && called.name.text === 'provide')
+  ) {
+    return unwrapped.arguments[0]
+  }
+  if (ts.isPropertyAccessExpression(called)) {
+    return readProviderTokenExpression(called.expression)
+  }
+  return undefined
+}
+
+function resolveSourceSymbol(
+  expression: ts.Node,
+  checker: Checker,
+): number | undefined {
+  let symbol = checker.getSymbolAtLocation(expression)
+  if (!symbol) return undefined
+  if ((symbol.flags & SymbolFlags.Alias) !== 0) {
+    symbol = checker.getAliasedSymbol(symbol)
+  }
+  return checker.isUnknownSymbol(symbol) ? undefined : symbol.id
 }
 
 function readContract(
@@ -736,6 +1054,7 @@ function readContract(
 function readConstructor(
   declaration: ts.ClassDeclaration,
   sourceFile: ts.SourceFile,
+  checker: Checker,
 ): SourceConstructorIR {
   const constructor = declaration.members.find(ts.isConstructorDeclaration)
   const dependencies: ConstructorDependencyIR[] = []
@@ -747,22 +1066,38 @@ function readConstructor(
         (expression): expression is ts.CallExpression =>
           isNamedCall(expression, 'Inject'),
       )
-    const explicitReference = inject?.arguments[0]?.getText(sourceFile)
-    const typeReference = parameter.type?.getText(sourceFile)
-    const reference = explicitReference ?? typeReference
-    if (!reference) continue
+    const referenceNode = inject?.arguments[0] ?? readTypeReferenceNode(parameter.type)
+    if (!referenceNode) continue
+    const root = readRootReference(referenceNode)
+    if (!root) continue
+    const dependencySymbol = resolveSourceSymbol(referenceNode, checker)
     dependencies.push({
       index,
       parameter: parameter.name.getText(sourceFile),
-      reference,
-      explicitInject: explicitReference !== undefined,
+      reference: referenceNode.getText(sourceFile),
+      rootReference: root.text,
+      ...(dependencySymbol === undefined ? {} : { symbol: dependencySymbol }),
+      explicitInject: inject !== undefined,
     })
   }
+  const classSymbol = resolveSourceSymbol(declaration.name!, checker)
   return {
     className: declaration.name!.text,
+    ...(classSymbol === undefined ? {} : { symbol: classSymbol }),
     location: locationOf(declaration, sourceFile),
     dependencies,
   }
+}
+
+function readTypeReferenceNode(type: ts.TypeNode | undefined): ts.Node | undefined {
+  return type && ts.isTypeReferenceNode(type) ? type.typeName : undefined
+}
+
+function readRootReference(node: ts.Node): ts.Identifier | undefined {
+  if (ts.isIdentifier(node)) return node
+  if (ts.isQualifiedName(node)) return readRootReference(node.left)
+  if (ts.isPropertyAccessExpression(node)) return readRootReference(node.expression)
+  return undefined
 }
 
 function readContextPropertyUses(
@@ -1072,197 +1407,40 @@ function readInboundReturnedProperties(
   })
 }
 
-function parseImplementation(source: string): SourceImplementationIR[] {
-  const match = /implement\(([^)]+)\)\s*\.for\(([^)]+)\)(?:\s*\.procedures\(([^)]*)\))?\s*\.with\(([^)]+)\)/s.exec(
-    source,
-  )
-  if (!match?.[1] || !match[2] || !match[4]) return []
-  const procedures = match[3]
-    ?.split(',')
-    .map((value) => value.trim().replace(/^['"]|['"]$/g, ''))
-    .filter(Boolean)
-  return [
-    {
-      contract: match[1].trim(),
-      protocol: match[2].trim(),
-      ...(procedures === undefined ? {} : { procedures }),
-      implementation: match[4].trim(),
-    },
-  ]
-}
-
-function validateSourceCoverage(
-  contracts: readonly SourceContractIR[],
-  implementations: readonly SourceImplementationIR[],
+function validateSourceDuplicateProviders(
+  modules: readonly SourceModuleDeclaration[],
   diagnostics: Diagnostic[],
 ): void {
-  for (const contract of contracts) {
-    for (const procedure of contract.procedures) {
-      for (const protocol of procedure.protocols) {
-        const covering = implementations.filter(
-          (implementation) =>
-            implementation.contract === contract.name &&
-            implementation.protocol === protocol.name &&
-            (implementation.procedures === undefined ||
-              implementation.procedures.includes(procedure.name)),
-        )
-        const path = `${contract.name}.${procedure.name}.${protocol.name}`
-        if (covering.length === 0) {
-          diagnostics.push({
-            code: 'LUTRE_IMPL_001',
-            message: `${path}のimplementationがありません`,
-            path,
-          })
-        } else if (covering.length > 1) {
-          diagnostics.push({
-            code: 'LUTRE_IMPL_002',
-            message: `${path}のimplementationが重複しています`,
-            path,
-          })
+  const modulesBySymbol = new Map(modules.map((module) => [module.symbol, module]))
+  const reportedPairs = new Set<string>()
+
+  for (const root of modules) {
+    const visited = new Set<number>()
+    const providersByToken = new Map<number, SourceProviderDeclaration>()
+    const visit = (module: SourceModuleDeclaration): void => {
+      if (visited.has(module.symbol)) return
+      visited.add(module.symbol)
+      for (const importedSymbol of module.imports) {
+        const imported = modulesBySymbol.get(importedSymbol)
+        if (imported) visit(imported)
+      }
+      for (const provider of module.providers) {
+        const existing = providersByToken.get(provider.tokenSymbol)
+        if (!existing) {
+          providersByToken.set(provider.tokenSymbol, provider)
+          continue
         }
-      }
-    }
-  }
-}
-
-function validateSourceConstructorDependencies(
-  implementations: readonly SourceImplementationIR[],
-  constructors: readonly SourceConstructorIR[],
-  providers: ReadonlySet<string>,
-  diagnostics: Diagnostic[],
-): void {
-  for (const implementation of implementations) {
-    const constructor = constructors.find(
-      ({ className }) => className === implementation.implementation,
-    )
-    if (!constructor) continue
-    for (const dependency of constructor.dependencies) {
-      const available = [...providers].some(
-        (provider) =>
-          provider === dependency.reference ||
-          provider.startsWith(`provide(${dependency.reference})`),
-      )
-      if (!available) {
-        const path = `${implementation.contract}.${implementation.protocol}.${implementation.implementation}`
+        const pair = [existing.id, provider.id].sort().join('\0')
+        if (reportedPairs.has(pair)) continue
+        reportedPairs.add(pair)
         diagnostics.push({
-          code: dependency.explicitInject ? 'LUTRE_DI_001' : 'LUTRE_DI_002',
-          message: dependency.explicitInject
-            ? `${implementation.implementation}のconstructor依存${dependency.reference}をapplication scopeで提供するProviderがありません。execution dataはContextOfから取得してください`
-            : `${implementation.implementation}のconstructor依存${dependency.reference}を提供するProviderがありません`,
-          path,
+          code: 'LUTRE_DI_003',
+          message: `Provider ${provider.reference}が${existing.module}と${provider.module}で重複しています`,
+          path: `${provider.location.file}:${provider.location.line}:${provider.location.column}`,
         })
       }
     }
-  }
-}
-
-function validateSourceContextProperties(
-  implementations: readonly SourceImplementationIR[],
-  contextProperties: readonly ContextPropertyUseIR[],
-  contextKeys: readonly SourceContextKeyIR[],
-  pipelines: SourceApplicationManifest['pipelines'],
-  diagnostics: Diagnostic[],
-): void {
-  const keyByDeclaration = new Map(
-    contextKeys.map((key) => [key.name, key.property]),
-  )
-  const declaredProperties = new Set(contextKeys.map((key) => key.property))
-  for (const implementation of implementations) {
-    const uses = contextProperties.filter(
-      ({ className, property }) =>
-        className === implementation.implementation &&
-        declaredProperties.has(property),
-    )
-    for (const use of uses) {
-      if (
-        implementation.procedures !== undefined &&
-        !implementation.procedures.includes(use.method)
-      ) {
-        continue
-      }
-      const pipeline = pipelines.find(
-        (candidate) =>
-          candidate.contract === implementation.contract &&
-          candidate.procedure === use.method &&
-          candidate.protocol === implementation.protocol,
-      )
-      if (!pipeline) continue
-      const available = new Set(
-        pipeline.layers.flatMap((layer) =>
-          layer.provides.map(
-            (reference) => keyByDeclaration.get(reference) ?? reference,
-          ),
-        ),
-      )
-      if (!available.has(use.property)) {
-        const path = `${implementation.contract}.${use.method}.${implementation.protocol}`
-        diagnostics.push({
-          code: 'LUTRE_CONTEXT_001',
-          message: `${implementation.implementation}.${use.method}が参照するctx.${use.property}はterminal到達時に利用できません`,
-          path,
-        })
-      }
-    }
-  }
-}
-
-function validateSourceContextKeyNames(
-  keys: readonly SourceContextKeyIR[],
-  diagnostics: Diagnostic[],
-): void {
-  const firstByProperty = new Map<string, SourceContextKeyIR>()
-  for (const key of keys) {
-    const first = firstByProperty.get(key.property)
-    if (!first) {
-      firstByProperty.set(key.property, key)
-      continue
-    }
-    diagnostics.push({
-      code: 'LUTRE_CONTEXT_002',
-      message: `Context Key ${key.property}は${first.name}と${key.name}で重複しています`,
-      path: key.name,
-    })
-  }
-}
-
-function validateSourceLayerReturns(
-  pipelines: SourceApplicationManifest['pipelines'],
-  diagnostics: Diagnostic[],
-): void {
-  for (const pipeline of pipelines) {
-    const path = `${pipeline.contract}.${pipeline.procedure}.${pipeline.protocol}`
-    for (const layer of pipeline.layers) {
-      if (layer.provides.length === 0 || layer.returns === undefined) continue
-      const provided = new Set(layer.provides)
-      const returned = new Set(layer.returns)
-      const missing = layer.provides.filter((property) => !returned.has(property))
-      const extra = layer.returns.filter((property) => !provided.has(property))
-      if (missing.length === 0 && extra.length === 0) continue
-      diagnostics.push({
-        code: 'LUTRE_CONTEXT_004',
-        message: `${layer.name}のprovidesとinbound返却propertyが一致しません（不足: ${missing.join(', ') || 'なし'}、未宣言: ${extra.join(', ') || 'なし'}）`,
-        path,
-      })
-    }
-  }
-}
-
-function validateSourceTokenIds(
-  tokens: readonly SourceTokenIR[],
-  diagnostics: Diagnostic[],
-): void {
-  const firstById = new Map<string, SourceTokenIR>()
-  for (const token of tokens) {
-    const first = firstById.get(token.id)
-    if (!first) {
-      firstById.set(token.id, token)
-      continue
-    }
-    diagnostics.push({
-      code: 'LUTRE_TOKEN_001',
-      message: `Token ID ${token.id}は${first.name}と${token.name}で重複しています`,
-      path: token.name,
-    })
+    visit(root)
   }
 }
 

@@ -1,5 +1,6 @@
 import {
   contract,
+  defineError,
   defineModule,
   implement,
   procedure,
@@ -138,6 +139,11 @@ describe('構造化ログ', () => {
     const body = await response.json() as { errorId: string }
 
     expect(response.status).toBe(500)
+    expect(body).toEqual({
+      error: 'Internal Server Error',
+      errorId: expect.stringMatching(/^[0-9a-f-]+$/),
+    })
+    expect(JSON.stringify(body)).not.toContain('fixture failure')
     const errorRecord = records.find((record) => record.event === 'application.error')
     expect(errorRecord).toEqual(expect.objectContaining({
       level: 'error',
@@ -152,6 +158,58 @@ describe('構造化ログ', () => {
       event: 'http.request.completed',
       status: 500,
       executionId: errorRecord?.executionId,
+    }))
+  })
+
+  it('宣言済みDomain Error mappingをunhandled errorとして重複記録しない', async () => {
+    const ExpectedError = defineError({
+      code: 'EXPECTED_ERROR',
+      data: z.object({ reason: z.string() }),
+    })
+    const Contract = contract({
+      fail: procedure({
+        protocols: {
+          http: http({
+            method: 'GET',
+            path: '/expected-failure',
+            responses: {
+              rejected: {
+                status: 409,
+                body: z.object({ reason: z.string() }),
+                error: http.error(ExpectedError),
+              },
+            },
+            pipeline: [http.controller],
+          }),
+        },
+      }),
+    })
+    class Implementation {
+      fail(): never {
+        throw ExpectedError({ reason: 'expected' })
+      }
+    }
+    const Module = defineModule(() => ({
+      implementations: [implement(Contract).for(http).with(Implementation)],
+    }))
+    const records: LogRecord[] = []
+    const application = createHttpApplication({
+      modules: [Module()],
+      logger: captureLogger(records),
+    })
+
+    const response = await application.handle(
+      new Request('https://fixture.test/expected-failure'),
+    )
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({ reason: 'expected' })
+    expect(records).not.toContainEqual(
+      expect.objectContaining({ event: 'application.error' }),
+    )
+    expect(records).toContainEqual(expect.objectContaining({
+      event: 'http.request.completed',
+      status: 409,
     }))
   })
 

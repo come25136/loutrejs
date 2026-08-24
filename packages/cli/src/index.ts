@@ -7,14 +7,11 @@ import {
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import type { Server } from 'node:http'
 import { tmpdir } from 'node:os'
-import { basename, dirname, extname, join, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { basename, dirname, join, resolve } from 'node:path'
 import {
   compileTypeScriptSource,
   createSourceCompilerSession,
-  createRuntimeLinkageBootstrap,
   createRuntimeLinkagePlan,
-  transformSourceForRuntimeLinkage,
   type RuntimeLinkagePlan,
 } from '@loutrejs/compiler'
 import { checkCapabilities, type RuntimeCapabilities } from '@loutrejs/runtime'
@@ -26,11 +23,14 @@ import { nodeRuntime } from '@loutrejs/runtime-node'
 import { createNodeHttpServer } from '@loutrejs/runtime-node'
 import type { HttpApplication } from '@loutrejs/http'
 import { workerdRuntime } from '@loutrejs/runtime-workerd'
-import { build as buildWithEsbuild, type Loader, type Plugin } from 'esbuild'
 import {
   printStartupBanner,
   type StartupBannerRenderOptions,
 } from './startup-banner.js'
+import {
+  emitLinkedApplication,
+  importHttpApplication,
+} from './linked-application.js'
 
 export {
   detectStartupBannerTerminal,
@@ -101,6 +101,28 @@ export async function runCli(
     }
     case 'graph': {
       const result = manifest()
+      const format = readOption(args, '--format') ?? 'text'
+      if (!['text', 'json', 'dot'].includes(format)) {
+        io.stderr('graph --formatにはtext、json、dotのいずれかを指定してください。')
+        return 2
+      }
+      if (
+        subject !== 'modules' &&
+        subject !== 'di' &&
+        subject !== 'contracts' &&
+        subject !== 'runtime'
+      ) {
+        io.stderr('graphにはmodules、di、contracts、runtimeのいずれかが必要です。')
+        return 2
+      }
+      if (format === 'json') {
+        io.stdout(`${JSON.stringify(graphData(result, subject), null, 2)}\n`)
+        return 0
+      }
+      if (format === 'dot') {
+        io.stdout(renderDotGraph(result, subject))
+        return 0
+      }
       switch (subject) {
         case 'modules':
           for (const module of result.modules) {
@@ -204,7 +226,7 @@ export async function runCli(
       const manifestOutput = join(outputDirectory, 'loutre.manifest.json')
       await writeFile(
         manifestOutput,
-        `${JSON.stringify({ ...plan.manifest, fingerprint: plan.fingerprint }, null, 2)}\n`,
+        `${JSON.stringify({ ...plan.graphManifest, fingerprint: plan.fingerprint }, null, 2)}\n`,
         'utf8',
       )
       io.stdout(`Applicationを出力しました: ${entryOutput}`)
@@ -625,85 +647,6 @@ async function loadLinkedHttpApplication(
   }
 }
 
-async function emitLinkedApplication(
-  plan: RuntimeLinkagePlan,
-  output: string,
-): Promise<readonly string[]> {
-  const workingDirectory = dirname(plan.entry)
-  const result = await buildWithEsbuild({
-    absWorkingDir: workingDirectory,
-    stdin: {
-      contents: createRuntimeLinkageBootstrap(plan),
-      loader: 'ts',
-      resolveDir: dirname(plan.entry),
-      sourcefile: 'loutre-generated-bootstrap.ts',
-    },
-    outfile: output,
-    bundle: true,
-    format: 'esm',
-    platform: 'node',
-    target: 'node24',
-    sourcemap: 'inline',
-    metafile: true,
-    plugins: [runtimeLinkagePlugin(plan)],
-  })
-  return Object.keys(result.metafile.inputs)
-    .filter((path) => path !== 'loutre-generated-bootstrap.ts')
-    .map((path) => resolve(workingDirectory, path))
-}
-
-async function importHttpApplication(output: string): Promise<HttpApplication> {
-  const module = await import(`${pathToFileURL(output).href}?loutre=${Date.now()}`)
-  const application = module.default ?? module.application
-  if (
-    !application ||
-    typeof application.initialize !== 'function' ||
-    typeof application.shutdown !== 'function' ||
-    typeof application.onServerListening !== 'function' ||
-    typeof application.handle !== 'function'
-  ) {
-    throw new Error(
-      'Application entryはdefaultまたはapplication named exportとしてHttpApplicationを公開する必要があります。',
-    )
-  }
-  return application as HttpApplication
-}
-
-function runtimeLinkagePlugin(plan: RuntimeLinkagePlan): Plugin {
-  const fragments = new Map(
-    plan.fragments.map((fragment) => [resolve(fragment.file), fragment]),
-  )
-  return {
-    name: 'loutre-runtime-linkage',
-    setup(build) {
-      build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async (args) => {
-        const fragment = fragments.get(resolve(args.path))
-        if (!fragment) return undefined
-        const source = await readFile(args.path, 'utf8')
-        return {
-          contents: transformSourceForRuntimeLinkage(source, fragment),
-          loader: loaderFor(args.path),
-        }
-      })
-    },
-  }
-}
-
-function loaderFor(path: string): Loader {
-  switch (extname(path)) {
-    case '.tsx':
-      return 'tsx'
-    case '.jsx':
-      return 'jsx'
-    case '.js':
-    case '.mjs':
-    case '.cjs':
-      return 'js'
-    default:
-      return 'ts'
-  }
-}
-
 function readOption(args: readonly string[], name: string): string | undefined {
   const index = args.indexOf(name)
   return index < 0 ? undefined : args[index + 1]
@@ -735,12 +678,87 @@ function requiredCapabilities(result: ReturnType<typeof compileTypeScriptSource>
   return [...required]
 }
 
+function graphData(
+  result: ReturnType<typeof compileTypeScriptSource>,
+  subject: 'modules' | 'di' | 'contracts' | 'runtime',
+): unknown {
+  switch (subject) {
+    case 'modules':
+      return { version: result.version, modules: result.modules }
+    case 'di':
+      return {
+        version: result.version,
+        providers: result.providers,
+        constructors: result.constructors,
+      }
+    case 'contracts':
+      return {
+        version: result.version,
+        contracts: result.contracts,
+        pipelines: result.pipelines,
+        implementations: result.implementations,
+      }
+    case 'runtime':
+      return { version: result.version, capabilities: requiredCapabilities(result) }
+  }
+}
+
+function renderDotGraph(
+  result: ReturnType<typeof compileTypeScriptSource>,
+  subject: 'modules' | 'di' | 'contracts' | 'runtime',
+): string {
+  const lines = ['digraph Loutre {', '  rankdir=LR;']
+  const edge = (from: string, to: string) => {
+    lines.push(`  ${dot(from)} -> ${dot(to)};`)
+  }
+  switch (subject) {
+    case 'modules':
+      for (const module of result.modules) {
+        lines.push(`  ${dot(module.name)};`)
+        for (const imported of module.imports) edge(module.name, imported)
+      }
+      break
+    case 'di':
+      for (const constructor of result.constructors) {
+        lines.push(`  ${dot(constructor.className)};`)
+        for (const dependency of constructor.dependencies) {
+          edge(constructor.className, dependency.reference)
+        }
+      }
+      break
+    case 'contracts':
+      for (const pipeline of result.pipelines) {
+        const procedure = `${pipeline.contract}.${pipeline.procedure} [${pipeline.protocol}]`
+        lines.push(`  ${dot(procedure)};`)
+        let previous = procedure
+        for (const layer of pipeline.layers) {
+          const current = `${procedure} :: ${layer.index + 1} ${layer.name}`
+          edge(previous, current)
+          previous = current
+        }
+      }
+      break
+    case 'runtime':
+      lines.push(`  ${dot('Application')};`)
+      for (const capability of requiredCapabilities(result)) {
+        edge('Application', capability)
+      }
+      break
+  }
+  lines.push('}')
+  return lines.join('\n')
+}
+
+function dot(value: string): string {
+  return JSON.stringify(value)
+}
+
 function helpText(): string {
   return [
     'Loutre CLI',
     '  loutre check',
     '  loutre doctor [node|deno|bun|workerd|electron|lambda]',
-    '  loutre graph modules|di|contracts|runtime',
+    '  loutre graph modules|di|contracts|runtime [--format text|json|dot]',
     '  loutre explain <target>',
     '  loutre build <明示entry> [--out-dir <directory>]',
     '  loutre dev <明示entry> [--port <port>]',

@@ -11,16 +11,26 @@ import {
 export interface RuntimeLinkageBindingPlan {
   readonly target: string
   readonly dependencies: readonly string[]
+  readonly runtimeDependencies?: readonly string[]
+}
+
+export interface RuntimeLinkageImportPlan {
+  readonly module: string
+  readonly kind: 'named' | 'default' | 'namespace'
+  readonly alias: string
+  readonly imported?: string
 }
 
 export interface RuntimeLinkageFragmentPlan {
   readonly file: string
   readonly exportName: string
   readonly bindings: readonly RuntimeLinkageBindingPlan[]
+  readonly imports: readonly RuntimeLinkageImportPlan[]
 }
 
 export interface RuntimeLinkagePlan {
   readonly manifest: SourceApplicationManifest
+  readonly graphManifest: Readonly<Record<string, unknown>>
   readonly fingerprint: string
   readonly entry: string
   readonly fragments: readonly RuntimeLinkageFragmentPlan[]
@@ -43,26 +53,42 @@ export function createRuntimeLinkagePlan(
   }
 
   const constructorsByName = new Map<string, SourceConstructorIR[]>()
+  const constructorsBySymbol = new Map<number, SourceConstructorIR>()
   for (const constructor of manifest.constructors) {
     const current = constructorsByName.get(constructor.className) ?? []
     current.push(constructor)
     constructorsByName.set(constructor.className, current)
+    if (constructor.symbol !== undefined) {
+      constructorsBySymbol.set(constructor.symbol, constructor)
+    }
   }
 
+  const managedSymbols = new Set<number>()
   const managedNames = new Set<string>()
   for (const implementation of manifest.implementations) {
-    if (isIdentifier(implementation.implementation)) {
+    if (implementation.implementationSymbol !== undefined) {
+      managedSymbols.add(implementation.implementationSymbol)
+    } else {
       managedNames.add(implementation.implementation)
     }
   }
-  for (const provider of manifest.providers) {
-    if (isIdentifier(provider)) managedNames.add(provider)
-    for (const name of readManagedProviderClasses(provider)) managedNames.add(name)
+  for (const provider of manifest.managedProviders) {
+    managedSymbols.add(provider.symbol)
   }
 
   const selected = new Map<string, SourceConstructorIR>()
-  const select = (name: string) => {
-    if (selected.has(name)) return
+  const selectConstructor = (constructor: SourceConstructorIR | undefined) => {
+    if (!constructor) return
+    const key = `${constructor.location.file}:${constructor.location.line}:${constructor.location.column}`
+    if (selected.has(key)) return
+    selected.set(key, constructor)
+    for (const dependency of constructor.dependencies) {
+      if (dependency.symbol !== undefined) {
+        selectConstructor(constructorsBySymbol.get(dependency.symbol))
+      }
+    }
+  }
+  const selectName = (name: string) => {
     const matches = constructorsByName.get(name) ?? []
     if (matches.length === 0) return
     if (matches.length > 1) {
@@ -70,15 +96,15 @@ export function createRuntimeLinkagePlan(
         `${name}のconstructor declarationが複数あり、Runtime linkageを一意に生成できません`,
       )
     }
-    const constructor = matches[0]!
-    selected.set(name, constructor)
-    for (const dependency of constructor.dependencies) {
-      if (isIdentifier(dependency.reference)) select(dependency.reference)
-    }
+    selectConstructor(matches[0])
   }
-  for (const name of managedNames) select(name)
+  for (const symbol of managedSymbols) {
+    selectConstructor(constructorsBySymbol.get(symbol))
+  }
+  for (const name of managedNames) selectName(name)
 
   const byFile = new Map<string, RuntimeLinkageBindingPlan[]>()
+  const importsByFile = new Map<string, RuntimeLinkageImportPlan[]>()
   for (const constructor of selected.values()) {
     if (constructor.dependencies.length === 0) continue
     const indices = constructor.dependencies.map(({ index }) => index)
@@ -89,42 +115,69 @@ export function createRuntimeLinkagePlan(
     }
     const file = resolve(constructor.location.file)
     const current = byFile.get(file) ?? []
+    const runtimeImports = importsByFile.get(file) ?? []
+    const runtimeDependencies = constructor.dependencies.map((dependency) =>
+      runtimeReference(
+        dependency.reference,
+        dependency.rootReference,
+        file,
+        manifest.runtimeImports,
+        runtimeImports,
+      ),
+    )
     current.push({
       target: constructor.className,
       dependencies: constructor.dependencies.map(({ reference }) => reference),
+      ...(runtimeDependencies.every(
+        (dependency, index) =>
+          dependency === constructor.dependencies[index]?.reference,
+      )
+        ? {}
+        : { runtimeDependencies }),
     })
     byFile.set(file, current)
+    importsByFile.set(file, runtimeImports)
   }
 
+  const graphManifest = createGraphManifest(manifest)
   const fingerprint = createHash('sha256')
-    .update(JSON.stringify(manifest))
+    .update(JSON.stringify(graphManifest))
     .digest('hex')
   const fragments = [...byFile.entries()].map(([file, bindings]) => ({
     file,
     exportName: `__loutre_runtime_linkage_${createHash('sha256').update(file).digest('hex').slice(0, 12)}`,
     bindings,
+    imports: importsByFile.get(file) ?? [],
   }))
-  return { manifest, fingerprint, entry, fragments }
+  return { manifest, graphManifest, fingerprint, entry, fragments }
+}
+
+function createGraphManifest(
+  manifest: SourceApplicationManifest,
+): Readonly<Record<string, unknown>> {
+  const { runtimeImports: _runtimeImports, managedProviders: _managedProviders, ...publicManifest } =
+    manifest
+  return JSON.parse(
+    JSON.stringify(publicManifest, (key, value) =>
+      key === 'symbol' || key === 'implementationSymbol' || key === 'rootReference'
+        ? undefined
+        : value,
+    ),
+  ) as Readonly<Record<string, unknown>>
 }
 
 export function transformSourceForRuntimeLinkage(
   source: string,
   plan: RuntimeLinkageFragmentPlan,
 ): string {
-  const runtimeReferences = new Set(
-    plan.bindings.flatMap((binding) => [
-      binding.target,
-      ...binding.dependencies.flatMap(firstIdentifier),
-    ]),
-  )
-  const transformed = makeRuntimeImportsAvailable(source, runtimeReferences)
+  const imports = plan.imports.map(renderRuntimeImport).join('\n')
   const bindings = plan.bindings
     .map(
-      ({ target, dependencies }) =>
-        `[${target}, [${dependencies.join(', ')}]]`,
+      ({ target, dependencies, runtimeDependencies }) =>
+        `[${target}, [${(runtimeDependencies ?? dependencies).join(', ')}]]`,
     )
     .join(', ')
-  return `${transformed}\nexport const ${plan.exportName} = { bindings: [${bindings}] } as const\n`
+  return `${source}\n${imports}${imports === '' ? '' : '\n'}export const ${plan.exportName} = { bindings: [${bindings}] } as const\n`
 }
 
 export function createRuntimeLinkageBootstrap(plan: RuntimeLinkagePlan): string {
@@ -159,82 +212,43 @@ export default __loutreLinkApplication(__loutreApplication, {
 `
 }
 
-function makeRuntimeImportsAvailable(
-  source: string,
-  references: ReadonlySet<string>,
+function runtimeReference(
+  reference: string,
+  rootReference: string,
+  file: string,
+  sourceImports: SourceApplicationManifest['runtimeImports'],
+  generatedImports: RuntimeLinkageImportPlan[],
 ): string {
-  return source
-    .replace(
-      /import\s+type\s*\{([^}]+)\}\s+from\s+(['"][^'"]+['"])/g,
-      (statement, members: string, moduleName: string) => {
-        const parsed = members.split(',').map((member) => member.trim()).filter(Boolean)
-        const runtime = parsed.filter((member) =>
-          references.has(member.split(/\s+as\s+/).at(-1) ?? member),
-        )
-        if (runtime.length === 0) return statement
-        const typeOnly = parsed.filter((member) => !runtime.includes(member))
-        return [
-          typeOnly.length > 0
-            ? `import type { ${typeOnly.join(', ')} } from ${moduleName}`
-            : '',
-          `import { ${runtime.join(', ')} } from ${moduleName}`,
-        ]
-          .filter(Boolean)
-          .join('\n')
-      },
-    )
-    .replace(
-      /import\s*\{([^}]+)\}\s+from\s+(['"][^'"]+['"])/g,
-      (statement, members: string, moduleName: string) => {
-        const parsed = members.split(',').map((member) => member.trim()).filter(Boolean)
-        let changed = false
-        const updated = parsed.map((member) => {
-          const value = member.replace(/^type\s+/, '')
-          const localName = value.split(/\s+as\s+/).at(-1) ?? value
-          if (value !== member && references.has(localName)) {
-            changed = true
-            return value
-          }
-          return member
-        })
-        return changed
-          ? `import { ${updated.join(', ')} } from ${moduleName}`
-          : statement
-      },
-    )
-    .replace(
-      /import\s+type\s+([A-Za-z_$][\w$]*)\s+from\s+(['"][^'"]+['"])/g,
-      (statement, name: string, moduleName: string) =>
-        references.has(name) ? `import ${name} from ${moduleName}` : statement,
-    )
-    .replace(
-      /import\s+type\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+(['"][^'"]+['"])/g,
-      (statement, name: string, moduleName: string) =>
-        references.has(name)
-          ? `import * as ${name} from ${moduleName}`
-          : statement,
-    )
-}
-
-function firstIdentifier(reference: string): string[] {
-  const match = /^[A-Za-z_$][\w$]*/.exec(reference.trim())
-  return match ? [match[0]] : []
-}
-
-function isIdentifier(value: string): boolean {
-  return /^[A-Za-z_$][\w$]*$/.test(value)
-}
-
-function readManagedProviderClasses(source: string): string[] {
-  const classes: string[] = []
-  for (const match of source.matchAll(/\.useClass\(\s*([A-Za-z_$][\w$]*)/g)) {
-    if (match[1]) classes.push(match[1])
-  }
-  const mapping = /\.select\([\s\S]*?\{([\s\S]*?)\}\s*\)/.exec(source)?.[1]
-  if (mapping) {
-    for (const match of mapping.matchAll(/:\s*([A-Za-z_$][\w$]*)/g)) {
-      if (match[1]) classes.push(match[1])
+  const sourceImport = sourceImports.find(
+    (candidate) =>
+      resolve(candidate.file) === file &&
+      candidate.local === rootReference &&
+      candidate.typeOnly,
+  )
+  if (!sourceImport) return reference
+  let generated = generatedImports.find(
+    (candidate) =>
+      candidate.module === sourceImport.module &&
+      candidate.kind === sourceImport.kind &&
+      candidate.imported === sourceImport.imported,
+  )
+  if (!generated) {
+    generated = {
+      module: sourceImport.module,
+      kind: sourceImport.kind,
+      alias: `__loutreRuntimeReference${generatedImports.length}`,
+      ...(sourceImport.imported === undefined
+        ? {}
+        : { imported: sourceImport.imported }),
     }
+    generatedImports.push(generated)
   }
-  return classes
+  return `${generated.alias}${reference.slice(rootReference.length)}`
+}
+
+function renderRuntimeImport(plan: RuntimeLinkageImportPlan): string {
+  const module = JSON.stringify(plan.module)
+  if (plan.kind === 'default') return `import ${plan.alias} from ${module}`
+  if (plan.kind === 'namespace') return `import * as ${plan.alias} from ${module}`
+  return `import { ${plan.imported} as ${plan.alias} } from ${module}`
 }

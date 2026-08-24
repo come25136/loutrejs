@@ -440,6 +440,7 @@ type HttpControllerContextDefinition<
   readonly body: PartOutput<TDefinition, 'body'>
   readonly response: ResponseHelpers<TDefinition>
   readonly logger: Logger
+  readonly signal: AbortSignal
 } & ContextProvidedBeforeTerminal<TDefinition['pipeline']>
 
 export type HttpControllerContext<TProtocol extends HttpProtocol<any>> =

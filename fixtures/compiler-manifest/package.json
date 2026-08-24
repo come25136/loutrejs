@@ -2,5 +2,12 @@
   "name": "@loutrejs/fixture-compiler-manifest",
   "version": "0.1.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    "./conditional": {
+      "node": "./src/conditional/node.ts",
+      "worker": "./src/conditional/worker.ts",
+      "default": "./src/conditional/default.ts"
+    }
+  }
 }

@@ -16,7 +16,7 @@ export interface CompiledApplicationArtifacts {
   readonly linkage: RuntimeLinkageArtifact
 }
 
-export const runtimeLinkageTarget: unique symbol = Symbol(
+export const runtimeLinkageTarget: unique symbol = Symbol.for(
   'loutre.runtime-linkage-target',
 )
 

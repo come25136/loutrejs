@@ -92,6 +92,8 @@ CLIはfilesystem discoveryを行いません。buildやserver起動ではentry f
 npx loutre check
 npx loutre doctor node
 npx loutre graph contracts
+npx loutre graph di --format json
+npx loutre graph modules --format dot
 npx loutre explain <diagnostic-code>
 npx loutre build fixtures/http-crud/src/app.ts --out-dir dist/loutre
 npx loutre start fixtures/http-crud/src/app.ts --port 3000
