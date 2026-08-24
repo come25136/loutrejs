@@ -1,13 +1,12 @@
 {
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "target": "ES2024",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "skipLibCheck": true,
-    "types": ["vitest/globals"]
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/examples-basic-auth",
+    "tsBuildInfoFile": "../../dist/examples-basic-auth.tsbuildinfo"
   },
   "include": ["src/**/*.ts"]
 }

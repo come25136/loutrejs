@@ -1,12 +1,12 @@
 {
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "target": "ES2024",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "skipLibCheck": true
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/examples-hello-http",
+    "tsBuildInfoFile": "../../dist/examples-hello-http.tsbuildinfo"
   },
   "include": ["src/**/*.ts"]
 }
