@@ -143,6 +143,35 @@ describe('TypeScript AST Compiler', () => {
     )
   })
 
+  it('ユーザー定義Layer factoryの型からGraph情報を抽出する', () => {
+    const bearerAuth = compileTypeScriptSource({
+      tsconfigPath: resolve('examples/bearer-auth/tsconfig.json'),
+      entry: resolve('examples/bearer-auth/src/app.ts'),
+    })
+    const pipeline = bearerAuth.pipelines.find(
+      ({ contract, procedure }) =>
+        contract === 'BearerProfileContract' && procedure === 'get',
+    )
+
+    expect(pipeline?.layers).toContainEqual(
+      expect.objectContaining({
+        name: 'bearerAuthentication',
+        role: 'authentication',
+        provides: ['bearerCurrentUser'],
+        shortCircuits: [
+          {
+            protocol: 'http',
+            variant: 'unauthorized',
+            response: { status: 401 },
+          },
+        ],
+      }),
+    )
+    expect(bearerAuth.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_CONTEXT_001' }),
+    )
+  })
+
   it('PipelineがprovideしないContext propertyを静的診断する', () => {
     const invalid = compileTypeScriptSource({
       tsconfigPath: resolve('source-fixtures/invalid-context/tsconfig.json'),
