@@ -69,22 +69,31 @@ jobs:
         run: npm run build
 
       - name: Deno conformanceを実行
+        if: ${{ !cancelled() }}
         run: npm run test:deno
 
       - name: Bun conformanceを実行
+        if: ${{ !cancelled() }}
         run: npm run test:bun
 
       - name: workerd conformanceを実行
+        if: ${{ !cancelled() }}
         run: npm run test:workerd
 
       - name: Electron conformanceを実行
+        if: ${{ !cancelled() }}
         run: xvfb-run --auto-servernum npm run test:electron
+        env:
+          LOUTRE_ELECTRON_NO_SANDBOX: '1'
 
       - name: Lambda managed Node baselineを実行
+        if: ${{ !cancelled() }}
         run: npm run test:lambda
 
       - name: CLI start conformanceを実行
+        if: ${{ !cancelled() }}
         run: npm run test:cli-start
 
       - name: CLI dev conformanceを実行
+        if: ${{ !cancelled() }}
         run: npm run test:cli-dev

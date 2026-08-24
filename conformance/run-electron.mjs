@@ -21,7 +21,11 @@ await writeFile(
   'utf8',
 )
 
-const child = spawn(resolve('node_modules/.bin/electron'), [directory], {
+const electronArguments =
+  process.env.LOUTRE_ELECTRON_NO_SANDBOX === '1'
+    ? ['--no-sandbox', directory]
+    : [directory]
+const child = spawn(resolve('node_modules/.bin/electron'), electronArguments, {
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 let stdout = ''
