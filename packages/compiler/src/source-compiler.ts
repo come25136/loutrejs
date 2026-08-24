@@ -131,12 +131,20 @@ export interface SourceCompilerSession {
 }
 
 export function createSourceCompilerSession(): SourceCompilerSession {
-  const api = new API()
+  let api = new API()
   let closed = false
   return {
     compile(options) {
       if (closed) throw new Error('終了済みSource Compiler Sessionは利用できません')
-      return compileTypeScriptSourceWithApi(api, options)
+      try {
+        return compileTypeScriptSourceWithApi(api, options)
+      } catch (error) {
+        if (!isStaleCompilerHandleError(error)) throw error
+        api.close()
+        api = new API()
+        const { fileChanges: _fileChanges, ...fullBuildOptions } = options
+        return compileTypeScriptSourceWithApi(api, fullBuildOptions)
+      }
     },
     close() {
       if (closed) return
@@ -144,6 +152,14 @@ export function createSourceCompilerSession(): SourceCompilerSession {
       api.close()
     },
   }
+}
+
+function isStaleCompilerHandleError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes('could not be resolved') &&
+    error.message.includes('handle')
+  )
 }
 
 export function compileTypeScriptSource(
@@ -335,11 +351,15 @@ function collectTypeScriptDiagnostics(
     ...program.getConfigFileParsingDiagnostics(),
     ...program.getProgramDiagnostics(),
     ...program.getGlobalDiagnostics(),
-    ...sourceFiles.flatMap((sourceFile) => [
-      ...program.getSyntacticDiagnostics(sourceFile.fileName),
-      ...program.getBindDiagnostics(sourceFile.fileName),
-      ...program.getSemanticDiagnostics(sourceFile.fileName),
-    ]),
+    ...sourceFiles.flatMap((sourceFile) => {
+      const syntactic = program.getSyntacticDiagnostics(sourceFile.fileName)
+      return syntactic.length > 0
+        ? syntactic
+        : [
+            ...program.getBindDiagnostics(sourceFile.fileName),
+            ...program.getSemanticDiagnostics(sourceFile.fileName),
+          ]
+    }),
   ].filter(({ category }) => category === DiagnosticCategory.Error)
   const unique = new Map<string, Diagnostic>()
   for (const diagnostic of compilerDiagnostics) {
