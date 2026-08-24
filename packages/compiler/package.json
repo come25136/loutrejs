@@ -1,14 +1,18 @@
 {
   "name": "@loutrejs/compiler",
   "version": "0.1.0",
-  "private": true,
+  "license": "MIT",
   "type": "module",
+  "files": ["dist"],
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./runtime": "./src/runtime.ts"
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./runtime": { "types": "./dist/runtime.d.ts", "import": "./dist/runtime.js" }
   },
+  "sideEffects": false,
+  "publishConfig": { "access": "public", "provenance": true },
   "dependencies": {
-    "@loutrejs/core": "0.1.0",
+    "@loutrejs/core": "^0.1.0",
     "typescript": "^7.0.2"
   }
 }

@@ -1,9 +1,13 @@
 {
   "name": "@loutrejs/core",
   "version": "0.1.0",
-  "private": true,
+  "license": "MIT",
   "type": "module",
-  "exports": "./src/index.ts",
+  "files": ["dist"],
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "sideEffects": false,
+  "publishConfig": { "access": "public", "provenance": true },
   "dependencies": {
     "@standard-schema/spec": "^1.1.0"
   }
