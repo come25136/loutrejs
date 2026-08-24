@@ -275,13 +275,13 @@ Public API の基準形:
 
 ```ts
 export const DatabaseModule = defineModule<DatabaseModuleArgs>((args) => ({
-  description: 'Database connection',
+  description: "Database connection",
   imports: [],
   providers: [],
   implementations: [],
   exports: [],
   lifecycle: {},
-}))
+}));
 ```
 
 ## 6.2 `@Module class` ではなく `defineModule()` — FROZEN
@@ -289,7 +289,7 @@ export const DatabaseModule = defineModule<DatabaseModuleArgs>((args) => ({
 Phase 1 の Module 表現は class decorator ではなく、以下を採用する。
 
 ```ts
-defineModule<Args>((args) => ModuleDefinition)
+defineModule<Args>((args) => ModuleDefinition);
 ```
 
 理由:
@@ -303,22 +303,22 @@ defineModule<Args>((args) => ModuleDefinition)
 ## 6.3 同一 Module の複数 Instance を許可
 
 ```ts
-export const PRIMARY_DB = token<Database>('database.primary')
-export const ANALYTICS_DB = token<Database>('database.analytics')
+export const PRIMARY_DB = token<Database>("database.primary");
+export const ANALYTICS_DB = token<Database>("database.analytics");
 
 export const AppModule = defineModule(() => ({
   imports: [
     DatabaseModule({
       provide: PRIMARY_DB,
-      url: AppEnv.key('PRIMARY_DATABASE_URL'),
+      url: AppEnv.key("PRIMARY_DATABASE_URL"),
     }),
 
     DatabaseModule({
       provide: ANALYTICS_DB,
-      url: AppEnv.key('ANALYTICS_DATABASE_URL'),
+      url: AppEnv.key("ANALYTICS_DATABASE_URL"),
     }),
   ],
-}))
+}));
 ```
 
 Injectable resource の user-facing identity は基本 **Provider Token** が担う。
@@ -353,9 +353,7 @@ Capability metadata の exact property name は OPEN。
 
 ```ts
 export class UserService {
-  constructor(
-    private readonly users: UserRepository,
-  ) {}
+  constructor(private readonly users: UserRepository) {}
 }
 ```
 
@@ -388,15 +386,15 @@ Compilerが依存を一意に解決できない場合はcompile/check time diagn
 ## 7.2 Arbitrary custom token は first-class
 
 ```ts
-export const PRIMARY_DB = token<Database>('database.primary')
+export const PRIMARY_DB = token<Database>("database.primary");
 ```
 
 Optional metadata は MAY:
 
 ```ts
-export const PRIMARY_DB = token<Database>('database.primary', {
-  description: 'Primary application database',
-})
+export const PRIMARY_DB = token<Database>("database.primary", {
+  description: "Primary application database",
+});
 ```
 
 Token は以下を持つべき。
@@ -431,7 +429,7 @@ provide(Token).select(...)
 ```
 
 ```ts
-providers: [UserService]
+providers: [UserService];
 ```
 
 は self-binding class Provider の shorthand とみなす。
@@ -439,13 +437,10 @@ providers: [UserService]
 ### Conditional Provider
 
 ```ts
-provide(Storage).select(
-  AppEnv.key('STORAGE_DRIVER'),
-  {
-    memory: MemoryStorage,
-    s3: S3Storage,
-  },
-)
+provide(Storage).select(AppEnv.key("STORAGE_DRIVER"), {
+  memory: MemoryStorage,
+  s3: S3Storage,
+});
 ```
 
 Env key の型が finite union の場合、Compiler は mapping exhaustiveness を検証 SHOULD。
@@ -497,7 +492,7 @@ Pipeline の途中で生成された値を constructor DI してはならない�
 ```ts
 export default createHttpApplication({
   modules: [AppModule()],
-})
+});
 ```
 
 `createHttpApplication()`、`createMessagePortApplication()`および将来の
@@ -578,10 +573,10 @@ Global mutable `env` は作らない。
 
 ```ts
 const AppEnvSchema = z.object({
-  APP_ENV: z.enum(['development', 'test', 'production']),
-  STORAGE_DRIVER: z.enum(['memory', 's3']),
+  APP_ENV: z.enum(["development", "test", "production"]),
+  STORAGE_DRIVER: z.enum(["memory", "s3"]),
   PRIMARY_DATABASE_URL: z.string(),
-})
+});
 
 export class AppEnv extends defineEnv(AppEnvSchema) {}
 ```
@@ -593,7 +588,7 @@ export class SomeService {
   constructor(private readonly env: AppEnv) {}
 
   run() {
-    this.env.STORAGE_DRIVER
+    this.env.STORAGE_DRIVER;
   }
 }
 ```
@@ -603,7 +598,7 @@ export class SomeService {
 Actual secret/value を compile-time graph declaration に埋めない。
 
 ```ts
-AppEnv.key('STORAGE_DRIVER')
+AppEnv.key("STORAGE_DRIVER");
 ```
 
 この symbolic key は schema から型生成され、Graph output に安全に表示できる。
@@ -638,10 +633,12 @@ Contract が public protocol schema と procedure name の source of truth。
 export const UsersContract = contract({
   get: procedure({
     protocols: {
-      http: http({ /* ... */ }),
+      http: http({
+        /* ... */
+      }),
     },
   }),
-})
+});
 ```
 
 `@Get()` / `@Post()` のような route decorator は Phase 1 の source of truth にしない。
@@ -703,8 +700,8 @@ Core handler model を `Request -> Response` だけに固定しない。
 procedure({
   protocols: {
     http: http({
-      method: 'PATCH',
-      path: '/articles/{id}',
+      method: "PATCH",
+      path: "/articles/{id}",
 
       input: {
         params: ArticleParamsSchema,
@@ -732,7 +729,7 @@ procedure({
       ],
     }),
   },
-})
+});
 ```
 
 ## 11.1 Named response variants
@@ -773,7 +770,7 @@ return ctx.response.updated({
   headers: {
     etag: `"${user.version}"`,
   },
-})
+});
 ```
 
 response定義のstatic headerとresultのdynamic headerが同名の場合はdynamicを優先する。
@@ -817,7 +814,7 @@ pipeline: [
   validate.body,
   tracing,
   http.controller,
-]
+];
 ```
 
 上から書いた順が inbound execution order と一致 MUST。
@@ -839,7 +836,7 @@ layer({
   outbound(ctx, outcome, state) {
     // ...
   },
-})
+});
 ```
 
 Factory signature は OPEN。
@@ -890,9 +887,7 @@ A.outbound(error) は呼ぶ
 Conceptual type:
 
 ```ts
-type Outcome<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: unknown }
+type Outcome<T> = { ok: true; value: T } | { ok: false; error: unknown };
 ```
 
 Exact public type name は OPEN。
@@ -928,10 +923,10 @@ Input validation は HTTP input category ごとに分割する。
 予約 namespace/token:
 
 ```ts
-validate.params
-validate.query
-validate.headers
-validate.body
+validate.params;
+validate.query;
+validate.headers;
+validate.body;
 ```
 
 `headers` は複数形で FROZEN。
@@ -951,7 +946,7 @@ pipeline: [
   validate.body,
 
   http.controller,
-]
+];
 ```
 
 Compiler は型が段階的に強くなることを理解する。
@@ -1057,20 +1052,14 @@ async update(
 
 ```ts
 export class UsersController {
-  constructor(
-    private readonly users: UsersService,
-  ) {}
+  constructor(private readonly users: UsersService) {}
 
-  async getPublic(
-    ctx: ContextOf<UsersHttp, 'getPublic'>,
-  ) {
+  async getPublic(ctx: ContextOf<UsersHttp, "getPublic">) {
     // ctx.session は存在しない
   }
 
-  async getMe(
-    ctx: ContextOf<UsersHttp, 'getMe'>,
-  ) {
-    ctx.session.user.id // User
+  async getMe(ctx: ContextOf<UsersHttp, "getMe">) {
+    ctx.session.user.id; // User
   }
 }
 ```
@@ -1084,17 +1073,13 @@ Developer は任意の Context Key を宣言できる。
 基準 API:
 
 ```ts
-export const AUTH =
-  contextKey('auth').of<AuthState>()
+export const AUTH = contextKey("auth").of<AuthState>();
 
-export const SESSION =
-  contextKey('session').of<Session>()
+export const SESSION = contextKey("session").of<Session>();
 
-export const CURRENT_TENANT =
-  contextKey('currentTenant').of<CurrentTenant>()
+export const CURRENT_TENANT = contextKey("currentTenant").of<CurrentTenant>();
 
-export const PERMISSIONS =
-  contextKey('permissions').of<PermissionSet>()
+export const PERMISSIONS = contextKey("permissions").of<PermissionSet>();
 ```
 
 `ContextKey<Name, T>` は DI Token ではない。
@@ -1113,7 +1098,7 @@ Execution Context の property 名・型・Graph identity を表す Compiler-vis
 **案B: Layer の return object だけから Context shape を推論**
 
 ```ts
-return { session }
+return { session };
 ```
 
 DX は短いが、Layer declaration だけでは依存関係が分からず、Graph/diagnostic/static ordering validation が弱くなるため primary API にしない。
@@ -1132,16 +1117,16 @@ Layerが担当し、applicationは資格情報の検証とprincipalのContext Ke
 
 ```ts
 export const basicAuthentication = basicAuth({
-  realm: 'Loutre Admin',
+  realm: "Loutre Admin",
   principal: CURRENT_USER,
   async authenticate({ username, password }) {
-    return await users.verifyPassword(username, password)
+    return await users.verifyPassword(username, password);
   },
   unauthorized: {
-    variant: 'unauthorized',
-    body: { message: '認証が必要です' },
+    variant: "unauthorized",
+    body: { message: "認証が必要です" },
   },
-})
+});
 ```
 
 `authenticate`が`null`または`undefined`を返した場合、Layerは`unauthorized.variant`へ
@@ -1154,21 +1139,19 @@ export const bearerAuthentication = authentication({
   provides: [AUTH],
 
   async inbound(ctx) {
-    const user = await verifyBearer(
-      ctx.headers.authorization,
-    )
+    const user = await verifyBearer(ctx.headers.authorization);
 
     return {
       auth: { user },
-    }
+    };
   },
-})
+});
 ```
 
 後段では:
 
 ```ts
-ctx.auth // AuthState
+ctx.auth; // AuthState
 ```
 
 Guard:
@@ -1180,16 +1163,16 @@ export const authenticated = guard({
 
   inbound(ctx) {
     if (!ctx.auth.user) {
-      throw Unauthorized()
+      throw Unauthorized();
     }
 
     return {
       session: {
         user: ctx.auth.user,
       },
-    }
+    };
   },
-})
+});
 ```
 
 Tenant Layer:
@@ -1200,17 +1183,14 @@ export const resolveTenant = layer({
   provides: [CURRENT_TENANT, PERMISSIONS],
 
   async inbound(ctx) {
-    const tenant = await findTenant(
-      ctx.session.user,
-      ctx.params.tenantId,
-    )
+    const tenant = await findTenant(ctx.session.user, ctx.params.tenantId);
 
     return {
       currentTenant: tenant,
       permissions: permissionsFor(ctx.session.user, tenant),
-    }
+    };
   },
-})
+});
 ```
 
 `provides` に宣言した Key と `inbound` の返却 object は TypeScript と Compiler の両方で整合性を検証 MUST。
@@ -1297,7 +1277,7 @@ Layer は残りの inbound と terminal invocation を打ち切り、Logical Res
 Conceptual API:
 
 ```ts
-return shortCircuit(result)
+return shortCircuit(result);
 ```
 
 Exact API は OPEN。
@@ -1340,10 +1320,10 @@ Terminal の後ろに user Layer を置いてはならない。
 FROZEN 名:
 
 ```ts
-http.controller
-graphql.resolver
-websocket.handler
-messagePort.handler
+http.controller;
+graphql.resolver;
+websocket.handler;
+messagePort.handler;
 ```
 
 Compiler IR 内部では共通して `TerminalLayer` と呼んでよい。
@@ -1351,20 +1331,13 @@ Compiler IR 内部では共通して `TerminalLayer` と呼んでよい。
 Valid:
 
 ```ts
-pipeline: [
-  validate.params,
-  authenticated,
-  http.controller,
-]
+pipeline: [validate.params, authenticated, http.controller];
 ```
 
 Invalid:
 
 ```ts
-pipeline: [
-  http.controller,
-  tracing,
-]
+pipeline: [http.controller, tracing];
 ```
 
 ---
@@ -1377,21 +1350,14 @@ Pipeline は Procedure root ではなく、**各 Protocol definition の中**に
 procedure({
   protocols: {
     http: http({
-      pipeline: [
-        validate.headers,
-        bearerAuthentication,
-        http.controller,
-      ],
+      pipeline: [validate.headers, bearerAuthentication, http.controller],
     }),
 
     messagePort: messagePort({
-      pipeline: [
-        desktopSession,
-        messagePort.handler,
-      ],
+      pipeline: [desktopSession, messagePort.handler],
     }),
   },
-})
+});
 ```
 
 理由:
@@ -1411,23 +1377,19 @@ procedure({
 Primary syntax は callback/class field 方式ではなく **normal prototype method**。
 
 ```ts
-type UsersHttp = ControllerOf<typeof UsersContract, 'http'>
+type UsersHttp = ControllerOf<typeof UsersContract, "http">;
 
 export class UsersController implements UsersHttp {
-  constructor(
-    private readonly users: UsersService,
-  ) {}
+  constructor(private readonly users: UsersService) {}
 
-  async get(
-    ctx: ContextOf<UsersHttp, 'get'>,
-  ) {
-    const user = await this.users.find(ctx.params.id)
+  async get(ctx: ContextOf<UsersHttp, "get">) {
+    const user = await this.users.find(ctx.params.id);
 
     if (!user) {
-      throw UserNotFound({ id: ctx.params.id })
+      throw UserNotFound({ id: ctx.params.id });
     }
 
-    return ctx.response.found({ body: user })
+    return ctx.response.found({ body: user });
   }
 }
 ```
@@ -1448,8 +1410,8 @@ TypeScript の `implements` は compatibility check はするが、method parame
 以下は FROZEN API ではない。
 
 ```ts
-type Users = ControllerOf<typeof UsersContract>
-Users.Context<'get'>
+type Users = ControllerOf<typeof UsersContract>;
+Users.Context<"get">;
 ```
 
 Type alias に namespace-like member をそのまま生やすことはできない。
@@ -1478,17 +1440,10 @@ Controller/Resolver/Handler は TypeScript type level で Contract を知る。
 
 ```ts
 export const UsersModule = defineModule(() => ({
-  providers: [
-    UsersService,
-    UsersRepository,
-  ],
+  providers: [UsersService, UsersRepository],
 
-  implementations: [
-    implement(UsersContract)
-      .for(http)
-      .with(UsersController),
-  ],
-}))
+  implementations: [implement(UsersContract).for(http).with(UsersController)],
+}));
 ```
 
 ## 20.1 Fundamental Binding Identity
@@ -1507,14 +1462,14 @@ Public/enabled binding には実装が **ちょうど1つ**必要。
 implementations: [
   implement(UsersContract)
     .for(http)
-    .procedures('get', 'list')
+    .procedures("get", "list")
     .with(UserQueryController),
 
   implement(UsersContract)
     .for(http)
-    .procedures('create', 'update', 'delete')
+    .procedures("create", "update", "delete")
     .with(UserCommandController),
-]
+];
 ```
 
 Type utility も procedure subset を表現可能にする。
@@ -1522,9 +1477,9 @@ Type utility も procedure subset を表現可能にする。
 ```ts
 type UserQueriesHttp = ControllerOf<
   typeof UsersContract,
-  'http',
-  'get' | 'list'
->
+  "http",
+  "get" | "list"
+>;
 ```
 
 Generic ordering は implementation detail。
@@ -1533,8 +1488,8 @@ Generic ordering は implementation detail。
 ## 20.3 1 Implementation class が複数 Contract を実装してよい
 
 ```ts
-implement(AccountContract).for(http).with(AccountController)
-implement(ProfileContract).for(http).with(AccountController)
+implement(AccountContract).for(http).with(AccountController);
+implement(ProfileContract).for(http).with(AccountController);
 ```
 
 Method name が incompatible collision する場合、Phase 1 は alias/mapping sugar を追加せず class 分割を要求する。
@@ -1543,14 +1498,10 @@ Method name が incompatible collision する場合、Phase 1 は alias/mapping 
 
 ```ts
 implementations: [
-  implement(UsersContract)
-    .for(http)
-    .with(UsersController),
+  implement(UsersContract).for(http).with(UsersController),
 
-  implement(UsersContract)
-    .for(graphql)
-    .with(UsersResolver),
-]
+  implement(UsersContract).for(graphql).with(UsersResolver),
+];
 ```
 
 HTTP Context と GraphQL Context は semantics が異なる。
@@ -1609,7 +1560,7 @@ HTTP Finalizer:
 候補:
 
 ```ts
-return ctx.response.created({ body: user })
+return ctx.response.created({ body: user });
 ```
 
 Named response variant が static check されることは FROZEN。
@@ -1642,11 +1593,11 @@ Protocol Finalization
 
 ```ts
 export const UserNotFound = defineError({
-  code: 'USER_NOT_FOUND',
+  code: "USER_NOT_FOUND",
   data: z.object({
     userId: z.string(),
   }),
-})
+});
 ```
 
 HTTP status は HTTP protocol 側:
@@ -1706,15 +1657,13 @@ onApplicationShutdown
 Runtime resource は基本 Provider class が lifecycle を所有する。
 
 ```ts
-export class Database
-  implements OnModuleInit, OnModuleDestroy
-{
+export class Database implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
-    await this.connect()
+    await this.connect();
   }
 
   async onModuleDestroy() {
-    await this.close()
+    await this.close();
   }
 }
 ```
@@ -1726,19 +1675,21 @@ Compiler-visible であり、ModuleInstance provider を inject できる。
 
 ```ts
 export const DatabaseModule = defineModule<DatabaseModuleArgs>((args) => ({
-  providers: [/* ... */],
+  providers: [
+    /* ... */
+  ],
 
   lifecycle: {
     onModuleInit: hook({
       inject: [args.provide, Logger],
 
       async run(db, logger) {
-        await db.verifySchema()
-        logger.info('Database ready')
+        await db.verifySchema();
+        logger.info("Database ready");
       },
     }),
   },
-}))
+}));
 ```
 
 Exact `hook()` syntax は OPEN。
@@ -1768,16 +1719,14 @@ Application-scoped Provider / Controller / Service は Logger を constructor DI
 
 ```ts
 export class UserService {
-  constructor(
-    private readonly logger: Logger,
-  ) {}
+  constructor(private readonly logger: Logger) {}
 }
 ```
 
 以下は不要:
 
 ```ts
-new Logger(UserService.name)
+new Logger(UserService.name);
 ```
 
 Compiler/Container は injection site から最低以下の static metadata を付与する。
@@ -2044,15 +1993,15 @@ Runtime target の version 方針:
 
 ## 27.2 2026-08-24 時点の Phase 1 Conformance Matrix
 
-| Target | Baseline | Policy | Phase 1 |
-|---|---|---|---:|
-| Node.js | **26.x** | user 指定。Current でも採用 | ✅ |
-| Bun | **1.4.x** | LTS制度なし → 最新Stable | ✅ |
-| Deno | **2.9.x LTS** | 最新LTS channel | ✅ |
-| Cloudflare Workers / workerd | **最新 compatibility date** | evergreen runtime | ✅ |
-| Electron main | **43.x** | LTS制度なし → 最新Stable major | ✅ |
-| Electron renderer / MessagePort | **43.x** | Electron stable に追従 | ✅ |
-| AWS Lambda managed Node.js | **24.x (`nodejs24.x`)** | 現在の最新 managed runtime | ✅ |
+| Target                          | Baseline                    | Policy                         | Phase 1 |
+| ------------------------------- | --------------------------- | ------------------------------ | ------: |
+| Node.js                         | **26.x**                    | user 指定。Current でも採用    |      ✅ |
+| Bun                             | **1.4.x**                   | LTS制度なし → 最新Stable       |      ✅ |
+| Deno                            | **2.9.x LTS**               | 最新LTS channel                |      ✅ |
+| Cloudflare Workers / workerd    | **最新 compatibility date** | evergreen runtime              |      ✅ |
+| Electron main                   | **43.x**                    | LTS制度なし → 最新Stable major |      ✅ |
+| Electron renderer / MessagePort | **43.x**                    | Electron stable に追従         |      ✅ |
+| AWS Lambda managed Node.js      | **24.x (`nodejs24.x`)**     | 現在の最新 managed runtime     |      ✅ |
 
 ### AWS Lambda Node.js 26 について
 
@@ -2155,6 +2104,51 @@ Phase 1 output は terminal text でよい。
 これらのcommandはSection 7.6のcompile/link/bootstrap flowを共有し、同一sourceから
 同一Graph versionのGraph ManifestとRuntime Linkage Artifactを生成する。
 
+## 28.1 `dev` incremental/watch compile — FROZEN
+
+`loutre dev`はTypeScript Compiler API sessionをprocess lifetime中維持し、source変更ごとに
+snapshotを更新する。各snapshotからGraph ManifestとRuntime Linkage Artifactを必ず一緒に
+再生成し、古いGraphに新しいruntime referenceだけを継ぎ足してはならない。
+
+watch対象はApplication entryから到達するsource、bundlerが実際に読み込んだsource、
+および`tsconfig.json`とする。再生成により到達可能sourceが変化した場合はwatch対象も
+置き換える。短時間に連続するfilesystem eventはまとめ、compile中に届いた変更は直後の
+追加compileとして直列化する。
+
+再起動は次の順序で行う。
+
+```text
+HTTP server close
+  -> current Application shutdown('reload')
+  -> incremental compile/link
+  -> bundle/import
+  -> next Application initialize
+  -> HTTP server listen
+```
+
+source変更時はcurrent Applicationを先に停止し、listen socketも閉じる。compile、bundle、
+import、initialize、listenのいずれかが失敗した場合はApplicationを停止したままwatchを継続し、
+次のsource変更で再起動を試みる。成功時は同じportで新しいlisten socketを開く。
+
+HTTP serverのlisten完了はRuntime AdapterからHttpApplicationへ通知する。
+`onServerListening(url)`はpublic lifecycle hookとし、`createHttpApplication()`の
+`lifecycle` optionで利用者が処理を定義する。Protocol Applicationのlifecycle hookは
+top-levelへ個別に追加せず、共通して`lifecycle` object配下へ置く。
+`createHttpApplication()`は既定のApplication起動ログを出さず、Applicationが必要なlogger、
+文言、形式を選ぶ。
+
+`loutre dev/start`はApplication logとは別にframework startup panelをterminalへ出す。
+panelはLoutre wordmark、version、Application名、Server、Runtime、Environment、
+実測startup duration、`ʕ•ᴥ•ʔ`を含み、watchによる再起動でも同じ形式で出す。
+十分な幅のTTYでは24-bit ANSI colorを使う。terminal幅がpanelの計算上の必要幅に満たない場合と
+non-TTYでは、巨大wordmarkとANSI sequenceを含まないcompact outputへfallbackする。
+`NO_COLOR`、`NODE_DISABLE_COLORS`、`FORCE_COLOR`はNode.jsのcolor depth判定と合わせて扱う。
+このpanelはCLI processの状態を示すもので、Application固有logの代替ではない。
+
+compile成功の判定にはTypeScriptのsyntax、bind、semantic diagnosticを含める。
+JavaScript変換だけを行うbundlerが成功しても、TypeScript errorが残っている場合は
+Applicationを起動せず、file、line、column、diagnostic codeとmessageをterminalへ表示する。
+
 将来 MAY:
 
 ```text
@@ -2248,8 +2242,8 @@ tenantAccess
 Controller は constructor DI ではなく:
 
 ```ts
-ctx.session
-ctx.currentTenant
+ctx.session;
+ctx.currentTenant;
 ```
 
 から execution data を読む。
@@ -2543,8 +2537,8 @@ constructor(
 Authentication / Session / Tenant / Permission 等は Execution Context (`ctx`) に置く。
 
 ```ts
-ctx.session
-ctx.currentTenant
+ctx.session;
+ctx.currentTenant;
 ```
 
 DI Graph と Pipeline Context Graph を混ぜない。
@@ -2676,7 +2670,7 @@ Protocol Pipeline は routing 後の procedure/protocol-local execution を表�
 - [ ] linked entryのemit方式とsource map
 - [ ] `defineModule()` 内の arbitrary TypeScript をどこまで static evaluate するか
 - [ ] Symbolic expression representation
-- [ ] Incremental/watch compile strategy
+- [x] Incremental/watch compile strategy
 
 ## 32.8 DI / Scope
 
@@ -2733,8 +2727,8 @@ Protocol Pipeline は routing 後の procedure/protocol-local execution を表�
 - [ ] 初期 package split
 - [ ] Config file が必要か
 - [ ] Config file name/format
-- [ ] Dev server
-- [ ] Build/watch implementation
+- [x] Dev server
+- [x] Build/watch implementation
 - [ ] JSON graph export
 - [ ] DOT graph export
 - [ ] CLI diagnostics UX
@@ -2981,9 +2975,9 @@ v0.1 architecture が実装済みとみなせる条件:
 - canonical fixtureと`examples/`から手書きdependency mapを削除
 - Node.js、Deno、Bun、workerd、Electron、Lambdaでlinked artifactをconformance検証
 
-次の優先課題は、Section 32.7でOPENのgenerated module形式、source map、
-incremental/watch compileを詰め、`loutre dev`が同じGraph/linkage invariantを保ったまま
-差分再生成できるようにすることである。
+`loutre dev`のincremental/watch compileを実装し、同じGraph/linkage invariantを保ったまま
+last-good Applicationへfallbackするhot reloadを追加した。次の優先課題は、Section 32.7で
+OPENのgenerated module形式とsource mapを詰めることである。
 
 Compilerを通さないunit test用の低水準linkage注入はtest/internal boundaryへ隔離し、
 今後もPublic APIやexampleへ露出させない。

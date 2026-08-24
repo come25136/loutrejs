@@ -43,11 +43,17 @@ export interface HttpApplication extends RuntimeLinkableApplication {
   readonly graph: ApplicationGraphIR
   initialize(): Promise<void>
   shutdown(signal?: string): Promise<void>
+  onServerListening(url: string): void
   handle(request: Request): Promise<Response>
+}
+
+export interface HttpApplicationLifecycle {
+  readonly onServerListening?: (url: string) => void
 }
 
 export function createHttpApplication(options: {
   readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
+  readonly lifecycle?: HttpApplicationLifecycle
 }): HttpApplication {
   const roots = options.modules.map(asModuleInstance)
   const graph = assertValidCompilation(compileApplication(roots))
@@ -55,6 +61,7 @@ export function createHttpApplication(options: {
   const runtimeGraph = runtime.graph
   const container = runtime.container
   const routes = collectRoutes(runtimeGraph.modules)
+  const logger = new Logger(new ConsoleLoggerBackend(), { protocol: 'http' })
   let initialization: Promise<void> | undefined
   const initialize = () => (initialization ??= runtime.initialize())
 
@@ -63,6 +70,7 @@ export function createHttpApplication(options: {
     graph,
     initialize,
     shutdown: (signal) => runtime.shutdown(signal),
+    onServerListening: (url) => options.lifecycle?.onServerListening?.(url),
     async handle(request) {
       await initialize()
       const url = new URL(request.url)
@@ -87,8 +95,7 @@ export function createHttpApplication(options: {
         )
         const raw: MutableHttpContext = {
           ...decoded,
-          logger: new Logger(new ConsoleLoggerBackend(), {
-            protocol: 'http',
+          logger: logger.child({
             procedure: routeMatch.route.procedure,
             source: `${routeMatch.route.binding.implementation.name}.${routeMatch.route.procedure}`,
             executionId: crypto.randomUUID(),

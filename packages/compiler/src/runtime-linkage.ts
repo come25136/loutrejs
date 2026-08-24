@@ -4,6 +4,7 @@ import {
   compileTypeScriptSource,
   type SourceApplicationManifest,
   type SourceCompilerOptions,
+  type SourceCompilerSession,
   type SourceConstructorIR,
 } from './source-compiler.js'
 
@@ -27,9 +28,12 @@ export interface RuntimeLinkagePlan {
 
 export function createRuntimeLinkagePlan(
   options: SourceCompilerOptions & { readonly entry: string },
+  compiler?: Pick<SourceCompilerSession, 'compile'>,
 ): RuntimeLinkagePlan {
   const entry = resolve(options.entry)
-  const manifest = compileTypeScriptSource({ ...options, entry })
+  const manifest = compiler
+    ? compiler.compile({ ...options, entry })
+    : compileTypeScriptSource({ ...options, entry })
   if (manifest.diagnostics.length > 0) {
     throw new Error(
       manifest.diagnostics

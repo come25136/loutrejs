@@ -21,8 +21,15 @@ export const nodeRuntime = {
   ]),
 } as const
 
-export function createNodeHttpServer(application: HttpApplication): Server {
-  return createServer(async (incoming, outgoing) => {
+export interface NodeHttpServerOptions {
+  readonly onListening?: (url: string) => void
+}
+
+export function createNodeHttpServer(
+  application: HttpApplication,
+  options: NodeHttpServerOptions = {},
+): Server {
+  const server = createServer(async (incoming, outgoing) => {
     try {
       const origin = `http://${incoming.headers.host ?? 'localhost'}`
       const headers = new Headers()
@@ -67,4 +74,13 @@ export function createNodeHttpServer(application: HttpApplication): Server {
       outgoing.end(JSON.stringify({ error: 'Internal Server Error' }))
     }
   })
+  server.on('listening', () => {
+    const address = server.address()
+    if (!address || typeof address === 'string') return
+    const host = address.family === 'IPv6' ? `[${address.address}]` : address.address
+    const url = `http://${host}:${address.port}`
+    options.onListening?.(url)
+    application.onServerListening(url)
+  })
+  return server
 }

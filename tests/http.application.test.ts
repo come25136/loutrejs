@@ -236,4 +236,18 @@ describe('HTTP application boundary', () => {
     expect(await response.json()).toEqual({ value: 'cached' })
     expect(controllerCalled).toBe(false)
   })
+
+  it('HTTP serverのlisten完了をpublic hookへ通知する', () => {
+    const urls: string[] = []
+    const application = createHttpApplication({
+      modules: [],
+      lifecycle: {
+        onServerListening: (url) => urls.push(url),
+      },
+    })
+
+    application.onServerListening('http://127.0.0.1:3000')
+
+    expect(urls).toEqual(['http://127.0.0.1:3000'])
+  })
 })

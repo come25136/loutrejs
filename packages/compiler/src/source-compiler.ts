@@ -1,4 +1,10 @@
-import { API, type Program } from 'typescript/unstable/sync'
+import {
+  API,
+  DiagnosticCategory,
+  type Diagnostic as TypeScriptDiagnostic,
+  type Program,
+  type Snapshot,
+} from 'typescript/unstable/sync'
 import * as ts from 'typescript/unstable/ast'
 import { dirname, extname, isAbsolute, resolve } from 'node:path'
 import type { Diagnostic, LayerIR } from './ir.js'
@@ -107,21 +113,68 @@ export interface SourceCompilerOptions {
   readonly tsconfigPath: string
   readonly entry?: string
   readonly includeDeclarationFiles?: boolean
+  readonly fileChanges?: {
+    readonly changed?: string[]
+    readonly created?: string[]
+    readonly deleted?: string[]
+  }
+}
+
+export interface SourceCompilerSession {
+  compile(options: SourceCompilerOptions): SourceApplicationManifest
+  close(): void
+}
+
+export function createSourceCompilerSession(): SourceCompilerSession {
+  const api = new API()
+  let closed = false
+  return {
+    compile(options) {
+      if (closed) throw new Error('終了済みSource Compiler Sessionは利用できません')
+      return compileTypeScriptSourceWithApi(api, options)
+    },
+    close() {
+      if (closed) return
+      closed = true
+      api.close()
+    },
+  }
 }
 
 export function compileTypeScriptSource(
   options: SourceCompilerOptions,
 ): SourceApplicationManifest {
-  const api = new API()
+  const session = createSourceCompilerSession()
+  try {
+    return session.compile(options)
+  } finally {
+    session.close()
+  }
+}
+
+function compileTypeScriptSourceWithApi(
+  api: API,
+  options: SourceCompilerOptions,
+): SourceApplicationManifest {
   const snapshot = api.updateSnapshot({
     openProjects: [options.tsconfigPath],
+    ...(options.fileChanges ? { fileChanges: options.fileChanges } : {}),
   })
+  try {
+    return compileTypeScriptSnapshot(snapshot, options)
+  } finally {
+    snapshot.dispose()
+  }
+}
+
+function compileTypeScriptSnapshot(
+  snapshot: Snapshot,
+  options: SourceCompilerOptions,
+): SourceApplicationManifest {
   const project = snapshot
     .getProjects()
     .find(({ configFileName }) => resolve(configFileName) === resolve(options.tsconfigPath))
   if (!project) {
-    snapshot.dispose()
-    api.close()
     throw new Error(`TypeScript projectを開けませんでした: ${options.tsconfigPath}`)
   }
   const program = project.program
@@ -151,7 +204,11 @@ export function compileTypeScriptSource(
   const contextKeys: SourceContextKeyIR[] = []
   const contextProperties: ContextPropertyUseIR[] = []
   const providers = new Set<string>()
-  const diagnostics: Diagnostic[] = []
+  const diagnostics: Diagnostic[] = collectTypeScriptDiagnostics(
+    program,
+    sourceFiles,
+    options.tsconfigPath,
+  )
   const envKeys: { env: string; key: string }[] = []
   const layerDefinitions = new Map<string, Omit<LayerIR, 'index'>>()
 
@@ -259,9 +316,61 @@ export function compileTypeScriptSource(
     ),
     diagnostics,
   }
-  snapshot.dispose()
-  api.close()
   return manifest
+}
+
+function collectTypeScriptDiagnostics(
+  program: Program,
+  sourceFiles: readonly ts.SourceFile[],
+  tsconfigPath: string,
+): Diagnostic[] {
+  const compilerDiagnostics = [
+    ...program.getConfigFileParsingDiagnostics(),
+    ...program.getProgramDiagnostics(),
+    ...program.getGlobalDiagnostics(),
+    ...sourceFiles.flatMap((sourceFile) => [
+      ...program.getSyntacticDiagnostics(sourceFile.fileName),
+      ...program.getBindDiagnostics(sourceFile.fileName),
+      ...program.getSemanticDiagnostics(sourceFile.fileName),
+    ]),
+  ].filter(({ category }) => category === DiagnosticCategory.Error)
+  const unique = new Map<string, Diagnostic>()
+  for (const diagnostic of compilerDiagnostics) {
+    const converted = convertTypeScriptDiagnostic(diagnostic, program, tsconfigPath)
+    unique.set(
+      `${converted.code}\0${converted.path}\0${converted.message}`,
+      converted,
+    )
+  }
+  return [...unique.values()]
+}
+
+function convertTypeScriptDiagnostic(
+  diagnostic: TypeScriptDiagnostic,
+  program: Program,
+  tsconfigPath: string,
+): Diagnostic {
+  const file = diagnostic.fileName
+  const sourceFile = file ? program.getSourceFile(file) : undefined
+  const position =
+    sourceFile && diagnostic.pos >= 0
+      ? sourceFile.getLineAndCharacterOfPosition(diagnostic.pos)
+      : undefined
+  const path = file
+    ? `${file}${position ? `:${position.line + 1}:${position.character + 1}` : ''}`
+    : tsconfigPath
+  return {
+    code: `TS${diagnostic.code}`,
+    message: formatTypeScriptDiagnosticMessage(diagnostic),
+    path,
+  }
+}
+
+function formatTypeScriptDiagnosticMessage(
+  diagnostic: TypeScriptDiagnostic,
+): string {
+  const nested = diagnostic.messageChain?.map(formatTypeScriptDiagnosticMessage) ?? []
+  return [diagnostic.text, ...nested].join('\n')
 }
 
 function collectReachableSourceFiles(
