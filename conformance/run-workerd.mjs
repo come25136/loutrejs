@@ -14,6 +14,7 @@ await build({
   format: 'esm',
   platform: 'browser',
   target: 'es2024',
+  external: ['node:*'],
 })
 await writeFile(
   config,

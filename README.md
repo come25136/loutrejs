@@ -83,6 +83,10 @@ curl http://127.0.0.1:3000/greetings/Loutre
 | [Hello HTTP](./examples/hello-http) | path parameter検証、型付きController、Provider DI | `npm run dev --workspace @loutrejs/example-hello-http` |
 | [Basic認証](./examples/basic-auth) | `basicAuth()`、authentication Layer、HTTP 401 | `npm run dev --workspace @loutrejs/example-basic-auth` |
 | [Bearer認証](./examples/bearer-auth) | ユーザー定義認証Layer、Context Key | `npm run dev --workspace @loutrejs/example-bearer-auth` |
+| [Database Transactions](./examples/database-transactions) | DB不要のtransaction / savepoint / ambient client | `npm run dev --workspace @loutrejs/example-database-transactions` |
+| [PostgreSQL Database](./examples/database-postgres) | `pg`のPool / PoolClient adapter | `npm run dev --workspace @loutrejs/example-database-postgres` |
+| [Drizzle PostgreSQL](./examples/database-drizzle-postgres) | native begin optionsとnested transaction | `npm run dev --workspace @loutrejs/example-database-drizzle-postgres` |
+| [Prisma PostgreSQL](./examples/database-prisma-postgres) | Prisma 7 interactive / nested transaction | `npm run dev --workspace @loutrejs/example-database-prisma-postgres` |
 
 ## CLI
 
@@ -113,6 +117,44 @@ class UsersService {
 Graph Probeによるdependency edge収集のsource of truthになります。DI constructionは同期で、
 非同期resourceの初期化と終了はLifecycle hookへ分離します。
 
+## Database integration
+
+`@loutrejs/database`はORMやdriverを抽象化せず、Database resourceのLifecycle、ambient
+transaction propagation、transaction Composite Layerを提供します。adapter固有optionは
+`options.begin` / `options.savepoint`の型をそのまま保持します。
+
+```ts
+import { transaction } from '@loutrejs/database'
+
+const createUser = transaction({
+  database: PrismaDatabase,
+  options: {
+    begin: {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: 5_000,
+      timeout: 10_000,
+    },
+  },
+  pipeline: [
+    authorization,
+    validate.body,
+    http.controller,
+  ],
+})
+
+void createUser
+```
+
+Graph ProbeはDatabaseServiceを同期生成しますが、`connect()`、transaction scope、child Pipelineを
+実行しません。詳細は
+[`docs/database_architecture.md`](./docs/database_architecture.md)を参照してください。
+
+DBを用意せずに試す場合は
+[`examples/database-transactions`](./examples/database-transactions)を実行してください。実際の
+adapter実装は[`pg`](./examples/database-postgres)、
+[`Drizzle`](./examples/database-drizzle-postgres)、
+[`Prisma`](./examples/database-prisma-postgres)で比較できます。
+
 ## 対応ランタイム
 
 | ランタイム | Adapter | Conformance test |
@@ -129,6 +171,7 @@ Graph Probeによるdependency edge収集のsource of truthになります。DI 
 | Package | 役割 |
 | --- | --- |
 | `@loutrejs/core` | Contract、Module、Provider、typed token、Context Key、Layer descriptor |
+| `@loutrejs/database` | DatabaseService、ambient transaction propagation、transaction Layer |
 | `@loutrejs/graph` | Application Graph IR、Graph Builder、Graph Probe、semantic validation |
 | `@loutrejs/runtime` | DI container、Execution Context、Pipeline engine |
 | `@loutrejs/http` | HTTP Contract、validation、authentication、Request / Response adapter |

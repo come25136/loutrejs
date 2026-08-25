@@ -17,6 +17,7 @@
     "skipLibCheck": true,
     "paths": {
       "@loutrejs/core": ["./packages/core/src/index.ts"],
+      "@loutrejs/database": ["./packages/database/src/index.ts"],
       "@loutrejs/graph": ["./packages/graph/src/index.ts"],
       "@loutrejs/cli": ["./packages/cli/src/index.ts"],
       "@loutrejs/runtime": ["./packages/runtime/src/index.ts"],

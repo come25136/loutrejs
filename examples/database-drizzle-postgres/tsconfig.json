@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/examples-database-drizzle-postgres",
+    "tsBuildInfoFile": "../../dist/examples-database-drizzle-postgres.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -1,11 +1,14 @@
 import {
   contextKeyName,
   isShortCircuit,
-  type LayerDescriptor,
   type ContextKey,
+  type ExecutionScope,
+  type LayerDescriptor,
+  type LayerInjection,
   type Outcome,
   type PipelineItem,
   type TerminalLayerDescriptor,
+  type TokenLike,
   type ValidationLayerDescriptor,
 } from '@loutrejs/core'
 
@@ -19,6 +22,7 @@ export interface PipelineHooks<TContext extends object, TResult> {
     layer: TerminalLayerDescriptor,
     context: TContext,
   ) => TResult | Promise<TResult>
+  readonly resolve?: <T>(token: TokenLike<T>) => T
 }
 
 interface EnteredLayer<TContext extends object> {
@@ -26,6 +30,10 @@ interface EnteredLayer<TContext extends object> {
   readonly context: TContext
   readonly state: unknown
 }
+
+type PipelineFlow<TResult> =
+  | { readonly kind: 'continue' }
+  | { readonly kind: 'complete', readonly result: TResult }
 
 export class LayerContractError extends Error {
   constructor(message: string) {
@@ -38,31 +46,56 @@ export async function executePipeline<TContext extends object, TResult>(
   pipeline: readonly PipelineItem[],
   hooks: PipelineHooks<TContext, TResult>,
 ): Promise<TResult> {
-  const entered: EnteredLayer<TContext>[] = []
   const context = hooks.context as TContext & Record<string, unknown>
-  const availableKeys = new Set<ContextKey>()
+  const flow = await executeSegment(
+    pipeline,
+    hooks,
+    context,
+    new Set<ContextKey>(),
+  )
+  if (flow.kind === 'continue') {
+    throw new Error('Pipelineがresultを生成しませんでした')
+  }
+  return flow.result
+}
 
+async function executeSegment<TContext extends object, TResult>(
+  pipeline: readonly PipelineItem[],
+  hooks: PipelineHooks<TContext, TResult>,
+  context: TContext & Record<string, unknown>,
+  availableKeys: Set<ContextKey>,
+): Promise<PipelineFlow<TResult>> {
+  const entered: EnteredLayer<TContext>[] = []
+  let flow: PipelineFlow<TResult> = { kind: 'continue' }
   let outcome: Outcome<TResult>
+
   try {
-    let result!: TResult
-    let completed = false
     for (const item of pipeline) {
       if (item.kind === 'validation') {
         await hooks.validate(item, context)
         continue
       }
       if (item.kind === 'terminal') {
-        result = await hooks.terminal(item, context)
-        completed = true
-        continue
+        flow = {
+          kind: 'complete',
+          result: await hooks.terminal(item, context),
+        }
+        break
       }
 
-      for (const required of item.requires) {
-        if (!availableKeys.has(required)) {
-          throw new LayerContractError(
-            `${item.name}が必要とするContext Key ${contextKeyName(required)}は利用できません`,
-          )
-        }
+      assertRequiredContext(item.name, item.requires, availableKeys)
+
+      if (item.composition === 'pipeline') {
+        flow = await executeComposite(
+          item.scope,
+          item.inject,
+          item.pipeline,
+          hooks,
+          context,
+          availableKeys,
+        )
+        if (flow.kind === 'complete') break
+        continue
       }
 
       const inboundResult = await item.inbound?.(context)
@@ -72,8 +105,10 @@ export async function executePipeline<TContext extends object, TResult>(
           context,
           state: inboundResult.state,
         })
-        result = inboundResult.result as TResult
-        completed = true
+        flow = {
+          kind: 'complete',
+          result: inboundResult.result as TResult,
+        }
         break
       }
 
@@ -86,22 +121,137 @@ export async function executePipeline<TContext extends object, TResult>(
       entered.push({ layer: item, context, state })
     }
 
-    if (!completed) throw new Error('Pipelineがresultを生成しませんでした')
-    outcome = { ok: true, value: result }
+    outcome = flow.kind === 'complete'
+      ? { ok: true, value: flow.result }
+      : { ok: true }
   } catch (error) {
     outcome = { ok: false, error }
   }
 
-  for (const { layer, context: enteredContext, state } of entered.reverse()) {
+  for (const enteredLayer of entered.reverse()) {
     try {
-      await layer.outbound?.(enteredContext as any, outcome, state as any)
+      await callOutbound(enteredLayer, outcome)
     } catch (error) {
       outcome = { ok: false, error }
     }
   }
 
   if (!outcome.ok) throw outcome.error
-  return outcome.value as TResult
+  return flow
+}
+
+async function executeComposite<TContext extends object, TResult>(
+  createScope: (...arguments_: never[]) => ExecutionScope,
+  injections: readonly LayerInjection[],
+  pipeline: readonly PipelineItem[],
+  hooks: PipelineHooks<TContext, TResult>,
+  context: TContext & Record<string, unknown>,
+  availableKeys: Set<ContextKey>,
+): Promise<PipelineFlow<TResult>> {
+  const dependencies = injections.map((injection) => {
+    const token = isLayerDependency(injection) ? injection.token : injection
+    if (!hooks.resolve) {
+      throw new LayerContractError(
+        `Composite Layer dependency ${tokenDescription(token)}を解決できません`,
+      )
+    }
+    return hooks.resolve(token)
+  })
+  const scope = Reflect.apply(createScope, undefined, [context, ...dependencies]) as ExecutionScope
+  let calls = 0
+  let childFlow: PipelineFlow<TResult> = { kind: 'continue' }
+  let childError: unknown
+  let childFailed = false
+  let childCompletion: Promise<void> | undefined
+
+  const execute = (): Promise<void> => {
+    calls += 1
+    if (calls > 1) {
+      throw new LayerContractError(
+        'LUTRE_LAYER_SCOPE_REENTRY: Composite Layer scope callbackは1回だけ実行できます',
+      )
+    }
+    childCompletion = (async () => {
+      try {
+        childFlow = await executeSegment(
+          pipeline,
+          hooks,
+          context,
+          availableKeys,
+        )
+      } catch (error) {
+        childFailed = true
+        childError = error
+        throw error
+      }
+    })()
+    return childCompletion
+  }
+
+  let scopeError: unknown
+  try {
+    await scope.run(execute)
+  } catch (error) {
+    scopeError = error
+  }
+
+  if (calls === 0) {
+    throw new LayerContractError(
+      'LUTRE_LAYER_SCOPE_SKIPPED: Composite Layer scope callbackが実行されませんでした',
+    )
+  }
+  if (calls > 1) {
+    throw new LayerContractError(
+      'LUTRE_LAYER_SCOPE_REENTRY: Composite Layer scope callbackは1回だけ実行できます',
+    )
+  }
+
+  if (childCompletion) {
+    try {
+      await childCompletion
+    } catch {
+      // child errorは下で元の値を再throwする。
+    }
+  }
+  if (childFailed) throw childError
+  if (scopeError !== undefined) throw scopeError
+  return childFlow
+}
+
+function assertRequiredContext(
+  layerName: string,
+  requiredKeys: readonly ContextKey[],
+  availableKeys: ReadonlySet<ContextKey>,
+): void {
+  for (const required of requiredKeys) {
+    if (!availableKeys.has(required)) {
+      throw new LayerContractError(
+        `${layerName}が必要とするContext Key ${contextKeyName(required)}は利用できません`,
+      )
+    }
+  }
+}
+
+function isLayerDependency(
+  injection: LayerInjection,
+): injection is Exclude<LayerInjection, TokenLike> {
+  return typeof injection === 'object' && 'token' in injection
+}
+
+function tokenDescription(token: TokenLike): string {
+  return typeof token === 'function' ? token.name : token.id
+}
+
+async function callOutbound<TContext extends object>(
+  entered: EnteredLayer<TContext>,
+  outcome: Outcome,
+): Promise<void> {
+  if (!entered.layer.outbound) return
+  await Reflect.apply(entered.layer.outbound, undefined, [
+    entered.context,
+    outcome,
+    entered.state,
+  ])
 }
 
 function applyProvidedContext(

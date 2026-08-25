@@ -1,0 +1,11 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: loutre
+      POSTGRES_PASSWORD: loutre
+      POSTGRES_DB: loutre
+    ports:
+      - "54321:5432"
+    volumes:
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro

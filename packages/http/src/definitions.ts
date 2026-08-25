@@ -2,6 +2,7 @@ import type {
   ContractDefinition,
   ContextProvidedBeforeTerminal,
   HasValidationBeforeTerminal,
+  IsValidProtocolPipeline,
   PipelineItem,
   ProtocolDescriptor,
   ProtocolFactory,
@@ -224,11 +225,13 @@ type IsHttpShortCircuitDeclarationCompatible<
   : true
 
 type HttpPipelineConstraint<TDefinition extends HttpProtocolDefinition> =
-  IsHttpPipelineCompatible<
-    TDefinition['pipeline'],
-    TDefinition['responses']
-  > extends true
-    ? unknown
+  IsValidProtocolPipeline<TDefinition['pipeline'], 'http'> extends true
+    ? IsHttpPipelineCompatible<
+        TDefinition['pipeline'],
+        TDefinition['responses']
+      > extends true
+      ? unknown
+      : { readonly pipeline: never }
     : { readonly pipeline: never }
 
 type IsResponseHeadersSchemaCompatible<TResponse> =

@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/examples-database-prisma-postgres",
+    "tsBuildInfoFile": "../../dist/examples-database-prisma-postgres.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts", "prisma.config.ts"]
+}

@@ -5,11 +5,13 @@ import {
   tokenName,
   type ContractDefinition,
   type ContextKey,
+  type CompositeLayerDescriptor,
   type ImplementationBinding,
   type ModuleInstance,
   type ModuleTemplate,
   type PipelineItem,
   type ProviderDescriptor,
+  type LayerInjection,
   type ShortCircuitDeclaration,
   type TokenLike,
 } from '@loutrejs/core'
@@ -115,7 +117,7 @@ export function compileApplication(
   validateCoverage(bindings, contractNames, diagnostics)
   validateDuplicateProviders(modules, diagnostics)
 
-  const tokensById = collectCustomTokens(providers, diagnostics)
+  const tokensById = collectCustomTokens(providers, targets, diagnostics)
   const contextKeysByName = collectContextKeys(targets, diagnostics)
 
   const pipelines: PipelineIR[] = []
@@ -147,7 +149,7 @@ export function compileApplication(
   }
 
   const graph: ApplicationGraphIR = {
-    version: 1,
+    version: 2,
     modules: modules.map((module, index) => ({
       id: `module:${index + 1}`,
       ...(module.definition.name === undefined
@@ -224,7 +226,7 @@ export function compileApplication(
         })),
       ),
     ],
-    ...buildDependencyGraph(modules, bindings, diagnostics),
+    ...buildDependencyGraph(modules, bindings, targets, diagnostics),
     diagnostics,
   }
 
@@ -240,6 +242,7 @@ export function validateGraph(graph: ApplicationGraphIR): readonly Diagnostic[] 
 function buildDependencyGraph(
   modules: readonly ModuleInstance[],
   bindings: readonly ImplementationBinding[],
+  targets: readonly BindingTarget[],
   diagnostics: Diagnostic[],
 ): Pick<ApplicationGraphIR, 'nodes' | 'edges'> {
   const nodes: DependencyNodeIR[] = []
@@ -332,6 +335,38 @@ function buildDependencyGraph(
       code: 'LUTRE_DI_UNRESOLVED',
       message: `${path} requires ${tokenName(dependency)}, but no provider is declared for ${tokenName(dependency)}.`,
       path,
+    })
+  }
+
+  for (const target of targets) {
+    visitCompositeLayers(target.pipeline, (layer, indexPath) => {
+      const layerId = `layer:${target.contractName}:${target.procedure}:${target.protocol}:${indexPath.join('.')}`
+      if (!nodes.some(({ id }) => id === layerId)) {
+        nodes.push({ id: layerId, label: layer.name, kind: 'layer' })
+      }
+      for (const injection of layer.inject) {
+        const dependency = layerInjectionToken(injection)
+        validateDeclaredDependency(dependency, layerId)
+        addEdge({
+          from: layerId,
+          to: ensureNode(dependency),
+          kind: 'inject',
+          source: 'declared',
+        })
+        const requiredScope = layerDependencyScope(injection)
+        const provider = providersByToken.get(dependency)
+        if (
+          requiredScope !== undefined &&
+          provider !== undefined &&
+          provider.scope !== requiredScope
+        ) {
+          diagnostics.push({
+            code: 'LUTRE_PIPELINE_DEPENDENCY_SCOPE',
+            message: `${layer.name}は${tokenName(dependency)}へ${requiredScope} scopeを要求しますが、Providerは${provider.scope} scopeです`,
+            path: layerId,
+          })
+        }
+      }
     })
   }
 
@@ -486,6 +521,7 @@ function describeModule(module: ModuleInstance, index: number): string {
 
 function collectCustomTokens(
   providers: readonly ProviderDescriptor[],
+  targets: readonly BindingTarget[],
   diagnostics: Diagnostic[],
 ): ReadonlyMap<string, TokenLike> {
   const tokens = new Map<string, TokenLike>()
@@ -511,6 +547,16 @@ function collectCustomTokens(
       }
     }
   }
+  for (const target of targets) {
+    visitCompositeLayers(target.pipeline, (layer, indexPath) => {
+      for (const injection of layer.inject) {
+        register(
+          layerInjectionToken(injection),
+          `${target.contractName}.${target.procedure}.${target.protocol}.${indexPath.join('.')}`,
+        )
+      }
+    })
+  }
   return tokens
 }
 
@@ -521,9 +567,10 @@ function collectContextKeys(
   const keys = new Map<string, ContextKey>()
   for (const target of targets) {
     const path = `${target.contractName}.${target.procedure}.${target.protocol}`
-    for (const item of target.pipeline) {
-      if (item.kind !== 'layer') continue
-      for (const key of [...item.requires, ...item.provides]) {
+    visitPipelineItems(target.pipeline, (item) => {
+      if (item.kind !== 'layer') return
+      const provided = item.composition === 'pipeline' ? [] : item.provides
+      for (const key of [...item.requires, ...provided]) {
         const existing = keys.get(key.name)
         if (existing && existing !== key) {
           diagnostics.push({
@@ -535,7 +582,7 @@ function collectContextKeys(
         }
         keys.set(key.name, key)
       }
-    }
+    })
   }
   return keys
 }
@@ -609,9 +656,11 @@ function validatePipeline(
   diagnostics: Diagnostic[],
 ) {
   const path = `${target.contractName}.${target.procedure}.${target.protocol}`
-  const terminals = target.pipeline
-    .map((layer, index) => ({ layer, index }))
-    .filter(({ layer }) => layer.kind === 'terminal')
+  const flattened: { readonly item: PipelineItem, readonly indexPath: readonly number[] }[] = []
+  visitPipelineItems(target.pipeline, (item, indexPath) => {
+    flattened.push({ item, indexPath })
+  })
+  const terminals = flattened.filter(({ item }) => item.kind === 'terminal')
 
   if (terminals.length !== 1) {
     diagnostics.push({
@@ -621,20 +670,20 @@ function validatePipeline(
     })
   } else {
     const terminal = terminals[0]!
-    if (terminal.index !== target.pipeline.length - 1) {
+    if (terminal !== flattened.at(-1)) {
       diagnostics.push({
         code: 'LUTRE_PIPELINE_002',
-        message: `${terminal.layer.name} must be the final Pipeline item`,
+        message: `${terminal.item.name} must be the final Pipeline item`,
         path,
       })
     }
     if (
-      terminal.layer.kind === 'terminal' &&
-      terminal.layer.protocol !== target.protocol
+      terminal.item.kind === 'terminal' &&
+      terminal.item.protocol !== target.protocol
     ) {
       diagnostics.push({
         code: 'LUTRE_PIPELINE_003',
-        message: `${terminal.layer.name} does not match protocol ${target.protocol}`,
+        message: `${terminal.item.name} does not match protocol ${target.protocol}`,
         path,
       })
     }
@@ -642,7 +691,7 @@ function validatePipeline(
 
   const available = new Set<ContextKey>()
   const validated = new Set<string>()
-  for (const item of target.pipeline) {
+  for (const { item } of flattened) {
     if (item.kind === 'validation') {
       validated.add(item.part)
       continue
@@ -666,6 +715,7 @@ function validatePipeline(
         })
       }
     }
+    if (item.composition === 'pipeline') continue
     for (const provided of item.provides) {
       if (available.has(provided)) {
         diagnostics.push({
@@ -704,6 +754,23 @@ function validatePipeline(
 }
 
 function toLayerIR(item: PipelineItem, index: number): LayerIR {
+  if (item.kind === 'layer' && item.composition === 'pipeline') {
+    return {
+      index,
+      name: item.name,
+      role: item.role,
+      requires: item.requires.map(contextKeyName),
+      provides: [],
+      requiresValidated: item.requiresValidated,
+      dependencies: item.inject.map((injection: LayerInjection) =>
+        tokenName(layerInjectionToken(injection)),
+      ),
+      ...(item.graph?.attributes === undefined
+        ? {}
+        : { attributes: item.graph.attributes }),
+      pipeline: item.pipeline.map(toLayerIR),
+    }
+  }
   return {
     index,
     name: item.name,
@@ -728,4 +795,48 @@ function toLayerIR(item: PipelineItem, index: number): LayerIR {
           ),
         }),
   }
+}
+
+function visitPipelineItems(
+  pipeline: readonly PipelineItem[],
+  visit: (item: PipelineItem, indexPath: readonly number[]) => void,
+  parentPath: readonly number[] = [],
+): void {
+  pipeline.forEach((item, index) => {
+    const indexPath = [...parentPath, index]
+    visit(item, indexPath)
+    if (item.kind === 'layer' && item.composition === 'pipeline') {
+      visitPipelineItems(item.pipeline, visit, indexPath)
+    }
+  })
+}
+
+function visitCompositeLayers(
+  pipeline: readonly PipelineItem[],
+  visit: (
+    layer: CompositeLayerDescriptor,
+    indexPath: readonly number[],
+  ) => void,
+  parentPath: readonly number[] = [],
+): void {
+  pipeline.forEach((item, index) => {
+    if (item.kind !== 'layer' || item.composition !== 'pipeline') return
+    const indexPath = [...parentPath, index]
+    visit(item, indexPath)
+    visitCompositeLayers(item.pipeline, visit, indexPath)
+  })
+}
+
+function layerInjectionToken(injection: LayerInjection): TokenLike {
+  return typeof injection === 'object' && 'token' in injection
+    ? injection.token
+    : injection
+}
+
+function layerDependencyScope(
+  injection: LayerInjection,
+): 'application' | 'transient' | undefined {
+  return typeof injection === 'object' && 'token' in injection
+    ? injection.scope
+    : undefined
 }

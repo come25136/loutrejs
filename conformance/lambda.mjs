@@ -4,10 +4,13 @@ import {
 } from '@loutrejs/runtime-lambda'
 import usersApplication from '../dist/conformance/http-crud/application.mjs'
 import eventsApplication from '../dist/conformance/streaming-http/application.mjs'
+import { runDatabaseConformance } from './database.ts'
 
 if (!process.version.startsWith('v24.')) {
   throw new Error(`Lambda conformanceにはNode.js 24.xが必要です: ${process.version}`)
 }
+
+await runDatabaseConformance()
 
 const unary = await createLambdaHandler(usersApplication)({
   rawPath: '/users/lambda-user',

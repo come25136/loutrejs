@@ -155,22 +155,13 @@ declare const rawContext: RawContext
 // @ts-expect-error validate.paramsがないためparamsはunknownのまま
 rawContext.params.id
 
-const AfterTerminalContract = contract({
-  run: procedure({
-    protocols: {
-      http: http({
-        method: 'GET',
-        path: '/after-terminal',
-        responses: { ok: { status: 200, body: z.string() } },
-        pipeline: [http.controller, sessionLayer],
-      }),
-    },
-  }),
+http({
+  method: 'GET',
+  path: '/after-terminal',
+  responses: { ok: { status: 200, body: z.string() } },
+  // @ts-expect-error terminalより後ろにPipelineItemは置けない
+  pipeline: [http.controller, sessionLayer],
 })
-type AfterTerminalHttp = ControllerOf<typeof AfterTerminalContract, 'http'>
-declare const afterTerminalContext: ContextOf<AfterTerminalHttp, 'run'>
-// @ts-expect-error terminalより後ろのLayerがprovideするpropertyは取得できない
-afterTerminalContext.session
 
 layer({
   name: 'invalid-provide',

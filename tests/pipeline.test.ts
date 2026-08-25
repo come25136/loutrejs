@@ -211,4 +211,249 @@ describe('Pipeline engine', () => {
       'outer.outbound',
     ])
   })
+
+  it('Composite Layerのchild pipelineをscope内で実行する', async () => {
+    const events: string[] = []
+    const child = layer({
+      name: 'child',
+      inbound: () => { events.push('child.inbound') },
+      outbound: (_ctx, outcome) => {
+        events.push(`child.outbound:${outcome.ok}:${'value' in outcome}`)
+      },
+    })
+    const composite = layer.compose({
+      name: 'composite',
+      pipeline: [child],
+      scope: () => ({
+        run: async (execute) => {
+          events.push('scope.begin')
+          await execute()
+          events.push('scope.end')
+        },
+      }),
+    })
+
+    await expect(executePipeline([composite, terminal], {
+      context: {},
+      validate: () => undefined,
+      terminal: () => {
+        events.push('terminal')
+        return 'done'
+      },
+    })).resolves.toBe('done')
+    expect(events).toEqual([
+      'scope.begin',
+      'child.inbound',
+      'child.outbound:true:false',
+      'scope.end',
+      'terminal',
+    ])
+  })
+
+  it('空のchild pipelineはcontinueする', async () => {
+    const composite = layer.compose({
+      name: 'empty',
+      pipeline: [],
+      scope: () => ({ run: async (execute) => { await execute() } }),
+    })
+    await expect(executePipeline([composite, terminal], {
+      context: {},
+      validate: () => undefined,
+      terminal: () => 'done',
+    })).resolves.toBe('done')
+  })
+
+  it('child terminalとshortCircuitのresultを親へbubbleする', async () => {
+    const terminalComposite = layer.compose({
+      name: 'terminal-composite',
+      pipeline: [terminal],
+      scope: () => ({ run: async (execute) => { await execute() } }),
+    })
+    await expect(executePipeline([terminalComposite], {
+      context: {},
+      validate: () => undefined,
+      terminal: () => 'terminal-result',
+    })).resolves.toBe('terminal-result')
+
+    const cached = layer({
+      name: 'cached',
+      inbound: () => shortCircuit('cached-result'),
+    })
+    const shortCircuitComposite = layer.compose({
+      name: 'short-circuit-composite',
+      pipeline: [cached],
+      scope: () => ({ run: async (execute) => { await execute() } }),
+    })
+    await expect(executePipeline([shortCircuitComposite, terminal], {
+      context: {},
+      validate: () => undefined,
+      terminal: () => 'unreachable',
+    })).resolves.toBe('cached-result')
+  })
+
+  it('child errorはscopeがcatchしても元errorを再throwする', async () => {
+    const failure = new Error('child failure')
+    const broken = layer({
+      name: 'broken',
+      inbound: () => { throw failure },
+    })
+    const composite = layer.compose({
+      name: 'catching-scope',
+      pipeline: [broken],
+      scope: () => ({
+        run: async (execute) => {
+          try {
+            await execute()
+          } catch {
+            // Scope Layerはchild errorをsuccessへ変換できない。
+          }
+        },
+      }),
+    })
+
+    await expect(executePipeline([composite, terminal], {
+      context: {},
+      validate: () => undefined,
+      terminal: () => 'unreachable',
+    })).rejects.toBe(failure)
+  })
+
+  it('scope callbackの未実行と再入を拒否する', async () => {
+    const skipped = layer.compose({
+      name: 'skipped',
+      pipeline: [],
+      scope: () => ({ run: async () => undefined }),
+    })
+    await expect(executePipeline([skipped, terminal], {
+      context: {},
+      validate: () => undefined,
+      terminal: () => 'unreachable',
+    })).rejects.toThrow('LUTRE_LAYER_SCOPE_SKIPPED')
+
+    const reentered = layer.compose({
+      name: 'reentered',
+      pipeline: [],
+      scope: () => ({
+        run: async (execute) => {
+          await execute()
+          try {
+            await execute()
+          } catch {
+            // Runtimeはscopeがreentry errorを握り潰しても検出する。
+          }
+        },
+      }),
+    })
+    await expect(executePipeline([reentered, terminal], {
+      context: {},
+      validate: () => undefined,
+      terminal: () => 'unreachable',
+    })).rejects.toThrow('LUTRE_LAYER_SCOPE_REENTRY')
+  })
+
+  it('childのContext provideとvalidationを親後段へ伝播する', async () => {
+    const VALUE = contextKey('recursiveValue').of<string>()
+    const provider = layer({
+      name: 'provider',
+      provides: [VALUE],
+      inbound: () => ({ recursiveValue: 'ready' }),
+    })
+    const validation = {
+      kind: 'validation',
+      name: 'validate.body',
+      role: 'validation',
+      part: 'body',
+    } as const
+    const composite = layer.compose({
+      name: 'context-composite',
+      pipeline: [provider, validation],
+      scope: () => ({ run: async (execute) => { await execute() } }),
+    })
+    const consumer = layer({
+      name: 'consumer',
+      requires: [VALUE],
+      inbound: (context) => {
+        expect(context.recursiveValue).toBe('ready')
+      },
+    })
+    let validated = false
+
+    await executePipeline([composite, consumer, terminal], {
+      context: {},
+      validate: () => { validated = true },
+      terminal: () => {
+        expect(validated).toBe(true)
+        return 'done'
+      },
+    })
+  })
+
+  it('nested Composite Layerの順序と外側outbound outcomeを維持する', async () => {
+    const events: string[] = []
+    const outer = layer({
+      name: 'outer-linear',
+      inbound: () => { events.push('outer.inbound') },
+      outbound: (_context, outcome) => {
+        events.push(`outer.outbound:${String(outcome.value)}`)
+      },
+    })
+    const inner = layer.compose({
+      name: 'inner',
+      pipeline: [terminal],
+      scope: () => ({
+        run: async (execute) => {
+          events.push('inner.begin')
+          await execute()
+          events.push('inner.end')
+        },
+      }),
+    })
+    const composite = layer.compose({
+      name: 'outer-composite',
+      pipeline: [inner],
+      scope: () => ({
+        run: async (execute) => {
+          events.push('composite.begin')
+          await execute()
+          events.push('composite.end')
+        },
+      }),
+    })
+
+    await executePipeline([outer, composite], {
+      context: {},
+      validate: () => undefined,
+      terminal: () => {
+        events.push('terminal')
+        return 'done'
+      },
+    })
+    expect(events).toEqual([
+      'outer.inbound',
+      'composite.begin',
+      'inner.begin',
+      'terminal',
+      'inner.end',
+      'composite.end',
+      'outer.outbound:done',
+    ])
+  })
+
+  it('child outbound errorでscopeとPipelineを失敗させる', async () => {
+    const failure = new Error('outbound failure')
+    const child = layer({
+      name: 'outbound-broken',
+      outbound: () => { throw failure },
+    })
+    const composite = layer.compose({
+      name: 'composite',
+      pipeline: [child],
+      scope: () => ({ run: async (execute) => { await execute() } }),
+    })
+    await expect(executePipeline([composite, terminal], {
+      context: {},
+      validate: () => undefined,
+      terminal: () => 'unreachable',
+    })).rejects.toBe(failure)
+  })
 })

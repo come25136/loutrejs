@@ -1,10 +1,12 @@
 import { app, MessageChannelMain } from 'electron'
 import { attachElectronMessagePort } from '@loutrejs/runtime-electron'
 import application from '../dist/conformance/streaming-message-port/application.mjs'
+import { runDatabaseConformance } from './database.js'
 
 async function main(): Promise<void> {
   await app.whenReady()
   try {
+  await runDatabaseConformance()
   const { port1, port2 } = new MessageChannelMain()
   attachElectronMessagePort(application, port1)
   const messages: unknown[] = []

@@ -17,7 +17,7 @@
     "test": "vitest run",
     "test:types": "tsc -p tests/types/tsconfig.json --pretty false",
     "build:conformance-apps": "loutre build fixtures/http-crud/src/app.ts --out-dir dist/conformance/http-crud && loutre build fixtures/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http && loutre build fixtures/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port",
-    "test:deno": "npm run build:conformance-apps && deno run -A conformance/deno.ts",
+    "test:deno": "npm run build:conformance-apps && deno run -A --sloppy-imports conformance/deno.ts",
     "test:bun": "npm run build:conformance-apps && bun run conformance/bun.ts",
     "test:workerd": "npm run build:conformance-apps && node conformance/run-workerd.mjs",
     "test:electron": "npm run build:conformance-apps && node conformance/run-electron.mjs",

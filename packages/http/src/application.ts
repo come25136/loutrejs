@@ -137,6 +137,7 @@ export function createHttpApplication(options: {
           routeMatch.route.protocol.definition.pipeline,
           {
             context: raw,
+            resolve: (token) => container.resolve(token),
             validate: async (layer, context) => {
               const schema = routeMatch.route.protocol.definition.request?.[
                 layer.part
