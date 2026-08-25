@@ -51,12 +51,6 @@ Runtime Linkage Artifact、decorator metadataはApplication Graphの成立条件
 ├ Lifecycle execution
 └ Pipeline execution
 
-@loutrejs/database
-├ DatabaseService
-├ ambient transaction propagation
-├ transaction Layer
-└ adapter-defined transaction options
-
 @loutrejs/http / @loutrejs/message-port
 ├ protocol descriptor
 ├ transport decode / encode
@@ -177,8 +171,8 @@ interface DependencyEdgeIR {
 ```
 
 JSON graphは`version: 2`、再帰的な`LayerIR.pipeline`、`nodes`、`edges`、`diagnostics`を
-持つmachine-readable interfaceである。Composite Layerの依存は`kind: 'layer'` nodeから
-`source: 'declared'`のinject edgeとして表現する。
+持つmachine-readable interfaceである。Layer factoryが`inject()`した依存は、pipeline内の
+index pathで識別される`kind: 'layer'` nodeから`source: 'probed'`のinject edgeとして表現する。
 
 ## 5. Graph Builder / Graph Probe
 
@@ -248,28 +242,34 @@ Runtime Linkage Artifactを介さない。
 
 ### 7.1 Recursive Pipeline
 
-Pipelineはlinear LayerとComposite Layerからなる順序付き再帰sequenceである。利用者から見た
-Public概念はいずれもLayerであり、`next()`、Boundary、ExecutionHookは導入しない。
+PipelineはLayer、Validation、Terminalからなる順序付き再帰sequenceである。Layerはdefinition
+object内にstatic metadataと同期factoryを持つcallable objectであり、種類は1つだけである。
 
 ```text
 Pipeline
-├ linear Layer
-├ Composite Layer
-│  ├ linear Layer
-│  └ Composite Layer
-│     └ linear Layer
+├ Layer
+├ Layer(child Pipeline)
+│  ├ Layer
+│  └ Layer(child Pipeline)
+│     └ Layer
 └ Terminal
 ```
 
-Composite Layerは`ExecutionScope`とchild Pipelineだけを所有する。Runtimeがchild executionを
-scopeへ渡し、callbackのexactly once、child errorの再throw、child内outboundのscope内unwindを
-保証する。childがterminalを持たず正常終了した場合のoutbound Outcomeは`{ ok: true }`であり、
-terminalまたはshortCircuitなら`{ ok: true, value }`となる。
+LayerをそのままPipelineへ置くと、`next()`はその位置以降を実行する。同じLayerを
+`layerA([...])`のように呼ぶと、factoryを再実行せず、その利用箇所だけにchild Pipelineを関連付ける。
+この場合の`next()`はchildだけを実行し、Layer runtimeがreturnした後に親Pipeline後段へ進む。
+
+Layer factoryはApplication construction時にInjection Context内で同期実行し、runtime functionを
+保持する。runtime functionは`(ctx, next)`だけを受け取る。`ctx`には`requires`で宣言したContextだけを
+公開し、`provides`がある場合は`next(provided)`の直前にContextへ追加する。
+
+正常終了には`next()`をちょうど1回呼ぶか、`next()`の代わりに`shortCircuit()`を返す必要がある。
+Runtimeはnextのskip/reentry、next後のshortCircuitを拒否する。downstream errorをLayerがcatchしても、
+Pipelineは保持した元errorを再throwする。
 
 Context providesとvalidation stateはchildがcontinueした場合に親後段へ伝播する。Logical terminalは
-depth-first順で全体にexactly one、かつ最後のitemでなければならない。shortCircuitは正常結果なので
-transactionをcommitする。Protocol Finalizationは`executePipeline()`完了後に実行し、transactionへ
-含めない。
+depth-first順で全体にexactly one、かつ最後のitemでなければならない。Protocol Finalizationは
+`executePipeline()`完了後に実行する。
 
 ## 8. Lifecycle
 
@@ -294,48 +294,10 @@ declared edgeとして収集する。
 cleanupも失敗した場合は初期化errorを先頭にした`AggregateError`を投げる。shutdownは個別hookが
 失敗しても残りを続行し、全cleanup後にerrorを`AggregateError`として報告する。
 
-### 8.1 Database Integration
-
-`@loutrejs/database`は特定のORMやdriverへ依存せず、application-scopedな
-`DatabaseService<TSpec>`をLifecycleとApplication Graphへ統合する。
-
-```text
-synchronous DI construction
-        ↓
-DatabaseService<TSpec>
-        ↓ initialize
-await connect()
-        ↓ execution
-client getter
-  ├ ambient transaction client
-  └ root client
-        ↓ shutdown
-await disconnect()
-```
-
-constructorは同期constructionだけを行い、外部接続、filesystem I/O、migrationを実行しない。
-非同期client取得は`onModuleInit`、resource解放は`onModuleDestroy`だけが担当する。このため
-Graph Probeはinstanceとdependency edgeを構築してもLifecycleやtransactionを実行しない。
-
-`transaction()`は`layer.compose()`を使うComposite Layer factoryであり、DB class tokenとcustom
-`TokenLike`の両方を受ける。DB dependencyには`application` scopeを要求し、Graph validatorが
-Provider scopeを検証する。adapter固有optionは`options.begin`と`options.savepoint`に分け、raw値を
-Graphへserializeしない。
-
-Transaction propagationはDatabaseService instanceごとの`AsyncLocalStorage`で管理し、
-`run()`と`getStore()`だけを使う。このambient transaction contextはInjection Contextおよび
-DI scopeとは別物である。`required`はactive transactionへjoinし、`savepoint`はactive時だけ
-adapterのsavepoint primitiveを使う。異なるDatabaseService間のatomicityや2PCは保証しない。
-
-ORM query API、Entity、migration、schema同期、retryは利用者が選択したORMまたはdriverの責務で
-ある。Prisma/Drizzleは`@loutrejs/database`のproduction dependencyにしない。
-
 ## 9. Runtime Portability
 
 DIとGraph Probeのcoreで利用するprimitiveは`Map`、`Set`、`WeakMap`、`try/finally`、class、
 function、`Symbol`に限定する。PromiseはLifecycleとprotocol executionで利用する。
-Database transactionだけは各runtimeが提供する`node:async_hooks`の`AsyncLocalStorage` portable
-subsetを利用する。`enterWith()`と`disable()`には依存しない。
 
 conformance対象はNode.js、Bun、Deno、workerd、AWS Lambda、Electronである。
 
