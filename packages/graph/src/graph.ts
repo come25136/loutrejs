@@ -8,7 +8,8 @@ import {
   type ContractDefinition,
   type ContextKey,
   type DependencyConsumer,
-  type ImplementationBinding,
+  type ImplementationConsumer,
+  type ImplementationDescriptor,
   type ModuleInstance,
   type ModuleTemplate,
   type PipelineItem,
@@ -29,8 +30,8 @@ import type {
   PipelineIR,
 } from './ir.js'
 
-interface BindingTarget {
-  readonly binding: ImplementationBinding
+interface ImplementationTarget {
+  readonly implementation: ImplementationDescriptor
   readonly contractName: string
   readonly procedure: string
   readonly protocol: string
@@ -68,20 +69,15 @@ export function compileApplication(
     return name
   }
 
-  const bindings = modules.flatMap(
+  const descriptors = modules.flatMap(
     (module) => module.definition.implementations ?? [],
   )
-  const targets: BindingTarget[] = []
+  const targets: ImplementationTarget[] = []
 
-  for (const binding of bindings) {
-    const availableProcedures = Object.entries(binding.contract.procedures)
-      .filter(([, procedure]) => binding.protocol in procedure.protocols)
-      .map(([name]) => name)
-    const selected = binding.procedures ?? availableProcedures
-
-    for (const procedureName of selected) {
-      const procedure = binding.contract.procedures[procedureName]
-      const protocol = procedure?.protocols[binding.protocol] as
+  for (const implementation of descriptors) {
+    for (const procedureName of implementation.procedures) {
+      const procedure = implementation.contract.procedures[procedureName]
+      const protocol = procedure?.protocols[implementation.protocol] as
         | ({
             readonly pipeline?: readonly PipelineItem[]
             readonly interaction?: string
@@ -98,16 +94,16 @@ export function compileApplication(
       if (!procedure || !protocol) {
         diagnostics.push({
           code: 'LUTRE_IMPL_003',
-          message: `${procedureName} is not declared for protocol ${binding.protocol}`,
-          path: `${nameContract(binding.contract)}.${procedureName}.${binding.protocol}`,
+          message: `${procedureName} is not declared for protocol ${implementation.protocol}`,
+          path: `${nameContract(implementation.contract)}.${procedureName}.${implementation.protocol}`,
         })
         continue
       }
       targets.push({
-        binding,
-        contractName: nameContract(binding.contract),
+        implementation,
+        contractName: nameContract(implementation.contract),
         procedure: procedureName,
-        protocol: binding.protocol,
+        protocol: implementation.protocol,
         dispatchKey: protocol.dispatchKey,
         pipeline: protocol.pipeline ?? protocol.definition?.pipeline ?? [],
         interaction:
@@ -120,7 +116,7 @@ export function compileApplication(
   }
 
   validateDispatchKeys(targets, diagnostics)
-  validateCoverage(bindings, contractNames, diagnostics)
+  validateCoverage(descriptors, contractNames, diagnostics)
   validateDuplicateProviders(modules, diagnostics)
 
   const tokensById = collectCustomTokens(providers, targets, diagnostics)
@@ -130,14 +126,6 @@ export function compileApplication(
   const implementations: ImplementationIR[] = []
   for (const target of targets) {
     validatePipeline(target, diagnostics)
-    const method = target.binding.implementation.prototype[target.procedure] as unknown
-    if (typeof method !== 'function') {
-      diagnostics.push({
-        code: 'LUTRE_IMPL_004',
-        message: `${target.binding.implementation.name} does not implement method ${target.procedure}`,
-        path: `${target.contractName}.${target.procedure}.${target.protocol}`,
-      })
-    }
 
     pipelines.push({
       contract: target.contractName,
@@ -149,14 +137,14 @@ export function compileApplication(
       contract: target.contractName,
       procedure: target.procedure,
       protocol: target.protocol,
-      implementation: target.binding.implementation.name,
+      implementation: target.implementation.name,
       method: target.procedure,
     })
   }
 
   const dependencyGraph = buildDependencyGraph(
     modules,
-    bindings,
+    descriptors,
     targets,
     diagnostics,
   )
@@ -250,17 +238,17 @@ export function compileApplication(
 }
 
 function validateDispatchKeys(
-  targets: readonly BindingTarget[],
+  targets: readonly ImplementationTarget[],
   diagnostics: Diagnostic[],
 ): void {
-  const targetsByKey = new Map<string, BindingTarget>()
+  const targetsByKey = new Map<string, ImplementationTarget>()
   for (const target of targets) {
     if (target.dispatchKey === null) continue
     const path = `${target.contractName}.${target.procedure}.${target.protocol}`
     const existing = targetsByKey.get(target.dispatchKey)
     if (existing) {
       if (
-        existing.binding.contract === target.binding.contract &&
+        existing.implementation.contract === target.implementation.contract &&
         existing.procedure === target.procedure &&
         existing.protocol === target.protocol
       ) {
@@ -286,18 +274,16 @@ export function validateGraph(graph: ApplicationGraphIR): readonly Diagnostic[] 
 
 function buildDependencyGraph(
   modules: readonly ModuleInstance[],
-  bindings: readonly ImplementationBinding[],
-  targets: readonly BindingTarget[],
+  descriptors: readonly ImplementationDescriptor[],
+  targets: readonly ImplementationTarget[],
   diagnostics: Diagnostic[],
 ): Pick<ApplicationGraphIR, 'nodes' | 'edges'> {
   const nodes: DependencyNodeIR[] = []
   const edges: DependencyEdgeIR[] = []
   const ids = new Map<TokenLike, string>()
+  const implementationIds = new Map<ImplementationDescriptor, string>()
   const modulesByProvider = new Map<TokenLike, string>()
   const providersByToken = new Map<TokenLike, ProviderDescriptor>()
-  const implementationClasses = new Set(
-    bindings.map((binding) => binding.implementation as TokenLike),
-  )
   const customTokensById = new Map<string, TokenLike>()
 
   modules.forEach((module, index) => {
@@ -344,13 +330,25 @@ function buildDependencyGraph(
       label: tokenName(token),
       kind:
         overrides.kind ??
-        (implementationClasses.has(token)
-          ? 'implementation'
-          : typeof token === 'function'
-            ? 'class'
-            : 'token'),
+        (typeof token === 'function' ? 'class' : 'token'),
       ...(scope === undefined ? {} : { scope }),
       ...(module === undefined ? {} : { module }),
+    })
+    return id
+  }
+
+  const ensureImplementationNode = (
+    implementation: ImplementationDescriptor,
+  ): string => {
+    const current = implementationIds.get(implementation)
+    if (current) return current
+    const id = `implementation:${implementationIds.size + 1}`
+    implementationIds.set(implementation, id)
+    nodes.push({
+      id,
+      label: implementation.name,
+      kind: 'implementation',
+      scope: 'application',
     })
     return id
   }
@@ -433,8 +431,8 @@ function buildDependencyGraph(
     }
   }
 
-  for (const binding of bindings) {
-    ensureNode(binding.implementation, { kind: 'implementation', scope: 'application' })
+  for (const implementation of descriptors) {
+    ensureImplementationNode(implementation)
   }
 
   modules.forEach((module, index) => {
@@ -477,8 +475,6 @@ function buildDependencyGraph(
       }
     }
   }
-  for (const binding of bindings) managedClasses.add(binding.implementation)
-
   for (const target of managedClasses) {
     try {
       container.probeClass(target)
@@ -494,6 +490,33 @@ function buildDependencyGraph(
       })
     }
   }
+
+  const uniqueImplementations = [...new Set(descriptors)]
+  uniqueImplementations.forEach((implementation, index) => {
+    const consumer: ImplementationConsumer = {
+      kind: 'implementation-consumer',
+      id: ensureImplementationNode(implementation),
+      name: implementation.name,
+    }
+    try {
+      container.probeImplementation(implementation, consumer)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      diagnostics.push({
+        code: message.includes('LUTRE_IMPL_ASYNC_FACTORY')
+          ? 'LUTRE_IMPL_ASYNC_FACTORY'
+          : message.includes('LUTRE_IMPL_FACTORY_RESULT')
+            ? 'LUTRE_IMPL_FACTORY_RESULT'
+            : message.includes('LUTRE_IMPL_004')
+              ? 'LUTRE_IMPL_004'
+              : message.includes('LUTRE_DI_CYCLE')
+                ? 'LUTRE_DI_CYCLE'
+                : 'LUTRE_DI_UNRESOLVED',
+        message,
+        path: `implementation:${index + 1}:${implementation.name}`,
+      })
+    }
+  })
 
   for (const target of targets) {
     visitPipelineItems(target.pipeline, (item, indexPath) => {
@@ -562,7 +585,7 @@ function describeModule(module: ModuleInstance, index: number): string {
 
 function collectCustomTokens(
   providers: readonly ProviderDescriptor[],
-  targets: readonly BindingTarget[],
+  targets: readonly ImplementationTarget[],
   diagnostics: Diagnostic[],
 ): ReadonlyMap<string, TokenLike> {
   const tokens = new Map<string, TokenLike>()
@@ -592,7 +615,7 @@ function collectCustomTokens(
 }
 
 function collectContextKeys(
-  targets: readonly BindingTarget[],
+  targets: readonly ImplementationTarget[],
   diagnostics: Diagnostic[],
 ): ReadonlyMap<string, ContextKey> {
   const keys = new Map<string, ContextKey>()
@@ -641,11 +664,13 @@ function collectModules(
 }
 
 function validateCoverage(
-  bindings: readonly ImplementationBinding[],
+  implementations: readonly ImplementationDescriptor[],
   contractNames: Map<ContractDefinition, string>,
   diagnostics: Diagnostic[],
 ) {
-  const contracts = new Set(bindings.map((binding) => binding.contract))
+  const contracts = new Set(
+    implementations.map((implementation) => implementation.contract),
+  )
   for (const contract of contracts) {
     const protocols = new Set(
       Object.values(contract.procedures).flatMap((procedure) =>
@@ -655,12 +680,11 @@ function validateCoverage(
     for (const protocol of protocols) {
       for (const [procedureName, procedure] of Object.entries(contract.procedures)) {
         if (!(protocol in procedure.protocols)) continue
-        const covering = bindings.filter(
-          (binding) =>
-            binding.contract === contract &&
-            binding.protocol === protocol &&
-            (binding.procedures === undefined ||
-              binding.procedures.includes(procedureName)),
+        const covering = implementations.filter(
+          (implementation) =>
+            implementation.contract === contract &&
+            implementation.protocol === protocol &&
+            implementation.procedures.includes(procedureName),
         )
         const path = `${contractNames.get(contract) ?? 'Contract'}.${procedureName}.${protocol}`
         if (covering.length === 0) {
@@ -682,7 +706,7 @@ function validateCoverage(
 }
 
 function validatePipeline(
-  target: BindingTarget,
+  target: ImplementationTarget,
   diagnostics: Diagnostic[],
 ) {
   const path = `${target.contractName}.${target.procedure}.${target.protocol}`
@@ -835,7 +859,14 @@ function ensureConsumerNode(
     return ensureTokenNode(consumer)
   }
   if (!nodes.some(({ id }) => id === consumer.id)) {
-    nodes.push({ id: consumer.id, label: consumer.name, kind: 'layer' })
+    nodes.push({
+      id: consumer.id,
+      label: consumer.name,
+      kind:
+        consumer.kind === 'implementation-consumer'
+          ? 'implementation'
+          : 'layer',
+    })
   }
   return consumer.id
 }

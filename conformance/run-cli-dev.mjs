@@ -10,8 +10,8 @@ const sourceDirectory = join(project, 'src')
 await mkdir(sourceDirectory)
 
 const appSource = `
-import { contract, defineModule, hook, implement, procedure } from '@loutrejs/core'
-import { type ContextOf, type ControllerOf, createHttpApplication, http } from '@loutrejs/http'
+import { contract, defineModule, hook, implementation, procedure } from '@loutrejs/core'
+import { createHttpApplication, http } from '@loutrejs/http'
 import { z } from 'zod'
 import { failInitialization, message } from './message.js'
 
@@ -30,16 +30,19 @@ const DevContract = contract({
   }),
 })
 
-type DevHttp = ControllerOf<typeof DevContract, 'http'>
-
-class DevController implements DevHttp {
-  get(ctx: ContextOf<DevHttp, 'get'>) {
-    return ctx.response.ok({ body: { message } })
-  }
-}
+const DevController = implementation({
+  name: 'DevController',
+  contract: DevContract,
+  protocol: http,
+  factory: () => ({
+    get(ctx) {
+      return ctx.response.ok({ body: { message } })
+    },
+  }),
+})
 
 const DevModule = defineModule(() => ({
-  implementations: [implement(DevContract).for(http).with(DevController)],
+  implementations: [DevController],
   lifecycle: {
     onModuleInit: hook({
       inject: [],

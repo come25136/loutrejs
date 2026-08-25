@@ -2,13 +2,11 @@ import {
   contract,
   contextKey,
   defineModule,
-  implement,
+  implementation,
   layer,
   procedure,
 } from '@loutrejs/core'
 import {
-  ContextOf,
-  ControllerOf,
   createHttpApplication,
   http,
   validate,
@@ -103,24 +101,25 @@ export const AccountContract = contract({
   }),
 })
 
-type AccountHttp = ControllerOf<typeof AccountContract, 'http'>
-
-export class AccountController implements AccountHttp {
-  get(ctx: ContextOf<AccountHttp, 'get'>) {
-    return ctx.response.found({
-      body: {
-        userId: ctx.session.principal.id,
-        tenantId: ctx.currentTenant.id,
-      },
-    })
-  }
-}
+export const AccountController = implementation({
+  name: 'AccountController',
+  contract: AccountContract,
+  protocol: http,
+  factory: () => ({
+    get(ctx) {
+      return ctx.response.found({
+        body: {
+          userId: ctx.session.principal.id,
+          tenantId: ctx.currentTenant.id,
+        },
+      })
+    },
+  }),
+})
 
 export const AccountModule = defineModule(() => ({
   description: 'Bearer認証と任意Execution Contextのcanonical fixture',
-  implementations: [
-    implement(AccountContract).for(http).with(AccountController),
-  ],
+  implementations: [AccountController],
 }))
 
 export function createAccountApplication() {

@@ -2,7 +2,7 @@ import {
   contextKey,
   contract,
   defineModule,
-  implement,
+  implementation,
   isShortCircuit,
   layer,
   procedure,
@@ -220,13 +220,18 @@ describe('basicAuth', () => {
         },
       }),
     })
-    class Implementation {
-      get(): never {
-        throw new Error('実行対象ではありません')
-      }
-    }
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        get(): never {
+          throw new Error('実行対象ではありません')
+        },
+      }),
+    })
     const Module = defineModule(() => ({
-      implementations: [implement(Contract).for(http).with(Implementation)],
+      implementations: [Implementation],
     }))
 
     expect(compileApplication([Module()]).diagnostics).toContainEqual(
@@ -267,13 +272,18 @@ describe('basicAuth', () => {
         },
       }),
     })
-    class Implementation {
-      get(): never {
-        throw new Error('実行対象ではありません')
-      }
-    }
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        get(): never {
+          throw new Error('実行対象ではありません')
+        },
+      }),
+    })
     const Module = defineModule(() => ({
-      implementations: [implement(Contract).for(http).with(Implementation)],
+      implementations: [Implementation],
     }))
 
     expect(compileApplication([Module()]).diagnostics).toContainEqual(

@@ -1,7 +1,7 @@
 import {
   asModuleInstance,
   validateSchema,
-  type ImplementationBinding,
+  type ImplementationDescriptor,
   type ModuleInstance,
   type ModuleTemplate,
   type StandardSchemaV1,
@@ -40,7 +40,7 @@ interface HttpRoute {
   readonly segments: readonly HttpPathSegment[]
   readonly dispatchKey: string
   readonly protocol: HttpProtocol
-  readonly binding: ImplementationBinding
+  readonly implementation: ImplementationDescriptor
   readonly procedure: string
 }
 
@@ -130,7 +130,7 @@ export function createHttpApplication(options: {
 
       requestLogger = requestLogger.child({
         procedure: routeMatch.route.procedure,
-        source: `${routeMatch.route.binding.implementation.name}.${routeMatch.route.procedure}`,
+        source: `${routeMatch.route.implementation.name}.${routeMatch.route.procedure}`,
       })
 
       try {
@@ -330,13 +330,13 @@ async function invokeController(
   raw: MutableHttpContext,
   container: import('@loutrejs/runtime').Container,
 ): Promise<LogicalHttpResult> {
-  const controller = container.resolveImplementation(
-    route.binding.implementation,
+  const controller = container.implementationRuntime(
+    route.implementation,
   ) as Record<PropertyKey, unknown>
   const method = controller[route.procedure as keyof typeof controller]
   if (typeof method !== 'function') {
     throw new Error(
-      `${route.binding.implementation.name}.${route.procedure} is not callable`,
+      `${route.implementation.name}.${route.procedure} is not callable`,
     )
   }
 
@@ -477,16 +477,11 @@ function isHttpHeaders(value: unknown): value is HttpHeaders {
 function collectRoutes(modules: readonly ModuleInstance[]): HttpRoute[] {
   const routes: HttpRoute[] = []
   for (const module of modules) {
-    for (const binding of module.definition.implementations ?? []) {
-      if (binding.protocol !== 'http') continue
-      const procedureNames =
-        binding.procedures ??
-        Object.entries(binding.contract.procedures)
-          .filter(([, procedure]) => 'http' in procedure.protocols)
-          .map(([name]) => name)
-
-      for (const procedure of procedureNames) {
-        const protocol = binding.contract.procedures[procedure]?.protocols.http
+    for (const implementation of module.definition.implementations ?? []) {
+      if (implementation.protocol !== 'http') continue
+      for (const procedure of implementation.procedures) {
+        const protocol =
+          implementation.contract.procedures[procedure]?.protocols.http
         if (!protocol || protocol.protocol !== 'http') continue
         const typed = protocol as HttpProtocol
         routes.push({
@@ -495,7 +490,7 @@ function collectRoutes(modules: readonly ModuleInstance[]): HttpRoute[] {
           segments: parseHttpPath(typed.definition.path),
           dispatchKey: typed.dispatchKey,
           protocol: typed,
-          binding,
+          implementation,
           procedure,
         })
       }

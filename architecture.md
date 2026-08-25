@@ -34,6 +34,7 @@ Runtime Linkage Artifact、decorator metadataはApplication Graphの成立条件
 @loutrejs/core
 ├ Contract / Procedure / Protocol descriptor
 ├ Module / Provider / Token
+├ Implementation descriptor / synchronous factory
 ├ inject() / Injection Context
 ├ Pipeline / Layer / Context Key
 └ Lifecycle descriptor
@@ -100,7 +101,7 @@ const service = new UsersService(mockRepository)
 
 ### 3.2 Injection Context
 
-`inject()`はframework-managed class construction中だけ利用できる。method bodyなどから
+`inject()`はframework-managedなclass・Layer factory・Implementation factoryの同期construction中だけ利用できる。procedure bodyなどから
 呼ぶと`LUTRE_DI_CONTEXT`で失敗する。contextは同期のstack disciplineと`try/finally`で
 復元し、`AsyncLocalStorage`を利用しない。
 
@@ -114,14 +115,15 @@ inject(token)
 request、session、current user、tenantなどのexecution dataはDIへ置かず、型付き`ctx`で
 伝播する。
 
-### 3.3 Managed Class
+### 3.3 Managed Component
 
-Containerがconstructionできるclassは次に限定する。
+Containerがconstructionするcomponentは次に限定する。
 
 - Module `providers`へ明示したclass
 - `useClass` implementation
 - conditional Providerのcandidate
-- Contract / Protocol implementation binding
+- Module `implementations`へ明示したImplementation descriptorのfactory
+- Pipelineに明示したLayer descriptorのfactory
 - framework built-in
 
 未宣言classの暗黙auto-resolutionは`LUTRE_DI_UNRESOLVED`で拒否する。DI cycleは
@@ -135,7 +137,7 @@ application-scoped managed instanceだけである。
 
 ### 3.5 Synchronous Construction
 
-`Container.resolve()`、class constructor、`inject()`、factory Providerは同期処理である。
+`Container.resolve()`、class constructor、`inject()`、Provider・Layer・Implementationのfactoryは同期処理である。
 factoryがthenableを返すと`LUTRE_DI_ASYNC_FACTORY`でfail-fastする。
 
 DB、Redis、Kafka、socket、watcherなどのresource acquisitionとcleanupはconstructorから
@@ -147,9 +149,9 @@ Application Graphは少なくとも次の情報を持つ。
 
 - Module / Provider graph
 - DI node / dependency edge
-- Contract / Procedure / Protocol binding
+- Contract / Procedure / ProtocolとImplementation descriptorの対応
 - Pipeline / Context requires-provides
-- implementation binding
+- Implementation descriptorと選択procedure
 - Lifecycle dependency
 - conditional branch
 - Runtime capability requirement
@@ -187,19 +189,19 @@ Declared Graph
         ↓
 Graph Probe Container
         ↓
-全managed classをLifecycleなしでconstruction
+Provider class、Layer factory、Implementation factoryをLifecycleなしでconstruction
         ↓
 inject() edgeをrecord
         ↓
 ApplicationGraph + diagnostics
 ```
 
-Graph Probeはapplication / transient class Provider、implementation、`useClass`、conditionalの
+Graph Probeはapplication / transient class Provider、Implementation factory、Layer factory、`useClass`、conditionalの
 全candidateを対象とする。現在選択されていないconditional branchもprobeするため、productionで
 だけ選ばれるbroken dependencyも開発・CIで検出できる。
 
 ProbeはLifecycle hook、server listen、外部接続、listener、watcher、long-running timerを実行しない。
-このためmanaged constructorはdependency wiringと軽量な同期初期化だけを行う。
+このためmanaged constructorとfactoryはdependency wiringと軽量な同期初期化だけを行う。
 
 unresolved dependencyやcycleがあっても、取得済みnode/edgeとdiagnosticを保持したpartial graphを返す。
 

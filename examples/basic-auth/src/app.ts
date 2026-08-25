@@ -1,7 +1,5 @@
-import { contextKey, contract, defineModule, implement, procedure } from '@loutrejs/core'
+import { contextKey, contract, defineModule, implementation, procedure } from '@loutrejs/core'
 import {
-  type ContextOf,
-  type ControllerOf,
   basicAuth,
   createHttpApplication,
   http,
@@ -61,21 +59,20 @@ const ProfileContract = contract({
   }),
 })
 
-type ProfileHttp = ControllerOf<typeof ProfileContract, 'http'>
-
-class ProfileController implements ProfileHttp {
-  get(ctx: ContextOf<ProfileHttp, 'get'>) {
-    return ctx.response.ok({
-      body: ctx.currentUser,
-    })
-  }
-}
+const ProfileController = implementation({
+  name: 'ProfileController',
+  contract: ProfileContract,
+  protocol: http,
+  factory: () => ({
+    get(ctx) {
+      return ctx.response.ok({ body: ctx.currentUser })
+    },
+  }),
+})
 
 const ProfileModule = defineModule(() => ({
   description: 'Basic認証で保護したプロフィールAPIのサンプル',
-  implementations: [
-    implement(ProfileContract).for(http).with(ProfileController),
-  ],
+  implementations: [ProfileController],
 }))
 
 export default createHttpApplication({

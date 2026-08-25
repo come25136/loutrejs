@@ -2,14 +2,12 @@ import {
   contract,
   contextKey,
   defineModule,
-  implement,
+  implementation,
   layer,
   procedure,
   shortCircuit,
 } from '@loutrejs/core'
 import {
-  ContextOf,
-  ControllerOf,
   createHttpApplication,
   http,
   validate,
@@ -72,34 +70,38 @@ describe('HTTP application boundary', () => {
         },
       }),
     })
-    type Controller = ControllerOf<typeof Contract, 'http'>
     let controllerInstances = 0
-    class Implementation implements Controller {
-      constructor() {
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => {
         controllerInstances += 1
-      }
-
-      update(ctx: ContextOf<Controller, 'update'>) {
-        return ctx.response.updated({
-          body: {
-            id: ctx.params.id,
-            page: ctx.query.page,
-            name: ctx.body.name,
-            executionId: ctx.executionId,
+        return {
+          update(ctx) {
+            return ctx.response.updated({
+              body: {
+                id: ctx.params.id,
+                page: ctx.query.page,
+                name: ctx.body.name,
+                executionId: ctx.executionId,
+              },
+              headers: {
+                'x-dynamic': 'request',
+                'x-overridden': 'dynamic',
+                'content-type': 'text/plain',
+              },
+            })
           },
-          headers: {
-            'x-dynamic': 'request',
-            'x-overridden': 'dynamic',
-            'content-type': 'text/plain',
-          },
-        })
-      }
-    }
+        }
+      },
+    })
     const Module = defineModule(() => ({
-      implementations: [implement(Contract).for(http).with(Implementation)],
+      implementations: [Implementation],
     }))
     const application = createHttpApplication({ modules: [Module()] })
-    controllerInstances = 0
+    const constructionCalls = controllerInstances
+    expect(constructionCalls).toBe(2)
 
     const response = await application.handle(
       new Request('http://fixture.test/things/t1?page=2', {
@@ -143,7 +145,7 @@ describe('HTTP application boundary', () => {
       name: 'Second',
       executionId: 'exec-2',
     })
-    expect(controllerInstances).toBe(1)
+    expect(controllerInstances).toBe(constructionCalls)
 
     const invalid = await application.handle(
       new Request('http://fixture.test/things/x?page=2', {
@@ -220,16 +222,20 @@ describe('HTTP application boundary', () => {
         },
       }),
     })
-    type Controller = ControllerOf<typeof Contract, 'http'>
-    class Implementation implements Controller {
-      run(ctx: ContextOf<Controller, 'run'>) {
-        return ctx.response.ok({
-          body: { value: 42 as unknown as string },
-        })
-      }
-    }
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        run(ctx) {
+          return ctx.response.ok({
+            body: { value: 42 as unknown as string },
+          })
+        },
+      }),
+    })
     const Module = defineModule(() => ({
-      implementations: [implement(Contract).for(http).with(Implementation)],
+      implementations: [Implementation],
     }))
     const application = createHttpApplication({ modules: [Module()] })
 
@@ -258,17 +264,21 @@ describe('HTTP application boundary', () => {
         },
       }),
     })
-    type Controller = ControllerOf<typeof Contract, 'http'>
-    class Implementation implements Controller {
-      run(ctx: ContextOf<Controller, 'run'>) {
-        return ctx.response.ok({
-          body: { value: 'invalid' },
-          headers: { etag: 'invalid' },
-        })
-      }
-    }
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        run(ctx) {
+          return ctx.response.ok({
+            body: { value: 'invalid' },
+            headers: { etag: 'invalid' },
+          })
+        },
+      }),
+    })
     const Module = defineModule(() => ({
-      implementations: [implement(Contract).for(http).with(Implementation)],
+      implementations: [Implementation],
     }))
     const application = createHttpApplication({ modules: [Module()] })
 
@@ -300,17 +310,21 @@ describe('HTTP application boundary', () => {
         },
       }),
     })
-    type Controller = ControllerOf<typeof Contract, 'http'>
-    class Implementation implements Controller {
-      run(ctx: ContextOf<Controller, 'run'>) {
-        return ctx.response.ok({
-          body: { value: 'invalid' },
-          headers: { etag: 'undeclared' },
-        } as never)
-      }
-    }
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        run(ctx) {
+          return ctx.response.ok({
+            body: { value: 'invalid' },
+            headers: { etag: 'undeclared' },
+          } as never)
+        },
+      }),
+    })
     const Module = defineModule(() => ({
-      implementations: [implement(Contract).for(http).with(Implementation)],
+      implementations: [Implementation],
     }))
     const application = createHttpApplication({ modules: [Module()] })
 
@@ -352,17 +366,19 @@ describe('HTTP application boundary', () => {
         },
       }),
     })
-    class Implementation {
-      run() {
-        controllerCalled = true
-      }
-    }
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        run() {
+          controllerCalled = true
+          throw new Error('呼び出されません')
+        },
+      }),
+    })
     const Module = defineModule(() => ({
-      implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Implementation as any),
-      ],
+      implementations: [Implementation],
     }))
     const application = createHttpApplication({ modules: [Module()] })
     const response = await application.handle(
@@ -411,14 +427,18 @@ function createInputDecodeFixture() {
       },
     }),
   })
-  type Controller = ControllerOf<typeof Contract, 'http'>
-  class Implementation implements Controller {
-    decode(ctx: ContextOf<Controller, 'decode'>) {
-      return ctx.response.ok({ body: { value: ctx.params.value } })
-    }
-  }
+  const Implementation = implementation({
+    name: 'Implementation',
+    contract: Contract,
+    protocol: http,
+    factory: () => ({
+      decode(ctx) {
+        return ctx.response.ok({ body: { value: ctx.params.value } })
+      },
+    }),
+  })
   const Module = defineModule(() => ({
-    implementations: [implement(Contract).for(http).with(Implementation)],
+    implementations: [Implementation],
   }))
   return createHttpApplication({ modules: [Module()] })
 }

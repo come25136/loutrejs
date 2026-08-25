@@ -1,4 +1,4 @@
-import type { ImplementationBinding } from './implementation.js'
+import type { ImplementationDescriptor } from './implementation.js'
 import type { ProviderDeclaration } from './provider.js'
 import type { ModuleLifecycle } from './lifecycle.js'
 
@@ -7,7 +7,7 @@ export interface ModuleDefinition {
   readonly description?: string
   readonly imports?: readonly ModuleInstance[]
   readonly providers?: readonly ProviderDeclaration[]
-  readonly implementations?: readonly ImplementationBinding[]
+  readonly implementations?: readonly ImplementationDescriptor[]
   readonly exports?: readonly unknown[]
   readonly lifecycle?: ModuleLifecycle
   readonly requires?: readonly string[]

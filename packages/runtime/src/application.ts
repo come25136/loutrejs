@@ -33,6 +33,11 @@ export class ApplicationRuntime {
     this.container = new Container(this.graph.providers, {
       ...(options.logger === undefined ? {} : { logger: options.logger }),
     })
+    for (const module of this.graph.modules) {
+      for (const implementation of module.definition.implementations ?? []) {
+        this.container.prepareImplementation(implementation)
+      }
+    }
     for (const pipeline of collectApplicationPipelines(this.graph.modules)) {
       this.container.preparePipeline(pipeline)
     }
@@ -163,9 +168,10 @@ function collectApplicationPipelines(
 ): readonly (readonly PipelineItem[])[] {
   const pipelines: (readonly PipelineItem[])[] = []
   for (const module of modules) {
-    for (const binding of module.definition.implementations ?? []) {
-      for (const procedure of Object.values(binding.contract.procedures)) {
-        const protocol = procedure.protocols[binding.protocol] as
+    for (const implementation of module.definition.implementations ?? []) {
+      for (const procedureName of implementation.procedures) {
+        const procedure = implementation.contract.procedures[procedureName]
+        const protocol = procedure?.protocols[implementation.protocol] as
           | {
               readonly pipeline?: readonly PipelineItem[]
               readonly definition?: {

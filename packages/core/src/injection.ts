@@ -6,7 +6,16 @@ export interface LayerConsumer {
   readonly name: string
 }
 
-export type DependencyConsumer = TokenLike | LayerConsumer
+export interface ImplementationConsumer {
+  readonly kind: 'implementation-consumer'
+  readonly id: string
+  readonly name: string
+}
+
+export type DependencyConsumer =
+  | TokenLike
+  | LayerConsumer
+  | ImplementationConsumer
 
 export interface InjectionContext {
   readonly consumer: DependencyConsumer

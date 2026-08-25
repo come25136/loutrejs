@@ -2,13 +2,14 @@ import {
   contract,
   contextKey,
   defineModule,
-  implement,
+  implementation,
   inject,
   layer,
   type PipelineItem,
   provide,
   procedure,
   token,
+  type ContractDefinition,
 } from '@loutrejs/core'
 import { compileApplication } from '@loutrejs/graph'
 import { http } from '@loutrejs/http'
@@ -33,6 +34,30 @@ function passthrough(name: string) {
       await next()
     },
   })
+}
+
+function graphImplementation(
+  contractDefinition: ContractDefinition,
+  options: {
+    readonly name?: string
+    readonly procedures?: readonly string[]
+  } = {},
+) {
+  const procedures =
+    options.procedures ??
+    Object.entries(contractDefinition.procedures)
+      .filter(([, definition]) => 'http' in definition.protocols)
+      .map(([name]) => name)
+  const runtime = Object.fromEntries(
+    procedures.map((name) => [name, () => ({ kind: 'http-result' })]),
+  )
+  return implementation({
+    name: options.name ?? 'Controller',
+    contract: contractDefinition,
+    protocol: http,
+    ...(options.procedures === undefined ? {} : { procedures }),
+    factory: () => runtime,
+  } as never)
 }
 
 describe('Application Graph IRとsemantic validation', () => {
@@ -69,9 +94,6 @@ describe('Application Graph IRとsemantic validation', () => {
       },
       { name: 'RecursiveGraphContract' },
     )
-    class Controller {
-      run() {}
-    }
     const Module = defineModule(() => ({
       providers: [
         provide(DATABASE).useValue({
@@ -81,9 +103,7 @@ describe('Application Graph IRとsemantic validation', () => {
         }),
       ],
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
 
@@ -127,14 +147,9 @@ describe('Application Graph IRとsemantic validation', () => {
         },
       }),
     })
-    class Controller {
-      run() {}
-    }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
     expect(compileApplication([Module()]).diagnostics).toContainEqual(
@@ -147,9 +162,7 @@ describe('Application Graph IRとsemantic validation', () => {
     })
     const MismatchModule = defineModule(() => ({
       implementations: [
-        implement(MismatchContract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(MismatchContract),
       ],
     }))
     expect(compileApplication([MismatchModule()]).diagnostics).toContainEqual(
@@ -174,14 +187,9 @@ describe('Application Graph IRとsemantic validation', () => {
         },
       }),
     })
-    class Controller {
-      run() {}
-    }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
     expect(compileApplication([Module()]).diagnostics).toContainEqual(
@@ -214,14 +222,9 @@ describe('Application Graph IRとsemantic validation', () => {
         protocols: { http: protocol([probeSafe([child, http.controller])]) },
       }),
     })
-    class Controller {
-      run() {}
-    }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
 
@@ -261,14 +264,9 @@ describe('Application Graph IRとsemantic validation', () => {
         protocols: { http: protocol([childOwner, consumer, http.controller]) },
       }),
     })
-    class Controller {
-      run() {}
-    }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
 
@@ -281,14 +279,9 @@ describe('Application Graph IRとsemantic validation', () => {
     const Contract = contract({
       run: procedure({ protocols: { http: protocol([first, second]) } }),
     })
-    class Controller {
-      run() {}
-    }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
 
@@ -317,14 +310,9 @@ describe('Application Graph IRとsemantic validation', () => {
         protocols: { http: protocol([childOwner, http.controller]) },
       }),
     })
-    class Controller {
-      run() {}
-    }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
 
@@ -340,14 +328,9 @@ describe('Application Graph IRとsemantic validation', () => {
         },
       }),
     })
-    class Controller {
-      run() {}
-    }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
     const result = compileApplication([Module()])
@@ -365,14 +348,9 @@ describe('Application Graph IRとsemantic validation', () => {
         },
       }),
     })
-    class Controller {
-      run() {}
-    }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
     expect(
@@ -387,22 +365,16 @@ describe('Application Graph IRとsemantic validation', () => {
         protocols: { http: protocol([http.controller], '/fixture-list') },
       }),
     })
-    class First {
-      get() {}
-    }
-    class Second {
-      get() {}
-    }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract)
-          .for(http)
-          .procedures('get')
-          .with(First as any),
-        implement(Contract)
-          .for(http)
-          .procedures('get')
-          .with(Second as any),
+        graphImplementation(Contract, {
+          name: 'First',
+          procedures: ['get'],
+        }),
+        graphImplementation(Contract, {
+          name: 'Second',
+          procedures: ['get'],
+        }),
       ],
     }))
     const codes = compileApplication([Module()]).diagnostics.map(
@@ -413,22 +385,22 @@ describe('Application Graph IRとsemantic validation', () => {
     expect(codes).toContain('LUTRE_IMPL_002')
   })
 
-  it('Controller constructorにはapplication providerだけを許可する', () => {
+  it('Implementation factoryにはapplication providerだけを許可する', () => {
     const SESSION = token<{ id: string }>('session')
     const SESSION_CONTEXT = contextKey('session').of<{ id: string }>()
-    class Controller {
-      constructor(readonly session = inject(SESSION)) {}
-      run() {}
-    }
     const Contract = contract({
       run: procedure({ protocols: { http: protocol([http.controller]) } }),
     })
+    const createImplementation = (contractDefinition: ContractDefinition) =>
+      implementation({
+        name: 'Controller',
+        contract: contractDefinition,
+        protocol: http,
+        factory: (_session = inject(SESSION)) => ({ run() {} }),
+      } as never)
+    const Controller = createImplementation(Contract)
     const InvalidModule = defineModule(() => ({
-      implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
-      ],
+      implementations: [Controller],
     }))
     expect(
       compileApplication([InvalidModule()]).diagnostics.map(({ code }) => code),
@@ -448,11 +420,7 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     })
     const LayerOnlyModule = defineModule(() => ({
-      implementations: [
-        implement(LayerOnlyContract)
-          .for(http)
-          .with(Controller as any),
-      ],
+      implementations: [createImplementation(LayerOnlyContract)],
     }))
     expect(
       compileApplication([LayerOnlyModule()]).diagnostics.map(
@@ -462,19 +430,12 @@ describe('Application Graph IRとsemantic validation', () => {
 
     const ValidModule = defineModule(() => ({
       providers: [provide(SESSION).useValue({ id: 'application' })],
-      implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
-      ],
+      implementations: [Controller],
     }))
     expect(compileApplication([ValidModule()]).diagnostics).toEqual([])
   })
 
   it('emits the five initial graph dimensions without runtime-specific core APIs', () => {
-    class Controller {
-      run() {}
-    }
     const Contract = contract({
       run: procedure({ protocols: { http: protocol([http.controller]) } }),
     })
@@ -482,9 +443,7 @@ describe('Application Graph IRとsemantic validation', () => {
       name: 'GraphFixtureModule',
       description: 'graph fixture',
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
     const { graph } = compileApplication([Module()])
@@ -572,14 +531,9 @@ describe('Application Graph IRとsemantic validation', () => {
         protocols: { http: protocol([guarded, http.controller]) },
       }),
     })
-    class Controller {
-      run() {}
-    }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
 
@@ -612,14 +566,9 @@ describe('Application Graph IRとsemantic validation', () => {
         },
       }),
     })
-    class Controller {
-      run() {}
-    }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract)
-          .for(http)
-          .with(Controller as any),
+        graphImplementation(Contract),
       ],
     }))
 

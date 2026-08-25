@@ -2,7 +2,7 @@ import {
   contextKey,
   contract,
   defineModule,
-  implement,
+  implementation,
   inject,
   layer,
   procedure,
@@ -10,8 +10,6 @@ import {
   token,
 } from '@loutrejs/core'
 import {
-  type ContextOf,
-  type ControllerOf,
   createHttpApplication,
   http,
   validate,
@@ -111,8 +109,6 @@ const UsersContract = contract(
   { name: 'UsersContract' },
 )
 
-type UsersHttp = ControllerOf<typeof UsersContract, 'http'>
-
 class UserRepository {
   create(client: InMemoryClient, name: string, createdBy: string): User {
     const user = { id: crypto.randomUUID(), name, createdBy }
@@ -121,24 +117,27 @@ class UserRepository {
   }
 }
 
-class UsersController implements UsersHttp {
-  constructor(readonly users = inject(UserRepository)) {}
-
-  create(ctx: ContextOf<UsersHttp, 'create'>) {
-    return ctx.response.created({
-      body: this.users.create(
-        ctx.transaction,
-        ctx.body.name,
-        ctx.currentUser.id,
-      ),
-    })
-  }
-}
+const UsersController = implementation({
+  name: 'UsersController',
+  contract: UsersContract,
+  protocol: http,
+  factory: (users = inject(UserRepository)) => ({
+    create(ctx) {
+      return ctx.response.created({
+        body: users.create(
+          ctx.transaction,
+          ctx.body.name,
+          ctx.currentUser.id,
+        ),
+      })
+    },
+  }),
+})
 
 const AppModule = defineModule(() => ({
   name: 'DatabaseTransactionsExample',
   providers: [provide(DATABASE).useClass(InMemoryDatabase), UserRepository],
-  implementations: [implement(UsersContract).for(http).with(UsersController)],
+  implementations: [UsersController],
 }))
 
 export default createHttpApplication({ modules: [AppModule()] })

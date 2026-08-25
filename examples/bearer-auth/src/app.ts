@@ -1,7 +1,5 @@
-import { contextKey, contract, defineModule, implement, procedure } from '@loutrejs/core'
+import { contextKey, contract, defineModule, implementation, procedure } from '@loutrejs/core'
 import {
-  type ContextOf,
-  type ControllerOf,
   createHttpApplication,
   http,
 } from '@loutrejs/http'
@@ -61,19 +59,20 @@ const BearerProfileContract = contract({
   }),
 })
 
-type BearerProfileHttp = ControllerOf<typeof BearerProfileContract, 'http'>
-
-class BearerProfileController implements BearerProfileHttp {
-  get(context: ContextOf<BearerProfileHttp, 'get'>) {
-    return context.response.ok({ body: context.bearerCurrentUser })
-  }
-}
+const BearerProfileController = implementation({
+  name: 'BearerProfileController',
+  contract: BearerProfileContract,
+  protocol: http,
+  factory: () => ({
+    get(context) {
+      return context.response.ok({ body: context.bearerCurrentUser })
+    },
+  }),
+})
 
 const BearerProfileModule = defineModule(() => ({
   description: 'ユーザー定義Bearer認証で保護したプロフィールAPIのサンプル',
-  implementations: [
-    implement(BearerProfileContract).for(http).with(BearerProfileController),
-  ],
+  implementations: [BearerProfileController],
 }))
 
 export default createHttpApplication({

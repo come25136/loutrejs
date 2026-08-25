@@ -2,12 +2,10 @@ import {
   contract,
   defineError,
   defineModule,
-  implement,
+  implementation,
   procedure,
 } from '@loutrejs/core'
 import {
-  ContextOf,
-  ControllerOf,
   createHttpApplication,
   http,
 } from '@loutrejs/http'
@@ -41,14 +39,18 @@ describe('Domain ErrorとProtocol mapping', () => {
         },
       }),
     })
-    type Controller = ControllerOf<typeof Contract, 'http'>
-    class Implementation implements Controller {
-      get(_ctx: ContextOf<Controller, 'get'>): never {
-        throw UserNotFound({ userId: 'missing-user' })
-      }
-    }
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        get(): never {
+          throw UserNotFound({ userId: 'missing-user' })
+        },
+      }),
+    })
     const Module = defineModule(() => ({
-      implementations: [implement(Contract).for(http).with(Implementation)],
+      implementations: [Implementation],
     }))
     const application = createHttpApplication({ modules: [Module()] })
     const response = await application.handle(

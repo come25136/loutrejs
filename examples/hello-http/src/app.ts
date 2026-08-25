@@ -1,14 +1,12 @@
 import {
   contract,
   defineModule,
-  implement,
+  implementation,
   inject,
   layer,
   procedure,
 } from '@loutrejs/core'
 import {
-  type ContextOf,
-  type ControllerOf,
   createHttpApplication,
   http,
   validate,
@@ -64,31 +62,28 @@ const GreetingContract = contract({
   }),
 })
 
-type GreetingHttp = ControllerOf<typeof GreetingContract, 'http'>
-
 class GreetingService {
   greet(name: string) {
     return { message: `こんにちは、${name}！` }
   }
 }
 
-class GreetingController implements GreetingHttp {
-  constructor(readonly greetings = inject(GreetingService)) {}
-
-  async greet(ctx: ContextOf<GreetingHttp, 'greet'>) {
-    return ctx.response.ok({
-      body: this.greetings.greet(ctx.params.name),
-    })
-  }
-}
+const GreetingController = implementation({
+  name: 'GreetingController',
+  contract: GreetingContract,
+  protocol: http,
+  factory: (greetings = inject(GreetingService)) => ({
+    async greet(ctx) {
+      return ctx.response.ok({ body: greetings.greet(ctx.params.name) })
+    },
+  }),
+})
 
 const GreetingModule = defineModule(() => ({
   name: 'GreetingModule',
   description: '挨拶HTTP APIのサンプル',
   providers: [GreetingService, RequestTiming],
-  implementations: [
-    implement(GreetingContract).for(http).with(GreetingController),
-  ],
+  implementations: [GreetingController],
 }))
 
 export default createHttpApplication({

@@ -318,7 +318,7 @@ factory引数を明示的に渡さないためdefault initializerが評価され
 現状の意味:
 
 ```text
-framework-managed class construction
+framework-managed Provider class construction
 ```
 
 から、

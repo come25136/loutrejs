@@ -4,6 +4,7 @@ import {
   type IsValidProtocolPipeline,
   validateSchema,
   type ContractDefinition,
+  type ImplementationDescriptor,
   type ModuleInstance,
   type ModuleTemplate,
   type PipelineItem,
@@ -149,7 +150,7 @@ export type MessageContextOf<
 interface Route {
   readonly procedure: string
   readonly protocol: MessagePortProtocol
-  readonly implementation: import('@loutrejs/core').Class
+  readonly implementation: ImplementationDescriptor
 }
 
 export interface MessagePortApplication {
@@ -211,7 +212,7 @@ export function createMessagePortApplication(options: {
           layer: (descriptor) => runtime.container.layerRuntime(descriptor),
           validate: () => undefined,
           terminal: async (_layer, terminalContext) => {
-            const target = runtime.container.resolveImplementation(
+            const target = runtime.container.implementationRuntime(
               route.implementation,
             ) as Record<string, unknown>
             const method = target[route.procedure]
@@ -270,18 +271,13 @@ async function finalize(
 
 function collectRoutes(modules: readonly ModuleInstance[]): Route[] {
   return modules.flatMap((module) =>
-    (module.definition.implementations ?? []).flatMap((binding) => {
-      if (binding.protocol !== 'messagePort') return []
-      const procedures =
-        binding.procedures ??
-        Object.entries(binding.contract.procedures)
-          .filter(([, procedure]) => 'messagePort' in procedure.protocols)
-          .map(([name]) => name)
-      return procedures.map((procedure) => ({
+    (module.definition.implementations ?? []).flatMap((implementation) => {
+      if (implementation.protocol !== 'messagePort') return []
+      return implementation.procedures.map((procedure) => ({
         procedure,
-        protocol: binding.contract.procedures[procedure]!.protocols
+        protocol: implementation.contract.procedures[procedure]!.protocols
           .messagePort as MessagePortProtocol,
-        implementation: binding.implementation,
+        implementation,
       }))
     }),
   )

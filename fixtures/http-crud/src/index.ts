@@ -1,7 +1,5 @@
-import { contract, defineModule, implement, inject, procedure } from '@loutrejs/core'
+import { contract, defineModule, implementation, inject, procedure } from '@loutrejs/core'
 import {
-  ContextOf,
-  ControllerOf,
   createHttpApplication,
   http,
   validate,
@@ -60,40 +58,35 @@ export const UsersContract = contract({
   }),
 }, { name: 'UsersContract' })
 
-export type UsersHttp = ControllerOf<typeof UsersContract, 'http'>
-
 export class UsersService {
   create(name: string) {
     return { id: 'created-user', name }
   }
 }
 
-export class UsersController implements UsersHttp {
-  constructor(readonly users = inject(UsersService)) {}
-
-  async get(ctx: ContextOf<UsersHttp, 'get'>) {
-    return ctx.response.found({
-      body: {
-        id: ctx.params.id,
-        name: 'test',
-      },
-    })
-  }
-
-  async create(ctx: ContextOf<UsersHttp, 'create'>) {
-    return ctx.response.created({
-      body: this.users.create(ctx.body.name),
-    })
-  }
-}
+export const UsersController = implementation({
+  name: 'UsersController',
+  contract: UsersContract,
+  protocol: http,
+  factory: (users = inject(UsersService)) => ({
+    async get(ctx) {
+      return ctx.response.found({
+        body: { id: ctx.params.id, name: 'test' },
+      })
+    },
+    async create(ctx) {
+      return ctx.response.created({
+        body: users.create(ctx.body.name),
+      })
+    },
+  }),
+})
 
 export const UsersModule = defineModule(() => ({
   name: 'UsersModule',
   description: 'Canonical HTTP CRUD fixture',
   providers: [UsersService],
-  implementations: [
-    implement(UsersContract).for(http).with(UsersController),
-  ],
+  implementations: [UsersController],
 }))
 
 export function createUsersApplication() {

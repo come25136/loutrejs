@@ -1,13 +1,11 @@
 import {
   contract,
   defineModule,
-  implement,
+  implementation,
   procedure,
   type StandardSchemaV1,
 } from '@loutrejs/core'
 import {
-  ContextOf,
-  ControllerOf,
   createHttpApplication,
   http,
   validate,
@@ -51,23 +49,25 @@ describe('streaming validate.body', () => {
         },
       }),
     })
-    type Controller = ControllerOf<typeof Contract, 'http'>
-    class Implementation implements Controller {
-      async upload(ctx: ContextOf<Controller, 'upload'>) {
-        const reader = ctx.body.getReader()
-        let bytes = 0
-        while (true) {
-          const chunk = await reader.read()
-          if (chunk.done) break
-          bytes += chunk.value.byteLength
-        }
-        return ctx.response.accepted({
-          body: { bytes },
-        })
-      }
-    }
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        async upload(ctx) {
+          const reader = ctx.body.getReader()
+          let bytes = 0
+          while (true) {
+            const chunk = await reader.read()
+            if (chunk.done) break
+            bytes += chunk.value.byteLength
+          }
+          return ctx.response.accepted({ body: { bytes } })
+        },
+      }),
+    })
     const Module = defineModule(() => ({
-      implementations: [implement(Contract).for(http).with(Implementation)],
+      implementations: [Implementation],
     }))
     const application = createHttpApplication({ modules: [Module()] })
     const response = await application.handle(

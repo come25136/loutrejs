@@ -7,6 +7,8 @@ import {
   tokenName,
   type Class,
   type DependencyConsumer,
+  type ImplementationConsumer,
+  type ImplementationDescriptor,
   type LayerConsumer,
   type LayerDescriptor,
   type LayerRuntime,
@@ -63,7 +65,11 @@ export function collectRuntimeModuleGraph(
 export class Container {
   readonly #providers = new Map<TokenLike, ProviderDescriptor>()
   readonly #applicationCache = new Map<TokenLike, unknown>()
-  readonly #implementationCache = new Map<Class, unknown>()
+  readonly #implementationCache = new Map<ImplementationDescriptor, object>()
+  readonly #implementationConsumers = new Map<
+    ImplementationDescriptor,
+    ImplementationConsumer
+  >()
   readonly #layerCache = new Map<LayerDescriptor, LayerRuntime<object, readonly [], unknown>>()
   readonly #logger: Logger
   readonly #recorder: DependencyRecorder | undefined
@@ -88,18 +94,45 @@ export class Container {
     return this.#resolve(token)
   }
 
-  resolveImplementation<T>(target: Class<T>): T {
-    const cached = this.#implementationCache.get(target)
-    if (this.#implementationCache.has(target)) return cached as T
-
-    const instance = this.#instantiate(target, [target])
-    this.#implementationCache.set(target, instance)
-    return instance
-  }
-
-  /** @internal Graph Probe が managed implementation class を construction する。 */
+  /** @internal Graph Probe がProvider classをconstructionする。 */
   probeClass<T>(target: Class<T>): T {
     return this.#instantiate(target, [target])
+  }
+
+  /** @internal Application construction時にImplementation factoryを1回だけ構築する。 */
+  prepareImplementation(implementation: ImplementationDescriptor): void {
+    if (this.#implementationCache.has(implementation)) return
+    let consumer = this.#implementationConsumers.get(implementation)
+    if (!consumer) {
+      consumer = {
+        kind: 'implementation-consumer',
+        id: `runtime-implementation:${this.#implementationConsumers.size + 1}`,
+        name: implementation.name,
+      }
+      this.#implementationConsumers.set(implementation, consumer)
+    }
+    this.#constructImplementation(implementation, consumer, true)
+  }
+
+  /** @internal 構築済みImplementation runtimeを取得する。 */
+  implementationRuntime(
+    implementation: ImplementationDescriptor,
+  ): object {
+    const cached = this.#implementationCache.get(implementation)
+    if (!cached) {
+      throw new DependencyResolutionError(
+        `LUTRE_IMPL_NOT_PREPARED: Implementation ${implementation.name} is not prepared during application construction.`,
+      )
+    }
+    return cached
+  }
+
+  /** @internal Graph Probe用にImplementation factoryを同期constructionする。 */
+  probeImplementation(
+    implementation: ImplementationDescriptor,
+    consumer: ImplementationConsumer,
+  ): object {
+    return this.#constructImplementation(implementation, consumer, false)
   }
 
   /** @internal Application construction時にLayer factoryを1回だけ構築する。 */
@@ -277,6 +310,54 @@ export class Container {
     }
     const normalized = runtime as LayerRuntime<object, readonly [], unknown>
     if (cache) this.#layerCache.set(layer, normalized)
+    return normalized
+  }
+
+  #constructImplementation(
+    implementation: ImplementationDescriptor,
+    consumer: ImplementationConsumer,
+    cache: boolean,
+  ): object {
+    const cached = this.#implementationCache.get(implementation)
+    if (cache && cached) return cached
+    const runtime = runInInjectionContext(
+      {
+        consumer,
+        resolve: (token) => this.#resolve(token, implementation.name),
+        ...(this.#recorder === undefined
+          ? {}
+          : {
+              record: (
+                recordedConsumer: DependencyConsumer,
+                dependency: TokenLike,
+              ) => this.#recorder!.record(recordedConsumer, dependency),
+            }),
+      },
+      () => implementation.factory(),
+    ) as unknown
+    if (isThenable(runtime)) {
+      throw new DependencyResolutionError(
+        `LUTRE_IMPL_ASYNC_FACTORY: Implementation ${implementation.name} factory must be synchronous.`,
+      )
+    }
+    if (
+      typeof runtime !== 'object' ||
+      runtime === null ||
+      Array.isArray(runtime)
+    ) {
+      throw new DependencyResolutionError(
+        `LUTRE_IMPL_FACTORY_RESULT: Implementation ${implementation.name} factory must return a non-null object.`,
+      )
+    }
+    const normalized = runtime as Record<string, unknown>
+    for (const procedure of implementation.procedures) {
+      if (typeof normalized[procedure] !== 'function') {
+        throw new DependencyResolutionError(
+          `LUTRE_IMPL_004: Implementation ${implementation.name} does not implement callable procedure ${procedure}.`,
+        )
+      }
+    }
+    if (cache) this.#implementationCache.set(implementation, normalized)
     return normalized
   }
 }

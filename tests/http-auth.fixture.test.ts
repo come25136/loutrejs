@@ -1,7 +1,7 @@
 import {
   contract,
   defineModule,
-  implement,
+  implementation,
   procedure,
 } from '@loutrejs/core'
 import { compileApplication } from '@loutrejs/graph'
@@ -61,10 +61,14 @@ describe('canonical Fixture B', () => {
         },
       }),
     })
+    const InvalidImplementation = implementation({
+      name: 'AccountController',
+      contract: InvalidContract,
+      protocol: http,
+      factory: AccountController.factory as never,
+    })
     const InvalidModule = defineModule(() => ({
-      implementations: [
-        implement(InvalidContract).for(http).with(AccountController as any),
-      ],
+      implementations: [InvalidImplementation],
     }))
     const codes = compileApplication([InvalidModule()]).diagnostics.map(
       ({ code }) => code,

@@ -1318,7 +1318,7 @@ interface HttpRoute {
   readonly segments: readonly HttpPathSegment[]
   readonly dispatchKey: string
   readonly protocol: HttpProtocol
-  readonly binding: ImplementationBinding
+  readonly implementation: ImplementationDescriptor
   readonly procedure: string
 }
 ```

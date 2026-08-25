@@ -1,13 +1,11 @@
 import {
   contract,
   defineModule,
-  implement,
+  implementation,
   procedure,
 } from '@loutrejs/core'
 import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
 import {
-  type ContextOf,
-  type ControllerOf,
   createHttpApplication,
   http,
   validate,
@@ -117,63 +115,58 @@ function createRoutingApplication() {
       },
     }),
   })
-  type Controller = ControllerOf<typeof Contract, 'http'>
-  class Implementation implements Controller {
-    raw(ctx: ContextOf<Controller, 'raw'>) {
-      return ctx.response.ok({ body: { route: 'raw', value: ctx.params.id } })
-    }
-
-    declaredOnly(ctx: ContextOf<Controller, 'declaredOnly'>) {
-      return ctx.response.ok({
-        body: { route: 'declared', value: ctx.params.id },
-      })
-    }
-
-    multiple(ctx: ContextOf<Controller, 'multiple'>) {
-      return ctx.response.ok({
-        body: {
-          route: 'multiple',
-          value: ctx.params,
-        },
-      })
-    }
-
-    dynamic(ctx: ContextOf<Controller, 'dynamic'>) {
-      return ctx.response.ok({
-        body: { route: 'dynamic', value: ctx.params.id },
-      })
-    }
-
-    static(ctx: ContextOf<Controller, 'static'>) {
-      return ctx.response.ok({ body: { route: 'static', value: null } })
-    }
-
-    lessSpecific(ctx: ContextOf<Controller, 'lessSpecific'>) {
-      return ctx.response.ok({
-        body: { route: 'less', value: ctx.params.x },
-      })
-    }
-
-    moreSpecific(ctx: ContextOf<Controller, 'moreSpecific'>) {
-      return ctx.response.ok({
-        body: { route: 'more', value: ctx.params.y },
-      })
-    }
-
-    getMethod(ctx: ContextOf<Controller, 'getMethod'>) {
-      return ctx.response.ok({
-        body: { route: 'get', value: ctx.params.id },
-      })
-    }
-
-    postMethod(ctx: ContextOf<Controller, 'postMethod'>) {
-      return ctx.response.ok({
-        body: { route: 'post', value: ctx.params.id },
-      })
-    }
-  }
+  const Implementation = implementation({
+    name: 'Implementation',
+    contract: Contract,
+    protocol: http,
+    factory: () => ({
+      raw(ctx) {
+        return ctx.response.ok({
+          body: { route: 'raw', value: ctx.params.id },
+        })
+      },
+      declaredOnly(ctx) {
+        return ctx.response.ok({
+          body: { route: 'declared', value: ctx.params.id },
+        })
+      },
+      multiple(ctx) {
+        return ctx.response.ok({
+          body: { route: 'multiple', value: ctx.params },
+        })
+      },
+      dynamic(ctx) {
+        return ctx.response.ok({
+          body: { route: 'dynamic', value: ctx.params.id },
+        })
+      },
+      static(ctx) {
+        return ctx.response.ok({ body: { route: 'static', value: null } })
+      },
+      lessSpecific(ctx) {
+        return ctx.response.ok({
+          body: { route: 'less', value: ctx.params.x },
+        })
+      },
+      moreSpecific(ctx) {
+        return ctx.response.ok({
+          body: { route: 'more', value: ctx.params.y },
+        })
+      },
+      getMethod(ctx) {
+        return ctx.response.ok({
+          body: { route: 'get', value: ctx.params.id },
+        })
+      },
+      postMethod(ctx) {
+        return ctx.response.ok({
+          body: { route: 'post', value: ctx.params.id },
+        })
+      },
+    }),
+  })
   const Module = defineModule(() => ({
-    implementations: [implement(Contract).for(http).with(Implementation)],
+    implementations: [Implementation],
   }))
   return createHttpApplication({ modules: [Module()] })
 }
@@ -243,20 +236,21 @@ describe('HTTP pathとroute identity', () => {
         },
       }),
     })
-    type ReverseController = ControllerOf<typeof ReverseContract, 'http'>
-    class ReverseImplementation implements ReverseController {
-      static(ctx: ContextOf<ReverseController, 'static'>) {
-        return ctx.response.ok({ body: 'static' })
-      }
-
-      dynamic(ctx: ContextOf<ReverseController, 'dynamic'>) {
-        return ctx.response.ok({ body: `dynamic:${ctx.params.id}` })
-      }
-    }
+    const ReverseImplementation = implementation({
+      name: 'ReverseImplementation',
+      contract: ReverseContract,
+      protocol: http,
+      factory: () => ({
+        static(ctx) {
+          return ctx.response.ok({ body: 'static' })
+        },
+        dynamic(ctx) {
+          return ctx.response.ok({ body: `dynamic:${ctx.params.id}` })
+        },
+      }),
+    })
     const ReverseModule = defineModule(() => ({
-      implementations: [
-        implement(ReverseContract).for(http).with(ReverseImplementation),
-      ],
+      implementations: [ReverseImplementation],
     }))
     const reverseApplication = createHttpApplication({
       modules: [ReverseModule()],
@@ -426,25 +420,31 @@ describe('protocol dispatchKeyの重複検査', () => {
       },
       { name: 'SecondContract' },
     )
-    class FirstController {
-      get() {
-        return { kind: 'http-result', variant: 'ok', body: 'first' } as const
-      }
-    }
-    class SecondController {
-      get() {
-        return { kind: 'http-result', variant: 'ok', body: 'second' } as const
-      }
-    }
+    const FirstController = implementation({
+      name: 'FirstController',
+      contract: FirstContract,
+      protocol: http,
+      factory: () => ({
+        get() {
+          return { kind: 'http-result', variant: 'ok', body: 'first' } as const
+        },
+      }),
+    })
+    const SecondController = implementation({
+      name: 'SecondController',
+      contract: SecondContract,
+      protocol: http,
+      factory: () => ({
+        get() {
+          return { kind: 'http-result', variant: 'ok', body: 'second' } as const
+        },
+      }),
+    })
     const FirstModule = defineModule(() => ({
-      implementations: [
-        implement(FirstContract).for(http).with(FirstController),
-      ],
+      implementations: [FirstController],
     }))
     const SecondModule = defineModule(() => ({
-      implementations: [
-        implement(SecondContract).for(http).with(SecondController),
-      ],
+      implementations: [SecondController],
     }))
 
     const result = compileApplication([FirstModule(), SecondModule()])

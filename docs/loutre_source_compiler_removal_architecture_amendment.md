@@ -39,7 +39,7 @@ class UserRepository {
 6. DB 接続などの非同期 resource initialization / cleanup は Lifecycle へ分離する。
 7. Loutre は Application Graph を引き続き framework の第一級モデルとして扱う。
 8. **Source Compiler 廃止の絶対条件として、`loutre graph di` から完全な DI dependency graph を生成できることを要求する。**
-9. `loutre graph di` は request traffic などの「実際にたまたま実行された依存」を収集するのではなく、**Graph Probe によって全 framework-managed class を lifecycle 実行なしで construction し、`inject()` dependency edge を収集する。**
+9. `loutre graph di` は request traffic などの「実際にたまたま実行された依存」を収集するのではなく、**Graph Probe によって全 framework-managed component を lifecycle 実行なしで construction し、`inject()` dependency edge を収集する。**
 10. `loutre graph`, `loutre check`, `loutre explain`, `loutre doctor`, Runtime は可能な限り **同じ Application Graph / validation engine** を source of truth とする。
 11. Compiler に存在していた Graph IR / semantic validation は捨てない。Compiler から独立した Graph layer へ移す。
 12. Source Compiler / Runtime Linkage の削除は、本文書末尾の Acceptance Criteria をすべて満たした後にのみ実施する。
@@ -59,11 +59,16 @@ class UserRepository {
 従来の Loutre は、次のような constructor injection DX を実現するため TypeScript Source Compiler を利用していた。
 
 ```ts
-class UsersController {
-  constructor(
-    readonly users: UsersService,
-  ) {}
-}
+const UsersController = implementation({
+  name: 'UsersController',
+  contract: UsersContract,
+  protocol: http,
+  factory: (users = inject(UsersService)) => ({
+    get(ctx) {
+      return ctx.response.ok({ body: users.get(ctx.params.id) })
+    },
+  }),
+})
 ```
 
 TypeScript の型情報は JavaScript runtime では消失するため、Source Compiler が TypeScript AST / TypeChecker を利用して、
@@ -87,7 +92,7 @@ UsersService
 - validation 前後の input type も TypeScript 型演算で導出可能
 - Module は runtime descriptor
 - Provider は runtime descriptor
-- Implementation binding は runtime descriptor
+- Implementationはdescriptorと同期factoryで成立する
 - Capability requirement は Application Graph から算出可能
 - Contract implementation coverage は Graph validation で検査可能
 - Pipeline semantic validation は Graph validation で検査可能
@@ -266,7 +271,7 @@ inject(TOKEN)
 
 ## 4.1 利用可能範囲
 
-`inject()` は **framework-managed class construction 中のみ**利用可能。
+`inject()` は **framework-managed componentの同期construction中のみ**利用可能。
 
 許可:
 
@@ -534,15 +539,15 @@ resource lifecycle が必要な object は application scope に置く。
 
 ---
 
-# 9. Managed Class
+# 9. Managed Component
 
 暗黙の arbitrary class auto-resolution は廃止する方向とする。
 
-framework-managed class は次のいずれか。
+framework-managed component は次のいずれか。
 
 1. Module `providers` に明示された class
 2. `provide(TOKEN).useClass(Class)` の implementation
-3. Contract / Protocol implementation binding に明示された class
+3. Module `implementations` に明示されたImplementation descriptor
 4. conditional provider mapping に明示された class
 5. framework built-in として明示登録された class
 
@@ -557,12 +562,12 @@ defineModule(() => ({
 }))
 ```
 
-または:
+Implementationは次のようにModuleへ所属させる。
 
 ```ts
-implement(UsersContract)
-  .for(http)
-  .with(UsersController)
+defineModule(() => ({
+  implementations: [UsersController],
+}))
 ```
 
 だけが managed。
@@ -639,7 +644,7 @@ Application Graph
 ├ Pipeline graph
 ├ Context requires/provides
 ├ validation state
-├ Implementation binding
+├ Implementation descriptor
 ├ Lifecycle metadata
 ├ Env / conditional branch
 ├ Runtime capability requirements
@@ -666,11 +671,11 @@ type DependencyEdgeSource =
 
 `probed`:
 
-- managed class construction 中に `inject()` から取得した dependency edge
+- managed componentの同期construction中に `inject()` から取得した dependency edge
 
 「probed」は request traffic で観測されたという意味ではない。
 
-**Graph Probe によって意図的に全 managed class を construction して取得された dependency** を意味する。
+**Graph Probe によって意図的に全 managed component を construction して取得された dependency** を意味する。
 
 ---
 
@@ -817,7 +822,7 @@ Declared Graph
        ↓
 Graph Probe Container
        ↓
-全 managed class を construction
+全 managed component を construction
        ↓
 inject() edge を record
        ↓
@@ -834,7 +839,7 @@ Complete Application Graph
 
 - application-scoped class provider
 - transient class provider
-- Contract implementation class
+- Implementation descriptorの同期factory
 - `useClass` implementation
 - conditional mapping の **全 candidate**
 - framework-managed built-ins
@@ -877,7 +882,7 @@ STORAGE
 
 # 16. Graph Probe と Side Effect
 
-`loutre graph` が安全に利用できるため、managed class construction に明確な purity rule を設ける。
+`loutre graph` が安全に利用できるため、managed component construction に明確な purity rule を設ける。
 
 ## 16.1 Graph command で実行してよいもの
 
@@ -886,7 +891,8 @@ OK
 - application module evaluation
 - defineModule evaluation
 - synchronous provider declaration
-- managed class constructor
+- managed Provider class constructor
+- Layer / Implementation factory
 - default parameter
 - inject()
 - cheap synchronous initialization
@@ -1560,7 +1566,7 @@ Source Compiler を先に消してはならない。
 - class/custom token support
 - application/transient support
 - cycle detection
-- managed class declaration enforcement
+- managed component declaration enforcement
 
 まだ Source Compiler は削除しない。
 
@@ -1612,7 +1618,7 @@ Graph representation を追加。
 
 ## Phase D — Graph Probe
 
-全 framework-managed class を lifecycle なしで Probe する。
+全 framework-managed component を lifecycle なしで Probe する。
 
 必須:
 
@@ -1736,7 +1742,7 @@ Electron
 - application singleton
 - transient per injection
 - transient injected into application consumer
-- implementation class cache semantics
+- Implementation descriptor単位のfactory result cache semantics
 
 ## factory
 

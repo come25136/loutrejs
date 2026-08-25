@@ -2,7 +2,7 @@ import {
   contextKey,
   contract,
   defineModule,
-  implement,
+  implementation,
   inject,
   layer,
   procedure,
@@ -12,8 +12,6 @@ import {
   type OnModuleInit,
 } from '@loutrejs/core'
 import {
-  type ContextOf,
-  type ControllerOf,
   createHttpApplication,
   http,
   validate,
@@ -105,8 +103,6 @@ const UsersContract = contract(
   { name: 'DrizzleUsersContract' },
 )
 
-type UsersHttp = ControllerOf<typeof UsersContract, 'http'>
-
 class UserRepository {
   async create(transaction: DrizzleTransaction, name: string) {
     const [user] = await transaction
@@ -122,15 +118,18 @@ class UserRepository {
   }
 }
 
-class UsersController implements UsersHttp {
-  constructor(readonly users = inject(UserRepository)) {}
-
-  async create(ctx: ContextOf<UsersHttp, 'create'>) {
-    return ctx.response.created({
-      body: await this.users.create(ctx.transaction, ctx.body.name),
-    })
-  }
-}
+const UsersController = implementation({
+  name: 'UsersController',
+  contract: UsersContract,
+  protocol: http,
+  factory: (users = inject(UserRepository)) => ({
+    async create(ctx) {
+      return ctx.response.created({
+        body: await users.create(ctx.transaction, ctx.body.name),
+      })
+    },
+  }),
+})
 
 const AppModule = defineModule(() => ({
   name: 'DatabaseDrizzlePostgresExample',
@@ -142,7 +141,7 @@ const AppModule = defineModule(() => ({
     DrizzleDatabase,
     UserRepository,
   ],
-  implementations: [implement(UsersContract).for(http).with(UsersController)],
+  implementations: [UsersController],
 }))
 
 export default createHttpApplication({ modules: [AppModule()] })

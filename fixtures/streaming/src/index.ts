@@ -1,19 +1,15 @@
 import {
   contract,
   defineModule,
-  implement,
+  implementation,
   inject,
   procedure,
 } from '@loutrejs/core'
 import {
-  ContextOf,
-  ControllerOf,
   createHttpApplication,
   http,
 } from '@loutrejs/http'
 import {
-  HandlerOf,
-  MessageContextOf,
   createMessagePortApplication,
   messagePort,
 } from '@loutrejs/message-port'
@@ -67,35 +63,35 @@ export const EventsContract = contract({
   }),
 }, { name: 'EventsContract' })
 
-type EventsHttp = ControllerOf<typeof EventsContract, 'http'>
+export const EventsController = implementation({
+  name: 'EventsController',
+  contract: EventsContract,
+  protocol: http,
+  factory: (streams = inject(EventStreamService)) => ({
+    subscribe(ctx) {
+      return ctx.response.events({ body: streams.events() })
+    },
+  }),
+})
 
-export class EventsController implements EventsHttp {
-  constructor(readonly streams = inject(EventStreamService)) {}
-
-  subscribe(ctx: ContextOf<EventsHttp, 'subscribe'>) {
-    return ctx.response.events({
-      body: this.streams.events(),
-    })
-  }
-}
-
-type EventsMessagePort = HandlerOf<typeof EventsContract, 'messagePort'>
-
-export class EventsMessageHandler implements EventsMessagePort {
-  constructor(readonly streams = inject(EventStreamService)) {}
-
-  subscribe(ctx: MessageContextOf<EventsMessagePort, 'subscribe'>) {
-    return ctx.message.events(this.streams.events())
-  }
-}
+export const EventsMessageHandler = implementation({
+  name: 'EventsMessageHandler',
+  contract: EventsContract,
+  protocol: messagePort,
+  factory: (streams = inject(EventStreamService)) => ({
+    subscribe(ctx) {
+      return ctx.message.events(streams.events())
+    },
+  }),
+})
 
 export const EventsModule = defineModule(() => ({
   name: 'EventsModule',
   description: 'HTTP server-stream canonical fixture',
   providers: [EventStreamService],
   implementations: [
-    implement(EventsContract).for(http).with(EventsController),
-    implement(EventsContract).for(messagePort).with(EventsMessageHandler),
+    EventsController,
+    EventsMessageHandler,
   ],
 }))
 

@@ -3,7 +3,7 @@ import {
   contextKey,
   defineError,
   defineEnv,
-  implement,
+  implementation,
   layer,
   provide,
   procedure,
@@ -137,46 +137,61 @@ void invalidId
 // @ts-expect-error named responseのbody型はschemaから導出される
 context.response.found({ body: { id: '1' } })
 
-class GetController {
-  get(_context: ContextOf<HttpController, 'get'>) {
-    return context.response.found({ body: { id: '1', name: 'Ada' } })
-  }
-}
+implementation({
+  name: 'GetController',
+  contract: Contract,
+  protocol: http,
+  procedures: ['get'],
+  factory: () => ({
+    get(ctx) {
+      const inferredId: string = ctx.params.id
+      void inferredId
+      return ctx.response.found({ body: { id: '1', name: 'Ada' } })
+    },
+  }),
+})
 
-implement(Contract).for(http).procedures('get').with(GetController)
+implementation({
+  name: 'DirectGetController',
+  contract: Contract,
+  protocol: http,
+  procedures: ['get'],
+  factory: () => ({
+    get() {
+      return {
+        kind: 'http-result' as const,
+        variant: 'found' as const,
+        body: { id: '1', name: 'Ada' },
+      }
+    },
+  }),
+})
 
-class DirectGetController {
-  get() {
-    return {
-      kind: 'http-result' as const,
-      variant: 'found' as const,
-      body: { id: '1', name: 'Ada' },
-    }
-  }
-}
+implementation({
+  name: 'UndeclaredResultController',
+  contract: Contract,
+  protocol: http,
+  procedures: ['get'],
+  factory: () => ({
+    // @ts-expect-error 直接返すresultもContractのresponse variantと一致する必要がある
+    get() {
+      return {
+        kind: 'http-result' as const,
+        variant: 'missing' as const,
+        body: { id: '1', name: 'Ada' },
+      }
+    },
+  }),
+})
 
-implement(Contract).for(http).procedures('get').with(DirectGetController)
-
-class UndeclaredResultController {
-  get() {
-    return {
-      kind: 'http-result' as const,
-      variant: 'missing' as const,
-      body: { id: '1', name: 'Ada' },
-    }
-  }
-}
-
-// @ts-expect-error Controllerが直接返すresultもContractのresponse variantと一致する必要がある
-implement(Contract).for(http).procedures('get').with(UndeclaredResultController)
-
-class InvalidController {
-  get() {
-    return 42
-  }
-}
-// @ts-expect-error implementation methodのreturn型がContractと互換でない
-implement(Contract).for(http).procedures('get').with(InvalidController)
+implementation({
+  name: 'InvalidController',
+  contract: Contract,
+  protocol: http,
+  procedures: ['get'],
+  // @ts-expect-error implementation procedureのreturn型がContractと互換でない
+  factory: () => ({ get: () => 42 }),
+})
 
 type RawContext = ContextOf<HttpController, 'unvalidated'>
 declare const rawContext: RawContext
@@ -229,8 +244,14 @@ layer({
   },
 })
 
-// @ts-expect-error 未定義のprocedureは選択できない
-implement(Contract).for(http).procedures('missing').with(GetController)
+implementation({
+  name: 'MissingController',
+  contract: Contract,
+  protocol: http,
+  // @ts-expect-error 未定義のprocedureは選択できない
+  procedures: ['missing'],
+  factory: (() => ({})) as never,
+})
 
 const EnvSchema = z.object({ DRIVER: z.enum(['memory', 's3']) })
 class TestEnv extends defineEnv(EnvSchema) {}

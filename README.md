@@ -43,6 +43,8 @@ Filesystem規約やruntime reflectionに依存せず、依存関係、実行順�
   Contractに集約
 - **型付きPipeline** — `requires` / `provides`でLayer間のContext変化を表現し、
   Controllerが受け取る最終Context shapeを導出
+- **Factory Implementation** — HTTPとMessagePortの実装をprotocol-neutralなdescriptorと
+  同期factoryで宣言し、`ctx`とresultをContractから自動推論
 - **明示的なDI** — class、typed token、`application` / `transient` scope、
   parameterized Module、conditional Provider、`inject()` dependency edgeに対応
 - **Schema相互運用** — Standard Schema互換のvalidatorを利用可能
@@ -91,6 +93,29 @@ http({
 })
 
 // Controllerではctx.params.id: string
+```
+
+Controllerはclassではなく、`implementation()`の同期factoryが返すplain objectとして定義します。
+`contract`、`protocol`、`procedures`はfactoryを実行しなくてもGraphから参照できます。
+
+```ts
+const UsersController = implementation({
+  name: 'UsersController',
+  contract: UsersContract,
+  protocol: http,
+  factory: (users = inject(UsersService)) => ({
+    get(ctx) {
+      return ctx.response.found({
+        body: users.get(ctx.params.id),
+      })
+    },
+  }),
+})
+
+const UsersModule = defineModule(() => ({
+  providers: [UsersService],
+  implementations: [UsersController],
+}))
 ```
 
 値の検証や変換が必要な場合、`request.params`へobject schemaではなくpropertyごとの
@@ -161,7 +186,7 @@ class UsersService {
 }
 ```
 
-`inject()`はframework-managedな同期construction中だけ利用でき、classとLayer factoryのRuntime解決および
+`inject()`はframework-managedな同期construction中だけ利用でき、class、Layer factory、Implementation factoryのRuntime解決および
 Graph Probeによるdependency edge収集のsource of truthになります。DI constructionは同期で、
 非同期resourceの初期化と終了はLifecycle hookへ分離します。
 
@@ -223,7 +248,7 @@ const authLayer = layer({
 
 | Package                  | 役割                                                                   |
 | ------------------------ | ---------------------------------------------------------------------- |
-| `@loutrejs/core`         | Contract、Module、Provider、typed token、Context Key、Layer descriptor |
+| `@loutrejs/core`         | Contract、Module、Provider、Implementation、typed token、Context Key、Layer descriptor |
 | `@loutrejs/graph`        | Application Graph IR、Graph Builder、Graph Probe、semantic validation  |
 | `@loutrejs/runtime`      | DI container、Execution Context、Pipeline engine                       |
 | `@loutrejs/http`         | HTTP Contract、validation、authentication、Request / Response adapter  |

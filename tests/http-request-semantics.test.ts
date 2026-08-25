@@ -1,12 +1,11 @@
 import {
   contract,
   defineModule,
-  implement,
+  implementation,
   procedure,
+  type ImplementationDescriptor,
 } from '@loutrejs/core'
 import {
-  ContextOf,
-  ControllerOf,
   createHttpApplication,
   http,
   validate,
@@ -39,18 +38,24 @@ describe('HTTP request semantics', () => {
         },
       }),
     })
-    type Controller = ControllerOf<typeof Contract, 'http'>
-    class Implementation implements Controller {
-      inspect(ctx: ContextOf<Controller, 'inspect'>) {
-        return ctx.response.ok({
-          body: {
-            tags: Array.isArray(ctx.query.tag) ? ctx.query.tag : [ctx.query.tag],
-            header: ctx.headers['x-repeat'],
-          },
-        })
-      }
-    }
-    const application = applicationFor(Contract, Implementation)
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        inspect(ctx) {
+          return ctx.response.ok({
+            body: {
+              tags: Array.isArray(ctx.query.tag)
+                ? ctx.query.tag
+                : [ctx.query.tag],
+              header: ctx.headers['x-repeat'],
+            },
+          })
+        },
+      }),
+    })
+    const application = applicationFor(Implementation)
     const headers = new Headers()
     headers.append('X-Repeat', 'first')
     headers.append('x-repeat', 'second')
@@ -85,19 +90,23 @@ describe('HTTP request semantics', () => {
         },
       }),
     })
-    type Controller = ControllerOf<typeof Contract, 'http'>
-    class Implementation implements Controller {
-      upload(ctx: ContextOf<Controller, 'upload'>) {
-        const file = ctx.body.get('file')
-        return ctx.response.accepted({
-          body: {
-            name: String(ctx.body.get('name')),
-            size: file instanceof File ? file.size : 0,
-          },
-        })
-      }
-    }
-    const application = applicationFor(Contract, Implementation)
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        upload(ctx) {
+          const file = ctx.body.get('file')
+          return ctx.response.accepted({
+            body: {
+              name: String(ctx.body.get('name')),
+              size: file instanceof File ? file.size : 0,
+            },
+          })
+        },
+      }),
+    })
+    const application = applicationFor(Implementation)
     const body = new FormData()
     body.set('name', 'loutre')
     body.set('file', new File(['otter'], 'otter.txt'))
@@ -126,12 +135,17 @@ describe('HTTP request semantics', () => {
         },
       }),
     })
-    class Implementation {
-      upload() {
-        throw new Error('呼び出されません')
-      }
-    }
-    const application = applicationFor(Contract, Implementation)
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        upload(): never {
+          throw new Error('呼び出されません')
+        },
+      }),
+    })
+    const application = applicationFor(Implementation)
 
     const response = await application.handle(
       new Request('https://fixture.test/invalid-multipart', {
@@ -166,25 +180,33 @@ describe('HTTP request semantics', () => {
         },
       }),
     })
-    type Controller = ControllerOf<typeof Contract, 'http'>
-    class Implementation implements Controller {
-      subscribe(ctx: ContextOf<Controller, 'subscribe'>) {
-        expect(ctx.signal).toBeInstanceOf(AbortSignal)
-        const stream = async function* () {
-          try {
-            yield 1
-            await new Promise<void>((resolve) => {
-              if (ctx.signal.aborted) resolve()
-              else ctx.signal.addEventListener('abort', () => resolve(), { once: true })
-            })
-          } finally {
-            iteratorReturned = true
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        subscribe(ctx) {
+          expect(ctx.signal).toBeInstanceOf(AbortSignal)
+          const stream = async function* () {
+            try {
+              yield 1
+              await new Promise<void>((resolve) => {
+                if (ctx.signal.aborted) resolve()
+                else {
+                  ctx.signal.addEventListener('abort', () => resolve(), {
+                    once: true,
+                  })
+                }
+              })
+            } finally {
+              iteratorReturned = true
+            }
           }
-        }
-        return ctx.response.ok({ body: stream() })
-      }
-    }
-    const application = applicationFor(Contract, Implementation)
+          return ctx.response.ok({ body: stream() })
+        },
+      }),
+    })
+    const application = applicationFor(Implementation)
     const abortController = new AbortController()
     const response = await application.handle(
       new Request('https://fixture.test/abort', {
@@ -200,14 +222,9 @@ describe('HTTP request semantics', () => {
   })
 })
 
-function applicationFor(
-  Contract: Parameters<typeof implement>[0],
-  Implementation: new (...args: any[]) => any,
-) {
+function applicationFor(Implementation: ImplementationDescriptor) {
   const Module = defineModule(() => ({
-    implementations: [
-      implement(Contract).for(http).with(Implementation as never),
-    ],
+    implementations: [Implementation],
   }))
   return createHttpApplication({ modules: [Module()] })
 }

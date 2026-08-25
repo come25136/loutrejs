@@ -2,16 +2,11 @@ import {
   contract,
   defineError,
   defineModule,
-  implement,
+  implementation,
   procedure,
 } from '@loutrejs/core'
 import { createHttpApplication, http } from '@loutrejs/http'
-import {
-  createMessagePortApplication,
-  HandlerOf,
-  messagePort,
-  MessageContextOf,
-} from '@loutrejs/message-port'
+import { createMessagePortApplication, messagePort } from '@loutrejs/message-port'
 import {
   ConsoleLoggerBackend,
   JsonConsoleLoggerBackend,
@@ -119,13 +114,18 @@ describe('構造化ログ', () => {
         },
       }),
     })
-    class Implementation {
-      fail(): never {
-        throw new Error('fixture failure')
-      }
-    }
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        fail(): never {
+          throw new Error('fixture failure')
+        },
+      }),
+    })
     const Module = defineModule(() => ({
-      implementations: [implement(Contract).for(http).with(Implementation)],
+      implementations: [Implementation],
     }))
     const records: LogRecord[] = []
     const application = createHttpApplication({
@@ -184,13 +184,18 @@ describe('構造化ログ', () => {
         },
       }),
     })
-    class Implementation {
-      fail(): never {
-        throw ExpectedError({ reason: 'expected' })
-      }
-    }
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        fail(): never {
+          throw ExpectedError({ reason: 'expected' })
+        },
+      }),
+    })
     const Module = defineModule(() => ({
-      implementations: [implement(Contract).for(http).with(Implementation)],
+      implementations: [Implementation],
     }))
     const records: LogRecord[] = []
     const application = createHttpApplication({
@@ -224,16 +229,18 @@ describe('構造化ログ', () => {
         },
       }),
     })
-    type Handler = HandlerOf<typeof Contract, 'messagePort'>
-    class Implementation implements Handler {
-      ping(ctx: MessageContextOf<Handler, 'ping'>) {
-        return ctx.message.ok('pong')
-      }
-    }
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: messagePort,
+      factory: () => ({
+        ping(ctx) {
+          return ctx.message.ok('pong')
+        },
+      }),
+    })
     const Module = defineModule(() => ({
-      implementations: [
-        implement(Contract).for(messagePort).with(Implementation),
-      ],
+      implementations: [Implementation],
     }))
     const records: LogRecord[] = []
     const application = createMessagePortApplication({
