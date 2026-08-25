@@ -70,7 +70,7 @@ curl http://127.0.0.1:3000/greetings/Loutre
 ```
 
 ```json
-{"message":"こんにちは、Loutre！"}
+{ "message": "こんにちは、Loutre！" }
 ```
 
 最小構成のapplicationは
@@ -78,11 +78,15 @@ curl http://127.0.0.1:3000/greetings/Loutre
 
 ### サンプル
 
-| サンプル | 内容 | 起動コマンド |
-| --- | --- | --- |
-| [Hello HTTP](./examples/hello-http) | path parameter検証、型付きController、Provider DI | `npm run dev --workspace @loutrejs/example-hello-http` |
-| [Basic認証](./examples/basic-auth) | `basicAuth()`、authentication Layer、HTTP 401 | `npm run dev --workspace @loutrejs/example-basic-auth` |
-| [Bearer認証](./examples/bearer-auth) | ユーザー定義認証Layer、Context Key | `npm run dev --workspace @loutrejs/example-bearer-auth` |
+| サンプル                                                   | 内容                                                             | 起動コマンド                                                          |
+| ---------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [Hello HTTP](./examples/hello-http)                        | path parameter検証、callable Layer、factory DI、型付きController | `npm run dev --workspace @loutrejs/example-hello-http`                |
+| [Basic認証](./examples/basic-auth)                         | `basicAuth()`、authentication Layer、HTTP 401                    | `npm run dev --workspace @loutrejs/example-basic-auth`                |
+| [Bearer認証](./examples/bearer-auth)                       | ユーザー定義認証Layer、Context Key                               | `npm run dev --workspace @loutrejs/example-bearer-auth`               |
+| [Database Transactions](./examples/database-transactions)  | DB不要のApplication定義transaction、custom token、再帰Pipeline   | `npm run dev --workspace @loutrejs/example-database-transactions`     |
+| [PostgreSQL Database](./examples/database-postgres)        | `pg`の`PoolClient`をtyped Contextへ渡すtransaction Layer         | `npm run dev --workspace @loutrejs/example-database-postgres`         |
+| [Drizzle PostgreSQL](./examples/database-drizzle-postgres) | Drizzle固有transaction clientとoptionを保持するLayer             | `npm run dev --workspace @loutrejs/example-database-drizzle-postgres` |
+| [Prisma PostgreSQL](./examples/database-prisma-postgres)   | Prisma 7 interactive transactionとtyped Context                  | `npm run dev --workspace @loutrejs/example-database-prisma-postgres`  |
 
 ## CLI
 
@@ -103,38 +107,79 @@ npx loutre start fixtures/http-crud/src/app.ts --port 3000
 
 ```ts
 class UsersService {
-  constructor(
-    readonly repository = inject(UserRepository),
-  ) {}
+  constructor(readonly repository = inject(UserRepository)) {}
 }
 ```
 
-`inject()`はframework-managed class construction中だけ利用でき、Runtime解決と
+`inject()`はframework-managedな同期construction中だけ利用でき、classとLayer factoryのRuntime解決および
 Graph Probeによるdependency edge収集のsource of truthになります。DI constructionは同期で、
 非同期resourceの初期化と終了はLifecycle hookへ分離します。
 
+## Layerとchild Pipeline
+
+LayerはContextと`next`を受け取り、Pipelineのcontinuationを包みます。`provides`があるLayerは
+`next({...})`でContextを追加します。Layer自体を関数として呼ぶと、その利用箇所だけにchild
+Pipelineを関連付けられます。
+
+```ts
+const transactionLayer = layer({
+  name: 'transaction',
+  factory:
+    (database = inject(Database)) =>
+    async (_ctx, next) => {
+      await database.transaction(next)
+    },
+})
+
+const pipeline = [
+  transactionLayer([authorization, validate.body, http.controller]),
+]
+
+void pipeline
+```
+
+`transactionLayer`をそのまま置いた場合、`next()`は親Pipelineの残りを実行します。
+`transactionLayer([...])`では`next()`がchildだけを実行し、Layerがreturnした後に親後段へ戻ります。
+childで追加されたContextとvalidation stateは親後段にも残ります。Database接続、transaction client、
+ORM固有optionなどはApplication側のProviderとLifecycleが管理し、Loutreはそれらを抽象化しません。
+
+ContextをprovideするLayerは次のように定義します。
+
+```ts
+const authLayer = layer({
+  name: 'auth',
+  provides: [CURRENT_USER],
+  factory:
+    (users = inject(UsersService)) =>
+    async (_ctx, next) => {
+      const currentUser = await users.current()
+      await next({ currentUser })
+    },
+})
+```
+
 ## 対応ランタイム
 
-| ランタイム | Adapter | Conformance test |
-| --- | --- | --- |
-| Node.js 26.x | `@loutrejs/runtime-node` | `npm run test:node` |
-| Deno | `@loutrejs/runtime-deno` | `npm run test:deno` |
-| Bun | `@loutrejs/runtime-bun` | `npm run test:bun` |
-| Cloudflare Workers / workerd | `@loutrejs/runtime-workerd` | `npm run test:workerd` |
-| Electron | `@loutrejs/runtime-electron` | `npm run test:electron` |
-| AWS Lambda | `@loutrejs/runtime-lambda` | `npm run test:lambda` |
+| ランタイム                   | Adapter                      | Conformance test        |
+| ---------------------------- | ---------------------------- | ----------------------- |
+| Node.js 26.x                 | `@loutrejs/runtime-node`     | `npm run test:node`     |
+| Deno                         | `@loutrejs/runtime-deno`     | `npm run test:deno`     |
+| Bun                          | `@loutrejs/runtime-bun`      | `npm run test:bun`      |
+| Cloudflare Workers / workerd | `@loutrejs/runtime-workerd`  | `npm run test:workerd`  |
+| Electron                     | `@loutrejs/runtime-electron` | `npm run test:electron` |
+| AWS Lambda                   | `@loutrejs/runtime-lambda`   | `npm run test:lambda`   |
 
 ## Package構成
 
-| Package | 役割 |
-| --- | --- |
-| `@loutrejs/core` | Contract、Module、Provider、typed token、Context Key、Layer descriptor |
-| `@loutrejs/graph` | Application Graph IR、Graph Builder、Graph Probe、semantic validation |
-| `@loutrejs/runtime` | DI container、Execution Context、Pipeline engine |
-| `@loutrejs/http` | HTTP Contract、validation、authentication、Request / Response adapter |
-| `@loutrejs/message-port` | MessagePort protocol、server-stream finalization |
-| `@loutrejs/runtime-*` | 各JavaScript runtimeとの境界adapter |
-| `@loutrejs/cli` | `check`、`doctor`、`graph`、`explain`、`build`、`dev`、`start` |
+| Package                  | 役割                                                                   |
+| ------------------------ | ---------------------------------------------------------------------- |
+| `@loutrejs/core`         | Contract、Module、Provider、typed token、Context Key、Layer descriptor |
+| `@loutrejs/graph`        | Application Graph IR、Graph Builder、Graph Probe、semantic validation  |
+| `@loutrejs/runtime`      | DI container、Execution Context、Pipeline engine                       |
+| `@loutrejs/http`         | HTTP Contract、validation、authentication、Request / Response adapter  |
+| `@loutrejs/message-port` | MessagePort protocol、server-stream finalization                       |
+| `@loutrejs/runtime-*`    | 各JavaScript runtimeとの境界adapter                                    |
+| `@loutrejs/cli`          | `check`、`doctor`、`graph`、`explain`、`build`、`dev`、`start`         |
 
 ## 設計ドキュメント
 

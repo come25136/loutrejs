@@ -1,7 +1,6 @@
 import { createDenoFetchHandler } from '@loutrejs/runtime-deno'
 import usersApplication from '../dist/conformance/http-crud/application.mjs'
 import eventsApplication from '../dist/conformance/streaming-http/application.mjs'
-
 const handler = createDenoFetchHandler(usersApplication)
 const response = await handler(
   new Request('https://deno.fixture/users/deno-user'),

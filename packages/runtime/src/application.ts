@@ -4,6 +4,7 @@ import {
   type ModuleInstance,
   type ModuleTemplate,
   type ProviderDescriptor,
+  type PipelineItem,
   type TokenLike,
 } from '@loutrejs/core'
 import {
@@ -32,49 +33,107 @@ export class ApplicationRuntime {
     this.container = new Container(this.graph.providers, {
       ...(options.logger === undefined ? {} : { logger: options.logger }),
     })
+    for (const pipeline of collectApplicationPipelines(this.graph.modules)) {
+      this.container.preparePipeline(pipeline)
+    }
   }
 
   async initialize(): Promise<void> {
     if (this.#initialized) return
     if (this.#stopped) throw new Error('停止済みApplicationは再初期化できません')
 
-    for (const module of this.graph.modules) {
-      const instances = await this.#resolveModuleProviders(module)
-      this.#instancesByModule.set(module, instances)
-      for (const instance of instances) await callLifecycle(instance, 'onModuleInit')
-      await this.#runHook(module.definition.lifecycle?.onModuleInit)
-    }
-    for (const module of this.graph.modules) {
-      for (const instance of this.#instancesByModule.get(module) ?? []) {
-        await callLifecycle(instance, 'onApplicationBootstrap')
+    try {
+      for (const module of this.graph.modules) {
+        const instances = await this.#resolveModuleProviders(module)
+        this.#instancesByModule.set(module, instances)
+        for (const instance of instances) await callLifecycle(instance, 'onModuleInit')
+        await this.#runHook(module.definition.lifecycle?.onModuleInit)
       }
-      await this.#runHook(module.definition.lifecycle?.onApplicationBootstrap)
+      for (const module of this.graph.modules) {
+        for (const instance of this.#instancesByModule.get(module) ?? []) {
+          await callLifecycle(instance, 'onApplicationBootstrap')
+        }
+        await this.#runHook(module.definition.lifecycle?.onApplicationBootstrap)
+      }
+      this.#initialized = true
+    } catch (error) {
+      const cleanupErrors = await this.#rollbackInitialization()
+      this.#stopped = true
+      if (cleanupErrors.length > 0) {
+        throw new AggregateError(
+          [error, ...cleanupErrors],
+          'Application initialization failed and rollback cleanup also failed',
+        )
+      }
+      throw error
     }
-    this.#initialized = true
   }
 
   async shutdown(signal?: string): Promise<void> {
     if (this.#stopped) return
+    const errors: unknown[] = []
     const modules = [...this.graph.modules].reverse()
-    for (const module of modules) {
-      for (const instance of [...(this.#instancesByModule.get(module) ?? [])].reverse()) {
-        await callLifecycle(instance, 'onModuleDestroy')
+    try {
+      for (const module of modules) {
+        for (const instance of [...(this.#instancesByModule.get(module) ?? [])].reverse()) {
+          await collectCleanupError(
+            () => callLifecycle(instance, 'onModuleDestroy'),
+            errors,
+          )
+        }
+        await collectCleanupError(
+          () => this.#runHook(module.definition.lifecycle?.onModuleDestroy),
+          errors,
+        )
       }
-      await this.#runHook(module.definition.lifecycle?.onModuleDestroy)
-    }
-    for (const module of modules) {
-      for (const instance of [...(this.#instancesByModule.get(module) ?? [])].reverse()) {
-        await callLifecycle(instance, 'beforeApplicationShutdown', signal)
+      for (const module of modules) {
+        for (const instance of [...(this.#instancesByModule.get(module) ?? [])].reverse()) {
+          await collectCleanupError(
+            () => callLifecycle(instance, 'beforeApplicationShutdown', signal),
+            errors,
+          )
+        }
+        await collectCleanupError(
+          () => this.#runHook(module.definition.lifecycle?.beforeApplicationShutdown),
+          errors,
+        )
       }
-      await this.#runHook(module.definition.lifecycle?.beforeApplicationShutdown)
-    }
-    for (const module of modules) {
-      for (const instance of [...(this.#instancesByModule.get(module) ?? [])].reverse()) {
-        await callLifecycle(instance, 'onApplicationShutdown', signal)
+      for (const module of modules) {
+        for (const instance of [...(this.#instancesByModule.get(module) ?? [])].reverse()) {
+          await collectCleanupError(
+            () => callLifecycle(instance, 'onApplicationShutdown', signal),
+            errors,
+          )
+        }
+        await collectCleanupError(
+          () => this.#runHook(module.definition.lifecycle?.onApplicationShutdown),
+          errors,
+        )
       }
-      await this.#runHook(module.definition.lifecycle?.onApplicationShutdown)
+    } finally {
+      this.#stopped = true
     }
-    this.#stopped = true
+    if (errors.length > 0) {
+      throw new AggregateError(errors, 'Application shutdown cleanup failed')
+    }
+  }
+
+  async #rollbackInitialization(): Promise<unknown[]> {
+    const errors: unknown[] = []
+    const modules = [...this.#instancesByModule.keys()].reverse()
+    for (const module of modules) {
+      await collectCleanupError(
+        () => this.#runHook(module.definition.lifecycle?.onModuleDestroy),
+        errors,
+      )
+      for (const instance of [...(this.#instancesByModule.get(module) ?? [])].reverse()) {
+        await collectCleanupError(
+          () => callLifecycle(instance, 'onModuleDestroy'),
+          errors,
+        )
+      }
+    }
+    return errors
   }
 
   async #resolveModuleProviders(module: ModuleInstance): Promise<unknown[]> {
@@ -82,9 +141,12 @@ export class ApplicationRuntime {
     const applicationProviders = providers.filter(
       (provider): provider is ProviderDescriptor => provider.scope === 'application',
     )
-    return applicationProviders.map((provider) =>
-      this.container.resolve(provider.provide),
-    )
+    const instances: unknown[] = []
+    this.#instancesByModule.set(module, instances)
+    for (const provider of applicationProviders) {
+      instances.push(this.container.resolve(provider.provide))
+    }
+    return instances
   }
 
   async #runHook(hook: LifecycleHook<any> | undefined): Promise<void> {
@@ -93,6 +155,40 @@ export class ApplicationRuntime {
       this.container.resolve(token),
     )
     await hook.run(...dependencies)
+  }
+}
+
+function collectApplicationPipelines(
+  modules: readonly ModuleInstance[],
+): readonly (readonly PipelineItem[])[] {
+  const pipelines: (readonly PipelineItem[])[] = []
+  for (const module of modules) {
+    for (const binding of module.definition.implementations ?? []) {
+      for (const procedure of Object.values(binding.contract.procedures)) {
+        const protocol = procedure.protocols[binding.protocol] as
+          | {
+              readonly pipeline?: readonly PipelineItem[]
+              readonly definition?: {
+                readonly pipeline?: readonly PipelineItem[]
+              }
+            }
+          | undefined
+        const pipeline = protocol?.pipeline ?? protocol?.definition?.pipeline
+        if (pipeline) pipelines.push(pipeline)
+      }
+    }
+  }
+  return pipelines
+}
+
+async function collectCleanupError(
+  cleanup: () => Promise<void>,
+  errors: unknown[],
+): Promise<void> {
+  try {
+    await cleanup()
+  } catch (error) {
+    errors.push(error)
   }
 }
 

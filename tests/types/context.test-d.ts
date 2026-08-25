@@ -9,12 +9,7 @@ import {
   procedure,
   token,
 } from '@loutrejs/core'
-import {
-  ContextOf,
-  ControllerOf,
-  http,
-  validate,
-} from '@loutrejs/http'
+import { ContextOf, ControllerOf, http, validate } from '@loutrejs/http'
 import { z } from 'zod'
 
 interface Session {
@@ -28,7 +23,15 @@ const OTHER_SESSION = contextKey('otherSession').of<OtherSession>()
 const sessionLayer = layer({
   name: 'session',
   provides: [SESSION],
-  inbound: () => ({ session: { userId: 'user-1' } }),
+  factory: () => async (_ctx, next) => {
+    await next({ session: { userId: 'user-1' } })
+  },
+})
+const wrapperLayer = layer({
+  name: 'wrapper',
+  factory: () => async (_ctx, next) => {
+    await next()
+  },
 })
 
 const Contract = contract({
@@ -50,7 +53,11 @@ const Contract = contract({
               .optional(),
           },
         },
-        pipeline: [validate.params, sessionLayer, http.controller],
+        pipeline: [
+          validate.params,
+          wrapperLayer([sessionLayer]),
+          http.controller,
+        ],
       }),
     },
   }),
@@ -75,6 +82,17 @@ const Contract = contract({
       }),
     },
   }),
+  nestedValidated: procedure({
+    protocols: {
+      http: http({
+        method: 'POST',
+        path: '/nested-validation',
+        request: { body: z.object({ name: z.string() }) },
+        responses: { ok: { status: 200, body: z.string() } },
+        pipeline: [wrapperLayer([validate.body]), http.controller],
+      }),
+    },
+  }),
 })
 
 type HttpController = ControllerOf<typeof Contract, 'http'>
@@ -87,10 +105,20 @@ context.response.found({
   body: { id: '1', name: 'Ada' },
   headers: { etag: 'user-1', vary: ['accept', 'authorization'] },
 })
-// @ts-expect-error response headerの値はstringまたはreadonly string[]のみ
-context.response.found({ body: { id: '1', name: 'Ada' }, headers: { etag: 1 } })
-// @ts-expect-error response schemaにないheaderは返せない
-context.response.found({ body: { id: '1', name: 'Ada' }, headers: { location: '/users/1' } })
+context.response.found({
+  body: { id: '1', name: 'Ada' },
+  headers: {
+    // @ts-expect-error response headerの値はstringまたはreadonly string[]のみ
+    etag: 1,
+  },
+})
+context.response.found({
+  body: { id: '1', name: 'Ada' },
+  headers: {
+    // @ts-expect-error response schemaにないheaderは返せない
+    location: '/users/1',
+  },
+})
 
 const session: Session = context.session
 void session
@@ -155,38 +183,37 @@ declare const rawContext: RawContext
 // @ts-expect-error validate.paramsがないためparamsはunknownのまま
 rawContext.params.id
 
-const AfterTerminalContract = contract({
-  run: procedure({
-    protocols: {
-      http: http({
-        method: 'GET',
-        path: '/after-terminal',
-        responses: { ok: { status: 200, body: z.string() } },
-        pipeline: [http.controller, sessionLayer],
-      }),
-    },
-  }),
+type NestedValidatedContext = ContextOf<HttpController, 'nestedValidated'>
+declare const nestedValidatedContext: NestedValidatedContext
+const nestedValidatedName: string = nestedValidatedContext.body.name
+void nestedValidatedName
+
+http({
+  method: 'GET',
+  path: '/after-terminal',
+  responses: { ok: { status: 200, body: z.string() } },
+  // @ts-expect-error terminalより後ろにPipelineItemは置けない
+  pipeline: [http.controller, sessionLayer],
 })
-type AfterTerminalHttp = ControllerOf<typeof AfterTerminalContract, 'http'>
-declare const afterTerminalContext: ContextOf<AfterTerminalHttp, 'run'>
-// @ts-expect-error terminalより後ろのLayerがprovideするpropertyは取得できない
-afterTerminalContext.session
 
 layer({
   name: 'invalid-provide',
   provides: [SESSION],
-  // @ts-expect-error Layerが宣言していないContext propertyは返せない
-  inbound: () => ({ otherSession: { accountId: 'account-2' } }),
+  factory: () => async (_ctx, next) => {
+    // @ts-expect-error Layerが宣言していないContext propertyはprovideできない
+    await next({ otherSession: { accountId: 'account-2' } })
+  },
 })
 
 layer({
   name: 'invalid-resolve',
   requires: [SESSION],
-  inbound: (ctx) => {
+  factory: () => async (ctx, next) => {
     const available: Session = ctx.session
     void available
     // @ts-expect-error LayerがrequireしていないContext propertyは参照できない
     ctx.otherSession
+    await next()
   },
 })
 
@@ -196,9 +223,9 @@ interface HeadersContext {
 layer({
   name: 'typed-headers',
   provides: [OTHER_SESSION],
-  inbound: (ctx: HeadersContext) => {
+  factory: () => async (ctx: HeadersContext, next) => {
     const authorization: string = ctx.headers.authorization
-    return { otherSession: { accountId: authorization } }
+    await next({ otherSession: { accountId: authorization } })
   },
 })
 

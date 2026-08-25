@@ -19,7 +19,9 @@ const OTHER_SESSION = contextKey('otherSession').of<OtherSession>()
 const sessionLayer = layer({
   name: 'message-port-session',
   provides: [SESSION],
-  inbound: () => ({ session: { userId: 'user-1' } }),
+  factory: () => async (_ctx, next) => {
+    await next({ session: { userId: 'user-1' } })
+  },
 })
 
 const Contract = contract({

@@ -6,7 +6,7 @@ const users = createWorkerdFetchHandler(usersApplication)
 const events = createWorkerdFetchHandler(eventsApplication)
 
 export default {
-  fetch(request: Request) {
+  async fetch(request: Request) {
     return new URL(request.url).pathname === '/events'
       ? events(request)
       : users(request)

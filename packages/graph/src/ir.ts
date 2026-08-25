@@ -25,6 +25,7 @@ export interface DependencyNodeIR {
     | 'factory'
     | 'conditional'
     | 'implementation'
+    | 'layer'
     | 'framework'
   readonly scope?: 'application' | 'transient'
   readonly module?: string
@@ -68,6 +69,9 @@ export interface LayerIR {
   readonly provides: readonly string[]
   readonly returns?: readonly string[]
   readonly requiresValidated: readonly string[]
+  readonly dependencies?: readonly string[]
+  readonly attributes?: Readonly<Record<string, string | number | boolean>>
+  readonly pipeline?: readonly LayerIR[]
   readonly shortCircuits?: readonly {
     readonly protocol: string
     readonly variant: string
@@ -96,7 +100,7 @@ export interface CapabilityIR {
 }
 
 export interface ApplicationGraphIR {
-  readonly version: 1
+  readonly version: 2
   readonly modules: readonly ModuleIR[]
   readonly providers: readonly ProviderIR[]
   readonly tokens: readonly TokenIR[]

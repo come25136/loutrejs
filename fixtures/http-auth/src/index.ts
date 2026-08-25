@@ -40,13 +40,13 @@ export const bearerAuthentication = layer({
   role: 'authentication',
   requiresValidated: ['headers'],
   provides: [AUTH],
-  inbound: (ctx: HeadersContext) => {
+  factory: () => async (ctx: HeadersContext, next) => {
     const value = ctx.headers.authorization
-    return {
+    await next({
       auth: {
         principal: value === 'Bearer fixture-token' ? { id: 'user-1' } : null,
       },
-    }
+    })
   },
 })
 
@@ -55,9 +55,9 @@ export const authenticated = layer({
   role: 'guard',
   requires: [AUTH],
   provides: [SESSION],
-  inbound: (ctx) => {
+  factory: () => async (ctx, next) => {
     if (!ctx.auth.principal) throw new Error('認証が必要です')
-    return { session: { principal: ctx.auth.principal } }
+    await next({ session: { principal: ctx.auth.principal } })
   },
 })
 
@@ -66,8 +66,10 @@ export const tenantAccess = layer({
   role: 'guard',
   requires: [SESSION],
   provides: [CURRENT_TENANT],
-  inbound: (ctx) => {
-    return { currentTenant: { id: `tenant-${ctx.session.principal.id}` } }
+  factory: () => async (ctx, next) => {
+    await next({
+      currentTenant: { id: `tenant-${ctx.session.principal.id}` },
+    })
   },
 })
 

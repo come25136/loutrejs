@@ -81,7 +81,7 @@ describe('Loutre CLI', () => {
     ], output.value)).toBe(0)
 
     const graph = JSON.parse(output.stdout.join('\n'))
-    expect(graph.version).toBe(1)
+    expect(graph.version).toBe(2)
     expect(graph.pipelines).toContainEqual(expect.objectContaining({
       contract: 'UsersContract',
       procedure: 'get',

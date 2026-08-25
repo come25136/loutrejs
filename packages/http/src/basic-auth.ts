@@ -13,10 +13,7 @@ export interface BasicAuthCredentials {
   readonly password: string
 }
 
-export interface BasicAuthUnauthorized<
-  TVariant extends string,
-  TBody,
-> {
+export interface BasicAuthUnauthorized<TVariant extends string, TBody> {
   readonly variant: TVariant
   readonly body: TBody
 }
@@ -55,10 +52,7 @@ export interface BasicAuthLayerDescriptor<
   TPrincipal extends ContextKey,
   TVariant extends string,
   TUnauthorizedBody,
->
-  extends LayerDescriptor<
-    BasicAuthContext,
-    void,
+> extends LayerDescriptor<
     readonly [],
     readonly [TPrincipal],
     string extends TVariant
@@ -68,7 +62,11 @@ export interface BasicAuthLayerDescriptor<
           TUnauthorizedBody,
           BasicAuthResponseHeaders
         >,
-    BasicAuthShortCircuits<TVariant>
+    BasicAuthShortCircuits<TVariant>,
+    string,
+    'authentication',
+    readonly [],
+    BasicAuthContext
   > {
   readonly role: 'authentication'
 }
@@ -89,7 +87,21 @@ export function basicAuth<
   options: BasicAuthOptions<TPrincipal, TVariant, TUnauthorizedBody>,
 ): BasicAuthLayerDescriptor<TPrincipal, TVariant, TUnauthorizedBody> {
   const challenge = formatBasicChallenge(options.realm)
-  const descriptor = layer({
+  const descriptor = layer<
+    readonly [],
+    readonly [TPrincipal],
+    BasicAuthContext,
+    string extends TVariant
+      ? unknown
+      : LogicalHttpResult<
+          TVariant,
+          TUnauthorizedBody,
+          BasicAuthResponseHeaders
+        >,
+    BasicAuthShortCircuits<TVariant>,
+    string,
+    'authentication'
+  >({
     name: options.name ?? 'basicAuth',
     role: 'authentication',
     provides: [options.principal],
@@ -100,7 +112,7 @@ export function basicAuth<
         response: { status: 401 },
       },
     ],
-    inbound: async (ctx: BasicAuthContext) => {
+    factory: () => async (ctx, next) => {
       const credentials = decodeBasicCredentials(ctx.headers.authorization)
       if (!credentials) {
         return unauthorizedResult(options.unauthorized, challenge)
@@ -111,9 +123,9 @@ export function basicAuth<
         return unauthorizedResult(options.unauthorized, challenge)
       }
 
-      return {
+      await next({
         [options.principal.name]: principal,
-      } as ContextProperties<readonly [TPrincipal]>
+      } as ContextProperties<readonly [TPrincipal]>)
     },
   })
   return Object.freeze(descriptor)
@@ -137,7 +149,9 @@ function unauthorizedResult<TVariant extends string, TBody>(
 
 function formatBasicChallenge(realm: string): string {
   if (realm.length === 0 || /[\u0000-\u001f\u007f]/.test(realm)) {
-    throw new TypeError('Basic認証のrealmには空文字列または制御文字を使用できません')
+    throw new TypeError(
+      'Basic認証のrealmには空文字列または制御文字を使用できません',
+    )
   }
   const escaped = realm.replace(/[\\"]/g, '\\$&')
   return `Basic realm="${escaped}", charset="UTF-8"`
@@ -151,7 +165,9 @@ function decodeBasicCredentials(
 
   try {
     const binary = atob(match[1])
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    const bytes = Uint8Array.from(binary, (character) =>
+      character.charCodeAt(0),
+    )
     const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     const separator = decoded.indexOf(':')
     if (separator < 0) return undefined

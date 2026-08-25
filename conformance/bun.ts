@@ -1,7 +1,6 @@
 import { createBunFetchHandler } from '@loutrejs/runtime-bun'
 import usersApplication from '../dist/conformance/http-crud/application.mjs'
 import eventsApplication from '../dist/conformance/streaming-http/application.mjs'
-
 const handler = createBunFetchHandler(usersApplication)
 const response = await handler(
   new Request('https://bun.fixture/users/bun-user'),

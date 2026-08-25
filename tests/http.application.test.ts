@@ -23,9 +23,9 @@ describe('HTTP application boundary', () => {
     const execution = layer({
       name: 'execution-id',
       provides: [EXECUTION_ID],
-      inbound: () => {
+      factory: () => async (_ctx, next) => {
         executions += 1
-        return { executionId: `exec-${executions}` }
+        await next({ executionId: `exec-${executions}` })
       },
     })
     const Contract = contract({
@@ -188,11 +188,14 @@ describe('HTTP application boundary', () => {
     const application = createInputDecodeFixture()
 
     const response = await application.handle(
-      new Request('http://fixture.test/decode/%E3%82%AB%E3%83%AF%E3%82%A6%E3%82%BD', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: '{}',
-      }),
+      new Request(
+        'http://fixture.test/decode/%E3%82%AB%E3%83%AF%E3%82%A6%E3%82%BD',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        },
+      ),
     )
 
     expect(response.status).toBe(200)
@@ -321,11 +324,11 @@ describe('HTTP application boundary', () => {
     )
   })
 
-  it('short circuit resultもoutbound後にProtocol Finalizationを通す', async () => {
+  it('short circuit resultもProtocol Finalizationを通す', async () => {
     let controllerCalled = false
     const cached = layer({
       name: 'cached-result',
-      inbound: () =>
+      factory: () => async () =>
         shortCircuit({
           kind: 'http-result' as const,
           variant: 'ok',
@@ -356,7 +359,9 @@ describe('HTTP application boundary', () => {
     }
     const Module = defineModule(() => ({
       implementations: [
-        implement(Contract).for(http).with(Implementation as any),
+        implement(Contract)
+          .for(http)
+          .with(Implementation as any),
       ],
     }))
     const application = createHttpApplication({ modules: [Module()] })

@@ -170,7 +170,9 @@ interface DependencyEdgeIR {
 }
 ```
 
-JSON graphは`version: 1`、`nodes`、`edges`、`diagnostics`を持つmachine-readable interfaceである。
+JSON graphは`version: 2`、再帰的な`LayerIR.pipeline`、`nodes`、`edges`、`diagnostics`を
+持つmachine-readable interfaceである。Layer factoryが`inject()`した依存は、pipeline内の
+index pathで識別される`kind: 'layer'` nodeから`source: 'probed'`のinject edgeとして表現する。
 
 ## 5. Graph Builder / Graph Probe
 
@@ -238,6 +240,37 @@ broken graphではpartial graphを出力してからdiagnosticを表示し、終
 生成しない。Graph ManifestはApplicationGraphから生成する。`dev`と`start`もentryを直接loadし、
 Runtime Linkage Artifactを介さない。
 
+### 7.1 Recursive Pipeline
+
+PipelineはLayer、Validation、Terminalからなる順序付き再帰sequenceである。Layerはdefinition
+object内にstatic metadataと同期factoryを持つcallable objectであり、種類は1つだけである。
+
+```text
+Pipeline
+├ Layer
+├ Layer(child Pipeline)
+│  ├ Layer
+│  └ Layer(child Pipeline)
+│     └ Layer
+└ Terminal
+```
+
+LayerをそのままPipelineへ置くと、`next()`はその位置以降を実行する。同じLayerを
+`layerA([...])`のように呼ぶと、factoryを再実行せず、その利用箇所だけにchild Pipelineを関連付ける。
+この場合の`next()`はchildだけを実行し、Layer runtimeがreturnした後に親Pipeline後段へ進む。
+
+Layer factoryはApplication construction時にInjection Context内で同期実行し、runtime functionを
+保持する。runtime functionは`(ctx, next)`だけを受け取る。`ctx`には`requires`で宣言したContextだけを
+公開し、`provides`がある場合は`next(provided)`の直前にContextへ追加する。
+
+正常終了には`next()`をちょうど1回呼ぶか、`next()`の代わりに`shortCircuit()`を返す必要がある。
+Runtimeはnextのskip/reentry、next後のshortCircuitを拒否する。downstream errorをLayerがcatchしても、
+Pipelineは保持した元errorを再throwする。
+
+Context providesとvalidation stateはchildがcontinueした場合に親後段へ伝播する。Logical terminalは
+depth-first順で全体にexactly one、かつ最後のitemでなければならない。Protocol Finalizationは
+`executePipeline()`完了後に実行する。
+
 ## 8. Lifecycle
 
 Application initializationとshutdownは非同期でよい。constructionとresource lifecycleを分離する。
@@ -250,11 +283,16 @@ Construction
 Lifecycle
 ├ asynchronous initialization
 ├ I/O / connection / verification
-└ reverse module shutdown
+├ initialization failure時のreverse rollback
+└ best-effort shutdown
 ```
 
 Graph ProbeではLifecycleを実行せず、module Lifecycle hookの`inject` declarationだけを
 declared edgeとして収集する。
+
+初期化途中で失敗した場合、対象となったapplication-scoped instanceとmoduleを逆順にcleanupする。
+cleanupも失敗した場合は初期化errorを先頭にした`AggregateError`を投げる。shutdownは個別hookが
+失敗しても残りを続行し、全cleanup後にerrorを`AggregateError`として報告する。
 
 ## 9. Runtime Portability
 

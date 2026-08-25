@@ -1,12 +1,19 @@
 import {
   asModuleInstance,
+  childPipelineOf,
+  layerDefinitionOf,
   normalizeProvider,
   runInInjectionContext,
   tokenName,
   type Class,
+  type DependencyConsumer,
+  type LayerConsumer,
+  type LayerDescriptor,
+  type LayerRuntime,
   type ModuleInstance,
   type ModuleTemplate,
   type ProviderDescriptor,
+  type PipelineItem,
   type TokenLike,
 } from '@loutrejs/core'
 import { Logger } from './logger.js'
@@ -24,7 +31,7 @@ export interface RuntimeModuleGraph {
 }
 
 export interface DependencyRecorder {
-  record(consumer: TokenLike, dependency: TokenLike): void
+  record(consumer: DependencyConsumer, dependency: TokenLike): void
 }
 
 export interface ContainerOptions {
@@ -57,6 +64,7 @@ export class Container {
   readonly #providers = new Map<TokenLike, ProviderDescriptor>()
   readonly #applicationCache = new Map<TokenLike, unknown>()
   readonly #implementationCache = new Map<Class, unknown>()
+  readonly #layerCache = new Map<LayerDescriptor, LayerRuntime<object, readonly [], unknown>>()
   readonly #logger: Logger
   readonly #recorder: DependencyRecorder | undefined
 
@@ -92,6 +100,37 @@ export class Container {
   /** @internal Graph Probe が managed implementation class を construction する。 */
   probeClass<T>(target: Class<T>): T {
     return this.#instantiate(target, [target])
+  }
+
+  /** @internal Application construction時にLayer factoryを1回だけ構築する。 */
+  preparePipeline(pipeline: readonly PipelineItem[]): void {
+    for (const item of pipeline) {
+      if (item.kind !== 'layer') continue
+      const definition = layerDefinitionOf(item)
+      this.#constructLayer(definition, {
+        kind: 'layer-consumer',
+        id: `runtime-layer:${definition.name}`,
+        name: definition.name,
+      }, true)
+      const child = childPipelineOf(item)
+      if (child) this.preparePipeline(child)
+    }
+  }
+
+  /** @internal 構築済みLayer runtimeを取得する。 */
+  layerRuntime(layer: LayerDescriptor): LayerRuntime<object, readonly [], unknown> {
+    const cached = this.#layerCache.get(layer)
+    if (!cached) {
+      throw new DependencyResolutionError(
+        `LUTRE_LAYER_NOT_PREPARED: Layer ${layer.name} is not prepared during application construction.`,
+      )
+    }
+    return cached
+  }
+
+  /** @internal Graph Probe用にLayer factoryを同期constructionする。 */
+  probeLayer(layer: LayerDescriptor, consumer: LayerConsumer): void {
+    this.#constructLayer(layer, consumer, false)
   }
 
   #resolve<T>(
@@ -198,12 +237,47 @@ export class Container {
         ...(this.#recorder === undefined
           ? {}
           : {
-              record: (consumer: TokenLike, dependency: TokenLike) =>
+              record: (consumer: DependencyConsumer, dependency: TokenLike) =>
                 this.#recorder!.record(consumer, dependency),
             }),
       },
       () => new target(),
     )
+  }
+
+  #constructLayer(
+    layer: LayerDescriptor,
+    consumer: LayerConsumer,
+    cache: boolean,
+  ): LayerRuntime<object, readonly [], unknown> {
+    const cached = this.#layerCache.get(layer)
+    if (cache && cached) return cached
+    const runtime = runInInjectionContext(
+      {
+        consumer,
+        resolve: (token) => this.#resolve(token, layer.name),
+        ...(this.#recorder === undefined
+          ? {}
+          : {
+              record: (recordedConsumer: DependencyConsumer, dependency: TokenLike) =>
+                this.#recorder!.record(recordedConsumer, dependency),
+            }),
+      },
+      () => layer.factory(),
+    )
+    if (isThenable(runtime)) {
+      throw new DependencyResolutionError(
+        `LUTRE_LAYER_ASYNC_FACTORY: Layer ${layer.name} factory must be synchronous.`,
+      )
+    }
+    if (typeof runtime !== 'function') {
+      throw new DependencyResolutionError(
+        `LUTRE_LAYER_FACTORY_RESULT: Layer ${layer.name} factory must return a runtime function.`,
+      )
+    }
+    const normalized = runtime as LayerRuntime<object, readonly [], unknown>
+    if (cache) this.#layerCache.set(layer, normalized)
+    return normalized
   }
 }
 

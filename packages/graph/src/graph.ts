@@ -1,15 +1,19 @@
 import {
   asModuleInstance,
+  childPipelineOf,
   contextKeyName,
+  layerDefinitionOf,
   normalizeProvider,
   tokenName,
   type ContractDefinition,
   type ContextKey,
+  type DependencyConsumer,
   type ImplementationBinding,
   type ModuleInstance,
   type ModuleTemplate,
   type PipelineItem,
   type ProviderDescriptor,
+  type LayerConsumer,
   type ShortCircuitDeclaration,
   type TokenLike,
 } from '@loutrejs/core'
@@ -115,7 +119,7 @@ export function compileApplication(
   validateCoverage(bindings, contractNames, diagnostics)
   validateDuplicateProviders(modules, diagnostics)
 
-  const tokensById = collectCustomTokens(providers, diagnostics)
+  const tokensById = collectCustomTokens(providers, targets, diagnostics)
   const contextKeysByName = collectContextKeys(targets, diagnostics)
 
   const pipelines: PipelineIR[] = []
@@ -146,8 +150,17 @@ export function compileApplication(
     })
   }
 
+  const dependencyGraph = buildDependencyGraph(
+    modules,
+    bindings,
+    targets,
+    diagnostics,
+  )
+  const probedTokenIds = dependencyGraph.nodes
+    .filter((node) => node.kind === 'token')
+    .map((node) => node.label)
   const graph: ApplicationGraphIR = {
-    version: 1,
+    version: 2,
     modules: modules.map((module, index) => ({
       id: `module:${index + 1}`,
       ...(module.definition.name === undefined
@@ -188,7 +201,8 @@ export function compileApplication(
               ? [provider.select.env.name]
               : [],
     })),
-    tokens: [...tokensById.keys()].map((id) => ({ id })),
+    tokens: [...new Set([...tokensById.keys(), ...probedTokenIds])]
+      .map((id) => ({ id })),
     contextKeys: [...contextKeysByName.keys()].map((name) => ({ name })),
     contracts: [...contractNames.values()],
     pipelines,
@@ -224,7 +238,7 @@ export function compileApplication(
         })),
       ),
     ],
-    ...buildDependencyGraph(modules, bindings, diagnostics),
+    ...dependencyGraph,
     diagnostics,
   }
 
@@ -240,6 +254,7 @@ export function validateGraph(graph: ApplicationGraphIR): readonly Diagnostic[] 
 function buildDependencyGraph(
   modules: readonly ModuleInstance[],
   bindings: readonly ImplementationBinding[],
+  targets: readonly BindingTarget[],
   diagnostics: Diagnostic[],
 ): Pick<ApplicationGraphIR, 'nodes' | 'edges'> {
   const nodes: DependencyNodeIR[] = []
@@ -411,7 +426,7 @@ function buildDependencyGraph(
   const recorder: DependencyRecorder = {
     record(consumer, dependency) {
       addEdge({
-        from: ensureNode(consumer),
+        from: ensureConsumerNode(consumer, nodes, ensureNode),
         to: ensureNode(dependency),
         kind: 'inject',
         source: 'probed',
@@ -445,6 +460,34 @@ function buildDependencyGraph(
         path: target.name,
       })
     }
+  }
+
+  for (const target of targets) {
+    visitPipelineItems(target.pipeline, (item, indexPath) => {
+      if (item.kind !== 'layer') return
+      const definition = layerDefinitionOf(item)
+      const consumer: LayerConsumer = {
+        kind: 'layer-consumer',
+        id: `layer:${target.contractName}:${target.procedure}:${target.protocol}:${indexPath.join('.')}`,
+        name: definition.name,
+      }
+      if (!nodes.some(({ id }) => id === consumer.id)) {
+        nodes.push({ id: consumer.id, label: consumer.name, kind: 'layer' })
+      }
+      try {
+        container.probeLayer(definition, consumer)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        diagnostics.push({
+          code: message.includes('LUTRE_DI_CYCLE') ? 'LUTRE_DI_CYCLE' :
+            message.includes('LUTRE_LAYER_ASYNC_FACTORY') ? 'LUTRE_LAYER_ASYNC_FACTORY' :
+            message.includes('LUTRE_LAYER_FACTORY_RESULT') ? 'LUTRE_LAYER_FACTORY_RESULT' :
+            'LUTRE_DI_UNRESOLVED',
+          message,
+          path: consumer.id,
+        })
+      }
+    })
   }
 
   return { nodes, edges }
@@ -486,6 +529,7 @@ function describeModule(module: ModuleInstance, index: number): string {
 
 function collectCustomTokens(
   providers: readonly ProviderDescriptor[],
+  targets: readonly BindingTarget[],
   diagnostics: Diagnostic[],
 ): ReadonlyMap<string, TokenLike> {
   const tokens = new Map<string, TokenLike>()
@@ -521,8 +565,8 @@ function collectContextKeys(
   const keys = new Map<string, ContextKey>()
   for (const target of targets) {
     const path = `${target.contractName}.${target.procedure}.${target.protocol}`
-    for (const item of target.pipeline) {
-      if (item.kind !== 'layer') continue
+    visitPipelineItems(target.pipeline, (item) => {
+      if (item.kind !== 'layer') return
       for (const key of [...item.requires, ...item.provides]) {
         const existing = keys.get(key.name)
         if (existing && existing !== key) {
@@ -535,7 +579,7 @@ function collectContextKeys(
         }
         keys.set(key.name, key)
       }
-    }
+    })
   }
   return keys
 }
@@ -609,9 +653,11 @@ function validatePipeline(
   diagnostics: Diagnostic[],
 ) {
   const path = `${target.contractName}.${target.procedure}.${target.protocol}`
-  const terminals = target.pipeline
-    .map((layer, index) => ({ layer, index }))
-    .filter(({ layer }) => layer.kind === 'terminal')
+  const flattened: { readonly item: PipelineItem, readonly indexPath: readonly number[] }[] = []
+  visitPipelineItems(target.pipeline, (item, indexPath) => {
+    flattened.push({ item, indexPath })
+  })
+  const terminals = flattened.filter(({ item }) => item.kind === 'terminal')
 
   if (terminals.length !== 1) {
     diagnostics.push({
@@ -621,20 +667,20 @@ function validatePipeline(
     })
   } else {
     const terminal = terminals[0]!
-    if (terminal.index !== target.pipeline.length - 1) {
+    if (terminal !== flattened.at(-1)) {
       diagnostics.push({
         code: 'LUTRE_PIPELINE_002',
-        message: `${terminal.layer.name} must be the final Pipeline item`,
+        message: `${terminal.item.name} must be the final Pipeline item`,
         path,
       })
     }
     if (
-      terminal.layer.kind === 'terminal' &&
-      terminal.layer.protocol !== target.protocol
+      terminal.item.kind === 'terminal' &&
+      terminal.item.protocol !== target.protocol
     ) {
       diagnostics.push({
         code: 'LUTRE_PIPELINE_003',
-        message: `${terminal.layer.name} does not match protocol ${target.protocol}`,
+        message: `${terminal.item.name} does not match protocol ${target.protocol}`,
         path,
       })
     }
@@ -642,7 +688,7 @@ function validatePipeline(
 
   const available = new Set<ContextKey>()
   const validated = new Set<string>()
-  for (const item of target.pipeline) {
+  for (const { item } of flattened) {
     if (item.kind === 'validation') {
       validated.add(item.part)
       continue
@@ -704,6 +750,7 @@ function validatePipeline(
 }
 
 function toLayerIR(item: PipelineItem, index: number): LayerIR {
+  const child = item.kind === 'layer' ? childPipelineOf(item) : undefined
   return {
     index,
     name: item.name,
@@ -714,6 +761,7 @@ function toLayerIR(item: PipelineItem, index: number): LayerIR {
       item.kind === 'layer' ? item.provides.map(contextKeyName) : [],
     requiresValidated:
       item.kind === 'layer' ? item.requiresValidated : [],
+    ...(child === undefined ? {} : { pipeline: child.map(toLayerIR) }),
     ...(item.kind !== 'layer' || item.shortCircuits.length === 0
       ? {}
       : {
@@ -728,4 +776,33 @@ function toLayerIR(item: PipelineItem, index: number): LayerIR {
           ),
         }),
   }
+}
+
+function visitPipelineItems(
+  pipeline: readonly PipelineItem[],
+  visit: (item: PipelineItem, indexPath: readonly number[]) => void,
+  parentPath: readonly number[] = [],
+): void {
+  pipeline.forEach((item, index) => {
+    const indexPath = [...parentPath, index]
+    visit(item, indexPath)
+    if (item.kind === 'layer') {
+      const child = childPipelineOf(item)
+      if (child) visitPipelineItems(child, visit, indexPath)
+    }
+  })
+}
+
+function ensureConsumerNode(
+  consumer: DependencyConsumer,
+  nodes: DependencyNodeIR[],
+  ensureTokenNode: (token: TokenLike) => string,
+): string {
+  if (typeof consumer === 'function' || consumer.kind === 'token') {
+    return ensureTokenNode(consumer)
+  }
+  if (!nodes.some(({ id }) => id === consumer.id)) {
+    nodes.push({ id: consumer.id, label: consumer.name, kind: 'layer' })
+  }
+  return consumer.id
 }

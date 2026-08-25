@@ -40,9 +40,7 @@ export function bearerAuth<
   TPrincipal extends ContextKey,
   const TVariant extends string,
   TUnauthorizedBody,
->(
-  options: BearerAuthOptions<TPrincipal, TVariant, TUnauthorizedBody>,
-) {
+>(options: BearerAuthOptions<TPrincipal, TVariant, TUnauthorizedBody>) {
   const challenge = formatBearerChallenge(options.realm)
   return layer({
     name: options.name ?? 'bearerAuth',
@@ -55,7 +53,7 @@ export function bearerAuth<
         response: { status: 401 },
       },
     ],
-    inbound: async (context: BearerAuthContext) => {
+    factory: () => async (context: BearerAuthContext, next) => {
       const token = readBearerToken(context.headers.authorization)
       if (!token) {
         return unauthorizedResult(options.unauthorized, challenge)
@@ -64,9 +62,9 @@ export function bearerAuth<
       if (principal == null) {
         return unauthorizedResult(options.unauthorized, challenge)
       }
-      return {
+      await next({
         [options.principal.name]: principal,
-      } as ContextProperties<readonly [TPrincipal]>
+      } as ContextProperties<readonly [TPrincipal]>)
     },
   })
 }
@@ -85,13 +83,17 @@ function unauthorizedResult<TVariant extends string, TBody>(
   })
 }
 
-function readBearerToken(authorization: string | undefined): string | undefined {
+function readBearerToken(
+  authorization: string | undefined,
+): string | undefined {
   return /^Bearer +([^\s]+)$/i.exec(authorization ?? '')?.[1]
 }
 
 function formatBearerChallenge(realm: string): string {
   if (realm.length === 0 || /[\u0000-\u001f\u007f]/.test(realm)) {
-    throw new TypeError('Bearer認証のrealmには空文字列または制御文字を使用できません')
+    throw new TypeError(
+      'Bearer認証のrealmには空文字列または制御文字を使用できません',
+    )
   }
   return `Bearer realm="${realm.replace(/[\\"]/g, '\\$&')}"`
 }

@@ -4,11 +4,7 @@ import {
   type PipelineItem,
   shortCircuit,
 } from '@loutrejs/core'
-import {
-  type BasicAuthLayerDescriptor,
-  basicAuth,
-  http,
-} from '@loutrejs/http'
+import { type BasicAuthLayerDescriptor, basicAuth, http } from '@loutrejs/http'
 import { z } from 'zod'
 
 const PRINCIPAL = contextKey('principal').of<{ readonly id: string }>()
@@ -49,6 +45,7 @@ http({
 http({
   method: 'GET',
   path: '/invalid-protected',
+  // @ts-expect-error basicAuthのunauthorized bodyはresponse schemaの出力型と一致する必要がある
   responses: {
     unauthorized: {
       status: 401,
@@ -56,7 +53,7 @@ http({
       headers: z.object({ 'www-authenticate': z.string() }),
     },
   },
-  // @ts-expect-error basicAuthのunauthorized bodyはresponse schemaの出力型と一致する必要がある
+  // @ts-expect-error shortCircuit resultとresponse宣言の双方を照合する
   pipeline: [
     basicAuth({
       realm: 'Loutre Test',
@@ -117,7 +114,7 @@ const customAuthentication = layer({
       response: { status: 401 },
     },
   ],
-  inbound: (context: CustomAuthContext) =>
+  factory: () => async (context: CustomAuthContext) =>
     shortCircuit({
       kind: 'http-result',
       variant: 'unauthorized',

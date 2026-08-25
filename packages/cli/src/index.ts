@@ -9,6 +9,7 @@ import type {
   ApplicationGraphIR,
   DependencyEdgeIR,
   DependencyNodeIR,
+  LayerIR,
 } from '@loutrejs/graph'
 import { checkCapabilities, type RuntimeCapabilities } from '@loutrejs/runtime'
 import { bunRuntime } from '@loutrejs/runtime-bun'
@@ -250,9 +251,7 @@ function renderTextGraph(
   if (subject === 'contracts') {
     for (const pipeline of graph.pipelines) {
       write(`${pipeline.contract}.${pipeline.procedure} [${pipeline.protocol}]`)
-      for (const layer of pipeline.layers) {
-        write(`  ${layer.index + 1} ${layer.name} ${layer.role}`)
-      }
+      renderLayerText(pipeline.layers, write)
     }
     return
   }
@@ -350,13 +349,13 @@ function renderMermaidGraph(
       const procedure = `${pipeline.contract}.${pipeline.procedure} [${pipeline.protocol}]`
       const procedureId = `p${pipelineIndex}`
       node(procedureId, procedure)
-      let previous = procedureId
-      for (const layer of pipeline.layers) {
-        const current = `p${pipelineIndex}l${layer.index}`
-        node(current, `${layer.index + 1} ${layer.name}`)
-        edge(previous, current)
-        previous = current
-      }
+      renderLayerMermaid(
+        pipeline.layers,
+        `p${pipelineIndex}`,
+        procedureId,
+        node,
+        edge,
+      )
     })
   } else {
     node('application', 'Application')
@@ -381,7 +380,7 @@ function renderExplanation(
   if (!node && pipelines.length === 0) return false
   for (const pipeline of pipelines) {
     write(`${pipeline.contract}.${pipeline.procedure} [${pipeline.protocol}]`)
-    for (const layer of pipeline.layers) write(`${layer.index + 1}. ${layer.name} (${layer.role})`)
+    renderLayerText(pipeline.layers, write, '')
   }
   if (node) {
     write(node.label)
@@ -401,6 +400,45 @@ function renderExplanation(
     }
   }
   return true
+}
+
+function renderLayerText(
+  layers: readonly LayerIR[],
+  write: (value: string) => void,
+  indent = '  ',
+): void {
+  for (const current of layers) {
+    write(`${indent}${current.index + 1} ${current.name} ${current.role}`)
+    if (current.pipeline) {
+      renderLayerText(current.pipeline, write, `${indent}  `)
+    }
+  }
+}
+
+function renderLayerMermaid(
+  layers: readonly LayerIR[],
+  idPrefix: string,
+  parentId: string,
+  node: (id: string, label: string) => void,
+  edge: (from: string, to: string, label?: string) => void,
+): string {
+  let previous = parentId
+  for (const current of layers) {
+    const currentId = `${idPrefix}l${current.index}`
+    node(currentId, `${current.index + 1} ${current.name}`)
+    edge(previous, currentId)
+    if (current.pipeline) {
+      renderLayerMermaid(
+        current.pipeline,
+        `${currentId}c`,
+        currentId,
+        node,
+        edge,
+      )
+    }
+    previous = currentId
+  }
+  return previous
 }
 
 function requiredCapabilities(graph: ApplicationGraphIR): string[] {
@@ -442,7 +480,9 @@ async function startDevelopmentServer(
   const build = async (): Promise<DevelopmentBuild> => {
     await runTypeCheck(tsconfigPath)
     const output = join(directory, `application-${generation++}.mjs`)
-    const sourceFiles = await emitApplication(entry, output)
+    const sourceFiles = await emitApplication(entry, output, {
+      nodeCompatibility: true,
+    })
     return { application: await importHttpApplication(output), sourceFiles }
   }
   const launch = async (candidate: DevelopmentBuild, startedAt: number) => {

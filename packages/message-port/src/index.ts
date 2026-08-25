@@ -1,6 +1,7 @@
 import {
   asModuleInstance,
   type ContextProvidedBeforeTerminal,
+  type IsValidProtocolPipeline,
   validateSchema,
   type ContractDefinition,
   type ModuleInstance,
@@ -53,7 +54,7 @@ const handler: TerminalLayerDescriptor<'messagePort'> = Object.freeze({
 })
 
 function defineMessagePort<const TDefinition extends MessagePortProtocolDefinition>(
-  definition: TDefinition,
+  definition: TDefinition & MessagePortPipelineConstraint<TDefinition>,
 ): MessagePortProtocol<TDefinition> {
   return {
     kind: 'protocol',
@@ -63,13 +64,19 @@ function defineMessagePort<const TDefinition extends MessagePortProtocolDefiniti
   }
 }
 
+type MessagePortPipelineConstraint<
+  TDefinition extends MessagePortProtocolDefinition,
+> = IsValidProtocolPipeline<
+  TDefinition['pipeline'],
+  'messagePort'
+> extends true
+  ? unknown
+  : { readonly pipeline: never }
+
 export const messagePort = Object.assign(defineMessagePort, {
   protocol: 'messagePort' as const,
   handler,
 }) satisfies ProtocolFactory<'messagePort'> & {
-  <const TDefinition extends MessagePortProtocolDefinition>(
-    definition: TDefinition,
-  ): MessagePortProtocol<TDefinition>
   readonly handler: TerminalLayerDescriptor<'messagePort'>
 }
 
@@ -200,6 +207,7 @@ export function createMessagePortApplication(options: {
           LogicalMessagePortResult
         >(route.protocol.definition.pipeline, {
           context,
+          layer: (descriptor) => runtime.container.layerRuntime(descriptor),
           validate: () => undefined,
           terminal: async (_layer, terminalContext) => {
             const target = runtime.container.resolveImplementation(
