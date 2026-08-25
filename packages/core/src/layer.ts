@@ -1,6 +1,4 @@
 import type { ContextKey, ContextProperties } from './context-key.js'
-import type { Scope } from './provider.js'
-import type { TokenLike, TokenValue } from './token.js'
 
 export type LayerRole =
   | 'generic'
@@ -12,33 +10,23 @@ export type LayerRole =
 
 export type ValidatedInputPart = 'params' | 'query' | 'headers' | 'body'
 
-export interface Outcome<T = unknown> {
-  readonly ok: boolean
-  readonly value?: T
-  readonly error?: unknown
-}
-
 const shortCircuitMarker = Symbol('loutre.short-circuit')
 
-export interface ShortCircuit<TResult = unknown, TState = undefined> {
+export interface ShortCircuit<TResult = unknown> {
   readonly kind: 'short-circuit'
   readonly result: TResult
-  readonly state: TState
   readonly [shortCircuitMarker]: true
 }
 
 /**
- * 残りのinbound Layerとterminalを実行せず、Logical ResultをProtocol
- * Finalizationへ送る。現在のLayerは正常にenteredとなり、outboundの対象になる。
+ * `next()`の代わりにLogical Resultを返し、残りのPipelineを終了する。
  */
-export function shortCircuit<const TResult, TState = undefined>(
+export function shortCircuit<const TResult>(
   result: TResult,
-  state?: TState,
-): ShortCircuit<TResult, TState | undefined> {
+): ShortCircuit<TResult> {
   return {
     kind: 'short-circuit',
     result,
-    state,
     [shortCircuitMarker]: true,
   }
 }
@@ -52,16 +40,6 @@ export function isShortCircuit(value: unknown): value is ShortCircuit {
   )
 }
 
-type ProvidedResult<
-  TProvides extends readonly ContextKey[],
-  TState,
-  TShortCircuitResult,
-> = number extends TProvides['length']
-  ? TState | void | ContextProperties<TProvides> | ShortCircuit<TShortCircuitResult, TState>
-  : TProvides extends readonly []
-    ? TState | void | ShortCircuit<TShortCircuitResult, TState>
-    : ContextProperties<TProvides> | ShortCircuit<TShortCircuitResult, TState>
-
 declare const shortCircuitResultType: unique symbol
 
 export interface ShortCircuitDeclaration {
@@ -70,93 +48,133 @@ export interface ShortCircuitDeclaration {
   readonly response?: Readonly<Record<string, unknown>>
 }
 
-export interface LayerDescriptor<
-  TContext = unknown,
-  TState = unknown,
+export type LayerNext<TProvides extends readonly ContextKey[]> =
+  number extends TProvides['length']
+    ? (provided: ContextProperties<TProvides>) => Promise<void>
+    : TProvides extends readonly []
+      ? () => Promise<void>
+      : (provided: ContextProperties<TProvides>) => Promise<void>
+
+export type LayerRuntime<
+  TContext extends object,
+  TProvides extends readonly ContextKey[],
+  TShortCircuitResult,
+> = (
+  context: TContext,
+  next: LayerNext<TProvides>,
+) => Promise<void | ShortCircuit<TShortCircuitResult>>
+
+export type LayerFactory<
+  TContext extends object,
+  TProvides extends readonly ContextKey[],
+  TShortCircuitResult,
+> = () => LayerRuntime<TContext, TProvides, TShortCircuitResult>
+
+export interface LayerDefinition<
+  TRequires extends readonly ContextKey[] = readonly [],
+  TProvides extends readonly ContextKey[] = readonly [],
+  TContext extends object = {},
+  TShortCircuitResult = never,
+  TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
+  TName extends string = string,
+  TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = 'generic',
+  TRequiresValidated extends readonly ValidatedInputPart[] = readonly [],
+> {
+  readonly name: TName
+  readonly role?: TRole
+  readonly requires?: TRequires
+  readonly provides?: TProvides
+  readonly requiresValidated?: TRequiresValidated
+  readonly shortCircuits?: TShortCircuits
+  readonly factory: LayerFactory<
+    TContext & ContextProperties<TRequires>,
+    TProvides,
+    TShortCircuitResult
+  >
+}
+
+/** @internal child pipelineを関連付けたLayerの利用箇所を表す。 */
+interface LayerOccurrenceDescriptor<
   TRequires extends readonly ContextKey[] = readonly ContextKey[],
   TProvides extends readonly ContextKey[] = readonly ContextKey[],
   TShortCircuitResult = unknown,
-  TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly ShortCircuitDeclaration[],
+  TShortCircuits extends
+    readonly ShortCircuitDeclaration[] = readonly ShortCircuitDeclaration[],
   TName extends string = string,
   TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = Exclude<
     LayerRole,
     'terminal' | 'validation'
   >,
-  TRequiresValidated extends readonly ValidatedInputPart[] = readonly ValidatedInputPart[],
+  TRequiresValidated extends
+    readonly ValidatedInputPart[] = readonly ValidatedInputPart[],
+  TContext extends object = object,
+  TPipeline extends readonly PipelineItem[] = readonly PipelineItem[],
 > {
   readonly kind: 'layer'
-  readonly composition?: never
   readonly name: TName
   readonly role: TRole
   readonly requires: TRequires
   readonly provides: TProvides
   readonly requiresValidated: TRequiresValidated
   readonly shortCircuits: TShortCircuits
+  readonly definition: LayerDescriptor<
+    TRequires,
+    TProvides,
+    TShortCircuitResult,
+    TShortCircuits,
+    TName,
+    TRole,
+    TRequiresValidated,
+    TContext
+  >
+  readonly pipeline: TPipeline
+  readonly factory?: never
   readonly [shortCircuitResultType]?: TShortCircuitResult
-  readonly inbound?: (
-    context: TContext & ContextProperties<TRequires>,
-  ) =>
-    | ProvidedResult<TProvides, TState, TShortCircuitResult>
-    | Promise<ProvidedResult<TProvides, TState, TShortCircuitResult>>
-  readonly outbound?: (
-    context: TContext & ContextProperties<TRequires> & ContextProperties<TProvides>,
-    outcome: Outcome,
-    state: TProvides extends readonly []
-      ? TState | undefined
-      : ContextProperties<TProvides> | undefined,
-  ) => void | Promise<void>
 }
 
-export interface ExecutionScope {
-  run(execute: () => Promise<void>): Promise<void>
-}
-
-export interface LayerDependency<
-  TToken extends TokenLike = TokenLike,
-> {
-  readonly token: TToken
-  readonly scope?: Scope
-}
-
-export type LayerInjection = TokenLike | LayerDependency
-
-export type InjectedLayerDependencies<
-  TInject extends readonly LayerInjection[],
-> = {
-  [TIndex in keyof TInject]: TInject[TIndex] extends LayerDependency<infer TToken>
-    ? TokenValue<TToken>
-    : TInject[TIndex] extends TokenLike
-      ? TokenValue<TInject[TIndex]>
-      : never
-}
-
-export interface CompositeLayerDescriptor<
-  TPipeline extends readonly PipelineItem[] = readonly PipelineItem[],
-  TInject extends readonly LayerInjection[] = readonly LayerInjection[],
-  TContext = unknown,
+export interface LayerDescriptor<
+  TRequires extends readonly ContextKey[] = readonly ContextKey[],
+  TProvides extends readonly ContextKey[] = readonly ContextKey[],
+  TShortCircuitResult = unknown,
+  TShortCircuits extends
+    readonly ShortCircuitDeclaration[] = readonly ShortCircuitDeclaration[],
   TName extends string = string,
   TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = Exclude<
     LayerRole,
     'terminal' | 'validation'
   >,
-  TRequires extends readonly ContextKey[] = readonly ContextKey[],
-  TRequiresValidated extends readonly ValidatedInputPart[] = readonly ValidatedInputPart[],
+  TRequiresValidated extends
+    readonly ValidatedInputPart[] = readonly ValidatedInputPart[],
+  TContext extends object = object,
 > {
+  <const TPipeline extends readonly PipelineItem[]>(
+    pipeline: TPipeline,
+  ): LayerOccurrenceDescriptor<
+    TRequires,
+    TProvides,
+    TShortCircuitResult,
+    TShortCircuits,
+    TName,
+    TRole,
+    TRequiresValidated,
+    TContext,
+    TPipeline
+  >
   readonly kind: 'layer'
-  readonly composition: 'pipeline'
   readonly name: TName
   readonly role: TRole
   readonly requires: TRequires
+  readonly provides: TProvides
   readonly requiresValidated: TRequiresValidated
-  readonly inject: TInject
-  readonly pipeline: TPipeline
-  readonly scope: (
-    context: TContext & ContextProperties<TRequires>,
-    ...dependencies: InjectedLayerDependencies<TInject>
-  ) => ExecutionScope
-  readonly graph?: {
-    readonly attributes?: Readonly<Record<string, string | number | boolean>>
-  }
+  readonly shortCircuits: TShortCircuits
+  readonly factory: LayerFactory<
+    TContext & ContextProperties<TRequires>,
+    TProvides,
+    TShortCircuitResult
+  >
+  readonly definition?: never
+  readonly pipeline?: never
+  readonly [shortCircuitResultType]?: TShortCircuitResult
 }
 
 export interface ValidationLayerDescriptor {
@@ -173,11 +191,51 @@ export interface TerminalLayerDescriptor<TProtocol extends string = string> {
   readonly protocol: TProtocol
 }
 
+type AnyLayerDescriptor = LayerDescriptor<
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any
+>
+type AnyLayerOccurrence = LayerOccurrenceDescriptor<
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any,
+  any
+>
+
 export type PipelineItem =
-  | LayerDescriptor<any, any, any, any, any, any, any, any, any>
-  | CompositeLayerDescriptor<any, any, any, any, any, any, any>
+  | AnyLayerDescriptor
+  | AnyLayerOccurrence
   | ValidationLayerDescriptor
   | TerminalLayerDescriptor
+
+export function isLayerOccurrence(
+  item: PipelineItem,
+): item is AnyLayerOccurrence {
+  return item.kind === 'layer' && item.definition !== undefined
+}
+
+export function layerDefinitionOf(
+  item: AnyLayerDescriptor | AnyLayerOccurrence,
+): AnyLayerDescriptor {
+  return isLayerOccurrence(item) ? item.definition : item
+}
+
+export function childPipelineOf(
+  item: AnyLayerDescriptor | AnyLayerOccurrence,
+): readonly PipelineItem[] | undefined {
+  return isLayerOccurrence(item) ? item.pipeline : undefined
+}
 
 interface PipelineTerminalState<
   THasTerminal extends boolean,
@@ -211,13 +269,24 @@ type FoldPipelineItemTerminals<
   TItem,
   TProtocol extends string,
   TState extends PipelineTerminalState<boolean, boolean>,
-> = TItem extends TerminalLayerDescriptor<infer TItemProtocol>
-  ? [TItemProtocol, TProtocol] extends [TProtocol, TItemProtocol]
-    ? PipelineTerminalState<true, true>
-    : InvalidPipelineTerminalState
-  : TItem extends CompositeLayerDescriptor<infer TPipeline>
-    ? FoldPipelineTerminals<TPipeline, TProtocol, TState>
-    : TState
+> =
+  TItem extends TerminalLayerDescriptor<infer TItemProtocol>
+    ? [TItemProtocol, TProtocol] extends [TProtocol, TItemProtocol]
+      ? PipelineTerminalState<true, true>
+      : InvalidPipelineTerminalState
+    : TItem extends LayerOccurrenceDescriptor<
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          infer TPipeline
+        >
+      ? FoldPipelineTerminals<TPipeline, TProtocol, TState>
+      : TState
 
 /**
  * 再帰Pipelineをdepth-first順に評価したとき、対象Protocolのterminalが
@@ -226,42 +295,67 @@ type FoldPipelineItemTerminals<
 export type IsValidProtocolPipeline<
   TPipeline extends readonly PipelineItem[],
   TProtocol extends string,
-> = FoldPipelineTerminals<
-  TPipeline,
-  TProtocol,
-  PipelineTerminalState<false, true>
-> extends PipelineTerminalState<true, true>
-  ? true
-  : false
+> =
+  FoldPipelineTerminals<
+    TPipeline,
+    TProtocol,
+    PipelineTerminalState<false, true>
+  > extends PipelineTerminalState<true, true>
+    ? true
+    : false
 
 export type ShortCircuitResultOf<TItem> =
-  TItem extends CompositeLayerDescriptor<infer TPipeline>
-    ? ShortCircuitResultsOfPipeline<TPipeline>
-    : TItem extends {
-        readonly [shortCircuitResultType]?: infer TResult
-      }
-      ? TResult
-      : never
+  TItem extends LayerOccurrenceDescriptor<
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    infer TPipeline
+  >
+    ? ShortCircuitResultOfPipeline<TPipeline> | ShortCircuitResultOfLayer<TItem>
+    : ShortCircuitResultOfLayer<TItem>
+
+type ShortCircuitResultOfLayer<TItem> = TItem extends {
+  readonly [shortCircuitResultType]?: infer TResult
+}
+  ? TResult
+  : never
 
 export type ShortCircuitDeclarationsOf<TItem> =
-  TItem extends CompositeLayerDescriptor<infer TPipeline>
-    ? ShortCircuitDeclarationsOfPipeline<TPipeline>
-    : TItem extends {
-        readonly shortCircuits: infer TShortCircuits
-      }
+  TItem extends LayerOccurrenceDescriptor<
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    any,
+    infer TPipeline
+  >
+    ? readonly [
+        ...NormalizeDeclarations<TItem['shortCircuits']>,
+        ...ShortCircuitDeclarationsOfPipeline<TPipeline>,
+      ]
+    : TItem extends { readonly shortCircuits: infer TShortCircuits }
       ? TShortCircuits
       : never
 
-type ShortCircuitResultsOfPipeline<
-  TPipeline extends readonly PipelineItem[],
-> = TPipeline[number] extends infer TItem ? ShortCircuitResultOf<TItem> : never
+type ShortCircuitResultOfPipeline<TPipeline extends readonly PipelineItem[]> =
+  TPipeline[number] extends infer TItem ? ShortCircuitResultOf<TItem> : never
 
 type ShortCircuitDeclarationsOfPipeline<
   TPipeline extends readonly PipelineItem[],
 > = TPipeline extends readonly [infer THead, ...infer TTail]
   ? readonly [
       ...NormalizeDeclarations<ShortCircuitDeclarationsOf<THead>>,
-      ...ShortCircuitDeclarationsOfPipeline<Extract<TTail, readonly PipelineItem[]>>,
+      ...ShortCircuitDeclarationsOfPipeline<
+        Extract<TTail, readonly PipelineItem[]>
+      >,
     ]
   : readonly []
 
@@ -305,19 +399,35 @@ type FoldPipelineItem<
         TState['validated'] | TItem['part'],
         false
       >
-    : TItem extends CompositeLayerDescriptor<infer TPipeline>
-      ? FoldPipeline<TPipeline, TState>
-      : TItem extends LayerDescriptor<
-          any,
-          any,
+    : TItem extends LayerOccurrenceDescriptor<
           any,
           infer TProvides,
           any,
           any,
           any,
           any,
-          any
+          any,
+          any,
+          infer TPipeline
         >
+      ? FoldPipeline<
+          TPipeline,
+          PipelineTypeState<
+            TState['context'] & ContextProperties<TProvides>,
+            TState['validated'],
+            false
+          >
+        >
+      : TItem extends LayerDescriptor<
+            any,
+            infer TProvides,
+            any,
+            any,
+            any,
+            any,
+            any,
+            any
+          >
         ? PipelineTypeState<
             TState['context'] & ContextProperties<TProvides>,
             TState['validated'],
@@ -341,104 +451,26 @@ export type HasValidationBeforeTerminal<
 > = number extends TPipeline['length']
   ? false
   : TPart extends FoldPipeline<
-      TPipeline,
-      PipelineTypeState<{}, never, false>
-    >['validated']
+        TPipeline,
+        PipelineTypeState<{}, never, false>
+      >['validated']
     ? true
     : false
 
-export interface LayerDefinition<
-  TContext,
-  TState,
-  TRequires extends readonly ContextKey[] = readonly [],
-  TProvides extends readonly ContextKey[] = readonly [],
-  TShortCircuitResult = unknown,
-  TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
-  TName extends string = string,
-  TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = 'generic',
-  TRequiresValidated extends readonly ValidatedInputPart[] = readonly [],
-> {
-  readonly name: TName
-  readonly role?: TRole
-  readonly requires?: TRequires
-  readonly provides?: TProvides
-  readonly requiresValidated?: TRequiresValidated
-  readonly shortCircuits?: TShortCircuits
-  readonly inbound?: LayerDescriptor<
-    TContext,
-    TState,
-    TRequires,
-    TProvides,
-    TShortCircuitResult
-  >['inbound']
-  readonly outbound?: LayerDescriptor<
-    TContext,
-    TState,
-    TRequires,
-    TProvides
-  >['outbound']
-}
-
-export interface CompositeLayerDefinition<
-  TPipeline extends readonly PipelineItem[],
-  TInject extends readonly LayerInjection[],
-  TContext,
-  TName extends string,
-  TRole extends Exclude<LayerRole, 'terminal' | 'validation'>,
-  TRequires extends readonly ContextKey[],
-  TRequiresValidated extends readonly ValidatedInputPart[],
-> {
-  readonly name: TName
-  readonly role?: TRole
-  readonly requires?: TRequires
-  readonly requiresValidated?: TRequiresValidated
-  readonly inject?: TInject
-  readonly pipeline: TPipeline
-  readonly scope: CompositeLayerDescriptor<
-    TPipeline,
-    TInject,
-    TContext,
-    TName,
-    TRole,
-    TRequires,
-    TRequiresValidated
-  >['scope']
-  readonly graph?: CompositeLayerDescriptor<
-    TPipeline,
-    TInject,
-    TContext,
-    TName,
-    TRole,
-    TRequires,
-    TRequiresValidated
-  >['graph']
-}
-
-type EffectiveLayerState<
-  TProvides extends readonly ContextKey[],
-  TState,
-> = number extends TProvides['length']
-  ? TState
-  : TProvides extends readonly []
-    ? TState
-    : void
-
-function defineLayer<
+export function layer<
   const TRequires extends readonly ContextKey[] = readonly [],
   const TProvides extends readonly ContextKey[] = readonly [],
-  TContext = unknown,
-  TState = void,
-  TShortCircuitResult = unknown,
+  TContext extends object = {},
+  TShortCircuitResult = never,
   const TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
   const TName extends string = string,
   const TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = 'generic',
   const TRequiresValidated extends readonly ValidatedInputPart[] = readonly [],
 >(
   definition: LayerDefinition<
-    TContext,
-    EffectiveLayerState<TProvides, TState>,
     TRequires,
     TProvides,
+    TContext,
     TShortCircuitResult,
     TShortCircuits,
     TName,
@@ -446,84 +478,63 @@ function defineLayer<
     TRequiresValidated
   >,
 ): LayerDescriptor<
-  TContext,
-  EffectiveLayerState<TProvides, TState>,
   TRequires,
   TProvides,
   TShortCircuitResult,
   TShortCircuits,
   TName,
   TRole,
-  TRequiresValidated
->
-function defineLayer(
-  definition: LayerDefinition<
-    unknown,
-    unknown,
-    readonly ContextKey[],
-    readonly ContextKey[],
-    unknown,
-    readonly ShortCircuitDeclaration[],
-    string,
-    Exclude<LayerRole, 'terminal' | 'validation'>,
-    readonly ValidatedInputPart[]
-  >,
-): LayerDescriptor {
-  return {
-    kind: 'layer',
-    name: definition.name,
-    role: definition.role ?? 'generic',
-    requires: definition.requires ?? [],
-    provides: definition.provides ?? [],
-    requiresValidated: definition.requiresValidated ?? [],
-    shortCircuits: definition.shortCircuits ?? [],
-    ...(definition.inbound === undefined ? {} : { inbound: definition.inbound }),
-    ...(definition.outbound === undefined ? {} : { outbound: definition.outbound }),
-  }
-}
-
-function composeLayer<
-  const TPipeline extends readonly PipelineItem[],
-  const TInject extends readonly LayerInjection[] = readonly [],
-  TContext = unknown,
-  const TName extends string = string,
-  const TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = 'generic',
-  const TRequires extends readonly ContextKey[] = readonly [],
-  const TRequiresValidated extends readonly ValidatedInputPart[] = readonly [],
->(
-  definition: CompositeLayerDefinition<
-    TPipeline,
-    TInject,
-    TContext,
+  TRequiresValidated,
+  TContext
+> {
+  let descriptor: LayerDescriptor<
+    TRequires,
+    TProvides,
+    TShortCircuitResult,
+    TShortCircuits,
     TName,
     TRole,
-    TRequires,
-    TRequiresValidated
-  >,
-): CompositeLayerDescriptor<
-  TPipeline,
-  TInject,
-  TContext,
-  TName,
-  TRole,
-  TRequires,
-  TRequiresValidated
-> {
-  return {
-    kind: 'layer',
-    composition: 'pipeline',
-    name: definition.name,
-    role: definition.role ?? 'generic' as TRole,
-    requires: definition.requires ?? [] as unknown as TRequires,
+    TRequiresValidated,
+    TContext
+  >
+  const callable = <const TPipeline extends readonly PipelineItem[]>(
+    pipeline: TPipeline,
+  ) =>
+    Object.freeze({
+      kind: 'layer' as const,
+      name: descriptor.name,
+      role: descriptor.role,
+      requires: descriptor.requires,
+      provides: descriptor.provides,
+      requiresValidated: descriptor.requiresValidated,
+      shortCircuits: descriptor.shortCircuits,
+      definition: descriptor,
+      pipeline,
+    })
+  Object.defineProperty(callable, 'name', {
+    value: definition.name,
+    enumerable: true,
+    configurable: true,
+  })
+  descriptor = Object.assign(callable, {
+    kind: 'layer' as const,
+    role: definition.role ?? ('generic' as TRole),
+    requires: definition.requires ?? ([] as unknown as TRequires),
+    provides: definition.provides ?? ([] as unknown as TProvides),
     requiresValidated:
-      definition.requiresValidated ?? [] as unknown as TRequiresValidated,
-    inject: definition.inject ?? [] as unknown as TInject,
-    pipeline: definition.pipeline,
-    scope: definition.scope,
-    ...(definition.graph === undefined ? {} : { graph: definition.graph }),
-  }
+      definition.requiresValidated ?? ([] as unknown as TRequiresValidated),
+    shortCircuits:
+      definition.shortCircuits ?? ([] as unknown as TShortCircuits),
+    factory: definition.factory,
+  }) as unknown as LayerDescriptor<
+    TRequires,
+    TProvides,
+    TShortCircuitResult,
+    TShortCircuits,
+    TName,
+    TRole,
+    TRequiresValidated,
+    TContext
+  >
+  return Object.freeze(descriptor)
 }
-
-export const layer = Object.assign(defineLayer, {
-  compose: composeLayer,
-})

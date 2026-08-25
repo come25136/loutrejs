@@ -1,18 +1,21 @@
 # Prisma PostgreSQL Database Example
 
-Prisma 7.9のgenerated clientを使い、interactive `$transaction()`とnested `$transaction()`を
-LoutreのBEGIN / SAVEPOINT primitiveへ対応させる例です。
+Prisma 7のgenerated clientとinteractive `$transaction()`を、新しい再帰Pipelineから直接
+利用するサンプルです。
 
 ```sh
-docker compose -f examples/database-prisma-postgres/compose.yaml up -d
+npm run generate --workspace @loutrejs/example-database-prisma-postgres
+npm run db:start --workspace @loutrejs/example-database-prisma-postgres
 npm run dev --workspace @loutrejs/example-database-prisma-postgres
 ```
 
 ```sh
-curl -X POST http://127.0.0.1:3003/users \
-  -H 'content-type: application/json' \
-  -d '{"name":"Loutre"}'
+curl --request POST http://127.0.0.1:3003/users \
+  --header 'content-type: application/json' \
+  --data '{"name":"Loutre"}'
 ```
 
-`options.begin`にはPrisma固有の`isolationLevel`、`maxWait`、`timeout`をそのまま指定します。
-generated transaction clientをroot `PrismaClient`へcastしていません。
+`Prisma.TransactionClient`を`TRANSACTION` Context Keyへ保持し、ControllerからRepositoryへ
+明示的に渡します。transaction optionもgenerated clientの`$transaction()`から推論し、Prisma
+固有の`isolationLevel`、`maxWait`、`timeout`をそのまま利用します。transaction clientをroot
+`PrismaClient`へcastせず、Prismaの型にないnested `$transaction()`も使用しません。

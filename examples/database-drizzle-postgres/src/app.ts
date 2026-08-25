@@ -1,17 +1,16 @@
 import {
+  contextKey,
   contract,
   defineModule,
   implement,
   inject,
+  layer,
   procedure,
   provide,
   token,
+  type OnModuleDestroy,
+  type OnModuleInit,
 } from '@loutrejs/core'
-import {
-  DatabaseService,
-  transaction,
-  type DatabaseAdapterSpec,
-} from '@loutrejs/database'
 import {
   type ContextOf,
   type ControllerOf,
@@ -25,82 +24,60 @@ import { Pool } from 'pg'
 import { z } from 'zod'
 import * as schema from './schema.js'
 
-interface AppConfig {
-  readonly databaseUrl: string
-}
-
-type DrizzleClient = NodePgDatabase<typeof schema>
+type DrizzleDatabaseClient = NodePgDatabase<typeof schema>
 type DrizzleTransaction = Parameters<
-  Parameters<DrizzleClient['transaction']>[0]
+  Parameters<DrizzleDatabaseClient['transaction']>[0]
 >[0]
-type DrizzleBeginOptions = NonNullable<
-  Parameters<DrizzleClient['transaction']>[1]
->
+type DrizzleTransactionOptions = Parameters<
+  DrizzleDatabaseClient['transaction']
+>[1]
 
-interface DrizzleDatabaseSpec extends DatabaseAdapterSpec {
-  readonly client: DrizzleClient
-  readonly transactionClient: DrizzleTransaction
-  readonly beginOptions: DrizzleBeginOptions
-  readonly savepointOptions: never
-  readonly capabilities: {
-    readonly transactions: true
-    readonly savepoints: true
+const DATABASE_URL = token<string>('database.url')
+const TRANSACTION = contextKey('transaction').of<DrizzleTransaction>()
+
+class DrizzleDatabase implements OnModuleInit, OnModuleDestroy {
+  readonly pool: Pool
+  readonly client: DrizzleDatabaseClient
+
+  constructor(url = inject(DATABASE_URL)) {
+    this.pool = new Pool({ connectionString: url })
+    this.client = drizzle({ client: this.pool, schema })
+  }
+
+  async onModuleInit(): Promise<void> {
+    await this.client.execute(sql`select 1`)
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.pool.end()
+  }
+
+  transaction<TResult>(
+    run: (transaction: DrizzleTransaction) => Promise<TResult>,
+    options?: DrizzleTransactionOptions,
+  ): Promise<TResult> {
+    return this.client.transaction(run, options)
   }
 }
 
-const APP_CONFIG = token<AppConfig>('app.config')
-
-class DrizzleDatabase extends DatabaseService<DrizzleDatabaseSpec> {
-  protected readonly transactionCapabilities = {
-    transactions: true,
-    savepoints: true,
-  } as const
-  #pool: Pool | undefined
-
-  constructor(readonly config = inject(APP_CONFIG)) {
-    super()
-  }
-
-  protected async connect(): Promise<DrizzleClient> {
-    const pool = new Pool({ connectionString: this.config.databaseUrl })
-    const client = drizzle({ client: pool, schema })
-    try {
-      await client.execute(sql`select 1`)
-      this.#pool = pool
-      return client
-    } catch (error) {
-      await pool.end()
-      throw error
-    }
-  }
-
-  protected async disconnect(): Promise<void> {
-    const pool = this.#pool
-    this.#pool = undefined
-    await pool?.end()
-  }
-
-  protected async beginTransaction<TResult>(
-    client: DrizzleClient,
-    options: DrizzleBeginOptions | undefined,
-    execute: (transaction: DrizzleTransaction) => Promise<TResult>,
-  ): Promise<TResult> {
-    return await client.transaction(
-      async (transaction) => await execute(transaction),
-      options,
-    )
-  }
-
-  protected async createSavepoint<TResult>(
-    transaction: DrizzleTransaction,
-    _options: undefined,
-    execute: (savepoint: DrizzleTransaction) => Promise<TResult>,
-  ): Promise<TResult> {
-    return await transaction.transaction(
-      async (savepoint) => await execute(savepoint),
-    )
-  }
-}
+const transaction = layer({
+  name: 'database.transaction',
+  provides: [TRANSACTION],
+  factory:
+    (database = inject(DrizzleDatabase)) =>
+    async (_ctx, next) => {
+      await database.transaction(
+        async (client) => {
+          await next({ transaction: client })
+        },
+        {
+          isolationLevel: 'read committed',
+          accessMode: 'read write',
+          deferrable: false,
+        },
+      )
+    },
+})
 
 const CreateUserBody = z.object({ name: z.string().min(1) })
 const UserResponse = z.object({
@@ -109,46 +86,30 @@ const UserResponse = z.object({
   createdBy: z.string(),
 })
 
-const UsersContract = contract({
-  create: procedure({
-    protocols: {
-      http: http({
-        method: 'POST',
-        path: '/users',
-        request: { body: CreateUserBody },
-        responses: { created: { status: 201, body: UserResponse } },
-        pipeline: [
-          transaction({
-            database: DrizzleDatabase,
-            options: {
-              begin: {
-                isolationLevel: 'read committed',
-                accessMode: 'read write',
-                deferrable: false,
-              },
-            },
-            pipeline: [
-              transaction({
-                database: DrizzleDatabase,
-                propagation: 'savepoint',
-                pipeline: [validate.body],
-              }),
-              http.controller,
-            ],
-          }),
-        ],
-      }),
-    },
-  }),
-}, { name: 'DrizzleUsersContract' })
+const UsersContract = contract(
+  {
+    create: procedure({
+      protocols: {
+        http: http({
+          method: 'POST',
+          path: '/users',
+          request: { body: CreateUserBody },
+          responses: {
+            created: { status: 201, body: UserResponse },
+          },
+          pipeline: [validate.body, transaction([http.controller])],
+        }),
+      },
+    }),
+  },
+  { name: 'DrizzleUsersContract' },
+)
 
 type UsersHttp = ControllerOf<typeof UsersContract, 'http'>
 
 class UserRepository {
-  constructor(readonly database = inject(DrizzleDatabase)) {}
-
-  async create(name: string) {
-    const [user] = await this.database.client
+  async create(transaction: DrizzleTransaction, name: string) {
+    const [user] = await transaction
       .insert(schema.users)
       .values({
         id: crypto.randomUUID(),
@@ -164,9 +125,9 @@ class UserRepository {
 class UsersController implements UsersHttp {
   constructor(readonly users = inject(UserRepository)) {}
 
-  async create(context: ContextOf<UsersHttp, 'create'>) {
-    return context.response.created({
-      body: await this.users.create(context.body.name),
+  async create(ctx: ContextOf<UsersHttp, 'create'>) {
+    return ctx.response.created({
+      body: await this.users.create(ctx.transaction, ctx.body.name),
     })
   }
 }
@@ -174,16 +135,14 @@ class UsersController implements UsersHttp {
 const AppModule = defineModule(() => ({
   name: 'DatabaseDrizzlePostgresExample',
   providers: [
-    provide(APP_CONFIG).useValue({
-      databaseUrl: process.env.DRIZZLE_DATABASE_URL
-        ?? 'postgres://loutre:loutre@127.0.0.1:54322/loutre_drizzle',
-    }),
+    provide(DATABASE_URL).useValue(
+      process.env.DRIZZLE_DATABASE_URL ??
+        'postgres://loutre:loutre@127.0.0.1:54322/loutre_drizzle',
+    ),
     DrizzleDatabase,
     UserRepository,
   ],
-  implementations: [
-    implement(UsersContract).for(http).with(UsersController),
-  ],
+  implementations: [implement(UsersContract).for(http).with(UsersController)],
 }))
 
 export default createHttpApplication({ modules: [AppModule()] })

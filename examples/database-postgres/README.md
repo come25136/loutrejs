@@ -1,17 +1,19 @@
 # PostgreSQL Database Example
 
-`pg`の`Pool` / `PoolClient`をLoutreのroot client / transaction clientへ対応させる最小adapter例です。
+`pg`の`Pool`と`PoolClient`をApplication側で管理し、`PoolClient`をtransaction Layerから
+Controllerへ渡す最小構成です。
 
 ```sh
-docker compose -f examples/database-postgres/compose.yaml up -d
+npm run db:start --workspace @loutrejs/example-database-postgres
 npm run dev --workspace @loutrejs/example-database-postgres
 ```
 
 ```sh
-curl -X POST http://127.0.0.1:3001/users \
-  -H 'content-type: application/json' \
-  -d '{"name":"Loutre"}'
+curl --request POST http://127.0.0.1:3001/users \
+  --header 'content-type: application/json' \
+  --data '{"name":"Loutre"}'
 ```
 
-`PostgresDatabase`のconstructorは設定のDIだけを行います。接続は`connect()`、解放は
-`disconnect()`、BEGIN/COMMIT/ROLLBACKとSAVEPOINTはphysical primitiveへ閉じ込めています。
+`PostgresDatabase`は同期constructionでPoolを組み立て、`onModuleInit()`で接続確認、
+`onModuleDestroy()`で解放します。BEGIN、COMMIT、ROLLBACKはApplication側のtransaction
+callbackに閉じ込め、Loutreは`pg`を認識しません。

@@ -16,12 +16,8 @@ import {
   createLinkedEventsApplication,
   createLinkedUsersApplication,
 } from './helpers/linked-applications.js'
-import { runDatabaseConformance } from '../conformance/database.js'
 
 describe('Runtime conformance harness', () => {
-  it('NodeでDatabase ambient transactionをawait越しに維持する', async () => {
-    await expect(runDatabaseConformance()).resolves.toBeUndefined()
-  })
   it.each([
     ['Deno 2.9 LTS', createDenoFetchHandler],
     ['Bun 1.4 Stable', createBunFetchHandler],

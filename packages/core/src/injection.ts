@@ -1,14 +1,22 @@
 import type { TokenLike, TokenValue } from './token.js'
 
+export interface LayerConsumer {
+  readonly kind: 'layer-consumer'
+  readonly id: string
+  readonly name: string
+}
+
+export type DependencyConsumer = TokenLike | LayerConsumer
+
 export interface InjectionContext {
-  readonly consumer: TokenLike
+  readonly consumer: DependencyConsumer
   readonly resolve: <T>(token: TokenLike<T>) => T
-  readonly record?: (consumer: TokenLike, dependency: TokenLike) => void
+  readonly record?: (consumer: DependencyConsumer, dependency: TokenLike) => void
 }
 
 let currentInjectionContext: InjectionContext | undefined
 
-/** @internal framework-managed class の同期 construction にだけ利用する。 */
+/** @internal framework-managedな同期constructionに利用する。 */
 export function runInInjectionContext<T>(
   context: InjectionContext,
   run: () => T,

@@ -4,6 +4,7 @@ import {
   type ModuleInstance,
   type ModuleTemplate,
   type ProviderDescriptor,
+  type PipelineItem,
   type TokenLike,
 } from '@loutrejs/core'
 import {
@@ -32,6 +33,9 @@ export class ApplicationRuntime {
     this.container = new Container(this.graph.providers, {
       ...(options.logger === undefined ? {} : { logger: options.logger }),
     })
+    for (const pipeline of collectApplicationPipelines(this.graph.modules)) {
+      this.container.preparePipeline(pipeline)
+    }
   }
 
   async initialize(): Promise<void> {
@@ -152,6 +156,29 @@ export class ApplicationRuntime {
     )
     await hook.run(...dependencies)
   }
+}
+
+function collectApplicationPipelines(
+  modules: readonly ModuleInstance[],
+): readonly (readonly PipelineItem[])[] {
+  const pipelines: (readonly PipelineItem[])[] = []
+  for (const module of modules) {
+    for (const binding of module.definition.implementations ?? []) {
+      for (const procedure of Object.values(binding.contract.procedures)) {
+        const protocol = procedure.protocols[binding.protocol] as
+          | {
+              readonly pipeline?: readonly PipelineItem[]
+              readonly definition?: {
+                readonly pipeline?: readonly PipelineItem[]
+              }
+            }
+          | undefined
+        const pipeline = protocol?.pipeline ?? protocol?.definition?.pipeline
+        if (pipeline) pipelines.push(pipeline)
+      }
+    }
+  }
+  return pipelines
 }
 
 async function collectCleanupError(

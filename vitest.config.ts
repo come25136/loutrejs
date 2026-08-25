@@ -5,7 +5,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@loutrejs/core': resolve('packages/core/src/index.ts'),
-      '@loutrejs/database': resolve('packages/database/src/index.ts'),
       '@loutrejs/graph': resolve('packages/graph/src/index.ts'),
       '@loutrejs/cli': resolve('packages/cli/src/index.ts'),
       '@loutrejs/runtime': resolve('packages/runtime/src/index.ts'),

@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@loutrejs/core": "0.1.0",
-    "@loutrejs/database": "0.1.0",
     "@loutrejs/http": "0.1.0",
     "zod": "^4.4.3"
   },

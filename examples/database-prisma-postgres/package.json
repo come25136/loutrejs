@@ -6,6 +6,8 @@
   "engines": { "node": "26.x" },
   "scripts": {
     "check": "loutre check --entry src/app.ts",
+    "db:start": "docker compose up -d --wait",
+    "db:stop": "docker compose down",
     "dev": "loutre dev src/app.ts --port 3003",
     "generate": "prisma generate",
     "graph": "loutre graph contracts --entry src/app.ts",
@@ -15,7 +17,6 @@
   },
   "dependencies": {
     "@loutrejs/core": "0.1.0",
-    "@loutrejs/database": "0.1.0",
     "@loutrejs/http": "0.1.0",
     "@prisma/adapter-pg": "7.9.1",
     "@prisma/client": "7.9.1",

@@ -1,17 +1,19 @@
 import {
   asModuleInstance,
+  childPipelineOf,
   contextKeyName,
+  layerDefinitionOf,
   normalizeProvider,
   tokenName,
   type ContractDefinition,
   type ContextKey,
-  type CompositeLayerDescriptor,
+  type DependencyConsumer,
   type ImplementationBinding,
   type ModuleInstance,
   type ModuleTemplate,
   type PipelineItem,
   type ProviderDescriptor,
-  type LayerInjection,
+  type LayerConsumer,
   type ShortCircuitDeclaration,
   type TokenLike,
 } from '@loutrejs/core'
@@ -148,6 +150,15 @@ export function compileApplication(
     })
   }
 
+  const dependencyGraph = buildDependencyGraph(
+    modules,
+    bindings,
+    targets,
+    diagnostics,
+  )
+  const probedTokenIds = dependencyGraph.nodes
+    .filter((node) => node.kind === 'token')
+    .map((node) => node.label)
   const graph: ApplicationGraphIR = {
     version: 2,
     modules: modules.map((module, index) => ({
@@ -190,7 +201,8 @@ export function compileApplication(
               ? [provider.select.env.name]
               : [],
     })),
-    tokens: [...tokensById.keys()].map((id) => ({ id })),
+    tokens: [...new Set([...tokensById.keys(), ...probedTokenIds])]
+      .map((id) => ({ id })),
     contextKeys: [...contextKeysByName.keys()].map((name) => ({ name })),
     contracts: [...contractNames.values()],
     pipelines,
@@ -226,7 +238,7 @@ export function compileApplication(
         })),
       ),
     ],
-    ...buildDependencyGraph(modules, bindings, targets, diagnostics),
+    ...dependencyGraph,
     diagnostics,
   }
 
@@ -338,38 +350,6 @@ function buildDependencyGraph(
     })
   }
 
-  for (const target of targets) {
-    visitCompositeLayers(target.pipeline, (layer, indexPath) => {
-      const layerId = `layer:${target.contractName}:${target.procedure}:${target.protocol}:${indexPath.join('.')}`
-      if (!nodes.some(({ id }) => id === layerId)) {
-        nodes.push({ id: layerId, label: layer.name, kind: 'layer' })
-      }
-      for (const injection of layer.inject) {
-        const dependency = layerInjectionToken(injection)
-        validateDeclaredDependency(dependency, layerId)
-        addEdge({
-          from: layerId,
-          to: ensureNode(dependency),
-          kind: 'inject',
-          source: 'declared',
-        })
-        const requiredScope = layerDependencyScope(injection)
-        const provider = providersByToken.get(dependency)
-        if (
-          requiredScope !== undefined &&
-          provider !== undefined &&
-          provider.scope !== requiredScope
-        ) {
-          diagnostics.push({
-            code: 'LUTRE_PIPELINE_DEPENDENCY_SCOPE',
-            message: `${layer.name}は${tokenName(dependency)}へ${requiredScope} scopeを要求しますが、Providerは${provider.scope} scopeです`,
-            path: layerId,
-          })
-        }
-      }
-    })
-  }
-
   for (const provider of providersByToken.values()) {
     const providerId = ensureNode(provider.provide)
     if (provider.kind === 'class' && provider.provide !== provider.useClass) {
@@ -446,7 +426,7 @@ function buildDependencyGraph(
   const recorder: DependencyRecorder = {
     record(consumer, dependency) {
       addEdge({
-        from: ensureNode(consumer),
+        from: ensureConsumerNode(consumer, nodes, ensureNode),
         to: ensureNode(dependency),
         kind: 'inject',
         source: 'probed',
@@ -480,6 +460,34 @@ function buildDependencyGraph(
         path: target.name,
       })
     }
+  }
+
+  for (const target of targets) {
+    visitPipelineItems(target.pipeline, (item, indexPath) => {
+      if (item.kind !== 'layer') return
+      const definition = layerDefinitionOf(item)
+      const consumer: LayerConsumer = {
+        kind: 'layer-consumer',
+        id: `layer:${target.contractName}:${target.procedure}:${target.protocol}:${indexPath.join('.')}`,
+        name: definition.name,
+      }
+      if (!nodes.some(({ id }) => id === consumer.id)) {
+        nodes.push({ id: consumer.id, label: consumer.name, kind: 'layer' })
+      }
+      try {
+        container.probeLayer(definition, consumer)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        diagnostics.push({
+          code: message.includes('LUTRE_DI_CYCLE') ? 'LUTRE_DI_CYCLE' :
+            message.includes('LUTRE_LAYER_ASYNC_FACTORY') ? 'LUTRE_LAYER_ASYNC_FACTORY' :
+            message.includes('LUTRE_LAYER_FACTORY_RESULT') ? 'LUTRE_LAYER_FACTORY_RESULT' :
+            'LUTRE_DI_UNRESOLVED',
+          message,
+          path: consumer.id,
+        })
+      }
+    })
   }
 
   return { nodes, edges }
@@ -547,16 +555,6 @@ function collectCustomTokens(
       }
     }
   }
-  for (const target of targets) {
-    visitCompositeLayers(target.pipeline, (layer, indexPath) => {
-      for (const injection of layer.inject) {
-        register(
-          layerInjectionToken(injection),
-          `${target.contractName}.${target.procedure}.${target.protocol}.${indexPath.join('.')}`,
-        )
-      }
-    })
-  }
   return tokens
 }
 
@@ -569,8 +567,7 @@ function collectContextKeys(
     const path = `${target.contractName}.${target.procedure}.${target.protocol}`
     visitPipelineItems(target.pipeline, (item) => {
       if (item.kind !== 'layer') return
-      const provided = item.composition === 'pipeline' ? [] : item.provides
-      for (const key of [...item.requires, ...provided]) {
+      for (const key of [...item.requires, ...item.provides]) {
         const existing = keys.get(key.name)
         if (existing && existing !== key) {
           diagnostics.push({
@@ -715,7 +712,6 @@ function validatePipeline(
         })
       }
     }
-    if (item.composition === 'pipeline') continue
     for (const provided of item.provides) {
       if (available.has(provided)) {
         diagnostics.push({
@@ -754,23 +750,7 @@ function validatePipeline(
 }
 
 function toLayerIR(item: PipelineItem, index: number): LayerIR {
-  if (item.kind === 'layer' && item.composition === 'pipeline') {
-    return {
-      index,
-      name: item.name,
-      role: item.role,
-      requires: item.requires.map(contextKeyName),
-      provides: [],
-      requiresValidated: item.requiresValidated,
-      dependencies: item.inject.map((injection: LayerInjection) =>
-        tokenName(layerInjectionToken(injection)),
-      ),
-      ...(item.graph?.attributes === undefined
-        ? {}
-        : { attributes: item.graph.attributes }),
-      pipeline: item.pipeline.map(toLayerIR),
-    }
-  }
+  const child = item.kind === 'layer' ? childPipelineOf(item) : undefined
   return {
     index,
     name: item.name,
@@ -781,6 +761,7 @@ function toLayerIR(item: PipelineItem, index: number): LayerIR {
       item.kind === 'layer' ? item.provides.map(contextKeyName) : [],
     requiresValidated:
       item.kind === 'layer' ? item.requiresValidated : [],
+    ...(child === undefined ? {} : { pipeline: child.map(toLayerIR) }),
     ...(item.kind !== 'layer' || item.shortCircuits.length === 0
       ? {}
       : {
@@ -805,38 +786,23 @@ function visitPipelineItems(
   pipeline.forEach((item, index) => {
     const indexPath = [...parentPath, index]
     visit(item, indexPath)
-    if (item.kind === 'layer' && item.composition === 'pipeline') {
-      visitPipelineItems(item.pipeline, visit, indexPath)
+    if (item.kind === 'layer') {
+      const child = childPipelineOf(item)
+      if (child) visitPipelineItems(child, visit, indexPath)
     }
   })
 }
 
-function visitCompositeLayers(
-  pipeline: readonly PipelineItem[],
-  visit: (
-    layer: CompositeLayerDescriptor,
-    indexPath: readonly number[],
-  ) => void,
-  parentPath: readonly number[] = [],
-): void {
-  pipeline.forEach((item, index) => {
-    if (item.kind !== 'layer' || item.composition !== 'pipeline') return
-    const indexPath = [...parentPath, index]
-    visit(item, indexPath)
-    visitCompositeLayers(item.pipeline, visit, indexPath)
-  })
-}
-
-function layerInjectionToken(injection: LayerInjection): TokenLike {
-  return typeof injection === 'object' && 'token' in injection
-    ? injection.token
-    : injection
-}
-
-function layerDependencyScope(
-  injection: LayerInjection,
-): 'application' | 'transient' | undefined {
-  return typeof injection === 'object' && 'token' in injection
-    ? injection.scope
-    : undefined
+function ensureConsumerNode(
+  consumer: DependencyConsumer,
+  nodes: DependencyNodeIR[],
+  ensureTokenNode: (token: TokenLike) => string,
+): string {
+  if (typeof consumer === 'function' || consumer.kind === 'token') {
+    return ensureTokenNode(consumer)
+  }
+  if (!nodes.some(({ id }) => id === consumer.id)) {
+    nodes.push({ id: consumer.id, label: consumer.name, kind: 'layer' })
+  }
+  return consumer.id
 }

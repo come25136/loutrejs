@@ -6,6 +6,8 @@
   "engines": { "node": "26.x" },
   "scripts": {
     "check": "loutre check --entry src/app.ts",
+    "db:start": "docker compose up -d --wait",
+    "db:stop": "docker compose down",
     "dev": "loutre dev src/app.ts --port 3001",
     "graph": "loutre graph contracts --entry src/app.ts",
     "start": "loutre start src/app.ts --port 3001",
@@ -13,7 +15,6 @@
   },
   "dependencies": {
     "@loutrejs/core": "0.1.0",
-    "@loutrejs/database": "0.1.0",
     "@loutrejs/http": "0.1.0",
     "pg": "^8.23.0",
     "zod": "^4.4.3"

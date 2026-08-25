@@ -1,459 +1,365 @@
 import {
   contextKey,
+  inject,
   layer,
+  provide,
   shortCircuit,
+  token,
+  type LayerDescriptor,
+  type LayerRuntime,
+  type PipelineItem,
   type TerminalLayerDescriptor,
 } from '@loutrejs/core'
-import { LayerContractError, executePipeline } from '@loutrejs/runtime'
+import {
+  Container,
+  LayerContractError,
+  executePipeline,
+} from '@loutrejs/runtime'
 
 const terminal: TerminalLayerDescriptor<'test'> = {
   kind: 'terminal',
-  name: 'test.handler',
+  name: 'test.terminal',
   role: 'terminal',
   protocol: 'test',
 }
 
-describe('Pipeline engine', () => {
-  it('inboundを宣言順、outboundを逆順で実行する', async () => {
-    const events: string[] = []
-    const create = (name: string) =>
-      layer({
-        name,
-        inbound: () => {
-          events.push(`${name}.inbound`)
-        },
-        outbound: () => {
-          events.push(`${name}.outbound`)
-        },
-      })
+function hooks(
+  context: Record<string, unknown>,
+  terminalResult: unknown = 'done',
+) {
+  const runtimes = new Map<
+    LayerDescriptor,
+    LayerRuntime<object, readonly [], unknown>
+  >()
+  return {
+    context,
+    validate: () => undefined,
+    terminal: () => terminalResult,
+    layer: (descriptor: LayerDescriptor) => {
+      const cached = runtimes.get(descriptor)
+      if (cached) return cached
+      const runtime = descriptor.factory() as LayerRuntime<
+        object,
+        readonly [],
+        unknown
+      >
+      runtimes.set(descriptor, runtime)
+      return runtime
+    },
+  }
+}
 
-    const result = await executePipeline([create('A'), create('B'), terminal], {
-      context: {},
-      validate: () => undefined,
-      terminal: () => {
-        events.push('terminal')
-        return 'done'
+describe('continuation Pipeline', () => {
+  it('next()をちょうど1回実行してcontinuationを包む', async () => {
+    const events: string[] = []
+    const timing = layer({
+      name: 'timing',
+      factory: () => async (_ctx, next) => {
+        events.push('before')
+        await next()
+        events.push('after')
       },
     })
 
-    expect(result).toBe('done')
-    expect(events).toEqual([
-      'A.inbound',
-      'B.inbound',
-      'terminal',
-      'B.outbound',
-      'A.outbound',
-    ])
+    await expect(executePipeline([timing, terminal], hooks({}))).resolves.toBe(
+      'done',
+    )
+    expect(events).toEqual(['before', 'after'])
   })
 
-  it('inboundが完了したLayerだけをunwindする', async () => {
-    const events: string[] = []
-    const first = layer({
-      name: 'first',
-      inbound: () => {
-        events.push('first.inbound')
-      },
-      outbound: () => {
-        events.push('first.outbound')
-      },
+  it('正常returnでnext()を呼ばないLayerを拒否する', async () => {
+    const skipped = layer({
+      name: 'skipped',
+      factory: () => async () => undefined,
     })
-    const second = layer({
-      name: 'second',
-      inbound: () => {
-        events.push('second.inbound')
-        throw new Error('stop')
-      },
-      outbound: () => {
-        events.push('second.outbound')
+
+    await expect(
+      executePipeline([skipped, terminal], hooks({})),
+    ).rejects.toThrow('LUTRE_LAYER_NEXT_SKIPPED')
+  })
+
+  it('next()の2回目をLayerがcatchしても拒否する', async () => {
+    const reentered = layer({
+      name: 'reentered',
+      factory: () => async (_ctx, next) => {
+        await next()
+        try {
+          await next()
+        } catch {
+          // Runtimeが保持したcontract errorを外側で検証する。
+        }
       },
     })
 
     await expect(
-      executePipeline([first, second, terminal], {
-        context: {},
-        validate: () => undefined,
-        terminal: () => 'unreachable',
-      }),
-    ).rejects.toThrow('stop')
-    expect(events).toEqual([
-      'first.inbound',
-      'second.inbound',
-      'first.outbound',
-    ])
+      executePipeline([reentered, terminal], hooks({})),
+    ).rejects.toThrow('LUTRE_LAYER_NEXT_REENTRY')
   })
 
-  it('Context Keyで宣言した値を後段Layerへ渡す', async () => {
+  it('next()より前のthrowをそのまま伝播する', async () => {
+    const failure = new Error('before next')
+    const broken = layer({
+      name: 'broken',
+      factory: () => async () => {
+        throw failure
+      },
+    })
+
+    await expect(executePipeline([broken, terminal], hooks({}))).rejects.toBe(
+      failure,
+    )
+  })
+
+  it('downstream errorをLayerが握り潰しても元errorを再throwする', async () => {
+    const failure = new Error('child failure')
+    const wrapper = layer({
+      name: 'wrapper',
+      factory: () => async (_ctx, next) => {
+        try {
+          await next()
+        } catch {
+          // transaction callback等による握り潰しを再現する。
+        }
+      },
+    })
+    const broken = layer({
+      name: 'child',
+      factory: () => async () => {
+        throw failure
+      },
+    })
+
+    await expect(
+      executePipeline([wrapper([broken]), terminal], hooks({})),
+    ).rejects.toBe(failure)
+  })
+
+  it('next()なしのshortCircuitを正常結果にする', async () => {
+    const cached = layer({
+      name: 'cached',
+      factory: () => async () => shortCircuit('cached-result'),
+    })
+
+    await expect(executePipeline([cached, terminal], hooks({}))).resolves.toBe(
+      'cached-result',
+    )
+  })
+
+  it('next()後のshortCircuitを拒否する', async () => {
+    const invalid = layer({
+      name: 'invalid-short-circuit',
+      factory: () => async (_ctx, next) => {
+        await next()
+        return shortCircuit('late')
+      },
+    })
+
+    await expect(
+      executePipeline([invalid, terminal], hooks({})),
+    ).rejects.toThrow('LUTRE_LAYER_SHORT_CIRCUIT_AFTER_NEXT')
+  })
+
+  it('next(provided)のContextを後段へ追加する', async () => {
     const VALUE = contextKey('value').of<string>()
-    const seen: string[] = []
+    const context: Record<string, unknown> = {}
     const provider = layer({
       name: 'provider',
       provides: [VALUE],
-      inbound: () => ({ value: 'ready' }),
+      factory: () => async (_ctx, next) => {
+        await next({ value: 'ready' })
+      },
     })
     const consumer = layer({
       name: 'consumer',
       requires: [VALUE],
-      inbound: (ctx) => {
-        seen.push(ctx.value)
+      factory: () => async (ctx, next) => {
+        expect(ctx.value).toBe('ready')
+        await next()
       },
     })
-    await executePipeline([provider, consumer, terminal], {
-      context: {},
-      validate: () => undefined,
-      terminal: () => 'done',
-    })
-    expect(seen).toEqual(['ready'])
+
+    await executePipeline([provider, consumer, terminal], hooks(context))
+    expect(context.value).toBe('ready')
   })
 
-  it('同名でも異なるContext Key identityをrequirementとして扱わない', async () => {
-    const PROVIDED = contextKey('session').of<string>()
-    const REQUIRED = contextKey('session').of<string>()
+  it('childがprovideしたContextを親Pipeline後段へ維持する', async () => {
+    const VALUE = contextKey('childValue').of<string>()
+    const context: Record<string, unknown> = {}
+    const wrapper = layer({
+      name: 'wrapper',
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
+    })
     const provider = layer({
-      name: 'provider',
-      provides: [PROVIDED],
-      inbound: () => ({ session: 'ready' }),
+      name: 'child-provider',
+      provides: [VALUE],
+      factory: () => async (_ctx, next) => {
+        await next({ childValue: 'ready' })
+      },
     })
     const consumer = layer({
-      name: 'consumer',
-      requires: [REQUIRED],
-      inbound: () => undefined,
+      name: 'parent-consumer',
+      requires: [VALUE],
+      factory: () => async (ctx, next) => {
+        expect(ctx.childValue).toBe('ready')
+        await next()
+      },
     })
 
-    await expect(
-      executePipeline([provider, consumer, terminal], {
-        context: {},
-        validate: () => undefined,
-        terminal: () => 'unreachable',
-      }),
-    ).rejects.toThrow('利用できません')
+    await executePipeline(
+      [wrapper([provider]), consumer, terminal],
+      hooks(context),
+    )
   })
 
-  it('宣言したContext Keyを返さないLayerをterminal前に拒否する', async () => {
-    const SESSION = contextKey('session').of<string>()
-    const broken = layer({
-      name: 'broken-authentication',
-      provides: [SESSION],
-      inbound: (() => undefined) as any,
-    })
-    let terminalCalled = false
-
-    await expect(
-      executePipeline([broken, terminal], {
-        context: {},
-        validate: () => undefined,
-        terminal: () => {
-          terminalCalled = true
-          return 'unreachable'
-        },
-      }),
-    ).rejects.toThrow(LayerContractError)
-    expect(terminalCalled).toBe(false)
-  })
-
-  it('既存Context propertyの暗黙上書きを拒否する', async () => {
+  it('既存Context propertyの上書きを拒否する', async () => {
     const SESSION = contextKey('session').of<string>()
     const provider = layer({
-      name: 'session',
+      name: 'provider',
       provides: [SESSION],
-      inbound: () => ({ session: 'new' }),
+      factory: () => async (_ctx, next) => {
+        await next({ session: 'new' })
+      },
     })
+
     await expect(
-      executePipeline([provider, terminal], {
-        context: { session: 'old' },
-        validate: () => undefined,
-        terminal: () => 'unreachable',
-      }),
+      executePipeline([provider, terminal], hooks({ session: 'existing' })),
     ).rejects.toThrow('上書きできません')
   })
 
-  it('short circuit後もentered Layerを逆順にunwindする', async () => {
-    const events: string[] = []
-    const outer = layer({
-      name: 'outer',
-      inbound: () => {
-        events.push('outer.inbound')
-      },
-      outbound: () => {
-        events.push('outer.outbound')
-      },
-    })
-    const cache = layer({
-      name: 'cache',
-      inbound: () => {
-        events.push('cache.inbound')
-        return shortCircuit('cached', 'hit')
-      },
-      outbound: (_ctx, outcome, state) => {
-        events.push(`cache.outbound:${outcome.ok}:${state}`)
-      },
-    })
-    const skipped = layer({
-      name: 'skipped',
-      inbound: () => {
-        events.push('skipped.inbound')
+  it('未宣言Context propertyを拒否する', async () => {
+    const broken = layer({
+      name: 'undeclared',
+      factory: () => async (_ctx, next) => {
+        await (next as (provided: object) => Promise<void>)({ extra: true })
       },
     })
 
-    const result = await executePipeline([outer, cache, skipped, terminal], {
-      context: {},
-      validate: () => undefined,
-      terminal: () => {
-        events.push('terminal')
-        return 'terminal-result'
-      },
-    })
-
-    expect(result).toBe('cached')
-    expect(events).toEqual([
-      'outer.inbound',
-      'cache.inbound',
-      'cache.outbound:true:hit',
-      'outer.outbound',
-    ])
+    await expect(
+      executePipeline([broken, terminal], hooks({})),
+    ).rejects.toThrow('未宣言のContext property extra')
   })
 
-  it('Composite Layerのchild pipelineをscope内で実行する', async () => {
+  it('provides内の同名property重複を拒否する', async () => {
+    const FIRST = contextKey('duplicate').of<string>()
+    const SECOND = contextKey('duplicate').of<string>()
+    const broken = layer({
+      name: 'duplicate-provider',
+      provides: [FIRST, SECOND],
+      factory: () => async (_ctx, next) => {
+        await next({ duplicate: 'value' })
+      },
+    })
+
+    await expect(
+      executePipeline([broken, terminal], hooks({})),
+    ).rejects.toThrow('重複して宣言しました')
+  })
+
+  it('Prisma風callback wrapperでchildだけを囲み親後段へ戻る', async () => {
     const events: string[] = []
+    const transaction = layer({
+      name: 'transaction',
+      factory: () => async (_ctx, next) => {
+        events.push('transaction.enter')
+        await (async (callback: () => Promise<void>) => {
+          await callback()
+        })(next)
+        events.push('transaction.exit')
+      },
+    })
     const child = layer({
       name: 'child',
-      inbound: () => { events.push('child.inbound') },
-      outbound: (_ctx, outcome) => {
-        events.push(`child.outbound:${outcome.ok}:${'value' in outcome}`)
+      factory: () => async (_ctx, next) => {
+        events.push('child')
+        await next()
       },
     })
-    const composite = layer.compose({
-      name: 'composite',
-      pipeline: [child],
-      scope: () => ({
-        run: async (execute) => {
-          events.push('scope.begin')
-          await execute()
-          events.push('scope.end')
-        },
-      }),
+    const parent = layer({
+      name: 'parent',
+      factory: () => async (_ctx, next) => {
+        events.push('parent')
+        await next()
+      },
     })
 
-    await expect(executePipeline([composite, terminal], {
-      context: {},
-      validate: () => undefined,
-      terminal: () => {
-        events.push('terminal')
-        return 'done'
-      },
-    })).resolves.toBe('done')
+    await executePipeline([transaction([child]), parent, terminal], hooks({}))
     expect(events).toEqual([
-      'scope.begin',
-      'child.inbound',
-      'child.outbound:true:false',
-      'scope.end',
-      'terminal',
+      'transaction.enter',
+      'child',
+      'transaction.exit',
+      'parent',
     ])
   })
 
-  it('空のchild pipelineはcontinueする', async () => {
-    const composite = layer.compose({
-      name: 'empty',
-      pipeline: [],
-      scope: () => ({ run: async (execute) => { await execute() } }),
+  it.each([false, true])(
+    'request timing風finallyをchild成功=%sでも実行する',
+    async (fails) => {
+      const events: string[] = []
+      const timing = layer({
+        name: 'timing',
+        factory: () => async (_ctx, next) => {
+          try {
+            await next()
+          } finally {
+            events.push('finally')
+          }
+        },
+      })
+      const child = layer({
+        name: 'child',
+        factory: () => async (_ctx, next) => {
+          if (fails) throw new Error('failure')
+          await next()
+        },
+      })
+      const execution = executePipeline([timing([child]), terminal], hooks({}))
+
+      if (fails) await expect(execution).rejects.toThrow('failure')
+      else await expect(execution).resolves.toBe('done')
+      expect(events).toEqual(['finally'])
+    },
+  )
+
+  it('factory default parameterのinjectをconstruction時に1回だけ解決する', async () => {
+    interface Service {
+      readonly value: string
+    }
+    const SERVICE = token<Service>('layer.service')
+    let constructions = 0
+    const injected = layer({
+      name: 'injected',
+      factory: (service = inject(SERVICE)) => {
+        constructions += 1
+        return async (_ctx, next) => {
+          expect(service.value).toBe('resolved')
+          await next()
+        }
+      },
     })
-    await expect(executePipeline([composite, terminal], {
+    const pipeline: readonly PipelineItem[] = [injected([injected]), terminal]
+    const container = new Container([
+      provide(SERVICE).useValue({ value: 'resolved' }),
+    ])
+    container.preparePipeline(pipeline)
+
+    await executePipeline(pipeline, {
       context: {},
       validate: () => undefined,
       terminal: () => 'done',
-    })).resolves.toBe('done')
+      layer: (descriptor) => container.layerRuntime(descriptor),
+    })
+    expect(constructions).toBe(1)
   })
 
-  it('child terminalとshortCircuitのresultを親へbubbleする', async () => {
-    const terminalComposite = layer.compose({
-      name: 'terminal-composite',
-      pipeline: [terminal],
-      scope: () => ({ run: async (execute) => { await execute() } }),
-    })
-    await expect(executePipeline([terminalComposite], {
-      context: {},
-      validate: () => undefined,
-      terminal: () => 'terminal-result',
-    })).resolves.toBe('terminal-result')
-
-    const cached = layer({
-      name: 'cached',
-      inbound: () => shortCircuit('cached-result'),
-    })
-    const shortCircuitComposite = layer.compose({
-      name: 'short-circuit-composite',
-      pipeline: [cached],
-      scope: () => ({ run: async (execute) => { await execute() } }),
-    })
-    await expect(executePipeline([shortCircuitComposite, terminal], {
-      context: {},
-      validate: () => undefined,
-      terminal: () => 'unreachable',
-    })).resolves.toBe('cached-result')
-  })
-
-  it('child errorはscopeがcatchしても元errorを再throwする', async () => {
-    const failure = new Error('child failure')
-    const broken = layer({
-      name: 'broken',
-      inbound: () => { throw failure },
-    })
-    const composite = layer.compose({
-      name: 'catching-scope',
-      pipeline: [broken],
-      scope: () => ({
-        run: async (execute) => {
-          try {
-            await execute()
-          } catch {
-            // Scope Layerはchild errorをsuccessへ変換できない。
-          }
-        },
-      }),
-    })
-
-    await expect(executePipeline([composite, terminal], {
-      context: {},
-      validate: () => undefined,
-      terminal: () => 'unreachable',
-    })).rejects.toBe(failure)
-  })
-
-  it('scope callbackの未実行と再入を拒否する', async () => {
-    const skipped = layer.compose({
+  it('Layer contract errorを専用Error型で返す', async () => {
+    const skipped = layer({
       name: 'skipped',
-      pipeline: [],
-      scope: () => ({ run: async () => undefined }),
+      factory: () => async () => undefined,
     })
-    await expect(executePipeline([skipped, terminal], {
-      context: {},
-      validate: () => undefined,
-      terminal: () => 'unreachable',
-    })).rejects.toThrow('LUTRE_LAYER_SCOPE_SKIPPED')
-
-    const reentered = layer.compose({
-      name: 'reentered',
-      pipeline: [],
-      scope: () => ({
-        run: async (execute) => {
-          await execute()
-          try {
-            await execute()
-          } catch {
-            // Runtimeはscopeがreentry errorを握り潰しても検出する。
-          }
-        },
-      }),
-    })
-    await expect(executePipeline([reentered, terminal], {
-      context: {},
-      validate: () => undefined,
-      terminal: () => 'unreachable',
-    })).rejects.toThrow('LUTRE_LAYER_SCOPE_REENTRY')
-  })
-
-  it('childのContext provideとvalidationを親後段へ伝播する', async () => {
-    const VALUE = contextKey('recursiveValue').of<string>()
-    const provider = layer({
-      name: 'provider',
-      provides: [VALUE],
-      inbound: () => ({ recursiveValue: 'ready' }),
-    })
-    const validation = {
-      kind: 'validation',
-      name: 'validate.body',
-      role: 'validation',
-      part: 'body',
-    } as const
-    const composite = layer.compose({
-      name: 'context-composite',
-      pipeline: [provider, validation],
-      scope: () => ({ run: async (execute) => { await execute() } }),
-    })
-    const consumer = layer({
-      name: 'consumer',
-      requires: [VALUE],
-      inbound: (context) => {
-        expect(context.recursiveValue).toBe('ready')
-      },
-    })
-    let validated = false
-
-    await executePipeline([composite, consumer, terminal], {
-      context: {},
-      validate: () => { validated = true },
-      terminal: () => {
-        expect(validated).toBe(true)
-        return 'done'
-      },
-    })
-  })
-
-  it('nested Composite Layerの順序と外側outbound outcomeを維持する', async () => {
-    const events: string[] = []
-    const outer = layer({
-      name: 'outer-linear',
-      inbound: () => { events.push('outer.inbound') },
-      outbound: (_context, outcome) => {
-        events.push(`outer.outbound:${String(outcome.value)}`)
-      },
-    })
-    const inner = layer.compose({
-      name: 'inner',
-      pipeline: [terminal],
-      scope: () => ({
-        run: async (execute) => {
-          events.push('inner.begin')
-          await execute()
-          events.push('inner.end')
-        },
-      }),
-    })
-    const composite = layer.compose({
-      name: 'outer-composite',
-      pipeline: [inner],
-      scope: () => ({
-        run: async (execute) => {
-          events.push('composite.begin')
-          await execute()
-          events.push('composite.end')
-        },
-      }),
-    })
-
-    await executePipeline([outer, composite], {
-      context: {},
-      validate: () => undefined,
-      terminal: () => {
-        events.push('terminal')
-        return 'done'
-      },
-    })
-    expect(events).toEqual([
-      'outer.inbound',
-      'composite.begin',
-      'inner.begin',
-      'terminal',
-      'inner.end',
-      'composite.end',
-      'outer.outbound:done',
-    ])
-  })
-
-  it('child outbound errorでscopeとPipelineを失敗させる', async () => {
-    const failure = new Error('outbound failure')
-    const child = layer({
-      name: 'outbound-broken',
-      outbound: () => { throw failure },
-    })
-    const composite = layer.compose({
-      name: 'composite',
-      pipeline: [child],
-      scope: () => ({ run: async (execute) => { await execute() } }),
-    })
-    await expect(executePipeline([composite, terminal], {
-      context: {},
-      validate: () => undefined,
-      terminal: () => 'unreachable',
-    })).rejects.toBe(failure)
+    await expect(
+      executePipeline([skipped, terminal], hooks({})),
+    ).rejects.toBeInstanceOf(LayerContractError)
   })
 })

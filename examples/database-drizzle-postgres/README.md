@@ -1,18 +1,19 @@
 # Drizzle PostgreSQL Database Example
 
-Drizzle PostgreSQLのnative transaction configを`options.begin`へそのまま渡し、nested
-`tx.transaction()`をsavepoint primitiveとして使う例です。
+Drizzle PostgreSQLのnative transaction clientとtransaction configを型を変えずにtyped
+Contextへ渡すサンプルです。
 
 ```sh
-docker compose -f examples/database-drizzle-postgres/compose.yaml up -d
+npm run db:start --workspace @loutrejs/example-database-drizzle-postgres
 npm run dev --workspace @loutrejs/example-database-drizzle-postgres
 ```
 
 ```sh
-curl -X POST http://127.0.0.1:3002/users \
-  -H 'content-type: application/json' \
-  -d '{"name":"Loutre"}'
+curl --request POST http://127.0.0.1:3002/users \
+  --header 'content-type: application/json' \
+  --data '{"name":"Loutre"}'
 ```
 
-Repositoryはrootの`NodePgDatabase`とtransaction callbackのclientを区別せず、
-`DrizzleDatabase.client`からambient clientを取得します。
+`DrizzleTransaction`と`DrizzleTransactionOptions`は`NodePgDatabase.transaction()`から
+推論しています。`transaction([http.controller])`のchild Pipeline内だけでtransaction
+clientを利用でき、Repositoryへ明示的に渡します。`any`やunsafe castは使用しません。

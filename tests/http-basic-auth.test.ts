@@ -8,7 +8,13 @@ import {
   procedure,
 } from '@loutrejs/core'
 import { compileApplication } from '@loutrejs/graph'
-import { basicAuth, http, type HttpProtocolDefinition } from '@loutrejs/http'
+import {
+  basicAuth,
+  http,
+  type BasicAuthContext,
+  type BasicAuthLayerDescriptor,
+  type HttpProtocolDefinition,
+} from '@loutrejs/http'
 import { z } from 'zod'
 
 describe('basicAuth', () => {
@@ -26,11 +32,10 @@ describe('basicAuth', () => {
       },
     })
 
-    await expect(
-      authentication.inbound?.({
-        headers: { authorization: `Basic ${btoa('loutre:otter')}` },
-      }),
-    ).resolves.toEqual({ principal: { id: 'user-1' } })
+    const execution = await runBasicAuth(authentication, {
+      headers: { authorization: `Basic ${btoa('loutre:otter')}` },
+    })
+    expect(execution.provided).toEqual({ principal: { id: 'user-1' } })
     expect(authenticate).toHaveBeenCalledWith({
       username: 'loutre',
       password: 'otter',
@@ -51,7 +56,7 @@ describe('basicAuth', () => {
       },
     })
 
-    await authentication.inbound?.({
+    await runBasicAuth(authentication, {
       headers: { authorization: `basic ${btoa('user:pass:word')}` },
     })
 
@@ -77,7 +82,7 @@ describe('basicAuth', () => {
       },
     })
 
-    await authentication.inbound?.({
+    await runBasicAuth(authentication, {
       headers: { authorization: `Basic ${encoded}` },
     })
 
@@ -106,7 +111,7 @@ describe('basicAuth', () => {
       },
     })
 
-    const result = await authentication.inbound?.({
+    const { result } = await runBasicAuth(authentication, {
       headers: authorization == null ? {} : { authorization },
     })
 
@@ -117,8 +122,7 @@ describe('basicAuth', () => {
         variant: 'unauthorized',
         body: { error: '認証が必要です' },
         headers: {
-          'www-authenticate':
-            'Basic realm="Loutre Test", charset="UTF-8"',
+          'www-authenticate': 'Basic realm="Loutre Test", charset="UTF-8"',
         },
       },
     })
@@ -136,7 +140,7 @@ describe('basicAuth', () => {
       },
     })
 
-    const result = await authentication.inbound?.({
+    const { result } = await runBasicAuth(authentication, {
       headers: { authorization: `Basic ${btoa('loutre:wrong')}` },
     })
     expect(isShortCircuit(result)).toBe(true)
@@ -153,7 +157,7 @@ describe('basicAuth', () => {
       },
     })
 
-    const result = await authentication.inbound?.({ headers: {} })
+    const { result } = await runBasicAuth(authentication, { headers: {} })
     expect(result).toMatchObject({
       result: {
         headers: {
@@ -183,57 +187,52 @@ describe('basicAuth', () => {
   it.each([
     { status: undefined, code: 'LUTRE_SHORT_CIRCUIT_001' },
     { status: 403, code: 'LUTRE_SHORT_CIRCUIT_002' },
-  ])(
-    'unauthorized responseの不整合を$codeで診断する',
-    ({ status, code }) => {
-      const authentication = basicAuth({
-        realm: 'Loutre Test',
-        principal: PRINCIPAL,
-        authenticate: () => undefined,
-        unauthorized: {
-          variant: 'unauthorized',
-          body: { error: '認証が必要です' },
+  ])('unauthorized responseの不整合を$codeで診断する', ({ status, code }) => {
+    const authentication = basicAuth({
+      realm: 'Loutre Test',
+      principal: PRINCIPAL,
+      authenticate: () => undefined,
+      unauthorized: {
+        variant: 'unauthorized',
+        body: { error: '認証が必要です' },
+      },
+    })
+    const responses: HttpProtocolDefinition['responses'] =
+      status === undefined
+        ? {
+            ok: { status: 200, body: z.object({ ok: z.boolean() }) },
+          }
+        : {
+            unauthorized: {
+              status,
+              body: z.object({ error: z.string() }),
+            },
+          }
+    const Contract = contract({
+      get: procedure({
+        protocols: {
+          http: http({
+            method: 'GET',
+            path: '/auth-diagnostic',
+            responses,
+            pipeline: [authentication, http.controller],
+          } as never),
         },
-      })
-      const responses: HttpProtocolDefinition['responses'] =
-        status === undefined
-          ? {
-              ok: { status: 200, body: z.object({ ok: z.boolean() }) },
-            }
-          : {
-              unauthorized: {
-                status,
-                body: z.object({ error: z.string() }),
-              },
-            }
-      const Contract = contract({
-        get: procedure({
-          protocols: {
-            http: http(
-              {
-                method: 'GET',
-                path: '/auth-diagnostic',
-                responses,
-                pipeline: [authentication, http.controller],
-              } as never,
-            ),
-          },
-        }),
-      })
-      class Implementation {
-        get(): never {
-          throw new Error('実行対象ではありません')
-        }
+      }),
+    })
+    class Implementation {
+      get(): never {
+        throw new Error('実行対象ではありません')
       }
-      const Module = defineModule(() => ({
-        implementations: [implement(Contract).for(http).with(Implementation)],
-      }))
+    }
+    const Module = defineModule(() => ({
+      implementations: [implement(Contract).for(http).with(Implementation)],
+    }))
 
-      expect(compileApplication([Module()]).diagnostics).toContainEqual(
-        expect.objectContaining({ code }),
-      )
-    },
-  )
+    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+      expect.objectContaining({ code }),
+    )
+  })
 
   it('ユーザー定義Layerのresponse制約を診断する', () => {
     const authentication = layer({
@@ -246,6 +245,9 @@ describe('basicAuth', () => {
           response: { status: 401 },
         },
       ],
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
     })
     const status: number = 403
     const Contract = contract({
@@ -279,3 +281,20 @@ describe('basicAuth', () => {
     )
   })
 })
+
+async function runBasicAuth<
+  TPrincipal extends import('@loutrejs/core').ContextKey,
+  TVariant extends string,
+  TBody,
+>(
+  authentication: BasicAuthLayerDescriptor<TPrincipal, TVariant, TBody>,
+  context: BasicAuthContext,
+) {
+  let provided:
+    | import('@loutrejs/core').ContextProperties<readonly [TPrincipal]>
+    | undefined
+  const result = await authentication.factory()(context, async (value) => {
+    provided = value
+  })
+  return { result, provided }
+}

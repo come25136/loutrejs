@@ -207,7 +207,7 @@ export function createMessagePortApplication(options: {
           LogicalMessagePortResult
         >(route.protocol.definition.pipeline, {
           context,
-          resolve: (token) => runtime.container.resolve(token),
+          layer: (descriptor) => runtime.container.layerRuntime(descriptor),
           validate: () => undefined,
           terminal: async (_layer, terminalContext) => {
             const target = runtime.container.resolveImplementation(

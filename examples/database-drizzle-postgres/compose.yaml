@@ -5,6 +5,11 @@ services:
       POSTGRES_USER: loutre
       POSTGRES_PASSWORD: loutre
       POSTGRES_DB: loutre_drizzle
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loutre -d loutre_drizzle"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
     ports:
       - "54322:5432"
     volumes:
