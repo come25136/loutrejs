@@ -8,9 +8,9 @@ import {
 } from '@loutrejs/http'
 import { z } from 'zod'
 
-export const UserParams = z.object({
+export const UserParams = {
   id: z.string(),
-})
+} as const
 
 export const User = z.object({
   id: z.string(),

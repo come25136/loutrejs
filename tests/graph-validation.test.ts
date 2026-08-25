@@ -17,10 +17,10 @@ import { z } from 'zod'
 
 const Body = z.object({ ok: z.boolean() })
 
-function protocol(pipeline: readonly PipelineItem[]) {
+function protocol(pipeline: readonly PipelineItem[], path = '/fixture') {
   return http({
     method: 'GET',
-    path: '/fixture',
+    path,
     responses: { ok: { status: 200, body: Body } },
     pipeline,
   } as never)
@@ -383,7 +383,9 @@ describe('Application Graph IRとsemantic validation', () => {
   it('detects missing and duplicate implementation coverage', () => {
     const Contract = contract({
       get: procedure({ protocols: { http: protocol([http.controller]) } }),
-      list: procedure({ protocols: { http: protocol([http.controller]) } }),
+      list: procedure({
+        protocols: { http: protocol([http.controller], '/fixture-list') },
+      }),
     })
     class First {
       get() {}

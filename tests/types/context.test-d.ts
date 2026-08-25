@@ -40,7 +40,7 @@ const Contract = contract({
       http: http({
         method: 'GET',
         path: '/users/{id}',
-        request: { params: z.object({ id: z.string() }) },
+        request: { params: { id: z.string() } },
         responses: {
           found: {
             status: 200,
@@ -76,7 +76,7 @@ const Contract = contract({
       http: http({
         method: 'GET',
         path: '/raw/{id}',
-        request: { params: z.object({ id: z.string() }) },
+        request: { params: { id: z.string() } },
         responses: { ok: { status: 200, body: z.string() } },
         pipeline: [http.controller],
       }),
@@ -180,8 +180,8 @@ implement(Contract).for(http).procedures('get').with(InvalidController)
 
 type RawContext = ContextOf<HttpController, 'unvalidated'>
 declare const rawContext: RawContext
-// @ts-expect-error validate.paramsがないためparamsはunknownのまま
-rawContext.params.id
+const rawId: string = rawContext.params.id
+void rawId
 
 type NestedValidatedContext = ContextOf<HttpController, 'nestedValidated'>
 declare const nestedValidatedContext: NestedValidatedContext

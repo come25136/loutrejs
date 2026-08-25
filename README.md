@@ -76,6 +76,56 @@ curl http://127.0.0.1:3000/greetings/Loutre
 最小構成のapplicationは
 [`examples/hello-http/src/app.ts`](./examples/hello-http/src/app.ts)で確認できます。
 
+### HTTP path parameterとroute identity
+
+HTTP pathのparameterは、schemaを宣言しなくてもControllerで`string`として型付けされます。
+
+```ts
+http({
+  method: 'GET',
+  path: '/users/{id}',
+  responses: {
+    found: { status: 200, body: User },
+  },
+  pipeline: [http.controller],
+})
+
+// Controllerではctx.params.id: string
+```
+
+値の検証や変換が必要な場合、`request.params`へobject schemaではなくpropertyごとの
+schema mapを指定します。schema mapのkeyはpath parameterのkeyと完全に一致する必要があり、
+各schemaはdecode後の`string`を入力できなければなりません。
+
+```ts
+http({
+  method: 'GET',
+  path: '/users/{userId}/posts/{postId}',
+  request: {
+    params: {
+      userId: z.coerce.number(),
+      postId: z.string().min(1),
+    },
+  },
+  responses: {
+    found: { status: 200, body: Post },
+  },
+  pipeline: [authLayer, validate.params, http.controller],
+})
+```
+
+`request.params`の宣言だけでは型は変わりません。`validate.params`より前はraw
+`string`、通過後はpropertyごとのschema outputになります。validationは自動実行されず、
+schema mapはproperty単位のvalidationと変換だけを扱います。parameter間の関係や
+cross-field validationはLayerまたはdomainで処理します。
+
+HTTP routeのidentityは、methodを大文字化し、path parameter名を`{}`へ正規化して作ります。
+たとえば`GET /users/{id}`と`get /users/{userId}`はどちらも
+`http:GET:/users/{}`であり、同一routeとして拒否されます。同一Contractでは型検査と
+`contract()`実行時、別Contract間ではApplication Graph compile時に重複を検出します。
+dispatch時は登録順ではなくsegmentを左から比較し、static segmentをparameter segmentより
+優先します。
+
 ### サンプル
 
 | サンプル                                                   | 内容                                                             | 起動コマンド                                                          |

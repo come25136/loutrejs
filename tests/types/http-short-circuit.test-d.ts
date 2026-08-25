@@ -43,6 +43,7 @@ http({
 })
 
 http({
+  // @ts-expect-error short circuit result型がresponse schemaの出力型と一致しない
   method: 'GET',
   path: '/invalid-protected',
   // @ts-expect-error basicAuthのunauthorized bodyはresponse schemaの出力型と一致する必要がある

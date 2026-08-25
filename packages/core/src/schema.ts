@@ -8,6 +8,10 @@ export type SchemaOutput<Schema> = Schema extends StandardSchemaV1
   ? StandardSchemaV1.InferOutput<Schema>
   : never
 
+export type SchemaInput<Schema> = Schema extends StandardSchemaV1
+  ? StandardSchemaV1.InferInput<Schema>
+  : never
+
 export async function validateSchema<Schema extends StandardSchemaV1>(
   schema: Schema,
   value: unknown,

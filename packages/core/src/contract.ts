@@ -2,10 +2,12 @@ export interface ProtocolDescriptor<
   TName extends string = string,
   TContext = unknown,
   TResult = unknown,
+  TDispatchKey extends string | null = string | null,
 > {
   readonly kind: 'protocol'
   readonly protocol: TName
   readonly interaction?: InteractionMode
+  readonly dispatchKey: TDispatchKey
   readonly '~context'?: TContext
   readonly '~result'?: TResult
 }
@@ -48,13 +50,94 @@ export interface ContractDefinition<
 export function contract<
   const TProcedures extends Record<string, ProcedureDefinition>,
 >(
-  procedures: TProcedures,
+  procedures: TProcedures & DispatchKeyUniquenessConstraint<TProcedures>,
   options: { readonly name?: string } = {},
 ): ContractDefinition<TProcedures> {
+  assertUniqueDispatchKeys(procedures, options.name)
   return {
     kind: 'contract',
     ...(options.name === undefined ? {} : { name: options.name }),
     procedures,
+  }
+}
+
+type ProtocolDispatchEntries<
+  TProcedures extends Record<string, ProcedureDefinition>,
+> = {
+  [TProcedure in keyof TProcedures & string]: {
+    [TProtocol in keyof TProcedures[TProcedure]['protocols'] & string]:
+      TProcedures[TProcedure]['protocols'][TProtocol] extends {
+        readonly dispatchKey: infer TDispatchKey extends string | null
+      }
+        ? TDispatchKey extends string
+          ? {
+              readonly key: TDispatchKey
+              readonly path: `${TProcedure}.${TProtocol}`
+            }
+          : never
+        : never
+  }[keyof TProcedures[TProcedure]['protocols'] & string]
+}[keyof TProcedures & string]
+
+type IsUnion<TValue, TCandidate = TValue> = TValue extends unknown
+  ? [TCandidate] extends [TValue]
+    ? false
+    : true
+  : never
+
+type DuplicateDispatchKeys<TEntries, TAllEntries = TEntries> = TEntries extends {
+  readonly key: infer TKey extends string
+}
+  ? string extends TKey
+    ? never
+    : IsUnion<
+          Extract<TAllEntries, { readonly key: TKey }> extends {
+            readonly path: infer TPath
+          }
+            ? TPath
+            : never
+        > extends true
+      ? TKey
+      : never
+  : never
+
+type DispatchKeyUniquenessConstraint<
+  TProcedures extends Record<string, ProcedureDefinition>,
+> = [DuplicateDispatchKeys<ProtocolDispatchEntries<TProcedures>>] extends [never]
+  ? unknown
+  : {
+      readonly __duplicateProtocolDispatchKey__: DuplicateDispatchKeys<
+        ProtocolDispatchEntries<TProcedures>
+      >
+    }
+
+function assertUniqueDispatchKeys(
+  procedures: Record<string, ProcedureDefinition>,
+  contractName: string | undefined,
+): void {
+  const paths = new Map<string, string>()
+  for (const [procedureName, procedureDefinition] of Object.entries(
+    procedures,
+  )) {
+    for (const [protocolName, protocol] of Object.entries(
+      procedureDefinition.protocols,
+    )) {
+      const dispatchKey = protocol.dispatchKey
+      if (dispatchKey === null) continue
+      if (typeof dispatchKey !== 'string') {
+        throw new Error(
+          `Protocol dispatchKey must be a string or null: ${procedureName}.${protocolName}`,
+        )
+      }
+      const path = `${contractName ?? 'Contract'}.${procedureName}.${protocolName}`
+      const existing = paths.get(dispatchKey)
+      if (existing) {
+        throw new Error(
+          `Duplicate protocol dispatch key "${dispatchKey}" between ${existing} and ${path}`,
+        )
+      }
+      paths.set(dispatchKey, path)
+    }
   }
 }
 

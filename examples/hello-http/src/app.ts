@@ -15,9 +15,9 @@ import {
 } from '@loutrejs/http'
 import { z } from 'zod'
 
-const GreetingParams = z.object({
+const GreetingParams = {
   name: z.string().min(1),
-})
+} as const
 
 const Greeting = z.object({
   message: z.string(),

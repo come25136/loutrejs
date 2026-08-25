@@ -34,6 +34,7 @@ interface BindingTarget {
   readonly contractName: string
   readonly procedure: string
   readonly protocol: string
+  readonly dispatchKey: string | null
   readonly pipeline: readonly PipelineItem[]
   readonly interaction: string
   readonly responses?: Readonly<Record<string, { readonly status: number }>>
@@ -84,6 +85,7 @@ export function compileApplication(
         | ({
             readonly pipeline?: readonly PipelineItem[]
             readonly interaction?: string
+            readonly dispatchKey: string | null
             readonly definition?: {
               readonly pipeline?: readonly PipelineItem[]
               readonly interaction?: string
@@ -106,6 +108,7 @@ export function compileApplication(
         contractName: nameContract(binding.contract),
         procedure: procedureName,
         protocol: binding.protocol,
+        dispatchKey: protocol.dispatchKey,
         pipeline: protocol.pipeline ?? protocol.definition?.pipeline ?? [],
         interaction:
           protocol.interaction ?? protocol.definition?.interaction ?? 'unary',
@@ -116,6 +119,7 @@ export function compileApplication(
     }
   }
 
+  validateDispatchKeys(targets, diagnostics)
   validateCoverage(bindings, contractNames, diagnostics)
   validateDuplicateProviders(modules, diagnostics)
 
@@ -243,6 +247,35 @@ export function compileApplication(
   }
 
   return { graph, diagnostics }
+}
+
+function validateDispatchKeys(
+  targets: readonly BindingTarget[],
+  diagnostics: Diagnostic[],
+): void {
+  const targetsByKey = new Map<string, BindingTarget>()
+  for (const target of targets) {
+    if (target.dispatchKey === null) continue
+    const path = `${target.contractName}.${target.procedure}.${target.protocol}`
+    const existing = targetsByKey.get(target.dispatchKey)
+    if (existing) {
+      if (
+        existing.binding.contract === target.binding.contract &&
+        existing.procedure === target.procedure &&
+        existing.protocol === target.protocol
+      ) {
+        continue
+      }
+      const existingPath = `${existing.contractName}.${existing.procedure}.${existing.protocol}`
+      diagnostics.push({
+        code: 'LUTRE_PROTOCOL_001',
+        message: `Duplicate protocol dispatch key "${target.dispatchKey}": ${existingPath}, ${path}`,
+        path,
+      })
+      continue
+    }
+    targetsByKey.set(target.dispatchKey, target)
+  }
 }
 
 export const buildApplicationGraph = compileApplication

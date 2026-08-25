@@ -6,6 +6,7 @@ import type {
   PipelineItem,
   ProtocolDescriptor,
   ProtocolFactory,
+  SchemaInput,
   SchemaOutput,
   ShortCircuitDeclarationsOf,
   ShortCircuitResultOf,
@@ -13,10 +14,21 @@ import type {
   TerminalLayerDescriptor,
   ValidationLayerDescriptor,
 } from '@loutrejs/core'
+import { childPipelineOf } from '@loutrejs/core'
 import type { Logger } from '@loutrejs/runtime'
+import {
+  createHttpDispatchKey,
+  type HttpDispatchKey,
+  type IsValidHttpPath,
+  type PathParamNames,
+  parseHttpPath,
+  type RawPathParams,
+} from './path.js'
+
+export type HttpParamsSchemas = Readonly<Record<string, StandardSchemaV1>>
 
 export interface HttpRequestDefinition {
-  readonly params?: StandardSchemaV1
+  readonly params?: HttpParamsSchemas
   readonly query?: StandardSchemaV1
   readonly headers?: StandardSchemaV1
   readonly body?: StandardSchemaV1
@@ -63,7 +75,8 @@ export interface HttpProtocol<
 > extends ProtocolDescriptor<
     'http',
     HttpControllerContextDefinition<TDefinition>,
-    DeclaredHttpResults<TDefinition['responses']>
+    DeclaredHttpResults<TDefinition['responses']>,
+    HttpDispatchKey<TDefinition['method'], TDefinition['path']>
   > {
   readonly definition: TDefinition
   readonly interaction: TDefinition extends { readonly interaction: infer TInteraction }
@@ -264,6 +277,67 @@ type HttpResponseConstraint<TDefinition extends HttpProtocolDefinition> =
         : { readonly responses: never }
       : { readonly responses: never }
 
+type IsExactParamsSchemaMap<
+  TPath extends string,
+  TSchemas extends HttpParamsSchemas,
+> = Exclude<keyof TSchemas, PathParamNames<TPath>> extends never
+  ? Exclude<PathParamNames<TPath>, keyof TSchemas> extends never
+    ? true
+    : false
+  : false
+
+type DoParamsSchemasAcceptStrings<TSchemas extends HttpParamsSchemas> =
+  false extends {
+    [TName in keyof TSchemas]: IsRawStringCompatible<
+      SchemaInput<TSchemas[TName]>
+    >
+  }[keyof TSchemas]
+    ? false
+    : true
+
+type IsRawStringCompatible<TInput> = string extends TInput
+  ? true
+  : [Extract<TInput, string>] extends [never]
+    ? false
+    : true
+
+type IsUnion<TValue, TCandidate = TValue> = TValue extends unknown
+  ? [TCandidate] extends [TValue]
+    ? false
+    : true
+  : never
+
+type IsSingleStringLiteral<TValue extends string> = string extends TValue
+  ? false
+  : true extends IsUnion<TValue>
+    ? false
+    : true
+
+type HttpPathConstraint<TDefinition extends HttpProtocolDefinition> =
+  IsSingleStringLiteral<TDefinition['method']> extends false
+    ? { readonly method: never }
+    : IsSingleStringLiteral<TDefinition['path']> extends false
+      ? { readonly path: never }
+      : IsValidHttpPath<TDefinition['path']> extends true
+      ? TDefinition['request'] extends {
+          readonly params: infer TSchemas extends HttpParamsSchemas
+        }
+        ? IsExactParamsSchemaMap<
+            TDefinition['path'],
+            TSchemas
+          > extends true
+          ? DoParamsSchemasAcceptStrings<TSchemas> extends true
+            ? unknown
+            : { readonly request: never }
+          : { readonly request: never }
+        : HasValidationBeforeTerminal<
+              TDefinition['pipeline'],
+              'params'
+            > extends true
+          ? { readonly pipeline: never }
+          : unknown
+        : { readonly path: never }
+
 type ErrorMappingResult<TResponse> = TResponse extends {
   readonly error: infer TMapping extends HttpErrorMapping<any, any>
 }
@@ -295,14 +369,41 @@ type AreErrorMappingsCompatible<
 function defineHttp<const TDefinition extends HttpProtocolDefinition>(
   definition: TDefinition &
     HttpPipelineConstraint<TDefinition> &
-    HttpResponseConstraint<TDefinition>,
+    HttpResponseConstraint<TDefinition> &
+    HttpPathConstraint<TDefinition>,
 ): HttpProtocol<TDefinition> {
+  const segments = parseHttpPath(definition.path)
+  const paramsSchemas = definition.request?.params
+  if (paramsSchemas) {
+    const pathNames = segments.flatMap((segment) =>
+      segment.kind === 'param' ? [segment.name] : [],
+    )
+    const schemaNames = Object.keys(paramsSchemas)
+    if (
+      pathNames.length !== schemaNames.length ||
+      pathNames.some((name) => !Object.hasOwn(paramsSchemas, name))
+    ) {
+      throw new Error('HTTP path parameter names and request.params keys must match')
+    }
+  } else if (hasParamsValidation(definition.pipeline)) {
+    throw new Error('validate.params requires request.params')
+  }
   return {
     kind: 'protocol',
     protocol: 'http',
     interaction: definition.interaction ?? 'unary',
+    dispatchKey: createHttpDispatchKey(definition.method, segments),
     definition,
   } as unknown as HttpProtocol<TDefinition>
+}
+
+function hasParamsValidation(pipeline: readonly PipelineItem[]): boolean {
+  return pipeline.some(
+    (item) =>
+      (item.kind === 'validation' && item.part === 'params') ||
+      (item.kind === 'layer' &&
+        hasParamsValidation(childPipelineOf(item) ?? [])),
+  )
 }
 
 export const http = Object.assign(defineHttp, {
@@ -357,15 +458,30 @@ type HttpProtocolAt<
 type PartOutput<
   TDefinition extends HttpProtocolDefinition,
   TPart extends keyof HttpRequestDefinition,
-> = HasValidationBeforeTerminal<TDefinition['pipeline'], TPart> extends false
-  ? unknown
-  : TDefinition['request'] extends HttpRequestDefinition
-  ? TPart extends keyof TDefinition['request']
-    ? NonNullable<TDefinition['request'][TPart]> extends StandardSchemaV1
-      ? SchemaOutput<NonNullable<TDefinition['request'][TPart]>>
+> = TPart extends 'params'
+  ? HasValidationBeforeTerminal<
+      TDefinition['pipeline'],
+      'params'
+    > extends true
+    ? TDefinition['request'] extends {
+        readonly params: infer TSchemas extends HttpParamsSchemas
+      }
+      ? ValidatedPathParams<TSchemas>
+      : never
+    : RawPathParams<TDefinition['path']>
+  : HasValidationBeforeTerminal<TDefinition['pipeline'], TPart> extends false
+    ? unknown
+    : TDefinition['request'] extends HttpRequestDefinition
+      ? TPart extends keyof TDefinition['request']
+        ? NonNullable<TDefinition['request'][TPart]> extends StandardSchemaV1
+          ? SchemaOutput<NonNullable<TDefinition['request'][TPart]>>
+          : unknown
+        : unknown
       : unknown
-    : unknown
-  : unknown
+
+type ValidatedPathParams<TSchemas extends HttpParamsSchemas> = Readonly<{
+  [TName in keyof TSchemas]: SchemaOutput<TSchemas[TName]>
+}>
 
 type HttpResultHeaders<THeaders> = IsAny<THeaders> extends true
   ? { readonly headers?: HttpHeaders }

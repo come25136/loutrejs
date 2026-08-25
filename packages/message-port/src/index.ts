@@ -60,6 +60,7 @@ function defineMessagePort<const TDefinition extends MessagePortProtocolDefiniti
     kind: 'protocol',
     protocol: 'messagePort',
     interaction: definition.interaction ?? 'unary',
+    dispatchKey: null,
     definition,
   }
 }

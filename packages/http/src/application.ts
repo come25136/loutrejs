@@ -20,15 +20,25 @@ import {
 import type {
   HttpControllerContext,
   HttpHeaders,
+  HttpParamsSchemas,
   HttpProtocol,
   HttpProtocolDefinition,
   LogicalHttpResult,
 } from './definitions.js'
+import {
+  compareHttpPathSpecificity,
+  HttpPathDecodeError,
+  type HttpPathSegment,
+  matchHttpPath,
+  parseHttpPath,
+} from './path.js'
+import { validateHttpParamsSchemas } from './params.js'
 
 interface HttpRoute {
   readonly method: string
   readonly path: string
-  readonly match: (pathname: string) => Record<string, string> | undefined
+  readonly segments: readonly HttpPathSegment[]
+  readonly dispatchKey: string
   readonly protocol: HttpProtocol
   readonly binding: ImplementationBinding
   readonly procedure: string
@@ -89,12 +99,14 @@ export function createHttpApplication(options: {
         | undefined
       try {
         const candidate = routes
-          .map((route) => ({ route, params: route.match(url.pathname) }))
-          .find(
-            (candidate) =>
-              candidate.params !== undefined &&
-              candidate.route.method === request.method.toUpperCase(),
+          .filter(
+            (route) => route.method === request.method.toUpperCase(),
           )
+          .map((route) => ({
+            route,
+            params: matchHttpPath(route.segments, url.pathname),
+          }))
+          .find((candidate) => candidate.params !== undefined)
         routeMatch = candidate?.params === undefined
           ? undefined
           : { route: candidate.route, params: candidate.params }
@@ -141,13 +153,19 @@ export function createHttpApplication(options: {
             validate: async (layer, context) => {
               const schema = routeMatch.route.protocol.definition.request?.[
                 layer.part
-              ] as StandardSchemaV1 | undefined
+              ] as StandardSchemaV1 | HttpParamsSchemas | undefined
               if (schema) {
                 try {
-                  context[layer.part] = await validateSchema(
-                    schema,
-                    context[layer.part],
-                  )
+                  context[layer.part] =
+                    layer.part === 'params'
+                      ? await validateHttpParamsSchemas(
+                          schema as HttpParamsSchemas,
+                          context.params as Record<string, string>,
+                        )
+                      : await validateSchema(
+                          schema as StandardSchemaV1,
+                          context[layer.part],
+                        )
                 } catch (error) {
                   throw new HttpInputValidationError(error)
                 }
@@ -474,7 +492,8 @@ function collectRoutes(modules: readonly ModuleInstance[]): HttpRoute[] {
         routes.push({
           method: typed.definition.method.toUpperCase(),
           path: typed.definition.path,
-          match: compilePath(typed.definition.path),
+          segments: parseHttpPath(typed.definition.path),
+          dispatchKey: typed.dispatchKey,
           protocol: typed,
           binding,
           procedure,
@@ -482,34 +501,9 @@ function collectRoutes(modules: readonly ModuleInstance[]): HttpRoute[] {
       }
     }
   }
-  return routes
-}
-
-function compilePath(path: string) {
-  const names: string[] = []
-  const escaped = path
-    .split(/(\{[^}]+\})/g)
-    .map((part) => {
-      const match = /^\{([^}]+)\}$/.exec(part)
-      if (match?.[1]) {
-        names.push(match[1])
-        return '([^/]+)'
-      }
-      return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    })
-    .join('')
-  const pattern = new RegExp(`^${escaped}$`)
-  return (pathname: string): Record<string, string> | undefined => {
-    const match = pattern.exec(pathname)
-    if (!match) return undefined
-    try {
-      return Object.fromEntries(
-        names.map((name, index) => [name, decodeURIComponent(match[index + 1]!)]),
-      )
-    } catch (error) {
-      throw new HttpInputDecodeError(error)
-    }
-  }
+  return routes.sort((left, right) =>
+    compareHttpPathSpecificity(left.segments, right.segments),
+  )
 }
 
 function jsonResponse(
@@ -557,7 +551,9 @@ function isValidationError(error: unknown): boolean {
 }
 
 function isDecodeError(error: unknown): boolean {
-  return error instanceof HttpInputDecodeError
+  return (
+    error instanceof HttpInputDecodeError || error instanceof HttpPathDecodeError
+  )
 }
 
 async function mapDeclaredError(

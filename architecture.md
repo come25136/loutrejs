@@ -203,6 +203,17 @@ ProbeはLifecycle hook、server listen、外部接続、listener、watcher、lon
 
 unresolved dependencyやcycleがあっても、取得済みnode/edgeとdiagnosticを保持したpartial graphを返す。
 
+### 5.1 Protocol dispatch identity
+
+すべての`ProtocolDescriptor`は`dispatchKey: string | null`を持つ。dispatch identityを持たない
+protocolは`null`を明示し、protocol packageがidentityを提供する場合はprotocol固有の規則で
+文字列を生成する。CoreとGraphはその文字列の意味を解釈しない。
+
+HTTPは大文字化したmethodと、parameter名を`{}`へ置換したpathからdispatch keyを作る。
+たとえば`GET /users/{id}`のdispatch keyは`http:GET:/users/{}`となる。schemaの内容は
+identityへ影響しない。同一Contract内では`contract()`が重複を拒否し、別Contract間では
+Application Graph compileが`LUTRE_PROTOCOL_001`を報告する。
+
 ## 6. Unified Validation
 
 Contract coverage、Pipeline、DI、Module、Runtime capabilityのsemantic validationは
