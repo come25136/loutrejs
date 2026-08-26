@@ -259,8 +259,8 @@ const authLayer = layer({
 ## 設計ドキュメント
 
 Application Graph、DI、Pipeline、Protocolなどの詳しい設計は
-[`architecture.md`](./architecture.md)を参照してください。実装上の補足は
-[`docs/phase-1-decisions.md`](./docs/phase-1-decisions.md)にまとめています。
+[`docs/architecture.md`](./docs/architecture.md)を参照してください。実装上の補足は
+[`docs/adr/phase-1-decisions.md`](./docs/adr/phase-1-decisions.md)にまとめています。
 
 ## 開発
 
