@@ -8,92 +8,102 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  quality-gate:
-    name: Node.js 26 品質ゲート
+  quality-checks:
+    name: Node.js 26 Quality Checks
     runs-on: ubuntu-latest
     steps:
-      - name: ソースを取得
+      - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Node.js 26を準備
+      - name: Setup Node.js 26
         uses: actions/setup-node@v7
         with:
           node-version: 26.x
           cache: npm
 
-      - name: 依存関係をインストール
-        run: npm ci
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
 
-      - name: TypeScriptを検査
+      - name: Type check
         run: npm run check
 
-      - name: Public型を検査
+      - name: Public type tests
         run: npm run test:types
 
-      - name: Unit・E2E testを実行
-        run: npm test
-
-      - name: packageをbuild
+      - name: Build packages
         run: npm run build
 
-      - name: 公開tarballを検査
+      - name: Verify published packages
         run: node scripts/verify-packages.mjs
 
-      - name: Node.js conformanceを実行
+  tests:
+    name: Node.js 26 Unit & E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 26
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run unit & E2E tests
+        run: npm test
+
+      - name: Run Node.js conformance
         run: npm run test:node
 
   runtime-conformance:
-    name: 全runtime conformance
+    name: Runtime Conformance (${{ matrix.name }})
     runs-on: ubuntu-latest
-    needs: quality-gate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Deno
+            command: npm run test:deno
+            deno: true
+          - name: Bun
+            command: npm run test:bun
+          - name: workerd
+            command: npm run test:workerd
+          - name: Electron
+            command: LOUTRE_ELECTRON_NO_SANDBOX=1 xvfb-run --auto-servernum npm run test:electron
+          - name: Lambda
+            command: npm run test:lambda
+          - name: CLI
+            command: npm run test:cli-start && npm run test:cli-dev
     steps:
-      - name: ソースを取得
+      - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Node.js 26を準備
+      - name: Setup Node.js 26
         uses: actions/setup-node@v7
         with:
           node-version: 26.x
           cache: npm
 
-      - name: Deno baselineを準備
+      - name: Setup Deno baseline
+        if: ${{ matrix.deno == true }}
         uses: denoland/setup-deno@v2
         with:
           deno-version: 2.9.5
 
-      - name: 依存関係をインストール
-        run: npm ci
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
 
-      - name: packageをbuild
+      - name: Build packages
         run: npm run build
 
-      - name: Deno conformanceを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:deno
-
-      - name: Bun conformanceを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:bun
-
-      - name: workerd conformanceを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:workerd
-
-      - name: Electron conformanceを実行
-        if: ${{ !cancelled() }}
-        run: xvfb-run --auto-servernum npm run test:electron
-        env:
-          LOUTRE_ELECTRON_NO_SANDBOX: '1'
-
-      - name: Lambda managed Node baselineを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:lambda
-
-      - name: CLI start conformanceを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:cli-start
-
-      - name: CLI dev conformanceを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:cli-dev
+      - name: Run ${{ matrix.name }} conformance
+        run: ${{ matrix.command }}
