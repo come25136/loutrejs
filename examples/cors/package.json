@@ -1,0 +1,24 @@
+{
+  "name": "@loutrejs/example-cors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "26.x"
+  },
+  "scripts": {
+    "check": "loutre check",
+    "dev": "loutre dev src/app.ts --port 3000",
+    "start": "loutre start src/app.ts --port 3000",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@loutrejs/core": "0.1.0",
+    "@loutrejs/http": "0.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@loutrejs/cli": "0.1.0",
+    "typescript": "^7.0.2"
+  }
+}

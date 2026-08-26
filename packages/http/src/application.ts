@@ -17,6 +17,10 @@ import {
   Logger,
   normalizeUnknownError,
 } from '@loutrejs/runtime'
+import {
+  createCorsActualResponseHeaders,
+  createCorsPreflightResponseHeaders,
+} from './cors.js'
 import type {
   HttpControllerContext,
   HttpHeaders,
@@ -80,9 +84,10 @@ export function createHttpApplication(options: {
     async handle(request) {
       const startedAt = Date.now()
       const url = new URL(request.url)
+      const method = request.method.toUpperCase()
       let requestLogger = logger.child({
         executionId: crypto.randomUUID(),
-        method: request.method.toUpperCase(),
+        method,
         path: url.pathname,
       })
       try {
@@ -94,22 +99,47 @@ export function createHttpApplication(options: {
           createInternalErrorResponse(error, requestLogger),
         )
       }
+
+      if (isCorsPreflightRequest(request)) {
+        try {
+          const requestedMethod = request.headers
+            .get('access-control-request-method')!
+            .toUpperCase()
+          const preflightMatch = findRoute(routes, requestedMethod, url.pathname)
+          if (preflightMatch) {
+            const headers = await createCorsPreflightResponseHeaders(
+              preflightMatch.route.protocol.definition.pipeline,
+              request,
+              preflightMatch.route.method,
+            )
+            if (headers) {
+              requestLogger = requestLogger.child({
+                procedure: preflightMatch.route.procedure,
+                source: `${preflightMatch.route.implementation.name}.${preflightMatch.route.procedure}`,
+              })
+              return logHttpResponse(
+                requestLogger,
+                startedAt,
+                new Response(null, { status: 204, headers }),
+              )
+            }
+          }
+        } catch (error) {
+          return logHttpResponse(
+            requestLogger,
+            startedAt,
+            isDecodeError(error)
+              ? jsonResponse(400, { error: 'Invalid request' })
+              : createInternalErrorResponse(error, requestLogger),
+          )
+        }
+      }
+
       let routeMatch:
         | { readonly route: HttpRoute; readonly params: Record<string, string> }
         | undefined
       try {
-        const candidate = routes
-          .filter(
-            (route) => route.method === request.method.toUpperCase(),
-          )
-          .map((route) => ({
-            route,
-            params: matchHttpPath(route.segments, url.pathname),
-          }))
-          .find((candidate) => candidate.params !== undefined)
-        routeMatch = candidate?.params === undefined
-          ? undefined
-          : { route: candidate.route, params: candidate.params }
+        routeMatch = findRoute(routes, method, url.pathname)
       } catch (error) {
         return logHttpResponse(
           requestLogger,
@@ -132,6 +162,26 @@ export function createHttpApplication(options: {
         procedure: routeMatch.route.procedure,
         source: `${routeMatch.route.implementation.name}.${routeMatch.route.procedure}`,
       })
+
+      let corsHeaders: Headers | undefined
+      try {
+        corsHeaders = await createCorsActualResponseHeaders(
+          routeMatch.route.protocol.definition.pipeline,
+          request,
+        )
+      } catch (error) {
+        return logHttpResponse(
+          requestLogger,
+          startedAt,
+          createInternalErrorResponse(error, requestLogger),
+        )
+      }
+      const complete = (response: Response): Response =>
+        logHttpResponse(
+          requestLogger,
+          startedAt,
+          applyFrameworkHeaders(response, corsHeaders),
+        )
 
       try {
         const decoded = await decodeRequest(
@@ -175,9 +225,7 @@ export function createHttpApplication(options: {
               invokeController(routeMatch.route, context, container),
           },
         )
-        return logHttpResponse(
-          requestLogger,
-          startedAt,
+        return complete(
           await finalizeResponse(
             routeMatch.route.protocol.definition,
             logical,
@@ -186,18 +234,10 @@ export function createHttpApplication(options: {
         )
       } catch (error) {
         if (isDecodeError(error)) {
-          return logHttpResponse(
-            requestLogger,
-            startedAt,
-            jsonResponse(400, { error: 'Invalid request' }),
-          )
+          return complete(jsonResponse(400, { error: 'Invalid request' }))
         }
         if (isValidationError(error)) {
-          return logHttpResponse(
-            requestLogger,
-            startedAt,
-            jsonResponse(400, { error: 'Validation failed' }),
-          )
+          return complete(jsonResponse(400, { error: 'Validation failed' }))
         }
         let mapped: LogicalHttpResult | undefined
         try {
@@ -206,17 +246,11 @@ export function createHttpApplication(options: {
             error,
           )
         } catch (mappingError) {
-          return logHttpResponse(
-            requestLogger,
-            startedAt,
-            createInternalErrorResponse(mappingError, requestLogger),
-          )
+          return complete(createInternalErrorResponse(mappingError, requestLogger))
         }
         if (mapped) {
           try {
-            return logHttpResponse(
-              requestLogger,
-              startedAt,
+            return complete(
               await finalizeResponse(
                 routeMatch.route.protocol.definition,
                 mapped,
@@ -224,21 +258,74 @@ export function createHttpApplication(options: {
               ),
             )
           } catch (finalizationError) {
-            return logHttpResponse(
-              requestLogger,
-              startedAt,
+            return complete(
               createInternalErrorResponse(finalizationError, requestLogger),
             )
           }
         }
-        return logHttpResponse(
-          requestLogger,
-          startedAt,
-          createInternalErrorResponse(error, requestLogger),
-        )
+        return complete(createInternalErrorResponse(error, requestLogger))
       }
     },
   }
+}
+
+function findRoute(
+  routes: readonly HttpRoute[],
+  method: string,
+  pathname: string,
+): { readonly route: HttpRoute; readonly params: Record<string, string> } | undefined {
+  const candidate = routes
+    .filter((route) => route.method === method)
+    .map((route) => ({
+      route,
+      params: matchHttpPath(route.segments, pathname),
+    }))
+    .find((candidate) => candidate.params !== undefined)
+  return candidate?.params === undefined
+    ? undefined
+    : { route: candidate.route, params: candidate.params }
+}
+
+function isCorsPreflightRequest(request: Request): boolean {
+  return (
+    request.method.toUpperCase() === 'OPTIONS' &&
+    request.headers.has('origin') &&
+    request.headers.has('access-control-request-method')
+  )
+}
+
+function applyFrameworkHeaders(
+  response: Response,
+  frameworkHeaders: Headers | undefined,
+): Response {
+  if (!frameworkHeaders) return response
+  frameworkHeaders.forEach((value, name) => {
+    if (name.toLowerCase() === 'vary') {
+      for (const item of value.split(',')) {
+        appendVary(response.headers, item.trim())
+      }
+      return
+    }
+    response.headers.set(name, value)
+  })
+  return response
+}
+
+function appendVary(headers: Headers, value: string): void {
+  if (value.length === 0) return
+  const current = headers.get('vary')
+  if (current === null) {
+    headers.set('vary', value)
+    return
+  }
+  const values = current
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (!values.some((item) => item.toLowerCase() === value.toLowerCase())) {
+    values.push(value)
+  }
+  headers.set('vary', values.join(', '))
 }
 
 function logHttpResponse(
