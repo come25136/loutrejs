@@ -5,6 +5,7 @@ import {
   http,
 } from '@loutrejs/http'
 import { z } from 'zod'
+import type { Logger } from '@loutrejs/runtime'
 
 const User = z.object({
   id: z.string(),
@@ -75,6 +76,11 @@ const ProfileModule = defineModule(() => ({
   implementations: [ProfileController],
 }))
 
-export default createHttpApplication({
-  modules: [ProfileModule()],
-})
+export function createApplication(logger?: Logger) {
+  return createHttpApplication({
+    modules: [ProfileModule()],
+    ...(logger === undefined ? {} : { logger }),
+  })
+}
+
+export default createApplication()

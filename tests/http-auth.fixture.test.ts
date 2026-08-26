@@ -5,19 +5,23 @@ import {
   procedure,
 } from '@loutrejs/core'
 import { compileApplication } from '@loutrejs/graph'
-import { http, validate } from '@loutrejs/http'
+import { createHttpApplication, http, validate } from '@loutrejs/http'
 import {
   AccountController,
+  AccountModule,
   authenticated,
   bearerAuthentication,
-  createAccountApplication,
   tenantAccess,
 } from '../fixtures/http-auth/src/index.js'
 import { z } from 'zod'
+import { silentLogger } from './helpers/silent-logger.js'
 
 describe('canonical Fixture B', () => {
   it('Layerが生成したContext propertyをControllerのctxから取得する', async () => {
-    const application = createAccountApplication()
+    const application = createHttpApplication({
+      modules: [AccountModule()],
+      logger: silentLogger,
+    })
     const response = await application.handle(
       new Request('http://fixture.test/account', {
         headers: { authorization: 'Bearer fixture-token' },

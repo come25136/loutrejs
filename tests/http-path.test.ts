@@ -12,6 +12,7 @@ import {
 } from '@loutrejs/http'
 import { validateHttpParamsSchemas } from '../packages/http/src/params.js'
 import { z } from 'zod'
+import { silentLogger } from './helpers/silent-logger.js'
 
 const Result = z.object({ route: z.string(), value: z.unknown() })
 
@@ -168,7 +169,10 @@ function createRoutingApplication() {
   const Module = defineModule(() => ({
     implementations: [Implementation],
   }))
-  return createHttpApplication({ modules: [Module()] })
+  return createHttpApplication({
+    modules: [Module()],
+    logger: silentLogger,
+  })
 }
 
 describe('HTTP pathとroute identity', () => {
@@ -254,6 +258,7 @@ describe('HTTP pathとroute identity', () => {
     }))
     const reverseApplication = createHttpApplication({
       modules: [ReverseModule()],
+      logger: silentLogger,
     })
     const reverseResponse = await reverseApplication.handle(
       new Request('http://fixture.test/reverse/me'),

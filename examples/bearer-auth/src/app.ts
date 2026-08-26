@@ -4,6 +4,7 @@ import {
   http,
 } from '@loutrejs/http'
 import { z } from 'zod'
+import type { Logger } from '@loutrejs/runtime'
 import { bearerAuth } from './bearer-auth.js'
 
 const User = z.object({
@@ -75,6 +76,11 @@ const BearerProfileModule = defineModule(() => ({
   implementations: [BearerProfileController],
 }))
 
-export default createHttpApplication({
-  modules: [BearerProfileModule()],
-})
+export function createApplication(logger?: Logger) {
+  return createHttpApplication({
+    modules: [BearerProfileModule()],
+    ...(logger === undefined ? {} : { logger }),
+  })
+}
+
+export default createApplication()
