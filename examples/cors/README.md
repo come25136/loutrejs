@@ -1,18 +1,12 @@
 # CORSサンプル
 
-LoutreのHTTP Pipelineへ`cors()`を組み込み、ブラウザから別OriginのAPIを呼び出すサンプルです。
+LoutreのHTTP Pipelineへ`validate.cors()`を組み込み、ブラウザから別OriginのAPIを呼び出すサンプルです。
 
-`OPTIONS` procedureを別途定義する必要はありません。preflightは対象routeのCORS policyを使ってHTTP application境界で処理され、Controllerまでは到達しません。
+CORSはrequest body/query/headerなどのvalidationより前に宣言します。子Pipelineで囲う必要はありません。
+
+`OPTIONS` procedureを別途定義する必要もありません。preflightは対象routeのCORS policyを使ってHTTP application境界で処理され、Controllerまでは到達しません。
 
 ```ts
-const browserCors = cors({
-  origin: ['http://localhost:5173'],
-  allowMethods: ['POST'],
-  allowHeaders: ['content-type'],
-  exposeHeaders: ['x-request-id'],
-  maxAge: 600,
-})
-
 http({
   method: 'POST',
   path: '/messages',
@@ -26,15 +20,22 @@ http({
     },
   },
   pipeline: [
-    browserCors([
-      validate.body,
-      http.controller,
-    ]),
+    validate.cors({
+      origin: ['http://localhost:5173'],
+      allowMethods: ['POST'],
+      allowHeaders: ['content-type'],
+      exposeHeaders: ['x-request-id'],
+      maxAge: 600,
+    }),
+    validate.body,
+    http.controller,
   ],
 })
 ```
 
-制限なしで全Originを許可するだけなら`cors()`だけでも使えます。
+制限なしで全Originを許可するだけなら`validate.cors()`で十分です。
+
+全routeへ同じCORS policyを適用したい場合は、framework側にglobal CORS設定を増やすのではなく、アプリ側で共通Pipeline helperを作って再利用できます。
 
 ## 起動
 
