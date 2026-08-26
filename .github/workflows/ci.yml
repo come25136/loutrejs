@@ -14,57 +14,57 @@ concurrency:
 
 jobs:
   quality-checks:
-    name: Node.js 26 静的・package検査
+    name: Node.js 26 Quality Checks
     runs-on: ubuntu-latest
     steps:
-      - name: ソースを取得
+      - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Node.js 26を準備
+      - name: Setup Node.js 26
         uses: actions/setup-node@v7
         with:
           node-version: 26.x
           cache: npm
 
-      - name: 依存関係をインストール
+      - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: TypeScriptを検査
+      - name: Type check
         run: npm run check
 
-      - name: Public型を検査
+      - name: Public type tests
         run: npm run test:types
 
-      - name: packageをbuild
+      - name: Build packages
         run: npm run build
 
-      - name: 公開tarballを検査
+      - name: Verify published packages
         run: node scripts/verify-packages.mjs
 
   tests:
-    name: Node.js 26 Unit・E2E
+    name: Node.js 26 Unit & E2E Tests
     runs-on: ubuntu-latest
     steps:
-      - name: ソースを取得
+      - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Node.js 26を準備
+      - name: Setup Node.js 26
         uses: actions/setup-node@v7
         with:
           node-version: 26.x
           cache: npm
 
-      - name: 依存関係をインストール
+      - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Unit・E2E testを実行
+      - name: Run unit & E2E tests
         run: npm test
 
-      - name: Node.js conformanceを実行
+      - name: Run Node.js conformance
         run: npm run test:node
 
   runtime-conformance:
-    name: Runtime conformance (${{ matrix.name }})
+    name: Runtime Conformance (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -84,26 +84,26 @@ jobs:
           - name: CLI
             command: npm run test:cli-start && npm run test:cli-dev
     steps:
-      - name: ソースを取得
+      - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Node.js 26を準備
+      - name: Setup Node.js 26
         uses: actions/setup-node@v7
         with:
           node-version: 26.x
           cache: npm
 
-      - name: Deno baselineを準備
+      - name: Setup Deno baseline
         if: ${{ matrix.deno == true }}
         uses: denoland/setup-deno@v2
         with:
           deno-version: 2.9.5
 
-      - name: 依存関係をインストール
+      - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: packageをbuild
+      - name: Build packages
         run: npm run build
 
-      - name: ${{ matrix.name }} conformanceを実行
+      - name: Run ${{ matrix.name }} conformance
         run: ${{ matrix.command }}
