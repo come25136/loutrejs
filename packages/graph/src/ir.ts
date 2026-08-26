@@ -28,6 +28,7 @@ export interface DependencyNodeIR {
     | 'environment'
     | 'implementation'
     | 'layer'
+    | 'entrypoint'
     | 'framework'
   readonly scope?: 'application' | 'transient'
   readonly module?: string
@@ -98,11 +99,57 @@ export interface ImplementationIR {
 
 export interface CapabilityIR {
   readonly name: string
+  readonly scope: 'application' | 'execution'
   readonly requiredBy: string
 }
 
+export interface ProtocolExecutionRootIR {
+  readonly id: `protocol:${string}`
+  readonly kind: 'protocol'
+  readonly protocol: string
+  readonly contract: string
+  readonly procedure: string
+  readonly implementation: string
+}
+
+export interface EntrypointExecutionRootIR {
+  readonly id: `entrypoint:${string}`
+  readonly kind: 'entrypoint'
+  readonly name: string
+}
+
+export interface ScheduleExecutionRootIR {
+  readonly id: `schedule:${string}`
+  readonly kind: 'schedule'
+  readonly name: string
+  readonly cron: {
+    readonly expression: string
+    readonly timezone: string
+  }
+  readonly entrypoint: string
+}
+
+export interface QueueConsumerExecutionRootIR {
+  readonly id: `queue-consumer:${string}`
+  readonly kind: 'queue-consumer'
+  readonly name: string
+  readonly queue: string
+  readonly entrypoint: string
+}
+
+export type ExecutionRootIR =
+  | ProtocolExecutionRootIR
+  | EntrypointExecutionRootIR
+  | ScheduleExecutionRootIR
+  | QueueConsumerExecutionRootIR
+
+export interface QueueIR {
+  readonly id: `queue:${string}`
+  readonly name: string
+}
+
 export interface ApplicationGraphIR {
-  readonly version: 2
+  readonly version: 3
   readonly modules: readonly ModuleIR[]
   readonly providers: readonly ProviderIR[]
   readonly tokens: readonly TokenIR[]
@@ -110,6 +157,8 @@ export interface ApplicationGraphIR {
   readonly contracts: readonly string[]
   readonly pipelines: readonly PipelineIR[]
   readonly implementations: readonly ImplementationIR[]
+  readonly queues: readonly QueueIR[]
+  readonly executions: readonly ExecutionRootIR[]
   readonly capabilities: readonly CapabilityIR[]
   readonly nodes: readonly DependencyNodeIR[]
   readonly edges: readonly DependencyEdgeIR[]

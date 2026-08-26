@@ -1,7 +1,7 @@
+import { defineApplication } from '@loutrejs/application'
 import { contextKey, contract, defineModule, implementation, procedure } from '@loutrejs/core'
 import {
   basicAuth,
-  createHttpApplication,
   http,
 } from '@loutrejs/http'
 import { z } from 'zod'
@@ -75,6 +75,6 @@ const ProfileModule = defineModule(() => ({
   implementations: [ProfileController],
 }))
 
-export default createHttpApplication({
+export default defineApplication({
   modules: [ProfileModule()],
 })

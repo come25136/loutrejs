@@ -1,16 +1,10 @@
 import {
-  asModuleInstance,
   validateSchema,
   type ImplementationDescriptor,
   type ModuleInstance,
-  type ModuleTemplate,
   type StandardSchemaV1,
 } from '@loutrejs/core'
-import {
-  assertValidCompilation,
-  compileApplication,
-  type ApplicationGraphIR,
-} from '@loutrejs/graph'
+import type { ApplicationGraphIR } from '@loutrejs/graph'
 import {
   ApplicationRuntime,
   executePipeline,
@@ -48,7 +42,8 @@ interface HttpRoute {
   readonly procedure: string
 }
 
-export interface HttpApplication {
+/** @internal HTTP protocol driverとUnified Applicationの境界。 */
+export interface HttpProtocolExecution {
   readonly graph: ApplicationGraphIR
   initialize(): Promise<void>
   shutdown(signal?: string): Promise<void>
@@ -56,19 +51,20 @@ export interface HttpApplication {
   handle(request: Request): Promise<Response>
 }
 
-export interface HttpApplicationLifecycle {
+export interface HttpProtocolExecutionLifecycle {
   readonly onServerListening?: (url: string) => void
 }
 
-export function createHttpApplication(options: {
-  readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
-  readonly lifecycle?: HttpApplicationLifecycle
+/** @internal Unified ApplicationがHTTP protocol executionを構築する。 */
+export function createHttpExecution(options: {
+  readonly runtime: ApplicationRuntime
+  readonly graph: ApplicationGraphIR
+  readonly lifecycle?: HttpProtocolExecutionLifecycle
   readonly logger?: Logger
-}): HttpApplication {
-  const roots = options.modules.map(asModuleInstance)
-  const graph = assertValidCompilation(compileApplication(roots))
+}): HttpProtocolExecution {
+  const { runtime } = options
+  const graph = options.graph
   const applicationLogger = options.logger ?? new Logger()
-  const runtime = new ApplicationRuntime(roots, { logger: applicationLogger })
   const runtimeGraph = runtime.graph
   const container = runtime.container
   const routes = collectRoutes(runtimeGraph.modules)
@@ -100,6 +96,7 @@ export function createHttpApplication(options: {
         )
       }
 
+      return runtime.execute(async () => {
       if (isCorsPreflightRequest(request)) {
         try {
           const requestedMethod = request.headers
@@ -265,6 +262,7 @@ export function createHttpApplication(options: {
         }
         return complete(createInternalErrorResponse(error, requestLogger))
       }
+      })
     },
   }
 }

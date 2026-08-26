@@ -12,10 +12,17 @@ export interface ImplementationConsumer {
   readonly name: string
 }
 
+export interface EntrypointConsumer {
+  readonly kind: 'entrypoint-consumer'
+  readonly id: string
+  readonly name: string
+}
+
 export type DependencyConsumer =
   | TokenLike
   | LayerConsumer
   | ImplementationConsumer
+  | EntrypointConsumer
 
 export interface InjectionContext {
   readonly consumer: DependencyConsumer
@@ -23,19 +30,31 @@ export interface InjectionContext {
   readonly record?: (consumer: DependencyConsumer, dependency: TokenLike) => void
 }
 
-let currentInjectionContext: InjectionContext | undefined
+const injectionContextKey = Symbol.for('loutre.injection-context')
+
+function currentInjectionContext(): InjectionContext | undefined {
+  return (globalThis as Record<PropertyKey, unknown>)[injectionContextKey] as
+    | InjectionContext
+    | undefined
+}
+
+function setCurrentInjectionContext(context: InjectionContext | undefined): void {
+  const storage = globalThis as Record<PropertyKey, unknown>
+  if (context === undefined) delete storage[injectionContextKey]
+  else storage[injectionContextKey] = context
+}
 
 /** @internal framework-managedな同期constructionに利用する。 */
 export function runInInjectionContext<T>(
   context: InjectionContext,
   run: () => T,
 ): T {
-  const previous = currentInjectionContext
-  currentInjectionContext = context
+  const previous = currentInjectionContext()
+  setCurrentInjectionContext(context)
   try {
     return run()
   } finally {
-    currentInjectionContext = previous
+    setCurrentInjectionContext(previous)
   }
 }
 
@@ -53,7 +72,7 @@ export class InjectionContextError extends Error {
 export function inject<TToken extends TokenLike>(
   token: TToken,
 ): TokenValue<TToken> {
-  const context = currentInjectionContext
+  const context = currentInjectionContext()
   if (!context) throw new InjectionContextError(token)
   context.record?.(context.consumer, token)
   return context.resolve(token) as TokenValue<TToken>

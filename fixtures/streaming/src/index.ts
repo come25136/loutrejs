@@ -1,3 +1,4 @@
+import { defineApplication } from '@loutrejs/application'
 import {
   contract,
   defineModule,
@@ -6,11 +7,9 @@ import {
   procedure,
 } from '@loutrejs/core'
 import {
-  createHttpApplication,
   http,
 } from '@loutrejs/http'
 import {
-  createMessagePortApplication,
   messagePort,
 } from '@loutrejs/message-port'
 import { z } from 'zod'
@@ -95,14 +94,8 @@ export const EventsModule = defineModule(() => ({
   ],
 }))
 
-export function createEventsApplication() {
-  return createHttpApplication({
-    modules: [EventsModule()],
-  })
-}
-
-export function createEventsMessagePortApplication() {
-  return createMessagePortApplication({
+export function createEventsDefinition() {
+  return defineApplication({
     modules: [EventsModule()],
   })
 }

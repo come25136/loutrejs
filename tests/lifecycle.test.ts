@@ -31,7 +31,7 @@ describe('Application Lifecycle', () => {
       'A.destroy',
     ])
     await expect(runtime.initialize()).rejects.toThrow(
-      '停止済みApplicationは再初期化できません',
+      'LUTRE_APP_STOPPED',
     )
   })
 
@@ -102,7 +102,7 @@ describe('Application Lifecycle', () => {
     }
     const Module = defineModule(() => ({ providers: [Resource] }))
 
-    expect(compileApplication([Module()]).diagnostics).toEqual([])
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toEqual([])
     expect(initialized).toBe(false)
     expect(destroyed).toBe(false)
   })

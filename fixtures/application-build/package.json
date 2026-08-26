@@ -9,5 +9,8 @@
       "worker": "./src/conditional/worker.ts",
       "default": "./src/conditional/default.ts"
     }
+  },
+  "dependencies": {
+    "@loutrejs/application": "0.1.0"
   }
 }

@@ -1,6 +1,5 @@
 import {
-  initializeHttpApplication,
-  type HttpApplication,
+  type HttpProtocolExecution,
 } from '@loutrejs/http'
 
 export const lambdaRuntime = {
@@ -34,20 +33,13 @@ export interface LambdaHttpResult {
   readonly isBase64Encoded: boolean
 }
 
-export interface LambdaHandlerOptions {
-  readonly environment?: unknown
-}
-
-export function createLambdaHandler(
-  application: HttpApplication,
-  options: LambdaHandlerOptions = {},
+/** @internal generated bindingが利用するLambda HTTP driver。 */
+export function createLambdaHttpDriver(
+  application: HttpProtocolExecution,
 ) {
   let initialization: Promise<void> | undefined
   return async (event: LambdaHttpEvent): Promise<LambdaHttpResult> => {
-    initialization ??= initializeHttpApplication(
-      application,
-      'environment' in options ? options.environment : process.env,
-    )
+    initialization ??= application.initialize()
     await initialization
     const response = await application.handle(toRequest(event))
     const metadata = responseMetadata(response)
@@ -71,19 +63,16 @@ export interface LambdaResponseStream {
   }): void
 }
 
-export function createLambdaStreamingHandler(
-  application: HttpApplication,
-  options: LambdaHandlerOptions = {},
+/** @internal generated bindingが利用するLambda streaming HTTP driver。 */
+export function createLambdaStreamingHttpDriver(
+  application: HttpProtocolExecution,
 ) {
   let initialization: Promise<void> | undefined
   return async (
     event: LambdaHttpEvent,
     output: LambdaResponseStream,
   ): Promise<void> => {
-    initialization ??= initializeHttpApplication(
-      application,
-      'environment' in options ? options.environment : process.env,
-    )
+    initialization ??= application.initialize()
     await initialization
     const response = await application.handle(toRequest(event))
     const metadata = responseMetadata(response)

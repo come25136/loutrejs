@@ -1,6 +1,5 @@
 import {
-  initializeHttpApplication,
-  type HttpApplication,
+  type HttpProtocolExecution,
 } from '@loutrejs/http'
 
 export const denoRuntime = {
@@ -18,39 +17,14 @@ export const denoRuntime = {
   ]),
 } as const
 
-export interface DenoFetchHandlerOptions {
-  readonly environment?: unknown
-}
-
-export function createDenoFetchHandler(
-  application: HttpApplication,
-  options: DenoFetchHandlerOptions = {},
+/** @internal generated bindingが利用するDeno HTTP driver。 */
+export function createDenoFetchDriver(
+  application: HttpProtocolExecution,
 ) {
   let initialization: Promise<void> | undefined
   return async (request: Request): Promise<Response> => {
-    initialization ??= initializeHttpApplication(
-      application,
-      'environment' in options
-        ? options.environment
-        : requiresEnvironment(application)
-          ? denoEnvironment()
-          : undefined,
-    )
+    initialization ??= application.initialize()
     await initialization
     return application.handle(request)
   }
-}
-
-function denoEnvironment(): unknown {
-  return (globalThis as typeof globalThis & {
-    readonly Deno?: {
-      readonly env: {
-        toObject(): Readonly<Record<string, string>>
-      }
-    }
-  }).Deno?.env.toObject()
-}
-
-function requiresEnvironment(application: HttpApplication): boolean {
-  return application.graph.capabilities.some(({ name }) => name === 'env.runtime')
 }

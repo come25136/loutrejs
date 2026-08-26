@@ -1,5 +1,4 @@
 import {
-  asModuleInstance,
   type ContextProvidedBeforeTerminal,
   type IsValidProtocolPipeline,
   validateSchema,
@@ -14,11 +13,7 @@ import {
   type StandardSchemaV1,
   type TerminalLayerDescriptor,
 } from '@loutrejs/core'
-import {
-  assertValidCompilation,
-  compileApplication,
-  type ApplicationGraphIR,
-} from '@loutrejs/graph'
+import type { ApplicationGraphIR } from '@loutrejs/graph'
 import {
   ApplicationRuntime,
   executePipeline,
@@ -153,21 +148,23 @@ interface Route {
   readonly implementation: ImplementationDescriptor
 }
 
-export interface MessagePortApplication {
+/** @internal MessagePort driverとUnified Applicationの境界。 */
+export interface MessagePortProtocolExecution {
   readonly graph: ApplicationGraphIR
   initialize(): Promise<void>
   shutdown(signal?: string): Promise<void>
   invoke(procedure: string, input?: unknown): Promise<LogicalMessagePortResult>
 }
 
-export function createMessagePortApplication(options: {
-  readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
+/** @internal Unified Application bindingがMessagePort executionを構築する。 */
+export function createMessagePortExecution(options: {
+  readonly runtime: ApplicationRuntime
+  readonly graph: ApplicationGraphIR
   readonly logger?: Logger
-}): MessagePortApplication {
-  const roots = options.modules.map(asModuleInstance)
-  const graph = assertValidCompilation(compileApplication(roots))
+}): MessagePortProtocolExecution {
+  const graph = options.graph
   const applicationLogger = options.logger ?? new Logger()
-  const runtime = new ApplicationRuntime(roots, { logger: applicationLogger })
+  const runtime = options.runtime
   const logger = applicationLogger.child({ protocol: 'messagePort' })
   const routes = collectRoutes(runtime.graph.modules)
   let initialization: Promise<void> | undefined
@@ -183,7 +180,7 @@ export function createMessagePortApplication(options: {
         executionId: crypto.randomUUID(),
       })
       try {
-        await initialize()
+        return await runtime.execute(async () => {
         const route = routes.find((candidate) => candidate.procedure === procedure)
         if (!route) throw new Error(`MessagePort procedureがありません: ${procedure}`)
         invocationLogger = invocationLogger.child({
@@ -226,6 +223,7 @@ export function createMessagePortApplication(options: {
           durationMs: Math.max(0, Date.now() - startedAt),
         })
         return finalized
+        })
       } catch (error) {
         const normalized = normalizeUnknownError(error, invocationLogger.context)
         invocationLogger.error('Unhandled application error', {
@@ -293,7 +291,7 @@ export interface MessagePortLike {
 }
 
 export function attachMessagePort(
-  application: MessagePortApplication,
+  application: MessagePortProtocolExecution,
   port: MessagePortLike,
 ): void {
   port.addEventListener('message', async (event) => {

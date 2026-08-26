@@ -1,7 +1,10 @@
-import { createDenoFetchHandler } from '@loutrejs/runtime-deno'
-import usersApplication from '../dist/conformance/http-crud/application.mjs'
-import eventsApplication from '../dist/conformance/streaming-http/application.mjs'
-const handler = createDenoFetchHandler(usersApplication)
+import { createInvocationBinding } from '@loutrejs/application/binding'
+import { createDenoFetchDriver } from '@loutrejs/runtime-deno'
+import usersDefinition from '../dist/conformance/http-crud/application.mjs'
+import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
+const usersBinding = createInvocationBinding(usersDefinition)
+const eventsBinding = createInvocationBinding(eventsDefinition)
+const handler = createDenoFetchDriver(usersBinding.http!)
 const response = await handler(
   new Request('https://deno.fixture/users/deno-user'),
 )
@@ -13,13 +16,13 @@ if (
 ) {
   throw new Error(`Deno conformanceに失敗しました: ${JSON.stringify(body)}`)
 }
-await usersApplication.shutdown('conformance')
+await usersBinding.application.close()
 
-const streamResponse = await createDenoFetchHandler(eventsApplication)(
+const streamResponse = await createDenoFetchDriver(eventsBinding.http!)(
   new Request('https://deno.fixture/events'),
 )
 if (!(await streamResponse.text()).includes('"sequence":3')) {
   throw new Error('Deno server-stream conformanceに失敗しました')
 }
-await eventsApplication.shutdown('conformance')
+await eventsBinding.application.close()
 console.log('Deno 2.9 LTS conformance: 成功')

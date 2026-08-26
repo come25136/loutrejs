@@ -1,6 +1,5 @@
 import {
-  initializeHttpApplication,
-  type HttpApplication,
+  type HttpProtocolExecution,
 } from '@loutrejs/http'
 
 export const workerdRuntime = {
@@ -18,13 +17,14 @@ export const workerdRuntime = {
   ]),
 } as const
 
-export function createWorkerdFetchHandler(application: HttpApplication) {
+/** @internal generated bindingが利用するworkerd HTTP driver。 */
+export function createWorkerdFetchDriver(application: HttpProtocolExecution) {
   let initialization: Promise<void> | undefined
   return async (
     request: Request,
-    environment?: unknown,
+    _environment?: unknown,
   ): Promise<Response> => {
-    initialization ??= initializeHttpApplication(application, environment)
+    initialization ??= application.initialize()
     await initialization
     return application.handle(request)
   }

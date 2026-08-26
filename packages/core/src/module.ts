@@ -18,30 +18,71 @@ export interface ModuleDefinition {
   readonly requires?: readonly string[]
 }
 
-export interface ModuleInstance {
+export const moduleTypeInfo: unique symbol = Symbol('loutre.module-type-info')
+
+export interface ModuleTypeInfo<
+  TDefinition extends ModuleDefinition = ModuleDefinition,
+> {
+  readonly protocols: ProtocolsOfModuleDefinition<TDefinition>
+}
+
+type DirectProtocols<TDefinition extends ModuleDefinition> =
+  TDefinition['implementations'] extends readonly ImplementationDescriptor[]
+    ? TDefinition['implementations'][number]['protocol']
+    : never
+
+type ImportedProtocols<TDefinition extends ModuleDefinition> =
+  TDefinition['imports'] extends readonly ModuleInstance[]
+    ? ModuleProtocols<TDefinition['imports'][number]>
+    : never
+
+export type ProtocolsOfModuleDefinition<
+  TDefinition extends ModuleDefinition,
+> = DirectProtocols<TDefinition> | ImportedProtocols<TDefinition>
+
+export type ModuleProtocols<TModule> =
+  TModule extends ModuleInstance<infer TDefinition>
+    ? ProtocolsOfModuleDefinition<TDefinition>
+    : never
+
+export interface ModuleInstance<
+  TDefinition extends ModuleDefinition = ModuleDefinition,
+> {
   readonly kind: 'module-instance'
   readonly template: AnyModuleTemplate
   readonly args: unknown
-  readonly definition: ModuleDefinition
+  readonly definition: TDefinition
+  /** @internal TypeScript上のModule構成を伝播するためのメタデータ。 */
+  readonly [moduleTypeInfo]?: ModuleTypeInfo<TDefinition>
 }
 
 export interface AnyModuleTemplate {
-  (args?: any): ModuleInstance
+  (args?: any): ModuleInstance<any>
   readonly kind: 'module-template'
-  readonly instantiate: (args: any) => ModuleInstance
+  readonly instantiate: (args: any) => ModuleInstance<any>
+  /** @internal TypeScript上のModule構成を伝播するためのメタデータ。 */
+  readonly [moduleTypeInfo]?: ModuleTypeInfo<any>
 }
 
-export type ModuleTemplate<Args> = ([Args] extends [void]
-  ? { (): ModuleInstance }
-  : { (args: Args): ModuleInstance }) & {
+export type ModuleTemplate<
+  Args,
+  TDefinition extends ModuleDefinition = ModuleDefinition,
+> = ([Args] extends [void]
+  ? { (): ModuleInstance<TDefinition> }
+  : { (args: Args): ModuleInstance<TDefinition> }) & {
   readonly kind: 'module-template'
-  readonly instantiate: (args: Args) => ModuleInstance
+  readonly instantiate: (args: Args) => ModuleInstance<TDefinition>
+  /** @internal TypeScript上のModule構成を伝播するためのメタデータ。 */
+  readonly [moduleTypeInfo]?: ModuleTypeInfo<TDefinition>
 }
 
-export function defineModule<Args = void>(
-  factory: (args: Args) => ModuleDefinition,
-): ModuleTemplate<Args> {
-  const instantiate = (args: Args): ModuleInstance => {
+export function defineModule<
+  Args = void,
+  const TDefinition extends ModuleDefinition = ModuleDefinition,
+>(
+  factory: (args: Args) => TDefinition,
+): ModuleTemplate<Args, TDefinition> {
+  const instantiate = (args: Args): ModuleInstance<TDefinition> => {
     const declared = factory(args)
     const environment = [...new Set(declared.environment ?? [])]
     const providers = [
@@ -57,11 +98,14 @@ export function defineModule<Args = void>(
         ...declared,
         ...(environment.length === 0 ? {} : { environment }),
         ...(providers.length === 0 ? {} : { providers }),
-      },
+      } as TDefinition,
     }
   }
 
-  const template = ((args: Args) => instantiate(args)) as ModuleTemplate<Args>
+  const template = ((args: Args) => instantiate(args)) as ModuleTemplate<
+    Args,
+    TDefinition
+  >
   Object.defineProperties(template, {
     kind: { value: 'module-template', enumerable: true },
     instantiate: { value: instantiate, enumerable: false },

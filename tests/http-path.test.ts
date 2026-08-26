@@ -1,3 +1,4 @@
+import { createTestApplication } from './helpers/application.js'
 import {
   contract,
   defineModule,
@@ -6,7 +7,6 @@ import {
 } from '@loutrejs/core'
 import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
 import {
-  createHttpApplication,
   http,
   validate,
 } from '@loutrejs/http'
@@ -169,7 +169,7 @@ function createRoutingApplication() {
   const Module = defineModule(() => ({
     implementations: [Implementation],
   }))
-  return createHttpApplication({
+  return createTestApplication({
     modules: [Module()],
     logger: silentLogger,
   })
@@ -179,12 +179,12 @@ describe('HTTP pathとroute identity', () => {
   it('raw paramsのdecodeとproperty-wise transformを行う', async () => {
     const application = createRoutingApplication()
 
-    const raw = await application.handle(
+    const raw = await application.fetch(
       new Request('http://fixture.test/raw/hello%20world'),
     )
     expect(await raw.json()).toEqual({ route: 'raw', value: 'hello world' })
 
-    const declaredOnly = await application.handle(
+    const declaredOnly = await application.fetch(
       new Request('http://fixture.test/declared/123'),
     )
     expect(await declaredOnly.json()).toEqual({
@@ -192,7 +192,7 @@ describe('HTTP pathとroute identity', () => {
       value: '123',
     })
 
-    const multiple = await application.handle(
+    const multiple = await application.fetch(
       new Request('http://fixture.test/users/123/posts/456'),
     )
     expect(await multiple.json()).toEqual({
@@ -200,7 +200,7 @@ describe('HTTP pathとroute identity', () => {
       value: { userId: 123, postId: '456' },
     })
 
-    const invalidEncoding = await application.handle(
+    const invalidEncoding = await application.fetch(
       new Request('http://fixture.test/raw/%E0%A4%A'),
     )
     expect(invalidEncoding.status).toBe(400)
@@ -208,12 +208,12 @@ describe('HTTP pathとroute identity', () => {
 
   it('static優先度と左からのspecificityが登録順に依存しない', async () => {
     const application = createRoutingApplication()
-    const staticResponse = await application.handle(
+    const staticResponse = await application.fetch(
       new Request('http://fixture.test/priority/me'),
     )
     expect(await staticResponse.json()).toEqual({ route: 'static', value: null })
 
-    const deeperResponse = await application.handle(
+    const deeperResponse = await application.fetch(
       new Request('http://fixture.test/specific/b/c'),
     )
     expect(await deeperResponse.json()).toEqual({ route: 'more', value: 'c' })
@@ -256,11 +256,11 @@ describe('HTTP pathとroute identity', () => {
     const ReverseModule = defineModule(() => ({
       implementations: [ReverseImplementation],
     }))
-    const reverseApplication = createHttpApplication({
+    const reverseApplication = createTestApplication({
       modules: [ReverseModule()],
       logger: silentLogger,
     })
-    const reverseResponse = await reverseApplication.handle(
+    const reverseResponse = await reverseApplication.fetch(
       new Request('http://fixture.test/reverse/me'),
     )
     expect(await reverseResponse.json()).toBe('static')
@@ -268,10 +268,10 @@ describe('HTTP pathとroute identity', () => {
 
   it('methodが異なる同一pathを別routeとしてdispatchする', async () => {
     const application = createRoutingApplication()
-    const getResponse = await application.handle(
+    const getResponse = await application.fetch(
       new Request('http://fixture.test/method/1'),
     )
-    const postResponse = await application.handle(
+    const postResponse = await application.fetch(
       new Request('http://fixture.test/method/1', { method: 'POST' }),
     )
     expect((await getResponse.json()).route).toBe('get')
@@ -452,7 +452,7 @@ describe('protocol dispatchKeyの重複検査', () => {
       implementations: [SecondController],
     }))
 
-    const result = compileApplication([FirstModule(), SecondModule()])
+    const result = compileApplication({ modules: [FirstModule(), SecondModule()] })
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({
         code: 'LUTRE_PROTOCOL_001',

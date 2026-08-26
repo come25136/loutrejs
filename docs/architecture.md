@@ -513,9 +513,9 @@ Schema validation failureのframework messageにraw secret valueを含めない�
 
 ### 7.1 Application creation と runtime initialization は別phase
 
-`createHttpApplication()` / `createMessagePortApplication()` の時点でApplication Graphはcompileするが、実runtimeのImplementation / Layer factoryやLifecycleを完成させない。
+`defineApplication()` はportableなApplication Definitionだけを作り、runtime side effectを開始しない。Graph inspectionはDefinitionをcompileし、self-host実行時は`bootstrap()`がHosted Applicationを構築する。
 
-`ApplicationRuntime` は初期状態でmodule graphとContainer shellを持ち、`initialize()` でruntimeを完成させる。
+`ApplicationRuntime` は初期状態でmodule graphとContainer shellを持ち、Hosted Applicationの`init()`またはexecution start時のauto-initでruntimeを完成させる。
 
 現行順序は概念的に次。
 

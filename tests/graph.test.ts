@@ -17,7 +17,7 @@ describe('Runtime Application Graph', () => {
     }
     const Module = defineModule(() => ({ providers: [Repository, Service] }))
 
-    const { graph, diagnostics } = compileApplication([Module()])
+    const { graph, diagnostics } = compileApplication({ modules: [Module()] })
     expect(diagnostics).toEqual([])
     const service = graph.nodes.find(({ label }) => label === 'Service')
     const repository = graph.nodes.find(({ label }) => label === 'Repository')
@@ -48,7 +48,7 @@ describe('Runtime Application Graph', () => {
       ],
     }))
 
-    const { graph, diagnostics } = compileApplication([Module()])
+    const { graph, diagnostics } = compileApplication({ modules: [Module()] })
     expect(graph.edges).toEqual(expect.arrayContaining([
       expect.objectContaining({
         kind: 'conditional',
@@ -78,7 +78,7 @@ describe('Runtime Application Graph', () => {
       },
     }))
 
-    const { graph } = compileApplication([Module()])
+    const { graph } = compileApplication({ modules: [Module()] })
     expect(executions).toBe(0)
     expect(graph.edges).toContainEqual(expect.objectContaining({
       kind: 'lifecycle',
@@ -104,7 +104,7 @@ describe('Runtime Application Graph', () => {
       ],
     }))
 
-    const { graph, diagnostics } = compileApplication([Module()])
+    const { graph, diagnostics } = compileApplication({ modules: [Module()] })
     expect(graph.edges).toContainEqual(expect.objectContaining({
       kind: 'factory',
       source: 'declared',
@@ -124,7 +124,7 @@ describe('Runtime Application Graph', () => {
       ],
     }))
 
-    const { diagnostics } = compileApplication([Module()])
+    const { diagnostics } = compileApplication({ modules: [Module()] })
     expect(diagnostics).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: 'LUTRE_DI_UNRESOLVED' }),
       expect.objectContaining({ code: 'LUTRE_DI_ASYNC_FACTORY' }),

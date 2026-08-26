@@ -1,10 +1,11 @@
+import { defineApplication } from '@loutrejs/application'
 import {
   contract,
   defineModule,
   implementation,
   procedure,
 } from '@loutrejs/core'
-import { createHttpApplication, http, validate } from '@loutrejs/http'
+import { http, validate } from '@loutrejs/http'
 import { z } from 'zod'
 
 const CreateMessageBody = z.object({
@@ -72,6 +73,6 @@ const MessageModule = defineModule(() => ({
   implementations: [MessageController],
 }))
 
-export default createHttpApplication({
+export default defineApplication({
   modules: [MessageModule()],
 })

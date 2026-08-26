@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@loutrejs/application": "0.1.0",
     "@loutrejs/core": "0.1.0",
     "@loutrejs/http": "0.1.0",
     "zod": "^4.4.3"

@@ -107,9 +107,9 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
 
-    const { graph, diagnostics } = compileApplication([Module()])
+    const { graph, diagnostics } = compileApplication({ modules: [Module()] })
     expect(diagnostics).toEqual([])
-    expect(graph.version).toBe(2)
+    expect(graph.version).toBe(3)
     const root = graph.pipelines[0]?.layers[0]
     expect(root).toMatchObject({
       index: 0,
@@ -152,7 +152,7 @@ describe('Application Graph IRとsemantic validation', () => {
         graphImplementation(Contract),
       ],
     }))
-    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_PIPELINE_002' }),
     )
 
@@ -165,7 +165,7 @@ describe('Application Graph IRとsemantic validation', () => {
         graphImplementation(MismatchContract),
       ],
     }))
-    expect(compileApplication([MismatchModule()]).diagnostics).toContainEqual(
+    expect(compileApplication({ modules: [MismatchModule()] }).diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_PIPELINE_003' }),
     )
   })
@@ -192,7 +192,7 @@ describe('Application Graph IRとsemantic validation', () => {
         graphImplementation(Contract),
       ],
     }))
-    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_DI_UNRESOLVED' }),
     )
   })
@@ -228,7 +228,7 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
 
-    expect(compileApplication([Module()]).diagnostics).toEqual([])
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toEqual([])
     expect(factoryCalls).toBe(1)
     expect(runtimeCalls).toBe(0)
   })
@@ -270,7 +270,7 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
 
-    expect(compileApplication([Module()]).diagnostics).toEqual([])
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toEqual([])
   })
 
   it('recursive Pipeline全体のterminal exactly oneを検証する', () => {
@@ -285,7 +285,7 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
 
-    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_PIPELINE_001' }),
     )
   })
@@ -316,7 +316,7 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
 
-    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_SHORT_CIRCUIT_001' }),
     )
   })
@@ -333,7 +333,7 @@ describe('Application Graph IRとsemantic validation', () => {
         graphImplementation(Contract),
       ],
     }))
-    const result = compileApplication([Module()])
+    const result = compileApplication({ modules: [Module()] })
 
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_PIPELINE_002' }),
@@ -354,7 +354,7 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
     expect(
-      compileApplication([Module()]).diagnostics.map(({ code }) => code),
+      compileApplication({ modules: [Module()] }).diagnostics.map(({ code }) => code),
     ).toContain('LUTRE_PIPELINE_003')
   })
 
@@ -377,7 +377,7 @@ describe('Application Graph IRとsemantic validation', () => {
         }),
       ],
     }))
-    const codes = compileApplication([Module()]).diagnostics.map(
+    const codes = compileApplication({ modules: [Module()] }).diagnostics.map(
       (diagnostic) => diagnostic.code,
     )
 
@@ -403,7 +403,7 @@ describe('Application Graph IRとsemantic validation', () => {
       implementations: [Controller],
     }))
     expect(
-      compileApplication([InvalidModule()]).diagnostics.map(({ code }) => code),
+      compileApplication({ modules: [InvalidModule()] }).diagnostics.map(({ code }) => code),
     ).toContain('LUTRE_DI_UNRESOLVED')
 
     const sessionLayer = layer({
@@ -423,7 +423,7 @@ describe('Application Graph IRとsemantic validation', () => {
       implementations: [createImplementation(LayerOnlyContract)],
     }))
     expect(
-      compileApplication([LayerOnlyModule()]).diagnostics.map(
+      compileApplication({ modules: [LayerOnlyModule()] }).diagnostics.map(
         ({ code }) => code,
       ),
     ).toContain('LUTRE_DI_UNRESOLVED')
@@ -432,7 +432,7 @@ describe('Application Graph IRとsemantic validation', () => {
       providers: [provide(SESSION).useValue({ id: 'application' })],
       implementations: [Controller],
     }))
-    expect(compileApplication([ValidModule()]).diagnostics).toEqual([])
+    expect(compileApplication({ modules: [ValidModule()] }).diagnostics).toEqual([])
   })
 
   it('emits the five initial graph dimensions without runtime-specific core APIs', () => {
@@ -446,7 +446,7 @@ describe('Application Graph IRとsemantic validation', () => {
         graphImplementation(Contract),
       ],
     }))
-    const { graph } = compileApplication([Module()])
+    const { graph } = compileApplication({ modules: [Module()] })
 
     expect(graph.modules).toHaveLength(1)
     expect(graph.modules[0]?.name).toBe('GraphFixtureModule')
@@ -469,7 +469,7 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
 
-    const result = compileApplication([Module()])
+    const result = compileApplication({ modules: [Module()] })
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_TOKEN_001' }),
     )
@@ -487,7 +487,7 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
 
-    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
       expect.objectContaining({
         code: 'LUTRE_DI_003',
         message: expect.stringContaining('duplicate-provider.direct'),
@@ -509,7 +509,7 @@ describe('Application Graph IRとsemantic validation', () => {
       imports: [FirstModule(), SecondModule()],
     }))
 
-    expect(compileApplication([RootModule()]).diagnostics).toContainEqual(
+    expect(compileApplication({ modules: [RootModule()] }).diagnostics).toContainEqual(
       expect.objectContaining({
         code: 'LUTRE_DI_003',
         message: expect.stringMatching(/FirstModule.*SecondModule/u),
@@ -537,7 +537,7 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
 
-    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_PIPELINE_004' }),
     )
   })
@@ -572,7 +572,7 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
 
-    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_CONTEXT_002' }),
     )
   })

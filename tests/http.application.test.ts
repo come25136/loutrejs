@@ -1,3 +1,4 @@
+import { createTestApplication } from './helpers/application.js'
 import {
   contract,
   contextKey,
@@ -8,7 +9,6 @@ import {
   shortCircuit,
 } from '@loutrejs/core'
 import {
-  createHttpApplication,
   http,
   validate,
 } from '@loutrejs/http'
@@ -100,14 +100,14 @@ describe('HTTP application boundary', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
+    const application = createTestApplication({
       modules: [Module()],
       logger: silentLogger,
     })
     const probeConstructionCalls = controllerInstances
     expect(probeConstructionCalls).toBe(1)
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/things/t1?page=2', {
         method: 'POST',
         headers: {
@@ -134,7 +134,7 @@ describe('HTTP application boundary', () => {
       executionId: 'exec-1',
     })
 
-    const second = await application.handle(
+    const second = await application.fetch(
       new Request('http://fixture.test/things/t2?page=3', {
         method: 'POST',
         headers: {
@@ -153,7 +153,7 @@ describe('HTTP application boundary', () => {
     })
     expect(controllerInstances).toBe(runtimeConstructionCalls)
 
-    const invalid = await application.handle(
+    const invalid = await application.fetch(
       new Request('http://fixture.test/things/x?page=2', {
         method: 'POST',
         headers: {
@@ -169,7 +169,7 @@ describe('HTTP application boundary', () => {
   it('malformed JSONを内部情報を含まない400 responseへ変換する', async () => {
     const application = createInputDecodeFixture()
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/decode/item', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -184,7 +184,7 @@ describe('HTTP application boundary', () => {
   it('malformed path percent encodingをthrowせず400 responseへ変換する', async () => {
     const application = createInputDecodeFixture()
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/decode/%E0%A4%A', { method: 'POST' }),
     )
 
@@ -195,7 +195,7 @@ describe('HTTP application boundary', () => {
   it('有効なUTF-8 percent encodingをpath parameterとしてdecodeする', async () => {
     const application = createInputDecodeFixture()
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request(
         'http://fixture.test/decode/%E3%82%AB%E3%83%AF%E3%82%A6%E3%82%BD',
         {
@@ -243,12 +243,12 @@ describe('HTTP application boundary', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
+    const application = createTestApplication({
       modules: [Module()],
       logger: silentLogger,
     })
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/invalid-output'),
     )
     expect(response.status).toBe(500)
@@ -289,12 +289,12 @@ describe('HTTP application boundary', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
+    const application = createTestApplication({
       modules: [Module()],
       logger: silentLogger,
     })
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/invalid-output-header'),
     )
 
@@ -338,12 +338,12 @@ describe('HTTP application boundary', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
+    const application = createTestApplication({
       modules: [Module()],
       logger: silentLogger,
     })
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/undeclared-output-header'),
     )
 
@@ -395,11 +395,11 @@ describe('HTTP application boundary', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
+    const application = createTestApplication({
       modules: [Module()],
       logger: silentLogger,
     })
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('https://fixture.test/cached'),
     )
 
@@ -408,20 +408,6 @@ describe('HTTP application boundary', () => {
     expect(controllerCalled).toBe(false)
   })
 
-  it('HTTP serverのlisten完了をpublic hookへ通知する', () => {
-    const urls: string[] = []
-    const application = createHttpApplication({
-      modules: [],
-      logger: silentLogger,
-      lifecycle: {
-        onServerListening: (url) => urls.push(url),
-      },
-    })
-
-    application.onServerListening('http://127.0.0.1:3000')
-
-    expect(urls).toEqual(['http://127.0.0.1:3000'])
-  })
 })
 
 function createInputDecodeFixture() {
@@ -459,7 +445,7 @@ function createInputDecodeFixture() {
   const Module = defineModule(() => ({
     implementations: [Implementation],
   }))
-  return createHttpApplication({
+  return createTestApplication({
     modules: [Module()],
     logger: silentLogger,
   })

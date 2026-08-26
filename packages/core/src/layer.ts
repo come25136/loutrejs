@@ -94,7 +94,7 @@ export interface LayerDefinition<
 }
 
 /** @internal child pipelineを関連付けたLayerの利用箇所を表す。 */
-interface LayerOccurrenceDescriptor<
+export interface LayerOccurrenceDescriptor<
   TRequires extends readonly ContextKey[] = readonly ContextKey[],
   TProvides extends readonly ContextKey[] = readonly ContextKey[],
   TShortCircuitResult = unknown,

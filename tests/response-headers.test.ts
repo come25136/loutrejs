@@ -1,13 +1,13 @@
 import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
-import type { HttpApplication } from '@loutrejs/http'
-import { createLambdaHandler } from '@loutrejs/runtime-lambda'
-import { createNodeHttpServer } from '@loutrejs/runtime-node'
+import type { HttpProtocolExecution } from '@loutrejs/http'
+import { createLambdaHttpDriver } from '@loutrejs/runtime-lambda'
+import { createNodeHttpServerDriver } from '@loutrejs/runtime-node'
 
 describe('複数値HTTP response header', () => {
   it('Node adapterが複数のSet-Cookieを別々に保持する', async () => {
     const application = cookieApplication()
-    const server = createNodeHttpServer(application)
+    const server = createNodeHttpServerDriver(application)
     server.listen(0, '127.0.0.1')
     await once(server, 'listening')
 
@@ -26,7 +26,7 @@ describe('複数値HTTP response header', () => {
   })
 
   it('Lambda adapterがSet-Cookieをcookiesへ分離する', async () => {
-    const handler = createLambdaHandler(cookieApplication())
+    const handler = createLambdaHttpDriver(cookieApplication())
     const result = await handler({ rawPath: '/cookies' })
 
     expect(result.cookies).toEqual([
@@ -37,9 +37,9 @@ describe('複数値HTTP response header', () => {
   })
 })
 
-function cookieApplication(): HttpApplication {
+function cookieApplication(): HttpProtocolExecution {
   return {
-    graph: {} as HttpApplication['graph'],
+    graph: {} as HttpProtocolExecution['graph'],
     initialize: async () => undefined,
     shutdown: async () => undefined,
     onServerListening: () => undefined,
@@ -49,5 +49,5 @@ function cookieApplication(): HttpApplication {
       headers.append('set-cookie', 'second=two; Path=/')
       return new Response('ok', { headers })
     },
-  } as unknown as HttpApplication
+  } as unknown as HttpProtocolExecution
 }

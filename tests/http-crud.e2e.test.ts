@@ -1,17 +1,16 @@
-import { once } from 'node:events'
-import type { AddressInfo } from 'node:net'
-import { createNodeHttpServer } from '@loutrejs/runtime-node'
 import { createLinkedUsersApplication } from './helpers/linked-applications.js'
+import { reserveHttpPort } from './helpers/http-server.js'
 
 describe('canonical Fixture A', () => {
   it('runs Contract -> HTTP -> Pipeline -> validation -> Controller -> finalization', async () => {
     const application = createLinkedUsersApplication()
-    const server = createNodeHttpServer(application)
-    server.listen(0, '127.0.0.1')
-    await once(server, 'listening')
+    const port = await reserveHttpPort()
+    await application.listen({ port, hostname: '127.0.0.1' })
+    await expect(
+      application.listen({ port, hostname: '127.0.0.1' }),
+    ).rejects.toThrow('LUTRE_HTTP_ALREADY_LISTENING')
 
     try {
-      const { port } = server.address() as AddressInfo
       const response = await fetch(`http://127.0.0.1:${port}/users/user-1`)
 
       expect(response.status).toBe(200)
@@ -21,6 +20,7 @@ describe('canonical Fixture A', () => {
       expect(await response.json()).toEqual({ id: 'user-1', name: 'test' })
       expect(application.graph.capabilities).toContainEqual({
         name: 'http.server',
+        scope: 'execution',
         requiredBy: 'UsersContract.get',
       })
 
@@ -35,8 +35,7 @@ describe('canonical Fixture A', () => {
         name: 'created',
       })
     } finally {
-      server.close()
-      await once(server, 'close')
+      await application.close()
     }
   })
 })

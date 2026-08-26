@@ -4,6 +4,13 @@ import { resolve } from 'node:path'
 export default defineConfig({
   resolve: {
     alias: {
+      '@loutrejs/application/host': resolve(
+        'packages/application/src/host.ts',
+      ),
+      '@loutrejs/application/binding': resolve(
+        'packages/application/src/binding.ts',
+      ),
+      '@loutrejs/application': resolve('packages/application/src/index.ts'),
       '@loutrejs/core': resolve('packages/core/src/index.ts'),
       '@loutrejs/graph': resolve('packages/graph/src/index.ts'),
       '@loutrejs/cli': resolve('packages/cli/src/index.ts'),

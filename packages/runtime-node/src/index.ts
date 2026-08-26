@@ -2,8 +2,7 @@ import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import { Readable } from 'node:stream'
 import {
-  initializeHttpApplication,
-  type HttpApplication,
+  type HttpProtocolExecution,
 } from '@loutrejs/http'
 
 export const nodeRuntime = {
@@ -24,18 +23,16 @@ export const nodeRuntime = {
   ]),
 } as const
 
-export interface NodeHttpServerOptions {
+export interface NodeHttpServerDriverOptions {
   readonly onListening?: (url: string) => void
-  readonly environment?: unknown
 }
 
-export function createNodeHttpServer(
-  application: HttpApplication,
-  options: NodeHttpServerOptions = {},
+/** @internal Unified Application hostが利用するNode.js HTTP driver。 */
+export function createNodeHttpServerDriver(
+  application: HttpProtocolExecution,
+  options: NodeHttpServerDriverOptions = {},
 ): Server {
-  const environment =
-    'environment' in options ? options.environment : process.env
-  const initialization = initializeHttpApplication(application, environment)
+  const initialization = application.initialize()
   void initialization.catch(() => undefined)
 
   const server = createServer(async (incoming, outgoing) => {

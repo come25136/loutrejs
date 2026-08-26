@@ -2,6 +2,9 @@ import {
   loadEnv,
   normalizeProvider,
   type EnvClass,
+  type EntrypointArguments,
+  type EntrypointDescriptor,
+  type EntrypointOutput,
   type LifecycleHook,
   type ModuleInstance,
   type ModuleTemplate,
@@ -19,6 +22,7 @@ import { Logger } from './logger.js'
 export interface ApplicationRuntimeOptions {
   readonly logger?: Logger
   readonly environmentSource?: unknown
+  readonly entrypoints?: readonly EntrypointDescriptor<any, any>[]
 }
 
 export interface InitializableApplication {
@@ -56,10 +60,14 @@ export class ApplicationRuntime {
   readonly #instancesByModule = new Map<ModuleInstance, unknown[]>()
   readonly #logger: Logger
   readonly #environmentSource: unknown
+  readonly #entrypoints: ReadonlySet<EntrypointDescriptor<any, any>>
   #initialized = false
   #initializing: Promise<void> | undefined
   #prepared = false
-  #stopped = false
+  #state: 'created' | 'initializing' | 'running' | 'stopping' | 'stopped' = 'created'
+  #activeExecutions = 0
+  readonly #idleWaiters = new Set<() => void>()
+  #shutdown: Promise<void> | undefined
 
   constructor(
     roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
@@ -70,6 +78,7 @@ export class ApplicationRuntime {
       'environmentSource' in options
         ? options.environmentSource
         : NO_ENVIRONMENT_SOURCE
+    this.#entrypoints = new Set(options.entrypoints ?? [])
     this.graph = collectRuntimeModuleGraph(roots)
     this.container = new Container(this.graph.providers, {
       logger: this.#logger,
@@ -79,8 +88,11 @@ export class ApplicationRuntime {
   initialize(): Promise<void> {
     if (this.#initialized) return Promise.resolve()
     if (this.#initializing) return this.#initializing
-    if (this.#stopped) {
-      return Promise.reject(new Error('停止済みApplicationは再初期化できません'))
+    if (this.#state === 'stopping') {
+      return Promise.reject(applicationStateError('LUTRE_APP_STOPPING'))
+    }
+    if (this.#state === 'stopped') {
+      return Promise.reject(applicationStateError('LUTRE_APP_STOPPED'))
     }
 
     const source =
@@ -97,6 +109,7 @@ export class ApplicationRuntime {
   }
 
   async #initialize(environmentSource: unknown): Promise<void> {
+    this.#state = 'initializing'
     try {
       await this.#bindEnvironment(environmentSource)
       this.#prepareRuntime()
@@ -114,9 +127,10 @@ export class ApplicationRuntime {
         await this.#runHook(module.definition.lifecycle?.onApplicationBootstrap)
       }
       this.#initialized = true
+      if ((this.#state as string) !== 'stopping') this.#state = 'running'
     } catch (error) {
       const cleanupErrors = await this.#rollbackInitialization()
-      this.#stopped = true
+      this.#state = 'stopped'
       if (cleanupErrors.length > 0) {
         throw new AggregateError(
           [error, ...cleanupErrors],
@@ -160,11 +174,63 @@ export class ApplicationRuntime {
     for (const pipeline of collectApplicationPipelines(this.graph.modules)) {
       this.container.preparePipeline(pipeline)
     }
+    for (const entrypoint of this.#entrypoints) {
+      this.container.prepareEntrypoint(entrypoint)
+    }
     this.#prepared = true
   }
 
-  async shutdown(signal?: string): Promise<void> {
-    if (this.#stopped) return
+  run<TEntrypoint extends EntrypointDescriptor<any, any>>(
+    entrypoint: TEntrypoint,
+    ...args: EntrypointArguments<TEntrypoint>
+  ): Promise<EntrypointOutput<TEntrypoint>> {
+    if (!this.#entrypoints.has(entrypoint)) {
+      return Promise.reject(
+        new Error(
+          `LUTRE_APP_ENTRYPOINT_NOT_REGISTERED: Entrypoint ${entrypoint.name} is not registered in this Application.`,
+        ),
+      )
+    }
+    return this.execute(async () => {
+      const runtime = this.container.entrypointRuntime(entrypoint)
+      return Reflect.apply(runtime, undefined, args) as Promise<
+        EntrypointOutput<TEntrypoint>
+      >
+    })
+  }
+
+  async execute<T>(execution: () => T | Promise<T>): Promise<T> {
+    if (this.#state === 'stopping') throw applicationStateError('LUTRE_APP_STOPPING')
+    if (this.#state === 'stopped') throw applicationStateError('LUTRE_APP_STOPPED')
+    this.#activeExecutions += 1
+    try {
+      await this.initialize()
+      return await execution()
+    } finally {
+      this.#activeExecutions -= 1
+      if (this.#activeExecutions === 0) {
+        for (const resolve of this.#idleWaiters) resolve()
+        this.#idleWaiters.clear()
+      }
+    }
+  }
+
+  shutdown(signal?: string): Promise<void> {
+    if (this.#state === 'stopped') return Promise.resolve()
+    if (this.#shutdown) return this.#shutdown
+    this.#state = 'stopping'
+    const shutdown = this.#shutdownRuntime(signal)
+    this.#shutdown = shutdown
+    return shutdown
+  }
+
+  async #shutdownRuntime(signal?: string): Promise<void> {
+    if (this.#initializing) {
+      await this.#initializing.catch(() => undefined)
+    }
+    if (this.#activeExecutions > 0) {
+      await new Promise<void>((resolve) => this.#idleWaiters.add(resolve))
+    }
     const errors: unknown[] = []
     const modules = [...this.graph.modules].reverse()
     try {
@@ -205,7 +271,7 @@ export class ApplicationRuntime {
         )
       }
     } finally {
-      this.#stopped = true
+      this.#state = 'stopped'
     }
     if (errors.length > 0) {
       throw new AggregateError(errors, 'Application shutdown cleanup failed')
@@ -251,6 +317,14 @@ export class ApplicationRuntime {
     )
     await hook.run(...dependencies)
   }
+}
+
+function applicationStateError(code: 'LUTRE_APP_STOPPING' | 'LUTRE_APP_STOPPED') {
+  return new Error(
+    code === 'LUTRE_APP_STOPPING'
+      ? `${code}: Application is stopping and cannot accept new executions.`
+      : `${code}: Application is stopped and cannot accept new executions.`,
+  )
 }
 
 function collectApplicationPipelines(

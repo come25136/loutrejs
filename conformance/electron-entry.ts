@@ -1,10 +1,24 @@
 import { app, MessageChannelMain } from 'electron'
+import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
+import { createMessagePortExecution } from '@loutrejs/message-port'
+import { ApplicationRuntime } from '@loutrejs/runtime'
 import { attachElectronMessagePort } from '@loutrejs/runtime-electron'
-import application from '../dist/conformance/streaming-message-port/application.mjs'
+import definition from '../dist/conformance/streaming-message-port/application.mjs'
 
 async function main(): Promise<void> {
   await app.whenReady()
   try {
+  const graph = assertValidCompilation(compileApplication({
+    modules: definition.modules,
+    entrypoints: definition.entrypoints,
+    schedules: definition.schedules,
+    queues: definition.queues,
+    consumers: definition.consumers,
+  }))
+  const runtime = new ApplicationRuntime(definition.modules, {
+    environmentSource: process.env,
+  })
+  const application = createMessagePortExecution({ runtime, graph })
   const { port1, port2 } = new MessageChannelMain()
   attachElectronMessagePort(application, port1)
   const messages: unknown[] = []

@@ -1,3 +1,4 @@
+import { defineApplication } from '@loutrejs/application'
 import {
   contract,
   contextKey,
@@ -7,7 +8,6 @@ import {
   procedure,
 } from '@loutrejs/core'
 import {
-  createHttpApplication,
   http,
   validate,
 } from '@loutrejs/http'
@@ -123,5 +123,5 @@ export const AccountModule = defineModule(() => ({
 }))
 
 export function createAccountApplication() {
-  return createHttpApplication({ modules: [AccountModule()] })
+  return defineApplication({ modules: [AccountModule()] })
 }

@@ -1,3 +1,3 @@
-import { createEventsMessagePortApplication } from './index.js'
+import { createEventsDefinition } from './index.js'
 
-export default createEventsMessagePortApplication()
+export default createEventsDefinition()

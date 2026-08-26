@@ -1,3 +1,3 @@
-import { createEventsApplication } from './index.js'
+import { createEventsDefinition } from './index.js'
 
-export default createEventsApplication()
+export default createEventsDefinition()

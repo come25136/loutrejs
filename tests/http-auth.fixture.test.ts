@@ -1,3 +1,4 @@
+import { createTestApplication } from './helpers/application.js'
 import {
   contract,
   defineModule,
@@ -5,7 +6,7 @@ import {
   procedure,
 } from '@loutrejs/core'
 import { compileApplication } from '@loutrejs/graph'
-import { createHttpApplication, http, validate } from '@loutrejs/http'
+import { http, validate } from '@loutrejs/http'
 import {
   AccountController,
   AccountModule,
@@ -18,11 +19,11 @@ import { silentLogger } from './helpers/silent-logger.js'
 
 describe('canonical Fixture B', () => {
   it('Layerが生成したContext propertyをControllerのctxから取得する', async () => {
-    const application = createHttpApplication({
+    const application = createTestApplication({
       modules: [AccountModule()],
       logger: silentLogger,
     })
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/account', {
         headers: { authorization: 'Bearer fixture-token' },
       }),
@@ -74,7 +75,7 @@ describe('canonical Fixture B', () => {
     const InvalidModule = defineModule(() => ({
       implementations: [InvalidImplementation],
     }))
-    const codes = compileApplication([InvalidModule()]).diagnostics.map(
+    const codes = compileApplication({ modules: [InvalidModule()] }).diagnostics.map(
       ({ code }) => code,
     )
 

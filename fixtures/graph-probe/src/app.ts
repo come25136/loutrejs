@@ -1,5 +1,5 @@
+import { defineApplication } from '@loutrejs/application'
 import { defineEnv, defineModule, inject, provide, token } from '@loutrejs/core'
-import { createHttpApplication } from '@loutrejs/http'
 import { z } from 'zod'
 
 interface MissingDependency {
@@ -27,4 +27,4 @@ const Module = defineModule(() => ({
   ],
 }))
 
-export default createHttpApplication({ modules: [Module()] })
+export default defineApplication({ modules: [Module()] })

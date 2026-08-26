@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": "26.x" },
+  "engines": {
+    "node": "26.x"
+  },
   "scripts": {
     "check": "loutre check --entry src/app.ts",
     "db:start": "docker compose up -d --wait",
@@ -14,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@loutrejs/application": "0.1.0",
     "@loutrejs/core": "0.1.0",
     "@loutrejs/http": "0.1.0",
     "drizzle-orm": "^0.45.2",

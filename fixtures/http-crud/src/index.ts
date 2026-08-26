@@ -1,6 +1,6 @@
+import { defineApplication } from '@loutrejs/application'
 import { contract, defineModule, implementation, inject, procedure } from '@loutrejs/core'
 import {
-  createHttpApplication,
   http,
   validate,
 } from '@loutrejs/http'
@@ -90,7 +90,7 @@ export const UsersModule = defineModule(() => ({
 }))
 
 export function createUsersApplication() {
-  return createHttpApplication({
+  return defineApplication({
     modules: [UsersModule()],
   })
 }

@@ -1,6 +1,5 @@
 export * from './application.js'
 export * from './basic-auth.js'
-export type { CorsOptions, CorsOrigin } from './cors.js'
+export type { CorsLayerDescriptor, CorsOptions, CorsOrigin } from './cors.js'
 export * from './definitions.js'
 export { validate } from './validate.js'
-export { initializeWithEnvironment as initializeHttpApplication } from '@loutrejs/runtime'

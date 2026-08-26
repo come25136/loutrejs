@@ -1,3 +1,4 @@
+import { defineApplication } from '@loutrejs/application'
 import {
   contextKey,
   contract,
@@ -11,7 +12,6 @@ import {
   type OnModuleInit,
 } from '@loutrejs/core'
 import {
-  createHttpApplication,
   http,
   validate,
 } from '@loutrejs/http'
@@ -152,4 +152,4 @@ const AppModule = defineModule(() => ({
   implementations: [UsersController],
 }))
 
-export default createHttpApplication({ modules: [AppModule()] })
+export default defineApplication({ modules: [AppModule()] })

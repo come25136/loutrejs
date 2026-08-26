@@ -1,9 +1,12 @@
-import { createWorkerdFetchHandler } from '@loutrejs/runtime-workerd'
-import usersApplication from '../dist/conformance/http-crud/application.mjs'
-import eventsApplication from '../dist/conformance/streaming-http/application.mjs'
+import { createInvocationBinding } from '@loutrejs/application/binding'
+import { createWorkerdFetchDriver } from '@loutrejs/runtime-workerd'
+import usersDefinition from '../dist/conformance/http-crud/application.mjs'
+import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
 
-const users = createWorkerdFetchHandler(usersApplication)
-const events = createWorkerdFetchHandler(eventsApplication)
+const usersBinding = createInvocationBinding(usersDefinition)
+const eventsBinding = createInvocationBinding(eventsDefinition)
+const users = createWorkerdFetchDriver(usersBinding.http!)
+const events = createWorkerdFetchDriver(eventsBinding.http!)
 
 export default {
   async fetch(request: Request) {

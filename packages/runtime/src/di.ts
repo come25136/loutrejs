@@ -9,6 +9,9 @@ import {
   type Class,
   type DependencyConsumer,
   type EnvClass,
+  type EntrypointConsumer,
+  type EntrypointDescriptor,
+  type EntrypointRuntime,
   type ImplementationConsumer,
   type ImplementationDescriptor,
   type LayerConsumer,
@@ -89,6 +92,8 @@ export class Container {
     ImplementationDescriptor,
     ImplementationConsumer
   >()
+  readonly #entrypointCache = new Map<EntrypointDescriptor<any, any>, EntrypointRuntime<any, any>>()
+  readonly #entrypointConsumers = new Map<EntrypointDescriptor<any, any>, EntrypointConsumer>()
   readonly #layerCache = new Map<
     LayerDescriptor,
     LayerRuntime<object, readonly [], unknown>
@@ -188,6 +193,47 @@ export class Container {
       )
     }
     return cached
+  }
+
+  /** @internal Application construction時にEntrypoint factoryを1回だけ構築する。 */
+  prepareEntrypoint(entrypoint: EntrypointDescriptor): void {
+    if (this.#entrypointCache.has(entrypoint)) return
+    let consumer = this.#entrypointConsumers.get(entrypoint)
+    if (!consumer) {
+      consumer = {
+        kind: 'entrypoint-consumer',
+        id: `runtime-entrypoint:${this.#entrypointConsumers.size + 1}`,
+        name: entrypoint.name,
+      }
+      this.#entrypointConsumers.set(entrypoint, consumer)
+    }
+    this.#constructEntrypoint(entrypoint, consumer, true)
+  }
+
+  /** @internal 構築済みEntrypoint runtimeを取得する。 */
+  entrypointRuntime<TInput, TOutput>(
+    entrypoint: EntrypointDescriptor<TInput, TOutput>,
+  ): EntrypointRuntime<TInput, TOutput> {
+    const cached = this.#entrypointCache.get(entrypoint)
+    if (!cached) {
+      throw new DependencyResolutionError(
+        `LUTRE_ENTRYPOINT_NOT_PREPARED: Entrypoint ${entrypoint.name} is not prepared during application construction.`,
+      )
+    }
+    return cached as EntrypointRuntime<TInput, TOutput>
+  }
+
+  /** @internal Graph Probe用にEntrypoint factoryを同期constructionする。 */
+  probeEntrypoint(
+    entrypoint: EntrypointDescriptor,
+    consumer: EntrypointConsumer,
+  ): void {
+    try {
+      this.#constructEntrypoint(entrypoint, consumer, false)
+    } catch (error) {
+      if (isGraphProbeBoundary(error)) return
+      throw error
+    }
   }
 
   /** @internal Graph Probe用にImplementation factoryを同期constructionする。 */
@@ -459,6 +505,43 @@ export class Container {
       }
     }
     if (cache) this.#implementationCache.set(implementation, normalized)
+    return normalized
+  }
+
+  #constructEntrypoint(
+    entrypoint: EntrypointDescriptor,
+    consumer: EntrypointConsumer,
+    cache: boolean,
+  ): EntrypointRuntime<any, any> {
+    const cached = this.#entrypointCache.get(entrypoint)
+    if (cache && cached) return cached
+    const runtime = runInInjectionContext(
+      {
+        consumer,
+        resolve: (token) => this.#resolve(token, entrypoint.name),
+        ...(this.#recorder === undefined
+          ? {}
+          : {
+              record: (
+                recordedConsumer: DependencyConsumer,
+                dependency: TokenLike,
+              ) => this.#recorder!.record(recordedConsumer, dependency),
+            }),
+      },
+      () => entrypoint.factory(),
+    ) as unknown
+    if (isThenable(runtime)) {
+      throw new DependencyResolutionError(
+        `LUTRE_ENTRYPOINT_ASYNC_FACTORY: Entrypoint ${entrypoint.name} factory must be synchronous.`,
+      )
+    }
+    if (typeof runtime !== 'function') {
+      throw new DependencyResolutionError(
+        `LUTRE_ENTRYPOINT_FACTORY_RESULT: Entrypoint ${entrypoint.name} factory must return a runtime function.`,
+      )
+    }
+    const normalized = runtime as EntrypointRuntime<any, any>
+    if (cache) this.#entrypointCache.set(entrypoint, normalized)
     return normalized
   }
 }

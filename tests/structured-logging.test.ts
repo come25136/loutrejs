@@ -1,12 +1,16 @@
 import {
+  createTestApplication,
+  createTestMessagePortExecution,
+} from './helpers/application.js'
+import {
   contract,
   defineError,
   defineModule,
   implementation,
   procedure,
 } from '@loutrejs/core'
-import { createHttpApplication, http } from '@loutrejs/http'
-import { createMessagePortApplication, messagePort } from '@loutrejs/message-port'
+import { http } from '@loutrejs/http'
+import { messagePort } from '@loutrejs/message-port'
 import {
   ConsoleLoggerBackend,
   JsonConsoleLoggerBackend,
@@ -76,9 +80,30 @@ describe('構造化ログ', () => {
   it('route未一致を相関可能なHTTP完了イベントとして記録する', async () => {
     const records: LogRecord[] = []
     const logger = captureLogger(records, { application: 'fixture' })
-    const application = createHttpApplication({ modules: [], logger })
+    const Contract = contract({
+      health: procedure({
+        protocols: {
+          http: http({
+            method: 'GET',
+            path: '/health',
+            responses: { ok: { status: 200, body: z.string() } },
+            pipeline: [http.controller],
+          }),
+        },
+      }),
+    })
+    const Implementation = implementation({
+      name: 'HealthImplementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        health: (context) => context.response.ok({ body: 'ok' }),
+      }),
+    })
+    const Module = defineModule(() => ({ implementations: [Implementation] }))
+    const application = createTestApplication({ modules: [Module()], logger })
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('https://fixture.test/missing?secret=value'),
     )
 
@@ -128,12 +153,12 @@ describe('構造化ログ', () => {
       implementations: [Implementation],
     }))
     const records: LogRecord[] = []
-    const application = createHttpApplication({
+    const application = createTestApplication({
       modules: [Module()],
       logger: captureLogger(records),
     })
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('https://fixture.test/fail'),
     )
     const body = await response.json() as { errorId: string }
@@ -198,12 +223,12 @@ describe('構造化ログ', () => {
       implementations: [Implementation],
     }))
     const records: LogRecord[] = []
-    const application = createHttpApplication({
+    const application = createTestApplication({
       modules: [Module()],
       logger: captureLogger(records),
     })
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('https://fixture.test/expected-failure'),
     )
 
@@ -243,10 +268,10 @@ describe('構造化ログ', () => {
       implementations: [Implementation],
     }))
     const records: LogRecord[] = []
-    const application = createMessagePortApplication({
-      modules: [Module()],
-      logger: captureLogger(records),
-    })
+    const application = createTestMessagePortExecution(
+      [Module()],
+      captureLogger(records),
+    )
 
     const result = await application.invoke('ping')
 

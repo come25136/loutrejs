@@ -1,3 +1,4 @@
+import { createTestApplication } from './helpers/application.js'
 import {
   contract,
   defineError,
@@ -6,7 +7,6 @@ import {
   procedure,
 } from '@loutrejs/core'
 import {
-  createHttpApplication,
   http,
 } from '@loutrejs/http'
 import { z } from 'zod'
@@ -53,11 +53,11 @@ describe('Domain ErrorとProtocol mapping', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
+    const application = createTestApplication({
       modules: [Module()],
       logger: silentLogger,
     })
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('https://fixture.test/missing'),
     )
 

@@ -1,6 +1,5 @@
 import {
-  initializeHttpApplication,
-  type HttpApplication,
+  type HttpProtocolExecution,
 } from '@loutrejs/http'
 
 export const bunRuntime = {
@@ -18,35 +17,14 @@ export const bunRuntime = {
   ]),
 } as const
 
-export interface BunFetchHandlerOptions {
-  readonly environment?: unknown
-}
-
-export function createBunFetchHandler(
-  application: HttpApplication,
-  options: BunFetchHandlerOptions = {},
+/** @internal generated bindingが利用するBun HTTP driver。 */
+export function createBunFetchDriver(
+  application: HttpProtocolExecution,
 ) {
   let initialization: Promise<void> | undefined
   return async (request: Request): Promise<Response> => {
-    initialization ??= initializeHttpApplication(
-      application,
-      'environment' in options
-        ? options.environment
-        : requiresEnvironment(application)
-          ? bunEnvironment()
-          : undefined,
-    )
+    initialization ??= application.initialize()
     await initialization
     return application.handle(request)
   }
-}
-
-function bunEnvironment(): unknown {
-  return (globalThis as typeof globalThis & {
-    readonly Bun?: { readonly env?: unknown }
-  }).Bun?.env
-}
-
-function requiresEnvironment(application: HttpApplication): boolean {
-  return application.graph.capabilities.some(({ name }) => name === 'env.runtime')
 }

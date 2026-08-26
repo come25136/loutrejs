@@ -234,7 +234,7 @@ describe('basicAuth', () => {
       implementations: [Implementation],
     }))
 
-    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
       expect.objectContaining({ code }),
     )
   })
@@ -286,7 +286,7 @@ describe('basicAuth', () => {
       implementations: [Implementation],
     }))
 
-    expect(compileApplication([Module()]).diagnostics).toContainEqual(
+    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_SHORT_CIRCUIT_002' }),
     )
   })

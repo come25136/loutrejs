@@ -10,8 +10,9 @@ const sourceDirectory = join(project, 'src')
 await mkdir(sourceDirectory)
 
 const appSource = `
+import { defineApplication } from '@loutrejs/application'
 import { contract, defineModule, hook, implementation, procedure } from '@loutrejs/core'
-import { createHttpApplication, http } from '@loutrejs/http'
+import { http } from '@loutrejs/http'
 import { z } from 'zod'
 import { failInitialization, message } from './message.js'
 
@@ -53,7 +54,7 @@ const DevModule = defineModule(() => ({
   },
 }))
 
-export default createHttpApplication({
+export default defineApplication({
   modules: [DevModule()],
 })
 `

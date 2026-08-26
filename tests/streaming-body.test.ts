@@ -1,3 +1,4 @@
+import { createTestApplication } from './helpers/application.js'
 import {
   contract,
   defineModule,
@@ -6,15 +7,12 @@ import {
   type StandardSchemaV1,
 } from '@loutrejs/core'
 import {
-  createHttpApplication,
   http,
   validate,
 } from '@loutrejs/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
-import { once } from 'node:events'
-import type { AddressInfo } from 'node:net'
-import { createNodeHttpServer } from '@loutrejs/runtime-node'
+import { reserveHttpPort } from './helpers/http-server.js'
 
 const BodyStreamSchema: StandardSchemaV1<
   unknown,
@@ -70,11 +68,11 @@ describe('streaming validate.body', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
+    const application = createTestApplication({
       modules: [Module()],
       logger: silentLogger,
     })
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('https://fixture.test/upload', {
         method: 'POST',
         headers: { 'content-type': 'application/octet-stream' },
@@ -84,11 +82,9 @@ describe('streaming validate.body', () => {
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({ bytes: 4 })
 
-    const server = createNodeHttpServer(application)
-    server.listen(0, '127.0.0.1')
-    await once(server, 'listening')
+    const port = await reserveHttpPort()
+    await application.listen({ port, hostname: '127.0.0.1' })
     try {
-      const { port } = server.address() as AddressInfo
       const nodeResponse = await fetch(`http://127.0.0.1:${port}/upload`, {
         method: 'POST',
         headers: { 'content-type': 'application/octet-stream' },
@@ -97,9 +93,7 @@ describe('streaming validate.body', () => {
       expect(nodeResponse.status).toBe(202)
       expect(await nodeResponse.json()).toEqual({ bytes: 5 })
     } finally {
-      server.close()
-      await once(server, 'close')
-      await application.shutdown('test')
+      await application.close()
     }
   })
 })

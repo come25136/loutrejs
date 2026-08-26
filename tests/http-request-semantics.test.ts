@@ -1,3 +1,4 @@
+import { createTestApplication } from './helpers/application.js'
 import {
   contract,
   defineModule,
@@ -6,7 +7,6 @@ import {
   type ImplementationDescriptor,
 } from '@loutrejs/core'
 import {
-  createHttpApplication,
   http,
   validate,
 } from '@loutrejs/http'
@@ -61,7 +61,7 @@ describe('HTTP request semantics', () => {
     headers.append('X-Repeat', 'first')
     headers.append('x-repeat', 'second')
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('https://fixture.test/inspect?tag=one&tag=two', { headers }),
     )
 
@@ -112,7 +112,7 @@ describe('HTTP request semantics', () => {
     body.set('name', 'loutre')
     body.set('file', new File(['otter'], 'otter.txt'))
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('https://fixture.test/multipart', { method: 'POST', body }),
     )
 
@@ -148,7 +148,7 @@ describe('HTTP request semantics', () => {
     })
     const application = applicationFor(Implementation)
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('https://fixture.test/invalid-multipart', {
         method: 'POST',
         headers: { 'content-type': 'multipart/form-data; boundary=missing' },
@@ -209,7 +209,7 @@ describe('HTTP request semantics', () => {
     })
     const application = applicationFor(Implementation)
     const abortController = new AbortController()
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('https://fixture.test/abort', {
         signal: abortController.signal,
       }),
@@ -227,7 +227,7 @@ function applicationFor(Implementation: ImplementationDescriptor) {
   const Module = defineModule(() => ({
     implementations: [Implementation],
   }))
-  return createHttpApplication({
+  return createTestApplication({
     modules: [Module()],
     logger: silentLogger,
   })

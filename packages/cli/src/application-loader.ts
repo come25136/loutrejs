@@ -3,26 +3,29 @@ import { builtinModules } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { ApplicationGraphIR } from '@loutrejs/graph'
+import type {
+  ApplicationDefinition,
+  BaseApplication,
+  HttpApplicationCapability,
+} from '@loutrejs/application'
+import { bootstrap } from '@loutrejs/application/host'
 import {
-  initializeHttpApplication,
-  type HttpApplication,
-} from '@loutrejs/http'
+  assertValidCompilation,
+  compileApplication,
+  type ApplicationGraphIR,
+} from '@loutrejs/graph'
 import { build as buildWithEsbuild } from 'esbuild'
 
+export type HostedHttpApplication = BaseApplication<ApplicationDefinition> &
+  HttpApplicationCapability
+
 export interface LoadedApplication {
-  readonly application: HttpApplication
+  readonly application: HostedHttpApplication
   readonly sourceFiles: readonly string[]
 }
 
 export interface EmitApplicationOptions {
   readonly nodeCompatibility?: boolean
-}
-
-interface FrameworkApplication {
-  readonly graph: ApplicationGraphIR
-  initialize(): Promise<void>
-  shutdown(signal?: string): Promise<void>
 }
 
 export async function emitApplication(
@@ -62,36 +65,45 @@ export async function emitApplication(
 
 export async function importHttpApplication(
   output: string,
-): Promise<HttpApplication> {
-  const application = await importApplication(output)
+): Promise<HostedHttpApplication> {
+  const definition = await importApplicationDefinition(output)
+  const graph = compileDefinition(definition)
   if (
-    typeof (application as Partial<HttpApplication>).onServerListening !== 'function' ||
-    typeof (application as Partial<HttpApplication>).handle !== 'function'
+    !graph.executions.some(
+      (execution) =>
+        execution.kind === 'protocol' && execution.protocol === 'http',
+    )
   ) {
     throw new Error(
-      'Application entryはdefaultまたはapplication named exportとしてHttpApplicationを公開する必要があります。',
+      'LUTRE_CLI_HTTP_REQUIRED: dev/startにはHTTP executionを持つApplicationが必要です。',
     )
   }
-
-  const httpApplication = application as HttpApplication
-  await initializeHttpApplication(httpApplication, process.env)
-  return httpApplication
+  return bootstrap(definition) as unknown as HostedHttpApplication
 }
 
-async function importApplication(output: string): Promise<FrameworkApplication> {
+async function importApplicationDefinition(
+  output: string,
+): Promise<ApplicationDefinition> {
   const module = await import(`${pathToFileURL(output).href}?loutre=${Date.now()}`)
   const application = module.default ?? module.application
-  if (
-    !application ||
-    typeof application.initialize !== 'function' ||
-    typeof application.shutdown !== 'function' ||
-    !application.graph
-  ) {
+  if (!application || application.kind !== 'application-definition') {
     throw new Error(
-      'Application entryはdefaultまたはapplication named exportとしてLoutre Applicationを公開する必要があります。',
+      'Application entryはdefaultまたはapplication named exportとしてApplicationDefinitionを公開する必要があります。',
     )
   }
-  return application as FrameworkApplication
+  return application as ApplicationDefinition
+}
+
+function compileDefinition(definition: ApplicationDefinition): ApplicationGraphIR {
+  return assertValidCompilation(
+    compileApplication({
+      modules: definition.modules,
+      entrypoints: definition.entrypoints,
+      schedules: definition.schedules,
+      queues: definition.queues,
+      consumers: definition.consumers,
+    }),
+  )
 }
 
 export async function loadHttpApplication(entry: string): Promise<LoadedApplication> {
@@ -113,7 +125,7 @@ export async function loadApplicationGraph(entry: string): Promise<ApplicationGr
   const output = join(directory, 'application.mjs')
   try {
     await emitApplication(entry, output, { nodeCompatibility: true })
-    return (await importApplication(output)).graph
+    return compileDefinition(await importApplicationDefinition(output))
   } catch (error) {
     const graph = (error as { readonly graph?: unknown })?.graph
     if (graph && typeof graph === 'object' && 'version' in graph) {

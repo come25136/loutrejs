@@ -134,7 +134,7 @@ describe('Environment Contract', () => {
       ],
     }))
 
-    const { graph, diagnostics } = compileApplication([AppModule()])
+    const { graph, diagnostics } = compileApplication({ modules: [AppModule()] })
 
     expect(diagnostics).toEqual([])
 
@@ -175,7 +175,7 @@ describe('Environment Contract', () => {
     const MissingModule = defineModule(() => ({
       providers: [NeedsEnv],
     }))
-    expect(compileApplication([MissingModule()]).diagnostics).toEqual(
+    expect(compileApplication({ modules: [MissingModule()] }).diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: 'LUTRE_ENV_002',
@@ -193,7 +193,7 @@ describe('Environment Contract', () => {
         provide(AppEnv).useValue(env),
       ],
     }))
-    expect(compileApplication([ConflictModule()]).diagnostics).toEqual(
+    expect(compileApplication({ modules: [ConflictModule()] }).diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: 'LUTRE_ENV_001',

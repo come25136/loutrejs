@@ -49,6 +49,9 @@ Application codeとruntime固有APIを分離する。
 
 ```ts
 import {
+  defineApplication,
+} from '@loutrejs/application'
+import {
   contract,
   defineModule,
   implementation,
@@ -56,7 +59,6 @@ import {
   procedure,
 } from '@loutrejs/core'
 import {
-  createHttpApplication,
   http,
   validate,
 } from '@loutrejs/http'
@@ -109,8 +111,22 @@ const GreetingModule = defineModule(() => ({
   implementations: [GreetingController],
 }))
 
-export default createHttpApplication({
+export default defineApplication({
   modules: [GreetingModule()],
+})
+```
+
+self-hostする場合もApplication sourceは変更せず、host側だけでbootstrapします。
+
+```ts
+import application from './app.js'
+import { bootstrap } from '@loutrejs/application/host'
+
+const app = bootstrap(application)
+
+await app.listen({
+  port: 3000,
+  hostname: '0.0.0.0',
 })
 ```
 

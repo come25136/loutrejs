@@ -9,6 +9,8 @@ import {
   type ContractDefinition,
   type ContextKey,
   type DependencyConsumer,
+  type EntrypointConsumer,
+  type EntrypointDescriptor,
   type ImplementationConsumer,
   type ImplementationDescriptor,
   type ModuleInstance,
@@ -18,6 +20,9 @@ import {
   type LayerConsumer,
   type ShortCircuitDeclaration,
   type TokenLike,
+  type QueueConsumerDescriptor,
+  type QueueDescriptor,
+  type ScheduleDescriptor,
 } from '@loutrejs/core'
 import { Container, Logger, type DependencyRecorder } from '@loutrejs/runtime'
 import type {
@@ -29,6 +34,8 @@ import type {
   ImplementationIR,
   LayerIR,
   PipelineIR,
+  QueueIR,
+  ExecutionRootIR,
 } from './ir.js'
 
 interface ImplementationTarget {
@@ -52,14 +59,27 @@ export class StaticValidationError extends Error {
   }
 }
 
+export interface ApplicationCompilationInput {
+  readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
+  readonly entrypoints?: readonly EntrypointDescriptor<any, any>[]
+  readonly schedules?: readonly ScheduleDescriptor<any>[]
+  readonly queues?: readonly QueueDescriptor<any>[]
+  readonly consumers?: readonly QueueConsumerDescriptor<any, any>[]
+}
+
 export function compileApplication(
-  roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
+  input: ApplicationCompilationInput,
 ): CompilationResult {
-  const modules = collectModules(roots)
+  const modules = collectModules(input.modules)
   const providers = modules.flatMap((module) =>
     (module.definition.providers ?? []).map(normalizeProvider),
   )
   const diagnostics: Diagnostic[] = []
+  const entrypoints = collectEntrypoints(input, diagnostics)
+  const queues = collectQueues(input, diagnostics)
+  validateNamedDescriptors(input.schedules ?? [], 'LUTRE_SCHEDULE_DUPLICATE', diagnostics)
+  validateNamedDescriptors(input.consumers ?? [], 'LUTRE_CONSUMER_DUPLICATE', diagnostics)
+  validateSchedules(input.schedules ?? [], diagnostics)
   const contractNames = new Map<ContractDefinition, string>()
   let contractSequence = 0
   const nameContract = (contract: ContractDefinition) => {
@@ -147,13 +167,14 @@ export function compileApplication(
     modules,
     descriptors,
     targets,
+    entrypoints,
     diagnostics,
   )
   const probedTokenIds = dependencyGraph.nodes
     .filter((node) => node.kind === 'token')
     .map((node) => node.label)
   const graph: ApplicationGraphIR = {
-    version: 2,
+    version: 3,
     modules: modules.map((module, index) => ({
       id: `module:${index + 1}`,
       ...(module.definition.name === undefined
@@ -204,25 +225,58 @@ export function compileApplication(
     contracts: [...contractNames.values()],
     pipelines,
     implementations,
+    queues: queues.map<QueueIR>((queue) => ({
+      id: `queue:${queue.name}`,
+      name: queue.name,
+    })),
+    executions: [
+      ...targets.map<ExecutionRootIR>((target) => ({
+        id: `protocol:${target.protocol}:${target.contractName}.${target.procedure}`,
+        kind: 'protocol',
+        protocol: target.protocol,
+        contract: target.contractName,
+        procedure: target.procedure,
+        implementation: target.implementation.name,
+      })),
+      ...entrypoints.map<ExecutionRootIR>((entrypoint) => ({
+        id: `entrypoint:${entrypoint.name}`,
+        kind: 'entrypoint',
+        name: entrypoint.name,
+      })),
+      ...(input.schedules ?? []).map<ExecutionRootIR>((schedule) => ({
+        id: `schedule:${schedule.name}`,
+        kind: 'schedule',
+        name: schedule.name,
+        cron: schedule.cron,
+        entrypoint: schedule.entrypoint.name,
+      })),
+      ...(input.consumers ?? []).map<ExecutionRootIR>((consumer) => ({
+        id: `queue-consumer:${consumer.name}`,
+        kind: 'queue-consumer',
+        name: consumer.name,
+        queue: consumer.queue.name,
+        entrypoint: consumer.entrypoint.name,
+      })),
+    ],
     capabilities: [
       ...targets.flatMap((target) => {
         const requiredBy = `${target.contractName}.${target.procedure}`
         return [
-          { name: 'crypto.random', requiredBy },
+          { name: 'crypto.random', scope: 'execution' as const, requiredBy },
           ...(target.protocol === 'http'
-            ? [{ name: 'http.server', requiredBy }]
+            ? [{ name: 'http.server', scope: 'execution' as const, requiredBy }]
             : []),
           ...(target.protocol === 'messagePort'
             ? [
-                { name: 'messagePort.send', requiredBy },
-                { name: 'messagePort.receive', requiredBy },
+                { name: 'messagePort.send', scope: 'execution' as const, requiredBy },
+                { name: 'messagePort.receive', scope: 'execution' as const, requiredBy },
               ]
             : []),
           ...(target.interaction === 'server-stream'
             ? [
-                { name: 'stream.readable', requiredBy },
+                { name: 'stream.readable', scope: 'execution' as const, requiredBy },
                 ...(target.protocol === 'http'
-                  ? [{ name: 'http.response.streaming', requiredBy }]
+                  ? [{ name: 'http.response.streaming', scope: 'execution' as const, requiredBy }]
                   : []),
               ]
             : []),
@@ -230,10 +284,11 @@ export function compileApplication(
       }),
       ...modules.flatMap((module, index) => [
         ...(module.definition.environment?.length
-          ? [{ name: 'env.runtime', requiredBy: `module:${index + 1}` }]
+          ? [{ name: 'env.runtime', scope: 'application' as const, requiredBy: `module:${index + 1}` }]
           : []),
         ...(module.definition.requires ?? []).map((name) => ({
           name,
+          scope: 'application' as const,
           requiredBy: `module:${index + 1}`,
         })),
       ]),
@@ -276,6 +331,123 @@ function validateDispatchKeys(
 
 export const buildApplicationGraph = compileApplication
 
+function collectEntrypoints(
+  input: ApplicationCompilationInput,
+  diagnostics: Diagnostic[],
+): readonly EntrypointDescriptor<any, any>[] {
+  const collected = [
+    ...(input.entrypoints ?? []),
+    ...(input.schedules ?? []).map((schedule) => schedule.entrypoint),
+    ...(input.consumers ?? []).map((consumer) => consumer.entrypoint),
+  ]
+  const unique = [...new Set(collected)]
+  validateNamedDescriptors(unique, 'LUTRE_ENTRYPOINT_DUPLICATE', diagnostics)
+  return unique
+}
+
+function collectQueues(
+  input: ApplicationCompilationInput,
+  diagnostics: Diagnostic[],
+): readonly QueueDescriptor<any>[] {
+  const collected = [
+    ...(input.queues ?? []),
+    ...(input.consumers ?? []).map((consumer) => consumer.queue),
+  ]
+  const unique = [...new Set(collected)]
+  validateNamedDescriptors(unique, 'LUTRE_QUEUE_DUPLICATE', diagnostics)
+  return unique
+}
+
+function validateNamedDescriptors(
+  descriptors: readonly { readonly name: string }[],
+  code: string,
+  diagnostics: Diagnostic[],
+): void {
+  const names = new Map<string, { readonly name: string }>()
+  for (const descriptor of descriptors) {
+    const existing = names.get(descriptor.name)
+    if (existing && existing !== descriptor) {
+      diagnostics.push({
+        code,
+        message: `Name ${descriptor.name} is declared by multiple descriptors.`,
+        path: descriptor.name,
+      })
+      continue
+    }
+    names.set(descriptor.name, descriptor)
+  }
+}
+
+function validateSchedules(
+  schedules: readonly ScheduleDescriptor<any>[],
+  diagnostics: Diagnostic[],
+): void {
+  for (const schedule of schedules) {
+    if (!isValidCronExpression(schedule.cron.expression)) {
+      diagnostics.push({
+        code: 'LUTRE_SCHEDULE_INVALID_CRON',
+        message: `Schedule ${schedule.name} must use a portable 5-field cron expression.`,
+        path: schedule.name,
+      })
+    }
+    try {
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: schedule.cron.timezone,
+      }).format()
+    } catch {
+      diagnostics.push({
+        code: 'LUTRE_SCHEDULE_INVALID_TIMEZONE',
+        message: `Schedule ${schedule.name} must use a valid IANA timezone.`,
+        path: schedule.name,
+      })
+    }
+  }
+}
+
+function isValidCronExpression(expression: string): boolean {
+  const fields = expression.trim().split(/\s+/)
+  if (fields.length !== 5) return false
+  const ranges = [
+    [0, 59],
+    [0, 23],
+    [1, 31],
+    [1, 12],
+    [0, 7],
+  ] as const
+  return fields.every((field, index) => {
+    const range = ranges[index]
+    return range !== undefined && isValidCronField(field, range[0], range[1])
+  })
+}
+
+function isValidCronField(
+  field: string,
+  minimum: number,
+  maximum: number,
+): boolean {
+  return field.split(',').every((segment) => {
+    const parts = segment.split('/')
+    if (parts.length > 2) return false
+    const rangeExpression = parts[0]
+    const stepExpression = parts[1]
+    if (!rangeExpression) return false
+    if (
+      stepExpression !== undefined &&
+      (!/^\d+$/.test(stepExpression) || Number(stepExpression) <= 0)
+    ) {
+      return false
+    }
+    if (rangeExpression === '*') return true
+    const bounds = rangeExpression.split('-')
+    if (bounds.length > 2 || bounds.some((bound) => !/^\d+$/.test(bound))) {
+      return false
+    }
+    const start = Number(bounds[0])
+    const end = bounds[1] === undefined ? start : Number(bounds[1])
+    return start >= minimum && end <= maximum && start <= end
+  })
+}
+
 export function validateGraph(graph: ApplicationGraphIR): readonly Diagnostic[] {
   return graph.diagnostics
 }
@@ -284,12 +456,14 @@ function buildDependencyGraph(
   modules: readonly ModuleInstance[],
   descriptors: readonly ImplementationDescriptor[],
   targets: readonly ImplementationTarget[],
+  entrypoints: readonly EntrypointDescriptor<any, any>[],
   diagnostics: Diagnostic[],
 ): Pick<ApplicationGraphIR, 'nodes' | 'edges'> {
   const nodes: DependencyNodeIR[] = []
   const edges: DependencyEdgeIR[] = []
   const ids = new Map<TokenLike, string>()
   const implementationIds = new Map<ImplementationDescriptor, string>()
+  const entrypointIds = new Map<EntrypointDescriptor<any, any>, string>()
   const modulesByProvider = new Map<TokenLike, string>()
   const providersByToken = new Map<TokenLike, ProviderDescriptor>()
   const customTokensById = new Map<string, TokenLike>()
@@ -362,6 +536,22 @@ function buildDependencyGraph(
       id,
       label: implementation.name,
       kind: 'implementation',
+      scope: 'application',
+    })
+    return id
+  }
+
+  const ensureEntrypointNode = (
+    entrypoint: EntrypointDescriptor<any, any>,
+  ): string => {
+    const current = entrypointIds.get(entrypoint)
+    if (current) return current
+    const id = `entrypoint:${entrypoint.name}`
+    entrypointIds.set(entrypoint, id)
+    nodes.push({
+      id,
+      label: entrypoint.name,
+      kind: 'entrypoint',
       scope: 'application',
     })
     return id
@@ -532,6 +722,24 @@ function buildDependencyGraph(
     }
   })
 
+  entrypoints.forEach((entrypoint) => {
+    const consumer: EntrypointConsumer = {
+      kind: 'entrypoint-consumer',
+      id: ensureEntrypointNode(entrypoint),
+      name: entrypoint.name,
+    }
+    try {
+      container.probeEntrypoint(entrypoint, consumer)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      diagnostics.push({
+        code: diagnosticCode(message),
+        message,
+        path: consumer.id,
+      })
+    }
+  })
+
   for (const target of targets) {
     visitPipelineItems(target.pipeline, (item, indexPath) => {
       if (item.kind !== 'layer') return
@@ -573,6 +781,8 @@ function diagnosticCode(message: string): string {
     'LUTRE_IMPL_004',
     'LUTRE_LAYER_ASYNC_FACTORY',
     'LUTRE_LAYER_FACTORY_RESULT',
+    'LUTRE_ENTRYPOINT_ASYNC_FACTORY',
+    'LUTRE_ENTRYPOINT_FACTORY_RESULT',
   ]) {
     if (message.includes(code)) return code
   }
@@ -911,7 +1121,9 @@ function ensureConsumerNode(
       kind:
         consumer.kind === 'implementation-consumer'
           ? 'implementation'
-          : 'layer',
+          : consumer.kind === 'entrypoint-consumer'
+            ? 'entrypoint'
+            : 'layer',
     })
   }
   return consumer.id

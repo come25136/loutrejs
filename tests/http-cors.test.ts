@@ -1,10 +1,11 @@
+import { createTestApplication } from './helpers/application.js'
 import {
   contract,
   defineModule,
   implementation,
   procedure,
 } from '@loutrejs/core'
-import { createHttpApplication, http, validate } from '@loutrejs/http'
+import { http, validate } from '@loutrejs/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 
@@ -12,7 +13,7 @@ describe('cors', () => {
   it('actual requestへ既定のwildcard originを付与する', async () => {
     const { application } = createFixture(validate.cors())
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/cors', {
         method: 'POST',
         headers: { origin: 'https://app.example' },
@@ -33,7 +34,7 @@ describe('cors', () => {
       }),
     )
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/cors', {
         method: 'POST',
         headers: { origin: 'https://app.example' },
@@ -55,7 +56,7 @@ describe('cors', () => {
   it('preflightをControllerへ流さず204で完結させる', async () => {
     const { application, executions } = createFixture(validate.cors())
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/cors', {
         method: 'OPTIONS',
         headers: {
@@ -87,7 +88,7 @@ describe('cors', () => {
       validate.cors({ origin: 'https://app.example' }),
     )
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/cors-validation', {
         method: 'POST',
         headers: {
@@ -114,7 +115,7 @@ describe('cors', () => {
       }),
     )
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/cors', {
         method: 'OPTIONS',
         headers: {
@@ -141,7 +142,7 @@ describe('cors', () => {
       validate.cors({ origin: 'https://allowed.example' }),
     )
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/cors', {
         method: 'POST',
         headers: { origin: 'https://denied.example' },
@@ -160,7 +161,7 @@ describe('cors', () => {
       }),
     )
 
-    const response = await application.handle(
+    const response = await application.fetch(
       new Request('http://fixture.test/cors', {
         method: 'POST',
         headers: { origin: 'https://app.example' },
@@ -216,7 +217,7 @@ function createFixture(corsLayer: ReturnType<typeof validate.cors>) {
   })
   const Module = defineModule(() => ({ implementations: [Implementation] }))
   return {
-    application: createHttpApplication({
+    application: createTestApplication({
       modules: [Module()],
       logger: silentLogger,
     }),
@@ -256,7 +257,7 @@ function createValidationFixture(corsLayer: ReturnType<typeof validate.cors>) {
     }),
   })
   const Module = defineModule(() => ({ implementations: [Implementation] }))
-  return createHttpApplication({
+  return createTestApplication({
     modules: [Module()],
     logger: silentLogger,
   })

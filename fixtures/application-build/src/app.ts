@@ -1,9 +1,9 @@
+import { defineApplication } from '@loutrejs/application'
 import { NamedRepository as Repo } from './named-repository.js'
 import DefaultRepo from './default-repository.js'
 import * as services from './namespace-services.js'
 import { ReexportedRepository } from './barrel.js'
 import {
-  createHttpApplication,
 } from '@loutrejs/http'
 import {
   defineEnv,
@@ -76,4 +76,4 @@ export const ConditionalModule = defineModule(() => ({
   ],
 }))
 
-export default createHttpApplication({ modules: [MainModule()] })
+export default defineApplication({ modules: [MainModule()] })

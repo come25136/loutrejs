@@ -192,7 +192,7 @@ describe('Implementation descriptorとfactory runtime', () => {
       implementations: [Implementation],
     }))
 
-    const { graph, diagnostics } = compileApplication([Module()])
+    const { graph, diagnostics } = compileApplication({ modules: [Module()] })
     expect(diagnostics).toEqual([])
     expect(probes).toBe(1)
     const implementationNode = graph.nodes.find(
@@ -226,7 +226,7 @@ describe('Implementation descriptorとfactory runtime', () => {
     })
     const Module = defineModule(() => ({ implementations: [Get, List] }))
 
-    const { graph, diagnostics } = compileApplication([Module()])
+    const { graph, diagnostics } = compileApplication({ modules: [Module()] })
     expect(diagnostics).toEqual([])
     const nodes = graph.nodes.filter(
       ({ kind, label }) => kind === 'implementation' && label === 'SameName',

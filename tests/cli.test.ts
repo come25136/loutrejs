@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { bootstrap } from '@loutrejs/application/host'
 
 describe('Loutre CLI', () => {
   function io() {
@@ -81,12 +82,26 @@ describe('Loutre CLI', () => {
     ], output.value)).toBe(0)
 
     const graph = JSON.parse(output.stdout.join('\n'))
-    expect(graph.version).toBe(2)
+    expect(graph.version).toBe(3)
     expect(graph.pipelines).toContainEqual(expect.objectContaining({
       contract: 'UsersContract',
       procedure: 'get',
       protocol: 'http',
     }))
+  })
+
+  it('execution rootをGraphから表示する', async () => {
+    const output = io()
+    expect(await runCli([
+      'graph',
+      'executions',
+      '--entry',
+      'fixtures/http-crud/src/app.ts',
+    ], output.value)).toBe(0)
+
+    expect(output.stdout.join('\n')).toContain(
+      'protocol: protocol:http:UsersContract.get',
+    )
   })
 
   it('GraphをMermaidで出力する', async () => {
@@ -166,8 +181,10 @@ describe('Loutre CLI', () => {
       const built = await import(
         `${pathToFileURL(applicationPath).href}?test=${Date.now()}`
       )
-      await expect(built.default.initialize()).resolves.toBeUndefined()
-      await built.default.shutdown('test')
+      expect(built.default.kind).toBe('application-definition')
+      const application = bootstrap(built.default)
+      await expect(application.init()).resolves.toBe(application)
+      await application.close()
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

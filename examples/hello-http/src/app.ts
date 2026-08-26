@@ -1,3 +1,4 @@
+import { defineApplication } from '@loutrejs/application'
 import {
   contract,
   defineModule,
@@ -7,7 +8,6 @@ import {
   procedure,
 } from '@loutrejs/core'
 import {
-  createHttpApplication,
   http,
   validate,
 } from '@loutrejs/http'
@@ -86,6 +86,6 @@ const GreetingModule = defineModule(() => ({
   implementations: [GreetingController],
 }))
 
-export default createHttpApplication({
+export default defineApplication({
   modules: [GreetingModule()],
 })
