@@ -10,6 +10,7 @@ import {
   http,
 } from '@loutrejs/http'
 import { z } from 'zod'
+import { silentLogger } from './helpers/silent-logger.js'
 
 describe('Domain ErrorとProtocol mapping', () => {
   it('Domain ErrorにHTTP statusを持たせず宣言variantへmappingする', async () => {
@@ -52,7 +53,10 @@ describe('Domain ErrorとProtocol mapping', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({ modules: [Module()] })
+    const application = createHttpApplication({
+      modules: [Module()],
+      logger: silentLogger,
+    })
     const response = await application.handle(
       new Request('https://fixture.test/missing'),
     )

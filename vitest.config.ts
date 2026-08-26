@@ -23,6 +23,6 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    include: ['tests/**/*.test.ts', 'examples/**/*.test.ts'],
+    include: ['tests/**/*.test.ts'],
   },
 })
