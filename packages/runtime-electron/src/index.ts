@@ -3,6 +3,7 @@ import {
   type MessagePortApplication,
   type MessagePortLike,
 } from '@loutrejs/message-port'
+import { initializeMessagePortApplication } from '@loutrejs/message-port/environment'
 
 export const electronRuntime = {
   runtime: 'electron-43',
@@ -24,10 +25,21 @@ export interface ElectronMessagePortMainLike {
   start(): void
 }
 
+export interface ElectronMessagePortOptions {
+  readonly environment?: unknown
+}
+
 export function attachElectronMessagePort(
   application: MessagePortApplication,
   port: MessagePortLike | ElectronMessagePortMainLike,
+  options: ElectronMessagePortOptions = {},
 ): void {
+  const initialization = initializeMessagePortApplication(
+    application,
+    'environment' in options ? options.environment : process.env,
+  )
+  void initialization.catch(() => undefined)
+
   if ('addEventListener' in port) {
     attachMessagePort(application, port)
     return

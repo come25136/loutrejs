@@ -66,6 +66,7 @@ const MainModule = defineModule(() => ({
 }))
 
 export const ConditionalModule = defineModule(() => ({
+  environment: [AppEnv],
   providers: [
     Repo,
     provide(CONDITIONAL).select(AppEnv.key('DRIVER'), {

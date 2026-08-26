@@ -1,11 +1,16 @@
+import type { EnvClass } from './env.js'
 import type { ImplementationDescriptor } from './implementation.js'
-import type { ProviderDeclaration } from './provider.js'
 import type { ModuleLifecycle } from './lifecycle.js'
+import {
+  environmentProvider,
+  type ProviderDeclaration,
+} from './provider.js'
 
 export interface ModuleDefinition {
   readonly name?: string
   readonly description?: string
   readonly imports?: readonly ModuleInstance[]
+  readonly environment?: readonly EnvClass[]
   readonly providers?: readonly ProviderDeclaration[]
   readonly implementations?: readonly ImplementationDescriptor[]
   readonly exports?: readonly unknown[]
@@ -36,12 +41,25 @@ export type ModuleTemplate<Args> = ([Args] extends [void]
 export function defineModule<Args = void>(
   factory: (args: Args) => ModuleDefinition,
 ): ModuleTemplate<Args> {
-  const instantiate = (args: Args): ModuleInstance => ({
-    kind: 'module-instance',
-    template: template as AnyModuleTemplate,
-    args,
-    definition: factory(args),
-  })
+  const instantiate = (args: Args): ModuleInstance => {
+    const declared = factory(args)
+    const environment = [...new Set(declared.environment ?? [])]
+    const providers = [
+      ...environment.map(environmentProvider),
+      ...(declared.providers ?? []),
+    ]
+
+    return {
+      kind: 'module-instance',
+      template: template as AnyModuleTemplate,
+      args,
+      definition: {
+        ...declared,
+        ...(environment.length === 0 ? {} : { environment }),
+        ...(providers.length === 0 ? {} : { providers }),
+      },
+    }
+  }
 
   const template = ((args: Args) => instantiate(args)) as ModuleTemplate<Args>
   Object.defineProperties(template, {

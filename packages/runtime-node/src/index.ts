@@ -1,7 +1,10 @@
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import { Readable } from 'node:stream'
-import type { HttpApplication } from '@loutrejs/http'
+import {
+  initializeHttpApplication,
+  type HttpApplication,
+} from '@loutrejs/http'
 
 export const nodeRuntime = {
   runtime: 'node-26',
@@ -23,12 +26,18 @@ export const nodeRuntime = {
 
 export interface NodeHttpServerOptions {
   readonly onListening?: (url: string) => void
+  readonly environment?: unknown
 }
 
 export function createNodeHttpServer(
   application: HttpApplication,
   options: NodeHttpServerOptions = {},
 ): Server {
+  const environment =
+    'environment' in options ? options.environment : process.env
+  const initialization = initializeHttpApplication(application, environment)
+  void initialization.catch(() => undefined)
+
   const server = createServer(async (incoming, outgoing) => {
     const abortController = new AbortController()
     const abort = () => {
@@ -41,6 +50,7 @@ export function createNodeHttpServer(
       if (!outgoing.writableEnded) abort()
     })
     try {
+      await initialization
       const origin = `http://${incoming.headers.host ?? 'localhost'}`
       const headers = new Headers()
       for (const [name, value] of Object.entries(incoming.headers)) {

@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { ApplicationGraphIR } from '@loutrejs/graph'
-import type { HttpApplication } from '@loutrejs/http'
+import {
+  initializeHttpApplication,
+  type HttpApplication,
+} from '@loutrejs/http'
 import { build as buildWithEsbuild } from 'esbuild'
 
 export interface LoadedApplication {
@@ -69,7 +72,10 @@ export async function importHttpApplication(
       'Application entryはdefaultまたはapplication named exportとしてHttpApplicationを公開する必要があります。',
     )
   }
-  return application as HttpApplication
+
+  const httpApplication = application as HttpApplication
+  await initializeHttpApplication(httpApplication, process.env)
+  return httpApplication
 }
 
 async function importApplication(output: string): Promise<FrameworkApplication> {

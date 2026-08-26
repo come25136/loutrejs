@@ -1,5 +1,5 @@
 import type { Class, TokenLike, TokenValue } from './token.js'
-import type { EnvKey } from './env.js'
+import type { EnvClass, EnvKey } from './env.js'
 
 export type Scope = 'application' | 'transient'
 
@@ -37,11 +37,18 @@ export interface ConditionalProvider<TToken extends TokenLike = TokenLike>
   readonly mapping: Readonly<Record<PropertyKey, Class<TokenValue<TToken>>>>
 }
 
+export interface EnvironmentProvider extends ProviderBase<EnvClass> {
+  readonly kind: 'environment'
+  readonly provide: EnvClass
+  readonly scope: 'application'
+}
+
 export type ProviderDescriptor =
   | ClassProvider
   | ValueProvider
   | FactoryProvider
   | ConditionalProvider
+  | EnvironmentProvider
 
 export type ProviderDeclaration = Class | ProviderDescriptor
 
@@ -100,6 +107,15 @@ export function provide<TToken extends TokenLike>(token: TToken) {
         scope: options.scope ?? 'application',
       }
     },
+  }
+}
+
+/** @internal Module.environmentからframework-managed providerを合成する。 */
+export function environmentProvider(environment: EnvClass): EnvironmentProvider {
+  return {
+    kind: 'environment',
+    provide: environment,
+    scope: 'application',
   }
 }
 

@@ -1,4 +1,7 @@
-import type { HttpApplication } from '@loutrejs/http'
+import {
+  initializeHttpApplication,
+  type HttpApplication,
+} from '@loutrejs/http'
 
 export const workerdRuntime = {
   runtime: 'workerd',
@@ -16,5 +19,13 @@ export const workerdRuntime = {
 } as const
 
 export function createWorkerdFetchHandler(application: HttpApplication) {
-  return (request: Request): Promise<Response> => application.handle(request)
+  let initialization: Promise<void> | undefined
+  return async (
+    request: Request,
+    environment?: unknown,
+  ): Promise<Response> => {
+    initialization ??= initializeHttpApplication(application, environment)
+    await initialization
+    return application.handle(request)
+  }
 }

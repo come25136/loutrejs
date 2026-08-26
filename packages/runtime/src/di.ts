@@ -1,12 +1,14 @@
 import {
   asModuleInstance,
   childPipelineOf,
+  isEnvClass,
   layerDefinitionOf,
   normalizeProvider,
   runInInjectionContext,
   tokenName,
   type Class,
   type DependencyConsumer,
+  type EnvClass,
   type ImplementationConsumer,
   type ImplementationDescriptor,
   type LayerConsumer,
@@ -27,6 +29,13 @@ export class DependencyResolutionError extends Error {
   }
 }
 
+class GraphProbeBoundary extends Error {
+  constructor(readonly source: string) {
+    super(`Graph Probe reached runtime-dependent value: ${source}`)
+    this.name = 'GraphProbeBoundary'
+  }
+}
+
 export interface RuntimeModuleGraph {
   readonly modules: readonly ModuleInstance[]
   readonly providers: readonly ProviderDescriptor[]
@@ -39,6 +48,8 @@ export interface DependencyRecorder {
 export interface ContainerOptions {
   readonly logger?: Logger
   readonly recorder?: DependencyRecorder
+  readonly environment?: ReadonlyMap<EnvClass, object>
+  readonly probe?: boolean
 }
 
 export function collectRuntimeModuleGraph(
@@ -46,6 +57,7 @@ export function collectRuntimeModuleGraph(
 ): RuntimeModuleGraph {
   const modules: ModuleInstance[] = []
   const providers: ProviderDescriptor[] = []
+  const environmentProviders = new Set<EnvClass>()
   const visited = new Set<ModuleInstance>()
 
   const visit = (moduleLike: ModuleInstance | ModuleTemplate<void>) => {
@@ -55,7 +67,14 @@ export function collectRuntimeModuleGraph(
 
     for (const imported of module.definition.imports ?? []) visit(imported)
     modules.push(module)
-    providers.push(...(module.definition.providers ?? []).map(normalizeProvider))
+    for (const declaration of module.definition.providers ?? []) {
+      const provider = normalizeProvider(declaration)
+      if (provider.kind === 'environment') {
+        if (environmentProviders.has(provider.provide)) continue
+        environmentProviders.add(provider.provide)
+      }
+      providers.push(provider)
+    }
   }
 
   for (const root of roots) visit(root)
@@ -70,9 +89,14 @@ export class Container {
     ImplementationDescriptor,
     ImplementationConsumer
   >()
-  readonly #layerCache = new Map<LayerDescriptor, LayerRuntime<object, readonly [], unknown>>()
+  readonly #layerCache = new Map<
+    LayerDescriptor,
+    LayerRuntime<object, readonly [], unknown>
+  >()
   readonly #logger: Logger
   readonly #recorder: DependencyRecorder | undefined
+  readonly #environment = new Map<EnvClass, object>()
+  readonly #probe: boolean
 
   constructor(
     providers: readonly ProviderDescriptor[],
@@ -80,8 +104,25 @@ export class Container {
   ) {
     this.#logger = options instanceof Logger ? options : options.logger ?? new Logger()
     this.#recorder = options instanceof Logger ? undefined : options.recorder
+    this.#probe = options instanceof Logger ? false : options.probe ?? false
+
+    if (!(options instanceof Logger)) {
+      for (const [environment, value] of options.environment ?? []) {
+        this.#environment.set(environment, value)
+      }
+    }
+
     for (const provider of providers) {
-      if (this.#providers.has(provider.provide)) {
+      const existing = this.#providers.get(provider.provide)
+      if (existing) {
+        if (existing.kind === 'environment' && provider.kind === 'environment') {
+          continue
+        }
+        if (existing.kind === 'environment' || provider.kind === 'environment') {
+          throw new DependencyResolutionError(
+            `LUTRE_ENV_001: Environment ${tokenName(provider.provide)} is runtime-managed and cannot also be declared as a normal provider.`,
+          )
+        }
         throw new DependencyResolutionError(
           `LUTRE_DI_DUPLICATE: Duplicate provider for ${tokenName(provider.provide)}`,
         )
@@ -90,13 +131,35 @@ export class Container {
     }
   }
 
+  bindEnvironment(environment: EnvClass, value: object): void {
+    const provider = this.#providers.get(environment)
+    if (!provider || provider.kind !== 'environment') {
+      throw new DependencyResolutionError(
+        `LUTRE_ENV_002: ${environment.name} is not declared by any Module.environment.`,
+      )
+    }
+    if (this.#applicationCache.has(environment)) {
+      throw new DependencyResolutionError(
+        `LUTRE_ENV_006: Environment ${environment.name} was already resolved and cannot be rebound.`,
+      )
+    }
+    this.#environment.set(environment, value)
+  }
+
   resolve<T>(token: TokenLike<T>): T {
     return this.#resolve(token)
   }
 
   /** @internal Graph Probe がProvider classをconstructionする。 */
   probeClass<T>(target: Class<T>): T {
-    return this.#instantiate(target, [target])
+    try {
+      return this.#instantiate(target, [target])
+    } catch (error) {
+      if (isGraphProbeBoundary(error)) {
+        return createOpaqueProbeValue(target.name) as T
+      }
+      throw error
+    }
   }
 
   /** @internal Application construction時にImplementation factoryを1回だけ構築する。 */
@@ -132,7 +195,14 @@ export class Container {
     implementation: ImplementationDescriptor,
     consumer: ImplementationConsumer,
   ): object {
-    return this.#constructImplementation(implementation, consumer, false)
+    try {
+      return this.#constructImplementation(implementation, consumer, false)
+    } catch (error) {
+      if (isGraphProbeBoundary(error)) {
+        return createOpaqueProbeValue(implementation.name)
+      }
+      throw error
+    }
   }
 
   /** @internal Application construction時にLayer factoryを1回だけ構築する。 */
@@ -140,11 +210,15 @@ export class Container {
     for (const item of pipeline) {
       if (item.kind !== 'layer') continue
       const definition = layerDefinitionOf(item)
-      this.#constructLayer(definition, {
-        kind: 'layer-consumer',
-        id: `runtime-layer:${definition.name}`,
-        name: definition.name,
-      }, true)
+      this.#constructLayer(
+        definition,
+        {
+          kind: 'layer-consumer',
+          id: `runtime-layer:${definition.name}`,
+          name: definition.name,
+        },
+        true,
+      )
       const child = childPipelineOf(item)
       if (child) this.preparePipeline(child)
     }
@@ -163,7 +237,12 @@ export class Container {
 
   /** @internal Graph Probe用にLayer factoryを同期constructionする。 */
   probeLayer(layer: LayerDescriptor, consumer: LayerConsumer): void {
-    this.#constructLayer(layer, consumer, false)
+    try {
+      this.#constructLayer(layer, consumer, false)
+    } catch (error) {
+      if (isGraphProbeBoundary(error)) return
+      throw error
+    }
   }
 
   #resolve<T>(
@@ -176,16 +255,22 @@ export class Container {
       const cycle = [...lineage.slice(cycleStart), token]
         .map(tokenName)
         .join(' -> ')
-      throw new DependencyResolutionError(`LUTRE_DI_CYCLE: 循環依存を検出しました: ${cycle}`)
+      throw new DependencyResolutionError(
+        `LUTRE_DI_CYCLE: 循環依存を検出しました: ${cycle}`,
+      )
     }
+
     const provider = this.#providers.get(token)
     if (!provider) {
-      if (
-        (token as TokenLike) === (Logger as unknown as TokenLike)
-      ) {
+      if ((token as TokenLike) === (Logger as unknown as TokenLike)) {
         return this.#logger.child({
           ...(source === undefined ? {} : { source }),
         }) as T
+      }
+      if (isEnvClass(token)) {
+        throw new DependencyResolutionError(
+          `LUTRE_ENV_002: ${token.name} is injected by ${source ?? 'Application'} but is not declared by any Module.environment.`,
+        )
       }
       throw new DependencyResolutionError(
         `LUTRE_DI_UNRESOLVED: ${source ?? 'Application'} requires ${tokenName(token)}, but no provider is declared for ${tokenName(token)}.`,
@@ -211,44 +296,58 @@ export class Container {
   ): unknown {
     try {
       switch (provider.kind) {
-      case 'value':
-        return provider.useValue
-      case 'class':
-        return this.#instantiate(provider.useClass, lineage)
-      case 'factory': {
-        const dependencies = provider.inject.map((token) =>
-          this.#resolve(token, tokenName(provider.provide), lineage),
-        )
-        const value = provider.useFactory(...dependencies)
-        if (isThenable(value)) {
+        case 'value':
+          return provider.useValue
+
+        case 'environment': {
+          if (this.#environment.has(provider.provide)) {
+            return this.#environment.get(provider.provide)
+          }
+          if (this.#probe) return createProbeEnvironment(provider.provide)
           throw new DependencyResolutionError(
-            'LUTRE_DI_ASYNC_FACTORY: Async factory providers are not supported. Move asynchronous resource initialization to application lifecycle.',
+            `LUTRE_ENV_005: Environment ${provider.provide.name} requires a runtime Environment source before Application initialization.`,
           )
         }
-        return value
-      }
-      case 'conditional': {
-        const env = this.#resolve(
-          provider.select.env,
-          tokenName(provider.provide),
-          lineage,
-        ) as Record<
-          string,
-          unknown
-        >
-        const selected = env[provider.select.key]
-        const implementation = provider.mapping[selected as PropertyKey]
-        if (!implementation) {
-          throw new DependencyResolutionError(
-            `${provider.select.key}=${String(selected)}に対応するconditional Providerがありません`,
+
+        case 'class':
+          return this.#instantiate(provider.useClass, lineage)
+
+        case 'factory': {
+          const dependencies = provider.inject.map((token) =>
+            this.#resolve(token, tokenName(provider.provide), lineage),
           )
+          const value = provider.useFactory(...dependencies)
+          if (isThenable(value)) {
+            throw new DependencyResolutionError(
+              'LUTRE_DI_ASYNC_FACTORY: Async factory providers are not supported. Move asynchronous resource initialization to application lifecycle.',
+            )
+          }
+          return value
         }
-        return this.#instantiate(implementation, lineage)
-      }
+
+        case 'conditional': {
+          if (this.#probe) return Object.create(null)
+          const env = this.#resolve(
+            provider.select.env,
+            tokenName(provider.provide),
+            lineage,
+          ) as Record<string, unknown>
+          const selected = env[provider.select.key]
+          const implementation = provider.mapping[selected as PropertyKey]
+          if (!implementation) {
+            throw new DependencyResolutionError(
+              `${provider.select.key}=${String(selected)}に対応するconditional Providerがありません`,
+            )
+          }
+          return this.#instantiate(implementation, lineage)
+        }
       }
     } catch (error) {
       if (provider.scope === 'application') {
         this.#applicationCache.delete(provider.provide)
+      }
+      if (this.#probe && isGraphProbeBoundary(error)) {
+        return createOpaqueProbeValue(tokenName(provider.provide))
       }
       throw error
     }
@@ -292,8 +391,10 @@ export class Container {
         ...(this.#recorder === undefined
           ? {}
           : {
-              record: (recordedConsumer: DependencyConsumer, dependency: TokenLike) =>
-                this.#recorder!.record(recordedConsumer, dependency),
+              record: (
+                recordedConsumer: DependencyConsumer,
+                dependency: TokenLike,
+              ) => this.#recorder!.record(recordedConsumer, dependency),
             }),
       },
       () => layer.factory(),
@@ -362,8 +463,53 @@ export class Container {
   }
 }
 
+function createProbeEnvironment(environment: EnvClass): object {
+  return createOpaqueProbeValue(environment.name)
+}
+
+function createOpaqueProbeValue(source: string): object {
+  const boundary = (operation: PropertyKey) =>
+    new GraphProbeBoundary(`${source}.${String(operation)}`)
+
+  return new Proxy(Object.create(null) as object, {
+    get(_target, key) {
+      throw boundary(key)
+    },
+    set(_target, key) {
+      throw boundary(key)
+    },
+    has(_target, key) {
+      throw boundary(key)
+    },
+    ownKeys() {
+      throw boundary('*')
+    },
+    getOwnPropertyDescriptor(_target, key) {
+      throw boundary(key)
+    },
+    defineProperty(_target, key) {
+      throw boundary(key)
+    },
+    deleteProperty(_target, key) {
+      throw boundary(key)
+    },
+    getPrototypeOf() {
+      throw boundary('[[Prototype]]')
+    },
+    setPrototypeOf() {
+      throw boundary('[[Prototype]]')
+    },
+  })
+}
+
+function isGraphProbeBoundary(error: unknown): error is GraphProbeBoundary {
+  return error instanceof GraphProbeBoundary
+}
+
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return (
-    (typeof value === 'object' && value !== null) || typeof value === 'function'
-  ) && typeof (value as { readonly then?: unknown }).then === 'function'
+    ((typeof value === 'object' && value !== null) ||
+      typeof value === 'function') &&
+    typeof (value as { readonly then?: unknown }).then === 'function'
+  )
 }

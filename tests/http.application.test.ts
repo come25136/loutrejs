@@ -100,8 +100,8 @@ describe('HTTP application boundary', () => {
       implementations: [Implementation],
     }))
     const application = createHttpApplication({ modules: [Module()] })
-    const constructionCalls = controllerInstances
-    expect(constructionCalls).toBe(2)
+    const probeConstructionCalls = controllerInstances
+    expect(probeConstructionCalls).toBe(1)
 
     const response = await application.handle(
       new Request('http://fixture.test/things/t1?page=2', {
@@ -114,6 +114,8 @@ describe('HTTP application boundary', () => {
       }),
     )
 
+    expect(controllerInstances).toBe(probeConstructionCalls + 1)
+    const runtimeConstructionCalls = controllerInstances
     expect(response.status).toBe(200)
     expect(response.headers.get('x-declared')).toBe('static')
     expect(response.headers.get('x-dynamic')).toBe('request')
@@ -145,7 +147,7 @@ describe('HTTP application boundary', () => {
       name: 'Second',
       executionId: 'exec-2',
     })
-    expect(controllerInstances).toBe(constructionCalls)
+    expect(controllerInstances).toBe(runtimeConstructionCalls)
 
     const invalid = await application.handle(
       new Request('http://fixture.test/things/x?page=2', {
