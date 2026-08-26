@@ -2,7 +2,6 @@ import {
   defineEnv,
   defineModule,
   hook,
-  loadEnv,
   provide,
   token,
   type EnvKey,
@@ -108,11 +107,11 @@ export async function createDatabaseFixture(
   storageDriver: 'memory' | 's3' = 'memory',
 ) {
   const events: string[] = []
-  const env = await loadEnv(AppEnv, {
+  const environmentSource = {
     STORAGE_DRIVER: storageDriver,
     PRIMARY_DATABASE_URL: 'primary://fixture',
     ANALYTICS_DATABASE_URL: 'analytics://fixture',
-  })
+  }
   const AppModule = defineModule(() => ({
     description: 'Database fixture application',
     imports: [
@@ -127,8 +126,8 @@ export async function createDatabaseFixture(
         url: AppEnv.key('ANALYTICS_DATABASE_URL'),
       }),
     ],
+    environment: [AppEnv],
     providers: [
-      provide(AppEnv).useValue(env),
       provide(LIFECYCLE_EVENTS).useValue(events),
       provide(STORAGE).select(AppEnv.key('STORAGE_DRIVER'), {
         memory: MemoryStorage,
@@ -136,6 +135,10 @@ export async function createDatabaseFixture(
       }),
     ],
   }))
-  const runtime = createApplicationRuntime([AppModule()])
+  const runtime = createApplicationRuntime([AppModule()], {
+    environmentSource,
+  })
+  await runtime.initialize()
+  const env = runtime.container.resolve(AppEnv)
   return { runtime, events, env }
 }

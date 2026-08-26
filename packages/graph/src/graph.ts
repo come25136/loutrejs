@@ -2,6 +2,7 @@ import {
   asModuleInstance,
   childPipelineOf,
   contextKeyName,
+  isEnvClass,
   layerDefinitionOf,
   normalizeProvider,
   tokenName,
@@ -165,9 +166,13 @@ export function compileApplication(
         const importedIndex = modules.indexOf(imported)
         return `module:${importedIndex + 1}`
       }),
-      providers: (module.definition.providers ?? []).map((provider) =>
-        tokenName(normalizeProvider(provider).provide),
+      environment: (module.definition.environment ?? []).map(
+        (environment) => environment.name,
       ),
+      providers: (module.definition.providers ?? [])
+        .map(normalizeProvider)
+        .filter((provider) => provider.kind !== 'environment')
+        .map((provider) => tokenName(provider.provide)),
       exports: (module.definition.exports ?? []).map((value) =>
         typeof value === 'function'
           ? value.name
@@ -182,7 +187,7 @@ export function compileApplication(
       lifecycle: Object.keys(module.definition.lifecycle ?? {}),
       requires: module.definition.requires ?? [],
     })),
-    providers: providers.map((provider) => ({
+    providers: dedupeProviders(providers).map((provider) => ({
       token: tokenName(provider.provide),
       kind: provider.kind,
       scope: provider.scope,
@@ -223,12 +228,15 @@ export function compileApplication(
             : []),
         ]
       }),
-      ...modules.flatMap((module, index) =>
-        (module.definition.requires ?? []).map((name) => ({
+      ...modules.flatMap((module, index) => [
+        ...(module.definition.environment?.length
+          ? [{ name: 'env.runtime', requiredBy: `module:${index + 1}` }]
+          : []),
+        ...(module.definition.requires ?? []).map((name) => ({
           name,
           requiredBy: `module:${index + 1}`,
         })),
-      ),
+      ]),
     ],
     ...dependencyGraph,
     diagnostics,
@@ -290,7 +298,9 @@ function buildDependencyGraph(
     const moduleId = `module:${index + 1}`
     for (const declaration of module.definition.providers ?? []) {
       const provider = normalizeProvider(declaration)
-      modulesByProvider.set(provider.provide, moduleId)
+      if (!modulesByProvider.has(provider.provide)) {
+        modulesByProvider.set(provider.provide, moduleId)
+      }
       if (!providersByToken.has(provider.provide)) {
         providersByToken.set(provider.provide, provider)
       }
@@ -330,7 +340,11 @@ function buildDependencyGraph(
       label: tokenName(token),
       kind:
         overrides.kind ??
-        (typeof token === 'function' ? 'class' : 'token'),
+        (provider?.kind === 'environment'
+          ? 'environment'
+          : typeof token === 'function'
+            ? 'class'
+            : 'token'),
       ...(scope === undefined ? {} : { scope }),
       ...(module === undefined ? {} : { module }),
     })
@@ -374,6 +388,14 @@ function buildDependencyGraph(
       providersByToken.has(dependency) ||
       dependency === (Logger as unknown as TokenLike)
     ) return
+    if (isEnvClass(dependency)) {
+      diagnostics.push({
+        code: 'LUTRE_ENV_002',
+        message: `${dependency.name} is injected but is not declared by any Module.environment.`,
+        path,
+      })
+      return
+    }
     diagnostics.push({
       code: 'LUTRE_DI_UNRESOLVED',
       message: `${path} requires ${tokenName(dependency)}, but no provider is declared for ${tokenName(dependency)}.`,
@@ -464,7 +486,10 @@ function buildDependencyGraph(
       })
     },
   }
-  const container = new Container([...providersByToken.values()], { recorder })
+  const container = new Container([...providersByToken.values()], {
+    recorder,
+    probe: true,
+  })
   const managedClasses = new Set<import('@loutrejs/core').Class>()
   for (const provider of providersByToken.values()) {
     if (provider.kind === 'class') managedClasses.add(provider.useClass)
@@ -481,10 +506,7 @@ function buildDependencyGraph(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       diagnostics.push({
-        code: message.includes('LUTRE_DI_CYCLE') ? 'LUTRE_DI_CYCLE' :
-          message.includes('LUTRE_DI_ASYNC_FACTORY') ? 'LUTRE_DI_ASYNC_FACTORY' :
-          message.includes('LUTRE_DI_CONSTRUCTOR') ? 'LUTRE_DI_CONSTRUCTOR' :
-          'LUTRE_DI_UNRESOLVED',
+        code: diagnosticCode(message),
         message,
         path: target.name,
       })
@@ -503,15 +525,7 @@ function buildDependencyGraph(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       diagnostics.push({
-        code: message.includes('LUTRE_IMPL_ASYNC_FACTORY')
-          ? 'LUTRE_IMPL_ASYNC_FACTORY'
-          : message.includes('LUTRE_IMPL_FACTORY_RESULT')
-            ? 'LUTRE_IMPL_FACTORY_RESULT'
-            : message.includes('LUTRE_IMPL_004')
-              ? 'LUTRE_IMPL_004'
-              : message.includes('LUTRE_DI_CYCLE')
-                ? 'LUTRE_DI_CYCLE'
-                : 'LUTRE_DI_UNRESOLVED',
+        code: diagnosticCode(message),
         message,
         path: `implementation:${index + 1}:${implementation.name}`,
       })
@@ -535,10 +549,7 @@ function buildDependencyGraph(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         diagnostics.push({
-          code: message.includes('LUTRE_DI_CYCLE') ? 'LUTRE_DI_CYCLE' :
-            message.includes('LUTRE_LAYER_ASYNC_FACTORY') ? 'LUTRE_LAYER_ASYNC_FACTORY' :
-            message.includes('LUTRE_LAYER_FACTORY_RESULT') ? 'LUTRE_LAYER_FACTORY_RESULT' :
-            'LUTRE_DI_UNRESOLVED',
+          code: diagnosticCode(message),
           message,
           path: consumer.id,
         })
@@ -549,13 +560,32 @@ function buildDependencyGraph(
   return { nodes, edges }
 }
 
+function diagnosticCode(message: string): string {
+  for (const code of [
+    'LUTRE_ENV_001',
+    'LUTRE_ENV_002',
+    'LUTRE_ENV_004',
+    'LUTRE_DI_CYCLE',
+    'LUTRE_DI_ASYNC_FACTORY',
+    'LUTRE_DI_CONSTRUCTOR',
+    'LUTRE_IMPL_ASYNC_FACTORY',
+    'LUTRE_IMPL_FACTORY_RESULT',
+    'LUTRE_IMPL_004',
+    'LUTRE_LAYER_ASYNC_FACTORY',
+    'LUTRE_LAYER_FACTORY_RESULT',
+  ]) {
+    if (message.includes(code)) return code
+  }
+  return 'LUTRE_DI_UNRESOLVED'
+}
+
 function validateDuplicateProviders(
   modules: readonly ModuleInstance[],
   diagnostics: Diagnostic[],
 ): void {
   const declarations = new Map<
     TokenLike,
-    { readonly module: string }
+    { readonly module: string; readonly provider: ProviderDescriptor }
   >()
 
   modules.forEach((module, moduleIndex) => {
@@ -564,6 +594,23 @@ function validateDuplicateProviders(
       const provider = normalizeProvider(declaration)
       const existing = declarations.get(provider.provide)
       if (existing) {
+        if (
+          existing.provider.kind === 'environment' &&
+          provider.kind === 'environment'
+        ) {
+          continue
+        }
+        if (
+          existing.provider.kind === 'environment' ||
+          provider.kind === 'environment'
+        ) {
+          diagnostics.push({
+            code: 'LUTRE_ENV_001',
+            message: `Environment ${tokenName(provider.provide)} is runtime-managed and cannot also be declared as a normal provider.`,
+            path: `${moduleName}.environment.${tokenName(provider.provide)}`,
+          })
+          continue
+        }
         diagnostics.push({
           code: 'LUTRE_DI_003',
           message: `Provider ${tokenName(provider.provide)}が${existing.module}と${moduleName}で重複しています`,
@@ -571,7 +618,7 @@ function validateDuplicateProviders(
         })
         continue
       }
-      declarations.set(provider.provide, { module: moduleName })
+      declarations.set(provider.provide, { module: moduleName, provider })
     }
   })
 }
@@ -803,7 +850,6 @@ function validatePipeline(
       }
     }
   }
-
 }
 
 function toLayerIR(item: PipelineItem, index: number): LayerIR {
@@ -869,4 +915,19 @@ function ensureConsumerNode(
     })
   }
   return consumer.id
+}
+
+function dedupeProviders(
+  providers: readonly ProviderDescriptor[],
+): readonly ProviderDescriptor[] {
+  const result: ProviderDescriptor[] = []
+  const seenEnvironment = new Set<TokenLike>()
+  for (const provider of providers) {
+    if (provider.kind === 'environment') {
+      if (seenEnvironment.has(provider.provide)) continue
+      seenEnvironment.add(provider.provide)
+    }
+    result.push(provider)
+  }
+  return result
 }

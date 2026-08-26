@@ -1,13 +1,12 @@
 import {
   contextKey,
   contract,
+  defineEnv,
   defineModule,
   implementation,
   inject,
   layer,
   procedure,
-  provide,
-  token,
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@loutrejs/core'
@@ -19,14 +18,29 @@ import {
 import { Pool, type PoolClient } from 'pg'
 import { z } from 'zod'
 
-const DATABASE_URL = token<string>('database.url')
+const AppEnvSchema = z
+  .object({
+    DATABASE_URL: z
+      .string()
+      .default('postgres://loutre:loutre@127.0.0.1:54321/loutre'),
+  })
+  .transform((env) => ({
+    databaseUrl: new URL(env.DATABASE_URL),
+  }))
+
+class AppEnv extends defineEnv(AppEnvSchema) {}
+
 const TRANSACTION = contextKey('transaction').of<PoolClient>()
 
 class PostgresDatabase implements OnModuleInit, OnModuleDestroy {
   readonly pool: Pool
 
-  constructor(url = inject(DATABASE_URL)) {
-    this.pool = new Pool({ connectionString: url })
+  constructor(
+    readonly env = inject(AppEnv),
+  ) {
+    this.pool = new Pool({
+      connectionString: env.databaseUrl.href,
+    })
   }
 
   async onModuleInit(): Promise<void> {
@@ -130,11 +144,8 @@ const UsersController = implementation({
 
 const AppModule = defineModule(() => ({
   name: 'DatabasePostgresExample',
+  environment: [AppEnv],
   providers: [
-    provide(DATABASE_URL).useValue(
-      process.env.DATABASE_URL ??
-        'postgres://loutre:loutre@127.0.0.1:54321/loutre',
-    ),
     PostgresDatabase,
     UserRepository,
   ],

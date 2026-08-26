@@ -1,13 +1,12 @@
 import {
   contextKey,
   contract,
+  defineEnv,
   defineModule,
   implementation,
   inject,
   layer,
   procedure,
-  provide,
-  token,
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@loutrejs/core'
@@ -22,15 +21,32 @@ import { Prisma, PrismaClient } from './generated/prisma/client.js'
 
 type PrismaTransactionOptions = Parameters<PrismaClient['$transaction']>[1]
 
-const DATABASE_URL = token<string>('database.url')
+const AppEnvSchema = z
+  .object({
+    PRISMA_DATABASE_URL: z
+      .string()
+      .default(
+        'postgres://loutre:loutre@127.0.0.1:54323/loutre_prisma',
+      ),
+  })
+  .transform((env) => ({
+    databaseUrl: new URL(env.PRISMA_DATABASE_URL),
+  }))
+
+class AppEnv extends defineEnv(AppEnvSchema) {}
+
 const TRANSACTION = contextKey('transaction').of<Prisma.TransactionClient>()
 
 class PrismaDatabase implements OnModuleInit, OnModuleDestroy {
   readonly client: PrismaClient
 
-  constructor(url = inject(DATABASE_URL)) {
+  constructor(
+    readonly env = inject(AppEnv),
+  ) {
     this.client = new PrismaClient({
-      adapter: new PrismaPg({ connectionString: url }),
+      adapter: new PrismaPg({
+        connectionString: env.databaseUrl.href,
+      }),
     })
   }
 
@@ -122,11 +138,8 @@ const UsersController = implementation({
 
 const AppModule = defineModule(() => ({
   name: 'DatabasePrismaPostgresExample',
+  environment: [AppEnv],
   providers: [
-    provide(DATABASE_URL).useValue(
-      process.env.PRISMA_DATABASE_URL ??
-        'postgres://loutre:loutre@127.0.0.1:54323/loutre_prisma',
-    ),
     PrismaDatabase,
     UserRepository,
   ],

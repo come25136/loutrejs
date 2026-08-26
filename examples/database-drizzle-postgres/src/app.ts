@@ -1,13 +1,12 @@
 import {
   contextKey,
   contract,
+  defineEnv,
   defineModule,
   implementation,
   inject,
   layer,
   procedure,
-  provide,
-  token,
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@loutrejs/core'
@@ -30,15 +29,32 @@ type DrizzleTransactionOptions = Parameters<
   DrizzleDatabaseClient['transaction']
 >[1]
 
-const DATABASE_URL = token<string>('database.url')
+const AppEnvSchema = z
+  .object({
+    DRIZZLE_DATABASE_URL: z
+      .string()
+      .default(
+        'postgres://loutre:loutre@127.0.0.1:54322/loutre_drizzle',
+      ),
+  })
+  .transform((env) => ({
+    databaseUrl: new URL(env.DRIZZLE_DATABASE_URL),
+  }))
+
+class AppEnv extends defineEnv(AppEnvSchema) {}
+
 const TRANSACTION = contextKey('transaction').of<DrizzleTransaction>()
 
 class DrizzleDatabase implements OnModuleInit, OnModuleDestroy {
   readonly pool: Pool
   readonly client: DrizzleDatabaseClient
 
-  constructor(url = inject(DATABASE_URL)) {
-    this.pool = new Pool({ connectionString: url })
+  constructor(
+    readonly env = inject(AppEnv),
+  ) {
+    this.pool = new Pool({
+      connectionString: env.databaseUrl.href,
+    })
     this.client = drizzle({ client: this.pool, schema })
   }
 
@@ -133,11 +149,8 @@ const UsersController = implementation({
 
 const AppModule = defineModule(() => ({
   name: 'DatabaseDrizzlePostgresExample',
+  environment: [AppEnv],
   providers: [
-    provide(DATABASE_URL).useValue(
-      process.env.DRIZZLE_DATABASE_URL ??
-        'postgres://loutre:loutre@127.0.0.1:54322/loutre_drizzle',
-    ),
     DrizzleDatabase,
     UserRepository,
   ],

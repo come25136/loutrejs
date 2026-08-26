@@ -9,6 +9,9 @@ export default defineConfig({
       '@loutrejs/cli': resolve('packages/cli/src/index.ts'),
       '@loutrejs/runtime': resolve('packages/runtime/src/index.ts'),
       '@loutrejs/http': resolve('packages/http/src/index.ts'),
+      '@loutrejs/message-port/environment': resolve(
+        'packages/message-port/src/environment.ts',
+      ),
       '@loutrejs/message-port': resolve('packages/message-port/src/index.ts'),
       '@loutrejs/runtime-node': resolve('packages/runtime-node/src/index.ts'),
       '@loutrejs/runtime-deno': resolve('packages/runtime-deno/src/index.ts'),

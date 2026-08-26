@@ -18,8 +18,8 @@ class BrokenStorage {
 }
 
 const Module = defineModule(() => ({
+  environment: [AppEnv],
   providers: [
-    provide(AppEnv).useValue(new AppEnv({ DRIVER: 'memory' })),
     provide(STORAGE).select(AppEnv.key('DRIVER'), {
       memory: MemoryStorage,
       broken: BrokenStorage,

@@ -1,4 +1,7 @@
-import type { HttpApplication } from '@loutrejs/http'
+import {
+  initializeHttpApplication,
+  type HttpApplication,
+} from '@loutrejs/http'
 
 export const lambdaRuntime = {
   runtime: 'aws-lambda-nodejs24.x',
@@ -31,8 +34,21 @@ export interface LambdaHttpResult {
   readonly isBase64Encoded: boolean
 }
 
-export function createLambdaHandler(application: HttpApplication) {
+export interface LambdaHandlerOptions {
+  readonly environment?: unknown
+}
+
+export function createLambdaHandler(
+  application: HttpApplication,
+  options: LambdaHandlerOptions = {},
+) {
+  let initialization: Promise<void> | undefined
   return async (event: LambdaHttpEvent): Promise<LambdaHttpResult> => {
+    initialization ??= initializeHttpApplication(
+      application,
+      'environment' in options ? options.environment : process.env,
+    )
+    await initialization
     const response = await application.handle(toRequest(event))
     const metadata = responseMetadata(response)
     return {
@@ -55,11 +71,20 @@ export interface LambdaResponseStream {
   }): void
 }
 
-export function createLambdaStreamingHandler(application: HttpApplication) {
+export function createLambdaStreamingHandler(
+  application: HttpApplication,
+  options: LambdaHandlerOptions = {},
+) {
+  let initialization: Promise<void> | undefined
   return async (
     event: LambdaHttpEvent,
     output: LambdaResponseStream,
   ): Promise<void> => {
+    initialization ??= initializeHttpApplication(
+      application,
+      'environment' in options ? options.environment : process.env,
+    )
+    await initialization
     const response = await application.handle(toRequest(event))
     const metadata = responseMetadata(response)
     output.setMetadata?.({

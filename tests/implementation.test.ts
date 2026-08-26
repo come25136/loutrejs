@@ -71,7 +71,7 @@ describe('Implementation descriptorとfactory runtime', () => {
     expect(Object.isFrozen(Implementation.procedures)).toBe(true)
   })
 
-  it('ApplicationRuntimeごとにfactory resultを1回だけ構築してcacheする', async () => {
+  it('Environment binding後のinitializeでfactory resultを1回だけ構築してcacheする', async () => {
     const Contract = createContract()
     let constructions = 0
     let lifecycleCalls = 0
@@ -103,14 +103,16 @@ describe('Implementation descriptorとfactory runtime', () => {
     }))
 
     const runtime = new ApplicationRuntime([Module()])
+    expect(constructions).toBe(0)
+
+    await runtime.initialize()
     expect(constructions).toBe(1)
+
     const first = runtime.container.implementationRuntime(Implementation)
     runtime.container.prepareImplementation(Implementation)
     const second = runtime.container.implementationRuntime(Implementation)
     expect(first).toBe(second)
     expect(constructions).toBe(1)
-
-    await runtime.initialize()
     expect(lifecycleCalls).toBe(0)
   })
 
@@ -127,7 +129,7 @@ describe('Implementation descriptorとfactory runtime', () => {
       code: 'LUTRE_IMPL_004',
       factory: () => ({ get() {} }),
     },
-  ])('$codeをruntime constructionで拒否する', ({ code, factory }) => {
+  ])('$codeをruntime initializeで拒否する', async ({ code, factory }) => {
     const Contract = createContract()
     const Invalid = implementation({
       name: 'InvalidImplementation',
@@ -136,8 +138,9 @@ describe('Implementation descriptorとfactory runtime', () => {
       factory,
     } as never)
     const Module = defineModule(() => ({ implementations: [Invalid] }))
+    const runtime = new ApplicationRuntime([Module()])
 
-    expect(() => new ApplicationRuntime([Module()])).toThrow(code)
+    await expect(runtime.initialize()).rejects.toThrow(code)
   })
 
   it('不正または重複したpartial procedureをdefinition時に拒否する', () => {

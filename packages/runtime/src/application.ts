@@ -1,5 +1,7 @@
 import {
+  loadEnv,
   normalizeProvider,
+  type EnvClass,
   type LifecycleHook,
   type ModuleInstance,
   type ModuleTemplate,
@@ -16,38 +18,89 @@ import { Logger } from './logger.js'
 
 export interface ApplicationRuntimeOptions {
   readonly logger?: Logger
+  readonly environmentSource?: unknown
+}
+
+export interface InitializableApplication {
+  initialize(): Promise<void>
+}
+
+const NO_ENVIRONMENT_SOURCE = Symbol('loutre.no-environment-source')
+let currentEnvironmentSource: unknown = NO_ENVIRONMENT_SOURCE
+
+export function initializeWithEnvironment(
+  application: InitializableApplication,
+  environmentSource: unknown,
+): Promise<void> {
+  const previous = currentEnvironmentSource
+  currentEnvironmentSource = environmentSource
+  try {
+    return application.initialize()
+  } finally {
+    currentEnvironmentSource = previous
+  }
+}
+
+export class EnvironmentBindingError extends Error {
+  readonly code = 'LUTRE_ENV_003'
+
+  constructor(environment: EnvClass, cause: unknown) {
+    super(`Environment validation failed for ${environment.name}.`, { cause })
+    this.name = 'EnvironmentBindingError'
+  }
 }
 
 export class ApplicationRuntime {
   readonly graph: RuntimeModuleGraph
   readonly container: Container
   readonly #instancesByModule = new Map<ModuleInstance, unknown[]>()
+  readonly #logger: Logger
+  readonly #environmentSource: unknown
   #initialized = false
+  #initializing: Promise<void> | undefined
+  #prepared = false
   #stopped = false
 
   constructor(
     roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
     options: ApplicationRuntimeOptions = {},
   ) {
+    this.#logger = options.logger ?? new Logger()
+    this.#environmentSource =
+      'environmentSource' in options
+        ? options.environmentSource
+        : NO_ENVIRONMENT_SOURCE
     this.graph = collectRuntimeModuleGraph(roots)
     this.container = new Container(this.graph.providers, {
-      ...(options.logger === undefined ? {} : { logger: options.logger }),
+      logger: this.#logger,
     })
-    for (const module of this.graph.modules) {
-      for (const implementation of module.definition.implementations ?? []) {
-        this.container.prepareImplementation(implementation)
-      }
-    }
-    for (const pipeline of collectApplicationPipelines(this.graph.modules)) {
-      this.container.preparePipeline(pipeline)
-    }
   }
 
-  async initialize(): Promise<void> {
-    if (this.#initialized) return
-    if (this.#stopped) throw new Error('停止済みApplicationは再初期化できません')
+  initialize(): Promise<void> {
+    if (this.#initialized) return Promise.resolve()
+    if (this.#initializing) return this.#initializing
+    if (this.#stopped) {
+      return Promise.reject(new Error('停止済みApplicationは再初期化できません'))
+    }
 
+    const source =
+      this.#environmentSource === NO_ENVIRONMENT_SOURCE
+        ? currentEnvironmentSource
+        : this.#environmentSource
+    const initialization = this.#initialize(source).finally(() => {
+      if (this.#initializing === initialization) {
+        this.#initializing = undefined
+      }
+    })
+    this.#initializing = initialization
+    return initialization
+  }
+
+  async #initialize(environmentSource: unknown): Promise<void> {
     try {
+      await this.#bindEnvironment(environmentSource)
+      this.#prepareRuntime()
+
       for (const module of this.graph.modules) {
         const instances = await this.#resolveModuleProviders(module)
         this.#instancesByModule.set(module, instances)
@@ -72,6 +125,42 @@ export class ApplicationRuntime {
       }
       throw error
     }
+  }
+
+  async #bindEnvironment(source: unknown): Promise<void> {
+    const environmentProviders = this.graph.providers.filter(
+      (provider) => provider.kind === 'environment',
+    )
+
+    if (environmentProviders.length === 0) return
+
+    if (source === NO_ENVIRONMENT_SOURCE) {
+      throw new Error(
+        'LUTRE_ENV_005: Application declares Environment Contracts, but the Runtime did not provide an Environment source.',
+      )
+    }
+
+    for (const provider of environmentProviders) {
+      try {
+        const value = await loadEnv(provider.provide, source)
+        this.container.bindEnvironment(provider.provide, value)
+      } catch (error) {
+        throw new EnvironmentBindingError(provider.provide, error)
+      }
+    }
+  }
+
+  #prepareRuntime(): void {
+    if (this.#prepared) return
+    for (const module of this.graph.modules) {
+      for (const implementation of module.definition.implementations ?? []) {
+        this.container.prepareImplementation(implementation)
+      }
+    }
+    for (const pipeline of collectApplicationPipelines(this.graph.modules)) {
+      this.container.preparePipeline(pipeline)
+    }
+    this.#prepared = true
   }
 
   async shutdown(signal?: string): Promise<void> {
@@ -144,7 +233,8 @@ export class ApplicationRuntime {
   async #resolveModuleProviders(module: ModuleInstance): Promise<unknown[]> {
     const providers = (module.definition.providers ?? []).map(normalizeProvider)
     const applicationProviders = providers.filter(
-      (provider): provider is ProviderDescriptor => provider.scope === 'application',
+      (provider): provider is ProviderDescriptor =>
+        provider.scope === 'application' && provider.kind !== 'environment',
     )
     const instances: unknown[] = []
     this.#instancesByModule.set(module, instances)

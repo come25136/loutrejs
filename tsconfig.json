@@ -22,12 +22,13 @@
       "@loutrejs/runtime": ["./packages/runtime/src/index.ts"],
       "@loutrejs/http": ["./packages/http/src/index.ts"],
       "@loutrejs/message-port": ["./packages/message-port/src/index.ts"],
-      "@loutrejs/runtime-node": ["./packages/runtime-node/src/index.ts"]
-      ,"@loutrejs/runtime-deno": ["./packages/runtime-deno/src/index.ts"]
-      ,"@loutrejs/runtime-bun": ["./packages/runtime-bun/src/index.ts"]
-      ,"@loutrejs/runtime-workerd": ["./packages/runtime-workerd/src/index.ts"]
-      ,"@loutrejs/runtime-electron": ["./packages/runtime-electron/src/index.ts"]
-      ,"@loutrejs/runtime-lambda": ["./packages/runtime-lambda/src/index.ts"]
+      "@loutrejs/message-port/environment": ["./packages/message-port/src/environment.ts"],
+      "@loutrejs/runtime-node": ["./packages/runtime-node/src/index.ts"],
+      "@loutrejs/runtime-deno": ["./packages/runtime-deno/src/index.ts"],
+      "@loutrejs/runtime-bun": ["./packages/runtime-bun/src/index.ts"],
+      "@loutrejs/runtime-workerd": ["./packages/runtime-workerd/src/index.ts"],
+      "@loutrejs/runtime-electron": ["./packages/runtime-electron/src/index.ts"],
+      "@loutrejs/runtime-lambda": ["./packages/runtime-lambda/src/index.ts"]
     },
     "types": ["node", "vitest/globals"]
   },

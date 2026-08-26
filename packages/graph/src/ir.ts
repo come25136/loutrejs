@@ -3,6 +3,7 @@ export interface ModuleIR {
   readonly name?: string
   readonly description?: string
   readonly imports: readonly string[]
+  readonly environment: readonly string[]
   readonly providers: readonly string[]
   readonly exports: readonly string[]
   readonly lifecycle: readonly string[]
@@ -11,7 +12,7 @@ export interface ModuleIR {
 
 export interface ProviderIR {
   readonly token: string
-  readonly kind: 'class' | 'value' | 'factory' | 'conditional'
+  readonly kind: 'class' | 'value' | 'factory' | 'conditional' | 'environment'
   readonly scope: 'application' | 'transient'
   readonly dependencies: readonly string[]
 }
@@ -24,6 +25,7 @@ export interface DependencyNodeIR {
     | 'token'
     | 'factory'
     | 'conditional'
+    | 'environment'
     | 'implementation'
     | 'layer'
     | 'framework'
