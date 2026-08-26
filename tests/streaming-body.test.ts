@@ -11,7 +11,6 @@ import {
   validate,
 } from '@loutrejs/http'
 import { z } from 'zod'
-import { silentLogger } from './helpers/silent-logger.js'
 import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
 import { createNodeHttpServer } from '@loutrejs/runtime-node'
@@ -70,10 +69,7 @@ describe('streaming validate.body', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
-      modules: [Module()],
-      logger: silentLogger,
-    })
+    const application = createHttpApplication({ modules: [Module()] })
     const response = await application.handle(
       new Request('https://fixture.test/upload', {
         method: 'POST',

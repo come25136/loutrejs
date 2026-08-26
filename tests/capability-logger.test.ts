@@ -1,7 +1,6 @@
 import {
   Container,
   Logger,
-  SilentLogger,
   checkCapabilities,
   type LogRecord,
   type LoggerBackend,
@@ -38,26 +37,6 @@ describe('CapabilityとLogger', () => {
         requestId: 'req-1',
       },
     ])
-  })
-
-  it('SilentLoggerはchildを含めてconsoleへ出力しない', () => {
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    const logger = new SilentLogger({ application: 'test' }).child({ source: 'fixture' })
-    logger.debug('debug')
-    logger.info('info')
-    logger.warn('warn')
-    logger.error('error')
-
-    expect(log).not.toHaveBeenCalled()
-    expect(warn).not.toHaveBeenCalled()
-    expect(error).not.toHaveBeenCalled()
-
-    log.mockRestore()
-    warn.mockRestore()
-    error.mockRestore()
   })
 
   it('constructor Loggerにはstatic sourceだけをDI時に付与する', () => {

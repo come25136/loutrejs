@@ -1,8 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest'
-import { SilentLogger } from '@loutrejs/runtime'
-import { createApplication } from './app.js'
-
-const application = createApplication(new SilentLogger())
+import application from './app.js'
 
 afterAll(() => application.shutdown('test'))
 

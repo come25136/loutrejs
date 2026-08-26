@@ -11,7 +11,6 @@ import {
   validate,
 } from '@loutrejs/http'
 import { z } from 'zod'
-import { silentLogger } from './helpers/silent-logger.js'
 
 describe('HTTP request semantics', () => {
   it('header名を小文字へ正規化し、duplicate queryを配列として保持する', async () => {
@@ -227,8 +226,5 @@ function applicationFor(Implementation: ImplementationDescriptor) {
   const Module = defineModule(() => ({
     implementations: [Implementation],
   }))
-  return createHttpApplication({
-    modules: [Module()],
-    logger: silentLogger,
-  })
+  return createHttpApplication({ modules: [Module()] })
 }

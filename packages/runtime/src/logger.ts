@@ -39,10 +39,6 @@ export class JsonConsoleLoggerBackend implements LoggerBackend {
   }
 }
 
-class SilentLoggerBackend implements LoggerBackend {
-  write(_record: LogRecord): void {}
-}
-
 export class Logger {
   constructor(
     readonly backend: LoggerBackend = new ConsoleLoggerBackend(),
@@ -81,12 +77,6 @@ export class Logger {
       level,
       message,
     })
-  }
-}
-
-export class SilentLogger extends Logger {
-  constructor(context: Readonly<Record<string, unknown>> = {}) {
-    super(new SilentLoggerBackend(), context)
   }
 }
 

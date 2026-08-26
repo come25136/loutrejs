@@ -13,7 +13,6 @@ import {
   validate,
 } from '@loutrejs/http'
 import { z } from 'zod'
-import { silentLogger } from './helpers/silent-logger.js'
 
 describe('HTTP application boundary', () => {
   it('全HTTP入力を検証し、Layer stateをctxからapplication-scoped Controllerへ渡す', async () => {
@@ -100,10 +99,7 @@ describe('HTTP application boundary', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
-      modules: [Module()],
-      logger: silentLogger,
-    })
+    const application = createHttpApplication({ modules: [Module()] })
     const probeConstructionCalls = controllerInstances
     expect(probeConstructionCalls).toBe(1)
 
@@ -243,10 +239,7 @@ describe('HTTP application boundary', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
-      modules: [Module()],
-      logger: silentLogger,
-    })
+    const application = createHttpApplication({ modules: [Module()] })
 
     const response = await application.handle(
       new Request('http://fixture.test/invalid-output'),
@@ -289,10 +282,7 @@ describe('HTTP application boundary', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
-      modules: [Module()],
-      logger: silentLogger,
-    })
+    const application = createHttpApplication({ modules: [Module()] })
 
     const response = await application.handle(
       new Request('http://fixture.test/invalid-output-header'),
@@ -338,10 +328,7 @@ describe('HTTP application boundary', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
-      modules: [Module()],
-      logger: silentLogger,
-    })
+    const application = createHttpApplication({ modules: [Module()] })
 
     const response = await application.handle(
       new Request('http://fixture.test/undeclared-output-header'),
@@ -395,10 +382,7 @@ describe('HTTP application boundary', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-    const application = createHttpApplication({
-      modules: [Module()],
-      logger: silentLogger,
-    })
+    const application = createHttpApplication({ modules: [Module()] })
     const response = await application.handle(
       new Request('https://fixture.test/cached'),
     )
@@ -412,7 +396,6 @@ describe('HTTP application boundary', () => {
     const urls: string[] = []
     const application = createHttpApplication({
       modules: [],
-      logger: silentLogger,
       lifecycle: {
         onServerListening: (url) => urls.push(url),
       },
@@ -459,8 +442,5 @@ function createInputDecodeFixture() {
   const Module = defineModule(() => ({
     implementations: [Implementation],
   }))
-  return createHttpApplication({
-    modules: [Module()],
-    logger: silentLogger,
-  })
+  return createHttpApplication({ modules: [Module()] })
 }
