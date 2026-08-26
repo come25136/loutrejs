@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality-gate:
-    name: Node.js 26 品質ゲート
+  quality-checks:
+    name: Node.js 26 静的・package検査
     runs-on: ubuntu-latest
     steps:
       - name: ソースを取得
@@ -35,14 +35,30 @@ jobs:
       - name: Public型を検査
         run: npm run test:types
 
-      - name: Unit・E2E testを実行
-        run: npm test
-
       - name: packageをbuild
         run: npm run build
 
       - name: 公開tarballを検査
         run: node scripts/verify-packages.mjs
+
+  tests:
+    name: Node.js 26 Unit・E2E
+    runs-on: ubuntu-latest
+    steps:
+      - name: ソースを取得
+        uses: actions/checkout@v6
+
+      - name: Node.js 26を準備
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.x
+          cache: npm
+
+      - name: 依存関係をインストール
+        run: npm ci --no-audit --no-fund
+
+      - name: Unit・E2E testを実行
+        run: npm test
 
       - name: Node.js conformanceを実行
         run: npm run test:node
@@ -54,15 +70,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Deno + Bun
-            command: npm run test:deno && npm run test:bun
+          - name: Deno
+            command: npm run test:deno
             deno: true
+          - name: Bun
+            command: npm run test:bun
           - name: workerd
             command: npm run test:workerd
           - name: Electron
             command: LOUTRE_ELECTRON_NO_SANDBOX=1 xvfb-run --auto-servernum npm run test:electron
-          - name: Lambda + CLI
-            command: npm run test:lambda && npm run test:cli-start && npm run test:cli-dev
+          - name: Lambda
+            command: npm run test:lambda
+          - name: CLI
+            command: npm run test:cli-start && npm run test:cli-dev
     steps:
       - name: ソースを取得
         uses: actions/checkout@v6
