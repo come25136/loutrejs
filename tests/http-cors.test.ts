@@ -4,13 +4,13 @@ import {
   implementation,
   procedure,
 } from '@loutrejs/core'
-import { cors, createHttpApplication, http } from '@loutrejs/http'
+import { createHttpApplication, http, validate } from '@loutrejs/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 
 describe('cors', () => {
   it('actual requestへ既定のwildcard originを付与する', async () => {
-    const { application } = createFixture(cors())
+    const { application } = createFixture(validate.cors())
 
     const response = await application.handle(
       new Request('http://fixture.test/cors', {
@@ -26,7 +26,7 @@ describe('cors', () => {
 
   it('明示originを反映しVaryとexpose headersをFramework境界でmergeする', async () => {
     const { application } = createFixture(
-      cors({
+      validate.cors({
         origin: ['https://app.example', 'https://admin.example'],
         credentials: true,
         exposeHeaders: ['x-request-id'],
@@ -53,7 +53,7 @@ describe('cors', () => {
   })
 
   it('preflightをControllerへ流さず204で完結させる', async () => {
-    const { application, executions } = createFixture(cors())
+    const { application, executions } = createFixture(validate.cors())
 
     const response = await application.handle(
       new Request('http://fixture.test/cors', {
@@ -84,7 +84,7 @@ describe('cors', () => {
 
   it('preflightのmethod/header/max-ageを明示設定できる', async () => {
     const { application } = createFixture(
-      cors({
+      validate.cors({
         origin: 'https://app.example',
         allowMethods: ['post', 'put'],
         allowHeaders: ['content-type', 'x-token'],
@@ -116,7 +116,7 @@ describe('cors', () => {
 
   it('許可していないoriginにはallow-originを返さない', async () => {
     const { application } = createFixture(
-      cors({ origin: 'https://allowed.example' }),
+      validate.cors({ origin: 'https://allowed.example' }),
     )
 
     const response = await application.handle(
@@ -133,7 +133,7 @@ describe('cors', () => {
 
   it('origin predicateを非同期で評価できる', async () => {
     const { application } = createFixture(
-      cors({
+      validate.cors({
         origin: async (origin) => origin.endsWith('.example'),
       }),
     )
@@ -151,12 +151,14 @@ describe('cors', () => {
   })
 
   it('credentialed CORSとwildcard originの組み合わせを拒否する', () => {
-    expect(() => cors({ credentials: true })).toThrow(TypeError)
-    expect(() => cors({ origin: '*', credentials: true })).toThrow(TypeError)
+    expect(() => validate.cors({ credentials: true })).toThrow(TypeError)
+    expect(() =>
+      validate.cors({ origin: '*', credentials: true }),
+    ).toThrow(TypeError)
   })
 })
 
-function createFixture(corsLayer: ReturnType<typeof cors>) {
+function createFixture(corsLayer: ReturnType<typeof validate.cors>) {
   let controllerExecutions = 0
   const Contract = contract({
     create: procedure({
