@@ -4,12 +4,7 @@ import {
   implementation,
   procedure,
 } from '@loutrejs/core'
-import {
-  cors,
-  createHttpApplication,
-  http,
-  validate,
-} from '@loutrejs/http'
+import { createHttpApplication, http, validate } from '@loutrejs/http'
 import { z } from 'zod'
 
 const CreateMessageBody = z.object({
@@ -19,14 +14,6 @@ const CreateMessageBody = z.object({
 const Message = z.object({
   id: z.string(),
   text: z.string(),
-})
-
-const browserCors = cors({
-  origin: ['http://localhost:5173'],
-  allowMethods: ['POST'],
-  allowHeaders: ['content-type'],
-  exposeHeaders: ['x-request-id'],
-  maxAge: 600,
 })
 
 const MessageContract = contract({
@@ -48,10 +35,15 @@ const MessageContract = contract({
           },
         },
         pipeline: [
-          browserCors([
-            validate.body,
-            http.controller,
-          ]),
+          validate.cors({
+            origin: ['http://localhost:5173'],
+            allowMethods: ['POST'],
+            allowHeaders: ['content-type'],
+            exposeHeaders: ['x-request-id'],
+            maxAge: 600,
+          }),
+          validate.body,
+          http.controller,
         ],
       }),
     },
