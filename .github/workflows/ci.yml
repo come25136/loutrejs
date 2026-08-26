@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality-gate:
     name: Node.js 26 品質ゲート
@@ -23,7 +27,7 @@ jobs:
           cache: npm
 
       - name: 依存関係をインストール
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: TypeScriptを検査
         run: npm run check
@@ -44,9 +48,25 @@ jobs:
         run: npm run test:node
 
   runtime-conformance:
-    name: 全runtime conformance
+    name: Runtime conformance (${{ matrix.name }})
     runs-on: ubuntu-latest
-    needs: quality-gate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Deno
+            command: npm run test:deno
+            deno: true
+          - name: Bun
+            command: npm run test:bun
+          - name: workerd
+            command: npm run test:workerd
+          - name: Electron
+            command: LOUTRE_ELECTRON_NO_SANDBOX=1 xvfb-run --auto-servernum npm run test:electron
+          - name: Lambda
+            command: npm run test:lambda
+          - name: CLI
+            command: npm run test:cli-start && npm run test:cli-dev
     steps:
       - name: ソースを取得
         uses: actions/checkout@v6
@@ -58,42 +78,16 @@ jobs:
           cache: npm
 
       - name: Deno baselineを準備
+        if: ${{ matrix.deno == true }}
         uses: denoland/setup-deno@v2
         with:
           deno-version: 2.9.5
 
       - name: 依存関係をインストール
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: packageをbuild
         run: npm run build
 
-      - name: Deno conformanceを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:deno
-
-      - name: Bun conformanceを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:bun
-
-      - name: workerd conformanceを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:workerd
-
-      - name: Electron conformanceを実行
-        if: ${{ !cancelled() }}
-        run: xvfb-run --auto-servernum npm run test:electron
-        env:
-          LOUTRE_ELECTRON_NO_SANDBOX: '1'
-
-      - name: Lambda managed Node baselineを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:lambda
-
-      - name: CLI start conformanceを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:cli-start
-
-      - name: CLI dev conformanceを実行
-        if: ${{ !cancelled() }}
-        run: npm run test:cli-dev
+      - name: ${{ matrix.name }} conformanceを実行
+        run: ${{ matrix.command }}
