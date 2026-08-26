@@ -82,6 +82,28 @@ describe('cors', () => {
     expect(executions()).toBe(0)
   })
 
+  it('validation errorにもCORS headerを付与する', async () => {
+    const application = createValidationFixture(
+      validate.cors({ origin: 'https://app.example' }),
+    )
+
+    const response = await application.handle(
+      new Request('http://fixture.test/cors-validation', {
+        method: 'POST',
+        headers: {
+          origin: 'https://app.example',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ text: 123 }),
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    expect(response.headers.get('access-control-allow-origin')).toBe(
+      'https://app.example',
+    )
+  })
+
   it('preflightのmethod/header/max-ageを明示設定できる', async () => {
     const { application } = createFixture(
       validate.cors({
@@ -200,4 +222,42 @@ function createFixture(corsLayer: ReturnType<typeof validate.cors>) {
     }),
     executions: () => controllerExecutions,
   }
+}
+
+function createValidationFixture(corsLayer: ReturnType<typeof validate.cors>) {
+  const Contract = contract({
+    create: procedure({
+      protocols: {
+        http: http({
+          method: 'POST',
+          path: '/cors-validation',
+          request: {
+            body: z.object({ text: z.string() }),
+          },
+          responses: {
+            created: {
+              status: 200,
+              body: z.object({ ok: z.boolean() }),
+            },
+          },
+          pipeline: [corsLayer, validate.body, http.controller],
+        }),
+      },
+    }),
+  })
+  const Implementation = implementation({
+    name: 'CorsValidationImplementation',
+    contract: Contract,
+    protocol: http,
+    factory: () => ({
+      create(ctx) {
+        return ctx.response.created({ body: { ok: true } })
+      },
+    }),
+  })
+  const Module = defineModule(() => ({ implementations: [Implementation] }))
+  return createHttpApplication({
+    modules: [Module()],
+    logger: silentLogger,
+  })
 }
