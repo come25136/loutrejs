@@ -135,6 +135,7 @@ export class ApplicationRuntime {
         throw new AggregateError(
           [error, ...cleanupErrors],
           'Application initialization failed and rollback cleanup also failed',
+          { cause: error },
         )
       }
       throw error
@@ -232,10 +233,10 @@ export class ApplicationRuntime {
       await new Promise<void>((resolve) => this.#idleWaiters.add(resolve))
     }
     const errors: unknown[] = []
-    const modules = [...this.graph.modules].reverse()
+    const modules = this.graph.modules.toReversed()
     try {
       for (const module of modules) {
-        for (const instance of [...(this.#instancesByModule.get(module) ?? [])].reverse()) {
+        for (const instance of (this.#instancesByModule.get(module) ?? []).toReversed()) {
           await collectCleanupError(
             () => callLifecycle(instance, 'onModuleDestroy'),
             errors,
@@ -247,7 +248,7 @@ export class ApplicationRuntime {
         )
       }
       for (const module of modules) {
-        for (const instance of [...(this.#instancesByModule.get(module) ?? [])].reverse()) {
+        for (const instance of (this.#instancesByModule.get(module) ?? []).toReversed()) {
           await collectCleanupError(
             () => callLifecycle(instance, 'beforeApplicationShutdown', signal),
             errors,
@@ -259,7 +260,7 @@ export class ApplicationRuntime {
         )
       }
       for (const module of modules) {
-        for (const instance of [...(this.#instancesByModule.get(module) ?? [])].reverse()) {
+        for (const instance of (this.#instancesByModule.get(module) ?? []).toReversed()) {
           await collectCleanupError(
             () => callLifecycle(instance, 'onApplicationShutdown', signal),
             errors,
@@ -280,13 +281,13 @@ export class ApplicationRuntime {
 
   async #rollbackInitialization(): Promise<unknown[]> {
     const errors: unknown[] = []
-    const modules = [...this.#instancesByModule.keys()].reverse()
+    const modules = [...this.#instancesByModule.keys()].toReversed()
     for (const module of modules) {
       await collectCleanupError(
         () => this.#runHook(module.definition.lifecycle?.onModuleDestroy),
         errors,
       )
-      for (const instance of [...(this.#instancesByModule.get(module) ?? [])].reverse()) {
+      for (const instance of (this.#instancesByModule.get(module) ?? []).toReversed()) {
         await collectCleanupError(
           () => callLifecycle(instance, 'onModuleDestroy'),
           errors,

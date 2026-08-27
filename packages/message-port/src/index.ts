@@ -5,7 +5,6 @@ import {
   type ContractDefinition,
   type ImplementationDescriptor,
   type ModuleInstance,
-  type ModuleTemplate,
   type PipelineItem,
   type ProtocolDescriptor,
   type ProtocolFactory,

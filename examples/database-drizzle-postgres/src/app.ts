@@ -125,8 +125,8 @@ const UsersContract = contract(
 )
 
 class UserRepository {
-  async create(transaction: DrizzleTransaction, name: string) {
-    const [user] = await transaction
+  async create(client: DrizzleTransaction, name: string) {
+    const [user] = await client
       .insert(schema.users)
       .values({
         id: crypto.randomUUID(),

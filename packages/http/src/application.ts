@@ -286,7 +286,7 @@ function findRoute(
       route,
       params: matchHttpPath(route.segments, pathname),
     }))
-    .find((candidate) => candidate.params !== undefined)
+    .find((match) => match.params !== undefined)
   return candidate?.params === undefined
     ? undefined
     : { route: candidate.route, params: candidate.params }
@@ -602,7 +602,7 @@ function collectRoutes(modules: readonly ModuleInstance[]): HttpRoute[] {
       }
     }
   }
-  return routes.sort((left, right) =>
+  return routes.toSorted((left, right) =>
     compareHttpPathSpecificity(left.segments, right.segments),
   )
 }

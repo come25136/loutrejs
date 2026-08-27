@@ -1,0 +1,51 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
+  "overrides": [
+    {
+      "files": ["tests/types/**/*.test-d.ts"],
+      "rules": {
+        "eslint/no-unused-expressions": "off",
+        "eslint/no-unused-vars": "off",
+        "typescript/no-extraneous-class": "off"
+      }
+    },
+    {
+      "files": ["tests/**/*.ts"],
+      "rules": {
+        "typescript/no-extraneous-class": "off",
+        "unicorn/consistent-function-scoping": "off"
+      }
+    },
+    {
+      "files": ["fixtures/**/*.ts"],
+      "rules": {
+        "typescript/no-extraneous-class": "off",
+        "unicorn/require-module-specifiers": "off"
+      }
+    },
+    {
+      "files": [
+        "packages/http/src/basic-auth.ts",
+        "packages/http/src/cors.ts",
+        "packages/cli/src/startup-banner.ts",
+        "examples/bearer-auth/src/bearer-auth.ts",
+        "tests/startup-banner.test.ts",
+        "tests/structured-logging.test.ts"
+      ],
+      "rules": {
+        "eslint/no-control-regex": "off"
+      }
+    },
+    {
+      "files": ["packages/cli/src/index.ts"],
+      "rules": {
+        "eslint/no-unmodified-loop-condition": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["dist/**", "node_modules/**"]
+}

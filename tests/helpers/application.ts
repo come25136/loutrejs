@@ -39,9 +39,10 @@ export function createTestMessagePortExecution(
   logger?: Logger,
 ) {
   const graph = assertValidCompilation(compileApplication({ modules }))
-  const runtime = new ApplicationRuntime(modules, {
-    ...(logger === undefined ? {} : { logger }),
-  })
+  const runtime = new ApplicationRuntime(
+    modules,
+    logger === undefined ? {} : { logger },
+  )
   return createMessagePortExecution({
     runtime,
     graph,

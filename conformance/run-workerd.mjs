@@ -62,10 +62,10 @@ try {
   await terminateChild(child)
 }
 
-async function terminateChild(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return
-  const exited = new Promise((resolveExit) => child.once('exit', resolveExit))
-  child.kill('SIGTERM')
+async function terminateChild(process) {
+  if (process.exitCode !== null || process.signalCode !== null) return
+  const exited = new Promise((resolveExit) => process.once('exit', resolveExit))
+  process.kill('SIGTERM')
   let timeout
   const terminated = await Promise.race([
     exited.then(() => true),
@@ -74,7 +74,7 @@ async function terminateChild(child) {
     }),
   ])
   clearTimeout(timeout)
-  if (terminated || child.exitCode !== null || child.signalCode !== null) return
-  child.kill('SIGKILL')
+  if (terminated || process.exitCode !== null || process.signalCode !== null) return
+  process.kill('SIGKILL')
   await exited
 }

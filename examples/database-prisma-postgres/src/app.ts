@@ -117,8 +117,8 @@ const UsersContract = contract(
 )
 
 class UserRepository {
-  create(transaction: Prisma.TransactionClient, name: string) {
-    return transaction.user.create({
+  create(client: Prisma.TransactionClient, name: string) {
+    return client.user.create({
       data: {
         id: crypto.randomUUID(),
         name,

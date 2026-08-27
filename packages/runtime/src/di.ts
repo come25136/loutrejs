@@ -309,9 +309,7 @@ export class Container {
     const provider = this.#providers.get(token)
     if (!provider) {
       if ((token as TokenLike) === (Logger as unknown as TokenLike)) {
-        return this.#logger.child({
-          ...(source === undefined ? {} : { source }),
-        }) as T
+        return this.#logger.child(source === undefined ? {} : { source }) as T
       }
       if (isEnvClass(token)) {
         throw new DependencyResolutionError(

@@ -113,8 +113,8 @@ const UsersContract = contract(
 )
 
 class UserRepository {
-  async create(transaction: PoolClient, name: string) {
-    const result = await transaction.query<{
+  async create(client: PoolClient, name: string) {
+    const result = await client.query<{
       readonly id: string
       readonly name: string
       readonly created_by: string

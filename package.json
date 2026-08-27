@@ -13,6 +13,10 @@
   ],
   "scripts": {
     "build": "tsc -b && node scripts/prepare-packages.mjs",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
     "check": "tsc --noEmit --pretty false",
     "test": "vitest run",
     "test:types": "tsc -p tests/types/tsconfig.json --pretty false",
@@ -26,7 +30,7 @@
     "test:cli-start": "node conformance/run-cli-start.mjs",
     "test:node": "node -e \"if (!process.version.startsWith('v26.')) process.exit(1); console.log('Node.js 26 conformance: 成功')\" && vitest run tests/http-crud.e2e.test.ts tests/http-stream.fixture.test.ts tests/runtime-conformance.test.ts",
     "test:conformance": "npm run test:node && npm run test:deno && npm run test:bun && npm run test:workerd && npm run test:electron && npm run test:lambda && npm run test:cli-start && npm run test:cli-dev",
-    "verify": "npm run check && npm run test:types && npm test && npm run build && npm run test:conformance",
+    "verify": "npm run format:check && npm run lint && npm run check && npm run test:types && npm test && npm run build && npm run test:conformance",
     "release:check": "npm run build && node scripts/verify-packages.mjs"
   },
   "devDependencies": {
@@ -34,6 +38,8 @@
     "bun": "^1.4.0",
     "electron": "^43.4.1",
     "esbuild": "^0.28.2",
+    "oxfmt": "^0.65.0",
+    "oxlint": "^1.80.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11",
     "workerd": "^1.20260824.1",

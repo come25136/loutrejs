@@ -248,7 +248,7 @@ function createResponses(
 
   return Object.fromEntries(
     [...grouped.entries()]
-      .sort(([left], [right]) => left - right)
+      .toSorted(([left], [right]) => left - right)
       .map(([status, entries]) => [
         String(status),
         createResponse(target, entries, registry),
@@ -514,7 +514,7 @@ class SchemaRegistry {
   }
 }
 
-function rebaseLocalDefinitions(schema: JsonSchema, componentName: string): JsonSchema {
+function rebaseLocalDefinitions(schema: JsonSchema, schemaComponentName: string): JsonSchema {
   const visit = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(visit)
     if (typeof value !== 'object' || value === null) return value
@@ -525,7 +525,7 @@ function rebaseLocalDefinitions(schema: JsonSchema, componentName: string): Json
         typeof child === 'string' &&
         child.startsWith('#/$defs/')
       ) {
-        result[key] = `#/components/schemas/${escapeJsonPointer(componentName)}/$defs/${child.slice('#/$defs/'.length)}`
+        result[key] = `#/components/schemas/${escapeJsonPointer(schemaComponentName)}/$defs/${child.slice('#/$defs/'.length)}`
       } else {
         result[key] = visit(child)
       }
