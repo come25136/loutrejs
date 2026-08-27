@@ -5,7 +5,6 @@ import {
   type ContractDefinition,
   type ImplementationDescriptor,
   type ModuleInstance,
-  type ModuleTemplate,
   type PipelineItem,
   type ProtocolDescriptor,
   type ProtocolFactory,
@@ -33,12 +32,13 @@ export interface MessagePortProtocolDefinition {
 }
 
 export interface MessagePortProtocol<
-  TDefinition extends MessagePortProtocolDefinition = MessagePortProtocolDefinition,
+  TDefinition extends MessagePortProtocolDefinition =
+    MessagePortProtocolDefinition,
 > extends ProtocolDescriptor<
-    'messagePort',
-    MessagePortHandlerContextDefinition<TDefinition>,
-    LogicalMessagePortResult
-  > {
+  'messagePort',
+  MessagePortHandlerContextDefinition<TDefinition>,
+  LogicalMessagePortResult
+> {
   readonly definition: TDefinition
 }
 
@@ -49,7 +49,9 @@ const handler: TerminalLayerDescriptor<'messagePort'> = Object.freeze({
   protocol: 'messagePort',
 })
 
-function defineMessagePort<const TDefinition extends MessagePortProtocolDefinition>(
+function defineMessagePort<
+  const TDefinition extends MessagePortProtocolDefinition,
+>(
   definition: TDefinition & MessagePortPipelineConstraint<TDefinition>,
 ): MessagePortProtocol<TDefinition> {
   return {
@@ -63,12 +65,10 @@ function defineMessagePort<const TDefinition extends MessagePortProtocolDefiniti
 
 type MessagePortPipelineConstraint<
   TDefinition extends MessagePortProtocolDefinition,
-> = IsValidProtocolPipeline<
-  TDefinition['pipeline'],
-  'messagePort'
-> extends true
-  ? unknown
-  : { readonly pipeline: never }
+> =
+  IsValidProtocolPipeline<TDefinition['pipeline'], 'messagePort'> extends true
+    ? unknown
+    : { readonly pipeline: never }
 
 export const messagePort = Object.assign(defineMessagePort, {
   protocol: 'messagePort' as const,
@@ -87,14 +87,19 @@ export interface LogicalMessagePortResult<
 }
 
 type ProceduresForMessagePort<TContract extends ContractDefinition> = {
-  [K in keyof TContract['procedures']]:
-    'messagePort' extends keyof TContract['procedures'][K]['protocols'] ? K : never
-}[keyof TContract['procedures']] & string
+  [
+    K in keyof TContract['procedures']
+  ]: 'messagePort' extends keyof TContract['procedures'][K]['protocols']
+    ? K
+    : never
+}[keyof TContract['procedures']] &
+  string
 
 type ProtocolAt<
   TContract extends ContractDefinition,
   TProcedure extends keyof TContract['procedures'],
-> = TContract['procedures'][TProcedure]['protocols']['messagePort' & keyof TContract['procedures'][TProcedure]['protocols']] extends infer TProtocol
+> = TContract['procedures'][TProcedure]['protocols']['messagePort' &
+  keyof TContract['procedures'][TProcedure]['protocols']] extends infer TProtocol
   ? TProtocol extends MessagePortProtocol
     ? TProtocol
     : never
@@ -126,7 +131,8 @@ export type MessagePortHandlerContext<TProtocol extends MessagePortProtocol> =
 export type HandlerOf<
   TContract extends ContractDefinition,
   TProtocol extends 'messagePort',
-  TProcedures extends ProceduresForMessagePort<TContract> = ProceduresForMessagePort<TContract>,
+  TProcedures extends ProceduresForMessagePort<TContract> =
+    ProceduresForMessagePort<TContract>,
 > = TProtocol extends 'messagePort'
   ? {
       [K in TProcedures]: (
@@ -138,7 +144,10 @@ export type HandlerOf<
 export type MessageContextOf<
   THandler,
   TProcedure extends keyof THandler,
-> = THandler[TProcedure] extends (context: infer TContext, ...args: any[]) => any
+> = THandler[TProcedure] extends (
+  context: infer TContext,
+  ...args: any[]
+) => any
   ? TContext
   : never
 
@@ -181,51 +190,60 @@ export function createMessagePortExecution(options: {
       })
       try {
         return await runtime.execute(async () => {
-        const route = routes.find((candidate) => candidate.procedure === procedure)
-        if (!route) throw new Error(`MessagePort procedureがありません: ${procedure}`)
-        invocationLogger = invocationLogger.child({
-          source: `${route.implementation.name}.${route.procedure}`,
-        })
-        const message = Object.fromEntries(
-          Object.keys(route.protocol.definition.responses).map((variant) => [
-            variant,
-            (value: unknown) => ({
-              kind: 'message-port-result',
+          const route = routes.find(
+            (candidate) => candidate.procedure === procedure,
+          )
+          if (!route)
+            throw new Error(`MessagePort procedureがありません: ${procedure}`)
+          invocationLogger = invocationLogger.child({
+            source: `${route.implementation.name}.${route.procedure}`,
+          })
+          const message = Object.fromEntries(
+            Object.keys(route.protocol.definition.responses).map((variant) => [
               variant,
-              value,
-            }),
-          ]),
-        )
-        const context = {
-          input,
-          message,
-          logger: invocationLogger,
-        }
-        const result = await executePipeline<
-          Record<string, unknown>,
-          LogicalMessagePortResult
-        >(route.protocol.definition.pipeline, {
-          context,
-          layer: (descriptor) => runtime.container.layerRuntime(descriptor),
-          validate: () => undefined,
-          terminal: async (_layer, terminalContext) => {
-            const target = runtime.container.implementationRuntime(
-              route.implementation,
-            ) as Record<string, unknown>
-            const method = target[route.procedure]
-            if (typeof method !== 'function') throw new Error('Handler methodがありません')
-            return Reflect.apply(method, target, [terminalContext]) as Promise<LogicalMessagePortResult>
-          },
-        })
-        const finalized = await finalize(route.protocol.definition, result)
-        invocationLogger.info('MessagePort invocation completed', {
-          event: 'message_port.invocation.completed',
-          durationMs: Math.max(0, Date.now() - startedAt),
-        })
-        return finalized
+              (value: unknown) => ({
+                kind: 'message-port-result',
+                variant,
+                value,
+              }),
+            ]),
+          )
+          const context = {
+            input,
+            message,
+            logger: invocationLogger,
+          }
+          const result = await executePipeline<
+            Record<string, unknown>,
+            LogicalMessagePortResult
+          >(route.protocol.definition.pipeline, {
+            context,
+            layer: (descriptor) => runtime.container.layerRuntime(descriptor),
+            validate: () => undefined,
+            terminal: async (_layer, terminalContext) => {
+              const target = runtime.container.implementationRuntime(
+                route.implementation,
+              ) as Record<string, unknown>
+              const method = target[route.procedure]
+              if (typeof method !== 'function')
+                throw new Error('Handler methodがありません')
+              return Reflect.apply(method, target, [
+                terminalContext,
+              ]) as Promise<LogicalMessagePortResult>
+            },
+          })
+          const finalized = await finalize(route.protocol.definition, result)
+          invocationLogger.info('MessagePort invocation completed', {
+            event: 'message_port.invocation.completed',
+            durationMs: Math.max(0, Date.now() - startedAt),
+          })
+          return finalized
         })
       } catch (error) {
-        const normalized = normalizeUnknownError(error, invocationLogger.context)
+        const normalized = normalizeUnknownError(
+          error,
+          invocationLogger.context,
+        )
         invocationLogger.error('Unhandled application error', {
           event: 'application.error',
           durationMs: Math.max(0, Date.now() - startedAt),
@@ -234,8 +252,12 @@ export function createMessagePortExecution(options: {
             id: normalized.errorId,
             name: error instanceof Error ? error.name : typeof error,
             message: normalized.message,
-            ...(normalized.stack === undefined ? {} : { stack: normalized.stack }),
-            ...(normalized.cause === undefined ? {} : { cause: normalized.cause }),
+            ...(normalized.stack === undefined
+              ? {}
+              : { stack: normalized.stack }),
+            ...(normalized.cause === undefined
+              ? {}
+              : { cause: normalized.cause }),
           },
         })
         throw error
@@ -283,10 +305,7 @@ function collectRoutes(modules: readonly ModuleInstance[]): Route[] {
 
 export interface MessagePortLike {
   postMessage(value: unknown): void
-  addEventListener(
-    type: string,
-    listener: (event: any) => void,
-  ): void
+  addEventListener(type: string, listener: (event: any) => void): void
   start?(): void
 }
 
@@ -311,7 +330,11 @@ export function attachMessagePort(
             done: false,
           })
         }
-        port.postMessage({ id: request.id, variant: result.variant, done: true })
+        port.postMessage({
+          id: request.id,
+          variant: result.variant,
+          done: true,
+        })
       } else {
         port.postMessage({
           id: request.id,

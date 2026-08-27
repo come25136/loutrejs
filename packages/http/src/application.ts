@@ -98,30 +98,53 @@ export function createHttpExecution(options: {
       }
 
       return runtime.execute(async () => {
-      if (isCorsPreflightRequest(request)) {
-        try {
-          const requestedMethod = request.headers
-            .get('access-control-request-method')!
-            .toUpperCase()
-          const preflightMatch = findRoute(routes, requestedMethod, url.pathname)
-          if (preflightMatch) {
-            const headers = await createCorsPreflightResponseHeaders(
-              preflightMatch.route.protocol.definition.pipeline,
-              request,
-              preflightMatch.route.method,
+        if (isCorsPreflightRequest(request)) {
+          try {
+            const requestedMethod = request.headers
+              .get('access-control-request-method')!
+              .toUpperCase()
+            const preflightMatch = findRoute(
+              routes,
+              requestedMethod,
+              url.pathname,
             )
-            if (headers) {
-              requestLogger = requestLogger.child({
-                procedure: preflightMatch.route.procedure,
-                source: `${preflightMatch.route.implementation.name}.${preflightMatch.route.procedure}`,
-              })
-              return logHttpResponse(
-                requestLogger,
-                startedAt,
-                new Response(null, { status: 204, headers }),
+            if (preflightMatch) {
+              const headers = await createCorsPreflightResponseHeaders(
+                preflightMatch.route.protocol.definition.pipeline,
+                request,
+                preflightMatch.route.method,
               )
+              if (headers) {
+                requestLogger = requestLogger.child({
+                  procedure: preflightMatch.route.procedure,
+                  source: `${preflightMatch.route.implementation.name}.${preflightMatch.route.procedure}`,
+                })
+                return logHttpResponse(
+                  requestLogger,
+                  startedAt,
+                  new Response(null, { status: 204, headers }),
+                )
+              }
             }
+          } catch (error) {
+            return logHttpResponse(
+              requestLogger,
+              startedAt,
+              isDecodeError(error)
+                ? jsonResponse(400, { error: 'Invalid request' })
+                : createInternalErrorResponse(error, requestLogger),
+            )
           }
+        }
+
+        let routeMatch:
+          | {
+              readonly route: HttpRoute
+              readonly params: Record<string, string>
+            }
+          | undefined
+        try {
+          routeMatch = findRoute(routes, method, url.pathname)
         } catch (error) {
           return logHttpResponse(
             requestLogger,
@@ -131,77 +154,66 @@ export function createHttpExecution(options: {
               : createInternalErrorResponse(error, requestLogger),
           )
         }
-      }
 
-      let routeMatch:
-        | { readonly route: HttpRoute; readonly params: Record<string, string> }
-        | undefined
-      try {
-        routeMatch = findRoute(routes, method, url.pathname)
-      } catch (error) {
-        return logHttpResponse(
-          requestLogger,
-          startedAt,
-          isDecodeError(error)
-            ? jsonResponse(400, { error: 'Invalid request' })
-            : createInternalErrorResponse(error, requestLogger),
-        )
-      }
-
-      if (!routeMatch?.params) {
-        return logHttpResponse(
-          requestLogger,
-          startedAt,
-          jsonResponse(404, { error: 'Not Found' }),
-        )
-      }
-
-      requestLogger = requestLogger.child({
-        procedure: routeMatch.route.procedure,
-        source: `${routeMatch.route.implementation.name}.${routeMatch.route.procedure}`,
-      })
-
-      let corsHeaders: Headers | undefined
-      try {
-        corsHeaders = await createCorsActualResponseHeaders(
-          routeMatch.route.protocol.definition.pipeline,
-          request,
-        )
-      } catch (error) {
-        return logHttpResponse(
-          requestLogger,
-          startedAt,
-          createInternalErrorResponse(error, requestLogger),
-        )
-      }
-      const complete = (response: Response): Response =>
-        logHttpResponse(
-          requestLogger,
-          startedAt,
-          applyFrameworkHeaders(response, corsHeaders),
-        )
-
-      try {
-        const decoded = await decodeRequest(
-          request,
-          url,
-          routeMatch.params,
-          routeMatch.route.protocol.definition,
-        )
-        const raw: MutableHttpContext = {
-          ...decoded,
-          logger: requestLogger,
-          signal: request.signal,
+        if (!routeMatch?.params) {
+          return logHttpResponse(
+            requestLogger,
+            startedAt,
+            jsonResponse(404, { error: 'Not Found' }),
+          )
         }
-        const logical = await executePipeline<MutableHttpContext, LogicalHttpResult>(
-          routeMatch.route.protocol.definition.pipeline,
-          {
+
+        requestLogger = requestLogger.child({
+          procedure: routeMatch.route.procedure,
+          source: `${routeMatch.route.implementation.name}.${routeMatch.route.procedure}`,
+        })
+
+        let corsHeaders: Headers | undefined
+        try {
+          corsHeaders = await createCorsActualResponseHeaders(
+            routeMatch.route.protocol.definition.pipeline,
+            request,
+          )
+        } catch (error) {
+          return logHttpResponse(
+            requestLogger,
+            startedAt,
+            createInternalErrorResponse(error, requestLogger),
+          )
+        }
+        const complete = (response: Response): Response =>
+          logHttpResponse(
+            requestLogger,
+            startedAt,
+            applyFrameworkHeaders(response, corsHeaders),
+          )
+
+        try {
+          const decoded = await decodeRequest(
+            request,
+            url,
+            routeMatch.params,
+            routeMatch.route.protocol.definition,
+          )
+          const raw: MutableHttpContext = {
+            ...decoded,
+            logger: requestLogger,
+            signal: request.signal,
+          }
+          const logical = await executePipeline<
+            MutableHttpContext,
+            LogicalHttpResult
+          >(routeMatch.route.protocol.definition.pipeline, {
             context: raw,
             layer: (descriptor) => container.layerRuntime(descriptor),
             validate: async (layer, context) => {
               const declared = routeMatch.route.protocol.definition.request?.[
                 layer.part
-              ] as StandardSchemaV1 | HttpParamsSchemas | HttpRequestBodyDefinition | undefined
+              ] as
+                | StandardSchemaV1
+                | HttpParamsSchemas
+                | HttpRequestBodyDefinition
+                | undefined
               const schema =
                 layer.part === 'body' && declared
                   ? (declared as HttpRequestBodyDefinition).schema
@@ -225,51 +237,54 @@ export function createHttpExecution(options: {
             },
             terminal: async (_layer, context) =>
               invokeController(routeMatch.route, context, container),
-          },
-        )
-        return complete(
-          await finalizeResponse(
-            routeMatch.route.protocol.definition,
-            logical,
-            request.signal,
-          ),
-        )
-      } catch (error) {
-        if (error instanceof HttpUnsupportedMediaTypeError) {
-          return complete(jsonResponse(415, { error: 'Unsupported Media Type' }))
-        }
-        if (isDecodeError(error)) {
-          return complete(jsonResponse(400, { error: 'Invalid request' }))
-        }
-        if (isValidationError(error)) {
-          return complete(jsonResponse(400, { error: 'Validation failed' }))
-        }
-        let mapped: LogicalHttpResult | undefined
-        try {
-          mapped = await mapDeclaredError(
-            routeMatch.route.protocol.definition,
-            error,
+          })
+          return complete(
+            await finalizeResponse(
+              routeMatch.route.protocol.definition,
+              logical,
+              request.signal,
+            ),
           )
-        } catch (mappingError) {
-          return complete(createInternalErrorResponse(mappingError, requestLogger))
-        }
-        if (mapped) {
-          try {
+        } catch (error) {
+          if (error instanceof HttpUnsupportedMediaTypeError) {
             return complete(
-              await finalizeResponse(
-                routeMatch.route.protocol.definition,
-                mapped,
-                request.signal,
-              ),
-            )
-          } catch (finalizationError) {
-            return complete(
-              createInternalErrorResponse(finalizationError, requestLogger),
+              jsonResponse(415, { error: 'Unsupported Media Type' }),
             )
           }
+          if (isDecodeError(error)) {
+            return complete(jsonResponse(400, { error: 'Invalid request' }))
+          }
+          if (isValidationError(error)) {
+            return complete(jsonResponse(400, { error: 'Validation failed' }))
+          }
+          let mapped: LogicalHttpResult | undefined
+          try {
+            mapped = await mapDeclaredError(
+              routeMatch.route.protocol.definition,
+              error,
+            )
+          } catch (mappingError) {
+            return complete(
+              createInternalErrorResponse(mappingError, requestLogger),
+            )
+          }
+          if (mapped) {
+            try {
+              return complete(
+                await finalizeResponse(
+                  routeMatch.route.protocol.definition,
+                  mapped,
+                  request.signal,
+                ),
+              )
+            } catch (finalizationError) {
+              return complete(
+                createInternalErrorResponse(finalizationError, requestLogger),
+              )
+            }
+          }
+          return complete(createInternalErrorResponse(error, requestLogger))
         }
-        return complete(createInternalErrorResponse(error, requestLogger))
-      }
       })
     },
   }
@@ -279,14 +294,16 @@ function findRoute(
   routes: readonly HttpRoute[],
   method: string,
   pathname: string,
-): { readonly route: HttpRoute; readonly params: Record<string, string> } | undefined {
+):
+  | { readonly route: HttpRoute; readonly params: Record<string, string> }
+  | undefined {
   const candidate = routes
     .filter((route) => route.method === method)
     .map((route) => ({
       route,
       params: matchHttpPath(route.segments, pathname),
     }))
-    .find((candidate) => candidate.params !== undefined)
+    .find((match) => match.params !== undefined)
   return candidate?.params === undefined
     ? undefined
     : { route: candidate.route, params: candidate.params }
@@ -389,14 +406,21 @@ async function decodeRequest(
   const query: Record<string, string | string[]> = {}
   for (const [key, value] of url.searchParams) {
     const current = query[key]
-    query[key] = current === undefined ? value : Array.isArray(current) ? [...current, value] : [current, value]
+    query[key] =
+      current === undefined
+        ? value
+        : Array.isArray(current)
+          ? [...current, value]
+          : [current, value]
   }
 
   const headers = Object.fromEntries(request.headers.entries())
   let body: unknown = undefined
   const bodyDefinition = definition.request?.body
   if (bodyDefinition) {
-    const actualMediaType = normalizeMediaType(request.headers.get('content-type'))
+    const actualMediaType = normalizeMediaType(
+      request.headers.get('content-type'),
+    )
     const declaredMediaType = normalizeMediaType(bodyDefinition.contentType)!
     if (request.body !== null && actualMediaType !== declaredMediaType) {
       throw new HttpUnsupportedMediaTypeError(
@@ -404,7 +428,10 @@ async function decodeRequest(
         actualMediaType,
       )
     }
-    if (declaredMediaType === 'application/json' || declaredMediaType.endsWith('+json')) {
+    if (
+      declaredMediaType === 'application/json' ||
+      declaredMediaType.endsWith('+json')
+    ) {
       try {
         body = await request.json()
       } catch (error) {
@@ -426,7 +453,9 @@ async function decodeRequest(
   return { params, query, headers, body }
 }
 
-function normalizeMediaType(value: string | null | undefined): string | undefined {
+function normalizeMediaType(
+  value: string | null | undefined,
+): string | undefined {
   const normalized = value?.split(';', 1)[0]?.trim().toLowerCase()
   return normalized ? normalized : undefined
 }
@@ -449,9 +478,10 @@ async function invokeController(
   const response = Object.fromEntries(
     Object.keys(route.protocol.definition.responses).map((variant) => [
       variant,
-      (
-        result: { readonly body: unknown; readonly headers?: HttpHeaders },
-      ): LogicalHttpResult => ({
+      (result: {
+        readonly body: unknown
+        readonly headers?: HttpHeaders
+      }): LogicalHttpResult => ({
         kind: 'http-result',
         variant,
         body: result.body,
@@ -463,7 +493,9 @@ async function invokeController(
     ...raw,
     response,
   } as unknown as HttpControllerContext<HttpProtocol>
-  return Reflect.apply(method, controller, [context]) as Promise<LogicalHttpResult>
+  return Reflect.apply(method, controller, [
+    context,
+  ]) as Promise<LogicalHttpResult>
 }
 
 async function finalizeResponse(
@@ -497,7 +529,9 @@ async function finalizeResponse(
           finished = true
           signal.removeEventListener('abort', abort!)
           void iterator.return?.(signal.reason).finally(() => {
-            controller.error(signal.reason ?? new Error('HTTP requestが中断されました'))
+            controller.error(
+              signal.reason ?? new Error('HTTP requestが中断されました'),
+            )
           })
         }
         if (signal.aborted) abort()
@@ -514,7 +548,9 @@ async function finalizeResponse(
             return
           }
           const value = await validateSchema(response.body, next.value)
-          controller.enqueue(encoder.encode(`data:${JSON.stringify(value)}\n\n`))
+          controller.enqueue(
+            encoder.encode(`data:${JSON.stringify(value)}\n\n`),
+          )
         } catch (error) {
           finished = true
           if (abort) signal.removeEventListener('abort', abort)
@@ -530,14 +566,10 @@ async function finalizeResponse(
     })
     return new Response(stream, {
       status: response.status,
-      headers: mergeResponseHeaders(
-        response.staticHeaders,
-        responseHeaders,
-        {
-          'content-type': 'text/event-stream; charset=utf-8',
-          'cache-control': 'no-cache',
-        },
-      ),
+      headers: mergeResponseHeaders(response.staticHeaders, responseHeaders, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache',
+      }),
     })
   }
   const body = await validateSchema(response.body, result.body)
@@ -602,7 +634,7 @@ function collectRoutes(modules: readonly ModuleInstance[]): HttpRoute[] {
       }
     }
   }
-  return routes.sort((left, right) =>
+  return routes.toSorted((left, right) =>
     compareHttpPathSpecificity(left.segments, right.segments),
   )
 }
@@ -653,7 +685,8 @@ function isValidationError(error: unknown): boolean {
 
 function isDecodeError(error: unknown): boolean {
   return (
-    error instanceof HttpInputDecodeError || error instanceof HttpPathDecodeError
+    error instanceof HttpInputDecodeError ||
+    error instanceof HttpPathDecodeError
   )
 }
 
@@ -665,14 +698,20 @@ async function mapDeclaredError(
     const errorMapping = response.error
     if (errorMapping?.definition.is(error)) {
       const result = await errorMapping.map(error)
-      if (typeof result !== 'object' || result === null || !('body' in result)) {
+      if (
+        typeof result !== 'object' ||
+        result === null ||
+        !('body' in result)
+      ) {
         throw new Error('HTTP error mappingはbodyを返す必要があります')
       }
       return {
         kind: 'http-result',
         variant,
         body: result.body,
-        ...('headers' in result ? { headers: result.headers as HttpHeaders } : {}),
+        ...('headers' in result
+          ? { headers: result.headers as HttpHeaders }
+          : {}),
       }
     }
   }

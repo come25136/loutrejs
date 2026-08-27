@@ -53,21 +53,17 @@ export interface BasicAuthLayerDescriptor<
   TVariant extends string,
   TUnauthorizedBody,
 > extends LayerDescriptor<
-    readonly [],
-    readonly [TPrincipal],
-    string extends TVariant
-      ? unknown
-      : LogicalHttpResult<
-          TVariant,
-          TUnauthorizedBody,
-          BasicAuthResponseHeaders
-        >,
-    BasicAuthShortCircuits<TVariant>,
-    string,
-    'authentication',
-    readonly [],
-    BasicAuthContext
-  > {
+  readonly [],
+  readonly [TPrincipal],
+  string extends TVariant
+    ? unknown
+    : LogicalHttpResult<TVariant, TUnauthorizedBody, BasicAuthResponseHeaders>,
+  BasicAuthShortCircuits<TVariant>,
+  string,
+  'authentication',
+  readonly [],
+  BasicAuthContext
+> {
   readonly role: 'authentication'
 }
 

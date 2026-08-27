@@ -10,10 +10,7 @@ import {
   provide,
   token,
 } from '@loutrejs/core'
-import {
-  http,
-  validate,
-} from '@loutrejs/http'
+import { http, validate } from '@loutrejs/http'
 import { z } from 'zod'
 
 interface User {
@@ -129,11 +126,7 @@ const UsersController = implementation({
   factory: (users = inject(UserRepository)) => ({
     create(ctx) {
       return ctx.response.created({
-        body: users.create(
-          ctx.transaction,
-          ctx.body.name,
-          ctx.currentUser.id,
-        ),
+        body: users.create(ctx.transaction, ctx.body.name, ctx.currentUser.id),
       })
     },
   }),

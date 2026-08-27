@@ -16,22 +16,25 @@ export interface ClassProvider<
   readonly useClass: Class<TValue>
 }
 
-export interface ValueProvider<TToken extends TokenLike = TokenLike>
-  extends ProviderBase<TToken> {
+export interface ValueProvider<
+  TToken extends TokenLike = TokenLike,
+> extends ProviderBase<TToken> {
   readonly kind: 'value'
   readonly useValue: TokenValue<TToken>
   readonly scope: 'application'
 }
 
-export interface FactoryProvider<TToken extends TokenLike = TokenLike>
-  extends ProviderBase<TToken> {
+export interface FactoryProvider<
+  TToken extends TokenLike = TokenLike,
+> extends ProviderBase<TToken> {
   readonly kind: 'factory'
   readonly inject: readonly TokenLike[]
   readonly useFactory: (...dependencies: any[]) => TokenValue<TToken>
 }
 
-export interface ConditionalProvider<TToken extends TokenLike = TokenLike>
-  extends ProviderBase<TToken> {
+export interface ConditionalProvider<
+  TToken extends TokenLike = TokenLike,
+> extends ProviderBase<TToken> {
   readonly kind: 'conditional'
   readonly select: EnvKey<PropertyKey>
   readonly mapping: Readonly<Record<PropertyKey, Class<TokenValue<TToken>>>>
@@ -84,7 +87,9 @@ export function provide<TToken extends TokenLike>(token: TToken) {
       }
     },
 
-    useFactory(definition: FactoryDefinition<TokenValue<TToken>>): FactoryProvider<TToken> {
+    useFactory(
+      definition: FactoryDefinition<TokenValue<TToken>>,
+    ): FactoryProvider<TToken> {
       return {
         kind: 'factory',
         provide: token,
@@ -111,7 +116,9 @@ export function provide<TToken extends TokenLike>(token: TToken) {
 }
 
 /** @internal Module.environmentからframework-managed providerを合成する。 */
-export function environmentProvider(environment: EnvClass): EnvironmentProvider {
+export function environmentProvider(
+  environment: EnvClass,
+): EnvironmentProvider {
   return {
     kind: 'environment',
     provide: environment,

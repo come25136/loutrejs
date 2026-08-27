@@ -11,10 +11,7 @@ import type { HttpProtocolExecution } from '@loutrejs/http'
 
 export function createTestApplication<
   const TModules extends readonly ModuleInstance[],
->(options: {
-  readonly modules: TModules
-  readonly logger?: Logger
-}) {
+>(options: { readonly modules: TModules; readonly logger?: Logger }) {
   const definition = defineApplication(options)
   return bootstrap(definition) as ReturnType<typeof bootstrap> &
     HttpApplicationCapability
@@ -39,9 +36,10 @@ export function createTestMessagePortExecution(
   logger?: Logger,
 ) {
   const graph = assertValidCompilation(compileApplication({ modules }))
-  const runtime = new ApplicationRuntime(modules, {
-    ...(logger === undefined ? {} : { logger }),
-  })
+  const runtime = new ApplicationRuntime(
+    modules,
+    logger === undefined ? {} : { logger },
+  )
   return createMessagePortExecution({
     runtime,
     graph,

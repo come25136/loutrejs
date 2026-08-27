@@ -37,9 +37,10 @@ type IsParamNameRest<TName extends string> = TName extends ''
     ? IsParamNameRest<TRest>
     : false
 
-type IsParamName<TName extends string> = TName extends `${ParamNameStart}${infer TRest}`
-  ? IsParamNameRest<TRest>
-  : false
+type IsParamName<TName extends string> =
+  TName extends `${ParamNameStart}${infer TRest}`
+    ? IsParamNameRest<TRest>
+    : false
 
 type IsStaticSegment<TSegment extends string> = TSegment extends ''
   ? false
@@ -54,7 +55,10 @@ type ValidatePathSegments<
   TSeen extends string = never,
 > = TSegments extends `${infer THead}/${infer TTail}`
   ? ValidatePathSegment<THead, TSeen> extends infer TResult
-    ? TResult extends { readonly valid: true; readonly seen: infer TNext extends string }
+    ? TResult extends {
+        readonly valid: true
+        readonly seen: infer TNext extends string
+      }
       ? ValidatePathSegments<TTail, TNext>
       : false
     : false
@@ -88,13 +92,13 @@ type PathParamNamesFromSegments<TSegments extends string> =
     ? PathParamName<THead> | PathParamNamesFromSegments<TTail>
     : PathParamName<TSegments>
 
-type PathParamName<TSegment extends string> = TSegment extends `{${infer TName}}`
-  ? TName
-  : never
+type PathParamName<TSegment extends string> =
+  TSegment extends `{${infer TName}}` ? TName : never
 
-export type PathParamNames<TPath extends string> = TPath extends `/${infer TSegments}`
-  ? PathParamNamesFromSegments<TSegments>
-  : never
+export type PathParamNames<TPath extends string> =
+  TPath extends `/${infer TSegments}`
+    ? PathParamNamesFromSegments<TSegments>
+    : never
 
 export type RawPathParams<TPath extends string> = Readonly<{
   [TName in PathParamNames<TPath>]: string
@@ -140,24 +144,29 @@ export function parseHttpPath(path: string): readonly HttpPathSegment[] {
   }
 
   const names = new Set<string>()
-  const segments = path.slice(1).split('/').map((segment): HttpPathSegment => {
-    if (segment.startsWith('{') || segment.endsWith('}')) {
-      const match = /^\{([^{}]*)\}$/.exec(segment)
-      const name = match?.[1]
-      if (!name || !PARAM_NAME_PATTERN.test(name)) {
-        throw new Error(`Invalid HTTP path parameter: ${segment}`)
+  const segments = path
+    .slice(1)
+    .split('/')
+    .map((segment): HttpPathSegment => {
+      if (segment.startsWith('{') || segment.endsWith('}')) {
+        const match = /^\{([^{}]*)\}$/.exec(segment)
+        const name = match?.[1]
+        if (!name || !PARAM_NAME_PATTERN.test(name)) {
+          throw new Error(`Invalid HTTP path parameter: ${segment}`)
+        }
+        if (names.has(name)) {
+          throw new Error(`Duplicate HTTP path parameter: ${name}`)
+        }
+        names.add(name)
+        return Object.freeze({ kind: 'param', name })
       }
-      if (names.has(name)) {
-        throw new Error(`Duplicate HTTP path parameter: ${name}`)
+      if (segment.includes('{') || segment.includes('}')) {
+        throw new Error(
+          `Inline HTTP path parameters are not supported: ${segment}`,
+        )
       }
-      names.add(name)
-      return Object.freeze({ kind: 'param', name })
-    }
-    if (segment.includes('{') || segment.includes('}')) {
-      throw new Error(`Inline HTTP path parameters are not supported: ${segment}`)
-    }
-    return Object.freeze({ kind: 'static', value: segment })
-  })
+      return Object.freeze({ kind: 'static', value: segment })
+    })
   return Object.freeze(segments)
 }
 

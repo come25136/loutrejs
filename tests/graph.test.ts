@@ -33,7 +33,9 @@ describe('Runtime Application Graph', () => {
   it('conditional全候補をprobeし未選択branchのbroken dependencyを診断する', () => {
     const MISSING = token<unknown>('graph.missing')
     const STORAGE = token<unknown>('graph.storage')
-    class Env extends defineEnv(z.object({ DRIVER: z.enum(['memory', 'broken']) })) {}
+    class Env extends defineEnv(
+      z.object({ DRIVER: z.enum(['memory', 'broken']) }),
+    ) {}
     class MemoryStorage {}
     class BrokenStorage {
       constructor(readonly missing = inject(MISSING)) {}
@@ -49,19 +51,24 @@ describe('Runtime Application Graph', () => {
     }))
 
     const { graph, diagnostics } = compileApplication({ modules: [Module()] })
-    expect(graph.edges).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        kind: 'conditional',
-        condition: { key: 'DRIVER', equals: 'memory' },
-      }),
-      expect.objectContaining({
-        kind: 'conditional',
-        condition: { key: 'DRIVER', equals: 'broken' },
-      }),
-      expect.objectContaining({ kind: 'inject', source: 'probed' }),
-    ]))
+    expect(graph.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'conditional',
+          condition: { key: 'DRIVER', equals: 'memory' },
+        }),
+        expect.objectContaining({
+          kind: 'conditional',
+          condition: { key: 'DRIVER', equals: 'broken' },
+        }),
+        expect.objectContaining({ kind: 'inject', source: 'probed' }),
+      ]),
+    )
     expect(diagnostics).toContainEqual(
-      expect.objectContaining({ code: 'LUTRE_DI_UNRESOLVED', path: 'BrokenStorage' }),
+      expect.objectContaining({
+        code: 'LUTRE_DI_UNRESOLVED',
+        path: 'BrokenStorage',
+      }),
     )
   })
 
@@ -73,17 +80,21 @@ describe('Runtime Application Graph', () => {
       lifecycle: {
         onModuleInit: hook({
           inject: [VALUE],
-          run: () => { executions += 1 },
+          run: () => {
+            executions += 1
+          },
         }),
       },
     }))
 
     const { graph } = compileApplication({ modules: [Module()] })
     expect(executions).toBe(0)
-    expect(graph.edges).toContainEqual(expect.objectContaining({
-      kind: 'lifecycle',
-      source: 'declared',
-    }))
+    expect(graph.edges).toContainEqual(
+      expect.objectContaining({
+        kind: 'lifecycle',
+        source: 'declared',
+      }),
+    )
   })
 
   it('factory dependencyとDI cycleをfirst-class edge/diagnosticで表す', () => {
@@ -100,16 +111,23 @@ describe('Runtime Application Graph', () => {
       providers: [
         provide(A_TOKEN).useClass(A),
         provide(B_TOKEN).useClass(B),
-        provide(FACTORY).useFactory({ inject: [A_TOKEN], use: (value) => value }),
+        provide(FACTORY).useFactory({
+          inject: [A_TOKEN],
+          use: (value) => value,
+        }),
       ],
     }))
 
     const { graph, diagnostics } = compileApplication({ modules: [Module()] })
-    expect(graph.edges).toContainEqual(expect.objectContaining({
-      kind: 'factory',
-      source: 'declared',
-    }))
-    expect(diagnostics).toContainEqual(expect.objectContaining({ code: 'LUTRE_DI_CYCLE' }))
+    expect(graph.edges).toContainEqual(
+      expect.objectContaining({
+        kind: 'factory',
+        source: 'declared',
+      }),
+    )
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_DI_CYCLE' }),
+    )
   })
 
   it('未解決のdeclared dependencyとasync factoryをGraph validationで拒否する', () => {
@@ -125,9 +143,11 @@ describe('Runtime Application Graph', () => {
     }))
 
     const { diagnostics } = compileApplication({ modules: [Module()] })
-    expect(diagnostics).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'LUTRE_DI_UNRESOLVED' }),
-      expect.objectContaining({ code: 'LUTRE_DI_ASYNC_FACTORY' }),
-    ]))
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'LUTRE_DI_UNRESOLVED' }),
+        expect.objectContaining({ code: 'LUTRE_DI_ASYNC_FACTORY' }),
+      ]),
+    )
   })
 })

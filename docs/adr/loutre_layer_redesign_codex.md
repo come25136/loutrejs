@@ -249,7 +249,7 @@ I/Oや非同期処理はruntime function、Provider lifecycle、Module lifecycle
 禁止:
 
 ```ts
-async (ctx, next, database) => {}
+;async (ctx, next, database) => {}
 ```
 
 禁止:

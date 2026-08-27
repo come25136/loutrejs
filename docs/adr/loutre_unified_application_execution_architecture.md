@@ -48,21 +48,13 @@ Application source は runtime を知らない。
 
 ```ts
 export const application = defineApplication({
-  modules: [
-    AppModule(),
-  ],
+  modules: [AppModule()],
 
-  entrypoints: [
-    rebuildIndex,
-  ],
+  entrypoints: [rebuildIndex],
 
-  schedules: [
-    nightlyCleanup,
-  ],
+  schedules: [nightlyCleanup],
 
-  consumers: [
-    orderConsumer,
-  ],
+  consumers: [orderConsumer],
 })
 ```
 
@@ -259,13 +251,9 @@ Graph が持たない execution capability を Hosted Application に生やさ�
 
 ```ts
 const workerApplication = defineApplication({
-  modules: [
-    WorkerModule(),
-  ],
+  modules: [WorkerModule()],
 
-  entrypoints: [
-    processJob,
-  ],
+  entrypoints: [processJob],
 })
 
 const app = bootstrap(workerApplication)
@@ -345,9 +333,7 @@ Loutre は Graph-first の明示的 root を維持する。
 - server を起動せず HTTP execution をテストできる低レベル `fetch()` API
 
 ```ts
-const response = await app.fetch(
-  new Request('http://localhost/users'),
-)
+const response = await app.fetch(new Request('http://localhost/users'))
 ```
 
 採用しない:
@@ -433,25 +419,15 @@ Terraform / CDK 等を置き換えない。
 
 ```ts
 export const application = defineApplication({
-  modules: [
-    AppModule(),
-  ],
+  modules: [AppModule()],
 
-  entrypoints: [
-    rebuildIndex,
-  ],
+  entrypoints: [rebuildIndex],
 
-  schedules: [
-    nightlyCleanup,
-  ],
+  schedules: [nightlyCleanup],
 
-  queues: [
-    outgoingEvents,
-  ],
+  queues: [outgoingEvents],
 
-  consumers: [
-    orderConsumer,
-  ],
+  consumers: [orderConsumer],
 })
 ```
 
@@ -533,16 +509,12 @@ export interface ModuleInstance<
 ModuleTemplate も Definition 型を保持する。
 
 ```ts
-export interface ModuleTemplate<
-  TArgs,
-  TDefinition extends ModuleDefinition,
-> {
+export interface ModuleTemplate<TArgs, TDefinition extends ModuleDefinition> {
   (args: TArgs): ModuleInstance<TDefinition>
 
   readonly kind: 'module-template'
 
-  readonly instantiate:
-    (args: TArgs) => ModuleInstance<TDefinition>
+  readonly instantiate: (args: TArgs) => ModuleInstance<TDefinition>
 
   /** @internal */
   readonly [moduleTypeInfo]?: ModuleTypeInfo<TDefinition>
@@ -559,18 +531,14 @@ export interface ModuleTemplate<
 export function defineModule<
   TArgs = void,
   const TDefinition extends ModuleDefinition = ModuleDefinition,
->(
-  factory: (args: TArgs) => TDefinition,
-): ModuleTemplate<TArgs, TDefinition>
+>(factory: (args: TArgs) => TDefinition): ModuleTemplate<TArgs, TDefinition>
 ```
 
 これにより、
 
 ```ts
 const UsersModule = defineModule(() => ({
-  implementations: [
-    UsersHttpImplementation,
-  ],
+  implementations: [UsersHttpImplementation],
 }))
 ```
 
@@ -587,9 +555,7 @@ Application 側から Module Graph 全体を毎回深い conditional type で再
 概念:
 
 ```ts
-interface ModuleTypeInfo<
-  TProtocols extends string = never,
-> {
+interface ModuleTypeInfo<TProtocols extends string = never> {
   readonly protocols: TProtocols
 }
 ```
@@ -598,9 +564,7 @@ interface ModuleTypeInfo<
 
 ```ts
 const UsersModule = defineModule(() => ({
-  implementations: [
-    UsersHttp,
-  ],
+  implementations: [UsersHttp],
 }))
 ```
 
@@ -614,9 +578,7 @@ ModuleTypeInfo<"http">
 
 ```ts
 const ApiModule = defineModule(() => ({
-  imports: [
-    UsersModule(),
-  ],
+  imports: [UsersModule()],
 }))
 ```
 
@@ -655,21 +617,14 @@ export interface EntrypointDescriptor<
   readonly kind: 'entrypoint'
   readonly name: TName
 
-  readonly factory:
-    () => EntrypointRuntime<TInput, TOutput>
+  readonly factory: () => EntrypointRuntime<TInput, TOutput>
 }
 ```
 
 ```ts
-export type EntrypointRuntime<
-  TInput,
-  TOutput,
-> =
-  [TInput] extends [void]
-    ? () => TOutput | Promise<TOutput>
-    : (
-        input: TInput,
-      ) => TOutput | Promise<TOutput>
+export type EntrypointRuntime<TInput, TOutput> = [TInput] extends [void]
+  ? () => TOutput | Promise<TOutput>
+  : (input: TInput) => TOutput | Promise<TOutput>
 ```
 
 ---
@@ -677,17 +632,15 @@ export type EntrypointRuntime<
 ## 7.2 利用例
 
 ```ts
-const processOrder =
-  entrypoint<Order, void>({
-    name: 'orders.process',
+const processOrder = entrypoint<Order, void>({
+  name: 'orders.process',
 
-    factory: (
-      service = inject(OrderService),
-    ) =>
-      async (order) => {
-        await service.process(order)
-      },
-  })
+  factory:
+    (service = inject(OrderService)) =>
+    async (order) => {
+      await service.process(order)
+    },
+})
 ```
 
 factory は synchronous construction。
@@ -736,33 +689,18 @@ Schedule / Consumer が参照する Entrypoint は自動登録する。
 
 ```ts
 type EntrypointInput<T> =
-  T extends EntrypointDescriptor<
-    infer TInput,
-    any,
-    any
-  >
-    ? TInput
-    : never
+  T extends EntrypointDescriptor<infer TInput, any, any> ? TInput : never
 ```
 
 ```ts
 type EntrypointOutput<T> =
-  T extends EntrypointDescriptor<
-    any,
-    infer TOutput,
-    any
-  >
-    ? TOutput
-    : never
+  T extends EntrypointDescriptor<any, infer TOutput, any> ? TOutput : never
 ```
 
 ```ts
-type EntrypointArguments<T> =
-  [EntrypointInput<T>] extends [void]
-    ? readonly []
-    : readonly [
-        input: EntrypointInput<T>
-      ]
+type EntrypointArguments<T> = [EntrypointInput<T>] extends [void]
+  ? readonly []
+  : readonly [input: EntrypointInput<T>]
 ```
 
 Hosted Application:
@@ -783,10 +721,7 @@ await app.run(cleanup)
 ```
 
 ```ts
-await app.run(
-  processOrder,
-  order,
-)
+await app.run(processOrder, order)
 ```
 
 未登録 descriptor は compile-time / runtime の両方で拒否する。
@@ -826,8 +761,10 @@ const nightlyCleanup = schedule({
 
 ```ts
 export interface ScheduleDescriptor<
-  TEntrypoint extends EntrypointDescriptor<void, void> =
-    EntrypointDescriptor<void, void>,
+  TEntrypoint extends EntrypointDescriptor<void, void> = EntrypointDescriptor<
+    void,
+    void
+  >,
   TName extends string = string,
 > {
   readonly kind: 'schedule'
@@ -999,9 +936,7 @@ Consumer が参照する Queue は Application Graph へ暗黙登録する。
 
 ```ts
 defineApplication({
-  consumers: [
-    orderConsumer,
-  ],
+  consumers: [orderConsumer],
 })
 ```
 
@@ -1010,9 +945,7 @@ defineApplication({
 ただし producer-only Queue 等を将来扱うため、
 
 ```ts
-queues: [
-  outgoingEvents,
-]
+queues: [outgoingEvents]
 ```
 
 も `defineApplication()` に持てる。
@@ -1024,23 +957,15 @@ queues: [
 ## 14.1 Base
 
 ```ts
-export interface BaseApplication<
-  TDefinition extends ApplicationDefinition,
-> {
+export interface BaseApplication<TDefinition extends ApplicationDefinition> {
   readonly graph: ApplicationGraphIR
 
   init(): Promise<this>
 
-  run<
-    TEntrypoint extends
-      RegisteredEntrypoint<TDefinition>,
-  >(
+  run<TEntrypoint extends RegisteredEntrypoint<TDefinition>>(
     entrypoint: TEntrypoint,
-    ...args:
-      EntrypointArguments<TEntrypoint>
-  ): Promise<
-    EntrypointOutput<TEntrypoint>
-  >
+    ...args: EntrypointArguments<TEntrypoint>
+  ): Promise<EntrypointOutput<TEntrypoint>>
 
   close(): Promise<void>
 }
@@ -1051,28 +976,13 @@ export interface BaseApplication<
 ## 14.2 Conditional capability
 
 ```ts
-export type HostedApplication<
-  TDefinition extends ApplicationDefinition,
-> =
-  BaseApplication<TDefinition>
-
-  & (
-    HasHttp<TDefinition> extends true
-      ? HttpApplicationCapability
-      : {}
-  )
-
-  & (
-    HasSchedules<TDefinition> extends true
+export type HostedApplication<TDefinition extends ApplicationDefinition> =
+  BaseApplication<TDefinition> &
+    (HasHttp<TDefinition> extends true ? HttpApplicationCapability : {}) &
+    (HasSchedules<TDefinition> extends true
       ? SchedulerApplicationCapability
-      : {}
-  )
-
-  & (
-    HasConsumers<TDefinition> extends true
-      ? QueueApplicationCapability
-      : {}
-  )
+      : {}) &
+    (HasConsumers<TDefinition> extends true ? QueueApplicationCapability : {})
 ```
 
 これを API Freeze とする。
@@ -1085,13 +995,9 @@ HTTP が Graph に存在する場合のみ追加。
 
 ```ts
 export interface HttpApplicationCapability {
-  listen(
-    options: HttpListenOptions,
-  ): Promise<void>
+  listen(options: HttpListenOptions): Promise<void>
 
-  fetch(
-    request: Request,
-  ): Promise<Response>
+  fetch(request: Request): Promise<Response>
 }
 ```
 
@@ -1134,9 +1040,7 @@ AI がコードを書く前提でもあるため、省略記法より明示性�
 HTTP がある Application の portable low-level execution API。
 
 ```ts
-const response = await app.fetch(
-  new Request('http://localhost/users'),
-)
+const response = await app.fetch(new Request('http://localhost/users'))
 ```
 
 server を起動しない HTTP test に使える。
@@ -1532,16 +1436,12 @@ portable Application source と self-host bootstrap code を import boundary で
 
 ```ts
 // app.ts
-import {
-  defineApplication,
-} from '@loutrejs/application'
+import { defineApplication } from '@loutrejs/application'
 ```
 
 ```ts
 // main.ts
-import {
-  bootstrap,
-} from '@loutrejs/application/host'
+import { bootstrap } from '@loutrejs/application/host'
 ```
 
 Node/Bun/Deno package 名を user code に出さない。
@@ -1711,44 +1611,31 @@ Graph IR は breaking change として v3 へ上げる。
 export interface ApplicationGraphIR {
   readonly version: 3
 
-  readonly modules:
-    readonly ModuleIR[]
+  readonly modules: readonly ModuleIR[]
 
-  readonly providers:
-    readonly ProviderIR[]
+  readonly providers: readonly ProviderIR[]
 
-  readonly tokens:
-    readonly TokenIR[]
+  readonly tokens: readonly TokenIR[]
 
-  readonly contextKeys:
-    readonly ContextKeyIR[]
+  readonly contextKeys: readonly ContextKeyIR[]
 
-  readonly contracts:
-    readonly string[]
+  readonly contracts: readonly string[]
 
-  readonly pipelines:
-    readonly PipelineIR[]
+  readonly pipelines: readonly PipelineIR[]
 
-  readonly implementations:
-    readonly ImplementationIR[]
+  readonly implementations: readonly ImplementationIR[]
 
-  readonly queues:
-    readonly QueueIR[]
+  readonly queues: readonly QueueIR[]
 
-  readonly executions:
-    readonly ExecutionRootIR[]
+  readonly executions: readonly ExecutionRootIR[]
 
-  readonly capabilities:
-    readonly CapabilityIR[]
+  readonly capabilities: readonly CapabilityIR[]
 
-  readonly nodes:
-    readonly DependencyNodeIR[]
+  readonly nodes: readonly DependencyNodeIR[]
 
-  readonly edges:
-    readonly DependencyEdgeIR[]
+  readonly edges: readonly DependencyEdgeIR[]
 
-  readonly diagnostics:
-    readonly Diagnostic[]
+  readonly diagnostics: readonly Diagnostic[]
 }
 ```
 
@@ -1797,11 +1684,9 @@ export type ExecutionRootIR =
 
 ```ts
 export interface EntrypointExecutionRootIR {
-  readonly id:
-    `entrypoint:${string}`
+  readonly id: `entrypoint:${string}`
 
-  readonly kind:
-    'entrypoint'
+  readonly kind: 'entrypoint'
 
   readonly name: string
 }
@@ -1813,11 +1698,9 @@ export interface EntrypointExecutionRootIR {
 
 ```ts
 export interface ScheduleExecutionRootIR {
-  readonly id:
-    `schedule:${string}`
+  readonly id: `schedule:${string}`
 
-  readonly kind:
-    'schedule'
+  readonly kind: 'schedule'
 
   readonly name: string
 
@@ -1836,11 +1719,9 @@ export interface ScheduleExecutionRootIR {
 
 ```ts
 export interface QueueConsumerExecutionRootIR {
-  readonly id:
-    `queue-consumer:${string}`
+  readonly id: `queue-consumer:${string}`
 
-  readonly kind:
-    'queue-consumer'
+  readonly kind: 'queue-consumer'
 
   readonly name: string
 
@@ -1856,8 +1737,7 @@ export interface QueueConsumerExecutionRootIR {
 
 ```ts
 export interface QueueIR {
-  readonly id:
-    `queue:${string}`
+  readonly id: `queue:${string}`
 
   readonly name: string
 }
@@ -1940,8 +1820,7 @@ DependencyConsumer に追加:
 
 ```ts
 export interface EntrypointConsumer {
-  readonly kind:
-    'entrypoint-consumer'
+  readonly kind: 'entrypoint-consumer'
 
   readonly id: string
   readonly name: string
@@ -1950,10 +1829,7 @@ export interface EntrypointConsumer {
 
 ```ts
 export type DependencyConsumer =
-  | TokenLike
-  | LayerConsumer
-  | ImplementationConsumer
-  | EntrypointConsumer
+  TokenLike | LayerConsumer | ImplementationConsumer | EntrypointConsumer
 ```
 
 `ScheduleConsumer` / `QueueConsumer` DI type は作らない。
@@ -1982,20 +1858,15 @@ compileApplication({
 
 ```ts
 export interface ApplicationCompilationInput {
-  readonly modules:
-    readonly AnyModuleLike[]
+  readonly modules: readonly AnyModuleLike[]
 
-  readonly entrypoints?:
-    readonly EntrypointDescriptor[]
+  readonly entrypoints?: readonly EntrypointDescriptor[]
 
-  readonly schedules?:
-    readonly ScheduleDescriptor[]
+  readonly schedules?: readonly ScheduleDescriptor[]
 
-  readonly queues?:
-    readonly QueueDescriptor[]
+  readonly queues?: readonly QueueDescriptor[]
 
-  readonly consumers?:
-    readonly QueueConsumerDescriptor[]
+  readonly consumers?: readonly QueueConsumerDescriptor[]
 }
 ```
 
@@ -2057,9 +1928,7 @@ Lambda worker Entrypoint
 export interface CapabilityIR {
   readonly name: string
 
-  readonly scope:
-    | 'application'
-    | 'execution'
+  readonly scope: 'application' | 'execution'
 
   readonly requiredBy: string
 }
@@ -2336,21 +2205,18 @@ runtime driver package 名は canonical Application code へ露出させない�
 # 45. Canonical example
 
 ```ts
-const cleanup =
-  entrypoint<void, void>({
-    name: 'maintenance.cleanup',
+const cleanup = entrypoint<void, void>({
+  name: 'maintenance.cleanup',
 
-    factory: (
-      service = inject(CleanupService),
-    ) =>
-      async () => {
-        await service.cleanup()
-      },
-  })
+  factory:
+    (service = inject(CleanupService)) =>
+    async () => {
+      await service.cleanup()
+    },
+})
 
 const nightlyCleanup = schedule({
-  name:
-    'maintenance.cleanup.nightly',
+  name: 'maintenance.cleanup.nightly',
 
   cron: {
     expression: '0 3 * * *',
@@ -2360,17 +2226,15 @@ const nightlyCleanup = schedule({
   entrypoint: cleanup,
 })
 
-const processOrder =
-  entrypoint<Order, void>({
-    name: 'orders.process',
+const processOrder = entrypoint<Order, void>({
+  name: 'orders.process',
 
-    factory: (
-      service = inject(OrderService),
-    ) =>
-      async (order) => {
-        await service.process(order)
-      },
-  })
+  factory:
+    (service = inject(OrderService)) =>
+    async (order) => {
+      await service.process(order)
+    },
+})
 
 const orders = queue<Order>({
   name: 'orders',
@@ -2382,31 +2246,21 @@ const orderConsumer = consumer({
   entrypoint: processOrder,
 })
 
-export const application =
-  defineApplication({
-    modules: [
-      AppModule(),
-    ],
+export const application = defineApplication({
+  modules: [AppModule()],
 
-    entrypoints: [
-      rebuildIndex,
-    ],
+  entrypoints: [rebuildIndex],
 
-    schedules: [
-      nightlyCleanup,
-    ],
+  schedules: [nightlyCleanup],
 
-    consumers: [
-      orderConsumer,
-    ],
-  })
+  consumers: [orderConsumer],
+})
 ```
 
 self-hosted:
 
 ```ts
-const app =
-  bootstrap(application)
+const app = bootstrap(application)
 
 await app.init()
 
@@ -2425,36 +2279,25 @@ await app.listen({
 # 46. Worker-only example
 
 ```ts
-const processJob =
-  entrypoint<Job, void>({
-    name: 'jobs.process',
+const processJob = entrypoint<Job, void>({
+  name: 'jobs.process',
 
-    factory: (
-      service = inject(JobService),
-    ) =>
-      async (job) => {
-        await service.process(job)
-      },
-  })
+  factory:
+    (service = inject(JobService)) =>
+    async (job) => {
+      await service.process(job)
+    },
+})
 
-export const workerApplication =
-  defineApplication({
-    modules: [
-      WorkerModule(),
-    ],
+export const workerApplication = defineApplication({
+  modules: [WorkerModule()],
 
-    entrypoints: [
-      processJob,
-    ],
-  })
+  entrypoints: [processJob],
+})
 
-const app =
-  bootstrap(workerApplication)
+const app = bootstrap(workerApplication)
 
-await app.run(
-  processJob,
-  job,
-)
+await app.run(processJob, job)
 ```
 
 TypeScript 上:
@@ -2483,17 +2326,11 @@ Application source:
 
 ```ts
 export default defineApplication({
-  modules: [
-    AppModule(),
-  ],
+  modules: [AppModule()],
 
-  entrypoints: [
-    processJob,
-  ],
+  entrypoints: [processJob],
 
-  schedules: [
-    nightlyCleanup,
-  ],
+  schedules: [nightlyCleanup],
 })
 ```
 

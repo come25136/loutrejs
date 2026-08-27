@@ -75,9 +75,9 @@ describe('canonical Fixture B', () => {
     const InvalidModule = defineModule(() => ({
       implementations: [InvalidImplementation],
     }))
-    const codes = compileApplication({ modules: [InvalidModule()] }).diagnostics.map(
-      ({ code }) => code,
-    )
+    const codes = compileApplication({
+      modules: [InvalidModule()],
+    }).diagnostics.map(({ code }) => code)
 
     expect(codes).toContain('LUTRE_PIPELINE_004')
     expect(codes).toContain('LUTRE_VALIDATION_001')

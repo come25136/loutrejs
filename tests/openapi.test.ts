@@ -1,6 +1,11 @@
 import { generateOpenApi } from '@loutrejs/application/openapi'
 import { defineApplication } from '@loutrejs/application'
-import { contract, defineModule, implementation, procedure } from '@loutrejs/core'
+import {
+  contract,
+  defineModule,
+  implementation,
+  procedure,
+} from '@loutrejs/core'
 import { http, validate } from '@loutrejs/http'
 import { createUsersApplication } from '../fixtures/http-crud/src/index.js'
 import { z } from 'zod'
@@ -69,7 +74,10 @@ describe('OpenAPI generation', () => {
   })
 
   it('uses querystring, header parameters, response oneOf and additionalOperations', () => {
-    const Input = z.object({ q: z.string(), page: z.coerce.number().optional() })
+    const Input = z.object({
+      q: z.string(),
+      page: z.coerce.number().optional(),
+    })
     const Headers = z.object({ 'x-tenant-id': z.string() })
     const Success = z.object({ ok: z.literal(true) })
     const FailureA = z.object({ code: z.literal('A') })
@@ -118,9 +126,11 @@ describe('OpenAPI generation', () => {
     const document = generateOpenApi(application, {
       info: { title: 'Search API', version: '1.0.0' },
     })
-    const operation = (document.paths['/search']?.additionalOperations as
-      | Record<string, Record<string, any>>
-      | undefined)?.COPY
+    const operation = (
+      document.paths['/search']?.additionalOperations as
+        | Record<string, Record<string, any>>
+        | undefined
+    )?.COPY
 
     expect(operation?.summary).toBe('Copy search result')
     expect(operation?.tags).toEqual(['Search'])
@@ -134,8 +144,9 @@ describe('OpenAPI generation', () => {
         }),
       ]),
     )
-    expect(operation?.responses['400'].content['application/json'].schema.oneOf)
-      .toHaveLength(2)
+    expect(
+      operation?.responses['400'].content['application/json'].schema.oneOf,
+    ).toHaveLength(2)
   })
 
   it('rejects an empty request body content type at contract definition', () => {

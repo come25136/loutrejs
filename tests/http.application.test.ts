@@ -8,10 +8,7 @@ import {
   procedure,
   shortCircuit,
 } from '@loutrejs/core'
-import {
-  http,
-  validate,
-} from '@loutrejs/http'
+import { http, validate } from '@loutrejs/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 
@@ -410,7 +407,6 @@ describe('HTTP application boundary', () => {
     expect(await response.json()).toEqual({ value: 'cached' })
     expect(controllerCalled).toBe(false)
   })
-
 })
 
 function createInputDecodeFixture() {

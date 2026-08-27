@@ -11,10 +11,7 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@loutrejs/core'
-import {
-  http,
-  validate,
-} from '@loutrejs/http'
+import { http, validate } from '@loutrejs/http'
 import { Pool, type PoolClient } from 'pg'
 import { z } from 'zod'
 
@@ -35,9 +32,7 @@ const TRANSACTION = contextKey('transaction').of<PoolClient>()
 class PostgresDatabase implements OnModuleInit, OnModuleDestroy {
   readonly pool: Pool
 
-  constructor(
-    readonly env = inject(AppEnv),
-  ) {
+  constructor(readonly env = inject(AppEnv)) {
     this.pool = new Pool({
       connectionString: env.databaseUrl.href,
     })
@@ -113,8 +108,8 @@ const UsersContract = contract(
 )
 
 class UserRepository {
-  async create(transaction: PoolClient, name: string) {
-    const result = await transaction.query<{
+  async create(client: PoolClient, name: string) {
+    const result = await client.query<{
       readonly id: string
       readonly name: string
       readonly created_by: string
@@ -150,10 +145,7 @@ const UsersController = implementation({
 const AppModule = defineModule(() => ({
   name: 'DatabasePostgresExample',
   environment: [AppEnv],
-  providers: [
-    PostgresDatabase,
-    UserRepository,
-  ],
+  providers: [PostgresDatabase, UserRepository],
   implementations: [UsersController],
 }))
 

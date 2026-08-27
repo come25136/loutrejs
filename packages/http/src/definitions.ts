@@ -42,9 +42,7 @@ export interface HttpRequestDefinition {
 }
 
 export type HttpHeaderValue = string | readonly string[]
-export type HttpHeaders = Readonly<
-  Record<string, HttpHeaderValue | undefined>
->
+export type HttpHeaders = Readonly<Record<string, HttpHeaderValue | undefined>>
 
 export interface HttpErrorMatcher<TError extends { readonly data: unknown }> {
   is(error: unknown): error is TError
@@ -85,13 +83,15 @@ export interface HttpProtocolDefinition {
 export interface HttpProtocol<
   TDefinition extends HttpProtocolDefinition = HttpProtocolDefinition,
 > extends ProtocolDescriptor<
-    'http',
-    HttpControllerContextDefinition<TDefinition>,
-    DeclaredHttpResults<TDefinition['responses']>,
-    HttpDispatchKey<TDefinition['method'], TDefinition['path']>
-  > {
+  'http',
+  HttpControllerContextDefinition<TDefinition>,
+  DeclaredHttpResults<TDefinition['responses']>,
+  HttpDispatchKey<TDefinition['method'], TDefinition['path']>
+> {
   readonly definition: TDefinition
-  readonly interaction: TDefinition extends { readonly interaction: infer TInteraction }
+  readonly interaction: TDefinition extends {
+    readonly interaction: infer TInteraction
+  }
     ? TInteraction & ('unary' | 'server-stream')
     : 'unary'
 }
@@ -170,7 +170,8 @@ type IsResultHeadersCompatible<
         readonly variant: infer TVariant extends keyof TResponses
       }
     ? TResult extends { readonly headers: infer TResultHeaders }
-      ? NonNullable<TResponses[TVariant]> extends infer TResponse extends HttpResponseDefinition
+      ? NonNullable<TResponses[TVariant]> extends infer TResponse extends
+          HttpResponseDefinition
         ? [ResponseHeadersOutput<TResponse>] extends [never]
           ? false
           : Exclude<
@@ -186,44 +187,48 @@ type IsResultHeadersCompatible<
 type AreResultHeadersCompatible<
   TResult,
   TResponses extends HttpProtocolDefinition['responses'],
-> = false extends (TResult extends unknown
-  ? IsResultHeadersCompatible<TResult, TResponses>
-  : never)
+> = false extends (
+  TResult extends unknown
+    ? IsResultHeadersCompatible<TResult, TResponses>
+    : never
+)
   ? false
   : true
 
 type IsLayerShortCircuitCompatible<
   TResult,
   TResponses extends HttpProtocolDefinition['responses'],
-> = IsAny<TResult> extends true
-  ? true
-  : IsUnknown<TResult> extends true
+> =
+  IsAny<TResult> extends true
     ? true
-    : [TResult] extends [never]
+    : IsUnknown<TResult> extends true
       ? true
-      : [TResult] extends [DeclaredHttpResults<TResponses>]
-        ? AreResultHeadersCompatible<TResult, TResponses>
-        : false
+      : [TResult] extends [never]
+        ? true
+        : [TResult] extends [DeclaredHttpResults<TResponses>]
+          ? AreResultHeadersCompatible<TResult, TResponses>
+          : false
 
 type IsShortCircuitDeclarationsCompatible<
   TDeclarations,
   TResponses extends HttpProtocolDefinition['responses'],
-> = IsAny<TDeclarations> extends true
-  ? true
-  : IsUnknown<TDeclarations> extends true
+> =
+  IsAny<TDeclarations> extends true
     ? true
-    : TDeclarations extends readonly unknown[]
-      ? number extends TDeclarations['length']
-        ? true
-        : TDeclarations extends readonly [infer THead, ...infer TTail]
-          ? IsHttpShortCircuitDeclarationCompatible<
-              THead,
-              TResponses
-            > extends true
-            ? IsShortCircuitDeclarationsCompatible<TTail, TResponses>
-            : false
-          : true
-      : true
+    : IsUnknown<TDeclarations> extends true
+      ? true
+      : TDeclarations extends readonly unknown[]
+        ? number extends TDeclarations['length']
+          ? true
+          : TDeclarations extends readonly [infer THead, ...infer TTail]
+            ? IsHttpShortCircuitDeclarationCompatible<
+                THead,
+                TResponses
+              > extends true
+              ? IsShortCircuitDeclarationsCompatible<TTail, TResponses>
+              : false
+            : true
+        : true
 
 type IsHttpShortCircuitDeclarationCompatible<
   TDeclaration,
@@ -292,11 +297,12 @@ type HttpResponseConstraint<TDefinition extends HttpProtocolDefinition> =
 type IsExactParamsSchemaMap<
   TPath extends string,
   TSchemas extends HttpParamsSchemas,
-> = Exclude<keyof TSchemas, PathParamNames<TPath>> extends never
-  ? Exclude<PathParamNames<TPath>, keyof TSchemas> extends never
-    ? true
+> =
+  Exclude<keyof TSchemas, PathParamNames<TPath>> extends never
+    ? Exclude<PathParamNames<TPath>, keyof TSchemas> extends never
+      ? true
+      : false
     : false
-  : false
 
 type DoParamsSchemasAcceptStrings<TSchemas extends HttpParamsSchemas> =
   false extends {
@@ -331,23 +337,20 @@ type HttpPathConstraint<TDefinition extends HttpProtocolDefinition> =
     : IsSingleStringLiteral<TDefinition['path']> extends false
       ? { readonly path: never }
       : IsValidHttpPath<TDefinition['path']> extends true
-      ? TDefinition['request'] extends {
-          readonly params: infer TSchemas extends HttpParamsSchemas
-        }
-        ? IsExactParamsSchemaMap<
-            TDefinition['path'],
-            TSchemas
-          > extends true
-          ? DoParamsSchemasAcceptStrings<TSchemas> extends true
-            ? unknown
+        ? TDefinition['request'] extends {
+            readonly params: infer TSchemas extends HttpParamsSchemas
+          }
+          ? IsExactParamsSchemaMap<TDefinition['path'], TSchemas> extends true
+            ? DoParamsSchemasAcceptStrings<TSchemas> extends true
+              ? unknown
+              : { readonly request: never }
             : { readonly request: never }
-          : { readonly request: never }
-        : HasValidationBeforeTerminal<
-              TDefinition['pipeline'],
-              'params'
-            > extends true
-          ? { readonly pipeline: never }
-          : unknown
+          : HasValidationBeforeTerminal<
+                TDefinition['pipeline'],
+                'params'
+              > extends true
+            ? { readonly pipeline: never }
+            : unknown
         : { readonly path: never }
 
 type ErrorMappingResult<TResponse> = TResponse extends {
@@ -371,9 +374,7 @@ type IsErrorMappingCompatible<TResponse> =
 type AreErrorMappingsCompatible<
   TResponses extends HttpProtocolDefinition['responses'],
 > = false extends {
-  [TVariant in keyof TResponses]: IsErrorMappingCompatible<
-    TResponses[TVariant]
-  >
+  [TVariant in keyof TResponses]: IsErrorMappingCompatible<TResponses[TVariant]>
 }[keyof TResponses]
   ? false
   : true
@@ -395,7 +396,9 @@ function defineHttp<const TDefinition extends HttpProtocolDefinition>(
       pathNames.length !== schemaNames.length ||
       pathNames.some((name) => !Object.hasOwn(paramsSchemas, name))
     ) {
-      throw new Error('HTTP path parameter names and request.params keys must match')
+      throw new Error(
+        'HTTP path parameter names and request.params keys must match',
+      )
     }
   } else if (hasParamsValidation(definition.pipeline)) {
     throw new Error('validate.params requires request.params')
@@ -456,14 +459,17 @@ export const validate = Object.freeze({
 })
 
 type ProceduresForHttp<TContract extends ContractDefinition> = {
-  [K in keyof TContract['procedures']]:
-    'http' extends keyof TContract['procedures'][K]['protocols'] ? K : never
-}[keyof TContract['procedures']] & string
+  [
+    K in keyof TContract['procedures']
+  ]: 'http' extends keyof TContract['procedures'][K]['protocols'] ? K : never
+}[keyof TContract['procedures']] &
+  string
 
 type HttpProtocolAt<
   TContract extends ContractDefinition,
   TProcedure extends keyof TContract['procedures'],
-> = TContract['procedures'][TProcedure]['protocols']['http' & keyof TContract['procedures'][TProcedure]['protocols']] extends infer TProtocol
+> = TContract['procedures'][TProcedure]['protocols']['http' &
+  keyof TContract['procedures'][TProcedure]['protocols']] extends infer TProtocol
   ? TProtocol extends { readonly definition: infer TDefinition }
     ? TDefinition extends HttpProtocolDefinition
       ? HttpProtocol<TDefinition>
@@ -471,20 +477,14 @@ type HttpProtocolAt<
     : never
   : never
 
-type RequestBodySchema<TBody> = TBody extends HttpRequestBodyDefinition<
-  infer TSchema
->
-  ? TSchema
-  : never
+type RequestBodySchema<TBody> =
+  TBody extends HttpRequestBodyDefinition<infer TSchema> ? TSchema : never
 
 type PartOutput<
   TDefinition extends HttpProtocolDefinition,
   TPart extends keyof HttpRequestDefinition,
 > = TPart extends 'params'
-  ? HasValidationBeforeTerminal<
-      TDefinition['pipeline'],
-      'params'
-    > extends true
+  ? HasValidationBeforeTerminal<TDefinition['pipeline'], 'params'> extends true
     ? TDefinition['request'] extends {
         readonly params: infer TSchemas extends HttpParamsSchemas
       }
@@ -496,7 +496,9 @@ type PartOutput<
     : TDefinition['request'] extends HttpRequestDefinition
       ? TPart extends keyof TDefinition['request']
         ? TPart extends 'body'
-          ? SchemaOutput<RequestBodySchema<NonNullable<TDefinition['request'][TPart]>>>
+          ? SchemaOutput<
+              RequestBodySchema<NonNullable<TDefinition['request'][TPart]>>
+            >
           : NonNullable<TDefinition['request'][TPart]> extends StandardSchemaV1
             ? SchemaOutput<NonNullable<TDefinition['request'][TPart]>>
             : unknown
@@ -507,23 +509,23 @@ type ValidatedPathParams<TSchemas extends HttpParamsSchemas> = Readonly<{
   [TName in keyof TSchemas]: SchemaOutput<TSchemas[TName]>
 }>
 
-type HttpResultHeaders<THeaders> = IsAny<THeaders> extends true
-  ? { readonly headers?: HttpHeaders }
-  : IsUnknown<THeaders> extends true
+type HttpResultHeaders<THeaders> =
+  IsAny<THeaders> extends true
     ? { readonly headers?: HttpHeaders }
-    : [THeaders] extends [never]
-      ? { readonly headers?: never }
-      : undefined extends THeaders
-        ? { readonly headers?: Exclude<THeaders, undefined> }
-        : { readonly headers: THeaders }
+    : IsUnknown<THeaders> extends true
+      ? { readonly headers?: HttpHeaders }
+      : [THeaders] extends [never]
+        ? { readonly headers?: never }
+        : undefined extends THeaders
+          ? { readonly headers?: Exclude<THeaders, undefined> }
+          : { readonly headers: THeaders }
 
 export type HttpResponseResult<TBody, THeaders = unknown> = {
   readonly body: TBody
 } & HttpResultHeaders<THeaders>
 
-type ErrorOf<TDefinition> = TDefinition extends HttpErrorMatcher<infer TError>
-  ? TError
-  : never
+type ErrorOf<TDefinition> =
+  TDefinition extends HttpErrorMatcher<infer TError> ? TError : never
 
 export function httpError<
   TDefinition extends HttpErrorMatcher<{ readonly data: unknown }>,
@@ -592,7 +594,8 @@ export type HttpControllerContext<TProtocol extends HttpProtocol<any>> =
 export type ControllerOf<
   TContract extends ContractDefinition,
   TProtocol extends 'http',
-  TProcedures extends ProceduresForHttp<TContract> = ProceduresForHttp<TContract>,
+  TProcedures extends ProceduresForHttp<TContract> =
+    ProceduresForHttp<TContract>,
 > = TProtocol extends 'http'
   ? {
       [K in TProcedures]: (
@@ -612,6 +615,9 @@ export type ControllerOf<
 export type ContextOf<
   TController,
   TProcedure extends keyof TController,
-> = TController[TProcedure] extends (context: infer TContext, ...args: any[]) => any
+> = TController[TProcedure] extends (
+  context: infer TContext,
+  ...args: any[]
+) => any
   ? TContext
   : never

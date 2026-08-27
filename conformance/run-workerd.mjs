@@ -51,7 +51,9 @@ try {
   if (!response) throw new Error(`workerdを起動できませんでした: ${stderr}`)
   const body = await response.json()
   if (response.status !== 200 || body.id !== 'workerd-user') {
-    throw new Error(`workerd conformanceに失敗しました: ${JSON.stringify(body)}`)
+    throw new Error(
+      `workerd conformanceに失敗しました: ${JSON.stringify(body)}`,
+    )
   }
   const streamed = await fetch('http://127.0.0.1:18787/events')
   if (!(await streamed.text()).includes('"sequence":3')) {
@@ -62,10 +64,10 @@ try {
   await terminateChild(child)
 }
 
-async function terminateChild(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return
-  const exited = new Promise((resolveExit) => child.once('exit', resolveExit))
-  child.kill('SIGTERM')
+async function terminateChild(process) {
+  if (process.exitCode !== null || process.signalCode !== null) return
+  const exited = new Promise((resolveExit) => process.once('exit', resolveExit))
+  process.kill('SIGTERM')
   let timeout
   const terminated = await Promise.race([
     exited.then(() => true),
@@ -74,7 +76,8 @@ async function terminateChild(child) {
     }),
   ])
   clearTimeout(timeout)
-  if (terminated || child.exitCode !== null || child.signalCode !== null) return
-  child.kill('SIGKILL')
+  if (terminated || process.exitCode !== null || process.signalCode !== null)
+    return
+  process.kill('SIGKILL')
   await exited
 }

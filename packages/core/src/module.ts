@@ -1,10 +1,7 @@
 import type { EnvClass } from './env.js'
 import type { ImplementationDescriptor } from './implementation.js'
 import type { ModuleLifecycle } from './lifecycle.js'
-import {
-  environmentProvider,
-  type ProviderDeclaration,
-} from './provider.js'
+import { environmentProvider, type ProviderDeclaration } from './provider.js'
 
 export interface ModuleDefinition {
   readonly name?: string
@@ -36,9 +33,9 @@ type ImportedProtocols<TDefinition extends ModuleDefinition> =
     ? ModuleProtocols<TDefinition['imports'][number]>
     : never
 
-export type ProtocolsOfModuleDefinition<
-  TDefinition extends ModuleDefinition,
-> = DirectProtocols<TDefinition> | ImportedProtocols<TDefinition>
+export type ProtocolsOfModuleDefinition<TDefinition extends ModuleDefinition> =
+  | DirectProtocols<TDefinition>
+  | ImportedProtocols<TDefinition>
 
 export type ModuleProtocols<TModule> =
   TModule extends ModuleInstance<infer TDefinition>
@@ -79,9 +76,7 @@ export type ModuleTemplate<
 export function defineModule<
   Args = void,
   const TDefinition extends ModuleDefinition = ModuleDefinition,
->(
-  factory: (args: Args) => TDefinition,
-): ModuleTemplate<Args, TDefinition> {
+>(factory: (args: Args) => TDefinition): ModuleTemplate<Args, TDefinition> {
   const instantiate = (args: Args): ModuleInstance<TDefinition> => {
     const declared = factory(args)
     const environment = [...new Set(declared.environment ?? [])]

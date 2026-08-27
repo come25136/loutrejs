@@ -89,7 +89,9 @@ describe('Implementation descriptorとfactory runtime', () => {
             lifecycleCalls += 1
           },
           get(ctx) {
-            return ctx.response.ok({ body: `${service.value}:${ctx.params.id}` })
+            return ctx.response.ok({
+              body: `${service.value}:${ctx.params.id}`,
+            })
           },
           list(ctx) {
             return ctx.response.ok({ body: service.value })

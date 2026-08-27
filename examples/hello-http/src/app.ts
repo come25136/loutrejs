@@ -7,10 +7,7 @@ import {
   layer,
   procedure,
 } from '@loutrejs/core'
-import {
-  http,
-  validate,
-} from '@loutrejs/http'
+import { http, validate } from '@loutrejs/http'
 import { z } from 'zod'
 
 const GreetingParams = {

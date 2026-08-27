@@ -92,8 +92,14 @@ export class Container {
     ImplementationDescriptor,
     ImplementationConsumer
   >()
-  readonly #entrypointCache = new Map<EntrypointDescriptor<any, any>, EntrypointRuntime<any, any>>()
-  readonly #entrypointConsumers = new Map<EntrypointDescriptor<any, any>, EntrypointConsumer>()
+  readonly #entrypointCache = new Map<
+    EntrypointDescriptor<any, any>,
+    EntrypointRuntime<any, any>
+  >()
+  readonly #entrypointConsumers = new Map<
+    EntrypointDescriptor<any, any>,
+    EntrypointConsumer
+  >()
   readonly #layerCache = new Map<
     LayerDescriptor,
     LayerRuntime<object, readonly [], unknown>
@@ -107,9 +113,10 @@ export class Container {
     providers: readonly ProviderDescriptor[],
     options: Logger | ContainerOptions = {},
   ) {
-    this.#logger = options instanceof Logger ? options : options.logger ?? new Logger()
+    this.#logger =
+      options instanceof Logger ? options : (options.logger ?? new Logger())
     this.#recorder = options instanceof Logger ? undefined : options.recorder
-    this.#probe = options instanceof Logger ? false : options.probe ?? false
+    this.#probe = options instanceof Logger ? false : (options.probe ?? false)
 
     if (!(options instanceof Logger)) {
       for (const [environment, value] of options.environment ?? []) {
@@ -120,10 +127,16 @@ export class Container {
     for (const provider of providers) {
       const existing = this.#providers.get(provider.provide)
       if (existing) {
-        if (existing.kind === 'environment' && provider.kind === 'environment') {
+        if (
+          existing.kind === 'environment' &&
+          provider.kind === 'environment'
+        ) {
           continue
         }
-        if (existing.kind === 'environment' || provider.kind === 'environment') {
+        if (
+          existing.kind === 'environment' ||
+          provider.kind === 'environment'
+        ) {
           throw new DependencyResolutionError(
             `LUTRE_ENV_001: Environment ${tokenName(provider.provide)} is runtime-managed and cannot also be declared as a normal provider.`,
           )
@@ -183,9 +196,7 @@ export class Container {
   }
 
   /** @internal 構築済みImplementation runtimeを取得する。 */
-  implementationRuntime(
-    implementation: ImplementationDescriptor,
-  ): object {
+  implementationRuntime(implementation: ImplementationDescriptor): object {
     const cached = this.#implementationCache.get(implementation)
     if (!cached) {
       throw new DependencyResolutionError(
@@ -271,7 +282,9 @@ export class Container {
   }
 
   /** @internal 構築済みLayer runtimeを取得する。 */
-  layerRuntime(layer: LayerDescriptor): LayerRuntime<object, readonly [], unknown> {
+  layerRuntime(
+    layer: LayerDescriptor,
+  ): LayerRuntime<object, readonly [], unknown> {
     const cached = this.#layerCache.get(layer)
     if (!cached) {
       throw new DependencyResolutionError(
@@ -309,9 +322,7 @@ export class Container {
     const provider = this.#providers.get(token)
     if (!provider) {
       if ((token as TokenLike) === (Logger as unknown as TokenLike)) {
-        return this.#logger.child({
-          ...(source === undefined ? {} : { source }),
-        }) as T
+        return this.#logger.child(source === undefined ? {} : { source }) as T
       }
       if (isEnvClass(token)) {
         throw new DependencyResolutionError(
@@ -399,10 +410,7 @@ export class Container {
     }
   }
 
-  #instantiate<T>(
-    target: Class<T>,
-    lineage: readonly TokenLike[],
-  ): T {
+  #instantiate<T>(target: Class<T>, lineage: readonly TokenLike[]): T {
     if (target.length > 0) {
       throw new DependencyResolutionError(
         `LUTRE_DI_CONSTRUCTOR: ${target.name} has required constructor parameters. Declare framework dependencies with constructor default parameters using inject().`,

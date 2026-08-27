@@ -1,6 +1,4 @@
-import {
-  type HttpProtocolExecution,
-} from '@loutrejs/http'
+import { type HttpProtocolExecution } from '@loutrejs/http'
 
 export const denoRuntime = {
   runtime: 'deno-2.9-lts',
@@ -18,9 +16,7 @@ export const denoRuntime = {
 } as const
 
 /** @internal generated bindingが利用するDeno HTTP driver。 */
-export function createDenoFetchDriver(
-  application: HttpProtocolExecution,
-) {
+export function createDenoFetchDriver(application: HttpProtocolExecution) {
   let initialization: Promise<void> | undefined
   return async (request: Request): Promise<Response> => {
     initialization ??= application.initialize()

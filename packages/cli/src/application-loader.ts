@@ -84,7 +84,9 @@ export async function importHttpApplication(
 async function importApplicationDefinition(
   output: string,
 ): Promise<ApplicationDefinition> {
-  const module = await import(`${pathToFileURL(output).href}?loutre=${Date.now()}`)
+  const module = await import(
+    `${pathToFileURL(output).href}?loutre=${Date.now()}`
+  )
   const application = module.default ?? module.application
   if (!application || application.kind !== 'application-definition') {
     throw new Error(
@@ -94,7 +96,9 @@ async function importApplicationDefinition(
   return application as ApplicationDefinition
 }
 
-function compileDefinition(definition: ApplicationDefinition): ApplicationGraphIR {
+function compileDefinition(
+  definition: ApplicationDefinition,
+): ApplicationGraphIR {
   return assertValidCompilation(
     compileApplication({
       modules: definition.modules,
@@ -119,7 +123,9 @@ export async function loadApplicationDefinition(
   }
 }
 
-export async function loadHttpApplication(entry: string): Promise<LoadedApplication> {
+export async function loadHttpApplication(
+  entry: string,
+): Promise<LoadedApplication> {
   const directory = await mkdtemp(join(tmpdir(), 'loutre-application-'))
   const output = join(directory, 'application.mjs')
   try {
@@ -133,7 +139,9 @@ export async function loadHttpApplication(entry: string): Promise<LoadedApplicat
   }
 }
 
-export async function loadApplicationGraph(entry: string): Promise<ApplicationGraphIR> {
+export async function loadApplicationGraph(
+  entry: string,
+): Promise<ApplicationGraphIR> {
   const directory = await mkdtemp(join(tmpdir(), 'loutre-graph-'))
   const output = join(directory, 'application.mjs')
   try {

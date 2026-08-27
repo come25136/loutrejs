@@ -591,7 +591,8 @@ EntrypointもImplementation / Layerと同じ **static descriptor + synchronous f
 ```ts
 const processOrder = entrypoint<Order, void>({
   name: 'orders.process',
-  factory: (service = inject(OrderService)) =>
+  factory:
+    (service = inject(OrderService)) =>
     async (order) => {
       await service.process(order)
     },
@@ -814,11 +815,7 @@ interface DependencyEdgeIR {
   readonly from: string
   readonly to: string
   readonly kind:
-    | 'inject'
-    | 'factory'
-    | 'lifecycle'
-    | 'conditional'
-    | 'framework'
+    'inject' | 'factory' | 'lifecycle' | 'conditional' | 'framework'
   readonly source: 'declared' | 'probed'
   readonly condition?: {
     readonly key: string
@@ -980,7 +977,8 @@ const auth = layer({
   name: 'auth',
   requires: [SESSION],
   provides: [CURRENT_USER],
-  factory: (users = inject(UserService)) =>
+  factory:
+    (users = inject(UserService)) =>
     async (ctx, next) => {
       const currentUser = await users.resolve(ctx.session)
       await next({ currentUser })

@@ -1,9 +1,12 @@
 import { defineApplication } from '@loutrejs/application'
-import { contract, defineModule, implementation, inject, procedure } from '@loutrejs/core'
 import {
-  http,
-  validate,
-} from '@loutrejs/http'
+  contract,
+  defineModule,
+  implementation,
+  inject,
+  procedure,
+} from '@loutrejs/core'
+import { http, validate } from '@loutrejs/http'
 import { z } from 'zod'
 
 export const UserParams = {
@@ -19,47 +22,50 @@ export const CreateUser = z.object({
   name: z.string(),
 })
 
-export const UsersContract = contract({
-  get: procedure({
-    protocols: {
-      http: http({
-        method: 'GET',
-        path: '/users/{id}',
-        request: {
-          params: UserParams,
-        },
-        responses: {
-          found: {
-            status: 200,
-            body: User,
+export const UsersContract = contract(
+  {
+    get: procedure({
+      protocols: {
+        http: http({
+          method: 'GET',
+          path: '/users/{id}',
+          request: {
+            params: UserParams,
           },
-        },
-        pipeline: [validate.params, http.controller],
-      }),
-    },
-  }),
-  create: procedure({
-    protocols: {
-      http: http({
-        method: 'POST',
-        path: '/users',
-        request: {
-          body: {
-            contentType: 'application/json',
-            schema: CreateUser,
+          responses: {
+            found: {
+              status: 200,
+              body: User,
+            },
           },
-        },
-        responses: {
-          created: {
-            status: 201,
-            body: User,
+          pipeline: [validate.params, http.controller],
+        }),
+      },
+    }),
+    create: procedure({
+      protocols: {
+        http: http({
+          method: 'POST',
+          path: '/users',
+          request: {
+            body: {
+              contentType: 'application/json',
+              schema: CreateUser,
+            },
           },
-        },
-        pipeline: [validate.body, http.controller],
-      }),
-    },
-  }),
-}, { name: 'UsersContract' })
+          responses: {
+            created: {
+              status: 201,
+              body: User,
+            },
+          },
+          pipeline: [validate.body, http.controller],
+        }),
+      },
+    }),
+  },
+  { name: 'UsersContract' },
+)
 
 export class UsersService {
   create(name: string) {

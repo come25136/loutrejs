@@ -12,21 +12,11 @@ export interface EntrypointDescriptor<
   readonly factory: () => EntrypointRuntime<TInput, TOutput>
 }
 
-export type EntrypointInput<T> = T extends EntrypointDescriptor<
-  infer TInput,
-  any,
-  any
->
-  ? TInput
-  : never
+export type EntrypointInput<T> =
+  T extends EntrypointDescriptor<infer TInput, any, any> ? TInput : never
 
-export type EntrypointOutput<T> = T extends EntrypointDescriptor<
-  any,
-  infer TOutput,
-  any
->
-  ? TOutput
-  : never
+export type EntrypointOutput<T> =
+  T extends EntrypointDescriptor<any, infer TOutput, any> ? TOutput : never
 
 export type EntrypointArguments<T> = [EntrypointInput<T>] extends [void]
   ? readonly []
@@ -83,10 +73,7 @@ export function schedule<
     }
     readonly entrypoint: TEntrypoint
   } & ScheduledEntrypointConstraint<TEntrypoint>,
-): ScheduleDescriptor<
-  TEntrypoint & EntrypointDescriptor<void, void>,
-  TName
-> {
+): ScheduleDescriptor<TEntrypoint & EntrypointDescriptor<void, void>, TName> {
   return Object.freeze({
     kind: 'schedule',
     name: declaration.name,
@@ -107,16 +94,13 @@ export interface QueueDescriptor<
   readonly [queuePayload]?: TPayload
 }
 
-export type QueuePayload<T> = T extends QueueDescriptor<infer TPayload, any>
-  ? TPayload
-  : never
+export type QueuePayload<T> =
+  T extends QueueDescriptor<infer TPayload, any> ? TPayload : never
 
 export function queue<
   TPayload,
   const TName extends string = string,
->(declaration: {
-  readonly name: TName
-}): QueueDescriptor<TPayload, TName> {
+>(declaration: { readonly name: TName }): QueueDescriptor<TPayload, TName> {
   return Object.freeze({
     kind: 'queue',
     name: declaration.name,

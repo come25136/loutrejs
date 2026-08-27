@@ -52,10 +52,10 @@ describe('構造化ログ', () => {
     const output = vi.spyOn(console, 'log').mockImplementation(() => undefined)
 
     try {
-      const logger = new Logger(
-        new ConsoleLoggerBackend({ colors: true }),
-        { source: 'UsersService', application: 'api' },
-      )
+      const logger = new Logger(new ConsoleLoggerBackend({ colors: true }), {
+        source: 'UsersService',
+        application: 'api',
+      })
       logger.info('ユーザーを取得しました', {
         requestId: 'req-1',
         result: { count: 1 },
@@ -109,16 +109,18 @@ describe('構造化ログ', () => {
 
     expect(response.status).toBe(404)
     expect(records).toHaveLength(1)
-    expect(records[0]).toEqual(expect.objectContaining({
-      application: 'fixture',
-      protocol: 'http',
-      event: 'http.request.completed',
-      method: 'GET',
-      path: '/missing',
-      status: 404,
-      durationMs: expect.any(Number),
-      executionId: expect.stringMatching(/^[0-9a-f-]+$/),
-    }))
+    expect(records[0]).toEqual(
+      expect.objectContaining({
+        application: 'fixture',
+        protocol: 'http',
+        event: 'http.request.completed',
+        method: 'GET',
+        path: '/missing',
+        status: 404,
+        durationMs: expect.any(Number),
+        executionId: expect.stringMatching(/^[0-9a-f-]+$/),
+      }),
+    )
     expect(records[0]).not.toHaveProperty('query')
     expect(records[0]).not.toHaveProperty('headers')
     expect(records[0]).not.toHaveProperty('body')
@@ -161,7 +163,7 @@ describe('構造化ログ', () => {
     const response = await application.fetch(
       new Request('https://fixture.test/fail'),
     )
-    const body = await response.json() as { errorId: string }
+    const body = (await response.json()) as { errorId: string }
 
     expect(response.status).toBe(500)
     expect(body).toEqual({
@@ -169,21 +171,27 @@ describe('構造化ログ', () => {
       errorId: expect.stringMatching(/^[0-9a-f-]+$/),
     })
     expect(JSON.stringify(body)).not.toContain('fixture failure')
-    const errorRecord = records.find((record) => record.event === 'application.error')
-    expect(errorRecord).toEqual(expect.objectContaining({
-      level: 'error',
-      procedure: 'fail',
-      source: 'Implementation.fail',
-      error: expect.objectContaining({
-        id: body.errorId,
-        message: 'fixture failure',
+    const errorRecord = records.find(
+      (record) => record.event === 'application.error',
+    )
+    expect(errorRecord).toEqual(
+      expect.objectContaining({
+        level: 'error',
+        procedure: 'fail',
+        source: 'Implementation.fail',
+        error: expect.objectContaining({
+          id: body.errorId,
+          message: 'fixture failure',
+        }),
       }),
-    }))
-    expect(records.at(-1)).toEqual(expect.objectContaining({
-      event: 'http.request.completed',
-      status: 500,
-      executionId: errorRecord?.executionId,
-    }))
+    )
+    expect(records.at(-1)).toEqual(
+      expect.objectContaining({
+        event: 'http.request.completed',
+        status: 500,
+        executionId: errorRecord?.executionId,
+      }),
+    )
   })
 
   it('宣言済みDomain Error mappingをunhandled errorとして重複記録しない', async () => {
@@ -237,10 +245,12 @@ describe('構造化ログ', () => {
     expect(records).not.toContainEqual(
       expect.objectContaining({ event: 'application.error' }),
     )
-    expect(records).toContainEqual(expect.objectContaining({
-      event: 'http.request.completed',
-      status: 409,
-    }))
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        event: 'http.request.completed',
+        status: 409,
+      }),
+    )
   })
 
   it('MessagePortの完了イベントを共通Loggerへ記録する', async () => {
@@ -280,15 +290,17 @@ describe('構造化ログ', () => {
       variant: 'ok',
       value: 'pong',
     })
-    expect(records).toContainEqual(expect.objectContaining({
-      level: 'info',
-      protocol: 'messagePort',
-      procedure: 'ping',
-      source: 'Implementation.ping',
-      event: 'message_port.invocation.completed',
-      durationMs: expect.any(Number),
-      executionId: expect.stringMatching(/^[0-9a-f-]+$/),
-    }))
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        level: 'info',
+        protocol: 'messagePort',
+        procedure: 'ping',
+        source: 'Implementation.ping',
+        event: 'message_port.invocation.completed',
+        durationMs: expect.any(Number),
+        executionId: expect.stringMatching(/^[0-9a-f-]+$/),
+      }),
+    )
   })
 })
 

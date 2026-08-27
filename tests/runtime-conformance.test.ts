@@ -57,7 +57,9 @@ describe('Runtime conformance harness', () => {
     const chunks: Uint8Array[] = []
     let ended = false
     let metadata: unknown
-    const handler = createLambdaStreamingHttpDriver(httpExecutionOf(application))
+    const handler = createLambdaStreamingHttpDriver(
+      httpExecutionOf(application),
+    )
     await handler(
       {
         rawPath: '/events',
@@ -78,9 +80,7 @@ describe('Runtime conformance harness', () => {
     )
 
     expect(ended).toBe(true)
-    expect(metadata).toEqual(
-      expect.objectContaining({ statusCode: 200 }),
-    )
+    expect(metadata).toEqual(expect.objectContaining({ statusCode: 200 }))
     expect(new TextDecoder().decode(Buffer.concat(chunks))).toContain(
       'data:{"sequence":3,"message":"event-3"}',
     )
@@ -98,8 +98,10 @@ describe('Runtime conformance harness', () => {
       expect(checkCapabilities(['http.server'], runtime).ok).toBe(true)
     }
     expect(
-      checkCapabilities(['messagePort.send', 'messagePort.receive'], electronRuntime)
-        .ok,
+      checkCapabilities(
+        ['messagePort.send', 'messagePort.receive'],
+        electronRuntime,
+      ).ok,
     ).toBe(true)
   })
 })

@@ -18,9 +18,7 @@ Loutre v0.1 の DI / Graph 設計を以下へ変更する。
 
 ```ts
 class UsersService {
-  constructor(
-    readonly repository = inject(UserRepository),
-  ) {}
+  constructor(readonly repository = inject(UserRepository)) {}
 }
 ```
 
@@ -28,9 +26,7 @@ class UsersService {
 
 ```ts
 class UserRepository {
-  constructor(
-    readonly db = inject(DATABASE),
-  ) {}
+  constructor(readonly db = inject(DATABASE)) {}
 }
 ```
 
@@ -173,9 +169,7 @@ import { inject } from '@loutrejs/core'
 class UserRepository {}
 
 class UsersService {
-  constructor(
-    readonly repository = inject(UserRepository),
-  ) {}
+  constructor(readonly repository = inject(UserRepository)) {}
 }
 ```
 
@@ -209,9 +203,7 @@ constructor(
 const DATABASE = token<Database>('database')
 
 class UserRepository {
-  constructor(
-    readonly db = inject(DATABASE),
-  ) {}
+  constructor(readonly db = inject(DATABASE)) {}
 }
 ```
 
@@ -231,9 +223,7 @@ class UsersService {
 
 ```ts
 class UsersService {
-  constructor(
-    readonly repository = inject(UserRepository),
-  ) {}
+  constructor(readonly repository = inject(UserRepository)) {}
 }
 ```
 
@@ -277,9 +267,7 @@ inject(TOKEN)
 
 ```ts
 class UsersService {
-  constructor(
-    readonly repository = inject(UserRepository),
-  ) {}
+  constructor(readonly repository = inject(UserRepository)) {}
 }
 ```
 
@@ -410,9 +398,7 @@ DB / Redis / Kafka / socket / filesystem watcher 等は constructor / factory �
 
 ```ts
 class Database implements OnModuleInit, OnModuleDestroy {
-  constructor(
-    readonly config = inject(DB_CONFIG),
-  ) {}
+  constructor(readonly config = inject(DB_CONFIG)) {}
 
   private pool!: Pool
 
@@ -496,9 +482,7 @@ Factory body 内の `inject()` は原則禁止する。
 Phase 1 の scope は維持する。
 
 ```ts
-type Scope =
-  | 'application'
-  | 'transient'
+type Scope = 'application' | 'transient'
 ```
 
 ## 8.1 application
@@ -555,10 +539,7 @@ framework-managed component は次のいずれか。
 
 ```ts
 defineModule(() => ({
-  providers: [
-    UserRepository,
-    UsersService,
-  ],
+  providers: [UserRepository, UsersService],
 }))
 ```
 
@@ -576,9 +557,7 @@ defineModule(() => ({
 
 ```ts
 class UsersService {
-  constructor(
-    readonly repository = inject(UserRepository),
-  ) {}
+  constructor(readonly repository = inject(UserRepository)) {}
 }
 
 // UserRepository が providers にない
@@ -656,9 +635,7 @@ Application Graph
 DI edge は取得方法を区別してよい。
 
 ```ts
-type DependencyEdgeSource =
-  | 'declared'
-  | 'probed'
+type DependencyEdgeSource = 'declared' | 'probed'
 ```
 
 `declared`:
@@ -691,15 +668,9 @@ interface DependencyEdgeIR {
   readonly to: string
 
   readonly kind:
-    | 'inject'
-    | 'factory'
-    | 'lifecycle'
-    | 'conditional'
-    | 'framework'
+    'inject' | 'factory' | 'lifecycle' | 'conditional' | 'framework'
 
-  readonly source:
-    | 'declared'
-    | 'probed'
+  readonly source: 'declared' | 'probed'
 
   readonly condition?: {
     readonly key: string
@@ -855,13 +826,10 @@ Lifecycle hook も `inject: []` から取得する。
 例:
 
 ```ts
-provide(STORAGE).select(
-  Env.key('STORAGE_DRIVER'),
-  {
-    memory: MemoryStorage,
-    s3: S3Storage,
-  },
-)
+provide(STORAGE).select(Env.key('STORAGE_DRIVER'), {
+  memory: MemoryStorage,
+  s3: S3Storage,
+})
 ```
 
 Graph:
@@ -1583,9 +1551,7 @@ constructor(service: Service)
 から:
 
 ```ts
-constructor(
-  service = inject(Service),
-)
+constructor((service = inject(Service)))
 ```
 
 へ移行。

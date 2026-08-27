@@ -65,17 +65,18 @@ type ProtocolDispatchEntries<
   TProcedures extends Record<string, ProcedureDefinition>,
 > = {
   [TProcedure in keyof TProcedures & string]: {
-    [TProtocol in keyof TProcedures[TProcedure]['protocols'] & string]:
-      TProcedures[TProcedure]['protocols'][TProtocol] extends {
-        readonly dispatchKey: infer TDispatchKey extends string | null
-      }
-        ? TDispatchKey extends string
-          ? {
-              readonly key: TDispatchKey
-              readonly path: `${TProcedure}.${TProtocol}`
-            }
-          : never
+    [
+      TProtocol in keyof TProcedures[TProcedure]['protocols'] & string
+    ]: TProcedures[TProcedure]['protocols'][TProtocol] extends {
+      readonly dispatchKey: infer TDispatchKey extends string | null
+    }
+      ? TDispatchKey extends string
+        ? {
+            readonly key: TDispatchKey
+            readonly path: `${TProcedure}.${TProtocol}`
+          }
         : never
+      : never
   }[keyof TProcedures[TProcedure]['protocols'] & string]
 }[keyof TProcedures & string]
 
@@ -85,7 +86,10 @@ type IsUnion<TValue, TCandidate = TValue> = TValue extends unknown
     : true
   : never
 
-type DuplicateDispatchKeys<TEntries, TAllEntries = TEntries> = TEntries extends {
+type DuplicateDispatchKeys<
+  TEntries,
+  TAllEntries = TEntries,
+> = TEntries extends {
   readonly key: infer TKey extends string
 }
   ? string extends TKey
@@ -103,7 +107,9 @@ type DuplicateDispatchKeys<TEntries, TAllEntries = TEntries> = TEntries extends 
 
 type DispatchKeyUniquenessConstraint<
   TProcedures extends Record<string, ProcedureDefinition>,
-> = [DuplicateDispatchKeys<ProtocolDispatchEntries<TProcedures>>] extends [never]
+> = [DuplicateDispatchKeys<ProtocolDispatchEntries<TProcedures>>] extends [
+  never,
+]
   ? unknown
   : {
       readonly __duplicateProtocolDispatchKey__: DuplicateDispatchKeys<

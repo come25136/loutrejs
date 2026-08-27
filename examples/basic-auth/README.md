@@ -25,7 +25,7 @@ curl -i -u loutre:otter http://127.0.0.1:3001/profile
 ```
 
 ```json
-{"id":"user-1","name":"Loutre User"}
+{ "id": "user-1", "name": "Loutre User" }
 ```
 
 この資格情報は動作確認専用です。実際のアプリケーションでは、平文の固定パスワードを

@@ -54,7 +54,11 @@ export class StaticValidationError extends Error {
     readonly diagnostics: readonly Diagnostic[],
     readonly graph?: ApplicationGraphIR,
   ) {
-    super(diagnostics.map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`).join('\n'))
+    super(
+      diagnostics
+        .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
+        .join('\n'),
+    )
     this.name = 'StaticValidationError'
   }
 }
@@ -77,8 +81,16 @@ export function compileApplication(
   const diagnostics: Diagnostic[] = []
   const entrypoints = collectEntrypoints(input, diagnostics)
   const queues = collectQueues(input, diagnostics)
-  validateNamedDescriptors(input.schedules ?? [], 'LUTRE_SCHEDULE_DUPLICATE', diagnostics)
-  validateNamedDescriptors(input.consumers ?? [], 'LUTRE_CONSUMER_DUPLICATE', diagnostics)
+  validateNamedDescriptors(
+    input.schedules ?? [],
+    'LUTRE_SCHEDULE_DUPLICATE',
+    diagnostics,
+  )
+  validateNamedDescriptors(
+    input.consumers ?? [],
+    'LUTRE_CONSUMER_DUPLICATE',
+    diagnostics,
+  )
   validateSchedules(input.schedules ?? [], diagnostics)
   const contractNames = new Map<ContractDefinition, string>()
   let contractSequence = 0
@@ -99,7 +111,7 @@ export function compileApplication(
     for (const procedureName of implementation.procedures) {
       const procedure = implementation.contract.procedures[procedureName]
       const protocol = procedure?.protocols[implementation.protocol] as
-        | ({
+        | {
             readonly pipeline?: readonly PipelineItem[]
             readonly interaction?: string
             readonly dispatchKey: string | null
@@ -110,7 +122,7 @@ export function compileApplication(
                 Record<string, { readonly status: number }>
               >
             }
-          })
+          }
         | undefined
       if (!procedure || !protocol) {
         diagnostics.push({
@@ -216,11 +228,12 @@ export function compileApplication(
         provider.kind === 'factory'
           ? provider.inject.map(tokenName)
           : provider.kind === 'conditional'
-              ? [provider.select.env.name]
-              : [],
+            ? [provider.select.env.name]
+            : [],
     })),
-    tokens: [...new Set([...tokensById.keys(), ...probedTokenIds])]
-      .map((id) => ({ id })),
+    tokens: [...new Set([...tokensById.keys(), ...probedTokenIds])].map(
+      (id) => ({ id }),
+    ),
     contextKeys: [...contextKeysByName.keys()].map((name) => ({ name })),
     contracts: [...contractNames.values()],
     pipelines,
@@ -268,15 +281,33 @@ export function compileApplication(
             : []),
           ...(target.protocol === 'messagePort'
             ? [
-                { name: 'messagePort.send', scope: 'execution' as const, requiredBy },
-                { name: 'messagePort.receive', scope: 'execution' as const, requiredBy },
+                {
+                  name: 'messagePort.send',
+                  scope: 'execution' as const,
+                  requiredBy,
+                },
+                {
+                  name: 'messagePort.receive',
+                  scope: 'execution' as const,
+                  requiredBy,
+                },
               ]
             : []),
           ...(target.interaction === 'server-stream'
             ? [
-                { name: 'stream.readable', scope: 'execution' as const, requiredBy },
+                {
+                  name: 'stream.readable',
+                  scope: 'execution' as const,
+                  requiredBy,
+                },
                 ...(target.protocol === 'http'
-                  ? [{ name: 'http.response.streaming', scope: 'execution' as const, requiredBy }]
+                  ? [
+                      {
+                        name: 'http.response.streaming',
+                        scope: 'execution' as const,
+                        requiredBy,
+                      },
+                    ]
                   : []),
               ]
             : []),
@@ -284,7 +315,13 @@ export function compileApplication(
       }),
       ...modules.flatMap((module, index) => [
         ...(module.definition.environment?.length
-          ? [{ name: 'env.runtime', scope: 'application' as const, requiredBy: `module:${index + 1}` }]
+          ? [
+              {
+                name: 'env.runtime',
+                scope: 'application' as const,
+                requiredBy: `module:${index + 1}`,
+              },
+            ]
           : []),
         ...(module.definition.requires ?? []).map((name) => ({
           name,
@@ -448,7 +485,9 @@ function isValidCronField(
   })
 }
 
-export function validateGraph(graph: ApplicationGraphIR): readonly Diagnostic[] {
+export function validateGraph(
+  graph: ApplicationGraphIR,
+): readonly Diagnostic[] {
   return graph.diagnostics
 }
 
@@ -487,9 +526,15 @@ function buildDependencyGraph(
   ): string => {
     if (typeof token !== 'function') {
       const registered = customTokensById.get(token.id)
-      if (registered && registered !== token && !diagnostics.some(
-        (diagnostic) => diagnostic.code === 'LUTRE_TOKEN_001' && diagnostic.message.includes(token.id),
-      )) {
+      if (
+        registered &&
+        registered !== token &&
+        !diagnostics.some(
+          (diagnostic) =>
+            diagnostic.code === 'LUTRE_TOKEN_001' &&
+            diagnostic.message.includes(token.id),
+        )
+      ) {
         diagnostics.push({
           code: 'LUTRE_TOKEN_001',
           message: `Token ID ${token.id}が異なるtoken declarationで重複しています`,
@@ -501,7 +546,8 @@ function buildDependencyGraph(
     }
     const current = ids.get(token)
     if (current) return current
-    const base = typeof token === 'function' ? `class:${token.name}` : `token:${token.id}`
+    const base =
+      typeof token === 'function' ? `class:${token.name}` : `token:${token.id}`
     let id = base
     let sequence = 2
     while (nodes.some((node) => node.id === id)) id = `${base}:${sequence++}`
@@ -577,7 +623,8 @@ function buildDependencyGraph(
     if (
       providersByToken.has(dependency) ||
       dependency === (Logger as unknown as TokenLike)
-    ) return
+    )
+      return
     if (isEnvClass(dependency)) {
       diagnostics.push({
         code: 'LUTRE_ENV_002',
@@ -616,13 +663,17 @@ function buildDependencyGraph(
       if (provider.useFactory.constructor.name === 'AsyncFunction') {
         diagnostics.push({
           code: 'LUTRE_DI_ASYNC_FACTORY',
-          message: 'Async factory providers are not supported. Move asynchronous resource initialization to application lifecycle.',
+          message:
+            'Async factory providers are not supported. Move asynchronous resource initialization to application lifecycle.',
           path: tokenName(provider.provide),
         })
       }
     }
     if (provider.kind === 'conditional') {
-      validateDeclaredDependency(provider.select.env, tokenName(provider.provide))
+      validateDeclaredDependency(
+        provider.select.env,
+        tokenName(provider.provide),
+      )
       addEdge({
         from: providerId,
         to: ensureNode(provider.select.env),
@@ -653,7 +704,11 @@ function buildDependencyGraph(
     for (const [hookName, hook] of Object.entries(lifecycle)) {
       if (!hook) continue
       const hookId = `lifecycle:module:${index + 1}:${hookName}`
-      nodes.push({ id: hookId, label: `${hookName} (module:${index + 1})`, kind: 'framework' })
+      nodes.push({
+        id: hookId,
+        label: `${hookName} (module:${index + 1})`,
+        kind: 'framework',
+      })
       for (const dependency of hook.inject) {
         validateDeclaredDependency(dependency, hookId)
         addEdge({
@@ -897,7 +952,9 @@ function collectContextKeys(
   return keys
 }
 
-export function assertValidCompilation(result: CompilationResult): ApplicationGraphIR {
+export function assertValidCompilation(
+  result: CompilationResult,
+): ApplicationGraphIR {
   if (result.diagnostics.length > 0) {
     throw new StaticValidationError(result.diagnostics, result.graph)
   }
@@ -935,7 +992,9 @@ function validateCoverage(
       ),
     )
     for (const protocol of protocols) {
-      for (const [procedureName, procedure] of Object.entries(contract.procedures)) {
+      for (const [procedureName, procedure] of Object.entries(
+        contract.procedures,
+      )) {
         if (!(protocol in procedure.protocols)) continue
         const covering = implementations.filter(
           (implementation) =>
@@ -967,7 +1026,10 @@ function validatePipeline(
   diagnostics: Diagnostic[],
 ) {
   const path = `${target.contractName}.${target.procedure}.${target.protocol}`
-  const flattened: { readonly item: PipelineItem, readonly indexPath: readonly number[] }[] = []
+  const flattened: {
+    readonly item: PipelineItem
+    readonly indexPath: readonly number[]
+  }[] = []
   visitPipelineItems(target.pipeline, (item, indexPath) => {
     flattened.push({ item, indexPath })
   })
@@ -1068,12 +1130,9 @@ function toLayerIR(item: PipelineItem, index: number): LayerIR {
     index,
     name: item.name,
     role: item.role,
-    requires:
-      item.kind === 'layer' ? item.requires.map(contextKeyName) : [],
-    provides:
-      item.kind === 'layer' ? item.provides.map(contextKeyName) : [],
-    requiresValidated:
-      item.kind === 'layer' ? item.requiresValidated : [],
+    requires: item.kind === 'layer' ? item.requires.map(contextKeyName) : [],
+    provides: item.kind === 'layer' ? item.provides.map(contextKeyName) : [],
+    requiresValidated: item.kind === 'layer' ? item.requiresValidated : [],
     ...(child === undefined ? {} : { pipeline: child.map(toLayerIR) }),
     ...(item.kind !== 'layer' || item.shortCircuits.length === 0
       ? {}

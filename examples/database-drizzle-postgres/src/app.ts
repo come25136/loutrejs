@@ -11,10 +11,7 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@loutrejs/core'
-import {
-  http,
-  validate,
-} from '@loutrejs/http'
+import { http, validate } from '@loutrejs/http'
 import { sql } from 'drizzle-orm'
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
@@ -33,9 +30,7 @@ const AppEnvSchema = z
   .object({
     DRIZZLE_DATABASE_URL: z
       .string()
-      .default(
-        'postgres://loutre:loutre@127.0.0.1:54322/loutre_drizzle',
-      ),
+      .default('postgres://loutre:loutre@127.0.0.1:54322/loutre_drizzle'),
   })
   .transform((env) => ({
     databaseUrl: new URL(env.DRIZZLE_DATABASE_URL),
@@ -49,9 +44,7 @@ class DrizzleDatabase implements OnModuleInit, OnModuleDestroy {
   readonly pool: Pool
   readonly client: DrizzleDatabaseClient
 
-  constructor(
-    readonly env = inject(AppEnv),
-  ) {
+  constructor(readonly env = inject(AppEnv)) {
     this.pool = new Pool({
       connectionString: env.databaseUrl.href,
     })
@@ -125,8 +118,8 @@ const UsersContract = contract(
 )
 
 class UserRepository {
-  async create(transaction: DrizzleTransaction, name: string) {
-    const [user] = await transaction
+  async create(client: DrizzleTransaction, name: string) {
+    const [user] = await client
       .insert(schema.users)
       .values({
         id: crypto.randomUUID(),
@@ -155,10 +148,7 @@ const UsersController = implementation({
 const AppModule = defineModule(() => ({
   name: 'DatabaseDrizzlePostgresExample',
   environment: [AppEnv],
-  providers: [
-    DrizzleDatabase,
-    UserRepository,
-  ],
+  providers: [DrizzleDatabase, UserRepository],
   implementations: [UsersController],
 }))
 

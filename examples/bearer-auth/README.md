@@ -22,7 +22,7 @@ curl -i -H 'Authorization: Bearer loutre-token' http://127.0.0.1:3002/profile
 ```
 
 ```json
-{"id":"user-1","name":"Loutre User"}
+{ "id": "user-1", "name": "Loutre User" }
 ```
 
 このtokenは動作確認専用です。実際のアプリケーションでは署名・issuer・audience・期限などを

@@ -1,6 +1,11 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, statSync, watch as watchFile, type FSWatcher } from 'node:fs'
+import {
+  existsSync,
+  statSync,
+  watch as watchFile,
+  type FSWatcher,
+} from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -55,7 +60,10 @@ const runtimes: Readonly<Record<string, RuntimeCapabilities>> = {
   lambda: lambdaRuntime,
 }
 
-export async function runCli(args: readonly string[], io: CliIO): Promise<number> {
+export async function runCli(
+  args: readonly string[],
+  io: CliIO,
+): Promise<number> {
   const [command, subject] = args
   if (!command || command === 'help' || command === '--help') {
     io.stdout(helpText())
@@ -65,7 +73,9 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
   const entry = () => {
     const requested = readOption(args, '--entry')
     if (!requested) {
-      io.stderr(`${command}には--entry <明示entry>が必要です。filesystem discoveryは行いません。`)
+      io.stderr(
+        `${command}には--entry <明示entry>が必要です。filesystem discoveryは行いません。`,
+      )
       return undefined
     }
     return resolve(io.cwd, requested)
@@ -103,7 +113,9 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
     }
     case 'graph': {
       if (!isGraphSubject(subject)) {
-        io.stderr('graphにはmodules、di、contracts、executions、runtimeのいずれかが必要です。')
+        io.stderr(
+          'graphにはmodules、di、contracts、executions、runtimeのいずれかが必要です。',
+        )
         return 2
       }
       const target = entry()
@@ -111,11 +123,15 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
       const graph = await loadApplicationGraph(target)
       const format = readOption(args, '--format') ?? 'text'
       if (!['text', 'json', 'mermaid'].includes(format)) {
-        io.stderr('graph --formatにはtext、json、mermaidのいずれかを指定してください。')
+        io.stderr(
+          'graph --formatにはtext、json、mermaidのいずれかを指定してください。',
+        )
         return 2
       }
-      if (format === 'json') io.stdout(`${JSON.stringify(graphData(graph, subject), null, 2)}\n`)
-      else if (format === 'mermaid') io.stdout(renderMermaidGraph(graph, subject))
+      if (format === 'json')
+        io.stdout(`${JSON.stringify(graphData(graph, subject), null, 2)}\n`)
+      else if (format === 'mermaid')
+        io.stdout(renderMermaidGraph(graph, subject))
       else renderTextGraph(graph, subject, io.stdout)
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
       return graph.diagnostics.length === 0 ? 0 : 1
@@ -146,11 +162,16 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
         writeDiagnostics(graph, io)
         return 1
       }
-      const outputDirectory = resolve(io.cwd, readOption(args, '--out-dir') ?? 'dist/loutre')
+      const outputDirectory = resolve(
+        io.cwd,
+        readOption(args, '--out-dir') ?? 'dist/loutre',
+      )
       await mkdir(outputDirectory, { recursive: true })
       const applicationOutput = join(outputDirectory, 'application.mjs')
       await emitApplication(applicationEntry, applicationOutput)
-      const fingerprint = createHash('sha256').update(JSON.stringify(graph)).digest('hex')
+      const fingerprint = createHash('sha256')
+        .update(JSON.stringify(graph))
+        .digest('hex')
       const manifestOutput = join(outputDirectory, 'loutre.manifest.json')
       await writeFile(
         manifestOutput,
@@ -163,7 +184,9 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
     }
     case 'dev': {
       if (!subject) {
-        io.stderr('devには明示的なApplication entryが必要です。filesystem discoveryは行いません。')
+        io.stderr(
+          'devには明示的なApplication entryが必要です。filesystem discoveryは行いません。',
+        )
         return 2
       }
       return startDevelopmentServer(
@@ -175,7 +198,9 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
     }
     case 'start': {
       if (!subject) {
-        io.stderr('startには明示的なApplication entryが必要です。filesystem discoveryは行いません。')
+        io.stderr(
+          'startには明示的なApplication entryが必要です。filesystem discoveryは行いません。',
+        )
         return 2
       }
       const startedAt = performance.now()
@@ -199,8 +224,16 @@ export async function runCli(args: readonly string[], io: CliIO): Promise<number
   }
 }
 
-function isGraphSubject(value: string | undefined): value is 'modules' | 'di' | 'contracts' | 'runtime' | 'executions' {
-  return value === 'modules' || value === 'di' || value === 'contracts' || value === 'runtime' || value === 'executions'
+function isGraphSubject(
+  value: string | undefined,
+): value is 'modules' | 'di' | 'contracts' | 'runtime' | 'executions' {
+  return (
+    value === 'modules' ||
+    value === 'di' ||
+    value === 'contracts' ||
+    value === 'runtime' ||
+    value === 'executions'
+  )
 }
 
 function writeDiagnostics(graph: ApplicationGraphIR, io: CliIO): void {
@@ -215,9 +248,18 @@ function graphData(
 ): unknown {
   switch (subject) {
     case 'modules':
-      return { version: graph.version, modules: graph.modules, diagnostics: graph.diagnostics }
+      return {
+        version: graph.version,
+        modules: graph.modules,
+        diagnostics: graph.diagnostics,
+      }
     case 'di':
-      return { version: graph.version, nodes: graph.nodes, edges: graph.edges, diagnostics: graph.diagnostics }
+      return {
+        version: graph.version,
+        nodes: graph.nodes,
+        edges: graph.edges,
+        diagnostics: graph.diagnostics,
+      }
     case 'contracts':
       return {
         version: graph.version,
@@ -227,7 +269,11 @@ function graphData(
         diagnostics: graph.diagnostics,
       }
     case 'runtime':
-      return { version: graph.version, capabilities: graph.capabilities, diagnostics: graph.diagnostics }
+      return {
+        version: graph.version,
+        capabilities: graph.capabilities,
+        diagnostics: graph.diagnostics,
+      }
     case 'executions':
       return {
         version: graph.version,
@@ -245,8 +291,11 @@ function renderTextGraph(
 ): void {
   if (subject === 'modules') {
     for (const module of graph.modules) {
-      write(module.name === undefined ? module.id : `${module.name} [${module.id}]`)
-      if (module.description !== undefined) write(`  description: ${module.description}`)
+      write(
+        module.name === undefined ? module.id : `${module.name} [${module.id}]`,
+      )
+      if (module.description !== undefined)
+        write(`  description: ${module.description}`)
       write(`  imports: ${module.imports.join(', ') || '(なし)'}`)
       write(`  providers: ${module.providers.join(', ') || '(なし)'}`)
       write(`  exports: ${module.exports.join(', ') || '(なし)'}`)
@@ -276,7 +325,10 @@ function renderTextGraph(
   renderDiText(graph, write)
 }
 
-function renderDiText(graph: ApplicationGraphIR, write: (value: string) => void): void {
+function renderDiText(
+  graph: ApplicationGraphIR,
+  write: (value: string) => void,
+): void {
   const byId = new Map(graph.nodes.map((node) => [node.id, node]))
   const outgoing = new Map<string, DependencyEdgeIR[]>()
   const incoming = new Set(graph.edges.map((edge) => edge.to))
@@ -297,20 +349,35 @@ function renderDiText(graph: ApplicationGraphIR, write: (value: string) => void)
         ? ` [${edge.condition.key}=${String(edge.condition.equals)}]`
         : ''
       const unresolved = graph.diagnostics.some(
-        (diagnostic) => diagnostic.code === 'LUTRE_DI_UNRESOLVED' && diagnostic.message.includes(child.label),
+        (diagnostic) =>
+          diagnostic.code === 'LUTRE_DI_UNRESOLVED' &&
+          diagnostic.message.includes(child.label),
       )
-      write(`${prefix}${last ? '└──' : '├──'}${condition} ${nodeLabel(child)}${cycle ? ' ↺ cycle' : unresolved ? ' ✗ UNRESOLVED' : ''}`)
-      if (!cycle) render(edge.to, `${prefix}${last ? '    ' : '│   '}`, [...lineage, edge.to])
+      write(
+        `${prefix}${last ? '└──' : '├──'}${condition} ${nodeLabel(child)}${cycle ? ' ↺ cycle' : unresolved ? ' ✗ UNRESOLVED' : ''}`,
+      )
+      if (!cycle)
+        render(edge.to, `${prefix}${last ? '    ' : '│   '}`, [
+          ...lineage,
+          edge.to,
+        ])
     })
   }
-  const roots = graph.nodes.filter((node) => !incoming.has(node.id) && (outgoing.get(node.id)?.length ?? 0) > 0)
+  const roots = graph.nodes.filter(
+    (node) =>
+      !incoming.has(node.id) && (outgoing.get(node.id)?.length ?? 0) > 0,
+  )
   for (const root of roots) {
     renderedRoots.add(root.id)
     write(nodeLabel(root))
     render(root.id, '', [root.id])
   }
   for (const node of graph.nodes) {
-    if (renderedRoots.has(node.id) || (outgoing.get(node.id)?.length ?? 0) === 0) continue
+    if (
+      renderedRoots.has(node.id) ||
+      (outgoing.get(node.id)?.length ?? 0) === 0
+    )
+      continue
     write(nodeLabel(node))
     render(node.id, '', [node.id])
   }
@@ -331,12 +398,12 @@ function renderMermaidGraph(
     lines.push(`  ${id}["${mermaidText(label)}"]`)
   }
   const edge = (from: string, to: string, label?: string) => {
-    lines.push(
-      `  ${from} -->${label ? `|"${mermaidText(label)}"|` : ''} ${to}`,
-    )
+    lines.push(`  ${from} -->${label ? `|"${mermaidText(label)}"|` : ''} ${to}`)
   }
   if (subject === 'di') {
-    const ids = new Map(graph.nodes.map((candidate, index) => [candidate.id, `n${index}`]))
+    const ids = new Map(
+      graph.nodes.map((candidate, index) => [candidate.id, `n${index}`]),
+    )
     for (const candidate of graph.nodes) {
       node(ids.get(candidate.id)!, nodeLabel(candidate))
     }
@@ -351,7 +418,9 @@ function renderMermaidGraph(
       )
     }
   } else if (subject === 'modules') {
-    const ids = new Map(graph.modules.map((module, index) => [module.id, `m${index}`]))
+    const ids = new Map(
+      graph.modules.map((module, index) => [module.id, `m${index}`]),
+    )
     for (const module of graph.modules) {
       node(ids.get(module.id)!, module.name ?? module.description ?? module.id)
       for (const imported of module.imports) {
@@ -375,7 +444,10 @@ function renderMermaidGraph(
     for (const queue of graph.queues) node(mermaidId(queue.id), queue.name)
     for (const execution of graph.executions) {
       const id = mermaidId(execution.id)
-      node(id, `${execution.kind}: ${'name' in execution ? execution.name : execution.procedure}`)
+      node(
+        id,
+        `${execution.kind}: ${'name' in execution ? execution.name : execution.procedure}`,
+      )
       if (execution.kind === 'schedule') {
         edge(id, mermaidId(`entrypoint:${execution.entrypoint}`), 'trigger')
       }
@@ -400,9 +472,13 @@ function renderExplanation(
   subject: string,
   write: (value: string) => void,
 ): boolean {
-  const node = graph.nodes.find((candidate) => candidate.label === subject || candidate.id === subject)
+  const node = graph.nodes.find(
+    (candidate) => candidate.label === subject || candidate.id === subject,
+  )
   const pipelines = graph.pipelines.filter(
-    (pipeline) => `${pipeline.contract}.${pipeline.procedure}` === subject || pipeline.contract === subject,
+    (pipeline) =>
+      `${pipeline.contract}.${pipeline.procedure}` === subject ||
+      pipeline.contract === subject,
   )
   if (!node && pipelines.length === 0) return false
   for (const pipeline of pipelines) {
@@ -418,7 +494,9 @@ function renderExplanation(
     write('dependencies:')
     if (edges.length === 0) write('  (なし)')
     for (const edge of edges) {
-      const dependency = graph.nodes.find((candidate) => candidate.id === edge.to)
+      const dependency = graph.nodes.find(
+        (candidate) => candidate.id === edge.to,
+      )
       if (!dependency) continue
       write(`  ${dependency.label}`)
       write(`    source: ${edge.kind}/${edge.source}`)
@@ -555,7 +633,9 @@ async function startDevelopmentServer(
       pending = true
       return
     }
-    activeReload = reload().finally(() => { activeReload = undefined })
+    activeReload = reload().finally(() => {
+      activeReload = undefined
+    })
   }
 
   async function reload(): Promise<void> {
@@ -575,8 +655,11 @@ async function startDevelopmentServer(
           watcher.replace([...candidate.sourceFiles, tsconfigPath])
           candidate = undefined
         } catch (error) {
-          if (candidate) await candidate.application.close().catch(() => undefined)
-          io.stderr(`Applicationの再起動に失敗しました。Applicationは停止しています。\n${errorMessage(error)}`)
+          if (candidate)
+            await candidate.application.close().catch(() => undefined)
+          io.stderr(
+            `Applicationの再起動に失敗しました。Applicationは停止しています。\n${errorMessage(error)}`,
+          )
         }
       } while (pending && !stopping)
     } finally {
@@ -593,7 +676,10 @@ async function startDevelopmentServer(
     await stop(signal)
     await rm(directory, { recursive: true, force: true })
   }
-  const report = (error: unknown) => io.stderr(`Development serverの終了処理に失敗しました: ${errorMessage(error)}`)
+  const report = (error: unknown) =>
+    io.stderr(
+      `Development serverの終了処理に失敗しました: ${errorMessage(error)}`,
+    )
   process.once('SIGINT', () => void shutdown('SIGINT').catch(report))
   process.once('SIGTERM', () => void shutdown('SIGTERM').catch(report))
   return 0
@@ -601,17 +687,31 @@ async function startDevelopmentServer(
 
 async function runTypeCheck(tsconfigPath: string): Promise<void> {
   await new Promise<void>((resolveCheck, reject) => {
-    const child = spawn('tsc', ['-p', tsconfigPath, '--noEmit', '--pretty', 'false'], {
-      cwd: dirname(tsconfigPath),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
+    const child = spawn(
+      'tsc',
+      ['-p', tsconfigPath, '--noEmit', '--pretty', 'false'],
+      {
+        cwd: dirname(tsconfigPath),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    )
     let output = ''
-    child.stdout.on('data', (chunk) => { output += chunk.toString() })
-    child.stderr.on('data', (chunk) => { output += chunk.toString() })
+    child.stdout.on('data', (chunk) => {
+      output += chunk.toString()
+    })
+    child.stderr.on('data', (chunk) => {
+      output += chunk.toString()
+    })
     child.once('error', reject)
     child.once('exit', (code) => {
       if (code === 0) resolveCheck()
-      else reject(new Error(output.trim() || `TypeScript type checkが終了code ${code}で失敗しました`))
+      else
+        reject(
+          new Error(
+            output.trim() ||
+              `TypeScript type checkが終了code ${code}で失敗しました`,
+          ),
+        )
     })
   })
 }
@@ -633,7 +733,8 @@ class SourceWatchSet {
     for (const [path, directory] of targets) {
       if (this.#watchers.has(path) || !existsSync(path)) continue
       const watcher = watchFile(path, (_event, fileName) => {
-        const changed = directory && fileName ? resolve(path, fileName.toString()) : path
+        const changed =
+          directory && fileName ? resolve(path, fileName.toString()) : path
         if (!/\.(?:[cm]?[jt]sx?|json)$/.test(changed)) return
         const version = sourceVersion(changed)
         if (this.#versions.get(changed) === version) return
@@ -665,7 +766,13 @@ class SourceWatchSet {
 function sourceVersion(path: string): string {
   try {
     const stats = statSync(path, { bigint: true })
-    return [stats.dev, stats.ino, stats.size, stats.mtimeNs, stats.ctimeNs].join(':')
+    return [
+      stats.dev,
+      stats.ino,
+      stats.size,
+      stats.mtimeNs,
+      stats.ctimeNs,
+    ].join(':')
   } catch {
     return 'missing'
   }
@@ -675,7 +782,12 @@ async function listen(
   application: HostedHttpApplication,
   port: number,
   io: CliIO,
-  details: { readonly application: string; readonly version: string; readonly environment: string; readonly startedAt: number },
+  details: {
+    readonly application: string
+    readonly version: string
+    readonly environment: string
+    readonly startedAt: number
+  },
 ): Promise<void> {
   const listenPort = port === 0 ? await reservePort() : port
   await application.listen({
@@ -711,22 +823,35 @@ async function reservePort(): Promise<number> {
 
 function writeStartupBanner(
   io: CliIO,
-  details: { readonly application: string; readonly version: string; readonly server: string; readonly environment: string; readonly startedAt: number },
+  details: {
+    readonly application: string
+    readonly version: string
+    readonly server: string
+    readonly environment: string
+    readonly startedAt: number
+  },
 ): void {
-  printStartupBanner({
-    application: details.application,
-    version: details.version,
-    server: details.server,
-    runtime: `Node.js ${process.versions.node}`,
-    environment: details.environment,
-    startupDurationMs: performance.now() - details.startedAt,
-  }, io.terminal ?? { isTTY: false, color: false }, io.stdout)
+  printStartupBanner(
+    {
+      application: details.application,
+      version: details.version,
+      server: details.server,
+      runtime: `Node.js ${process.versions.node}`,
+      environment: details.environment,
+      startupDurationMs: performance.now() - details.startedAt,
+    },
+    io.terminal ?? { isTTY: false, color: false },
+    io.stdout,
+  )
 }
 
 async function readApplicationName(cwd: string): Promise<string> {
   try {
-    const manifest = JSON.parse(await readFile(resolve(cwd, 'package.json'), 'utf8')) as { readonly name?: unknown }
-    if (typeof manifest.name === 'string' && manifest.name.length > 0) return manifest.name.split('/').at(-1) ?? manifest.name
+    const manifest = JSON.parse(
+      await readFile(resolve(cwd, 'package.json'), 'utf8'),
+    ) as { readonly name?: unknown }
+    if (typeof manifest.name === 'string' && manifest.name.length > 0)
+      return manifest.name.split('/').at(-1) ?? manifest.name
   } catch {
     // package.jsonがないApplicationではdirectory名を使用する。
   }
@@ -735,7 +860,9 @@ async function readApplicationName(cwd: string): Promise<string> {
 
 async function readFrameworkVersion(): Promise<string> {
   try {
-    const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { readonly version?: unknown }
+    const manifest = JSON.parse(
+      await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+    ) as { readonly version?: unknown }
     if (typeof manifest.version === 'string') return manifest.version
   } catch {
     // package metadataを読めない実行形態ではunknownを表示する。
@@ -752,7 +879,8 @@ function readPort(args: readonly string[]): number {
   const value = readOption(args, '--port')
   if (value === undefined) return 3000
   const port = Number(value)
-  if (!Number.isInteger(port) || port < 0 || port > 65_535) throw new Error(`不正なportです: ${value}`)
+  if (!Number.isInteger(port) || port < 0 || port > 65_535)
+    throw new Error(`不正なportです: ${value}`)
   return port
 }
 

@@ -6,9 +6,7 @@ import {
   implementation,
   procedure,
 } from '@loutrejs/core'
-import {
-  http,
-} from '@loutrejs/http'
+import { http } from '@loutrejs/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 

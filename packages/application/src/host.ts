@@ -55,7 +55,10 @@ export function bootstrap<const TDefinition extends ApplicationDefinition>(
       await runtime.initialize()
       return application
     },
-    run(entrypoint: EntrypointDescriptor<any, any>, ...args: readonly unknown[]) {
+    run(
+      entrypoint: EntrypointDescriptor<any, any>,
+      ...args: readonly unknown[]
+    ) {
       return Reflect.apply(runtime.run, runtime, [entrypoint, ...args])
     },
     async close() {
@@ -114,15 +117,20 @@ export function bootstrap<const TDefinition extends ApplicationDefinition>(
                   if (!matchesSchedule(schedule, now)) continue
                   if (triggeredMinutes.get(schedule.name) === minute) continue
                   triggeredMinutes.set(schedule.name, minute)
-                  void runtime.run(
-                    schedule.entrypoint as EntrypointDescriptor<void, void>,
-                  ).catch((error) => {
-                    logger.error('Scheduled Entrypoint execution failed', {
-                      event: 'scheduler.execution.failed',
-                      schedule: schedule.name,
-                      error: error instanceof Error ? error.message : String(error),
+                  void runtime
+                    .run(
+                      schedule.entrypoint as EntrypointDescriptor<void, void>,
+                    )
+                    .catch((error) => {
+                      logger.error('Scheduled Entrypoint execution failed', {
+                        event: 'scheduler.execution.failed',
+                        schedule: schedule.name,
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      })
                     })
-                  })
                 }
               }
               tick()
@@ -171,7 +179,10 @@ function registeredEntrypoints(
   ]
 }
 
-function listenServer(server: Server, options: HttpListenOptions): Promise<void> {
+function listenServer(
+  server: Server,
+  options: HttpListenOptions,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const onError = (error: Error) => {
       server.off('listening', onListening)

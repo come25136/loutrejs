@@ -7,7 +7,9 @@ import usersDefinition from '../dist/conformance/http-crud/application.mjs'
 import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
 
 if (!process.version.startsWith('v24.')) {
-  throw new Error(`Lambda conformanceにはNode.js 24.xが必要です: ${process.version}`)
+  throw new Error(
+    `Lambda conformanceにはNode.js 24.xが必要です: ${process.version}`,
+  )
 }
 
 const usersBinding = createInvocationBinding(usersDefinition, process.env)
@@ -18,7 +20,9 @@ const unary = await createLambdaHttpDriver(usersBinding.http)({
 })
 const body = JSON.parse(Buffer.from(unary.body, 'base64').toString('utf8'))
 if (unary.statusCode !== 200 || body.id !== 'lambda-user') {
-  throw new Error(`Lambda unary conformanceに失敗しました: ${JSON.stringify(body)}`)
+  throw new Error(
+    `Lambda unary conformanceに失敗しました: ${JSON.stringify(body)}`,
+  )
 }
 await usersBinding.application.close()
 

@@ -61,16 +61,20 @@ export default defineApplication({
 
 await writeFile(
   join(project, 'tsconfig.json'),
-  `${JSON.stringify({
-    compilerOptions: {
-      target: 'ES2024',
-      module: 'NodeNext',
-      moduleResolution: 'NodeNext',
-      strict: true,
-      skipLibCheck: true,
+  `${JSON.stringify(
+    {
+      compilerOptions: {
+        target: 'ES2024',
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        strict: true,
+        skipLibCheck: true,
+      },
+      include: ['src/**/*.ts'],
     },
-    include: ['src/**/*.ts'],
-  }, null, 2)}\n`,
+    null,
+    2,
+  )}\n`,
   'utf8',
 )
 await writeFile(join(sourceDirectory, 'app.ts'), appSource, 'utf8')
@@ -105,7 +109,9 @@ async function waitFor(readValue, expected, label) {
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 25))
   }
-  throw new Error(`${label}を確認できませんでした\nstdout:\n${stdout}\nstderr:\n${stderr}`)
+  throw new Error(
+    `${label}を確認できませんでした\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+  )
 }
 
 async function waitForUnavailable(port, label) {
@@ -122,14 +128,13 @@ async function waitForUnavailable(port, label) {
 
 try {
   const serverLine = await waitFor(
-    async () =>
-      stdout
-        .split('\n')
-        .find((line) => line.startsWith('Server:')),
+    async () => stdout.split('\n').find((line) => line.startsWith('Server:')),
     'Server: http://127.0.0.1:',
     'HTTP Application起動',
   )
-  const port = Number(serverLine.match(/Server: http:\/\/127\.0\.0\.1:(\d+)/)?.[1])
+  const port = Number(
+    serverLine.match(/Server: http:\/\/127\.0\.0\.1:(\d+)/)?.[1],
+  )
   await waitFor(async () => stdout, 'Loutre 0.1.0', 'Loutre version')
   await waitFor(async () => stdout, '(cli-dev-', 'Application名')
   const readMessage = async () => {
@@ -151,7 +156,9 @@ try {
   await new Promise((resolveWait) => setTimeout(resolveWait, 250))
   const startsBeforeTypeError = stdout.match(/^Ready in \d+ ms$/gm)?.length ?? 0
   if (startsBeforeTypeError !== 2) {
-    throw new Error(`初期起動と1回のsaveで${startsBeforeTypeError}回起動されました`)
+    throw new Error(
+      `初期起動と1回のsaveで${startsBeforeTypeError}回起動されました`,
+    )
   }
   const wordmarks = stdout.match(/██████╗/g)?.length ?? 0
   if (wordmarks !== 0) {
@@ -168,7 +175,9 @@ try {
   await new Promise((resolveWait) => setTimeout(resolveWait, 250))
   const typeErrors = stderr.match(/TS2322/g)?.length ?? 0
   if (typeErrors !== 1) {
-    throw new Error(`1回のsaveでTypeScript型エラーが${typeErrors}回表示されました`)
+    throw new Error(
+      `1回のsaveでTypeScript型エラーが${typeErrors}回表示されました`,
+    )
   }
   const startsAfterTypeError = stdout.match(/^Ready in \d+ ms$/gm)?.length ?? 0
   if (startsAfterTypeError !== startsBeforeTypeError) {
@@ -195,7 +204,9 @@ try {
   await waitFor(readMessage, '復旧後', 'compile復旧後のApplication response')
   const startsAfterRecovery = stdout.match(/^Ready in \d+ ms$/gm)?.length ?? 0
   if (startsAfterRecovery !== 3) {
-    throw new Error(`復旧までにApplicationが${startsAfterRecovery}回起動されました`)
+    throw new Error(
+      `復旧までにApplicationが${startsAfterRecovery}回起動されました`,
+    )
   }
   console.log('Loutre CLI dev incremental/watch conformance: 成功')
 } finally {

@@ -278,12 +278,7 @@ http({
     },
   },
 
-  pipeline: [
-    someLayer,
-    validate.params,
-    anotherLayer,
-    http.controller,
-  ],
+  pipeline: [someLayer, validate.params, anotherLayer, http.controller],
 })
 ```
 
@@ -341,12 +336,7 @@ request.params が存在する
 明示的に:
 
 ```ts
-pipeline: [
-  auth,
-  validate.params,
-  rateLimit,
-  http.controller,
-]
+pipeline: [auth, validate.params, rateLimit, http.controller]
 ```
 
 と書かせる。
@@ -533,11 +523,8 @@ type ValidatedParams = {
 概念:
 
 ```ts
-type ValidatedPathParams<
-  TSchemas extends Record<string, StandardSchemaV1>,
-> = {
-  readonly [K in keyof TSchemas]:
-    SchemaOutput<TSchemas[K]>
+type ValidatedPathParams<TSchemas extends Record<string, StandardSchemaV1>> = {
+  readonly [K in keyof TSchemas]: SchemaOutput<TSchemas[K]>
 }
 ```
 
@@ -555,9 +542,7 @@ plain object schema map へ変更するため、以下のような object 全体
 z.object({
   start: z.coerce.number(),
   end: z.coerce.number(),
-}).refine(
-  ({ start, end }) => start < end,
-)
+}).refine(({ start, end }) => start < end)
 ```
 
 また以下のような object 全体 transform も `request.params` の責務にしない。
@@ -643,10 +628,9 @@ schema constraint によって route dispatch を分岐させてはいけない�
 現在の `SchemaOutput` と対になる utility:
 
 ```ts
-export type SchemaInput<Schema> =
-  Schema extends StandardSchemaV1
-    ? StandardSchemaV1.InferInput<Schema>
-    : never
+export type SchemaInput<Schema> = Schema extends StandardSchemaV1
+  ? StandardSchemaV1.InferInput<Schema>
+  : never
 ```
 
 を追加する。
@@ -675,10 +659,7 @@ schema map の各 property を個別に validate する。
 const output = {}
 
 for (const [name, schema] of Object.entries(paramsSchemas)) {
-  output[name] = await validateSchema(
-    schema,
-    context.params[name],
-  )
+  output[name] = await validateSchema(schema, context.params[name])
 }
 
 context.params = output
@@ -725,7 +706,7 @@ z.coerce.number()
 元の `issue.path` が undefined なら:
 
 ```ts
-['id']
+;['id']
 ```
 
 にする。
@@ -880,7 +861,7 @@ parseHttpPath('/users/{id}')
 ↓
 
 ```ts
-[
+;[
   { kind: 'static', value: 'users' },
   { kind: 'param', name: 'id' },
 ]
@@ -941,8 +922,7 @@ type PathParamNames<TPath extends string> = ...
 type A = PathParamNames<'/users/{id}'>
 // 'id'
 
-type B =
-  PathParamNames<'/users/{userId}/posts/{postId}'>
+type B = PathParamNames<'/users/{userId}/posts/{postId}'>
 // 'userId' | 'postId'
 
 type C = PathParamNames<'/users'>
@@ -1004,26 +984,21 @@ dispatch identity を静的に生成できない definition は認めない。
 validation 前:
 
 ```ts
-type ParamsBeforeValidation<TDefinition> =
-  RawPathParams<TDefinition['path']>
+type ParamsBeforeValidation<TDefinition> = RawPathParams<TDefinition['path']>
 ```
 
 validation 後、schema map がある場合:
 
 ```ts
-type ParamsAfterValidation<TDefinition> =
-  ValidatedPathParams<
-    TDefinition['request']['params']
-  >
+type ParamsAfterValidation<TDefinition> = ValidatedPathParams<
+  TDefinition['request']['params']
+>
 ```
 
 Pipeline analysis で:
 
 ```ts
-HasValidationBeforeTerminal<
-  TDefinition['pipeline'],
-  'params'
->
+HasValidationBeforeTerminal<TDefinition['pipeline'], 'params'>
 ```
 
 が true の場合のみ validated type を採用。
@@ -1891,11 +1866,7 @@ http({
     },
   },
 
-  pipeline: [
-    authLayer,
-    validate.params,
-    http.controller,
-  ],
+  pipeline: [authLayer, validate.params, http.controller],
 })
 ```
 

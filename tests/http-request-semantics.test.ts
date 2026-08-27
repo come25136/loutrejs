@@ -6,10 +6,7 @@ import {
   procedure,
   type ImplementationDescriptor,
 } from '@loutrejs/core'
-import {
-  http,
-  validate,
-} from '@loutrejs/http'
+import { http, validate } from '@loutrejs/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 
@@ -22,7 +19,9 @@ describe('HTTP request semantics', () => {
             method: 'GET',
             path: '/inspect',
             request: {
-              query: z.object({ tag: z.union([z.string(), z.array(z.string())]) }),
+              query: z.object({
+                tag: z.union([z.string(), z.array(z.string())]),
+              }),
               headers: z.object({ 'x-repeat': z.string() }),
             },
             responses: {

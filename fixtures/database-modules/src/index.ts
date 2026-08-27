@@ -91,7 +91,11 @@ export const DatabaseModule = defineModule<DatabaseModuleArgs>((args) => ({
     provide(args.provide).useFactory({
       inject: [AppEnv, LIFECYCLE_EVENTS],
       use: (env: AppEnv, events: string[]) =>
-        new Database(args.name, env[args.url.key as keyof AppEnv] as string, events),
+        new Database(
+          args.name,
+          env[args.url.key as keyof AppEnv] as string,
+          events,
+        ),
     }),
   ],
   exports: [args.provide],
