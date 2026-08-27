@@ -79,7 +79,12 @@ describe('HTTP request semantics', () => {
           http: http({
             method: 'POST',
             path: '/multipart',
-            request: { body: z.instanceof(FormData) },
+            request: {
+              body: {
+                contentType: 'multipart/form-data',
+                schema: z.instanceof(FormData),
+              },
+            },
             responses: {
               accepted: {
                 status: 202,
@@ -127,7 +132,12 @@ describe('HTTP request semantics', () => {
           http: http({
             method: 'POST',
             path: '/invalid-multipart',
-            request: { body: z.instanceof(FormData) },
+            request: {
+              body: {
+                contentType: 'multipart/form-data',
+                schema: z.instanceof(FormData),
+              },
+            },
             responses: {
               ok: { status: 200, body: z.object({ ok: z.boolean() }) },
             },

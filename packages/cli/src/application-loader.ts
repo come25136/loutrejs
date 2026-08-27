@@ -106,6 +106,19 @@ function compileDefinition(definition: ApplicationDefinition): ApplicationGraphI
   )
 }
 
+export async function loadApplicationDefinition(
+  entry: string,
+): Promise<ApplicationDefinition> {
+  const directory = await mkdtemp(join(tmpdir(), 'loutre-definition-'))
+  const output = join(directory, 'application.mjs')
+  try {
+    await emitApplication(entry, output, { nodeCompatibility: true })
+    return await importApplicationDefinition(output)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+}
+
 export async function loadHttpApplication(entry: string): Promise<LoadedApplication> {
   const directory = await mkdtemp(join(tmpdir(), 'loutre-application-'))
   const output = join(directory, 'application.mjs')

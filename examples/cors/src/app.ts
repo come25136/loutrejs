@@ -24,7 +24,10 @@ const MessageContract = contract({
         method: 'POST',
         path: '/messages',
         request: {
-          body: CreateMessageBody,
+          body: {
+            contentType: 'application/json',
+            schema: CreateMessageBody,
+          },
         },
         responses: {
           created: {

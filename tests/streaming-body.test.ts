@@ -36,7 +36,12 @@ describe('streaming validate.body', () => {
           http: http({
             method: 'POST',
             path: '/upload',
-            request: { body: BodyStreamSchema },
+            request: {
+              body: {
+                contentType: 'application/octet-stream',
+                schema: BodyStreamSchema,
+              },
+            },
             responses: {
               accepted: {
                 status: 202,

@@ -44,7 +44,10 @@ export const UsersContract = contract({
         method: 'POST',
         path: '/users',
         request: {
-          body: CreateUser,
+          body: {
+            contentType: 'application/json',
+            schema: CreateUser,
+          },
         },
         responses: {
           created: {

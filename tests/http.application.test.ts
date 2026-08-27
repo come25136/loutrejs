@@ -37,7 +37,10 @@ describe('HTTP application boundary', () => {
               params: { id: z.string().min(2) },
               query: z.object({ page: z.coerce.number().int() }),
               headers: z.object({ 'x-kind': z.literal('fixture') }),
-              body: z.object({ name: z.string() }),
+              body: {
+                contentType: 'application/json',
+                schema: z.object({ name: z.string() }),
+              },
             },
             responses: {
               updated: {
@@ -419,7 +422,10 @@ function createInputDecodeFixture() {
           path: '/decode/{value}',
           request: {
             params: { value: z.string() },
-            body: z.object({}).optional(),
+            body: {
+              contentType: 'application/json',
+              schema: z.object({}).optional(),
+            },
           },
           responses: {
             ok: {

@@ -1,6 +1,9 @@
-import type { StandardSchemaV1 } from '@standard-schema/spec'
+import type {
+  StandardJSONSchemaV1,
+  StandardSchemaV1,
+} from '@standard-schema/spec'
 
-export type { StandardSchemaV1 } from '@standard-schema/spec'
+export type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec'
 
 export type StandardSchemaResult<Output> = StandardSchemaV1.Result<Output>
 
@@ -11,6 +14,25 @@ export type SchemaOutput<Schema> = Schema extends StandardSchemaV1
 export type SchemaInput<Schema> = Schema extends StandardSchemaV1
   ? StandardSchemaV1.InferInput<Schema>
   : never
+
+export type JsonSchemaInput<Schema> = Schema extends StandardJSONSchemaV1
+  ? StandardJSONSchemaV1.InferInput<Schema>
+  : never
+
+export type JsonSchemaOutput<Schema> = Schema extends StandardJSONSchemaV1
+  ? StandardJSONSchemaV1.InferOutput<Schema>
+  : never
+
+export function supportsJsonSchema(
+  schema: StandardSchemaV1,
+): schema is StandardSchemaV1 & StandardJSONSchemaV1 {
+  const standard = schema['~standard'] as StandardSchemaV1.Props &
+    Partial<StandardJSONSchemaV1.Props>
+  return (
+    typeof standard.jsonSchema?.input === 'function' &&
+    typeof standard.jsonSchema.output === 'function'
+  )
+}
 
 export async function validateSchema<Schema extends StandardSchemaV1>(
   schema: Schema,

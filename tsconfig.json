@@ -20,6 +20,7 @@
       "@loutrejs/application": ["./packages/application/src/index.ts"],
       "@loutrejs/application/host": ["./packages/application/src/host.ts"],
       "@loutrejs/application/binding": ["./packages/application/src/binding.ts"],
+      "@loutrejs/application/openapi": ["./packages/application/src/openapi.ts"],
       "@loutrejs/graph": ["./packages/graph/src/index.ts"],
       "@loutrejs/cli": ["./packages/cli/src/index.ts"],
       "@loutrejs/runtime": ["./packages/runtime/src/index.ts"],
