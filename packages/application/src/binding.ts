@@ -17,20 +17,12 @@ export function createInvocationBinding<
   environment?: unknown,
 ): InvocationBinding<TDefinition> {
   const logger = definition.logger ?? new Logger()
-  const entrypoints = [
-    ...new Set([
-      ...definition.entrypoints,
-      ...definition.schedules.map((schedule) => schedule.entrypoint),
-      ...definition.consumers.map((consumer) => consumer.entrypoint),
-    ]),
-  ]
+  const entrypoints = registeredEntrypoints(definition)
   const graph = assertValidCompilation(
     compileApplication({
       modules: definition.modules,
-      entrypoints: definition.entrypoints,
-      schedules: definition.schedules,
-      queues: definition.queues,
-      consumers: definition.consumers,
+      entrypoint: definition.entrypoint,
+      triggers: definition.triggers,
     }),
   )
   const runtime = new ApplicationRuntime(definition.modules, {
@@ -44,22 +36,34 @@ export function createInvocationBinding<
       await runtime.initialize()
       return application
     },
-    run(
-      entrypoint: EntrypointDescriptor<any, any>,
-      ...args: readonly unknown[]
-    ) {
-      return Reflect.apply(runtime.run, runtime, [entrypoint, ...args])
-    },
-    close: () => runtime.shutdown(),
+    ...(definition.entrypoint
+      ? {
+          run(...args: readonly unknown[]) {
+            return Reflect.apply(runtime.run, runtime, [
+              definition.entrypoint,
+              ...args,
+            ])
+          },
+        }
+      : {}),
+    close: (signal?: string) => runtime.shutdown(signal),
   } as InvocationApplication<TDefinition>
-  const hasHttp = graph.executions.some(
-    (execution) =>
-      execution.kind === 'protocol' && execution.protocol === 'http',
-  )
+  const hasHttp = graph.hostCapabilities.includes('http')
   return {
     application,
     ...(hasHttp
       ? { http: createHttpExecution({ runtime, graph, logger }) }
       : {}),
   }
+}
+
+function registeredEntrypoints(
+  definition: ApplicationDefinition,
+): readonly EntrypointDescriptor<any, any>[] {
+  return [
+    ...new Set([
+      ...(definition.entrypoint ? [definition.entrypoint] : []),
+      ...definition.triggers.map((trigger) => trigger.entrypoint),
+    ]),
+  ]
 }

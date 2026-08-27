@@ -144,6 +144,19 @@ curl http://127.0.0.1:3000/greetings/Loutre
 { "message": "こんにちは、Loutre！" }
 ```
 
+HTTPなしのone-shot Applicationはmanual `entrypoint`を`run`します。
+
+```sh
+npm run start --workspace @loutrejs/example-hello-cli
+# Hello, World!
+```
+
+HTTPなしのlong-lived workerはTriggerだけで起動できます。
+
+```sh
+npm run dev --workspace @loutrejs/example-hello-worker
+```
+
 Application GraphはCLIから確認できます。
 
 ```sh

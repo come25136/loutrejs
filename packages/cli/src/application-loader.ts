@@ -5,8 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type {
   ApplicationDefinition,
-  BaseApplication,
-  HttpApplicationCapability,
+  HostedApplication,
 } from '@loutrejs/application'
 import { bootstrap } from '@loutrejs/application/host'
 import {
@@ -16,11 +15,11 @@ import {
 } from '@loutrejs/graph'
 import { build as buildWithEsbuild } from 'esbuild'
 
-export type HostedHttpApplication = BaseApplication<ApplicationDefinition> &
-  HttpApplicationCapability
+export type LoadedHostedApplication = HostedApplication<ApplicationDefinition>
 
 export interface LoadedApplication {
-  readonly application: HostedHttpApplication
+  readonly application: LoadedHostedApplication
+  readonly definition: ApplicationDefinition
   readonly sourceFiles: readonly string[]
 }
 
@@ -63,22 +62,12 @@ export async function emitApplication(
   )
 }
 
-export async function importHttpApplication(
+export async function importApplication(
   output: string,
-): Promise<HostedHttpApplication> {
+): Promise<LoadedHostedApplication> {
   const definition = await importApplicationDefinition(output)
-  const graph = compileDefinition(definition)
-  if (
-    !graph.executions.some(
-      (execution) =>
-        execution.kind === 'protocol' && execution.protocol === 'http',
-    )
-  ) {
-    throw new Error(
-      'LUTRE_CLI_HTTP_REQUIRED: dev/startにはHTTP executionを持つApplicationが必要です。',
-    )
-  }
-  return bootstrap(definition) as unknown as HostedHttpApplication
+  compileDefinition(definition)
+  return bootstrap(definition) as LoadedHostedApplication
 }
 
 async function importApplicationDefinition(
@@ -102,10 +91,8 @@ function compileDefinition(
   return assertValidCompilation(
     compileApplication({
       modules: definition.modules,
-      entrypoints: definition.entrypoints,
-      schedules: definition.schedules,
-      queues: definition.queues,
-      consumers: definition.consumers,
+      entrypoint: definition.entrypoint,
+      triggers: definition.triggers,
     }),
   )
 }
@@ -123,7 +110,7 @@ export async function loadApplicationDefinition(
   }
 }
 
-export async function loadHttpApplication(
+export async function loadApplication(
   entry: string,
 ): Promise<LoadedApplication> {
   const directory = await mkdtemp(join(tmpdir(), 'loutre-application-'))
@@ -132,8 +119,10 @@ export async function loadHttpApplication(
     const sourceFiles = await emitApplication(entry, output, {
       nodeCompatibility: true,
     })
-    const application = await importHttpApplication(output)
-    return { application, sourceFiles }
+    const definition = await importApplicationDefinition(output)
+    compileDefinition(definition)
+    const application = bootstrap(definition) as LoadedHostedApplication
+    return { application, definition, sourceFiles }
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

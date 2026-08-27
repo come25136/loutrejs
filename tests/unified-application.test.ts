@@ -1,17 +1,19 @@
-import { defineApplication } from '@loutrejs/application'
+import { bindQueueDriver, defineApplication } from '@loutrejs/application'
 import { bootstrap } from '@loutrejs/application/host'
 import {
-  consumer,
+  consume,
+  cron,
   defineModule,
   entrypoint,
+  fixedDelay,
   inject,
   queue,
-  schedule,
 } from '@loutrejs/core'
 import { compileApplication } from '@loutrejs/graph'
+import { z } from 'zod'
 
 describe('Unified Application', () => {
-  test('Entrypointを一度だけ構築し、実行結果とerrorをそのまま返す', async () => {
+  test('Applicationの単一Entrypointを一度だけ構築し、実行結果を返す', async () => {
     let constructions = 0
     const ServiceToken = class Service {
       value = 40
@@ -23,38 +25,36 @@ describe('Unified Application', () => {
         return async (input) => service.value + input
       },
     })
+    const Module = defineModule(() => ({ providers: [ServiceToken] }))
+    const application = bootstrap(
+      defineApplication({ modules: [Module()], entrypoint: calculate }),
+    )
+    constructions = 0
+
+    await expect(application.run(2)).resolves.toBe(42)
+    await expect(application.run(3)).resolves.toBe(43)
+    expect(constructions).toBe(1)
+    expect(application.graph.executions).toContainEqual(
+      expect.objectContaining({
+        id: 'entrypoint:calculate',
+        kind: 'entrypoint',
+      }),
+    )
+    await application.close()
+  })
+
+  test('Entrypoint errorをそのまま返す', async () => {
     const fail = entrypoint<void, void>({
       name: 'fail',
       factory: () => () => {
         throw new Error('domain failure')
       },
     })
-    const Module = defineModule(() => ({ providers: [ServiceToken] }))
     const application = bootstrap(
-      defineApplication({
-        modules: [Module()],
-        entrypoints: [calculate, fail],
-      }),
+      defineApplication({ modules: [], entrypoint: fail }),
     )
-    constructions = 0
 
-    await expect(application.run(calculate, 2)).resolves.toBe(42)
-    await expect(application.run(calculate, 3)).resolves.toBe(43)
-    await expect(application.run(fail)).rejects.toThrow('domain failure')
-    expect(constructions).toBe(1)
-    expect(application.graph.nodes).toContainEqual(
-      expect.objectContaining({
-        id: 'entrypoint:calculate',
-        kind: 'entrypoint',
-      }),
-    )
-    expect(application.graph.edges).toContainEqual(
-      expect.objectContaining({
-        from: 'entrypoint:calculate',
-        to: 'class:Service',
-        source: 'probed',
-      }),
-    )
+    await expect(application.run()).rejects.toThrow('domain failure')
     await application.close()
   })
 
@@ -69,10 +69,10 @@ describe('Unified Application', () => {
     })
     const Module = defineModule(() => ({}))
     const application = bootstrap(
-      defineApplication({ modules: [Module()], entrypoints: [job] }),
+      defineApplication({ modules: [Module()], entrypoint: job }),
     )
 
-    const execution = application.run(job)
+    const execution = application.run()
     await Promise.resolve()
     const closing = application.close()
     let closed = false
@@ -81,93 +81,130 @@ describe('Unified Application', () => {
     })
     await Promise.resolve()
     expect(closed).toBe(false)
-    await expect(application.run(job)).rejects.toThrow('LUTRE_APP_STOPPING')
+    await expect(application.run()).rejects.toThrow('LUTRE_APP_STOPPING')
     release()
     await execution
     await closing
-    await expect(application.run(job)).rejects.toThrow('LUTRE_APP_STOPPED')
+    await expect(application.run()).rejects.toThrow('LUTRE_APP_STOPPED')
     await expect(application.close()).resolves.toBeUndefined()
   })
 
-  test('ScheduleとQueue ConsumerをGraphへ登録し、二重開始を拒否する', async () => {
+  test('Cron / fixed-delay / Queue ConsumerをTrigger Rootとして登録する', async () => {
     const cleanup = entrypoint<void, void>({
       name: 'cleanup',
+      factory: () => () => undefined,
+    })
+    const poll = entrypoint<void, void>({
+      name: 'poll',
       factory: () => () => undefined,
     })
     const process = entrypoint<{ id: string }, void>({
       name: 'orders.process',
       factory: () => () => undefined,
     })
-    const nightly = schedule({
+    const nightly = cron({
       name: 'cleanup.nightly',
-      cron: { expression: '0 3 * * *', timezone: 'Asia/Tokyo' },
+      expression: '0 3 * * *',
+      timezone: 'Asia/Tokyo',
       entrypoint: cleanup,
     })
-    const orders = queue<{ id: string }>({ name: 'orders' })
-    const orderConsumer = consumer({
+    const polling = fixedDelay({
+      name: 'poll.remote',
+      delay: 10_000,
+      immediate: true,
+      entrypoint: poll,
+    })
+    const orders = queue({
+      name: 'orders',
+      payload: z.object({ id: z.string() }),
+    })
+    let consumePayload: ((payload: unknown) => Promise<void>) | undefined
+    const orderConsumer = consume({
       name: 'orders.process',
       queue: orders,
       entrypoint: process,
     })
-    const Module = defineModule(() => ({}))
+    const Module = defineModule(() => ({
+      providers: [
+        bindQueueDriver(orders, {
+          async start({ consume: dispatch }) {
+            consumePayload = dispatch
+            return { stop: async () => undefined }
+          },
+        }),
+      ],
+    }))
     const application = bootstrap(
       defineApplication({
         modules: [Module()],
-        schedules: [nightly],
-        consumers: [orderConsumer],
+        triggers: [nightly, polling, orderConsumer],
       }),
     )
 
+    expect(application.graph.version).toBe(4)
     expect(application.graph.queues).toEqual([
-      { id: 'queue:orders', name: 'orders' },
+      expect.objectContaining({ id: 'queue:orders', name: 'orders' }),
     ])
     expect(application.graph.executions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ kind: 'schedule', name: 'cleanup.nightly' }),
         expect.objectContaining({
-          kind: 'queue-consumer',
+          kind: 'trigger',
+          trigger: 'cron',
+          name: 'cleanup.nightly',
+        }),
+        expect.objectContaining({
+          kind: 'trigger',
+          trigger: 'fixed-delay',
+          name: 'poll.remote',
+        }),
+        expect.objectContaining({
+          kind: 'trigger',
+          trigger: 'queue-consumer',
           name: 'orders.process',
         }),
       ]),
     )
-    await application.scheduler.start()
-    await expect(application.scheduler.start()).rejects.toThrow(
-      'LUTRE_SCHEDULER_ALREADY_STARTED',
+    expect(application.graph.executions).not.toContainEqual(
+      expect.objectContaining({ kind: 'entrypoint', name: 'cleanup' }),
     )
-    await application.queue.listen()
-    await expect(application.queue.listen()).rejects.toThrow(
-      'LUTRE_QUEUE_ALREADY_LISTENING',
+    expect('run' in application).toBe(false)
+    await application.triggers.start()
+    await expect(application.triggers.start()).rejects.toThrow(
+      'LUTRE_TRIGGERS_ALREADY_STARTED',
     )
+    await expect(consumePayload?.({ id: 'one' })).resolves.toBeUndefined()
     await application.close()
   })
 
-  test('execution descriptorの重複名とportable cron違反をdiagnosticにする', () => {
-    const first = entrypoint<void, void>({
-      name: 'duplicate',
+  test('Trigger重複名とportable cron違反をdiagnosticにする', () => {
+    const cleanup = entrypoint<void, void>({
+      name: 'cleanup',
       factory: () => () => undefined,
     })
-    const second = entrypoint<void, void>({
-      name: 'duplicate',
-      factory: () => () => undefined,
+    const invalidCron = cron({
+      name: 'maintenance',
+      expression: '90 25 * * *',
+      timezone: 'Invalid/Timezone',
+      entrypoint: cleanup,
     })
-    const invalidSchedule = schedule({
-      name: 'invalid.schedule',
-      cron: { expression: '90 25 * * *', timezone: 'Invalid/Timezone' },
-      entrypoint: first,
+    const duplicate = cron({
+      name: 'maintenance',
+      expression: '0 0 * * *',
+      timezone: 'UTC',
+      entrypoint: cleanup,
     })
     const Module = defineModule(() => ({}))
 
     const result = compileApplication({
       modules: [Module()],
-      entrypoints: [first, second],
-      schedules: [invalidSchedule],
+      triggers: [invalidCron, duplicate],
     })
 
     expect(result.diagnostics.map(({ code }) => code)).toEqual(
       expect.arrayContaining([
-        'LUTRE_ENTRYPOINT_DUPLICATE',
-        'LUTRE_SCHEDULE_INVALID_CRON',
-        'LUTRE_SCHEDULE_INVALID_TIMEZONE',
+        'LUTRE_TRIGGER_DUPLICATE',
+        'LUTRE_TRIGGER_INVALID_CRON',
+        'LUTRE_TRIGGER_INVALID_TIMEZONE',
       ]),
     )
   })

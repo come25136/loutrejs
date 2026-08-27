@@ -11,10 +11,8 @@ async function main(): Promise<void> {
     const graph = assertValidCompilation(
       compileApplication({
         modules: definition.modules,
-        entrypoints: definition.entrypoints,
-        schedules: definition.schedules,
-        queues: definition.queues,
-        consumers: definition.consumers,
+        entrypoint: definition.entrypoint,
+        triggers: definition.triggers,
       }),
     )
     const runtime = new ApplicationRuntime(definition.modules, {

@@ -2,14 +2,15 @@ import { defineApplication } from '@loutrejs/application'
 import { bootstrap } from '@loutrejs/application/host'
 import { createInvocationBinding } from '@loutrejs/application/binding'
 import {
-  consumer,
+  consume,
   contract,
+  cron,
   defineModule,
   entrypoint,
+  fixedDelay,
   implementation,
   procedure,
   queue,
-  schedule,
 } from '@loutrejs/core'
 import { http } from '@loutrejs/http'
 import { z } from 'zod'
@@ -36,33 +37,38 @@ const HealthHttp = implementation({
   }),
 })
 
-const HttpModule = defineModule(() => ({
-  implementations: [HealthHttp],
-}))
-const ImportedHttpModule = defineModule(() => ({
-  imports: [HttpModule()],
-}))
+const HttpModule = defineModule(() => ({ implementations: [HealthHttp] }))
+const ImportedHttpModule = defineModule(() => ({ imports: [HttpModule()] }))
 const WorkerModule = defineModule(() => ({}))
 
 const cleanup = entrypoint<void, void>({
   name: 'maintenance.cleanup',
   factory: () => async () => undefined,
 })
+const calculate = entrypoint<number, number>({
+  name: 'calculate',
+  factory: () => async (input) => input + 1,
+})
 const processOrder = entrypoint<{ readonly id: string }, void>({
   name: 'orders.process',
   factory: () => async () => undefined,
 })
-const unregistered = entrypoint<boolean, void>({
-  name: 'unregistered',
-  factory: () => () => undefined,
-})
-const nightly = schedule({
+const nightly = cron({
   name: 'maintenance.cleanup.nightly',
-  cron: { expression: '0 3 * * *', timezone: 'Asia/Tokyo' },
+  expression: '0 3 * * *',
+  timezone: 'Asia/Tokyo',
   entrypoint: cleanup,
 })
-const orders = queue<{ readonly id: string }>({ name: 'orders' })
-const orderConsumer = consumer({
+const poll = fixedDelay({
+  name: 'maintenance.poll',
+  delay: 1_000,
+  entrypoint: cleanup,
+})
+const orders = queue({
+  name: 'orders',
+  payload: z.object({ id: z.string() }),
+})
+const orderConsumer = consume({
   name: 'orders.process',
   queue: orders,
   entrypoint: processOrder,
@@ -73,60 +79,66 @@ const httpApplication = bootstrap(
 )
 httpApplication.listen({ port: 3000 })
 httpApplication.fetch(new Request('http://localhost/health'))
+// @ts-expect-error manual Entrypointが無いApplicationにはrunを公開しない
+httpApplication.run
 // @ts-expect-error listenはobject formのみを受け付ける
 httpApplication.listen(3000)
-// @ts-expect-error Scheduleが無いApplicationにはschedulerを公開しない
-httpApplication.scheduler
-// @ts-expect-error Consumerが無いApplicationにはqueueを公開しない
-httpApplication.queue
+// @ts-expect-error Triggerが無いApplicationにはtriggersを公開しない
+httpApplication.triggers
 
 const workerApplication = bootstrap(
   defineApplication({
     modules: [WorkerModule()],
-    entrypoints: [cleanup],
-    schedules: [nightly],
-    consumers: [orderConsumer],
+    entrypoint: calculate,
+    triggers: [nightly, poll, orderConsumer],
   }),
 )
-workerApplication.run(cleanup)
-workerApplication.run(processOrder, { id: 'order-1' })
-workerApplication.scheduler.start()
-workerApplication.queue.listen()
+workerApplication.run(41)
+workerApplication.triggers.start()
+workerApplication.triggers.stop()
+// @ts-expect-error Entrypoint inputはnumber
+workerApplication.run('41')
+// @ts-expect-error Applicationのmanual Entrypointはdescriptor引数を取らない
+workerApplication.run(calculate, 41)
 // @ts-expect-error HTTPが無いApplicationにはlistenを公開しない
 workerApplication.listen
 // @ts-expect-error HTTPが無いApplicationにはfetchを公開しない
 workerApplication.fetch
-// @ts-expect-error 未登録Entrypointは実行できない
-workerApplication.run(unregistered, true)
-// @ts-expect-error inputを持つEntrypointには引数が必要
-workerApplication.run(processOrder)
-// @ts-expect-error Entrypoint input型を一致させる
-workerApplication.run(processOrder, { id: 1 })
+
+const triggerOnlyApplication = bootstrap(
+  defineApplication({
+    modules: [WorkerModule()],
+    triggers: [nightly, poll, orderConsumer],
+  }),
+)
+// @ts-expect-error Triggerから参照されるEntrypointはmanual run rootではない
+triggerOnlyApplication.run
 
 const invocationApplication = createInvocationBinding(
   defineApplication({ modules: [HttpModule()] }),
 ).application
 // @ts-expect-error callback runtimeにはlistenを公開しない
 invocationApplication.listen
-// @ts-expect-error callback runtimeにはschedulerを公開しない
-invocationApplication.scheduler
-// @ts-expect-error callback runtimeにはqueueを公開しない
-invocationApplication.queue
+// @ts-expect-error callback runtimeにはtriggersを公開しない
+invocationApplication.triggers
+// @ts-expect-error manual Entrypointが無いcallback Applicationにはrunを公開しない
+invocationApplication.run
 
 const wrongInput = entrypoint<string, void>({
   name: 'wrong.input',
   factory: () => () => undefined,
 })
 // @ts-expect-error Queue payloadとEntrypoint inputは一致させる
-consumer({ name: 'wrong.consumer', queue: orders, entrypoint: wrongInput })
+consume({ name: 'wrong.consumer', queue: orders, entrypoint: wrongInput })
 
-const wrongSchedule = entrypoint<string, void>({
-  name: 'wrong.schedule',
+const wrongTrigger = entrypoint<string, void>({
+  name: 'wrong.trigger',
   factory: () => () => undefined,
 })
-// @ts-expect-error Schedule Entrypointはvoid inputのみを受け付ける
-schedule({
-  name: 'wrong.schedule',
-  cron: { expression: '* * * * *', timezone: 'UTC' },
-  entrypoint: wrongSchedule,
+// @ts-expect-error Cron Entrypointはvoid inputのみを受け付ける
+cron({
+  name: 'wrong.trigger',
+  expression: '* * * * *',
+  timezone: 'UTC',
+  entrypoint: wrongTrigger,
 })

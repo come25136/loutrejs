@@ -26,7 +26,9 @@ type ImplementationRuntimeShape<
     keyof ContractProcedures<TContract>[K]['protocols']] extends ProtocolDescriptor<
     TProtocol,
     infer TContext,
-    infer TResult
+    infer TResult,
+    any,
+    any
   >
     ? (context: TContext) => TResult | Promise<TResult>
     : never
@@ -37,11 +39,13 @@ export interface ImplementationDescriptor<
   TProtocol extends string = string,
   TProcedures extends readonly string[] = readonly string[],
   TRuntime extends object = object,
+  TCapabilities extends readonly string[] = readonly string[],
 > {
   readonly kind: 'implementation'
   readonly name: string
   readonly contract: TContract
   readonly protocol: TProtocol
+  readonly capabilities: TCapabilities
   readonly procedures: TProcedures
   readonly factory: () => TRuntime
 }
@@ -49,17 +53,23 @@ export interface ImplementationDescriptor<
 type AvailableProtocolConstraint<
   TContract extends ContractDefinition,
   TProtocol extends string,
+  TCapabilities extends readonly string[],
 > = [ProcedureNamesForProtocol<TContract, TProtocol>] extends [never]
   ? never
-  : ProtocolFactory<TProtocol>
+  : ProtocolFactory<TProtocol, TCapabilities>
 
 type FullImplementationDeclaration<
   TContract extends ContractDefinition,
   TProtocol extends string,
+  TCapabilities extends readonly string[],
 > = {
   readonly name: string
   readonly contract: TContract
-  readonly protocol: AvailableProtocolConstraint<TContract, TProtocol>
+  readonly protocol: AvailableProtocolConstraint<
+    TContract,
+    TProtocol,
+    TCapabilities
+  >
   readonly procedures?: never
   readonly factory: () => ImplementationRuntimeShape<
     TContract,
@@ -75,10 +85,15 @@ type PartialImplementationDeclaration<
     TContract,
     TProtocol
   >[],
+  TCapabilities extends readonly string[],
 > = {
   readonly name: string
   readonly contract: TContract
-  readonly protocol: AvailableProtocolConstraint<TContract, TProtocol>
+  readonly protocol: AvailableProtocolConstraint<
+    TContract,
+    TProtocol,
+    TCapabilities
+  >
   readonly procedures: TProcedures
   readonly factory: () => ImplementationRuntimeShape<
     TContract,
@@ -90,8 +105,13 @@ type PartialImplementationDeclaration<
 export function implementation<
   const TContract extends ContractDefinition,
   const TProtocol extends string,
+  const TCapabilities extends readonly string[],
 >(
-  declaration: FullImplementationDeclaration<TContract, TProtocol>,
+  declaration: FullImplementationDeclaration<
+    TContract,
+    TProtocol,
+    TCapabilities
+  >,
 ): ImplementationDescriptor<
   TContract,
   TProtocol,
@@ -100,7 +120,8 @@ export function implementation<
     TContract,
     TProtocol,
     ProcedureNamesForProtocol<TContract, TProtocol>
-  >
+  >,
+  TCapabilities
 >
 export function implementation<
   const TContract extends ContractDefinition,
@@ -109,22 +130,25 @@ export function implementation<
     TContract,
     TProtocol
   >[],
+  const TCapabilities extends readonly string[],
 >(
   declaration: PartialImplementationDeclaration<
     TContract,
     TProtocol,
-    TProcedures
+    TProcedures,
+    TCapabilities
   >,
 ): ImplementationDescriptor<
   TContract,
   TProtocol,
   TProcedures,
-  ImplementationRuntimeShape<TContract, TProtocol, TProcedures[number]>
+  ImplementationRuntimeShape<TContract, TProtocol, TProcedures[number]>,
+  TCapabilities
 >
 export function implementation(declaration: {
   readonly name: string
   readonly contract: ContractDefinition
-  readonly protocol: ProtocolFactory<string>
+  readonly protocol: ProtocolFactory<string, readonly string[]>
   readonly procedures?: readonly string[]
   readonly factory: () => object
 }): ImplementationDescriptor {
@@ -160,6 +184,7 @@ export function implementation(declaration: {
     name: declaration.name,
     contract: declaration.contract,
     protocol,
+    capabilities: declaration.protocol.capabilities ?? [],
     procedures: Object.freeze(procedures),
     factory: declaration.factory,
   })

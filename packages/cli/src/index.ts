@@ -11,6 +11,10 @@ import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import type {
+  HttpApplicationCapability,
+  TriggerApplicationCapability,
+} from '@loutrejs/application'
+import type {
   ApplicationGraphIR,
   DependencyEdgeIR,
   DependencyNodeIR,
@@ -25,10 +29,10 @@ import { nodeRuntime } from '@loutrejs/runtime-node'
 import { workerdRuntime } from '@loutrejs/runtime-workerd'
 import {
   emitApplication,
-  importHttpApplication,
+  importApplication,
+  loadApplication,
   loadApplicationGraph,
-  loadHttpApplication,
-  type HostedHttpApplication,
+  type LoadedHostedApplication,
 } from './application-loader.js'
 import {
   printStartupBanner,
@@ -182,6 +186,46 @@ export async function runCli(
       io.stdout(`Graph Manifestを出力しました: ${manifestOutput}`)
       return 0
     }
+    case 'run': {
+      if (!subject) {
+        io.stderr(
+          'runには明示的なApplication entryが必要です。filesystem discoveryは行いません。',
+        )
+        return 2
+      }
+      const rawInput = readOption(args, '--input')
+      let input: unknown
+      if (rawInput !== undefined) {
+        try {
+          input = JSON.parse(rawInput)
+        } catch {
+          io.stderr('run --inputには有効なJSONを指定してください。')
+          return 2
+        }
+      }
+      const loaded = await loadApplication(resolve(io.cwd, subject))
+      if (!loaded.definition.entrypoint || !('run' in loaded.application)) {
+        io.stderr(
+          'LUTRE_CLI_ENTRYPOINT_REQUIRED: runにはentrypointを持つApplicationが必要です。',
+        )
+        return 2
+      }
+      await loaded.application.init()
+      try {
+        const run = loaded.application.run as (
+          ...args: readonly unknown[]
+        ) => Promise<unknown>
+        const result = await Reflect.apply(
+          run,
+          loaded.application,
+          rawInput === undefined ? [] : [input],
+        )
+        if (result !== undefined) io.stdout(formatRunResult(result))
+        return 0
+      } finally {
+        await loaded.application.close('run-complete')
+      }
+    }
     case 'dev': {
       if (!subject) {
         io.stderr(
@@ -207,15 +251,15 @@ export async function runCli(
       const [applicationName, frameworkVersion, loaded] = await Promise.all([
         readApplicationName(io.cwd),
         readFrameworkVersion(),
-        loadHttpApplication(resolve(io.cwd, subject)),
+        loadApplication(resolve(io.cwd, subject)),
       ])
-      await loaded.application.init()
-      await listen(loaded.application, readPort(args), io, {
+      await startHostedApplication(loaded.application, readPort(args), io, {
         application: applicationName,
         version: frameworkVersion,
         environment: process.env.NODE_ENV ?? 'production',
         startedAt,
       })
+      registerShutdown(loaded.application, io)
       return 0
     }
     default:
@@ -272,6 +316,7 @@ function graphData(
       return {
         version: graph.version,
         capabilities: graph.capabilities,
+        hostCapabilities: graph.hostCapabilities,
         diagnostics: graph.diagnostics,
       }
     case 'executions':
@@ -313,12 +358,12 @@ function renderTextGraph(
   }
   if (subject === 'runtime') {
     for (const capability of requiredCapabilities(graph)) write(capability)
+    for (const capability of graph.hostCapabilities) write(`host:${capability}`)
     return
   }
   if (subject === 'executions') {
-    for (const execution of graph.executions) {
+    for (const execution of graph.executions)
       write(`${execution.kind}: ${execution.id}`)
-    }
     for (const queue of graph.queues) write(`queue: ${queue.name}`)
     return
   }
@@ -394,19 +439,16 @@ function renderMermaidGraph(
   subject: 'modules' | 'di' | 'contracts' | 'runtime' | 'executions',
 ): string {
   const lines = ['flowchart LR']
-  const node = (id: string, label: string) => {
+  const node = (id: string, label: string) =>
     lines.push(`  ${id}["${mermaidText(label)}"]`)
-  }
-  const edge = (from: string, to: string, label?: string) => {
+  const edge = (from: string, to: string, label?: string) =>
     lines.push(`  ${from} -->${label ? `|"${mermaidText(label)}"|` : ''} ${to}`)
-  }
   if (subject === 'di') {
     const ids = new Map(
       graph.nodes.map((candidate, index) => [candidate.id, `n${index}`]),
     )
-    for (const candidate of graph.nodes) {
+    for (const candidate of graph.nodes)
       node(ids.get(candidate.id)!, nodeLabel(candidate))
-    }
     for (const dependency of graph.edges) {
       const condition = dependency.condition
         ? `${dependency.kind}: ${dependency.condition.key}=${String(dependency.condition.equals)}`
@@ -423,15 +465,16 @@ function renderMermaidGraph(
     )
     for (const module of graph.modules) {
       node(ids.get(module.id)!, module.name ?? module.description ?? module.id)
-      for (const imported of module.imports) {
+      for (const imported of module.imports)
         edge(ids.get(module.id)!, ids.get(imported) ?? mermaidId(imported))
-      }
     }
   } else if (subject === 'contracts') {
     graph.pipelines.forEach((pipeline, pipelineIndex) => {
-      const procedure = `${pipeline.contract}.${pipeline.procedure} [${pipeline.protocol}]`
       const procedureId = `p${pipelineIndex}`
-      node(procedureId, procedure)
+      node(
+        procedureId,
+        `${pipeline.contract}.${pipeline.procedure} [${pipeline.protocol}]`,
+      )
       renderLayerMermaid(
         pipeline.layers,
         `p${pipelineIndex}`,
@@ -448,11 +491,10 @@ function renderMermaidGraph(
         id,
         `${execution.kind}: ${'name' in execution ? execution.name : execution.procedure}`,
       )
-      if (execution.kind === 'schedule') {
-        edge(id, mermaidId(`entrypoint:${execution.entrypoint}`), 'trigger')
-      }
-      if (execution.kind === 'queue-consumer') {
-        edge(mermaidId(`queue:${execution.queue}`), id, 'consume')
+      if (execution.kind === 'trigger') {
+        if (execution.trigger === 'queue-consumer') {
+          edge(mermaidId(`queue:${execution.queue}`), id, 'consume')
+        }
         edge(id, mermaidId(`entrypoint:${execution.entrypoint}`), 'trigger')
       }
     }
@@ -514,9 +556,8 @@ function renderLayerText(
 ): void {
   for (const current of layers) {
     write(`${indent}${current.index + 1} ${current.name} ${current.role}`)
-    if (current.pipeline) {
+    if (current.pipeline)
       renderLayerText(current.pipeline, write, `${indent}  `)
-    }
   }
 }
 
@@ -532,7 +573,7 @@ function renderLayerMermaid(
     const currentId = `${idPrefix}l${current.index}`
     node(currentId, `${current.index + 1} ${current.name}`)
     edge(previous, currentId)
-    if (current.pipeline) {
+    if (current.pipeline)
       renderLayerMermaid(
         current.pipeline,
         `${currentId}c`,
@@ -540,7 +581,6 @@ function renderLayerMermaid(
         node,
         edge,
       )
-    }
     previous = currentId
   }
   return previous
@@ -563,7 +603,7 @@ function mermaidText(value: string): string {
 }
 
 interface DevelopmentBuild {
-  readonly application: HostedHttpApplication
+  readonly application: LoadedHostedApplication
   readonly sourceFiles: readonly string[]
 }
 
@@ -576,7 +616,7 @@ async function startDevelopmentServer(
   const directory = await mkdtemp(join(tmpdir(), 'loutre-dev-'))
   let generation = 0
   let listenPort = port
-  let active: { readonly application: HostedHttpApplication } | undefined
+  let active: { readonly application: LoadedHostedApplication } | undefined
   const [applicationName, frameworkVersion] = await Promise.all([
     readApplicationName(io.cwd),
     readFrameworkVersion(),
@@ -588,28 +628,25 @@ async function startDevelopmentServer(
     const sourceFiles = await emitApplication(entry, output, {
       nodeCompatibility: true,
     })
-    return { application: await importHttpApplication(output), sourceFiles }
+    return { application: await importApplication(output), sourceFiles }
   }
   const launch = async (candidate: DevelopmentBuild, startedAt: number) => {
-    if (listenPort === 0) listenPort = await reservePort()
-    await candidate.application.listen({
-      port: listenPort,
-      hostname: '127.0.0.1',
-    })
-    writeStartupBanner(io, {
+    if (hasHttpCapability(candidate.application) && listenPort === 0) {
+      listenPort = await reservePort()
+    }
+    await startHostedApplication(candidate.application, listenPort, io, {
       application: applicationName,
       version: frameworkVersion,
-      server: `http://127.0.0.1:${listenPort}`,
       environment: process.env.NODE_ENV ?? 'development',
       startedAt,
     })
     active = { application: candidate.application }
   }
-  const stop = async (_signal: string) => {
+  const stop = async (signal: string) => {
     const current = active
     active = undefined
     if (!current) return
-    await current.application.close()
+    await current.application.close(signal)
   }
 
   const first = await build()
@@ -648,7 +685,7 @@ async function startDevelopmentServer(
           await stop('reload')
           candidate = await build()
           if (stopping) {
-            await candidate.application.close()
+            await candidate.application.close('reload-cancelled')
             return
           }
           await launch(candidate, performance.now())
@@ -656,7 +693,9 @@ async function startDevelopmentServer(
           candidate = undefined
         } catch (error) {
           if (candidate)
-            await candidate.application.close().catch(() => undefined)
+            await candidate.application
+              .close('reload-failed')
+              .catch(() => undefined)
           io.stderr(
             `Applicationの再起動に失敗しました。Applicationは停止しています。\n${errorMessage(error)}`,
           )
@@ -683,6 +722,78 @@ async function startDevelopmentServer(
   process.once('SIGINT', () => void shutdown('SIGINT').catch(report))
   process.once('SIGTERM', () => void shutdown('SIGTERM').catch(report))
   return 0
+}
+
+async function startHostedApplication(
+  application: LoadedHostedApplication,
+  port: number,
+  io: CliIO,
+  details: {
+    readonly application: string
+    readonly version: string
+    readonly environment: string
+    readonly startedAt: number
+  },
+): Promise<void> {
+  const http = hasHttpCapability(application)
+  const triggers = hasTriggerCapability(application)
+  if (!http && !triggers) {
+    throw new Error(
+      'LUTRE_CLI_HOST_REQUIRED: dev/startにはHTTPまたはTriggerを持つApplicationが必要です。',
+    )
+  }
+  await application.init()
+  let server: string | undefined
+  try {
+    if (http) {
+      const listenPort = port === 0 ? await reservePort() : port
+      await application.listen({ port: listenPort, hostname: '127.0.0.1' })
+      server = `http://127.0.0.1:${listenPort}`
+    }
+    if (triggers) await application.triggers.start()
+  } catch (error) {
+    await application.close('startup-failure').catch(() => undefined)
+    throw error
+  }
+  if (server) {
+    writeStartupBanner(io, { ...details, server })
+  } else {
+    io.stdout(`${details.application} started`)
+    io.stdout(`Loutre ${details.version}`)
+    io.stdout(`Runtime Node.js ${process.versions.node}`)
+    io.stdout(`Environment ${details.environment}`)
+    io.stdout(
+      `Triggers ${application.graph.executions.filter((execution) => execution.kind === 'trigger').length}`,
+    )
+  }
+}
+
+function registerShutdown(
+  application: LoadedHostedApplication,
+  io: CliIO,
+): void {
+  let closing = false
+  const shutdown = async (signal: string) => {
+    if (closing) return
+    closing = true
+    await application.close(signal)
+  }
+  const report = (error: unknown) =>
+    io.stderr(`Applicationの終了処理に失敗しました: ${errorMessage(error)}`)
+  process.once('SIGINT', () => void shutdown('SIGINT').catch(report))
+  process.once('SIGTERM', () => void shutdown('SIGTERM').catch(report))
+}
+
+function hasHttpCapability(
+  application: LoadedHostedApplication,
+): application is LoadedHostedApplication & HttpApplicationCapability {
+  return 'listen' in application && typeof application.listen === 'function'
+}
+
+function hasTriggerCapability(
+  application: LoadedHostedApplication,
+): application is LoadedHostedApplication & TriggerApplicationCapability {
+  return 'triggers' in application
 }
 
 async function runTypeCheck(tsconfigPath: string): Promise<void> {
@@ -778,31 +889,6 @@ function sourceVersion(path: string): string {
   }
 }
 
-async function listen(
-  application: HostedHttpApplication,
-  port: number,
-  io: CliIO,
-  details: {
-    readonly application: string
-    readonly version: string
-    readonly environment: string
-    readonly startedAt: number
-  },
-): Promise<void> {
-  const listenPort = port === 0 ? await reservePort() : port
-  await application.listen({
-    port: listenPort,
-    hostname: '127.0.0.1',
-  })
-  writeStartupBanner(io, {
-    ...details,
-    server: `http://127.0.0.1:${listenPort}`,
-  })
-  const shutdown = async (_signal: string) => application.close()
-  process.once('SIGINT', () => void shutdown('SIGINT'))
-  process.once('SIGTERM', () => void shutdown('SIGTERM'))
-}
-
 async function reservePort(): Promise<number> {
   const server = createNetServer()
   await new Promise<void>((resolveListening, reject) => {
@@ -884,6 +970,12 @@ function readPort(args: readonly string[]): number {
   return port
 }
 
+function formatRunResult(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'bigint') return value.toString()
+  return JSON.stringify(value, null, 2) ?? String(value)
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -896,6 +988,7 @@ function helpText(): string {
     '  loutre graph modules|di|contracts|executions|runtime --entry <明示entry> [--format text|json|mermaid]',
     '  loutre explain <target> --entry <明示entry>',
     '  loutre build <明示entry> [--out-dir <directory>]',
+    '  loutre run <明示entry> [--input <json>]',
     '  loutre dev <明示entry> [--port <port>]',
     '  loutre start <明示entry> [--port <port>]',
   ].join('\n')

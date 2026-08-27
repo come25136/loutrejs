@@ -220,10 +220,15 @@ export class ApplicationRuntime {
     }
   }
 
+  /** @internal Application Hostがcleanup前に新規execution受付を同期的に閉じる。 */
+  stopAcceptingExecutions(): void {
+    if (this.#state !== 'stopped') this.#state = 'stopping'
+  }
+
   shutdown(signal?: string): Promise<void> {
     if (this.#state === 'stopped') return Promise.resolve()
     if (this.#shutdown) return this.#shutdown
-    this.#state = 'stopping'
+    this.stopAcceptingExecutions()
     const shutdown = this.#shutdownRuntime(signal)
     this.#shutdown = shutdown
     return shutdown

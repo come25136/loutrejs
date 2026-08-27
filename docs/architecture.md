@@ -548,15 +548,13 @@ Schema validation failureのframework messageにraw secret valueを含めない�
 
 ### 7.1 Application は一種類のportable Definition
 
-Application sourceはProtocolごとのApplication wrapperを作らない。
+Application sourceはProtocolやprocess種別ごとのruntime wrapperを作らない。
 
 ```ts
 const application = defineApplication({
   modules: [AppModule()],
-  entrypoints: [rebuildIndex],
-  schedules: [nightlyCleanup],
-  queues: [outgoingEvents],
-  consumers: [orderConsumer],
+  entrypoint: rebuildIndex,
+  triggers: [nightlyCleanup, pollRemoteState, orderConsumer],
 })
 ```
 
@@ -576,15 +574,13 @@ Module
 
 Application Definition
 ├ modules
-├ entrypoints
-├ schedules
-├ queues
-└ consumers
+├ entrypoint?    # manual root: 0..1
+└ triggers[]     # automatic roots: 0..N
 ```
 
-HTTP / MessagePort は **Protocol execution**、standalone worker相当の直接実行は **Entrypoint execution**、Schedule / Queue Consumer はEntrypointを起動する **Trigger execution** とする。
+HTTP / MessagePort は **Protocol execution**、one-shotの直接実行は **Entrypoint execution**、cron / fixed-delay / queue-consumerはEntrypointを自動発火する **Trigger execution** とする。
 
-### 7.2 Entrypoint / Schedule / Queue / Consumer
+### 7.2 Entrypoint / Trigger / Queue
 
 EntrypointもImplementation / Layerと同じ **static descriptor + synchronous factory** modelを使う。
 
@@ -600,30 +596,42 @@ const processOrder = entrypoint<Order, void>({
 ```
 
 Entrypoint factoryは同期でruntime functionを返す。runtime function自体はasyncでよい。
-同一ApplicationRuntimeではEntrypoint runtimeを1度だけprepare/cacheし、`run()`ごとにfactoryを再実行しない。
+同一ApplicationRuntimeではEntrypoint runtimeを1度だけprepare/cacheし、executionごとにfactoryを再実行しない。
 
-Applicationで実行可能なEntrypointは次のunion。
+Application Definitionが外部へ公開するmanual Entrypoint Rootは最大1つ。
 
-```text
-explicit Application.entrypoints
-        +
-Schedule.entrypoint
-        +
-QueueConsumer.entrypoint
-        =
-Registered Entrypoints
+```ts
+const application = defineApplication({
+  modules: [AppModule()],
+  entrypoint: rebuildIndex,
+})
 ```
 
-`app.run()` はregistered descriptorだけを型レベル・runtime object identityの両方で受け付ける。
+この場合Hosted / Invocation Applicationはdescriptor引数を要求せず、
 
-Scheduleはportableな5-field cron + IANA timezoneをApplication semanticsとして持つ。
-Schedule targetはv0.1で `void -> void` Entrypoint。
+```ts
+await app.run(input)
+```
 
-Queueはvendor-neutralなlogical resourceであり、ConsumerがQueue payloadとEntrypoint inputを型で結ぶ。
-Consumer target outputはv0.1で `void`。
-Consumerが参照するQueue / EntrypointはGraphへ自動収集される。
+で唯一のmanual Entrypointを実行する。
+manual `entrypoint`を持たないApplicationには`app.run`自体を型surfaceへ公開しない。
 
-現行実装ではQueue / ConsumerのGraph semanticsとHosted Application上のlifecycle facadeまでは存在するが、SQS / RabbitMQ / Kafka等へ接続する具体transport delivery SPIはまだ提供しない。
+Triggerから参照されるEntrypointはruntime登録・DI解析対象へ自動収集するが、manual Entrypoint Rootにはしない。
+
+Triggerのcanonical kindは次。
+
+```text
+cron
+fixed-delay
+queue-consumer
+```
+
+Cronはportableな5-field cron + IANA timezoneを持ち、overlap policyは`skip | allow`。
+Fixed-delayはexecution完了後にdelayを開始するため、同一Trigger自身はoverlapしない。
+
+Queueはvendor-neutralなlogical resourceで、payloadにStandard Schemaを必須とする。
+Queue Consumer Driverが受信したunknown payloadをvalidateしてからEntrypointへ渡す。
+transport固有のproducer / delayed publish / retry option等はframework標準化しない。
 
 ### 7.3 Hosted Application と Invocation Application
 
@@ -641,26 +649,26 @@ Hosted Applicationのbase APIは次。
 ```text
 graph
 init()
-run(entrypoint, ...args)
-close()
+close(signal?)
 ```
 
-さらにDefinitionの構成に応じてTypeScriptのAPI surfaceを増減させる。
+Definitionの構成に応じてTypeScriptのAPI surfaceを増減させる。
 
 ```text
-HTTPあり          → listen() / fetch()
-Scheduleあり      → scheduler.start() / scheduler.stop()
-Consumerあり      → queue.listen() / queue.stop()
+manual entrypointあり → run(...args)
+HTTP capabilityあり  → listen() / fetch()
+Triggerあり          → triggers.start() / triggers.stop()
 ```
 
-HTTPを持たないApplicationに `listen` / `fetch`、Scheduleを持たないApplicationに `scheduler`、Consumerを持たないApplicationに `queue` を生やさない。
-Module import先を含むProtocol type summaryを使ってHTTP capabilityを伝播する。
+存在しないexecution capabilityはruntime errorではなく、可能な限り型surfaceから消す。
 
-現行 `bootstrap()` のself-host HTTP実装はNode HTTP driverとhost `process.env` を内部利用するが、portable Application sourceへ `@loutrejs/runtime-node` や `process.env` を要求しない。
+CLI self-hostはgeneric Application HostとしてHTTPのみ、Triggerのみ、HTTP + Triggerを起動できる。
+`loutre start`はlong-lived hosted capabilityだけを起動し、manual `entrypoint`を自動実行しない。
+one-shot Applicationは`loutre run <entry>`でmanual `entrypoint`を1回実行して`close('run-complete')`後に終了する。
 
 Lambda / workerd等のcallback runtimeではhost/deployment boundaryが `InvocationApplication` とprotocol executionをbindingする。
 現行conformanceでは `createInvocationBinding()` とruntime-specific low-level Driverを組み合わせる。Application source自体はportable Definitionのexportから変更しない。
-Invocation Applicationは `graph / init / run / close` のみを持ち、`listen / scheduler / queue` は持たない。
+Invocation Applicationもmanual `entrypoint`の有無に応じて`run` surfaceを増減させ、`listen` / `triggers`は持たない。
 
 `createInvocationBinding()` はこのcallback bindingを作る低レベルinternal APIであり、canonical Application sourceから直接runtime-specific handler factoryを選ぶモデルにはしない。
 
@@ -699,7 +707,7 @@ Application ready
 Environment validationはasyncになり得るため、PromiseはLifecycle / protocol executionだけでなくRuntime initializationにも利用する。
 
 `init()` はidempotent。
-`run()` / `fetch()` / `listen()` / `scheduler.start()` / `queue.listen()` は必要ならauto-initする。
+`run()` / `fetch()` / `listen()` / `triggers.start()` は必要ならauto-initする。
 
 ### 7.5 Lifecycle participant
 
@@ -773,8 +781,7 @@ Hosted Applicationの `close()` はhost側の新規受付を止めた後、activ
 
 ```text
 listen()二重開始          → LUTRE_HTTP_ALREADY_LISTENING
-scheduler.start()二重開始 → LUTRE_SCHEDULER_ALREADY_STARTED
-queue.listen()二重開始    → LUTRE_QUEUE_ALREADY_LISTENING
+triggers.start()二重開始 → LUTRE_TRIGGERS_ALREADY_STARTED
 ```
 
 初期化途中で失敗した場合は、開始済みapplication-scoped Provider / Moduleをreverse orderでcleanupする。
@@ -955,10 +962,8 @@ OrderService
 ```ts
 compileApplication({
   modules,
-  entrypoints,
-  schedules,
-  queues,
-  consumers,
+  entrypoint,
+  triggers,
 })
 ```
 

@@ -77,10 +77,8 @@ export function generateOpenApi(
   const graph = assertValidCompilation(
     compileApplication({
       modules: application.modules,
-      entrypoints: application.entrypoints,
-      schedules: application.schedules,
-      queues: application.queues,
-      consumers: application.consumers,
+      entrypoint: application.entrypoint,
+      triggers: application.triggers,
     }),
   )
   const executable = new Set(

@@ -20,9 +20,7 @@ import {
   type LayerConsumer,
   type ShortCircuitDeclaration,
   type TokenLike,
-  type QueueConsumerDescriptor,
   type QueueDescriptor,
-  type ScheduleDescriptor,
 } from '@loutrejs/core'
 import { Container, Logger, type DependencyRecorder } from '@loutrejs/runtime'
 import type {
@@ -63,12 +61,29 @@ export class StaticValidationError extends Error {
   }
 }
 
+interface LegacyScheduleDescriptor {
+  readonly kind: 'schedule'
+  readonly name: string
+  readonly cron: {
+    readonly expression: string
+    readonly timezone: string
+  }
+  readonly entrypoint: EntrypointDescriptor<void, void>
+}
+
+interface LegacyQueueConsumerDescriptor {
+  readonly kind: 'queue-consumer'
+  readonly name: string
+  readonly queue: QueueDescriptor<any>
+  readonly entrypoint: EntrypointDescriptor<any, void>
+}
+
 export interface ApplicationCompilationInput {
   readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
   readonly entrypoints?: readonly EntrypointDescriptor<any, any>[]
-  readonly schedules?: readonly ScheduleDescriptor<any>[]
+  readonly schedules?: readonly LegacyScheduleDescriptor[]
   readonly queues?: readonly QueueDescriptor<any>[]
-  readonly consumers?: readonly QueueConsumerDescriptor<any, any>[]
+  readonly consumers?: readonly LegacyQueueConsumerDescriptor[]
 }
 
 export function compileApplication(
@@ -416,7 +431,7 @@ function validateNamedDescriptors(
 }
 
 function validateSchedules(
-  schedules: readonly ScheduleDescriptor<any>[],
+  schedules: readonly LegacyScheduleDescriptor[],
   diagnostics: Diagnostic[],
 ): void {
   for (const schedule of schedules) {
