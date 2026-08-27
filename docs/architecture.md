@@ -617,7 +617,6 @@ await app.run(input)
 manual `entrypoint`を持たないApplicationには`app.run`自体を型surfaceへ公開しない。
 
 Triggerから参照されるEntrypointはruntime登録・DI解析対象へ自動収集するが、manual Entrypoint Rootにはしない。
-複数のone-shot jobを名前で選択したい場合は、jobごとにApplication Definitionを分ける。
 
 Triggerのcanonical kindは次。
 

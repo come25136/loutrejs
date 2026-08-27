@@ -65,7 +65,6 @@ await app.triggers.stop()
 ```
 
 特定Triggerだけを起動するAPIは提供しない。
-異なるprocess topologyが必要ならApplication Definition自体を分ける。
 
 CLIの`dev` / `start`はHTTPの存在を要求しない。
 Application Graphに存在するhosted execution capabilityを起動するgeneric Application Hostへ変更する。
@@ -295,9 +294,6 @@ export interface ApplicationDefinitionOptions<
 
 Application Definitionが持てるmanual Entrypoint Rootは **0..1** とする。
 `entrypoint`は外部から明示的に`app.run()`できる唯一のmanual rootである。
-複数のone-shot jobを同一Application内の名前付きregistryとして持たせない。
-別jobは別Application Definitionとして表現する。
-
 Triggerから参照されるEntrypointはruntime登録対象へ自動的に含めるため、manual `entrypoint`への重複登録は不要である。
 
 ---
@@ -672,8 +668,6 @@ app.triggers.start({ only: ['cleanup'] })
 
 Hosted ApplicationはDefinitionに宣言されたTrigger topologyをそのまま起動する。
 
-別processで別Trigger集合を動かしたいなら、別Application Definitionとして表現する。
-
 ---
 
 # 8. Trigger Engine
@@ -800,9 +794,6 @@ manual `entrypoint`を1回だけ実行するone-shot Applicationには専用の`
 loutre run dist/application.js
 loutre run dist/application.js --input '{"name":"Loutre"}'
 ```
-
-Entrypoint名をCLI引数で選択するAPIは提供しない。
-Application Definitionが持てるmanual `entrypoint`は最大1つであり、複数のone-shot jobは別Application Definitionとして表現する。
 
 `run`は次の順序で実行する。
 
@@ -1257,8 +1248,6 @@ const app = bootstrap(application)
 await app.init()
 await app.triggers.start()
 ```
-
-CLI hostならmanual trigger startは不要。
 
 ---
 

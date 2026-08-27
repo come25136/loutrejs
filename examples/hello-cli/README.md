@@ -18,6 +18,3 @@ Hello, World!
 ```sh
 loutre run src/app.ts
 ```
-
-Application Definitionが持てるmanual `entrypoint`は最大1つなので、CLIでEntrypoint名を選択する必要はありません。
-別のone-shot jobは別Application Definitionとして表現します。

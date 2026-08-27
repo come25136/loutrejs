@@ -20,4 +20,3 @@ loutre start src/app.ts
 ```
 
 起動直後と、その後5秒ごとに`Hello from worker!`を出力します。
-このApplicationにはmanual `entrypoint`が無いため、`loutre run`の対象ではありません。
