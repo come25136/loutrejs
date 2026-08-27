@@ -102,9 +102,7 @@ describe('Application Graph IRとsemantic validation', () => {
           },
         }),
       ],
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
 
     const { graph, diagnostics } = compileApplication({ modules: [Module()] })
@@ -148,26 +146,22 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     })
     const Module = defineModule(() => ({
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
-    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
-      expect.objectContaining({ code: 'LUTRE_PIPELINE_002' }),
-    )
+    expect(
+      compileApplication({ modules: [Module()] }).diagnostics,
+    ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_002' }))
 
     const mismatch = passthrough('mismatch')([messagePort.handler])
     const MismatchContract = contract({
       run: procedure({ protocols: { http: protocol([mismatch]) } }),
     })
     const MismatchModule = defineModule(() => ({
-      implementations: [
-        graphImplementation(MismatchContract),
-      ],
+      implementations: [graphImplementation(MismatchContract)],
     }))
-    expect(compileApplication({ modules: [MismatchModule()] }).diagnostics).toContainEqual(
-      expect.objectContaining({ code: 'LUTRE_PIPELINE_003' }),
-    )
+    expect(
+      compileApplication({ modules: [MismatchModule()] }).diagnostics,
+    ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_003' }))
   })
 
   it('Layer factoryの未解決DIを診断する', () => {
@@ -188,13 +182,11 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     })
     const Module = defineModule(() => ({
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
-    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
-      expect.objectContaining({ code: 'LUTRE_DI_UNRESOLVED' }),
-    )
+    expect(
+      compileApplication({ modules: [Module()] }).diagnostics,
+    ).toContainEqual(expect.objectContaining({ code: 'LUTRE_DI_UNRESOLVED' }))
   })
 
   it('Graph Probeでfactoryだけを同期実行しruntimeとchildを実行しない', () => {
@@ -223,9 +215,7 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     })
     const Module = defineModule(() => ({
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
 
     expect(compileApplication({ modules: [Module()] }).diagnostics).toEqual([])
@@ -265,9 +255,7 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     })
     const Module = defineModule(() => ({
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
 
     expect(compileApplication({ modules: [Module()] }).diagnostics).toEqual([])
@@ -280,14 +268,12 @@ describe('Application Graph IRとsemantic validation', () => {
       run: procedure({ protocols: { http: protocol([first, second]) } }),
     })
     const Module = defineModule(() => ({
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
 
-    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
-      expect.objectContaining({ code: 'LUTRE_PIPELINE_001' }),
-    )
+    expect(
+      compileApplication({ modules: [Module()] }).diagnostics,
+    ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_001' }))
   })
 
   it('childのshortCircuit declarationをresponseと照合する', () => {
@@ -311,12 +297,12 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     })
     const Module = defineModule(() => ({
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
 
-    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
+    expect(
+      compileApplication({ modules: [Module()] }).diagnostics,
+    ).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_SHORT_CIRCUIT_001' }),
     )
   })
@@ -329,9 +315,7 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     })
     const Module = defineModule(() => ({
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
     const result = compileApplication({ modules: [Module()] })
 
@@ -349,12 +333,12 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     })
     const Module = defineModule(() => ({
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
     expect(
-      compileApplication({ modules: [Module()] }).diagnostics.map(({ code }) => code),
+      compileApplication({ modules: [Module()] }).diagnostics.map(
+        ({ code }) => code,
+      ),
     ).toContain('LUTRE_PIPELINE_003')
   })
 
@@ -403,7 +387,9 @@ describe('Application Graph IRとsemantic validation', () => {
       implementations: [Controller],
     }))
     expect(
-      compileApplication({ modules: [InvalidModule()] }).diagnostics.map(({ code }) => code),
+      compileApplication({ modules: [InvalidModule()] }).diagnostics.map(
+        ({ code }) => code,
+      ),
     ).toContain('LUTRE_DI_UNRESOLVED')
 
     const sessionLayer = layer({
@@ -432,7 +418,9 @@ describe('Application Graph IRとsemantic validation', () => {
       providers: [provide(SESSION).useValue({ id: 'application' })],
       implementations: [Controller],
     }))
-    expect(compileApplication({ modules: [ValidModule()] }).diagnostics).toEqual([])
+    expect(
+      compileApplication({ modules: [ValidModule()] }).diagnostics,
+    ).toEqual([])
   })
 
   it('emits the five initial graph dimensions without runtime-specific core APIs', () => {
@@ -442,9 +430,7 @@ describe('Application Graph IRとsemantic validation', () => {
     const Module = defineModule(() => ({
       name: 'GraphFixtureModule',
       description: 'graph fixture',
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
     const { graph } = compileApplication({ modules: [Module()] })
 
@@ -487,7 +473,9 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
 
-    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
+    expect(
+      compileApplication({ modules: [Module()] }).diagnostics,
+    ).toContainEqual(
       expect.objectContaining({
         code: 'LUTRE_DI_003',
         message: expect.stringContaining('duplicate-provider.direct'),
@@ -509,7 +497,9 @@ describe('Application Graph IRとsemantic validation', () => {
       imports: [FirstModule(), SecondModule()],
     }))
 
-    expect(compileApplication({ modules: [RootModule()] }).diagnostics).toContainEqual(
+    expect(
+      compileApplication({ modules: [RootModule()] }).diagnostics,
+    ).toContainEqual(
       expect.objectContaining({
         code: 'LUTRE_DI_003',
         message: expect.stringMatching(/FirstModule.*SecondModule/u),
@@ -532,14 +522,12 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     })
     const Module = defineModule(() => ({
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
 
-    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
-      expect.objectContaining({ code: 'LUTRE_PIPELINE_004' }),
-    )
+    expect(
+      compileApplication({ modules: [Module()] }).diagnostics,
+    ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_004' }))
   })
 
   it('同名の異なるContext Key宣言を拒否する', () => {
@@ -567,13 +555,11 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     })
     const Module = defineModule(() => ({
-      implementations: [
-        graphImplementation(Contract),
-      ],
+      implementations: [graphImplementation(Contract)],
     }))
 
-    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
-      expect.objectContaining({ code: 'LUTRE_CONTEXT_002' }),
-    )
+    expect(
+      compileApplication({ modules: [Module()] }).diagnostics,
+    ).toContainEqual(expect.objectContaining({ code: 'LUTRE_CONTEXT_002' }))
   })
 })

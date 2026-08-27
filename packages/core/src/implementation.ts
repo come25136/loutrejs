@@ -9,20 +9,25 @@ type ProcedureNamesForProtocol<
   TContract extends ContractDefinition,
   TProtocol extends string,
 > = {
-  [K in keyof ContractProcedures<TContract>]:
-    TProtocol extends keyof ContractProcedures<TContract>[K]['protocols']
-      ? K
-      : never
-}[keyof ContractProcedures<TContract>] & string
+  [
+    K in keyof ContractProcedures<TContract>
+  ]: TProtocol extends keyof ContractProcedures<TContract>[K]['protocols']
+    ? K
+    : never
+}[keyof ContractProcedures<TContract>] &
+  string
 
 type ImplementationRuntimeShape<
   TContract extends ContractDefinition,
   TProtocol extends string,
   TProcedures extends string,
 > = {
-  [K in TProcedures]: ContractProcedures<TContract>[K]['protocols'][
-    TProtocol & keyof ContractProcedures<TContract>[K]['protocols']
-  ] extends ProtocolDescriptor<TProtocol, infer TContext, infer TResult>
+  [K in TProcedures]: ContractProcedures<TContract>[K]['protocols'][TProtocol &
+    keyof ContractProcedures<TContract>[K]['protocols']] extends ProtocolDescriptor<
+    TProtocol,
+    infer TContext,
+    infer TResult
+  >
     ? (context: TContext) => TResult | Promise<TResult>
     : never
 }
@@ -116,15 +121,13 @@ export function implementation<
   TProcedures,
   ImplementationRuntimeShape<TContract, TProtocol, TProcedures[number]>
 >
-export function implementation(
-  declaration: {
-    readonly name: string
-    readonly contract: ContractDefinition
-    readonly protocol: ProtocolFactory<string>
-    readonly procedures?: readonly string[]
-    readonly factory: () => object
-  },
-): ImplementationDescriptor {
+export function implementation(declaration: {
+  readonly name: string
+  readonly contract: ContractDefinition
+  readonly protocol: ProtocolFactory<string>
+  readonly procedures?: readonly string[]
+  readonly factory: () => object
+}): ImplementationDescriptor {
   const protocol = declaration.protocol.protocol
   const available = Object.entries(declaration.contract.procedures)
     .filter(([, procedure]) => protocol in procedure.protocols)

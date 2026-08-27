@@ -19,9 +19,10 @@ export interface ErrorDefinition<
   TCode extends string = string,
   TSchema extends StandardSchemaV1 = StandardSchemaV1,
 > {
-  (data: SchemaOutput<TSchema>, options?: { readonly cause?: unknown }): DomainError<
-    SchemaOutput<TSchema>
-  >
+  (
+    data: SchemaOutput<TSchema>,
+    options?: { readonly cause?: unknown },
+  ): DomainError<SchemaOutput<TSchema>>
   readonly kind: 'error-definition'
   readonly code: TCode
   readonly data: TSchema

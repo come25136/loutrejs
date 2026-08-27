@@ -32,10 +32,7 @@ export function detectStartupBannerTerminal(
   const columns = output.columns
   return {
     isTTY,
-    color:
-      isTTY &&
-      !colorDisabled &&
-      output.getColorDepth(environment) >= 24,
+    color: isTTY && !colorDisabled && output.getColorDepth(environment) >= 24,
     ...(columns !== undefined && columns > 0 ? { columns } : {}),
   }
 }
@@ -58,14 +55,7 @@ const colors = {
 } as const satisfies Record<string, RGB>
 
 const logoGlyphs = [
-  [
-    '██╗     ',
-    '██║     ',
-    '██║     ',
-    '██║     ',
-    '███████╗',
-    '╚══════╝',
-  ],
+  ['██╗     ', '██║     ', '██║     ', '██║     ', '███████╗', '╚══════╝'],
   [
     ' ██████╗ ',
     '██╔═══██╗',
@@ -90,22 +80,8 @@ const logoGlyphs = [
     '   ██║   ',
     '   ╚═╝   ',
   ],
-  [
-    '██████╗ ',
-    '██╔══██╗',
-    '██████╔╝',
-    '██╔══██╗',
-    '██║  ██║',
-    '╚═╝  ╚═╝',
-  ],
-  [
-    '███████╗',
-    '██╔════╝',
-    '█████╗  ',
-    '██╔══╝  ',
-    '███████╗',
-    '╚══════╝',
-  ],
+  ['██████╗ ', '██╔══██╗', '██████╔╝', '██╔══██╗', '██║  ██║', '╚═╝  ╚═╝'],
+  ['███████╗', '██╔════╝', '█████╗  ', '██╔══╝  ', '███████╗', '╚══════╝'],
 ] as const
 
 const logoColors = [
@@ -188,7 +164,10 @@ function renderRichBanner(
       brand,
       `${paint(colors.lavender, mascot)}  ${paint(colors.lavenderSoft, `Loutre ${info.version}`)}`,
     ),
-    centered('typed · modular · fast', paint(colors.muted, 'typed · modular · fast')),
+    centered(
+      'typed · modular · fast',
+      paint(colors.muted, 'typed · modular · fast'),
+    ),
     row(''),
     ...metadata.map(([label, value]) => {
       const gap = ' '.repeat(labelWidth - displayWidth(label) + 3)
@@ -213,7 +192,10 @@ function createRichLayout(info: StartupBannerInfo): {
     info.server,
     info.runtime,
     info.environment,
-  ].map((value) => displayWidth(metadataIndent) + labelWidth + 3 + displayWidth(value))
+  ].map(
+    (value) =>
+      displayWidth(metadataIndent) + labelWidth + 3 + displayWidth(value),
+  )
   const contentWidth = Math.max(
     minimumContentWidth,
     logoWidth(),

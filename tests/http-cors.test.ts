@@ -175,9 +175,9 @@ describe('cors', () => {
 
   it('credentialed CORSとwildcard originの組み合わせを拒否する', () => {
     expect(() => validate.cors({ credentials: true })).toThrow(TypeError)
-    expect(() =>
-      validate.cors({ origin: '*', credentials: true }),
-    ).toThrow(TypeError)
+    expect(() => validate.cors({ origin: '*', credentials: true })).toThrow(
+      TypeError,
+    )
   })
 })
 

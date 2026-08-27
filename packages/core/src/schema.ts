@@ -3,7 +3,10 @@ import type {
   StandardSchemaV1,
 } from '@standard-schema/spec'
 
-export type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec'
+export type {
+  StandardJSONSchemaV1,
+  StandardSchemaV1,
+} from '@standard-schema/spec'
 
 export type StandardSchemaResult<Output> = StandardSchemaV1.Result<Output>
 

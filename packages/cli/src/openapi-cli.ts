@@ -54,13 +54,17 @@ async function readPackageInfo(
   cwd: string,
 ): Promise<{ readonly name?: string; readonly version?: string }> {
   try {
-    const parsed = JSON.parse(await readFile(resolve(cwd, 'package.json'), 'utf8')) as {
+    const parsed = JSON.parse(
+      await readFile(resolve(cwd, 'package.json'), 'utf8'),
+    ) as {
       readonly name?: unknown
       readonly version?: unknown
     }
     return {
       ...(typeof parsed.name === 'string' ? { name: parsed.name } : {}),
-      ...(typeof parsed.version === 'string' ? { version: parsed.version } : {}),
+      ...(typeof parsed.version === 'string'
+        ? { version: parsed.version }
+        : {}),
     }
   } catch {
     return {}

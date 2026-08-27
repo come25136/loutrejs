@@ -1,8 +1,12 @@
 import { defineApplication } from '@loutrejs/application'
-import { contextKey, contract, defineModule, implementation, procedure } from '@loutrejs/core'
 import {
-  http,
-} from '@loutrejs/http'
+  contextKey,
+  contract,
+  defineModule,
+  implementation,
+  procedure,
+} from '@loutrejs/core'
+import { http } from '@loutrejs/http'
 import { z } from 'zod'
 import { bearerAuth } from './bearer-auth.js'
 
@@ -15,9 +19,8 @@ const UnauthorizedBody = z.object({
   error: z.string(),
 })
 
-const BEARER_CURRENT_USER = contextKey('bearerCurrentUser').of<
-  z.output<typeof User>
->()
+const BEARER_CURRENT_USER =
+  contextKey('bearerCurrentUser').of<z.output<typeof User>>()
 
 const bearerAuthentication = bearerAuth({
   name: 'bearerAuthentication',

@@ -45,7 +45,9 @@ describe('CapabilityとLogger', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    const logger = new SilentLogger({ application: 'test' }).child({ source: 'fixture' })
+    const logger = new SilentLogger({ application: 'test' }).child({
+      source: 'fixture',
+    })
     logger.debug('debug')
     logger.info('info')
     logger.warn('warn')
@@ -95,10 +97,12 @@ describe('CapabilityとLogger', () => {
     const consumer = container.resolve(Consumer)
     consumer.logger.info('DIから出力しました')
 
-    expect(records[0]).toEqual(expect.objectContaining({
-      application: 'fixture',
-      source: 'Consumer',
-      message: 'DIから出力しました',
-    }))
+    expect(records[0]).toEqual(
+      expect.objectContaining({
+        application: 'fixture',
+        source: 'Consumer',
+        message: 'DIから出力しました',
+      }),
+    )
   })
 })

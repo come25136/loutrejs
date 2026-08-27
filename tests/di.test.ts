@@ -65,15 +65,20 @@ describe('同期DI Container', () => {
     const module = defineModule(() => ({
       providers: [provide(CLOCK).useValue({ id: 1 }), Nested, Consumer],
     }))()
-    const container = new Container(collectRuntimeModuleGraph([module]).providers, {
-      recorder: {
-        record: (consumer, dependency) => {
-          const from = typeof consumer === 'function' ? consumer.name : consumer.id
-          const to = typeof dependency === 'function' ? dependency.name : dependency.id
-          edges.push(`${from}->${to}`)
+    const container = new Container(
+      collectRuntimeModuleGraph([module]).providers,
+      {
+        recorder: {
+          record: (consumer, dependency) => {
+            const from =
+              typeof consumer === 'function' ? consumer.name : consumer.id
+            const to =
+              typeof dependency === 'function' ? dependency.name : dependency.id
+            edges.push(`${from}->${to}`)
+          },
         },
       },
-    })
+    )
 
     expect(container.resolve(Consumer).after.id).toBe(1)
     expect(edges).toEqual([
@@ -91,10 +96,7 @@ describe('同期DI Container', () => {
         throw new Error('construction failed')
       }
     }
-    const container = containerFor([
-      provide(CLOCK).useValue({ id: 1 }),
-      Broken,
-    ])
+    const container = containerFor([provide(CLOCK).useValue({ id: 1 }), Broken])
 
     expect(() => container.resolve(Broken)).toThrow('construction failed')
     expect(() => inject(CLOCK)).toThrow(InjectionContextError)

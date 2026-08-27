@@ -28,16 +28,14 @@ export interface ApplicationDefinitionOptions<
 
 export interface ApplicationDefinition<
   TModules extends readonly ModuleInstance[] = readonly ModuleInstance[],
-  TEntrypoints extends readonly EntrypointDescriptor<any, any>[] = readonly EntrypointDescriptor<
-    any,
-    any
-  >[],
-  TSchedules extends readonly ScheduleDescriptor<any>[] = readonly ScheduleDescriptor<any>[],
-  TQueues extends readonly QueueDescriptor<any>[] = readonly QueueDescriptor<any>[],
-  TConsumers extends readonly QueueConsumerDescriptor<
-    any,
-    any
-  >[] = readonly QueueConsumerDescriptor<any, any>[],
+  TEntrypoints extends readonly EntrypointDescriptor<any, any>[] =
+    readonly EntrypointDescriptor<any, any>[],
+  TSchedules extends readonly ScheduleDescriptor<any>[] =
+    readonly ScheduleDescriptor<any>[],
+  TQueues extends readonly QueueDescriptor<any>[] =
+    readonly QueueDescriptor<any>[],
+  TConsumers extends readonly QueueConsumerDescriptor<any, any>[] =
+    readonly QueueConsumerDescriptor<any, any>[],
 > {
   readonly kind: 'application-definition'
   readonly modules: TModules
@@ -50,10 +48,12 @@ export interface ApplicationDefinition<
 
 export function defineApplication<
   const TModules extends readonly ModuleInstance[],
-  const TEntrypoints extends readonly EntrypointDescriptor<any, any>[] = readonly [],
+  const TEntrypoints extends readonly EntrypointDescriptor<any, any>[] =
+    readonly [],
   const TSchedules extends readonly ScheduleDescriptor<any>[] = readonly [],
   const TQueues extends readonly QueueDescriptor<any>[] = readonly [],
-  const TConsumers extends readonly QueueConsumerDescriptor<any, any>[] = readonly [],
+  const TConsumers extends readonly QueueConsumerDescriptor<any, any>[] =
+    readonly [],
 >(
   options: ApplicationDefinitionOptions<
     TModules,
@@ -101,9 +101,7 @@ export type RegisteredEntrypoint<TDefinition extends ApplicationDefinition> =
   | ScheduledEntrypoints<TDefinition>
   | ConsumerEntrypoints<TDefinition>
 
-export interface BaseApplication<
-  TDefinition extends ApplicationDefinition,
-> {
+export interface BaseApplication<TDefinition extends ApplicationDefinition> {
   readonly graph: ApplicationGraphIR
   init(): Promise<this>
   run<TEntrypoint extends RegisteredEntrypoint<TDefinition>>(
@@ -137,12 +135,10 @@ export interface QueueApplicationCapability {
   }
 }
 
-export type HasHttp<TDefinition extends ApplicationDefinition> = Extract<
-  ModuleProtocols<TDefinition['modules'][number]>,
-  'http'
-> extends never
-  ? false
-  : true
+export type HasHttp<TDefinition extends ApplicationDefinition> =
+  Extract<ModuleProtocols<TDefinition['modules'][number]>, 'http'> extends never
+    ? false
+    : true
 
 export type HasSchedules<TDefinition extends ApplicationDefinition> =
   TDefinition['schedules'] extends readonly [] ? false : true

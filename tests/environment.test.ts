@@ -33,9 +33,7 @@ const AppEnvSchema = z
   })
   .transform((env) => ({
     port: env.PORT,
-    tls: env.TLS
-      ? { ca: env.TLS_CA! }
-      : false as const,
+    tls: env.TLS ? { ca: env.TLS_CA! } : (false as const),
   }))
 
 class AppEnv extends defineEnv(AppEnvSchema) {}
@@ -127,14 +125,12 @@ describe('Environment Contract', () => {
 
     const AppModule = defineModule(() => ({
       environment: [AppEnv],
-      providers: [
-        Database,
-        Service,
-        provide(AFTER).useValue('after'),
-      ],
+      providers: [Database, Service, provide(AFTER).useValue('after')],
     }))
 
-    const { graph, diagnostics } = compileApplication({ modules: [AppModule()] })
+    const { graph, diagnostics } = compileApplication({
+      modules: [AppModule()],
+    })
 
     expect(diagnostics).toEqual([])
 
@@ -175,7 +171,9 @@ describe('Environment Contract', () => {
     const MissingModule = defineModule(() => ({
       providers: [NeedsEnv],
     }))
-    expect(compileApplication({ modules: [MissingModule()] }).diagnostics).toEqual(
+    expect(
+      compileApplication({ modules: [MissingModule()] }).diagnostics,
+    ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: 'LUTRE_ENV_002',
@@ -189,11 +187,11 @@ describe('Environment Contract', () => {
     })
     const ConflictModule = defineModule(() => ({
       environment: [AppEnv],
-      providers: [
-        provide(AppEnv).useValue(env),
-      ],
+      providers: [provide(AppEnv).useValue(env)],
     }))
-    expect(compileApplication({ modules: [ConflictModule()] }).diagnostics).toEqual(
+    expect(
+      compileApplication({ modules: [ConflictModule()] }).diagnostics,
+    ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: 'LUTRE_ENV_001',

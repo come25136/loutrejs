@@ -27,7 +27,10 @@ export type DependencyConsumer =
 export interface InjectionContext {
   readonly consumer: DependencyConsumer
   readonly resolve: <T>(token: TokenLike<T>) => T
-  readonly record?: (consumer: DependencyConsumer, dependency: TokenLike) => void
+  readonly record?: (
+    consumer: DependencyConsumer,
+    dependency: TokenLike,
+  ) => void
 }
 
 const injectionContextKey = Symbol.for('loutre.injection-context')
@@ -38,7 +41,9 @@ function currentInjectionContext(): InjectionContext | undefined {
     | undefined
 }
 
-function setCurrentInjectionContext(context: InjectionContext | undefined): void {
+function setCurrentInjectionContext(
+  context: InjectionContext | undefined,
+): void {
   const storage = globalThis as Record<PropertyKey, unknown>
   if (context === undefined) delete storage[injectionContextKey]
   else storage[injectionContextKey] = context

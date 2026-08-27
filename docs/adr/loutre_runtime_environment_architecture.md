@@ -86,9 +86,7 @@ const AppEnvSchema = z
   .transform((env) => ({
     database: {
       url: new URL(env.DATABASE_URL),
-      ssl: env.DATABASE_SSL
-        ? { ca: env.DATABASE_CA! }
-        : false,
+      ssl: env.DATABASE_SSL ? { ca: env.DATABASE_CA! } : false,
     },
     cacheTtlMs: env.CACHE_TTL * 1000,
   }))
@@ -118,13 +116,10 @@ class Service {
 一方、値により Provider topology を切り替える場合は conditional Provider を使う。
 
 ```ts
-provide(STORAGE).select(
-  AppEnv.key('storageDriver'),
-  {
-    memory: MemoryStorage,
-    s3: S3Storage,
-  },
-)
+provide(STORAGE).select(AppEnv.key('storageDriver'), {
+  memory: MemoryStorage,
+  s3: S3Storage,
+})
 ```
 
 ---
@@ -200,9 +195,7 @@ Environment を constructor で読むことを禁止しない。
 同期的に完成できる object invariant は constructor / factory で完成させる。
 
 ```ts
-class PostgresDatabase
-  implements OnModuleInit, OnModuleDestroy
-{
+class PostgresDatabase implements OnModuleInit, OnModuleDestroy {
   readonly pool: Pool
 
   constructor(readonly env = inject(AppEnv)) {

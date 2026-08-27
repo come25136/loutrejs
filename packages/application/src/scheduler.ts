@@ -12,14 +12,9 @@ export function matchesSchedule(
   schedule: ScheduleDescriptor<any>,
   instant: Date,
 ): boolean {
-  const [minute, hour, dayOfMonth, month, dayOfWeek] =
-    schedule.cron.expression.trim().split(/\s+/) as [
-      string,
-      string,
-      string,
-      string,
-      string,
-    ]
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = schedule.cron.expression
+    .trim()
+    .split(/\s+/) as [string, string, string, string, string]
   const fields: CronFields = { minute, hour, dayOfMonth, month, dayOfWeek }
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: schedule.cron.timezone,

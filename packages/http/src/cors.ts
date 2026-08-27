@@ -7,7 +7,9 @@ import {
 } from '@loutrejs/core'
 
 export type CorsOrigin =
-  string | readonly string[] | ((origin: string) => boolean | Promise<boolean>)
+  | string
+  | readonly string[]
+  | ((origin: string) => boolean | Promise<boolean>)
 
 export interface CorsOptions {
   readonly origin?: CorsOrigin

@@ -1,6 +1,4 @@
-import {
-  type HttpProtocolExecution,
-} from '@loutrejs/http'
+import { type HttpProtocolExecution } from '@loutrejs/http'
 
 export const workerdRuntime = {
   runtime: 'workerd',

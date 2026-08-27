@@ -6,12 +6,8 @@ import {
   inject,
   procedure,
 } from '@loutrejs/core'
-import {
-  http,
-} from '@loutrejs/http'
-import {
-  messagePort,
-} from '@loutrejs/message-port'
+import { http } from '@loutrejs/http'
+import { messagePort } from '@loutrejs/message-port'
 import { z } from 'zod'
 
 export interface DomainEvent {
@@ -32,35 +28,38 @@ const EventSchema = z.object({
   message: z.string(),
 })
 
-export const EventsContract = contract({
-  subscribe: procedure({
-    protocols: {
-      http: http({
-        method: 'GET',
-        path: '/events',
-        interaction: 'server-stream',
-        responses: {
-          events: {
-            status: 200,
-            body: EventSchema,
-            stream: 'server',
+export const EventsContract = contract(
+  {
+    subscribe: procedure({
+      protocols: {
+        http: http({
+          method: 'GET',
+          path: '/events',
+          interaction: 'server-stream',
+          responses: {
+            events: {
+              status: 200,
+              body: EventSchema,
+              stream: 'server',
+            },
           },
-        },
-        pipeline: [http.controller],
-      }),
-      messagePort: messagePort({
-        interaction: 'server-stream',
-        responses: {
-          events: {
-            body: EventSchema,
-            stream: 'server',
+          pipeline: [http.controller],
+        }),
+        messagePort: messagePort({
+          interaction: 'server-stream',
+          responses: {
+            events: {
+              body: EventSchema,
+              stream: 'server',
+            },
           },
-        },
-        pipeline: [messagePort.handler],
-      }),
-    },
-  }),
-}, { name: 'EventsContract' })
+          pipeline: [messagePort.handler],
+        }),
+      },
+    }),
+  },
+  { name: 'EventsContract' },
+)
 
 export const EventsController = implementation({
   name: 'EventsController',
@@ -88,10 +87,7 @@ export const EventsModule = defineModule(() => ({
   name: 'EventsModule',
   description: 'HTTP server-stream canonical fixture',
   providers: [EventStreamService],
-  implementations: [
-    EventsController,
-    EventsMessageHandler,
-  ],
+  implementations: [EventsController, EventsMessageHandler],
 }))
 
 export function createEventsDefinition() {

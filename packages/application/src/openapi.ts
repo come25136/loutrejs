@@ -103,8 +103,10 @@ export function generateOpenApi(
     for (const implementation of module.definition.implementations ?? []) {
       if (implementation.protocol !== 'http') continue
       for (const procedure of implementation.procedures) {
-        if (!executable.has(`${implementation.name}\u0000${procedure}`)) continue
-        const protocol = implementation.contract.procedures[procedure]?.protocols.http
+        if (!executable.has(`${implementation.name}\u0000${procedure}`))
+          continue
+        const protocol =
+          implementation.contract.procedures[procedure]?.protocols.http
         if (!protocol || protocol.protocol !== 'http') continue
         const typed = protocol as HttpProtocol
         const target: HttpOperationTarget = {
@@ -127,9 +129,7 @@ export function generateOpenApi(
     info: options.info,
     ...(options.servers === undefined ? {} : { servers: options.servers }),
     paths,
-    ...(Object.keys(schemas).length === 0
-      ? {}
-      : { components: { schemas } }),
+    ...(Object.keys(schemas).length === 0 ? {} : { components: { schemas } }),
   }
 }
 
@@ -199,7 +199,9 @@ function createOperation(
 
   return {
     ...(definition.tags === undefined ? {} : { tags: definition.tags }),
-    ...(definition.summary === undefined ? {} : { summary: definition.summary }),
+    ...(definition.summary === undefined
+      ? {}
+      : { summary: definition.summary }),
     ...(definition.description === undefined
       ? {}
       : { description: definition.description }),
@@ -240,7 +242,9 @@ function createResponses(
     number,
     { readonly variant: string; readonly response: HttpResponseDefinition }[]
   >()
-  for (const [variant, response] of Object.entries(target.definition.responses)) {
+  for (const [variant, response] of Object.entries(
+    target.definition.responses,
+  )) {
     const current = grouped.get(response.status) ?? []
     current.push({ variant, response })
     grouped.set(response.status, current)
@@ -280,15 +284,12 @@ function createResponse(
       componentName(target, `Response_${variant}_Output`),
     ),
   )
-  const payloadSchema =
-    schemas.length === 1 ? schemas[0]! : { oneOf: schemas }
+  const payloadSchema = schemas.length === 1 ? schemas[0]! : { oneOf: schemas }
   const streaming = entries[0]?.response.stream === 'server'
   const headers = mergeResponseHeaders(entries, registry, target)
   const descriptions = [
     ...new Set(
-      entries.map(
-        ({ variant, response }) => response.description ?? variant,
-      ),
+      entries.map(({ variant, response }) => response.description ?? variant),
     ),
   ]
 
@@ -443,7 +444,9 @@ function attachOperation(
   additional[methodName] = operation
 }
 
-function collectModules(roots: readonly ModuleInstance[]): readonly ModuleInstance[] {
+function collectModules(
+  roots: readonly ModuleInstance[],
+): readonly ModuleInstance[] {
   const result: ModuleInstance[] = []
   const seen = new Set<ModuleInstance>()
   const visit = (module: ModuleInstance) => {
@@ -514,7 +517,10 @@ class SchemaRegistry {
   }
 }
 
-function rebaseLocalDefinitions(schema: JsonSchema, schemaComponentName: string): JsonSchema {
+function rebaseLocalDefinitions(
+  schema: JsonSchema,
+  schemaComponentName: string,
+): JsonSchema {
   const visit = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(visit)
     if (typeof value !== 'object' || value === null) return value
@@ -525,7 +531,8 @@ function rebaseLocalDefinitions(schema: JsonSchema, schemaComponentName: string)
         typeof child === 'string' &&
         child.startsWith('#/$defs/')
       ) {
-        result[key] = `#/components/schemas/${escapeJsonPointer(schemaComponentName)}/$defs/${child.slice('#/$defs/'.length)}`
+        result[key] =
+          `#/components/schemas/${escapeJsonPointer(schemaComponentName)}/$defs/${child.slice('#/$defs/'.length)}`
       } else {
         result[key] = visit(child)
       }

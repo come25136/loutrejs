@@ -1,6 +1,4 @@
-import {
-  type HttpProtocolExecution,
-} from '@loutrejs/http'
+import { type HttpProtocolExecution } from '@loutrejs/http'
 
 export const lambdaRuntime = {
   runtime: 'aws-lambda-nodejs24.x',
@@ -34,9 +32,7 @@ export interface LambdaHttpResult {
 }
 
 /** @internal generated bindingが利用するLambda HTTP driver。 */
-export function createLambdaHttpDriver(
-  application: HttpProtocolExecution,
-) {
+export function createLambdaHttpDriver(application: HttpProtocolExecution) {
   let initialization: Promise<void> | undefined
   return async (event: LambdaHttpEvent): Promise<LambdaHttpResult> => {
     initialization ??= application.initialize()
@@ -96,10 +92,9 @@ export function createLambdaStreamingHttpDriver(
   }
 }
 
-function responseMetadata(response: Response): Pick<
-  LambdaHttpResult,
-  'headers' | 'cookies'
-> {
+function responseMetadata(
+  response: Response,
+): Pick<LambdaHttpResult, 'headers' | 'cookies'> {
   const headers = Object.fromEntries(
     [...response.headers.entries()].filter(([name]) => name !== 'set-cookie'),
   )

@@ -6,11 +6,11 @@ services:
       POSTGRES_PASSWORD: loutre
       POSTGRES_DB: loutre
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U loutre -d loutre"]
+      test: ['CMD-SHELL', 'pg_isready -U loutre -d loutre']
       interval: 2s
       timeout: 2s
       retries: 15
     ports:
-      - "54321:5432"
+      - '54321:5432'
     volumes:
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro

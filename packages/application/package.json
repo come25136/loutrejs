@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
@@ -24,7 +26,10 @@
     }
   },
   "sideEffects": false,
-  "publishConfig": { "access": "public", "provenance": true },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "dependencies": {
     "@loutrejs/core": "^0.1.0",
     "@loutrejs/graph": "^0.1.0",

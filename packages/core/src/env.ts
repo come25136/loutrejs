@@ -14,9 +14,9 @@ export interface EnvKey<TValue = unknown> {
   readonly '~value'?: TValue
 }
 
-export interface EnvClass<
-  TSchema extends EnvSchema = EnvSchema,
-> extends Class<SchemaOutput<TSchema>> {
+export interface EnvClass<TSchema extends EnvSchema = EnvSchema> extends Class<
+  SchemaOutput<TSchema>
+> {
   readonly kind: 'environment'
   readonly schema: TSchema
   key<TKey extends keyof SchemaOutput<TSchema> & string>(

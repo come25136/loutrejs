@@ -28,7 +28,9 @@ try {
   if (!response) throw new Error(`CLI serverを起動できませんでした: ${stderr}`)
   const body = await response.json()
   if (response.status !== 200 || body.id !== 'cli-user') {
-    throw new Error(`CLI start conformanceに失敗しました: ${JSON.stringify(body)}`)
+    throw new Error(
+      `CLI start conformanceに失敗しました: ${JSON.stringify(body)}`,
+    )
   }
   console.log('Loutre CLI start conformance: 成功')
 } finally {

@@ -1,6 +1,4 @@
-import {
-  type HttpProtocolExecution,
-} from '@loutrejs/http'
+import { type HttpProtocolExecution } from '@loutrejs/http'
 
 export const bunRuntime = {
   runtime: 'bun-1.4-stable',
@@ -18,9 +16,7 @@ export const bunRuntime = {
 } as const
 
 /** @internal generated bindingが利用するBun HTTP driver。 */
-export function createBunFetchDriver(
-  application: HttpProtocolExecution,
-) {
+export function createBunFetchDriver(application: HttpProtocolExecution) {
   let initialization: Promise<void> | undefined
   return async (request: Request): Promise<Response> => {
     initialization ??= application.initialize()

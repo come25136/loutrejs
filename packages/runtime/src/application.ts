@@ -64,7 +64,8 @@ export class ApplicationRuntime {
   #initialized = false
   #initializing: Promise<void> | undefined
   #prepared = false
-  #state: 'created' | 'initializing' | 'running' | 'stopping' | 'stopped' = 'created'
+  #state: 'created' | 'initializing' | 'running' | 'stopping' | 'stopped' =
+    'created'
   #activeExecutions = 0
   readonly #idleWaiters = new Set<() => void>()
   #shutdown: Promise<void> | undefined
@@ -117,7 +118,8 @@ export class ApplicationRuntime {
       for (const module of this.graph.modules) {
         const instances = await this.#resolveModuleProviders(module)
         this.#instancesByModule.set(module, instances)
-        for (const instance of instances) await callLifecycle(instance, 'onModuleInit')
+        for (const instance of instances)
+          await callLifecycle(instance, 'onModuleInit')
         await this.#runHook(module.definition.lifecycle?.onModuleInit)
       }
       for (const module of this.graph.modules) {
@@ -201,8 +203,10 @@ export class ApplicationRuntime {
   }
 
   async execute<T>(execution: () => T | Promise<T>): Promise<T> {
-    if (this.#state === 'stopping') throw applicationStateError('LUTRE_APP_STOPPING')
-    if (this.#state === 'stopped') throw applicationStateError('LUTRE_APP_STOPPED')
+    if (this.#state === 'stopping')
+      throw applicationStateError('LUTRE_APP_STOPPING')
+    if (this.#state === 'stopped')
+      throw applicationStateError('LUTRE_APP_STOPPED')
     this.#activeExecutions += 1
     try {
       await this.initialize()
@@ -236,7 +240,9 @@ export class ApplicationRuntime {
     const modules = this.graph.modules.toReversed()
     try {
       for (const module of modules) {
-        for (const instance of (this.#instancesByModule.get(module) ?? []).toReversed()) {
+        for (const instance of (
+          this.#instancesByModule.get(module) ?? []
+        ).toReversed()) {
           await collectCleanupError(
             () => callLifecycle(instance, 'onModuleDestroy'),
             errors,
@@ -248,26 +254,34 @@ export class ApplicationRuntime {
         )
       }
       for (const module of modules) {
-        for (const instance of (this.#instancesByModule.get(module) ?? []).toReversed()) {
+        for (const instance of (
+          this.#instancesByModule.get(module) ?? []
+        ).toReversed()) {
           await collectCleanupError(
             () => callLifecycle(instance, 'beforeApplicationShutdown', signal),
             errors,
           )
         }
         await collectCleanupError(
-          () => this.#runHook(module.definition.lifecycle?.beforeApplicationShutdown),
+          () =>
+            this.#runHook(
+              module.definition.lifecycle?.beforeApplicationShutdown,
+            ),
           errors,
         )
       }
       for (const module of modules) {
-        for (const instance of (this.#instancesByModule.get(module) ?? []).toReversed()) {
+        for (const instance of (
+          this.#instancesByModule.get(module) ?? []
+        ).toReversed()) {
           await collectCleanupError(
             () => callLifecycle(instance, 'onApplicationShutdown', signal),
             errors,
           )
         }
         await collectCleanupError(
-          () => this.#runHook(module.definition.lifecycle?.onApplicationShutdown),
+          () =>
+            this.#runHook(module.definition.lifecycle?.onApplicationShutdown),
           errors,
         )
       }
@@ -287,7 +301,9 @@ export class ApplicationRuntime {
         () => this.#runHook(module.definition.lifecycle?.onModuleDestroy),
         errors,
       )
-      for (const instance of (this.#instancesByModule.get(module) ?? []).toReversed()) {
+      for (const instance of (
+        this.#instancesByModule.get(module) ?? []
+      ).toReversed()) {
         await collectCleanupError(
           () => callLifecycle(instance, 'onModuleDestroy'),
           errors,
@@ -320,7 +336,9 @@ export class ApplicationRuntime {
   }
 }
 
-function applicationStateError(code: 'LUTRE_APP_STOPPING' | 'LUTRE_APP_STOPPED') {
+function applicationStateError(
+  code: 'LUTRE_APP_STOPPING' | 'LUTRE_APP_STOPPED',
+) {
   return new Error(
     code === 'LUTRE_APP_STOPPING'
       ? `${code}: Application is stopping and cannot accept new executions.`
@@ -380,7 +398,11 @@ async function callLifecycle(
     | 'onApplicationShutdown',
   signal?: string,
 ): Promise<void> {
-  if (!instance || (typeof instance !== 'object' && typeof instance !== 'function')) return
+  if (
+    !instance ||
+    (typeof instance !== 'object' && typeof instance !== 'function')
+  )
+    return
   const candidate = (instance as Record<string, unknown>)[method]
   if (typeof candidate !== 'function') return
   await Reflect.apply(candidate, instance, signal === undefined ? [] : [signal])

@@ -234,9 +234,9 @@ describe('basicAuth', () => {
       implementations: [Implementation],
     }))
 
-    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
-      expect.objectContaining({ code }),
-    )
+    expect(
+      compileApplication({ modules: [Module()] }).diagnostics,
+    ).toContainEqual(expect.objectContaining({ code }))
   })
 
   it('ユーザー定義Layerのresponse制約を診断する', () => {
@@ -286,7 +286,9 @@ describe('basicAuth', () => {
       implementations: [Implementation],
     }))
 
-    expect(compileApplication({ modules: [Module()] }).diagnostics).toContainEqual(
+    expect(
+      compileApplication({ modules: [Module()] }).diagnostics,
+    ).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_SHORT_CIRCUIT_002' }),
     )
   })

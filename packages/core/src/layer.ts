@@ -98,15 +98,15 @@ export interface LayerOccurrenceDescriptor<
   TRequires extends readonly ContextKey[] = readonly ContextKey[],
   TProvides extends readonly ContextKey[] = readonly ContextKey[],
   TShortCircuitResult = unknown,
-  TShortCircuits extends
-    readonly ShortCircuitDeclaration[] = readonly ShortCircuitDeclaration[],
+  TShortCircuits extends readonly ShortCircuitDeclaration[] =
+    readonly ShortCircuitDeclaration[],
   TName extends string = string,
   TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = Exclude<
     LayerRole,
     'terminal' | 'validation'
   >,
-  TRequiresValidated extends
-    readonly ValidatedInputPart[] = readonly ValidatedInputPart[],
+  TRequiresValidated extends readonly ValidatedInputPart[] =
+    readonly ValidatedInputPart[],
   TContext extends object = object,
   TPipeline extends readonly PipelineItem[] = readonly PipelineItem[],
 > {
@@ -136,15 +136,15 @@ export interface LayerDescriptor<
   TRequires extends readonly ContextKey[] = readonly ContextKey[],
   TProvides extends readonly ContextKey[] = readonly ContextKey[],
   TShortCircuitResult = unknown,
-  TShortCircuits extends
-    readonly ShortCircuitDeclaration[] = readonly ShortCircuitDeclaration[],
+  TShortCircuits extends readonly ShortCircuitDeclaration[] =
+    readonly ShortCircuitDeclaration[],
   TName extends string = string,
   TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = Exclude<
     LayerRole,
     'terminal' | 'validation'
   >,
-  TRequiresValidated extends
-    readonly ValidatedInputPart[] = readonly ValidatedInputPart[],
+  TRequiresValidated extends readonly ValidatedInputPart[] =
+    readonly ValidatedInputPart[],
   TContext extends object = object,
 > {
   <const TPipeline extends readonly PipelineItem[]>(

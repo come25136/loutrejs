@@ -7,9 +7,7 @@ export default defineConfig({
       '@loutrejs/application/openapi': resolve(
         'packages/application/src/openapi.ts',
       ),
-      '@loutrejs/application/host': resolve(
-        'packages/application/src/host.ts',
-      ),
+      '@loutrejs/application/host': resolve('packages/application/src/host.ts'),
       '@loutrejs/application/binding': resolve(
         'packages/application/src/binding.ts',
       ),
@@ -26,9 +24,15 @@ export default defineConfig({
       '@loutrejs/runtime-node': resolve('packages/runtime-node/src/index.ts'),
       '@loutrejs/runtime-deno': resolve('packages/runtime-deno/src/index.ts'),
       '@loutrejs/runtime-bun': resolve('packages/runtime-bun/src/index.ts'),
-      '@loutrejs/runtime-workerd': resolve('packages/runtime-workerd/src/index.ts'),
-      '@loutrejs/runtime-electron': resolve('packages/runtime-electron/src/index.ts'),
-      '@loutrejs/runtime-lambda': resolve('packages/runtime-lambda/src/index.ts'),
+      '@loutrejs/runtime-workerd': resolve(
+        'packages/runtime-workerd/src/index.ts',
+      ),
+      '@loutrejs/runtime-electron': resolve(
+        'packages/runtime-electron/src/index.ts',
+      ),
+      '@loutrejs/runtime-lambda': resolve(
+        'packages/runtime-lambda/src/index.ts',
+      ),
     },
   },
   test: {

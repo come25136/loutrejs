@@ -124,7 +124,10 @@ describe('Unified Application', () => {
     expect(application.graph.executions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: 'schedule', name: 'cleanup.nightly' }),
-        expect.objectContaining({ kind: 'queue-consumer', name: 'orders.process' }),
+        expect.objectContaining({
+          kind: 'queue-consumer',
+          name: 'orders.process',
+        }),
       ]),
     )
     await application.scheduler.start()

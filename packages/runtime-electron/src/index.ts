@@ -20,7 +20,10 @@ export const electronRuntime = {
 
 export interface ElectronMessagePortMainLike {
   postMessage(value: unknown): void
-  on(type: 'message', listener: (event: { readonly data: unknown }) => void): void
+  on(
+    type: 'message',
+    listener: (event: { readonly data: unknown }) => void,
+  ): void
   start(): void
 }
 

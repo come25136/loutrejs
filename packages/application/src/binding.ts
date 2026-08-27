@@ -1,18 +1,10 @@
 import type { EntrypointDescriptor } from '@loutrejs/core'
 import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
-import {
-  createHttpExecution,
-  type HttpProtocolExecution,
-} from '@loutrejs/http'
+import { createHttpExecution, type HttpProtocolExecution } from '@loutrejs/http'
 import { ApplicationRuntime, Logger } from '@loutrejs/runtime'
-import type {
-  ApplicationDefinition,
-  InvocationApplication,
-} from './index.js'
+import type { ApplicationDefinition, InvocationApplication } from './index.js'
 
-export interface InvocationBinding<
-  TDefinition extends ApplicationDefinition,
-> {
+export interface InvocationBinding<TDefinition extends ApplicationDefinition> {
   readonly application: InvocationApplication<TDefinition>
   readonly http?: HttpProtocolExecution
 }
@@ -52,7 +44,10 @@ export function createInvocationBinding<
       await runtime.initialize()
       return application
     },
-    run(entrypoint: EntrypointDescriptor<any, any>, ...args: readonly unknown[]) {
+    run(
+      entrypoint: EntrypointDescriptor<any, any>,
+      ...args: readonly unknown[]
+    ) {
       return Reflect.apply(runtime.run, runtime, [entrypoint, ...args])
     },
     close: () => runtime.shutdown(),

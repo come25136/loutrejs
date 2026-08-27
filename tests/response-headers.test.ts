@@ -29,10 +29,7 @@ describe('複数値HTTP response header', () => {
     const handler = createLambdaHttpDriver(cookieApplication())
     const result = await handler({ rawPath: '/cookies' })
 
-    expect(result.cookies).toEqual([
-      'first=one; Path=/',
-      'second=two; Path=/',
-    ])
+    expect(result.cookies).toEqual(['first=one; Path=/', 'second=two; Path=/'])
     expect(result.headers).not.toHaveProperty('set-cookie')
   })
 })

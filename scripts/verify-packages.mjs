@@ -12,14 +12,16 @@ for (const directory of await readdir(packagesDirectory)) {
     await readFile(resolve(packageDirectory, 'package.json'), 'utf8'),
   )
   if (manifest.private === true) continue
-  const result = JSON.parse(execFileSync(
-    'npm',
-    ['pack', packageDirectory, '--dry-run', '--json'],
-    { cwd: repository, encoding: 'utf8' },
-  ))[0]
+  const result = JSON.parse(
+    execFileSync('npm', ['pack', packageDirectory, '--dry-run', '--json'], {
+      cwd: repository,
+      encoding: 'utf8',
+    }),
+  )[0]
   const files = new Set(result.files.map(({ path }) => path))
   for (const required of ['dist/index.js', 'dist/index.d.ts', 'package.json']) {
-    if (!files.has(required)) failures.push(`${manifest.name}: ${required}がありません`)
+    if (!files.has(required))
+      failures.push(`${manifest.name}: ${required}がありません`)
   }
   for (const file of files) {
     if (

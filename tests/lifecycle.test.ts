@@ -11,36 +11,37 @@ describe('Application Lifecycle', () => {
         await Promise.resolve()
         events.push('A.init')
       }
-      onModuleDestroy() { events.push('A.destroy') }
+      onModuleDestroy() {
+        events.push('A.destroy')
+      }
     }
     class ProviderB {
       onModuleInit() {
         events.push('B.init')
         throw failure
       }
-      onModuleDestroy() { events.push('B.destroy') }
+      onModuleDestroy() {
+        events.push('B.destroy')
+      }
     }
     const Module = defineModule(() => ({ providers: [ProviderA, ProviderB] }))
     const runtime = createApplicationRuntime([Module()])
 
     await expect(runtime.initialize()).rejects.toBe(failure)
-    expect(events).toEqual([
-      'A.init',
-      'B.init',
-      'B.destroy',
-      'A.destroy',
-    ])
-    await expect(runtime.initialize()).rejects.toThrow(
-      'LUTRE_APP_STOPPED',
-    )
+    expect(events).toEqual(['A.init', 'B.init', 'B.destroy', 'A.destroy'])
+    await expect(runtime.initialize()).rejects.toThrow('LUTRE_APP_STOPPED')
   })
 
   it('初期化errorとcleanup errorをoriginal先頭のAggregateErrorにする', async () => {
     const initializationError = new Error('initialization')
     const cleanupError = new Error('cleanup')
     class Provider {
-      onModuleInit() { throw initializationError }
-      onModuleDestroy() { throw cleanupError }
+      onModuleInit() {
+        throw initializationError
+      }
+      onModuleDestroy() {
+        throw cleanupError
+      }
     }
     const Module = defineModule(() => ({ providers: [Provider] }))
     const runtime = createApplicationRuntime([Module()])
@@ -86,10 +87,7 @@ describe('Application Lifecycle', () => {
     }
     expect(events).toEqual(['second', 'first'])
     expect(thrown).toBeInstanceOf(AggregateError)
-    expect((thrown as AggregateError).errors).toEqual([
-      secondError,
-      firstError,
-    ])
+    expect((thrown as AggregateError).errors).toEqual([secondError, firstError])
     await expect(runtime.shutdown()).resolves.toBeUndefined()
   })
 
@@ -97,8 +95,12 @@ describe('Application Lifecycle', () => {
     let initialized = false
     let destroyed = false
     class Resource {
-      onModuleInit() { initialized = true }
-      onModuleDestroy() { destroyed = true }
+      onModuleInit() {
+        initialized = true
+      }
+      onModuleDestroy() {
+        destroyed = true
+      }
     }
     const Module = defineModule(() => ({ providers: [Resource] }))
 

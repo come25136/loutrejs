@@ -107,9 +107,8 @@ Layer
 const authLayer = layer({
   name: 'auth',
 
-  factory: (
-    auth = inject(AuthService),
-  ) =>
+  factory:
+    (auth = inject(AuthService)) =>
     async (ctx, next) => {
       // ...
       await next()
@@ -123,18 +122,14 @@ const authLayer = layer({
 
 ```ts
 class UsersController implements UsersHttp {
-  constructor(
-    readonly users = inject(UsersService),
-  ) {}
+  constructor(readonly users = inject(UsersService)) {}
 
   async get(ctx: ContextOf<UsersHttp, 'get'>) {
     // ...
   }
 }
 
-implement(UsersContract)
-  .for(http)
-  .with(UsersController)
+implement(UsersContract).for(http).with(UsersController)
 ```
 
 となっている。
@@ -221,9 +216,7 @@ export const UsersController = implementation({
   contract: UsersContract,
   protocol: http,
 
-  factory: (
-    users = inject(UsersService),
-  ) => ({
+  factory: (users = inject(UsersService)) => ({
     async get(ctx) {
       return ctx.response.found({
         body: {
@@ -246,13 +239,9 @@ Module:
 
 ```ts
 export const UsersModule = defineModule(() => ({
-  providers: [
-    UsersService,
-  ],
+  providers: [UsersService],
 
-  implementations: [
-    UsersController,
-  ],
+  implementations: [UsersController],
 }))
 ```
 
@@ -462,13 +451,9 @@ export const GetUserController = implementation({
   contract: UsersContract,
   protocol: http,
 
-  procedures: [
-    'get',
-  ],
+  procedures: ['get'],
 
-  factory: (
-    users = inject(UsersService),
-  ) => ({
+  factory: (users = inject(UsersService)) => ({
     async get(ctx) {
       // ...
     },
@@ -494,13 +479,10 @@ export const GetUserController = implementation({
 canonical usageでは以下を不要にする。
 
 ```ts
-type UsersHttp =
-  ControllerOf<typeof UsersContract, 'http'>
+type UsersHttp = ControllerOf<typeof UsersContract, 'http'>
 
 class UsersController implements UsersHttp {
-  async get(
-    ctx: ContextOf<UsersHttp, 'get'>,
-  ) {
+  async get(ctx: ContextOf<UsersHttp, 'get'>) {
     // ...
   }
 }
@@ -565,9 +547,7 @@ const UsersContract = contract({
           },
         },
 
-        pipeline: [
-          http.controller,
-        ],
+        pipeline: [http.controller],
       }),
     },
   }),
@@ -611,10 +591,7 @@ http({
     },
   },
 
-  pipeline: [
-    validate.params,
-    http.controller,
-  ],
+  pipeline: [validate.params, http.controller],
 })
 ```
 
@@ -646,8 +623,7 @@ Implementation factory化のために `ControllerOf` の旧型経路へ戻して
 factoryが返す各procedure functionは:
 
 ```ts
-(context: TContext) =>
-  TResult | Promise<TResult>
+;(context: TContext) => TResult | Promise<TResult>
 ```
 
 を満たすこと。
@@ -659,12 +635,13 @@ type ProcedureNamesForProtocol<
   TContract extends ContractDefinition,
   TProtocol extends string,
 > = {
-  [K in keyof ContractProcedures<TContract>]:
-    TProtocol extends
-      keyof ContractProcedures<TContract>[K]['protocols']
-      ? K
-      : never
-}[keyof ContractProcedures<TContract>] & string
+  [
+    K in keyof ContractProcedures<TContract>
+  ]: TProtocol extends keyof ContractProcedures<TContract>[K]['protocols']
+    ? K
+    : never
+}[keyof ContractProcedures<TContract>] &
+  string
 ```
 
 ```ts
@@ -673,20 +650,15 @@ type ImplementationRuntimeShape<
   TProtocol extends string,
   TProcedures extends string,
 > = {
-  [K in TProcedures]:
-    ContractProcedures<TContract>[K]['protocols'][
-      TProtocol &
-        keyof ContractProcedures<TContract>[K]['protocols']
-    ] extends ProtocolDescriptor<
-      TProtocol,
-      infer TContext,
-      infer TResult,
-      any
-    >
-      ? (
-          context: TContext,
-        ) => TResult | Promise<TResult>
-      : never
+  [K in TProcedures]: ContractProcedures<TContract>[K]['protocols'][TProtocol &
+    keyof ContractProcedures<TContract>[K]['protocols']] extends ProtocolDescriptor<
+    TProtocol,
+    infer TContext,
+    infer TResult,
+    any
+  >
+    ? (context: TContext) => TResult | Promise<TResult>
+    : never
 }
 ```
 
@@ -742,9 +714,7 @@ implementation({
   contract: UsersContract,
   protocol: http,
 
-  factory: (
-    users = inject(UsersService),
-  ) => ({
+  factory: (users = inject(UsersService)) => ({
     async get(ctx) {
       return ctx.response.found({
         body: await users.get(ctx.params.id),
@@ -796,10 +766,7 @@ Implementation factoryはGraph Probeでも実行される。
 推奨:
 
 ```ts
-factory: (
-  users = inject(UsersService),
-  audit = inject(AuditService),
-) => ({
+factory: (users = inject(UsersService), audit = inject(AuditService)) => ({
   // ...
 })
 ```
@@ -986,14 +953,9 @@ Module利用側:
 
 ```ts
 defineModule(() => ({
-  providers: [
-    UsersService,
-  ],
+  providers: [UsersService],
 
-  implementations: [
-    UsersController,
-    AdminController,
-  ],
+  implementations: [UsersController, AdminController],
 }))
 ```
 
@@ -1015,18 +977,13 @@ ImplementationBinding
 旧:
 
 ```ts
-implement(UsersContract)
-  .for(http)
-  .with(UsersController)
+implement(UsersContract).for(http).with(UsersController)
 ```
 
 旧partial:
 
 ```ts
-implement(UsersContract)
-  .for(http)
-  .procedures('get')
-  .with(GetUserController)
+implement(UsersContract).for(http).procedures('get').with(GetUserController)
 ```
 
 は全て新APIへ移行する。
@@ -1181,13 +1138,8 @@ implementation.factory()
 
 ```ts
 for (const module of runtimeGraph.modules) {
-  for (
-    const implementation
-    of module.definition.implementations ?? []
-  ) {
-    container.prepareImplementation(
-      implementation,
-    )
+  for (const implementation of module.definition.implementations ?? []) {
+    container.prepareImplementation(implementation)
   }
 }
 ```
@@ -1234,9 +1186,7 @@ export interface ImplementationConsumer {
 
 ```ts
 export type DependencyConsumer =
-  | TokenLike
-  | LayerConsumer
-  | ImplementationConsumer
+  TokenLike | LayerConsumer | ImplementationConsumer
 ```
 
 相当。
@@ -1356,10 +1306,7 @@ source: probed
 1 descriptorが:
 
 ```ts
-procedures: [
-  'get',
-  'create',
-]
+procedures: ['get', 'create']
 ```
 
 を持つ場合でもfactory constructionは1回。
@@ -1455,9 +1402,7 @@ class名取得へ依存しないこと。
 旧Graph validation:
 
 ```ts
-binding.implementation.prototype[
-  procedure
-]
+binding.implementation.prototype[procedure]
 ```
 
 のようなclass prototype inspectionは削除する。
@@ -1638,14 +1583,9 @@ container.implementationRuntime(
 その後:
 
 ```ts
-const method =
-  runtime[route.procedure]
+const method = runtime[route.procedure]
 
-Reflect.apply(
-  method,
-  runtime,
-  [context],
-)
+Reflect.apply(method, runtime, [context])
 ```
 
 相当で呼び出してよい。
@@ -1667,7 +1607,7 @@ UsersController.get
 相当を:
 
 ```ts
-`${implementation.name}.${procedure}`
+;`${implementation.name}.${procedure}`
 ```
 
 で生成する。
@@ -1801,10 +1741,7 @@ Contract / Protocol Implementation
 
 ```ts
 class UsersService {
-  constructor(
-    readonly repository =
-      inject(UserRepository),
-  ) {}
+  constructor(readonly repository = inject(UserRepository)) {}
 }
 ```
 
@@ -1815,9 +1752,7 @@ Provider class construction / lifecycleは今回の対象外。
 Implementation factoryが:
 
 ```ts
-factory: (
-  users = inject(UsersService),
-) => ({
+factory: (users = inject(UsersService)) => ({
   // ...
 })
 ```
@@ -1893,19 +1828,14 @@ const UsersController = implementation({
   contract: UsersContract,
   protocol: http,
 
-  factory: (
-    users = inject(UsersService),
-  ) => {
-    const loadUser = async (
-      id: string,
-    ) => {
+  factory: (users = inject(UsersService)) => {
+    const loadUser = async (id: string) => {
       return users.find(id)
     }
 
     return {
       async get(ctx) {
-        const user =
-          await loadUser(ctx.params.id)
+        const user = await loadUser(ctx.params.id)
 
         return ctx.response.found({
           body: user,
@@ -2181,9 +2111,7 @@ Contract procedureが指定protocolを持たない組み合わせをreject。
 ## DI
 
 ```ts
-factory: (
-  service = inject(Service),
-) => ({
+factory: (service = inject(Service)) => ({
   // ...
 })
 ```
@@ -2431,9 +2359,7 @@ class UsersController {}
 ImplementationはModuleへ明示的に所属させる。
 
 ```ts
-implementations: [
-  UsersController,
-]
+implementations: [UsersController]
 ```
 
 と書いたものだけApplication Graphへ参加する。
@@ -2670,10 +2596,7 @@ export const UsersContract = contract({
           },
         },
 
-        pipeline: [
-          validate.params,
-          http.controller,
-        ],
+        pipeline: [validate.params, http.controller],
       }),
     },
   }),
@@ -2687,16 +2610,13 @@ export const UsersController = implementation({
   contract: UsersContract,
   protocol: http,
 
-  factory: (
-    users = inject(UsersService),
-  ) => ({
+  factory: (users = inject(UsersService)) => ({
     async get(ctx) {
       ctx.params.id
       // number
 
       return ctx.response.found({
-        body:
-          await users.get(ctx.params.id),
+        body: await users.get(ctx.params.id),
       })
     },
   }),
@@ -2705,13 +2625,9 @@ export const UsersController = implementation({
 
 ```ts
 export const UsersModule = defineModule(() => ({
-  providers: [
-    UsersService,
-  ],
+  providers: [UsersService],
 
-  implementations: [
-    UsersController,
-  ],
+  implementations: [UsersController],
 }))
 ```
 

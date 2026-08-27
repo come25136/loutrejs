@@ -3,15 +3,8 @@ import { NamedRepository as Repo } from './named-repository.js'
 import DefaultRepo from './default-repository.js'
 import * as services from './namespace-services.js'
 import { ReexportedRepository } from './barrel.js'
-import {
-} from '@loutrejs/http'
-import {
-  defineEnv,
-  defineModule,
-  inject,
-  provide,
-  token,
-} from '@loutrejs/core'
+import {} from '@loutrejs/http'
+import { defineEnv, defineModule, inject, provide, token } from '@loutrejs/core'
 import { z } from 'zod'
 import { selectedRuntime } from '@loutrejs/fixture-application-build/conditional'
 
@@ -44,12 +37,16 @@ class DiskService {
 }
 
 const USE_CLASS = token<UseClassService>('application-build.use-class')
-const CONDITIONAL = token<MemoryService | DiskService>('application-build.conditional')
+const CONDITIONAL = token<MemoryService | DiskService>(
+  'application-build.conditional',
+)
 const RUNTIME_BRANCH = token<string>('application-build.runtime-branch')
 
-class AppEnv extends defineEnv(z.object({
-  DRIVER: z.enum(['memory', 'disk']),
-})) {}
+class AppEnv extends defineEnv(
+  z.object({
+    DRIVER: z.enum(['memory', 'disk']),
+  }),
+) {}
 
 const MainModule = defineModule(() => ({
   providers: [

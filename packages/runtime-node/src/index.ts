@@ -1,9 +1,7 @@
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import { Readable } from 'node:stream'
-import {
-  type HttpProtocolExecution,
-} from '@loutrejs/http'
+import { type HttpProtocolExecution } from '@loutrejs/http'
 
 export const nodeRuntime = {
   runtime: 'node-26',
@@ -39,7 +37,9 @@ export function createNodeHttpServerDriver(
     const abortController = new AbortController()
     const abort = () => {
       if (!abortController.signal.aborted) {
-        abortController.abort(new Error('HTTP client connectionが切断されました'))
+        abortController.abort(
+          new Error('HTTP client connectionが切断されました'),
+        )
       }
     }
     incoming.once('aborted', abort)
@@ -99,7 +99,8 @@ export function createNodeHttpServerDriver(
   server.on('listening', () => {
     const address = server.address()
     if (!address || typeof address === 'string') return
-    const host = address.family === 'IPv6' ? `[${address.address}]` : address.address
+    const host =
+      address.family === 'IPv6' ? `[${address.address}]` : address.address
     const url = `http://${host}:${address.port}`
     options.onListening?.(url)
     application.onServerListening(url)

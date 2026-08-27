@@ -9,7 +9,9 @@ interface MissingDependency {
 const MISSING = token<MissingDependency>('graph-probe.missing')
 const STORAGE = token<MemoryStorage | BrokenStorage>('graph-probe.storage')
 
-class AppEnv extends defineEnv(z.object({ DRIVER: z.enum(['memory', 'broken']) })) {}
+class AppEnv extends defineEnv(
+  z.object({ DRIVER: z.enum(['memory', 'broken']) }),
+) {}
 
 class MemoryStorage {}
 

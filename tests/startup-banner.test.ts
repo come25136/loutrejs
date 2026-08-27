@@ -91,7 +91,10 @@ describe('startup banner', () => {
   })
 
   it('server URLを入力値から描画する', () => {
-    const banner = renderRich({ ...baseInfo, server: 'https://api.example.test' })
+    const banner = renderRich({
+      ...baseInfo,
+      server: 'https://api.example.test',
+    })
     expect(banner).toContain('https://api.example.test')
   })
 
@@ -123,10 +126,8 @@ describe('startup banner', () => {
 
   it('renderとwriteを分離して出力できる', () => {
     const output: string[] = []
-    printStartupBanner(
-      baseInfo,
-      { isTTY: false, color: false },
-      (value) => output.push(value),
+    printStartupBanner(baseInfo, { isTTY: false, color: false }, (value) =>
+      output.push(value),
     )
 
     expect(output).toHaveLength(1)

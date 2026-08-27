@@ -6,10 +6,7 @@ import {
   procedure,
 } from '@loutrejs/core'
 import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
-import {
-  http,
-  validate,
-} from '@loutrejs/http'
+import { http, validate } from '@loutrejs/http'
 import { validateHttpParamsSchemas } from '../packages/http/src/params.js'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
@@ -211,7 +208,10 @@ describe('HTTP pathとroute identity', () => {
     const staticResponse = await application.fetch(
       new Request('http://fixture.test/priority/me'),
     )
-    expect(await staticResponse.json()).toEqual({ route: 'static', value: null })
+    expect(await staticResponse.json()).toEqual({
+      route: 'static',
+      value: null,
+    })
 
     const deeperResponse = await application.fetch(
       new Request('http://fixture.test/specific/b/c'),
@@ -452,7 +452,9 @@ describe('protocol dispatchKeyの重複検査', () => {
       implementations: [SecondController],
     }))
 
-    const result = compileApplication({ modules: [FirstModule(), SecondModule()] })
+    const result = compileApplication({
+      modules: [FirstModule(), SecondModule()],
+    })
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({
         code: 'LUTRE_PROTOCOL_001',

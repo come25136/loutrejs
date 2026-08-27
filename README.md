@@ -48,9 +48,7 @@ Application codeとruntime固有APIを分離する。
 最小のHTTP Applicationはこんな形です。
 
 ```ts
-import {
-  defineApplication,
-} from '@loutrejs/application'
+import { defineApplication } from '@loutrejs/application'
 import {
   contract,
   defineModule,
@@ -58,10 +56,7 @@ import {
   inject,
   procedure,
 } from '@loutrejs/core'
-import {
-  http,
-  validate,
-} from '@loutrejs/http'
+import { http, validate } from '@loutrejs/http'
 import { z } from 'zod'
 
 const GreetingContract = contract({
@@ -146,7 +141,7 @@ curl http://127.0.0.1:3000/greetings/Loutre
 ```
 
 ```json
-{"message":"こんにちは、Loutre！"}
+{ "message": "こんにちは、Loutre！" }
 ```
 
 Application GraphはCLIから確認できます。

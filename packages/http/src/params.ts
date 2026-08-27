@@ -1,7 +1,4 @@
-import {
-  SchemaValidationError,
-  validateSchema,
-} from '@loutrejs/core'
+import { SchemaValidationError, validateSchema } from '@loutrejs/core'
 import type { HttpParamsSchemas } from './definitions.js'
 
 export async function validateHttpParamsSchemas(

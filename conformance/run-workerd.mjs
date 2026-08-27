@@ -51,7 +51,9 @@ try {
   if (!response) throw new Error(`workerdを起動できませんでした: ${stderr}`)
   const body = await response.json()
   if (response.status !== 200 || body.id !== 'workerd-user') {
-    throw new Error(`workerd conformanceに失敗しました: ${JSON.stringify(body)}`)
+    throw new Error(
+      `workerd conformanceに失敗しました: ${JSON.stringify(body)}`,
+    )
   }
   const streamed = await fetch('http://127.0.0.1:18787/events')
   if (!(await streamed.text()).includes('"sequence":3')) {
@@ -74,7 +76,8 @@ async function terminateChild(process) {
     }),
   ])
   clearTimeout(timeout)
-  if (terminated || process.exitCode !== null || process.signalCode !== null) return
+  if (terminated || process.exitCode !== null || process.signalCode !== null)
+    return
   process.kill('SIGKILL')
   await exited
 }
