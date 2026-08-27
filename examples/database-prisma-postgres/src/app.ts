@@ -99,7 +99,12 @@ const UsersContract = contract(
         http: http({
           method: 'POST',
           path: '/users',
-          request: { body: CreateUserBody },
+          request: {
+            body: {
+              contentType: 'application/json',
+              schema: CreateUserBody,
+            },
+          },
           responses: {
             created: { status: 201, body: UserResponse },
           },

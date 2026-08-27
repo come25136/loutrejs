@@ -4,6 +4,9 @@ import { resolve } from 'node:path'
 export default defineConfig({
   resolve: {
     alias: {
+      '@loutrejs/application/openapi': resolve(
+        'packages/application/src/openapi.ts',
+      ),
       '@loutrejs/application/host': resolve(
         'packages/application/src/host.ts',
       ),

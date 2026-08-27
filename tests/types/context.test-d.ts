@@ -87,7 +87,12 @@ const Contract = contract({
       http: http({
         method: 'POST',
         path: '/nested-validation',
-        request: { body: z.object({ name: z.string() }) },
+        request: {
+          body: {
+            contentType: 'application/json',
+            schema: z.object({ name: z.string() }),
+          },
+        },
         responses: { ok: { status: 200, body: z.string() } },
         pipeline: [wrapperLayer([validate.body]), http.controller],
       }),

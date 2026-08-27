@@ -233,7 +233,10 @@ function createValidationFixture(corsLayer: ReturnType<typeof validate.cors>) {
           method: 'POST',
           path: '/cors-validation',
           request: {
-            body: z.object({ text: z.string() }),
+            body: {
+              contentType: 'application/json',
+              schema: z.object({ text: z.string() }),
+            },
           },
           responses: {
             created: {

@@ -34,6 +34,16 @@ describe('canonical Fixture A', () => {
         id: 'created-user',
         name: 'created',
       })
+
+      const unsupported = await fetch(`http://127.0.0.1:${port}/users`, {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain' },
+        body: JSON.stringify({ name: 'created' }),
+      })
+      expect(unsupported.status).toBe(415)
+      expect(await unsupported.json()).toEqual({
+        error: 'Unsupported Media Type',
+      })
     } finally {
       await application.close()
     }

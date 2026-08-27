@@ -27,11 +27,18 @@ import {
 
 export type HttpParamsSchemas = Readonly<Record<string, StandardSchemaV1>>
 
+export interface HttpRequestBodyDefinition<
+  TSchema extends StandardSchemaV1 = StandardSchemaV1,
+> {
+  readonly contentType: string
+  readonly schema: TSchema
+}
+
 export interface HttpRequestDefinition {
   readonly params?: HttpParamsSchemas
   readonly query?: StandardSchemaV1
   readonly headers?: StandardSchemaV1
-  readonly body?: StandardSchemaV1
+  readonly body?: HttpRequestBodyDefinition
 }
 
 export type HttpHeaderValue = string | readonly string[]
@@ -54,6 +61,7 @@ export interface HttpErrorMapping<
 
 export interface HttpResponseDefinition {
   readonly status: number
+  readonly description?: string
   readonly body: StandardSchemaV1
   readonly headers?: StandardSchemaV1
   readonly staticHeaders?: HttpHeaders
@@ -64,6 +72,10 @@ export interface HttpResponseDefinition {
 export interface HttpProtocolDefinition {
   readonly method: string
   readonly path: string
+  readonly summary?: string
+  readonly description?: string
+  readonly tags?: readonly string[]
+  readonly deprecated?: boolean
   readonly request?: HttpRequestDefinition
   readonly responses: Readonly<Record<string, HttpResponseDefinition>>
   readonly pipeline: readonly PipelineItem[]
@@ -388,6 +400,10 @@ function defineHttp<const TDefinition extends HttpProtocolDefinition>(
   } else if (hasParamsValidation(definition.pipeline)) {
     throw new Error('validate.params requires request.params')
   }
+  const body = definition.request?.body
+  if (body && body.contentType.trim().length === 0) {
+    throw new Error('HTTP request body contentType must not be empty')
+  }
   return {
     kind: 'protocol',
     protocol: 'http',
@@ -455,6 +471,12 @@ type HttpProtocolAt<
     : never
   : never
 
+type RequestBodySchema<TBody> = TBody extends HttpRequestBodyDefinition<
+  infer TSchema
+>
+  ? TSchema
+  : never
+
 type PartOutput<
   TDefinition extends HttpProtocolDefinition,
   TPart extends keyof HttpRequestDefinition,
@@ -473,9 +495,11 @@ type PartOutput<
     ? unknown
     : TDefinition['request'] extends HttpRequestDefinition
       ? TPart extends keyof TDefinition['request']
-        ? NonNullable<TDefinition['request'][TPart]> extends StandardSchemaV1
-          ? SchemaOutput<NonNullable<TDefinition['request'][TPart]>>
-          : unknown
+        ? TPart extends 'body'
+          ? SchemaOutput<RequestBodySchema<NonNullable<TDefinition['request'][TPart]>>>
+          : NonNullable<TDefinition['request'][TPart]> extends StandardSchemaV1
+            ? SchemaOutput<NonNullable<TDefinition['request'][TPart]>>
+            : unknown
         : unknown
       : unknown
 

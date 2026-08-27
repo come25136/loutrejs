@@ -21,6 +21,7 @@ import type {
   HttpParamsSchemas,
   HttpProtocol,
   HttpProtocolDefinition,
+  HttpRequestBodyDefinition,
   LogicalHttpResult,
 } from './definitions.js'
 import {
@@ -198,9 +199,13 @@ export function createHttpExecution(options: {
             context: raw,
             layer: (descriptor) => container.layerRuntime(descriptor),
             validate: async (layer, context) => {
-              const schema = routeMatch.route.protocol.definition.request?.[
+              const declared = routeMatch.route.protocol.definition.request?.[
                 layer.part
-              ] as StandardSchemaV1 | HttpParamsSchemas | undefined
+              ] as StandardSchemaV1 | HttpParamsSchemas | HttpRequestBodyDefinition | undefined
+              const schema =
+                layer.part === 'body' && declared
+                  ? (declared as HttpRequestBodyDefinition).schema
+                  : declared
               if (schema) {
                 try {
                   context[layer.part] =
@@ -230,6 +235,9 @@ export function createHttpExecution(options: {
           ),
         )
       } catch (error) {
+        if (error instanceof HttpUnsupportedMediaTypeError) {
+          return complete(jsonResponse(415, { error: 'Unsupported Media Type' }))
+        }
         if (isDecodeError(error)) {
           return complete(jsonResponse(400, { error: 'Invalid request' }))
         }
@@ -386,21 +394,29 @@ async function decodeRequest(
 
   const headers = Object.fromEntries(request.headers.entries())
   let body: unknown = undefined
-  if (definition.request?.body) {
-    const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim()
-    if (mediaType === 'application/json') {
+  const bodyDefinition = definition.request?.body
+  if (bodyDefinition) {
+    const actualMediaType = normalizeMediaType(request.headers.get('content-type'))
+    const declaredMediaType = normalizeMediaType(bodyDefinition.contentType)!
+    if (request.body !== null && actualMediaType !== declaredMediaType) {
+      throw new HttpUnsupportedMediaTypeError(
+        declaredMediaType,
+        actualMediaType,
+      )
+    }
+    if (declaredMediaType === 'application/json' || declaredMediaType.endsWith('+json')) {
       try {
         body = await request.json()
       } catch (error) {
         throw new HttpInputDecodeError(error)
       }
-    } else if (mediaType === 'multipart/form-data') {
+    } else if (declaredMediaType === 'multipart/form-data') {
       try {
         body = await request.formData()
       } catch (error) {
         throw new HttpInputDecodeError(error)
       }
-    } else if (mediaType?.startsWith('text/')) {
+    } else if (declaredMediaType.startsWith('text/')) {
       body = await request.text()
     } else {
       body = request.body
@@ -408,6 +424,11 @@ async function decodeRequest(
   }
 
   return { params, query, headers, body }
+}
+
+function normalizeMediaType(value: string | null | undefined): string | undefined {
+  const normalized = value?.split(';', 1)[0]?.trim().toLowerCase()
+  return normalized ? normalized : undefined
 }
 
 async function invokeController(
@@ -678,5 +699,17 @@ class HttpInputDecodeError extends Error {
   constructor(readonly cause: unknown) {
     super('HTTP input decode failed', { cause })
     this.name = 'HttpInputDecodeError'
+  }
+}
+
+class HttpUnsupportedMediaTypeError extends Error {
+  constructor(
+    readonly expected: string,
+    readonly actual: string | undefined,
+  ) {
+    super(
+      `Unsupported HTTP request media type: expected ${expected}, received ${actual ?? '(missing)'}`,
+    )
+    this.name = 'HttpUnsupportedMediaTypeError'
   }
 }
