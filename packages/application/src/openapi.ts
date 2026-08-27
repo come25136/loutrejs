@@ -78,9 +78,7 @@ export function generateOpenApi(
     compileApplication({
       modules: application.modules,
       entrypoints: application.entrypoints,
-      schedules: application.schedules,
-      queues: application.queues,
-      consumers: application.consumers,
+      triggers: application.triggers,
     }),
   )
   const executable = new Set(

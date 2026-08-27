@@ -456,9 +456,7 @@ QueueはTriggerではなくlogical resource descriptor。
 概念型:
 
 ```ts
-export interface QueueDescriptor<
-  TSchema extends StandardSchemaV1,
-> {
+export interface QueueDescriptor<TSchema extends StandardSchemaV1> {
   readonly kind: 'queue'
   readonly name: string
   readonly payload: TSchema
@@ -640,8 +638,7 @@ Triggerを1つ以上持つHosted Applicationにだけ`triggers`を生やす。
 概念型:
 
 ```ts
-type HostedApplication<TDefinition> =
-  BaseApplication<TDefinition> &
+type HostedApplication<TDefinition> = BaseApplication<TDefinition> &
   HttpCapability<TDefinition> &
   TriggerCapability<TDefinition>
 ```
@@ -915,9 +912,7 @@ v4:
 
 ```ts
 type ExecutionRootIR =
-  | ProtocolExecutionRootIR
-  | EntrypointExecutionRootIR
-  | TriggerExecutionRootIR
+  ProtocolExecutionRootIR | EntrypointExecutionRootIR | TriggerExecutionRootIR
 ```
 
 Trigger Rootはkindごとのunionとする。

@@ -1,4 +1,12 @@
-import type { EntrypointDescriptor } from '@loutrejs/core'
+import {
+  queueRuntimeToken,
+  validateSchema,
+  type CronTriggerDescriptor,
+  type EntrypointDescriptor,
+  type FixedDelayTriggerDescriptor,
+  type QueueConsumerTriggerDescriptor,
+  type TriggerDescriptor,
+} from '@loutrejs/core'
 import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
 import { createHttpExecution } from '@loutrejs/http'
 import { ApplicationRuntime, Logger } from '@loutrejs/runtime'
@@ -8,12 +16,16 @@ import type {
   ApplicationDefinition,
   HostedApplication,
   HttpListenOptions,
+  QueueConsumerDriver,
+  QueueConsumerHandle,
 } from './index.js'
-import { matchesSchedule } from './scheduler.js'
+import { matchesCronTrigger } from './scheduler.js'
 
 export interface BootstrapOptions {
   readonly environment?: unknown
 }
+
+type TriggerHandle = { stop(): Promise<void> }
 
 export function bootstrap<const TDefinition extends ApplicationDefinition>(
   definition: TDefinition,
@@ -25,9 +37,7 @@ export function bootstrap<const TDefinition extends ApplicationDefinition>(
     compileApplication({
       modules: definition.modules,
       entrypoints: definition.entrypoints,
-      schedules: definition.schedules,
-      queues: definition.queues,
-      consumers: definition.consumers,
+      triggers: definition.triggers,
     }),
   )
   const runtime = new ApplicationRuntime(definition.modules, {
@@ -36,18 +46,27 @@ export function bootstrap<const TDefinition extends ApplicationDefinition>(
     environmentSource:
       'environment' in options ? options.environment : process.env,
   })
-  const hasHttp = graph.executions.some(
-    (execution) =>
-      execution.kind === 'protocol' && execution.protocol === 'http',
-  )
+  const hasHttp = graph.hostCapabilities.includes('http')
   const http = hasHttp
     ? createHttpExecution({ runtime, graph, logger })
     : undefined
   let server: Server | undefined
-  let schedulerTimer: ReturnType<typeof setInterval> | undefined
-  let schedulerStarted = false
-  let queueListening = false
-  const triggeredMinutes = new Map<string, string>()
+  let triggersStarted = false
+  let triggerHandles: TriggerHandle[] = []
+
+  const stopTriggers = async () => {
+    const handles = triggerHandles
+    triggerHandles = []
+    triggersStarted = false
+    const results = await Promise.allSettled(
+      handles.toReversed().map((handle) => handle.stop()),
+    )
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    )
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Trigger stop failed')
+  }
 
   const application = {
     graph,
@@ -61,19 +80,31 @@ export function bootstrap<const TDefinition extends ApplicationDefinition>(
     ) {
       return Reflect.apply(runtime.run, runtime, [entrypoint, ...args])
     },
-    async close() {
+    async close(signal?: string) {
+      runtime.stopAcceptingExecutions()
+      const errors: unknown[] = []
       if (server) {
         const current = server
         server = undefined
-        await closeServer(current)
+        try {
+          await closeServer(current)
+        } catch (error) {
+          errors.push(error)
+        }
       }
-      if (schedulerTimer) {
-        clearInterval(schedulerTimer)
-        schedulerTimer = undefined
+      try {
+        await stopTriggers()
+      } catch (error) {
+        errors.push(error)
       }
-      schedulerStarted = false
-      queueListening = false
-      await runtime.shutdown()
+      try {
+        await runtime.shutdown(signal)
+      } catch (error) {
+        errors.push(error)
+      }
+      if (errors.length > 0) {
+        throw new AggregateError(errors, 'Application shutdown failed')
+      }
     },
     ...(http
       ? {
@@ -99,66 +130,32 @@ export function bootstrap<const TDefinition extends ApplicationDefinition>(
           },
         }
       : {}),
-    ...(definition.schedules.length > 0
+    ...(definition.triggers.length > 0
       ? {
-          scheduler: {
+          triggers: {
             async start() {
-              if (schedulerStarted) {
+              if (triggersStarted) {
                 throw new Error(
-                  'LUTRE_SCHEDULER_ALREADY_STARTED: Scheduler is already started.',
+                  'LUTRE_TRIGGERS_ALREADY_STARTED: Trigger Engine is already started.',
                 )
               }
               await runtime.initialize()
-              schedulerStarted = true
-              const tick = () => {
-                const now = new Date()
-                const minute = now.toISOString().slice(0, 16)
-                for (const schedule of definition.schedules) {
-                  if (!matchesSchedule(schedule, now)) continue
-                  if (triggeredMinutes.get(schedule.name) === minute) continue
-                  triggeredMinutes.set(schedule.name, minute)
-                  void runtime
-                    .run(
-                      schedule.entrypoint as EntrypointDescriptor<void, void>,
-                    )
-                    .catch((error) => {
-                      logger.error('Scheduled Entrypoint execution failed', {
-                        event: 'scheduler.execution.failed',
-                        schedule: schedule.name,
-                        error:
-                          error instanceof Error
-                            ? error.message
-                            : String(error),
-                      })
-                    })
+              triggersStarted = true
+              const started: TriggerHandle[] = []
+              try {
+                for (const trigger of definition.triggers) {
+                  started.push(await startTrigger(trigger, runtime, logger))
                 }
-              }
-              tick()
-              schedulerTimer = setInterval(tick, 1_000)
-            },
-            async stop() {
-              if (schedulerTimer) clearInterval(schedulerTimer)
-              schedulerTimer = undefined
-              schedulerStarted = false
-            },
-          },
-        }
-      : {}),
-    ...(definition.consumers.length > 0
-      ? {
-          queue: {
-            async listen() {
-              if (queueListening) {
-                throw new Error(
-                  'LUTRE_QUEUE_ALREADY_LISTENING: Queue listener is already started.',
+                triggerHandles = started
+              } catch (error) {
+                await Promise.allSettled(
+                  started.toReversed().map((handle) => handle.stop()),
                 )
+                triggersStarted = false
+                throw error
               }
-              await runtime.initialize()
-              queueListening = true
             },
-            async stop() {
-              queueListening = false
-            },
+            stop: stopTriggers,
           },
         }
       : {}),
@@ -167,16 +164,164 @@ export function bootstrap<const TDefinition extends ApplicationDefinition>(
   return application as HostedApplication<TDefinition>
 }
 
+async function startTrigger(
+  trigger: TriggerDescriptor,
+  runtime: ApplicationRuntime,
+  logger: Logger,
+): Promise<TriggerHandle> {
+  switch (trigger.trigger) {
+    case 'cron':
+      return startCronTrigger(trigger, runtime, logger)
+    case 'fixed-delay':
+      return startFixedDelayTrigger(trigger, runtime, logger)
+    case 'queue-consumer':
+      return startQueueTrigger(trigger, runtime)
+  }
+}
+
+function startCronTrigger(
+  trigger: CronTriggerDescriptor<any>,
+  runtime: ApplicationRuntime,
+  logger: Logger,
+): TriggerHandle {
+  let stopped = false
+  let lastMinute: string | undefined
+  const active = new Set<Promise<void>>()
+  const tick = () => {
+    if (stopped) return
+    const now = new Date()
+    if (!matchesCronTrigger(trigger, now)) return
+    const minute = cronMinuteIdentity(trigger.timezone, now)
+    if (lastMinute === minute) return
+    lastMinute = minute
+    if (trigger.overlap === 'skip' && active.size > 0) {
+      logger.info('Cron trigger skipped overlapping execution', {
+        event: 'trigger.cron.skipped',
+        trigger: trigger.name,
+      })
+      return
+    }
+    const execution = runtime
+      .run(trigger.entrypoint as EntrypointDescriptor<void, void>)
+      .catch((error) => {
+        logger.error('Cron trigger execution failed', {
+          event: 'trigger.cron.execution.failed',
+          trigger: trigger.name,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    active.add(execution)
+    void execution.finally(() => active.delete(execution))
+  }
+  tick()
+  const timer = setInterval(tick, 1_000)
+  return {
+    async stop() {
+      if (stopped) return
+      stopped = true
+      clearInterval(timer)
+      await Promise.allSettled(active)
+    },
+  }
+}
+
+function startFixedDelayTrigger(
+  trigger: FixedDelayTriggerDescriptor<any>,
+  runtime: ApplicationRuntime,
+  logger: Logger,
+): TriggerHandle {
+  let stopped = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let releaseSleep: (() => void) | undefined
+  const sleep = () =>
+    new Promise<void>((resolve) => {
+      releaseSleep = resolve
+      timer = setTimeout(() => {
+        timer = undefined
+        releaseSleep = undefined
+        resolve()
+      }, trigger.delay)
+    })
+  const execute = async () => {
+    try {
+      await runtime.run(trigger.entrypoint as EntrypointDescriptor<void, void>)
+    } catch (error) {
+      logger.error('Fixed-delay trigger execution failed', {
+        event: 'trigger.fixed_delay.execution.failed',
+        trigger: trigger.name,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+  const loop = (async () => {
+    if (!trigger.immediate) await sleep()
+    while (true) {
+      if (stopped) break
+      await execute()
+      if (stopped) break
+      await sleep()
+    }
+  })()
+  return {
+    async stop() {
+      if (stopped) return
+      stopped = true
+      if (timer) clearTimeout(timer)
+      timer = undefined
+      releaseSleep?.()
+      releaseSleep = undefined
+      await loop
+    },
+  }
+}
+
+async function startQueueTrigger(
+  trigger: QueueConsumerTriggerDescriptor<any, any>,
+  runtime: ApplicationRuntime,
+): Promise<QueueConsumerHandle> {
+  const driver = runtime.container.resolve(
+    queueRuntimeToken(trigger.queue),
+  ) as QueueConsumerDriver
+  if (!driver || typeof driver.start !== 'function') {
+    throw new Error(
+      `LUTRE_QUEUE_DRIVER_INVALID: Queue ${trigger.queue.name} driver is invalid.`,
+    )
+  }
+  const handle = await driver.start({
+    consume: async (payload) => {
+      const validated = await validateSchema(trigger.queue.payload, payload)
+      await runtime.run(trigger.entrypoint, validated)
+    },
+  })
+  if (!handle || typeof handle.stop !== 'function') {
+    throw new Error(
+      `LUTRE_QUEUE_DRIVER_INVALID: Queue ${trigger.queue.name} driver returned an invalid handle.`,
+    )
+  }
+  return handle
+}
+
 function registeredEntrypoints(
   definition: ApplicationDefinition,
 ): readonly EntrypointDescriptor<any, any>[] {
   return [
     ...new Set([
       ...definition.entrypoints,
-      ...definition.schedules.map((schedule) => schedule.entrypoint),
-      ...definition.consumers.map((consumer) => consumer.entrypoint),
+      ...definition.triggers.map((trigger) => trigger.entrypoint),
     ]),
   ]
+}
+
+function cronMinuteIdentity(timezone: string, instant: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(instant)
 }
 
 function listenServer(

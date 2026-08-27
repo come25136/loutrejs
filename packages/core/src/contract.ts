@@ -3,11 +3,13 @@ export interface ProtocolDescriptor<
   TContext = unknown,
   TResult = unknown,
   TDispatchKey extends string | null = string | null,
+  TCapabilities extends readonly string[] = readonly string[],
 > {
   readonly kind: 'protocol'
   readonly protocol: TName
   readonly interaction?: InteractionMode
   readonly dispatchKey: TDispatchKey
+  readonly capabilities?: TCapabilities
   readonly '~context'?: TContext
   readonly '~result'?: TResult
 }
@@ -150,6 +152,10 @@ function assertUniqueDispatchKeys(
 export type ContractProcedures<TContract extends ContractDefinition> =
   TContract['procedures']
 
-export interface ProtocolFactory<TName extends string> {
+export interface ProtocolFactory<
+  TName extends string,
+  TCapabilities extends readonly string[] = readonly string[],
+> {
   readonly protocol: TName
+  readonly capabilities?: TCapabilities
 }

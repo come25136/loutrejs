@@ -12,9 +12,7 @@ async function main(): Promise<void> {
       compileApplication({
         modules: definition.modules,
         entrypoints: definition.entrypoints,
-        schedules: definition.schedules,
-        queues: definition.queues,
-        consumers: definition.consumers,
+        triggers: definition.triggers,
       }),
     )
     const runtime = new ApplicationRuntime(definition.modules, {

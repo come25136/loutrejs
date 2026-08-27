@@ -21,6 +21,7 @@ export interface ModuleTypeInfo<
   TDefinition extends ModuleDefinition = ModuleDefinition,
 > {
   readonly protocols: ProtocolsOfModuleDefinition<TDefinition>
+  readonly capabilities: CapabilitiesOfModuleDefinition<TDefinition>
 }
 
 type DirectProtocols<TDefinition extends ModuleDefinition> =
@@ -37,9 +38,28 @@ export type ProtocolsOfModuleDefinition<TDefinition extends ModuleDefinition> =
   | DirectProtocols<TDefinition>
   | ImportedProtocols<TDefinition>
 
+type DirectCapabilities<TDefinition extends ModuleDefinition> =
+  TDefinition['implementations'] extends readonly ImplementationDescriptor[]
+    ? TDefinition['implementations'][number]['capabilities'][number]
+    : never
+
+type ImportedCapabilities<TDefinition extends ModuleDefinition> =
+  TDefinition['imports'] extends readonly ModuleInstance[]
+    ? ModuleCapabilities<TDefinition['imports'][number]>
+    : never
+
+export type CapabilitiesOfModuleDefinition<
+  TDefinition extends ModuleDefinition,
+> = DirectCapabilities<TDefinition> | ImportedCapabilities<TDefinition>
+
 export type ModuleProtocols<TModule> =
   TModule extends ModuleInstance<infer TDefinition>
     ? ProtocolsOfModuleDefinition<TDefinition>
+    : never
+
+export type ModuleCapabilities<TModule> =
+  TModule extends ModuleInstance<infer TDefinition>
+    ? CapabilitiesOfModuleDefinition<TDefinition>
     : never
 
 export interface ModuleInstance<

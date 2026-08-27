@@ -17,20 +17,12 @@ export function createInvocationBinding<
   environment?: unknown,
 ): InvocationBinding<TDefinition> {
   const logger = definition.logger ?? new Logger()
-  const entrypoints = [
-    ...new Set([
-      ...definition.entrypoints,
-      ...definition.schedules.map((schedule) => schedule.entrypoint),
-      ...definition.consumers.map((consumer) => consumer.entrypoint),
-    ]),
-  ]
+  const entrypoints = registeredEntrypoints(definition)
   const graph = assertValidCompilation(
     compileApplication({
       modules: definition.modules,
       entrypoints: definition.entrypoints,
-      schedules: definition.schedules,
-      queues: definition.queues,
-      consumers: definition.consumers,
+      triggers: definition.triggers,
     }),
   )
   const runtime = new ApplicationRuntime(definition.modules, {
@@ -50,16 +42,24 @@ export function createInvocationBinding<
     ) {
       return Reflect.apply(runtime.run, runtime, [entrypoint, ...args])
     },
-    close: () => runtime.shutdown(),
+    close: (signal?: string) => runtime.shutdown(signal),
   } as InvocationApplication<TDefinition>
-  const hasHttp = graph.executions.some(
-    (execution) =>
-      execution.kind === 'protocol' && execution.protocol === 'http',
-  )
+  const hasHttp = graph.hostCapabilities.includes('http')
   return {
     application,
     ...(hasHttp
       ? { http: createHttpExecution({ runtime, graph, logger }) }
       : {}),
   }
+}
+
+function registeredEntrypoints(
+  definition: ApplicationDefinition,
+): readonly EntrypointDescriptor<any, any>[] {
+  return [
+    ...new Set([
+      ...definition.entrypoints,
+      ...definition.triggers.map((trigger) => trigger.entrypoint),
+    ]),
+  ]
 }

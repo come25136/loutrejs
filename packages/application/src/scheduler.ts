@@ -1,4 +1,4 @@
-import type { ScheduleDescriptor } from '@loutrejs/core'
+import type { CronTriggerDescriptor } from '@loutrejs/core'
 
 interface CronFields {
   readonly minute: string
@@ -8,16 +8,16 @@ interface CronFields {
   readonly dayOfWeek: string
 }
 
-export function matchesSchedule(
-  schedule: ScheduleDescriptor<any>,
+export function matchesCronTrigger(
+  trigger: CronTriggerDescriptor<any>,
   instant: Date,
 ): boolean {
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = schedule.cron.expression
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = trigger.expression
     .trim()
     .split(/\s+/) as [string, string, string, string, string]
   const fields: CronFields = { minute, hour, dayOfMonth, month, dayOfWeek }
   const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: schedule.cron.timezone,
+    timeZone: trigger.timezone,
     minute: 'numeric',
     hour: 'numeric',
     day: 'numeric',

@@ -33,6 +33,7 @@
       "@loutrejs/message-port/environment": [
         "./packages/message-port/src/environment.ts"
       ],
+      "@loutrejs/queue-bullmq": ["./packages/queue-bullmq/src/index.ts"],
       "@loutrejs/runtime-node": ["./packages/runtime-node/src/index.ts"],
       "@loutrejs/runtime-deno": ["./packages/runtime-deno/src/index.ts"],
       "@loutrejs/runtime-bun": ["./packages/runtime-bun/src/index.ts"],
