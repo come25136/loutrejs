@@ -11,7 +11,7 @@ async function main(): Promise<void> {
     const graph = assertValidCompilation(
       compileApplication({
         modules: definition.modules,
-        entrypoints: definition.entrypoints,
+        entrypoint: definition.entrypoint,
         triggers: definition.triggers,
       }),
     )

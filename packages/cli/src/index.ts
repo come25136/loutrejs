@@ -186,6 +186,46 @@ export async function runCli(
       io.stdout(`Graph Manifestを出力しました: ${manifestOutput}`)
       return 0
     }
+    case 'run': {
+      if (!subject) {
+        io.stderr(
+          'runには明示的なApplication entryが必要です。filesystem discoveryは行いません。',
+        )
+        return 2
+      }
+      const rawInput = readOption(args, '--input')
+      let input: unknown
+      if (rawInput !== undefined) {
+        try {
+          input = JSON.parse(rawInput)
+        } catch {
+          io.stderr('run --inputには有効なJSONを指定してください。')
+          return 2
+        }
+      }
+      const loaded = await loadApplication(resolve(io.cwd, subject))
+      if (!loaded.definition.entrypoint || !('run' in loaded.application)) {
+        io.stderr(
+          'LUTRE_CLI_ENTRYPOINT_REQUIRED: runにはentrypointを持つApplicationが必要です。',
+        )
+        return 2
+      }
+      await loaded.application.init()
+      try {
+        const run = loaded.application.run as (
+          ...args: readonly unknown[]
+        ) => Promise<unknown>
+        const result = await Reflect.apply(
+          run,
+          loaded.application,
+          rawInput === undefined ? [] : [input],
+        )
+        if (result !== undefined) io.stdout(formatRunResult(result))
+        return 0
+      } finally {
+        await loaded.application.close('run-complete')
+      }
+    }
     case 'dev': {
       if (!subject) {
         io.stderr(
@@ -930,6 +970,12 @@ function readPort(args: readonly string[]): number {
   return port
 }
 
+function formatRunResult(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'bigint') return value.toString()
+  return JSON.stringify(value, null, 2) ?? String(value)
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -942,6 +988,7 @@ function helpText(): string {
     '  loutre graph modules|di|contracts|executions|runtime --entry <明示entry> [--format text|json|mermaid]',
     '  loutre explain <target> --entry <明示entry>',
     '  loutre build <明示entry> [--out-dir <directory>]',
+    '  loutre run <明示entry> [--input <json>]',
     '  loutre dev <明示entry> [--port <port>]',
     '  loutre start <明示entry> [--port <port>]',
   ].join('\n')

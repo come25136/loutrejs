@@ -13,7 +13,7 @@ import { compileApplication } from '@loutrejs/graph'
 import { z } from 'zod'
 
 describe('Unified Application', () => {
-  test('Entrypointを一度だけ構築し、実行結果とerrorをそのまま返す', async () => {
+  test('Applicationの単一Entrypointを一度だけ構築し、実行結果を返す', async () => {
     let constructions = 0
     const ServiceToken = class Service {
       value = 40
@@ -25,31 +25,36 @@ describe('Unified Application', () => {
         return async (input) => service.value + input
       },
     })
+    const Module = defineModule(() => ({ providers: [ServiceToken] }))
+    const application = bootstrap(
+      defineApplication({ modules: [Module()], entrypoint: calculate }),
+    )
+    constructions = 0
+
+    await expect(application.run(2)).resolves.toBe(42)
+    await expect(application.run(3)).resolves.toBe(43)
+    expect(constructions).toBe(1)
+    expect(application.graph.executions).toContainEqual(
+      expect.objectContaining({
+        id: 'entrypoint:calculate',
+        kind: 'entrypoint',
+      }),
+    )
+    await application.close()
+  })
+
+  test('Entrypoint errorをそのまま返す', async () => {
     const fail = entrypoint<void, void>({
       name: 'fail',
       factory: () => () => {
         throw new Error('domain failure')
       },
     })
-    const Module = defineModule(() => ({ providers: [ServiceToken] }))
     const application = bootstrap(
-      defineApplication({
-        modules: [Module()],
-        entrypoints: [calculate, fail],
-      }),
+      defineApplication({ modules: [], entrypoint: fail }),
     )
-    constructions = 0
 
-    await expect(application.run(calculate, 2)).resolves.toBe(42)
-    await expect(application.run(calculate, 3)).resolves.toBe(43)
-    await expect(application.run(fail)).rejects.toThrow('domain failure')
-    expect(constructions).toBe(1)
-    expect(application.graph.nodes).toContainEqual(
-      expect.objectContaining({
-        id: 'entrypoint:calculate',
-        kind: 'entrypoint',
-      }),
-    )
+    await expect(application.run()).rejects.toThrow('domain failure')
     await application.close()
   })
 
@@ -64,10 +69,10 @@ describe('Unified Application', () => {
     })
     const Module = defineModule(() => ({}))
     const application = bootstrap(
-      defineApplication({ modules: [Module()], entrypoints: [job] }),
+      defineApplication({ modules: [Module()], entrypoint: job }),
     )
 
-    const execution = application.run(job)
+    const execution = application.run()
     await Promise.resolve()
     const closing = application.close()
     let closed = false
@@ -76,11 +81,11 @@ describe('Unified Application', () => {
     })
     await Promise.resolve()
     expect(closed).toBe(false)
-    await expect(application.run(job)).rejects.toThrow('LUTRE_APP_STOPPING')
+    await expect(application.run()).rejects.toThrow('LUTRE_APP_STOPPING')
     release()
     await execution
     await closing
-    await expect(application.run(job)).rejects.toThrow('LUTRE_APP_STOPPED')
+    await expect(application.run()).rejects.toThrow('LUTRE_APP_STOPPED')
     await expect(application.close()).resolves.toBeUndefined()
   })
 
@@ -162,6 +167,7 @@ describe('Unified Application', () => {
     expect(application.graph.executions).not.toContainEqual(
       expect.objectContaining({ kind: 'entrypoint', name: 'cleanup' }),
     )
+    expect('run' in application).toBe(false)
     await application.triggers.start()
     await expect(application.triggers.start()).rejects.toThrow(
       'LUTRE_TRIGGERS_ALREADY_STARTED',
@@ -170,32 +176,33 @@ describe('Unified Application', () => {
     await application.close()
   })
 
-  test('execution descriptorの重複名とportable cron違反をdiagnosticにする', () => {
-    const first = entrypoint<void, void>({
-      name: 'duplicate',
-      factory: () => () => undefined,
-    })
-    const second = entrypoint<void, void>({
-      name: 'duplicate',
+  test('Trigger重複名とportable cron違反をdiagnosticにする', () => {
+    const cleanup = entrypoint<void, void>({
+      name: 'cleanup',
       factory: () => () => undefined,
     })
     const invalidCron = cron({
-      name: 'invalid.schedule',
+      name: 'maintenance',
       expression: '90 25 * * *',
       timezone: 'Invalid/Timezone',
-      entrypoint: first,
+      entrypoint: cleanup,
+    })
+    const duplicate = cron({
+      name: 'maintenance',
+      expression: '0 0 * * *',
+      timezone: 'UTC',
+      entrypoint: cleanup,
     })
     const Module = defineModule(() => ({}))
 
     const result = compileApplication({
       modules: [Module()],
-      entrypoints: [first, second],
-      triggers: [invalidCron],
+      triggers: [invalidCron, duplicate],
     })
 
     expect(result.diagnostics.map(({ code }) => code)).toEqual(
       expect.arrayContaining([
-        'LUTRE_ENTRYPOINT_DUPLICATE',
+        'LUTRE_TRIGGER_DUPLICATE',
         'LUTRE_TRIGGER_INVALID_CRON',
         'LUTRE_TRIGGER_INVALID_TIMEZONE',
       ]),

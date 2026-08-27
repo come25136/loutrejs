@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/examples-hello-worker",
+    "tsBuildInfoFile": "../../dist/examples-hello-worker.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

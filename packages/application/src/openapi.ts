@@ -77,7 +77,7 @@ export function generateOpenApi(
   const graph = assertValidCompilation(
     compileApplication({
       modules: application.modules,
-      entrypoints: application.entrypoints,
+      entrypoint: application.entrypoint,
       triggers: application.triggers,
     }),
   )

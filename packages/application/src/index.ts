@@ -11,56 +11,58 @@ import type { Logger } from '@loutrejs/runtime'
 
 export interface ApplicationDefinitionOptions<
   TModules extends readonly ModuleInstance[],
-  TEntrypoints extends readonly EntrypointDescriptor<any, any>[],
+  TEntrypoint extends EntrypointDescriptor<any, any> | undefined,
   TTriggers extends readonly TriggerDescriptor[],
 > {
   readonly modules: TModules
-  readonly entrypoints?: TEntrypoints
+  readonly entrypoint?: TEntrypoint
   readonly triggers?: TTriggers
   readonly logger?: Logger
 }
 
 export interface ApplicationDefinition<
   TModules extends readonly ModuleInstance[] = readonly ModuleInstance[],
-  TEntrypoints extends readonly EntrypointDescriptor<any, any>[] =
-    readonly EntrypointDescriptor<any, any>[],
+  TEntrypoint extends EntrypointDescriptor<any, any> | undefined =
+    | EntrypointDescriptor<any, any>
+    | undefined,
   TTriggers extends readonly TriggerDescriptor[] = readonly TriggerDescriptor[],
 > {
   readonly kind: 'application-definition'
   readonly modules: TModules
-  readonly entrypoints: TEntrypoints
+  readonly entrypoint: TEntrypoint
   readonly triggers: TTriggers
   readonly logger?: Logger
 }
 
 export function defineApplication<
   const TModules extends readonly ModuleInstance[],
-  const TEntrypoints extends readonly EntrypointDescriptor<any, any>[] =
-    readonly [],
+  const TEntrypoint extends EntrypointDescriptor<any, any> | undefined =
+    undefined,
   const TTriggers extends readonly TriggerDescriptor[] = readonly [],
 >(
-  options: ApplicationDefinitionOptions<TModules, TEntrypoints, TTriggers>,
-): ApplicationDefinition<TModules, TEntrypoints, TTriggers> {
+  options: ApplicationDefinitionOptions<TModules, TEntrypoint, TTriggers>,
+): ApplicationDefinition<TModules, TEntrypoint, TTriggers> {
   return Object.freeze({
     kind: 'application-definition',
     modules: options.modules,
-    entrypoints: options.entrypoints ?? ([] as unknown as TEntrypoints),
+    entrypoint: options.entrypoint as TEntrypoint,
     triggers: options.triggers ?? ([] as unknown as TTriggers),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   })
 }
 
-export type ExplicitEntrypoint<TDefinition extends ApplicationDefinition> =
-  TDefinition['entrypoints'][number]
-
-export interface BaseApplication<TDefinition extends ApplicationDefinition> {
+export interface BaseApplication {
   readonly graph: ApplicationGraphIR
   init(): Promise<this>
-  run<TEntrypoint extends ExplicitEntrypoint<TDefinition>>(
-    entrypoint: TEntrypoint,
+  close(signal?: string): Promise<void>
+}
+
+export interface EntrypointApplicationCapability<
+  TEntrypoint extends EntrypointDescriptor<any, any>,
+> {
+  run(
     ...args: EntrypointArguments<TEntrypoint>
   ): Promise<EntrypointOutput<TEntrypoint>>
-  close(signal?: string): Promise<void>
 }
 
 export interface HttpListenOptions {
@@ -106,15 +108,26 @@ export type HasHttp<TDefinition extends ApplicationDefinition> = HasCapability<
   'http'
 >
 
+export type HasEntrypoint<TDefinition extends ApplicationDefinition> =
+  TDefinition['entrypoint'] extends EntrypointDescriptor<any, any>
+    ? true
+    : false
+
 export type HasTriggers<TDefinition extends ApplicationDefinition> =
   TDefinition['triggers'] extends readonly [] ? false : true
 
+type EntrypointCapability<TDefinition extends ApplicationDefinition> =
+  TDefinition['entrypoint'] extends EntrypointDescriptor<any, any>
+    ? EntrypointApplicationCapability<TDefinition['entrypoint']>
+    : {}
+
 export type HostedApplication<TDefinition extends ApplicationDefinition> =
-  BaseApplication<TDefinition> &
+  BaseApplication &
+    EntrypointCapability<TDefinition> &
     (HasHttp<TDefinition> extends true ? HttpApplicationCapability : {}) &
     (HasTriggers<TDefinition> extends true ? TriggerApplicationCapability : {})
 
 export type InvocationApplication<TDefinition extends ApplicationDefinition> =
-  BaseApplication<TDefinition>
+  BaseApplication & EntrypointCapability<TDefinition>
 
 export { bindQueueDriver } from './queue.js'

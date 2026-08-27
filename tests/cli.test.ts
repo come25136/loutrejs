@@ -188,6 +188,24 @@ describe('Loutre CLI', () => {
     expect(output.stderr.join('\n')).toContain('LUTRE_DI_UNRESOLVED')
   })
 
+  it('Applicationの単一Entrypointを1回実行して結果をstdoutへ出力する', async () => {
+    const output = io()
+    expect(
+      await runCli(['run', 'examples/hello-cli/src/app.ts'], output.value),
+    ).toBe(0)
+    expect(output.stdout).toEqual(['Hello, World!'])
+  })
+
+  it('Entrypointを持たないApplicationはrunできない', async () => {
+    const output = io()
+    expect(
+      await runCli(['run', 'examples/hello-worker/src/app.ts'], output.value),
+    ).toBe(2)
+    expect(output.stderr).toEqual([
+      'LUTRE_CLI_ENTRYPOINT_REQUIRED: runにはentrypointを持つApplicationが必要です。',
+    ])
+  })
+
   it('複雑なimportを持つApplicationをCompiler linkageなしでbuildして起動する', async () => {
     const output = io()
     const directory = await mkdtemp(join(tmpdir(), 'loutre-linkage-'))

@@ -26,7 +26,7 @@ import type {
 
 export interface ApplicationCompilationInput {
   readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
-  readonly entrypoints?: readonly EntrypointDescriptor<any, any>[]
+  readonly entrypoint?: EntrypointDescriptor<any, any> | undefined
   readonly triggers?: readonly TriggerDescriptor[]
 }
 
@@ -48,7 +48,7 @@ export function compileApplication(
   input: ApplicationCompilationInput,
 ): CompilationResult {
   const triggers = input.triggers ?? []
-  const explicitEntrypoints = input.entrypoints ?? []
+  const explicitEntrypoint = input.entrypoint
   const cronTriggers = triggers.filter(
     (
       trigger,
@@ -86,8 +86,10 @@ export function compileApplication(
   })) satisfies NonNullable<LegacyApplicationCompilationInput['consumers']>
   const queues = uniqueQueues(queueTriggers.map((trigger) => trigger.queue))
   const bridgeEntrypoints = [
-    ...explicitEntrypoints,
-    ...fixedDelayTriggers.map((trigger) => trigger.entrypoint),
+    ...new Set([
+      ...(explicitEntrypoint ? [explicitEntrypoint] : []),
+      ...fixedDelayTriggers.map((trigger) => trigger.entrypoint),
+    ]),
   ]
   const legacyInput: LegacyApplicationCompilationInput = {
     modules: input.modules,
@@ -110,7 +112,7 @@ export function compileApplication(
   ]
   const graph = toGraphV4(
     legacy.graph,
-    explicitEntrypoints,
+    explicitEntrypoint,
     triggers,
     queues,
     diagnostics,
@@ -130,22 +132,17 @@ export function assertValidCompilation(
 
 function toGraphV4(
   legacy: LegacyApplicationGraphIR,
-  explicitEntrypoints: readonly EntrypointDescriptor<any, any>[],
+  explicitEntrypoint: EntrypointDescriptor<any, any> | undefined,
   triggers: readonly TriggerDescriptor[],
   queues: readonly QueueDescriptor[],
   diagnostics: readonly Diagnostic[],
   modules: readonly (ModuleInstance | ModuleTemplate<void>)[],
 ): ApplicationGraphIR {
-  const explicitNames = new Set(
-    explicitEntrypoints.map((entrypoint) => entrypoint.name),
-  )
+  const explicitName = explicitEntrypoint?.name
   const executions: ExecutionRootIR[] = [
     ...legacy.executions.flatMap((execution): ExecutionRootIR[] => {
       if (execution.kind === 'protocol') return [execution]
-      if (
-        execution.kind === 'entrypoint' &&
-        explicitNames.has(execution.name)
-      ) {
+      if (execution.kind === 'entrypoint' && execution.name === explicitName) {
         return [execution]
       }
       return []

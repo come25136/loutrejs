@@ -45,13 +45,13 @@ const cleanup = entrypoint<void, void>({
   name: 'maintenance.cleanup',
   factory: () => async () => undefined,
 })
+const calculate = entrypoint<number, number>({
+  name: 'calculate',
+  factory: () => async (input) => input + 1,
+})
 const processOrder = entrypoint<{ readonly id: string }, void>({
   name: 'orders.process',
   factory: () => async () => undefined,
-})
-const unregistered = entrypoint<boolean, void>({
-  name: 'unregistered',
-  factory: () => () => undefined,
 })
 const nightly = cron({
   name: 'maintenance.cleanup.nightly',
@@ -79,6 +79,8 @@ const httpApplication = bootstrap(
 )
 httpApplication.listen({ port: 3000 })
 httpApplication.fetch(new Request('http://localhost/health'))
+// @ts-expect-error manual Entrypointが無いApplicationにはrunを公開しない
+httpApplication.run
 // @ts-expect-error listenはobject formのみを受け付ける
 httpApplication.listen(3000)
 // @ts-expect-error Triggerが無いApplicationにはtriggersを公開しない
@@ -87,21 +89,30 @@ httpApplication.triggers
 const workerApplication = bootstrap(
   defineApplication({
     modules: [WorkerModule()],
-    entrypoints: [cleanup],
+    entrypoint: calculate,
     triggers: [nightly, poll, orderConsumer],
   }),
 )
-workerApplication.run(cleanup)
+workerApplication.run(41)
 workerApplication.triggers.start()
 workerApplication.triggers.stop()
+// @ts-expect-error Entrypoint inputはnumber
+workerApplication.run('41')
+// @ts-expect-error Applicationのmanual Entrypointはdescriptor引数を取らない
+workerApplication.run(calculate, 41)
 // @ts-expect-error HTTPが無いApplicationにはlistenを公開しない
 workerApplication.listen
 // @ts-expect-error HTTPが無いApplicationにはfetchを公開しない
 workerApplication.fetch
-// @ts-expect-error Trigger専用Entrypointは明示run rootではない
-workerApplication.run(processOrder, { id: 'order-1' })
-// @ts-expect-error 未登録Entrypointは実行できない
-workerApplication.run(unregistered, true)
+
+const triggerOnlyApplication = bootstrap(
+  defineApplication({
+    modules: [WorkerModule()],
+    triggers: [nightly, poll, orderConsumer],
+  }),
+)
+// @ts-expect-error Triggerから参照されるEntrypointはmanual run rootではない
+triggerOnlyApplication.run
 
 const invocationApplication = createInvocationBinding(
   defineApplication({ modules: [HttpModule()] }),
@@ -110,6 +121,8 @@ const invocationApplication = createInvocationBinding(
 invocationApplication.listen
 // @ts-expect-error callback runtimeにはtriggersを公開しない
 invocationApplication.triggers
+// @ts-expect-error manual Entrypointが無いcallback Applicationにはrunを公開しない
+invocationApplication.run
 
 const wrongInput = entrypoint<string, void>({
   name: 'wrong.input',

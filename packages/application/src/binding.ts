@@ -21,7 +21,7 @@ export function createInvocationBinding<
   const graph = assertValidCompilation(
     compileApplication({
       modules: definition.modules,
-      entrypoints: definition.entrypoints,
+      entrypoint: definition.entrypoint,
       triggers: definition.triggers,
     }),
   )
@@ -36,12 +36,16 @@ export function createInvocationBinding<
       await runtime.initialize()
       return application
     },
-    run(
-      entrypoint: EntrypointDescriptor<any, any>,
-      ...args: readonly unknown[]
-    ) {
-      return Reflect.apply(runtime.run, runtime, [entrypoint, ...args])
-    },
+    ...(definition.entrypoint
+      ? {
+          run(...args: readonly unknown[]) {
+            return Reflect.apply(runtime.run, runtime, [
+              definition.entrypoint,
+              ...args,
+            ])
+          },
+        }
+      : {}),
     close: (signal?: string) => runtime.shutdown(signal),
   } as InvocationApplication<TDefinition>
   const hasHttp = graph.hostCapabilities.includes('http')
@@ -58,7 +62,7 @@ function registeredEntrypoints(
 ): readonly EntrypointDescriptor<any, any>[] {
   return [
     ...new Set([
-      ...definition.entrypoints,
+      ...(definition.entrypoint ? [definition.entrypoint] : []),
       ...definition.triggers.map((trigger) => trigger.entrypoint),
     ]),
   ]

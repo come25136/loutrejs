@@ -38,7 +38,7 @@ Application Definitionのcanonical shapeは次とする。
 ```ts
 export const application = defineApplication({
   modules: [AppModule()],
-  entrypoints: [rebuildIndex],
+  entrypoint: rebuildIndex,
   triggers: [nightlyCleanup, pollRemoteState, jobConsumer],
 })
 ```
@@ -216,7 +216,15 @@ app.triggers
 
 は存在しない。
 
-HTTP host capabilityを持たないApplicationに、
+manual `entrypoint`を持たないApplicationに、
+
+```ts
+app.run
+```
+
+は存在しない。
+
+HTTP host capabilityを持たないApplicationに,
 
 ```ts
 app.listen
@@ -250,7 +258,7 @@ Applicationの型surfaceとHost起動判定はprotocol文字列の特例では�
 ```ts
 const application = defineApplication({
   modules: [AppModule()],
-  entrypoints: [rebuildIndex],
+  entrypoint: rebuildIndex,
   schedules: [nightlyCleanup],
   queues: [jobs],
   consumers: [jobConsumer],
@@ -262,7 +270,7 @@ const application = defineApplication({
 ```ts
 const application = defineApplication({
   modules: [AppModule()],
-  entrypoints: [rebuildIndex],
+  entrypoint: rebuildIndex,
   triggers: [nightlyCleanup, pollRemoteState, jobConsumer],
 })
 ```
@@ -272,27 +280,25 @@ const application = defineApplication({
 ```ts
 export interface ApplicationDefinitionOptions<
   TModules extends readonly AnyModuleLike[],
-  TEntrypoints extends readonly EntrypointDescriptor[],
+  TEntrypoint extends EntrypointDescriptor | undefined,
   TTriggers extends readonly TriggerDescriptor[],
 > {
   readonly modules: TModules
-  readonly entrypoints?: TEntrypoints
+  readonly entrypoint?: TEntrypoint
   readonly triggers?: TTriggers
   readonly logger?: Logger
 }
 ```
 
-`defineApplication()`は省略値を空配列へnormalizeする。
+`defineApplication()`は`triggers`省略時だけ空配列へnormalizeする。
+`entrypoint`は省略時`undefined`のままとする。
 
-```text
-entrypoints = []
-triggers = []
-```
+Application Definitionが持てるmanual Entrypoint Rootは **0..1** とする。
+`entrypoint`は外部から明示的に`app.run()`できる唯一のmanual rootである。
+複数のone-shot jobを同一Application内の名前付きregistryとして持たせない。
+別jobは別Application Definitionとして表現する。
 
-Triggerから参照されるEntrypointはruntime登録対象へ自動的に含める。
-`entrypoints`への重複登録は不要。
-
-`entrypoints`は外部から明示的に`app.run()`可能なrootを宣言するために残す。
+Triggerから参照されるEntrypointはruntime登録対象へ自動的に含めるため、manual `entrypoint`への重複登録は不要である。
 
 ---
 
@@ -762,7 +768,7 @@ HTTPのみ、Triggerのみ、HTTP + Triggerのいずれも合法。
 
 少なくとも1つのlong-lived hosted capabilityを持たないApplicationを`start`した場合の扱いは、明示Entrypoint workerを自動実行せずdiagnostic errorとする。
 
-`entrypoints`は`app.run()`対象であり、自動起動対象ではない。
+manual `entrypoint`は`app.run()`対象であり、自動起動対象ではない。
 
 ## 9.2 CLI dev
 
@@ -785,6 +791,42 @@ host start
 ```
 
 HTTPの存在はdev mode成立条件ではない。
+
+## 9.3 CLI run
+
+manual `entrypoint`を1回だけ実行するone-shot Applicationには専用の`run` commandを使う。
+
+```text
+loutre run dist/application.js
+loutre run dist/application.js --input '{"name":"Loutre"}'
+```
+
+Entrypoint名をCLI引数で選択するAPIは提供しない。
+Application Definitionが持てるmanual `entrypoint`は最大1つであり、複数のone-shot jobは別Application Definitionとして表現する。
+
+`run`は次の順序で実行する。
+
+```text
+load Application Definition
+        ↓
+compile / validate Graph
+        ↓
+bootstrap / init
+        ↓
+Application.entrypointを1回実行
+        ↓
+close('run-complete')
+        ↓
+process exit
+```
+
+`entrypoint`を持たないApplicationでは`app.run`を型surfaceへ公開しない。
+`loutre run`も`LUTRE_CLI_ENTRYPOINT_REQUIRED`で拒否する。
+
+`--input`を指定した場合はJSONをparseし、Entrypoint inputとして渡す。
+戻り値が`undefined`以外ならCLIはstdoutへ出力する。stringはそのまま、それ以外はJSONとして出力する。
+
+`run`はHTTP listenerやTrigger Engineを起動しない。
 
 ---
 
@@ -914,6 +956,9 @@ v4:
 type ExecutionRootIR =
   ProtocolExecutionRootIR | EntrypointExecutionRootIR | TriggerExecutionRootIR
 ```
+
+`EntrypointExecutionRootIR`はmanual `entrypoint`に対応し、Applicationごとに0..1個だけ存在する。
+Triggerからのみ参照されるEntrypointはDI解析対象にはなるが、manual Entrypoint Rootとしては公開しない。
 
 Trigger Rootはkindごとのunionとする。
 
@@ -1222,9 +1267,11 @@ CLI hostならmanual trigger startは不要。
 以下はcompatibility aliasなしで削除する。
 
 ```text
+ApplicationDefinition.entrypoints
 ApplicationDefinition.schedules
 ApplicationDefinition.queues
 ApplicationDefinition.consumers
+app.run(entrypoint, ...args)
 schedule()
 consumer()
 app.scheduler
@@ -1234,7 +1281,10 @@ app.queue
 以下を追加する。
 
 ```text
+ApplicationDefinition.entrypoint
 ApplicationDefinition.triggers
+app.run(...args)
+loutre run <application> [--input <json>]
 cron()
 fixedDelay()
 consume()
@@ -1276,8 +1326,9 @@ Application Graph IR v4
 1. `schedule()` / `consumer()`を削除
 2. `cron()` / `fixedDelay()` / `consume()`を追加
 3. Queue payload Standard Schema化
-4. `ApplicationDefinition.triggers`へ変更
-5. type tests更新
+4. `ApplicationDefinition.entrypoints`を`entrypoint` 0..1へ変更
+5. `ApplicationDefinition.triggers`へ変更
+6. type tests更新
 
 ## Phase 2: Graph IR v4
 
@@ -1310,6 +1361,7 @@ Application Graph IR v4
 3. capability-driven host start
 4. signal-aware shutdown
 5. `dev` / `start`更新
+6. one-shot `run` command追加
 
 ## Phase 6: cleanup
 
@@ -1324,6 +1376,9 @@ Application Graph IR v4
 
 本ADRの実装完了条件は次。
 
+- `defineApplication({ entrypoint })`のmanual Entrypoint Rootが0..1である
+- manual `entrypoint`を持つApplicationにだけ`app.run`が存在し、descriptor引数なしで実行できる
+- `loutre run <application>`がmanual `entrypoint`を1回実行して終了する
 - `defineApplication({ triggers })`でcron / fixed-delay / queue-consumerを同列に宣言できる
 - Triggerを持つHosted Applicationにだけ`app.triggers`が存在する
 - cron default overlapが`skip`

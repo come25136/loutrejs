@@ -19,6 +19,7 @@ export type LoadedHostedApplication = HostedApplication<ApplicationDefinition>
 
 export interface LoadedApplication {
   readonly application: LoadedHostedApplication
+  readonly definition: ApplicationDefinition
   readonly sourceFiles: readonly string[]
 }
 
@@ -90,7 +91,7 @@ function compileDefinition(
   return assertValidCompilation(
     compileApplication({
       modules: definition.modules,
-      entrypoints: definition.entrypoints,
+      entrypoint: definition.entrypoint,
       triggers: definition.triggers,
     }),
   )
@@ -118,8 +119,10 @@ export async function loadApplication(
     const sourceFiles = await emitApplication(entry, output, {
       nodeCompatibility: true,
     })
-    const application = await importApplication(output)
-    return { application, sourceFiles }
+    const definition = await importApplicationDefinition(output)
+    compileDefinition(definition)
+    const application = bootstrap(definition) as LoadedHostedApplication
+    return { application, definition, sourceFiles }
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
