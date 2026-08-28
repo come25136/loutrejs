@@ -5,8 +5,8 @@ import {
   implementation,
   procedure,
   type ImplementationDescriptor,
-} from '@loutrejs/core'
-import { http, validate } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 

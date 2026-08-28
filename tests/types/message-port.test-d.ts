@@ -1,9 +1,9 @@
-import { contextKey, contract, layer, procedure } from '@loutrejs/core'
+import { contextKey, contract, layer, procedure } from '@loutrejs/loutre'
 import {
   HandlerOf,
   MessageContextOf,
   messagePort,
-} from '@loutrejs/message-port'
+} from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
 
 interface Session {

@@ -8,16 +8,16 @@ import {
   defineModule,
   implementation,
   procedure,
-} from '@loutrejs/core'
-import { http } from '@loutrejs/http'
-import { messagePort } from '@loutrejs/message-port'
+} from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
+import { messagePort } from '@loutrejs/loutre/message-port'
 import {
   ConsoleLoggerBackend,
   JsonConsoleLoggerBackend,
   Logger,
   type LogRecord,
   type LoggerBackend,
-} from '@loutrejs/runtime'
+} from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
 describe('構造化ログ', () => {

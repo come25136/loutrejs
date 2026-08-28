@@ -1579,7 +1579,7 @@ Loutre package graphへyargs等を依存追加しない。
 import yargs from 'yargs'
 import { hideBin } from 'yargs/helpers'
 
-import { bootstrap } from '@loutrejs/application'
+import { bootstrap } from '@loutrejs/loutre'
 
 import { application } from './app.js'
 

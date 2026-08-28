@@ -1,4 +1,4 @@
-import { defineApplication } from '@loutrejs/application'
+import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
   contract,
@@ -10,8 +10,8 @@ import {
   procedure,
   type OnModuleDestroy,
   type OnModuleInit,
-} from '@loutrejs/core'
-import { http, validate } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import { http, validate } from '@loutrejs/loutre/http'
 import { sql } from 'drizzle-orm'
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'

@@ -1,6 +1,6 @@
-import { layer } from '@loutrejs/core'
-import { http } from '@loutrejs/http'
-import { messagePort } from '@loutrejs/message-port'
+import { layer } from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
+import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
 
 const generic = layer({

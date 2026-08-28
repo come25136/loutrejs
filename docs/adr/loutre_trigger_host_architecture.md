@@ -246,7 +246,7 @@ Protocol
 
 Applicationの型surfaceとHost起動判定はprotocol文字列の特例ではなくcapability summaryから導出する。
 
-これにより`@loutrejs/application`が個別Protocol名を列挙し続ける構造を避ける。
+これにより`@loutrejs/loutre`が個別Protocol名を列挙し続ける構造を避ける。
 
 ---
 
@@ -496,11 +496,11 @@ payloadなしQueueが必要なら、利用するStandard Schema側で`undefined`
 Queue transportはCore descriptorから分離する。
 
 ```text
-@loutrejs/core
+@loutrejs/loutre
     QueueDescriptor / consume()
             │
             ▼
-@loutrejs/application
+@loutrejs/loutre
     Queue Consumer Runtime SPI
             │
             ▼
@@ -575,7 +575,7 @@ Graph compile / checkで、consumerが参照するQueueにdriver bindingが存�
 初期公式adapter packageとして次を追加する。
 
 ```text
-@loutrejs/queue-bullmq
+@loutrejs/bullmq
 ```
 
 責務:
@@ -672,7 +672,7 @@ Hosted ApplicationはDefinitionに宣言されたTrigger topologyをそのまま
 
 # 8. Trigger Engine
 
-`@loutrejs/application`はTrigger Engineを持つ。
+`@loutrejs/loutre`はTrigger Engineを持つ。
 
 概念責務:
 
@@ -1135,7 +1135,7 @@ exact event nameは実装時に既存logging conventionへ揃えてよいが、T
 変更後の責務は概ね次とする。
 
 ```text
-@loutrejs/core
+@loutrejs/loutre
 ├ Entrypoint descriptor
 ├ Trigger descriptors
 │  ├ cron
@@ -1144,26 +1144,26 @@ exact event nameは実装時に既存logging conventionへ揃えてよいが、T
 ├ Queue resource descriptor
 └ Standard Schema payload typing
 
-@loutrejs/graph
+@loutrejs/loutre/graph
 ├ Trigger Root IR v4
 ├ Queue resource IR
 ├ capability topology
 └ validation
 
-@loutrejs/runtime
+@loutrejs/loutre/runtime
 ├ Entrypoint execution
 ├ execution gate
 ├ active execution drain
 └ lifecycle
 
-@loutrejs/application
+@loutrejs/loutre
 ├ Application Definition
 ├ Hosted Application capability typing
 ├ Trigger Engine
 ├ Queue Consumer Driver SPI
 └ generic self-host bootstrap
 
-@loutrejs/queue-bullmq
+@loutrejs/bullmq
 └ BullMQ Queue Consumer Driver
 
 @loutrejs/cli
@@ -1172,7 +1172,7 @@ exact event nameは実装時に既存logging conventionへ揃えてよいが、T
 └ start host orchestration
 ```
 
-`@loutrejs/application`がBullMQ APIを直接importしてはならない。
+`@loutrejs/loutre`がBullMQ APIを直接importしてはならない。
 
 ---
 
@@ -1280,7 +1280,7 @@ consume()
 queue({ payload })
 app.triggers
 Queue Consumer Driver SPI
-@loutrejs/queue-bullmq
+@loutrejs/bullmq
 generic Application Host
 Protocol Host Capability metadata
 Application Graph IR v4

@@ -1,10 +1,16 @@
-import { defineApplication } from '@loutrejs/application'
+import { defineApplication } from '@loutrejs/loutre'
 import { NamedRepository as Repo } from './named-repository.js'
 import DefaultRepo from './default-repository.js'
 import * as services from './namespace-services.js'
 import { ReexportedRepository } from './barrel.js'
-import {} from '@loutrejs/http'
-import { defineEnv, defineModule, inject, provide, token } from '@loutrejs/core'
+import {} from '@loutrejs/loutre/http'
+import {
+  defineEnv,
+  defineModule,
+  inject,
+  provide,
+  token,
+} from '@loutrejs/loutre'
 import { z } from 'zod'
 import { selectedRuntime } from '@loutrejs/fixture-application-build/conditional'
 

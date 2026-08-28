@@ -1,12 +1,12 @@
-import { generateOpenApi } from '@loutrejs/application/openapi'
-import { defineApplication } from '@loutrejs/application'
+import { generateOpenApi } from '@loutrejs/loutre/openapi'
+import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
   defineModule,
   implementation,
   procedure,
-} from '@loutrejs/core'
-import { http, validate } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import { http, validate } from '@loutrejs/loutre/http'
 import { createUsersApplication } from '../fixtures/http-crud/src/index.js'
 import { z } from 'zod'
 

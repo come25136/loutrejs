@@ -1,10 +1,10 @@
-import { contract, procedure, type SchemaInput } from '@loutrejs/core'
+import { contract, procedure, type SchemaInput } from '@loutrejs/loutre'
 import {
   type ContextOf,
   type ControllerOf,
   http,
   validate,
-} from '@loutrejs/http'
+} from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const RawContract = contract({

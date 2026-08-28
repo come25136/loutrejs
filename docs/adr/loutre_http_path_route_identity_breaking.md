@@ -641,7 +641,7 @@ export type SchemaInput<Schema> = Schema extends StandardSchemaV1
 packages/core/src/schema.ts
 ```
 
-`@loutrejs/core` から public export する。
+`@loutrejs/loutre` から public export する。
 
 用途は主に各 property schema が raw path string を入力として受け取れるかの型検査。
 

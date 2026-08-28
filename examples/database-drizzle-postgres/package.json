@@ -16,9 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@loutrejs/application": "0.1.0",
-    "@loutrejs/core": "0.1.0",
-    "@loutrejs/http": "0.1.0",
+    "@loutrejs/loutre": "0.1.0",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.23.0",
     "zod": "^4.4.3"

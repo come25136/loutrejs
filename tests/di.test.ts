@@ -5,12 +5,12 @@ import {
   provide,
   token,
   type ProviderDeclaration,
-} from '@loutrejs/core'
+} from '@loutrejs/loutre'
 import {
   collectRuntimeModuleGraph,
   Container,
   DependencyResolutionError,
-} from '@loutrejs/runtime'
+} from '@loutrejs/loutre/runtime'
 
 interface Clock {
   readonly id: number

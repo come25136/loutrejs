@@ -25,15 +25,8 @@
     "node": "26.x"
   },
   "dependencies": {
-    "@loutrejs/application": "^0.1.0",
-    "@loutrejs/graph": "^0.1.0",
-    "@loutrejs/runtime": "^0.1.0",
-    "@loutrejs/runtime-bun": "^0.1.0",
-    "@loutrejs/runtime-deno": "^0.1.0",
-    "@loutrejs/runtime-electron": "^0.1.0",
-    "@loutrejs/runtime-lambda": "^0.1.0",
-    "@loutrejs/runtime-node": "^0.1.0",
-    "@loutrejs/runtime-workerd": "^0.1.0",
+    "@loutrejs/loutre": "^0.1.0",
+    "@loutrejs/node": "^0.1.0",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.12"
   }

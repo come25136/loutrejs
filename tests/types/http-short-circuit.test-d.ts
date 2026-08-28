@@ -3,8 +3,12 @@ import {
   layer,
   type PipelineItem,
   shortCircuit,
-} from '@loutrejs/core'
-import { type BasicAuthLayerDescriptor, basicAuth, http } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import {
+  type BasicAuthLayerDescriptor,
+  basicAuth,
+  http,
+} from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const PRINCIPAL = contextKey('principal').of<{ readonly id: string }>()

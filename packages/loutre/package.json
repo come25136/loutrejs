@@ -1,0 +1,76 @@
+{
+  "name": "@loutrejs/loutre",
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./host": {
+      "types": "./dist/application/host.d.ts",
+      "import": "./dist/application/host.js"
+    },
+    "./binding": {
+      "types": "./dist/application/binding.d.ts",
+      "import": "./dist/application/binding.js"
+    },
+    "./openapi": {
+      "types": "./dist/application/openapi.d.ts",
+      "import": "./dist/application/openapi.js"
+    },
+    "./graph": {
+      "types": "./dist/graph/index.d.ts",
+      "import": "./dist/graph/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js"
+    },
+    "./http": {
+      "types": "./dist/http/index.d.ts",
+      "import": "./dist/http/index.js"
+    },
+    "./message-port": {
+      "types": "./dist/message-port/index.d.ts",
+      "import": "./dist/message-port/index.js"
+    },
+    "./message-port/environment": {
+      "types": "./dist/message-port/environment.d.ts",
+      "import": "./dist/message-port/environment.js"
+    },
+    "./runtime/bun": {
+      "types": "./dist/adapters/bun.d.ts",
+      "import": "./dist/adapters/bun.js"
+    },
+    "./runtime/deno": {
+      "types": "./dist/adapters/deno.d.ts",
+      "import": "./dist/adapters/deno.js"
+    },
+    "./runtime/workerd": {
+      "types": "./dist/adapters/workerd.d.ts",
+      "import": "./dist/adapters/workerd.js"
+    },
+    "./runtime/lambda": {
+      "types": "./dist/adapters/lambda.d.ts",
+      "import": "./dist/adapters/lambda.js"
+    },
+    "./runtime/electron": {
+      "types": "./dist/adapters/electron.d.ts",
+      "import": "./dist/adapters/electron.js"
+    }
+  },
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@standard-schema/spec": "^1.1.0"
+  }
+}

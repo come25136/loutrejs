@@ -1,12 +1,12 @@
-import { defineApplication } from '@loutrejs/application'
+import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
   contract,
   defineModule,
   implementation,
   procedure,
-} from '@loutrejs/core'
-import { http } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { bearerAuth } from './bearer-auth.js'
 

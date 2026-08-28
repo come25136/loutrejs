@@ -1,5 +1,5 @@
-import { defineApplication } from '@loutrejs/application'
-import { fixedDelay, task } from '@loutrejs/core'
+import { defineApplication } from '@loutrejs/loutre'
+import { fixedDelay, task } from '@loutrejs/loutre'
 
 const hello = task<void, void>({
   name: 'hello-worker.tick',

@@ -1,3 +1,3 @@
-import { SilentLogger } from '@loutrejs/runtime'
+import { SilentLogger } from '@loutrejs/loutre/runtime'
 
 export const silentLogger = new SilentLogger()

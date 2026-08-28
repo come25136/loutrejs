@@ -1,6 +1,6 @@
-import { defineModule } from '@loutrejs/core'
-import { compileApplication } from '@loutrejs/graph'
-import { createApplicationRuntime } from '@loutrejs/runtime'
+import { defineModule } from '@loutrejs/loutre'
+import { compileApplication } from '@loutrejs/loutre/graph'
+import { createApplicationRuntime } from '@loutrejs/loutre/runtime'
 
 describe('Application Lifecycle', () => {
   it('初期化失敗時に対象instanceを逆順でcleanupする', async () => {

@@ -1,5 +1,5 @@
-import { binding, defineApplication } from '@loutrejs/application'
-import { bootstrap } from '@loutrejs/application/host'
+import { binding, defineApplication } from '@loutrejs/loutre'
+import { bootstrap } from '@loutrejs/loutre/host'
 import {
   consume,
   cron,
@@ -9,8 +9,8 @@ import {
   inject,
   queue,
   task,
-} from '@loutrejs/core'
-import { compileApplication } from '@loutrejs/graph'
+} from '@loutrejs/loutre'
+import { compileApplication } from '@loutrejs/loutre/graph'
 import { z } from 'zod'
 
 describe('Unified Application', () => {

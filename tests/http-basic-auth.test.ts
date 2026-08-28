@@ -6,15 +6,15 @@ import {
   isShortCircuit,
   layer,
   procedure,
-} from '@loutrejs/core'
-import { compileApplication } from '@loutrejs/graph'
+} from '@loutrejs/loutre'
+import { compileApplication } from '@loutrejs/loutre/graph'
 import {
   basicAuth,
   http,
   type BasicAuthContext,
   type BasicAuthLayerDescriptor,
   type HttpProtocolDefinition,
-} from '@loutrejs/http'
+} from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 describe('basicAuth', () => {
@@ -295,7 +295,7 @@ describe('basicAuth', () => {
 })
 
 async function runBasicAuth<
-  TPrincipal extends import('@loutrejs/core').ContextKey,
+  TPrincipal extends import('@loutrejs/loutre').ContextKey,
   TVariant extends string,
   TBody,
 >(
@@ -303,7 +303,7 @@ async function runBasicAuth<
   context: BasicAuthContext,
 ) {
   let provided:
-    | import('@loutrejs/core').ContextProperties<readonly [TPrincipal]>
+    | import('@loutrejs/loutre').ContextProperties<readonly [TPrincipal]>
     | undefined
   const result = await authentication.factory()(context, async (value) => {
     provided = value

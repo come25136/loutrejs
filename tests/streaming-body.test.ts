@@ -1,14 +1,14 @@
-import { bootstrap } from '@loutrejs/application/host'
-import { defineApplication } from '@loutrejs/application'
+import { bootstrap } from '@loutrejs/loutre/host'
+import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
   defineModule,
   implementation,
   procedure,
   type StandardSchemaV1,
-} from '@loutrejs/core'
-import { http, validate } from '@loutrejs/http'
-import { nodeRuntime } from '@loutrejs/runtime-node'
+} from '@loutrejs/loutre'
+import { http, validate } from '@loutrejs/loutre/http'
+import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 import { reserveHttpPort } from './helpers/http-server.js'

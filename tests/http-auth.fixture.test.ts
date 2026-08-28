@@ -4,9 +4,9 @@ import {
   defineModule,
   implementation,
   procedure,
-} from '@loutrejs/core'
-import { compileApplication } from '@loutrejs/graph'
-import { http, validate } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import { compileApplication } from '@loutrejs/loutre/graph'
+import { http, validate } from '@loutrejs/loutre/http'
 import {
   AccountController,
   AccountModule,

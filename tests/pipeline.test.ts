@@ -9,12 +9,12 @@ import {
   type LayerRuntime,
   type PipelineItem,
   type TerminalLayerDescriptor,
-} from '@loutrejs/core'
+} from '@loutrejs/loutre'
 import {
   Container,
   LayerContractError,
   executePipeline,
-} from '@loutrejs/runtime'
+} from '@loutrejs/loutre/runtime'
 
 const terminal: TerminalLayerDescriptor<'test'> = {
   kind: 'terminal',

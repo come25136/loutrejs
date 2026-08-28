@@ -220,7 +220,7 @@ Lambda:
 
 ```ts
 import application from './application.mjs'
-import { lambdaRuntime } from '@loutrejs/runtime-lambda'
+import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'
 
 export const handler = lambdaRuntime.bind({ application })
 ```
@@ -229,7 +229,7 @@ workerd:
 
 ```ts
 import application from './application.mjs'
-import { workerdRuntime } from '@loutrejs/runtime-workerd'
+import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'
 
 export default workerdRuntime.bind({ application })
 ```
@@ -238,7 +238,7 @@ Deno `serve` target:
 
 ```ts
 import application from './application.mjs'
-import { denoRuntime } from '@loutrejs/runtime-deno'
+import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 
 export default denoRuntime.bind({ application })
 ```

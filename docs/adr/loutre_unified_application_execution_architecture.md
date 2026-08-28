@@ -1436,12 +1436,12 @@ portable Application source と self-host bootstrap code を import boundary で
 
 ```ts
 // app.ts
-import { defineApplication } from '@loutrejs/application'
+import { defineApplication } from '@loutrejs/loutre'
 ```
 
 ```ts
 // main.ts
-import { bootstrap } from '@loutrejs/application/host'
+import { bootstrap } from '@loutrejs/loutre/host'
 ```
 
 Node/Bun/Deno package 名を user code に出さない。
@@ -2138,7 +2138,7 @@ user code に Lambda-specific factory を要求しない。
 最終的な概念 package 構成:
 
 ```text
-@loutrejs/core
+@loutrejs/loutre
   module
   provider
   inject
@@ -2150,7 +2150,7 @@ user code に Lambda-specific factory を要求しない。
   queue
   consumer
 
-@loutrejs/runtime
+@loutrejs/loutre/runtime
   Container
   ApplicationRuntime
   lifecycle
@@ -2158,27 +2158,27 @@ user code に Lambda-specific factory を要求しない。
   logger
   capabilities
 
-@loutrejs/graph
+@loutrejs/loutre/graph
   compiler
   Graph IR v3
   diagnostics
   probes
 
-@loutrejs/application
+@loutrejs/loutre
   defineApplication
   ApplicationDefinition
   common application types
 
-@loutrejs/application/host
+@loutrejs/loutre/host
   bootstrap
   HostedApplication
   host capability facade
 
-@loutrejs/http
+@loutrejs/loutre/http
   HTTP Protocol
   HTTP execution internals
 
-@loutrejs/message-port
+@loutrejs/loutre/message-port
   MessagePort Protocol
   MessagePort execution internals
 
@@ -2559,11 +2559,11 @@ consumer()
 
 ## Phase 5: Application Definition / Hosted Application
 
-- `@loutrejs/application`
+- `@loutrejs/loutre`
 - `defineApplication()`
 - `ApplicationDefinition`
 - conditional capability type
-- `@loutrejs/application/host`
+- `@loutrejs/loutre/host`
 - `bootstrap()`
 - `init/run/close`
 - capability facade

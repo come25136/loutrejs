@@ -5,8 +5,8 @@ import {
   inject,
   provide,
   token,
-} from '@loutrejs/core'
-import { compileApplication } from '@loutrejs/graph'
+} from '@loutrejs/loutre'
+import { compileApplication } from '@loutrejs/loutre/graph'
 import { z } from 'zod'
 
 describe('Runtime Application Graph', () => {

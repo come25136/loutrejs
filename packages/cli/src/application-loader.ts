@@ -3,12 +3,12 @@ import { builtinModules } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { ApplicationDefinition } from '@loutrejs/application'
+import type { ApplicationDefinition } from '@loutrejs/loutre'
 import {
   assertValidCompilation,
   compileApplication,
   type ApplicationGraphIR,
-} from '@loutrejs/graph'
+} from '@loutrejs/loutre/graph'
 import { build as buildWithEsbuild } from 'esbuild'
 
 export interface EmitApplicationOptions {
