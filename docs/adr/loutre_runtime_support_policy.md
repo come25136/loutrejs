@@ -28,16 +28,14 @@ versionはsupport policyとCI matrixが管理する。`node-26`、`bun-1.4-stabl
 
 2026-08-28時点のsupport baselineは次の通り。
 
-| Runtime | Support policy | Current supported baseline | Primary |
-| --- | --- | --- | --- |
-| Node.js | upstreamでsupport中のLTS | 22 / 24 | 24 LTS |
-| Bun | current stable minor + previous stable minor | 1.3 / 1.4 | 1.4 |
-| Deno | current LTS line | 2.9 LTS | 2.9 LTS |
-| Electron | upstreamでsupport中のstable majorすべて | 42 / 43 / 44 | 44 |
-| workerd | lockfileで検証releaseをpin | lockfile-pinned release | lockfile-pinned release |
-| AWS Lambda | AWSがGA提供するNode.js managed runtime | nodejs22.x / nodejs24.x | nodejs24.x |
+- Node.js: support中LTSは22 / 24、Primaryは24 LTS
+- Bun: current stable minor + previous stable minorとして1.3 / 1.4、Primaryは1.4
+- Deno: current LTS lineとして2.9 LTS
+- Electron: upstreamでsupport中のstable majorすべてとして42 / 43 / 44、Primaryは44
+- workerd: lockfile-pinned releaseを検証し、そのreleaseをPrimaryとする
+- AWS Lambda: AWSがGA提供するNode.js managed runtimeとしてnodejs22.x / nodejs24.x、Primaryはnodejs24.x
 
-この表の具体的versionはsnapshotであり、永続的な設計値ではない。Source of Truthは以下の更新ルールとする。
+具体的versionはsnapshotであり、永続的な設計値ではない。Source of Truthは以下の更新ルールとする。
 
 ## 2. Node.js
 
