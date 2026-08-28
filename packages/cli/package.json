@@ -21,13 +21,11 @@
     "access": "public",
     "provenance": true
   },
-  "engines": {
-    "node": ">=22"
-  },
   "dependencies": {
     "@loutrejs/loutre": "^0.1.0",
-    "@loutrejs/node": "^0.1.0",
-    "esbuild": "^0.28.2",
+    "esbuild": "^0.28.2"
+  },
+  "devDependencies": {
     "tsx": "^4.23.12"
   }
 }

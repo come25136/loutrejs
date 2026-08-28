@@ -65,9 +65,19 @@ Node上で実行される公開packageはminimumをsemver rangeとして宣言�
 
 `24.x`のようにdevelopment baselineへpackage consumerを固定しない。
 
-`@loutrejs/loutre`はNode専用packageではないためNode engineを宣言しない。`@loutrejs/node`、`@loutrejs/cli`およびNodeで実行するexampleはNode minimumを宣言する。
+`@loutrejs/loutre`はNode専用packageではないためNode engineを宣言しない。`@loutrejs/node`およびNodeで実行するexampleはNode minimumを宣言する。`@loutrejs/cli`はNode.js / Bun / Denoの複数host runtimeで実行するため、Node.jsだけを要求する`engines.node`は宣言しない。
 
 `.nvmrc`はminimumではなくdevelopment baselineを表し、latest LTSを使用する。
+
+### 2.1 CLI host runtime
+
+`@loutrejs/cli`のhost runtime supportはNode.js / Bun / Denoとする。各host runtimeのsupport versionは本ADRのNode.js / Bun / Deno policyへ追従する。
+
+CLI implementationは3 runtimeで共通して利用可能なWeb APIとNode.js compatibility APIのsubsetへ制限し、Node専用packageをruntime dependencyとして要求しない。Node runtimeのCapability検査に必要なmetadataはruntime-neutralな`@loutrejs/loutre/runtime`から取得する。
+
+`bin/loutre.js`のshebangはnpm / npx ecosystemとの互換性のため`#!/usr/bin/env node`を維持する。これはCLI implementationのNode専用化を意味しない。Bunでnative実行する場合は`bunx --bun`または`bun run --bun`を使用し、Denoでは`deno x`、`deno run`、`deno task`のnpm binary compatibilityから実行する。
+
+CIはCLIの`check` / `build` / `openapi`を各host runtime自身で実行し、Application runtime conformanceとは別にCLI host portabilityを検証する。
 
 ## 3. Bun
 

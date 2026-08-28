@@ -98,6 +98,12 @@ jobs:
       - name: Run unit & E2E tests
         run: npm test
 
+      - name: Run Node.js CLI conformance
+        run: |
+          node packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
+          node packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/node
+          node packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/node/openapi.json
+
       - name: Run Node.js conformance
         run: npm run test:node
 
@@ -112,16 +118,19 @@ jobs:
             node: 24.x
             deno: true
             deno_version: 2.9.5
+            cli_runner: deno run -A
             command: npm run test:deno
           - name: Bun 1.3
             node: 24.x
             bun: true
             bun_version: 1.3.14
+            cli_runner: bun
             command: npm run build:conformance-apps && bun --version && bun run conformance/bun.ts
           - name: Bun 1.4
             node: 24.x
             bun: true
             bun_version: 1.4.0
+            cli_runner: bun
             command: npm run build:conformance-apps && bun --version && bun run conformance/bun.ts
           - name: workerd (lockfile)
             node: 24.x
@@ -178,6 +187,13 @@ jobs:
 
       - name: Build packages
         run: npm run build
+
+      - name: Run native CLI conformance
+        if: ${{ matrix.cli_runner != null }}
+        run: |
+          ${{ matrix.cli_runner }} packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
+          ${{ matrix.cli_runner }} packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/runtime
+          ${{ matrix.cli_runner }} packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/runtime/openapi.json
 
       - name: Run ${{ matrix.name }} conformance
         run: ${{ matrix.command }}

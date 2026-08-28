@@ -10,6 +10,7 @@ import {
   type InvocationBindingOptions,
 } from '@loutrejs/loutre'
 import { type HttpProtocolExecution } from '@loutrejs/loutre/http'
+import { nodeRuntimeCapabilities } from '@loutrejs/loutre/runtime'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
@@ -36,21 +37,7 @@ export interface NodeServeHandle<
 }
 
 export const nodeRuntime = {
-  runtime: 'node',
-  capabilities: new Set([
-    'http.server',
-    'http.request.streaming',
-    'http.response.streaming',
-    'stream.readable',
-    'stream.writable',
-    'messagePort.send',
-    'messagePort.receive',
-    'messagePort.transfer',
-    'runtime.longLived',
-    'runtime.shutdownHook',
-    'env.runtime',
-    'crypto.random',
-  ]),
+  ...nodeRuntimeCapabilities,
   serve,
 } as const
 
