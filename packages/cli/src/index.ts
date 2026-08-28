@@ -181,15 +181,7 @@ export async function runCli(
       await mkdir(outputDirectory, { recursive: true })
       const applicationOutput = join(outputDirectory, 'application.mjs')
       await emitApplication(applicationEntry, applicationOutput)
-      const fingerprint = await sha256(JSON.stringify(graph))
-      const manifestOutput = join(outputDirectory, 'loutre.manifest.json')
-      await writeFile(
-        manifestOutput,
-        `${JSON.stringify({ ...graph, fingerprint }, null, 2)}\n`,
-        'utf8',
-      )
       io.stdout(`Applicationを出力しました: ${applicationOutput}`)
-      io.stdout(`Graph Manifestを出力しました: ${manifestOutput}`)
       if (deploymentRuntime) {
         const deploymentOutput = join(outputDirectory, 'entry.mjs')
         await writeFile(
@@ -206,16 +198,6 @@ export async function runCli(
       io.stderr(`不明なcommandです: ${command}`)
       return 2
   }
-}
-
-async function sha256(value: string): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(value),
-  )
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
 }
 
 function parseDeploymentRuntime(value: string): DeploymentRuntime | undefined {
@@ -280,21 +262,18 @@ function graphData(
   switch (subject) {
     case 'modules':
       return {
-        version: graph.version,
         modules: graph.modules,
         arguments: graph.arguments,
         diagnostics: graph.diagnostics,
       }
     case 'di':
       return {
-        version: graph.version,
         nodes: graph.nodes,
         edges: graph.edges,
         diagnostics: graph.diagnostics,
       }
     case 'contracts':
       return {
-        version: graph.version,
         contracts: graph.contracts,
         pipelines: graph.pipelines,
         implementations: graph.implementations,
@@ -302,14 +281,12 @@ function graphData(
       }
     case 'runtime':
       return {
-        version: graph.version,
         capabilities: graph.capabilities,
         hostCapabilities: graph.hostCapabilities,
         diagnostics: graph.diagnostics,
       }
     case 'executions':
       return {
-        version: graph.version,
         tasks: graph.tasks,
         executions: graph.executions,
         queues: graph.queues,

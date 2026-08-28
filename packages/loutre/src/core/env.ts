@@ -38,7 +38,6 @@ export function defineEnv<TSchema extends EnvSchema>(
         kind: 'runtime-input-key',
         source: 'environment',
         contract: this,
-        env: this,
         key,
       }
     }

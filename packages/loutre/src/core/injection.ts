@@ -18,19 +18,11 @@ export interface TaskConsumer {
   readonly name: string
 }
 
-/** @internal Legacy Graph compiler bridge. */
-export interface EntrypointConsumer {
-  readonly kind: 'entrypoint-consumer'
-  readonly id: string
-  readonly name: string
-}
-
 export type DependencyConsumer =
   | TokenLike
   | LayerConsumer
   | ImplementationConsumer
   | TaskConsumer
-  | EntrypointConsumer
 
 export interface InjectionContext {
   readonly consumer: DependencyConsumer
@@ -57,7 +49,6 @@ function setCurrentInjectionContext(
   else storage[injectionContextKey] = context
 }
 
-/** @internal framework-managedな同期constructionに利用する。 */
 export function runInInjectionContext<T>(
   context: InjectionContext,
   run: () => T,

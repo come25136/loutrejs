@@ -1,26 +1,33 @@
 import {
+  argumentsProvider,
   asModuleInstance,
   childPipelineOf,
   contextKeyName,
+  defineModule,
+  isArgsClass,
   isEnvClass,
   layerDefinitionOf,
   normalizeProvider,
+  queueRuntimeToken,
   tokenName,
+  type ArgsClass,
   type ContractDefinition,
   type ContextKey,
   type DependencyConsumer,
-  type EntrypointConsumer,
-  type EntrypointDescriptor,
   type ImplementationConsumer,
   type ImplementationDescriptor,
+  type LayerConsumer,
   type ModuleInstance,
   type ModuleTemplate,
   type PipelineItem,
   type ProviderDescriptor,
-  type LayerConsumer,
-  type ShortCircuitDeclaration,
-  type TokenLike,
   type QueueDescriptor,
+  type ShortCircuitDeclaration,
+  type StandardSchemaV1,
+  type TaskConsumer,
+  type TaskDescriptor,
+  type TokenLike,
+  type TriggerDescriptor,
 } from '../core/index.js'
 import { Container, Logger, type DependencyRecorder } from '../runtime/index.js'
 import type {
@@ -34,6 +41,7 @@ import type {
   PipelineIR,
   QueueIR,
   ExecutionRootIR,
+  TaskIR,
 } from './ir.js'
 
 interface ImplementationTarget {
@@ -61,52 +69,53 @@ export class StaticValidationError extends Error {
   }
 }
 
-interface LegacyScheduleDescriptor {
-  readonly kind: 'schedule'
-  readonly name: string
-  readonly cron: {
-    readonly expression: string
-    readonly timezone: string
-  }
-  readonly entrypoint: EntrypointDescriptor<void, void>
-}
-
-interface LegacyQueueConsumerDescriptor {
-  readonly kind: 'queue-consumer'
-  readonly name: string
-  readonly queue: QueueDescriptor<any>
-  readonly entrypoint: EntrypointDescriptor<any, void>
-}
-
 export interface ApplicationCompilationInput {
   readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
-  readonly entrypoints?: readonly EntrypointDescriptor<any, any>[]
-  readonly schedules?: readonly LegacyScheduleDescriptor[]
-  readonly queues?: readonly QueueDescriptor<any>[]
-  readonly consumers?: readonly LegacyQueueConsumerDescriptor[]
+  readonly arguments?: ArgsClass | undefined
+  readonly tasks?: readonly TaskDescriptor<any, any>[]
+  readonly triggers?: readonly TriggerDescriptor[]
 }
 
 export function compileApplication(
   input: ApplicationCompilationInput,
 ): CompilationResult {
-  const modules = collectModules(input.modules)
+  const publicTasks = input.tasks ?? []
+  const triggers = input.triggers ?? []
+  const tasks = uniqueTasks([
+    ...publicTasks,
+    ...triggers.map((trigger) => trigger.task),
+  ])
+  const argumentModule = input.arguments
+    ? defineModule(() => ({
+        name: '@loutrejs/application-arguments',
+        providers: [argumentsProvider(input.arguments!)],
+      }))()
+    : undefined
+  const modules = collectModules(
+    argumentModule ? [...input.modules, argumentModule] : input.modules,
+  )
+  const visibleModules = argumentModule
+    ? modules.filter((module) => module !== argumentModule)
+    : modules
   const providers = modules.flatMap((module) =>
     (module.definition.providers ?? []).map(normalizeProvider),
   )
+  const queueTriggers = triggers.filter(
+    (
+      trigger,
+    ): trigger is Extract<
+      TriggerDescriptor,
+      { readonly trigger: 'queue-consumer' }
+    > => trigger.trigger === 'queue-consumer',
+  )
+  const queues = uniqueQueues(queueTriggers.map((trigger) => trigger.queue))
   const diagnostics: Diagnostic[] = []
-  const entrypoints = collectEntrypoints(input, diagnostics)
-  const queues = collectQueues(input, diagnostics)
-  validateNamedDescriptors(
-    input.schedules ?? [],
-    'LUTRE_SCHEDULE_DUPLICATE',
-    diagnostics,
-  )
-  validateNamedDescriptors(
-    input.consumers ?? [],
-    'LUTRE_CONSUMER_DUPLICATE',
-    diagnostics,
-  )
-  validateSchedules(input.schedules ?? [], diagnostics)
+  validateNamedDescriptors(tasks, 'LUTRE_TASK_001', diagnostics)
+  validateNamedDescriptors(triggers, 'LUTRE_TRIGGER_DUPLICATE', diagnostics)
+  validateNamedDescriptors(queues, 'LUTRE_QUEUE_DUPLICATE', diagnostics)
+  validateCronTriggers(triggers, diagnostics)
+  diagnostics.push(...validateQueueDrivers(input.modules, queueTriggers))
+
   const contractNames = new Map<ContractDefinition, string>()
   let contractSequence = 0
   const nameContract = (contract: ContractDefinition) => {
@@ -194,47 +203,51 @@ export function compileApplication(
     modules,
     descriptors,
     targets,
-    entrypoints,
+    tasks,
     diagnostics,
   )
   const probedTokenIds = dependencyGraph.nodes
     .filter((node) => node.kind === 'token')
     .map((node) => node.label)
+  const publicTaskSet = new Set(publicTasks)
   const graph: ApplicationGraphIR = {
-    version: 3,
-    modules: modules.map((module, index) => ({
-      id: `module:${index + 1}`,
-      ...(module.definition.name === undefined
-        ? {}
-        : { name: module.definition.name }),
-      ...(module.definition.description === undefined
-        ? {}
-        : { description: module.definition.description }),
-      imports: (module.definition.imports ?? []).map((imported) => {
-        const importedIndex = modules.indexOf(imported)
-        return `module:${importedIndex + 1}`
-      }),
-      environment: (module.definition.environment ?? []).map(
-        (environment) => environment.name,
-      ),
-      providers: (module.definition.providers ?? [])
-        .map(normalizeProvider)
-        .filter((provider) => provider.kind !== 'environment')
-        .map((provider) => tokenName(provider.provide)),
-      exports: (module.definition.exports ?? []).map((value) =>
-        typeof value === 'function'
-          ? value.name
-          : typeof value === 'object' &&
-              value !== null &&
-              'kind' in value &&
-              value.kind === 'token' &&
-              'id' in value
-            ? String(value.id)
-            : String(value),
-      ),
-      lifecycle: Object.keys(module.definition.lifecycle ?? {}),
-      requires: module.definition.requires ?? [],
-    })),
+    modules: visibleModules.map((module) => {
+      const index = modules.indexOf(module)
+      return {
+        id: `module:${index + 1}`,
+        ...(module.definition.name === undefined
+          ? {}
+          : { name: module.definition.name }),
+        ...(module.definition.description === undefined
+          ? {}
+          : { description: module.definition.description }),
+        imports: (module.definition.imports ?? []).map((imported) => {
+          const importedIndex = modules.indexOf(imported)
+          return `module:${importedIndex + 1}`
+        }),
+        environment: (module.definition.environment ?? []).map(
+          (environment) => environment.name,
+        ),
+        providers: (module.definition.providers ?? [])
+          .map(normalizeProvider)
+          .filter((provider) => provider.kind !== 'environment')
+          .map((provider) => tokenName(provider.provide)),
+        exports: (module.definition.exports ?? []).map((value) =>
+          typeof value === 'function'
+            ? value.name
+            : typeof value === 'object' &&
+                value !== null &&
+                'kind' in value &&
+                value.kind === 'token' &&
+                'id' in value
+              ? String(value.id)
+              : String(value),
+        ),
+        lifecycle: Object.keys(module.definition.lifecycle ?? {}),
+        requires: module.definition.requires ?? [],
+      }
+    }),
+    ...(input.arguments ? { arguments: { name: input.arguments.name } } : {}),
     providers: dedupeProviders(providers).map((provider) => ({
       token: tokenName(provider.provide),
       kind: provider.kind,
@@ -243,7 +256,7 @@ export function compileApplication(
         provider.kind === 'factory'
           ? provider.inject.map(tokenName)
           : provider.kind === 'conditional'
-            ? [provider.select.env.name]
+            ? [tokenName(provider.select.contract)]
             : [],
     })),
     tokens: [...new Set([...tokensById.keys(), ...probedTokenIds])].map(
@@ -253,10 +266,12 @@ export function compileApplication(
     contracts: [...contractNames.values()],
     pipelines,
     implementations,
-    queues: queues.map<QueueIR>((queue) => ({
-      id: `queue:${queue.name}`,
-      name: queue.name,
+    tasks: tasks.map<TaskIR>((task) => ({
+      id: `task:${task.name}`,
+      name: task.name,
+      public: publicTaskSet.has(task),
     })),
+    queues: queues.map(toQueueIR),
     executions: [
       ...targets.map<ExecutionRootIR>((target) => ({
         id: `protocol:${target.protocol}:${target.contractName}.${target.procedure}`,
@@ -266,25 +281,12 @@ export function compileApplication(
         procedure: target.procedure,
         implementation: target.implementation.name,
       })),
-      ...entrypoints.map<ExecutionRootIR>((entrypoint) => ({
-        id: `entrypoint:${entrypoint.name}`,
-        kind: 'entrypoint',
-        name: entrypoint.name,
+      ...publicTasks.map<ExecutionRootIR>((task) => ({
+        id: `task:${task.name}`,
+        kind: 'task',
+        name: task.name,
       })),
-      ...(input.schedules ?? []).map<ExecutionRootIR>((schedule) => ({
-        id: `schedule:${schedule.name}`,
-        kind: 'schedule',
-        name: schedule.name,
-        cron: schedule.cron,
-        entrypoint: schedule.entrypoint.name,
-      })),
-      ...(input.consumers ?? []).map<ExecutionRootIR>((consumer) => ({
-        id: `queue-consumer:${consumer.name}`,
-        kind: 'queue-consumer',
-        name: consumer.name,
-        queue: consumer.queue.name,
-        entrypoint: consumer.entrypoint.name,
-      })),
+      ...triggers.map(toTriggerExecution),
     ],
     capabilities: [
       ...targets.flatMap((target) => {
@@ -328,23 +330,36 @@ export function compileApplication(
             : []),
         ]
       }),
-      ...modules.flatMap((module, index) => [
-        ...(module.definition.environment?.length
-          ? [
-              {
-                name: 'env.runtime',
-                scope: 'application' as const,
-                requiredBy: `module:${index + 1}`,
-              },
-            ]
-          : []),
-        ...(module.definition.requires ?? []).map((name) => ({
-          name,
-          scope: 'application' as const,
-          requiredBy: `module:${index + 1}`,
-        })),
-      ]),
+      ...visibleModules.flatMap((module) => {
+        const index = modules.indexOf(module)
+        return [
+          ...(module.definition.environment?.length
+            ? [
+                {
+                  name: 'env.runtime',
+                  scope: 'application' as const,
+                  requiredBy: `module:${index + 1}`,
+                },
+              ]
+            : []),
+          ...(module.definition.requires ?? []).map((name) => ({
+            name,
+            scope: 'application' as const,
+            requiredBy: `module:${index + 1}`,
+          })),
+        ]
+      }),
+      ...(input.arguments
+        ? [
+            {
+              name: 'args.runtime',
+              scope: 'application' as const,
+              requiredBy: 'application',
+            },
+          ]
+        : []),
     ],
+    hostCapabilities: collectHostCapabilities(input.modules),
     ...dependencyGraph,
     diagnostics,
   }
@@ -383,33 +398,6 @@ function validateDispatchKeys(
 
 export const buildApplicationGraph = compileApplication
 
-function collectEntrypoints(
-  input: ApplicationCompilationInput,
-  diagnostics: Diagnostic[],
-): readonly EntrypointDescriptor<any, any>[] {
-  const collected = [
-    ...(input.entrypoints ?? []),
-    ...(input.schedules ?? []).map((schedule) => schedule.entrypoint),
-    ...(input.consumers ?? []).map((consumer) => consumer.entrypoint),
-  ]
-  const unique = [...new Set(collected)]
-  validateNamedDescriptors(unique, 'LUTRE_ENTRYPOINT_DUPLICATE', diagnostics)
-  return unique
-}
-
-function collectQueues(
-  input: ApplicationCompilationInput,
-  diagnostics: Diagnostic[],
-): readonly QueueDescriptor<any>[] {
-  const collected = [
-    ...(input.queues ?? []),
-    ...(input.consumers ?? []).map((consumer) => consumer.queue),
-  ]
-  const unique = [...new Set(collected)]
-  validateNamedDescriptors(unique, 'LUTRE_QUEUE_DUPLICATE', diagnostics)
-  return unique
-}
-
 function validateNamedDescriptors(
   descriptors: readonly { readonly name: string }[],
   code: string,
@@ -430,27 +418,28 @@ function validateNamedDescriptors(
   }
 }
 
-function validateSchedules(
-  schedules: readonly LegacyScheduleDescriptor[],
+function validateCronTriggers(
+  triggers: readonly TriggerDescriptor[],
   diagnostics: Diagnostic[],
 ): void {
-  for (const schedule of schedules) {
-    if (!isValidCronExpression(schedule.cron.expression)) {
+  for (const trigger of triggers) {
+    if (trigger.trigger !== 'cron') continue
+    if (!isValidCronExpression(trigger.expression)) {
       diagnostics.push({
-        code: 'LUTRE_SCHEDULE_INVALID_CRON',
-        message: `Schedule ${schedule.name} must use a portable 5-field cron expression.`,
-        path: schedule.name,
+        code: 'LUTRE_TRIGGER_INVALID_CRON',
+        message: `Trigger ${trigger.name} must use a portable 5-field cron expression.`,
+        path: `trigger:${trigger.name}`,
       })
     }
     try {
       new Intl.DateTimeFormat('en-US', {
-        timeZone: schedule.cron.timezone,
+        timeZone: trigger.timezone,
       }).format()
     } catch {
       diagnostics.push({
-        code: 'LUTRE_SCHEDULE_INVALID_TIMEZONE',
-        message: `Schedule ${schedule.name} must use a valid IANA timezone.`,
-        path: schedule.name,
+        code: 'LUTRE_TRIGGER_INVALID_TIMEZONE',
+        message: `Trigger ${trigger.name} must use a valid IANA timezone.`,
+        path: `trigger:${trigger.name}`,
       })
     }
   }
@@ -500,6 +489,111 @@ function isValidCronField(
   })
 }
 
+function uniqueTasks(
+  tasks: readonly TaskDescriptor<any, any>[],
+): readonly TaskDescriptor<any, any>[] {
+  return [...new Set(tasks)]
+}
+
+function uniqueQueues(queues: readonly QueueDescriptor[]): QueueDescriptor[] {
+  return [...new Set(queues)]
+}
+
+function toTriggerExecution(trigger: TriggerDescriptor): ExecutionRootIR {
+  switch (trigger.trigger) {
+    case 'cron':
+      return {
+        id: `trigger:${trigger.name}`,
+        kind: 'trigger',
+        trigger: 'cron',
+        name: trigger.name,
+        expression: trigger.expression,
+        timezone: trigger.timezone,
+        overlap: trigger.overlap,
+        task: trigger.task.name,
+      }
+    case 'fixed-delay':
+      return {
+        id: `trigger:${trigger.name}`,
+        kind: 'trigger',
+        trigger: 'fixed-delay',
+        name: trigger.name,
+        delay: trigger.delay,
+        immediate: trigger.immediate,
+        task: trigger.task.name,
+      }
+    case 'queue-consumer':
+      return {
+        id: `trigger:${trigger.name}`,
+        kind: 'trigger',
+        trigger: 'queue-consumer',
+        name: trigger.name,
+        queue: trigger.queue.name,
+        task: trigger.task.name,
+      }
+  }
+}
+
+function toQueueIR(queue: QueueDescriptor): QueueIR {
+  return {
+    id: `queue:${queue.name}`,
+    name: queue.name,
+    payloadSchema: schemaIdentity(queue.payload),
+  }
+}
+
+function schemaIdentity(schema: StandardSchemaV1): string {
+  const standard = schema['~standard'] as {
+    readonly vendor?: unknown
+    readonly version?: unknown
+  }
+  const vendor =
+    typeof standard.vendor === 'string' ? standard.vendor : 'standard-schema'
+  const version =
+    typeof standard.version === 'number' || typeof standard.version === 'string'
+      ? String(standard.version)
+      : '1'
+  return `${vendor}@${version}`
+}
+
+function validateQueueDrivers(
+  roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
+  triggers: readonly Extract<
+    TriggerDescriptor,
+    { readonly trigger: 'queue-consumer' }
+  >[],
+): Diagnostic[] {
+  const providers = collectModules(roots).flatMap((module) =>
+    (module.definition.providers ?? []).map(normalizeProvider),
+  )
+  return triggers.flatMap((trigger) => {
+    const runtimeToken = queueRuntimeToken(trigger.queue)
+    return providers.some((provider) => provider.provide === runtimeToken)
+      ? []
+      : [
+          {
+            code: 'LUTRE_QUEUE_DRIVER_UNBOUND',
+            message: `Queue ${trigger.queue.name} has a consumer trigger but no runtime driver binding.`,
+            path: `trigger:${trigger.name}`,
+          },
+        ]
+  })
+}
+
+function collectHostCapabilities(
+  roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
+): string[] {
+  return [
+    ...new Set(
+      collectModules(roots).flatMap((module) =>
+        (module.definition.implementations ?? []).flatMap(
+          (implementation) => implementation.capabilities,
+        ),
+      ),
+    ),
+  ]
+}
+
 export function validateGraph(
   graph: ApplicationGraphIR,
 ): readonly Diagnostic[] {
@@ -510,14 +604,14 @@ function buildDependencyGraph(
   modules: readonly ModuleInstance[],
   descriptors: readonly ImplementationDescriptor[],
   targets: readonly ImplementationTarget[],
-  entrypoints: readonly EntrypointDescriptor<any, any>[],
+  tasks: readonly TaskDescriptor<any, any>[],
   diagnostics: Diagnostic[],
 ): Pick<ApplicationGraphIR, 'nodes' | 'edges'> {
   const nodes: DependencyNodeIR[] = []
   const edges: DependencyEdgeIR[] = []
   const ids = new Map<TokenLike, string>()
   const implementationIds = new Map<ImplementationDescriptor, string>()
-  const entrypointIds = new Map<EntrypointDescriptor<any, any>, string>()
+  const taskIds = new Map<TaskDescriptor<any, any>, string>()
   const modulesByProvider = new Map<TokenLike, string>()
   const providersByToken = new Map<TokenLike, ProviderDescriptor>()
   const customTokensById = new Map<string, TokenLike>()
@@ -561,25 +655,33 @@ function buildDependencyGraph(
     }
     const current = ids.get(token)
     if (current) return current
-    const base =
-      typeof token === 'function' ? `class:${token.name}` : `token:${token.id}`
+    const base = isArgsClass(token)
+      ? `arguments:${token.name}`
+      : typeof token === 'function'
+        ? `class:${token.name}`
+        : `token:${token.id}`
     let id = base
     let sequence = 2
     while (nodes.some((node) => node.id === id)) id = `${base}:${sequence++}`
     ids.set(token, id)
     const provider = providersByToken.get(token)
     const scope = overrides.scope ?? provider?.scope
-    const module = overrides.module ?? modulesByProvider.get(token)
+    const module =
+      provider?.kind === 'arguments'
+        ? undefined
+        : (overrides.module ?? modulesByProvider.get(token))
     nodes.push({
       id,
       label: tokenName(token),
       kind:
         overrides.kind ??
-        (provider?.kind === 'environment'
+        (provider?.kind === 'environment' || isEnvClass(token)
           ? 'environment'
-          : typeof token === 'function'
-            ? 'class'
-            : 'token'),
+          : provider?.kind === 'arguments' || isArgsClass(token)
+            ? 'arguments'
+            : typeof token === 'function'
+              ? 'class'
+              : 'token'),
       ...(scope === undefined ? {} : { scope }),
       ...(module === undefined ? {} : { module }),
     })
@@ -602,17 +704,15 @@ function buildDependencyGraph(
     return id
   }
 
-  const ensureEntrypointNode = (
-    entrypoint: EntrypointDescriptor<any, any>,
-  ): string => {
-    const current = entrypointIds.get(entrypoint)
+  const ensureTaskNode = (task: TaskDescriptor<any, any>): string => {
+    const current = taskIds.get(task)
     if (current) return current
-    const id = `entrypoint:${entrypoint.name}`
-    entrypointIds.set(entrypoint, id)
+    const id = `task:${task.name}`
+    taskIds.set(task, id)
     nodes.push({
       id,
-      label: entrypoint.name,
-      kind: 'entrypoint',
+      label: task.name,
+      kind: 'task',
       scope: 'application',
     })
     return id
@@ -644,6 +744,14 @@ function buildDependencyGraph(
       diagnostics.push({
         code: 'LUTRE_ENV_002',
         message: `${dependency.name} is injected but is not declared by any Module.environment.`,
+        path,
+      })
+      return
+    }
+    if (isArgsClass(dependency)) {
+      diagnostics.push({
+        code: 'LUTRE_ARGS_002',
+        message: `${dependency.name} is injected but is not declared by Application.arguments.`,
         path,
       })
       return
@@ -686,12 +794,12 @@ function buildDependencyGraph(
     }
     if (provider.kind === 'conditional') {
       validateDeclaredDependency(
-        provider.select.env,
+        provider.select.contract,
         tokenName(provider.provide),
       )
       addEdge({
         from: providerId,
-        to: ensureNode(provider.select.env),
+        to: ensureNode(provider.select.contract),
         kind: 'conditional',
         source: 'declared',
       })
@@ -703,7 +811,12 @@ function buildDependencyGraph(
           to: ensureNode(candidate, { scope: provider.scope }),
           kind: 'conditional',
           source: 'declared',
-          condition: { key: provider.select.key, equals },
+          condition: {
+            source: provider.select.source,
+            contract: tokenName(provider.select.contract),
+            key: provider.select.key,
+            equals,
+          },
         })
       }
     }
@@ -792,14 +905,14 @@ function buildDependencyGraph(
     }
   })
 
-  entrypoints.forEach((entrypoint) => {
-    const consumer: EntrypointConsumer = {
-      kind: 'entrypoint-consumer',
-      id: ensureEntrypointNode(entrypoint),
-      name: entrypoint.name,
+  tasks.forEach((task) => {
+    const consumer: TaskConsumer = {
+      kind: 'task-consumer',
+      id: ensureTaskNode(task),
+      name: task.name,
     }
     try {
-      container.probeEntrypoint(entrypoint, consumer)
+      container.probeTask(task, consumer)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       diagnostics.push({
@@ -843,6 +956,8 @@ function diagnosticCode(message: string): string {
     'LUTRE_ENV_001',
     'LUTRE_ENV_002',
     'LUTRE_ENV_004',
+    'LUTRE_ARGS_001',
+    'LUTRE_ARGS_002',
     'LUTRE_DI_CYCLE',
     'LUTRE_DI_ASYNC_FACTORY',
     'LUTRE_DI_CONSTRUCTOR',
@@ -851,8 +966,8 @@ function diagnosticCode(message: string): string {
     'LUTRE_IMPL_004',
     'LUTRE_LAYER_ASYNC_FACTORY',
     'LUTRE_LAYER_FACTORY_RESULT',
-    'LUTRE_ENTRYPOINT_ASYNC_FACTORY',
-    'LUTRE_ENTRYPOINT_FACTORY_RESULT',
+    'LUTRE_TASK_ASYNC_FACTORY',
+    'LUTRE_TASK_FACTORY_RESULT',
   ]) {
     if (message.includes(code)) return code
   }
@@ -1195,8 +1310,8 @@ function ensureConsumerNode(
       kind:
         consumer.kind === 'implementation-consumer'
           ? 'implementation'
-          : consumer.kind === 'entrypoint-consumer'
-            ? 'entrypoint'
+          : consumer.kind === 'task-consumer'
+            ? 'task'
             : 'layer',
     })
   }

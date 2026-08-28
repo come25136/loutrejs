@@ -103,7 +103,13 @@ export async function loadApplicationGraph(
     return compileDefinition(await importApplicationDefinition(output))
   } catch (error) {
     const graph = (error as { readonly graph?: unknown })?.graph
-    if (graph && typeof graph === 'object' && 'version' in graph) {
+    if (
+      graph &&
+      typeof graph === 'object' &&
+      'diagnostics' in graph &&
+      'nodes' in graph &&
+      'edges' in graph
+    ) {
       return graph as ApplicationGraphIR
     }
     throw error

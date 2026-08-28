@@ -11,7 +11,6 @@ import {
   type Class,
   type DependencyConsumer,
   type EnvClass,
-  type EntrypointConsumer,
   type ImplementationConsumer,
   type ImplementationDescriptor,
   type LayerConsumer,
@@ -194,7 +193,6 @@ export class Container {
     return this.#resolve(token)
   }
 
-  /** @internal Graph Probe がProvider classをconstructionする。 */
   probeClass<T>(target: Class<T>): T {
     try {
       return this.#instantiate(target, [target])
@@ -206,7 +204,6 @@ export class Container {
     }
   }
 
-  /** @internal Application construction時にImplementation factoryを1回だけ構築する。 */
   prepareImplementation(implementation: ImplementationDescriptor): void {
     if (this.#implementationCache.has(implementation)) return
     let consumer = this.#implementationConsumers.get(implementation)
@@ -221,7 +218,6 @@ export class Container {
     this.#constructImplementation(implementation, consumer, true)
   }
 
-  /** @internal 構築済みImplementation runtimeを取得する。 */
   implementationRuntime(implementation: ImplementationDescriptor): object {
     const cached = this.#implementationCache.get(implementation)
     if (!cached) {
@@ -232,7 +228,6 @@ export class Container {
     return cached
   }
 
-  /** @internal Application construction時にTask factoryを1回だけ構築する。 */
   prepareTask(task: TaskDescriptor): void {
     if (this.#taskCache.has(task)) return
     let consumer = this.#taskConsumers.get(task)
@@ -247,7 +242,6 @@ export class Container {
     this.#constructTask(task, consumer, true)
   }
 
-  /** @internal 構築済みTask runtimeを取得する。 */
   taskRuntime<TInput, TOutput>(
     task: TaskDescriptor<TInput, TOutput>,
   ): TaskRuntime<TInput, TOutput> {
@@ -260,7 +254,6 @@ export class Container {
     return cached as TaskRuntime<TInput, TOutput>
   }
 
-  /** @internal Graph Probe用にTask factoryを同期constructionする。 */
   probeTask(task: TaskDescriptor, consumer: TaskConsumer): void {
     try {
       this.#constructTask(task, consumer, false)
@@ -270,30 +263,6 @@ export class Container {
     }
   }
 
-  /** @internal Legacy Graph compiler bridge. */
-  probeEntrypoint(task: TaskDescriptor, consumer: EntrypointConsumer): void {
-    try {
-      this.#constructTask(task, consumer, false)
-    } catch (error) {
-      if (error instanceof DependencyResolutionError) {
-        throw new DependencyResolutionError(
-          error.message
-            .replace(
-              'LUTRE_TASK_ASYNC_FACTORY',
-              'LUTRE_ENTRYPOINT_ASYNC_FACTORY',
-            )
-            .replace(
-              'LUTRE_TASK_FACTORY_RESULT',
-              'LUTRE_ENTRYPOINT_FACTORY_RESULT',
-            )
-            .replace('Task ', 'Entrypoint '),
-        )
-      }
-      throw error
-    }
-  }
-
-  /** @internal Graph Probe用にImplementation factoryを同期constructionする。 */
   probeImplementation(
     implementation: ImplementationDescriptor,
     consumer: ImplementationConsumer,
@@ -308,7 +277,6 @@ export class Container {
     }
   }
 
-  /** @internal Application construction時にLayer factoryを1回だけ構築する。 */
   preparePipeline(pipeline: readonly PipelineItem[]): void {
     for (const item of pipeline) {
       if (item.kind !== 'layer') continue
@@ -327,7 +295,6 @@ export class Container {
     }
   }
 
-  /** @internal 構築済みLayer runtimeを取得する。 */
   layerRuntime(
     layer: LayerDescriptor,
   ): LayerRuntime<object, readonly [], unknown> {
@@ -340,7 +307,6 @@ export class Container {
     return cached
   }
 
-  /** @internal Graph Probe用にLayer factoryを同期constructionする。 */
   probeLayer(layer: LayerDescriptor, consumer: LayerConsumer): void {
     try {
       this.#constructLayer(layer, consumer, false)
@@ -579,7 +545,7 @@ export class Container {
 
   #constructTask(
     task: TaskDescriptor,
-    consumer: TaskConsumer | EntrypointConsumer,
+    consumer: TaskConsumer,
     cache: boolean,
   ): TaskRuntime<any, any> {
     const cached = this.#taskCache.get(task)

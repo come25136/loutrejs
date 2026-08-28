@@ -97,7 +97,6 @@ interface NodeHttpServerDriverOptions {
   readonly onListening?: (url: string) => void
 }
 
-/** @internal `nodeRuntime.serve()` が利用するNode.js HTTP driver。 */
 function createNodeHttpServerDriver(
   application: HttpProtocolExecution,
   options: NodeHttpServerDriverOptions = {},

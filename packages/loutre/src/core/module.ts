@@ -69,7 +69,6 @@ export interface ModuleInstance<
   readonly template: AnyModuleTemplate
   readonly args: unknown
   readonly definition: TDefinition
-  /** @internal TypeScript上のModule構成を伝播するためのメタデータ。 */
   readonly [moduleTypeInfo]?: ModuleTypeInfo<TDefinition>
 }
 
@@ -77,7 +76,6 @@ export interface AnyModuleTemplate {
   (args?: any): ModuleInstance<any>
   readonly kind: 'module-template'
   readonly instantiate: (args: any) => ModuleInstance<any>
-  /** @internal TypeScript上のModule構成を伝播するためのメタデータ。 */
   readonly [moduleTypeInfo]?: ModuleTypeInfo<any>
 }
 
@@ -89,7 +87,6 @@ export type ModuleTemplate<
   : { (args: Args): ModuleInstance<TDefinition> }) & {
   readonly kind: 'module-template'
   readonly instantiate: (args: Args) => ModuleInstance<TDefinition>
-  /** @internal TypeScript上のModule構成を伝播するためのメタデータ。 */
   readonly [moduleTypeInfo]?: ModuleTypeInfo<TDefinition>
 }
 

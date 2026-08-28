@@ -16,10 +16,7 @@ export interface BootstrapBaseOptions<
 export type BootstrapOptions<TDefinition extends ApplicationDefinition> =
   BootstrapBaseOptions<TDefinition> & BootstrapArguments<TDefinition>
 
-/**
- * Runtime-neutralなApplication host primitive。
- * listener/module export/transport ownershipはruntime adapterが担う。
- */
+/** generic hostへruntime固有listenerを持ち込まないため、listener ownershipはruntime adapterへ委ねる。 */
 export function bootstrap<const TDefinition extends ApplicationDefinition>(
   options: BootstrapOptions<TDefinition>,
 ): HostedApplication<TDefinition> {

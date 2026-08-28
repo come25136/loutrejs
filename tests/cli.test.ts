@@ -1,6 +1,6 @@
 import { bootstrap } from '@loutrejs/loutre/host'
 import { runCli } from '@loutrejs/cli'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -88,7 +88,7 @@ describe('Loutre CLI', () => {
       ),
     ).toBe(0)
     const graph = JSON.parse(output.stdout.join('\n'))
-    expect(graph.version).toBe(5)
+    expect(graph).not.toHaveProperty('version')
     expect(graph.pipelines).toContainEqual(
       expect.objectContaining({
         contract: 'UsersContract',
@@ -206,6 +206,7 @@ describe('Loutre CLI', () => {
         ),
       ).toBe(0)
       const applicationPath = join(directory, 'application.mjs')
+      expect(await readdir(directory)).toEqual(['application.mjs'])
       const source = await readFile(applicationPath, 'utf8')
       expect(source).toContain('conditional-default-branch')
       expect(source).not.toContain('conditional-node-branch')

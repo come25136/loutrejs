@@ -71,10 +71,6 @@ export interface BasicAuthContext {
   readonly headers: Readonly<Record<string, string | undefined>>
 }
 
-/**
- * HTTP adapterがdecodeしたAuthorization headerをBasic credentialsとして認証し、
- * 認証済みprincipalをExecution Contextへ追加するLayerを生成する。
- */
 export function basicAuth<
   TPrincipal extends ContextKey,
   const TVariant extends string,

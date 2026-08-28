@@ -38,7 +38,6 @@ export function defineArgs<TSchema extends ArgsSchema>(
         kind: 'runtime-input-key',
         source: 'arguments',
         contract: this,
-        env: this,
         key,
       }
     }

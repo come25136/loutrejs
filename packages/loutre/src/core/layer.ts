@@ -18,9 +18,6 @@ export interface ShortCircuit<TResult = unknown> {
   readonly [shortCircuitMarker]: true
 }
 
-/**
- * `next()`の代わりにLogical Resultを返し、残りのPipelineを終了する。
- */
 export function shortCircuit<const TResult>(
   result: TResult,
 ): ShortCircuit<TResult> {
@@ -93,7 +90,6 @@ export interface LayerDefinition<
   >
 }
 
-/** @internal child pipelineを関連付けたLayerの利用箇所を表す。 */
 export interface LayerOccurrenceDescriptor<
   TRequires extends readonly ContextKey[] = readonly ContextKey[],
   TProvides extends readonly ContextKey[] = readonly ContextKey[],
@@ -288,10 +284,6 @@ type FoldPipelineItemTerminals<
       ? FoldPipelineTerminals<TPipeline, TProtocol, TState>
       : TState
 
-/**
- * 再帰Pipelineをdepth-first順に評価したとき、対象Protocolのterminalが
- * ちょうど1つ存在し、かつ最後のPipelineItemであるかを判定する。
- */
 export type IsValidProtocolPipeline<
   TPipeline extends readonly PipelineItem[],
   TProtocol extends string,

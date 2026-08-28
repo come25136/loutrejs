@@ -54,10 +54,6 @@ interface CorsPolicy {
 const policies = new WeakMap<object, CorsPolicy>()
 const httpToken = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 
-/**
- * HTTP responseへCORS policyを適用するFramework Layerを生成する。
- * preflightはController実行前にHTTP application境界で処理される。
- */
 export function cors(options: CorsOptions = {}): CorsLayerDescriptor {
   const policy = normalizeCorsOptions(options)
   const descriptor = layer<
@@ -79,7 +75,6 @@ export function cors(options: CorsOptions = {}): CorsLayerDescriptor {
   return descriptor
 }
 
-/** @internal */
 export async function createCorsActualResponseHeaders(
   pipeline: readonly PipelineItem[],
   request: Request,
@@ -107,7 +102,6 @@ export async function createCorsActualResponseHeaders(
   return headers
 }
 
-/** @internal */
 export async function createCorsPreflightResponseHeaders(
   pipeline: readonly PipelineItem[],
   request: Request,

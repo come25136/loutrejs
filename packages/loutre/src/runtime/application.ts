@@ -236,7 +236,7 @@ export class ApplicationRuntime {
     return this.#invokeTask(task, args)
   }
 
-  /** @internal Trigger Host invokes registered non-public Tasks through this path. */
+  /** public run()ではTrigger専用Taskを拒否するため、Trigger Host専用経路を分ける。 */
   runTask<TTask extends TaskDescriptor<any, any>>(
     task: TTask,
     ...args: TaskArguments<TTask>
@@ -281,7 +281,6 @@ export class ApplicationRuntime {
     }
   }
 
-  /** @internal Application Hostがcleanup前に新規execution受付を同期的に閉じる。 */
   stopAcceptingExecutions(): void {
     if (this.#state !== 'stopped') this.#state = 'stopping'
   }

@@ -124,7 +124,6 @@ export function provide<TToken extends TokenLike>(token: TToken) {
   }
 }
 
-/** @internal Module.environmentからframework-managed providerを合成する。 */
 export function environmentProvider(
   environment: EnvClass,
 ): EnvironmentProvider {
@@ -135,7 +134,6 @@ export function environmentProvider(
   }
 }
 
-/** @internal Application.argumentsからframework-managed providerを合成する。 */
 export function argumentsProvider(
   argumentsContract: ArgsClass,
 ): ArgumentsProvider {

@@ -85,9 +85,7 @@ describe('continuation Pipeline', () => {
         await next()
         try {
           await next()
-        } catch {
-          // Runtimeが保持したcontract errorを外側で検証する。
-        }
+        } catch {}
       },
     })
 
@@ -117,9 +115,7 @@ describe('continuation Pipeline', () => {
       factory: () => async (_ctx, next) => {
         try {
           await next()
-        } catch {
-          // transaction callback等による握り潰しを再現する。
-        }
+        } catch {}
       },
     })
     const broken = layer({
