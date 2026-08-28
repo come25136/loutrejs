@@ -105,7 +105,36 @@ describe('create-loutre', () => {
       stderr: () => undefined,
     }
 
-    expect(await runCreateLoutre(['--yes'], io)).toBe(0)
+    expect(await runCreateLoutre(['-y'], io)).toBe(0)
     expect(installs).toEqual([join(root, 'loutre-app')])
+  })
+
+  it('npmが渡す区切りの--を無視してoptionを解釈する', async () => {
+    let installed = false
+    const io: CreateLoutreCliIO = {
+      cwd: root,
+      install: async () => {
+        installed = true
+        return 0
+      },
+      stdout: () => undefined,
+      stderr: () => undefined,
+    }
+
+    expect(await runCreateLoutre(['demo', '--', '--no-install'], io)).toBe(0)
+    expect(installed).toBe(false)
+  })
+
+  it('未知のoptionをargのparse errorとして拒否する', async () => {
+    const errors: string[] = []
+    const io: CreateLoutreCliIO = {
+      cwd: root,
+      install: async () => 0,
+      stdout: () => undefined,
+      stderr: (value) => errors.push(value),
+    }
+
+    expect(await runCreateLoutre(['demo', '--unknown'], io)).toBe(2)
+    expect(errors[0]).toContain("unknown option '--unknown'")
   })
 })

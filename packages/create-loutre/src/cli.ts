@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { relative } from 'node:path'
 import { createInterface } from 'node:readline/promises'
+import { Command, CommanderError } from 'commander'
 import { bootstrap } from '@loutrejs/loutre/host'
 import application, { createProject } from './app.js'
 
@@ -71,34 +72,42 @@ interface ParsedArgs {
 function parseArgs(
   args: readonly string[],
 ): ParsedArgs | { readonly error: string } {
-  let target: string | undefined
-  let help = false
-  let yes = false
-  let install = true
+  const command = new Command()
+    .name('create-loutre')
+    .helpOption(false)
+    .exitOverride()
+    .configureOutput({
+      writeOut: () => undefined,
+      writeErr: () => undefined,
+    })
+    .argument('[directory]')
+    .option('-y, --yes', '生成先未指定時にloutre-appを使用する')
+    .option('--no-install', 'npm installを実行しない')
+    .option('-h, --help', 'helpを表示する')
+    .allowExcessArguments(false)
 
-  for (const arg of args) {
-    if (arg === '--help' || arg === '-h') {
-      help = true
-      continue
-    }
-    if (arg === '--yes' || arg === '-y') {
-      yes = true
-      continue
-    }
-    if (arg === '--no-install') {
-      install = false
-      continue
-    }
-    if (arg.startsWith('-')) return { error: `不明なoptionです: ${arg}` }
-    if (target) return { error: '生成先は1つだけ指定できます。' }
-    target = arg
+  try {
+    command.parse(
+      args.filter((value) => value !== '--'),
+      { from: 'user' },
+    )
+  } catch (error) {
+    if (error instanceof CommanderError) return { error: error.message }
+    throw error
   }
+
+  const options = command.opts<{
+    readonly yes?: boolean
+    readonly install: boolean
+    readonly help?: boolean
+  }>()
+  const target = command.processedArgs[0] as string | undefined
 
   return {
     ...(target === undefined ? {} : { target }),
-    help,
-    yes,
-    install,
+    help: options.help ?? false,
+    yes: options.yes ?? false,
+    install: options.install,
   }
 }
 
