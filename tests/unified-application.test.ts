@@ -3,22 +3,23 @@ import { bootstrap } from '@loutrejs/application/host'
 import {
   consume,
   cron,
+  defineArgs,
   defineModule,
-  entrypoint,
   fixedDelay,
   inject,
   queue,
+  task,
 } from '@loutrejs/core'
 import { compileApplication } from '@loutrejs/graph'
 import { z } from 'zod'
 
 describe('Unified Application', () => {
-  test('Applicationの単一Entrypointを一度だけ構築し、実行結果を返す', async () => {
+  test('public Taskを一度だけ構築し、descriptor指定で実行結果を返す', async () => {
     let constructions = 0
     const ServiceToken = class Service {
       value = 40
     }
-    const calculate = entrypoint<number, number>({
+    const calculate = task<number, number>({
       name: 'calculate',
       factory: (service = inject(ServiceToken)) => {
         constructions += 1
@@ -26,35 +27,57 @@ describe('Unified Application', () => {
       },
     })
     const Module = defineModule(() => ({ providers: [ServiceToken] }))
-    const application = bootstrap(
-      defineApplication({ modules: [Module()], entrypoint: calculate }),
-    )
+    const definition = defineApplication({
+      modules: [Module()],
+      tasks: [calculate],
+    })
+    const application = bootstrap({ application: definition })
     constructions = 0
 
-    await expect(application.run(2)).resolves.toBe(42)
-    await expect(application.run(3)).resolves.toBe(43)
+    await expect(application.run(calculate, 2)).resolves.toBe(42)
+    await expect(application.run(calculate, 3)).resolves.toBe(43)
     expect(constructions).toBe(1)
     expect(application.graph.executions).toContainEqual(
-      expect.objectContaining({
-        id: 'entrypoint:calculate',
-        kind: 'entrypoint',
-      }),
+      expect.objectContaining({ id: 'task:calculate', kind: 'task' }),
     )
     await application.close()
   })
 
-  test('Entrypoint errorをそのまま返す', async () => {
-    const fail = entrypoint<void, void>({
+  test('Task errorをそのまま返す', async () => {
+    const fail = task<void, void>({
       name: 'fail',
       factory: () => () => {
         throw new Error('domain failure')
       },
     })
-    const application = bootstrap(
-      defineApplication({ modules: [], entrypoint: fail }),
-    )
+    const application = bootstrap({
+      application: defineApplication({ modules: [], tasks: [fail] }),
+    })
+    await expect(application.run(fail)).rejects.toThrow('domain failure')
+    await application.close()
+  })
 
-    await expect(application.run()).rejects.toThrow('domain failure')
+  test('Argumentsをbootstrap前にvalidationしてDIする', async () => {
+    class AppArgs extends defineArgs(
+      z.object({ workers: z.coerce.number().int().positive() }),
+    ) {}
+    const read = task<void, number>({
+      name: 'arguments.read',
+      factory:
+        (args = inject(AppArgs)) =>
+        () =>
+          args.workers,
+    })
+    const definition = defineApplication({
+      modules: [],
+      arguments: AppArgs,
+      tasks: [read],
+    })
+    const application = bootstrap({
+      application: definition,
+      arguments: { workers: '8' },
+    })
+    await expect(application.run(read)).resolves.toBe(8)
     await application.close()
   })
 
@@ -63,16 +86,14 @@ describe('Unified Application', () => {
     const blocker = new Promise<void>((resolve) => {
       release = resolve
     })
-    const job = entrypoint<void, void>({
+    const job = task<void, void>({
       name: 'job',
       factory: () => async () => blocker,
     })
-    const Module = defineModule(() => ({}))
-    const application = bootstrap(
-      defineApplication({ modules: [Module()], entrypoint: job }),
-    )
-
-    const execution = application.run()
+    const application = bootstrap({
+      application: defineApplication({ modules: [], tasks: [job] }),
+    })
+    const execution = application.run(job)
     await Promise.resolve()
     const closing = application.close()
     let closed = false
@@ -81,24 +102,24 @@ describe('Unified Application', () => {
     })
     await Promise.resolve()
     expect(closed).toBe(false)
-    await expect(application.run()).rejects.toThrow('LUTRE_APP_STOPPING')
+    await expect(application.run(job)).rejects.toThrow('LUTRE_APP_STOPPING')
     release()
     await execution
     await closing
-    await expect(application.run()).rejects.toThrow('LUTRE_APP_STOPPED')
+    await expect(application.run(job)).rejects.toThrow('LUTRE_APP_STOPPED')
     await expect(application.close()).resolves.toBeUndefined()
   })
 
-  test('Cron / fixed-delay / Queue ConsumerをTrigger Rootとして登録する', async () => {
-    const cleanup = entrypoint<void, void>({
+  test('Cron / fixed-delay / Queue ConsumerをTrigger RootとしてTaskへ接続する', async () => {
+    const cleanup = task<void, void>({
       name: 'cleanup',
       factory: () => () => undefined,
     })
-    const poll = entrypoint<void, void>({
+    const poll = task<void, void>({
       name: 'poll',
       factory: () => () => undefined,
     })
-    const process = entrypoint<{ id: string }, void>({
+    const process = task<{ id: string }, void>({
       name: 'orders.process',
       factory: () => () => undefined,
     })
@@ -106,13 +127,13 @@ describe('Unified Application', () => {
       name: 'cleanup.nightly',
       expression: '0 3 * * *',
       timezone: 'Asia/Tokyo',
-      entrypoint: cleanup,
+      task: cleanup,
     })
     const polling = fixedDelay({
       name: 'poll.remote',
       delay: 10_000,
       immediate: true,
-      entrypoint: poll,
+      task: poll,
     })
     const orders = queue({
       name: 'orders',
@@ -122,7 +143,7 @@ describe('Unified Application', () => {
     const orderConsumer = consume({
       name: 'orders.process',
       queue: orders,
-      entrypoint: process,
+      task: process,
     })
     const Module = defineModule(() => ({
       providers: [
@@ -134,14 +155,14 @@ describe('Unified Application', () => {
         }),
       ],
     }))
-    const application = bootstrap(
-      defineApplication({
+    const application = bootstrap({
+      application: defineApplication({
         modules: [Module()],
         triggers: [nightly, polling, orderConsumer],
       }),
-    )
+    })
 
-    expect(application.graph.version).toBe(4)
+    expect(application.graph.version).toBe(5)
     expect(application.graph.queues).toEqual([
       expect.objectContaining({ id: 'queue:orders', name: 'orders' }),
     ])
@@ -151,21 +172,24 @@ describe('Unified Application', () => {
           kind: 'trigger',
           trigger: 'cron',
           name: 'cleanup.nightly',
+          task: 'cleanup',
         }),
         expect.objectContaining({
           kind: 'trigger',
           trigger: 'fixed-delay',
           name: 'poll.remote',
+          task: 'poll',
         }),
         expect.objectContaining({
           kind: 'trigger',
           trigger: 'queue-consumer',
           name: 'orders.process',
+          task: 'orders.process',
         }),
       ]),
     )
     expect(application.graph.executions).not.toContainEqual(
-      expect.objectContaining({ kind: 'entrypoint', name: 'cleanup' }),
+      expect.objectContaining({ kind: 'task', name: 'cleanup' }),
     )
     expect('run' in application).toBe(false)
     await application.triggers.start()
@@ -177,7 +201,7 @@ describe('Unified Application', () => {
   })
 
   test('Trigger重複名とportable cron違反をdiagnosticにする', () => {
-    const cleanup = entrypoint<void, void>({
+    const cleanup = task<void, void>({
       name: 'cleanup',
       factory: () => () => undefined,
     })
@@ -185,21 +209,18 @@ describe('Unified Application', () => {
       name: 'maintenance',
       expression: '90 25 * * *',
       timezone: 'Invalid/Timezone',
-      entrypoint: cleanup,
+      task: cleanup,
     })
     const duplicate = cron({
       name: 'maintenance',
       expression: '0 0 * * *',
       timezone: 'UTC',
-      entrypoint: cleanup,
+      task: cleanup,
     })
-    const Module = defineModule(() => ({}))
-
     const result = compileApplication({
-      modules: [Module()],
+      modules: [],
       triggers: [invalidCron, duplicate],
     })
-
     expect(result.diagnostics.map(({ code }) => code)).toEqual(
       expect.arrayContaining([
         'LUTRE_TRIGGER_DUPLICATE',

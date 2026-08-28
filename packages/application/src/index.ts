@@ -1,9 +1,11 @@
 import type {
-  EntrypointArguments,
-  EntrypointDescriptor,
-  EntrypointOutput,
+  ArgsClass,
   ModuleCapabilities,
   ModuleInstance,
+  SchemaInput,
+  TaskArguments,
+  TaskDescriptor,
+  TaskOutput,
   TriggerDescriptor,
 } from '@loutrejs/core'
 import type { ApplicationGraphIR } from '@loutrejs/graph'
@@ -11,45 +13,72 @@ import type { Logger } from '@loutrejs/runtime'
 
 export interface ApplicationDefinitionOptions<
   TModules extends readonly ModuleInstance[],
-  TEntrypoint extends EntrypointDescriptor<any, any> | undefined,
+  TArguments extends ArgsClass | undefined,
+  TTasks extends readonly TaskDescriptor<any, any>[],
   TTriggers extends readonly TriggerDescriptor[],
 > {
   readonly modules: TModules
-  readonly entrypoint?: TEntrypoint
+  readonly arguments?: TArguments
+  readonly tasks?: TTasks
   readonly triggers?: TTriggers
   readonly logger?: Logger
 }
 
 export interface ApplicationDefinition<
   TModules extends readonly ModuleInstance[] = readonly ModuleInstance[],
-  TEntrypoint extends EntrypointDescriptor<any, any> | undefined =
-    | EntrypointDescriptor<any, any>
-    | undefined,
+  TArguments extends ArgsClass | undefined = ArgsClass | undefined,
+  TTasks extends readonly TaskDescriptor<any, any>[] = readonly TaskDescriptor<
+    any,
+    any
+  >[],
   TTriggers extends readonly TriggerDescriptor[] = readonly TriggerDescriptor[],
 > {
   readonly kind: 'application-definition'
   readonly modules: TModules
-  readonly entrypoint: TEntrypoint
+  readonly arguments: TArguments
+  readonly tasks: TTasks
   readonly triggers: TTriggers
+  /** @internal Legacy source bridge. ApplicationDefinition never owns an Entrypoint. */
+  readonly entrypoint?: undefined
   readonly logger?: Logger
 }
 
 export function defineApplication<
   const TModules extends readonly ModuleInstance[],
-  const TEntrypoint extends EntrypointDescriptor<any, any> | undefined =
-    undefined,
+  const TArguments extends ArgsClass | undefined = undefined,
+  const TTasks extends readonly TaskDescriptor<any, any>[] = readonly [],
   const TTriggers extends readonly TriggerDescriptor[] = readonly [],
 >(
-  options: ApplicationDefinitionOptions<TModules, TEntrypoint, TTriggers>,
-): ApplicationDefinition<TModules, TEntrypoint, TTriggers> {
+  options: ApplicationDefinitionOptions<
+    TModules,
+    TArguments,
+    TTasks,
+    TTriggers
+  >,
+): ApplicationDefinition<TModules, TArguments, TTasks, TTriggers> {
   return Object.freeze({
     kind: 'application-definition',
     modules: options.modules,
-    entrypoint: options.entrypoint as TEntrypoint,
+    arguments: options.arguments as TArguments,
+    tasks: options.tasks ?? ([] as unknown as TTasks),
     triggers: options.triggers ?? ([] as unknown as TTriggers),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   })
 }
+
+export type ApplicationArgumentsInput<
+  TDefinition extends ApplicationDefinition,
+> =
+  TDefinition['arguments'] extends ArgsClass<infer TSchema>
+    ? SchemaInput<TSchema>
+    : never
+
+export type BootstrapArguments<TDefinition extends ApplicationDefinition> =
+  TDefinition['arguments'] extends ArgsClass<infer TSchema>
+    ? {} extends SchemaInput<TSchema>
+      ? { readonly arguments?: SchemaInput<TSchema> }
+      : { readonly arguments: SchemaInput<TSchema> }
+    : { readonly arguments?: never }
 
 export interface BaseApplication {
   readonly graph: ApplicationGraphIR
@@ -57,12 +86,13 @@ export interface BaseApplication {
   close(signal?: string): Promise<void>
 }
 
-export interface EntrypointApplicationCapability<
-  TEntrypoint extends EntrypointDescriptor<any, any>,
+export interface TaskApplicationCapability<
+  TTasks extends readonly TaskDescriptor<any, any>[],
 > {
-  run(
-    ...args: EntrypointArguments<TEntrypoint>
-  ): Promise<EntrypointOutput<TEntrypoint>>
+  run<TTask extends TTasks[number]>(
+    task: TTask,
+    ...args: TaskArguments<TTask>
+  ): Promise<TaskOutput<TTask>>
 }
 
 export interface HttpListenOptions {
@@ -108,26 +138,24 @@ export type HasHttp<TDefinition extends ApplicationDefinition> = HasCapability<
   'http'
 >
 
-export type HasEntrypoint<TDefinition extends ApplicationDefinition> =
-  TDefinition['entrypoint'] extends EntrypointDescriptor<any, any>
-    ? true
-    : false
+export type HasTasks<TDefinition extends ApplicationDefinition> =
+  TDefinition['tasks'] extends readonly [] ? false : true
 
 export type HasTriggers<TDefinition extends ApplicationDefinition> =
   TDefinition['triggers'] extends readonly [] ? false : true
 
-type EntrypointCapability<TDefinition extends ApplicationDefinition> =
-  TDefinition['entrypoint'] extends EntrypointDescriptor<any, any>
-    ? EntrypointApplicationCapability<TDefinition['entrypoint']>
-    : {}
+type TaskCapability<TDefinition extends ApplicationDefinition> =
+  TDefinition['tasks'] extends readonly []
+    ? {}
+    : TaskApplicationCapability<TDefinition['tasks']>
 
 export type HostedApplication<TDefinition extends ApplicationDefinition> =
   BaseApplication &
-    EntrypointCapability<TDefinition> &
+    TaskCapability<TDefinition> &
     (HasHttp<TDefinition> extends true ? HttpApplicationCapability : {}) &
     (HasTriggers<TDefinition> extends true ? TriggerApplicationCapability : {})
 
 export type InvocationApplication<TDefinition extends ApplicationDefinition> =
-  BaseApplication & EntrypointCapability<TDefinition>
+  BaseApplication & TaskCapability<TDefinition>
 
 export { bindQueueDriver } from './queue.js'

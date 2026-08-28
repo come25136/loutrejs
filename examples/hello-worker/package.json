@@ -8,8 +8,8 @@
   },
   "scripts": {
     "check": "loutre check --entry src/app.ts",
-    "dev": "loutre dev src/app.ts",
-    "start": "loutre start src/app.ts",
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -4,14 +4,13 @@ import {
   type SchemaOutput,
   type StandardSchemaV1,
 } from './schema.js'
+import type { RuntimeInputKey } from './runtime-input.js'
 
 export type EnvSchema = StandardSchemaV1<unknown, object>
 
-export interface EnvKey<TValue = unknown> {
-  readonly kind: 'env-key'
-  readonly env: EnvClass
-  readonly key: string
-  readonly '~value'?: TValue
+export type EnvKey<TValue = unknown> = RuntimeInputKey<TValue> & {
+  readonly source: 'environment'
+  readonly contract: EnvClass
 }
 
 export interface EnvClass<TSchema extends EnvSchema = EnvSchema> extends Class<
@@ -35,7 +34,13 @@ export function defineEnv<TSchema extends EnvSchema>(
       this: EnvClass<TSchema>,
       key: TKey,
     ): EnvKey<SchemaOutput<TSchema>[TKey]> {
-      return { kind: 'env-key', env: this, key }
+      return {
+        kind: 'runtime-input-key',
+        source: 'environment',
+        contract: this,
+        env: this,
+        key,
+      }
     }
 
     constructor(values: SchemaOutput<TSchema>) {

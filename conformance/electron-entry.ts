@@ -11,12 +11,23 @@ async function main(): Promise<void> {
     const graph = assertValidCompilation(
       compileApplication({
         modules: definition.modules,
-        entrypoint: definition.entrypoint,
+        ...(definition.arguments === undefined
+          ? {}
+          : { arguments: definition.arguments }),
+        tasks: definition.tasks,
         triggers: definition.triggers,
       }),
     )
     const runtime = new ApplicationRuntime(definition.modules, {
       environmentSource: process.env,
+      ...(definition.arguments === undefined
+        ? {}
+        : { arguments: definition.arguments }),
+      tasks: [
+        ...definition.tasks,
+        ...definition.triggers.map((trigger: any) => trigger.task),
+      ],
+      publicTasks: definition.tasks,
     })
     const application = createMessagePortExecution({ runtime, graph })
     const { port1, port2 } = new MessageChannelMain()

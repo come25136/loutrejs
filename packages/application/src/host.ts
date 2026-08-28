@@ -2,9 +2,9 @@ import {
   queueRuntimeToken,
   validateSchema,
   type CronTriggerDescriptor,
-  type EntrypointDescriptor,
   type FixedDelayTriggerDescriptor,
   type QueueConsumerTriggerDescriptor,
+  type TaskDescriptor,
   type TriggerDescriptor,
 } from '@loutrejs/core'
 import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
@@ -14,6 +14,7 @@ import { createNodeHttpServerDriver } from '@loutrejs/runtime-node'
 import type { Server } from 'node:http'
 import type {
   ApplicationDefinition,
+  BootstrapArguments,
   HostedApplication,
   HttpListenOptions,
   QueueConsumerDriver,
@@ -21,28 +22,45 @@ import type {
 } from './index.js'
 import { matchesCronTrigger } from './scheduler.js'
 
-export interface BootstrapOptions {
+export interface BootstrapBaseOptions<
+  TDefinition extends ApplicationDefinition,
+> {
+  readonly application: TDefinition
   readonly environment?: unknown
 }
+
+export type BootstrapOptions<TDefinition extends ApplicationDefinition> =
+  BootstrapBaseOptions<TDefinition> & BootstrapArguments<TDefinition>
 
 type TriggerHandle = { stop(): Promise<void> }
 
 export function bootstrap<const TDefinition extends ApplicationDefinition>(
-  definition: TDefinition,
-  options: BootstrapOptions = {},
+  options: BootstrapOptions<TDefinition>,
 ): HostedApplication<TDefinition> {
+  const definition = options.application
   const logger = definition.logger ?? new Logger()
-  const entrypoints = registeredEntrypoints(definition)
+  const tasks = registeredTasks(definition)
   const graph = assertValidCompilation(
     compileApplication({
       modules: definition.modules,
-      entrypoint: definition.entrypoint,
+      ...(definition.arguments === undefined
+        ? {}
+        : { arguments: definition.arguments }),
+      tasks: definition.tasks,
       triggers: definition.triggers,
     }),
   )
   const runtime = new ApplicationRuntime(definition.modules, {
     logger,
-    entrypoints,
+    tasks,
+    publicTasks: definition.tasks,
+    ...(definition.arguments === undefined
+      ? {}
+      : {
+          arguments: definition.arguments,
+          argumentsSource:
+            'arguments' in options ? options.arguments : Object.freeze({}),
+        }),
     environmentSource:
       'environment' in options ? options.environment : process.env,
   })
@@ -74,13 +92,10 @@ export function bootstrap<const TDefinition extends ApplicationDefinition>(
       await runtime.initialize()
       return application
     },
-    ...(definition.entrypoint
+    ...(definition.tasks.length > 0
       ? {
-          run(...args: readonly unknown[]) {
-            return Reflect.apply(runtime.run, runtime, [
-              definition.entrypoint,
-              ...args,
-            ])
+          run(task: TaskDescriptor, ...args: readonly unknown[]) {
+            return Reflect.apply(runtime.run, runtime, [task, ...args])
           },
         }
       : {}),
@@ -184,13 +199,13 @@ async function startTrigger(
 }
 
 function startCronTrigger(
-  trigger: CronTriggerDescriptor<any>,
+  trigger: CronTriggerDescriptor,
   runtime: ApplicationRuntime,
   logger: Logger,
 ): TriggerHandle {
   let stopped = false
   let lastMinute: string | undefined
-  const active = new Set<Promise<void>>()
+  const active = new Set<Promise<unknown>>()
   const tick = () => {
     if (stopped) return
     const now = new Date()
@@ -205,15 +220,13 @@ function startCronTrigger(
       })
       return
     }
-    const execution = runtime
-      .run(trigger.entrypoint as EntrypointDescriptor<void, void>)
-      .catch((error) => {
-        logger.error('Cron trigger execution failed', {
-          event: 'trigger.cron.execution.failed',
-          trigger: trigger.name,
-          error: error instanceof Error ? error.message : String(error),
-        })
+    const execution = runtime.runTask(trigger.task).catch((error) => {
+      logger.error('Cron trigger execution failed', {
+        event: 'trigger.cron.execution.failed',
+        trigger: trigger.name,
+        error: error instanceof Error ? error.message : String(error),
       })
+    })
     active.add(execution)
     void execution.finally(() => active.delete(execution))
   }
@@ -230,7 +243,7 @@ function startCronTrigger(
 }
 
 function startFixedDelayTrigger(
-  trigger: FixedDelayTriggerDescriptor<any>,
+  trigger: FixedDelayTriggerDescriptor,
   runtime: ApplicationRuntime,
   logger: Logger,
 ): TriggerHandle {
@@ -248,7 +261,7 @@ function startFixedDelayTrigger(
     })
   const execute = async () => {
     try {
-      await runtime.run(trigger.entrypoint as EntrypointDescriptor<void, void>)
+      await runtime.runTask(trigger.task)
     } catch (error) {
       logger.error('Fixed-delay trigger execution failed', {
         event: 'trigger.fixed_delay.execution.failed',
@@ -294,7 +307,7 @@ async function startQueueTrigger(
   const handle = await driver.start({
     consume: async (payload) => {
       const validated = await validateSchema(trigger.queue.payload, payload)
-      await runtime.run(trigger.entrypoint, validated)
+      await runtime.runTask(trigger.task, validated)
     },
   })
   if (!handle || typeof handle.stop !== 'function') {
@@ -305,13 +318,13 @@ async function startQueueTrigger(
   return handle
 }
 
-function registeredEntrypoints(
+function registeredTasks(
   definition: ApplicationDefinition,
-): readonly EntrypointDescriptor<any, any>[] {
+): readonly TaskDescriptor<any, any>[] {
   return [
     ...new Set([
-      ...(definition.entrypoint ? [definition.entrypoint] : []),
-      ...definition.triggers.map((trigger) => trigger.entrypoint),
+      ...definition.tasks,
+      ...definition.triggers.map((trigger) => trigger.task),
     ]),
   ]
 }

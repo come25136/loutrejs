@@ -55,11 +55,21 @@ describe('Runtime Application Graph', () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'conditional',
-          condition: { key: 'DRIVER', equals: 'memory' },
+          condition: {
+            source: 'environment',
+            contract: 'Env',
+            key: 'DRIVER',
+            equals: 'memory',
+          },
         }),
         expect.objectContaining({
           kind: 'conditional',
-          condition: { key: 'DRIVER', equals: 'broken' },
+          condition: {
+            source: 'environment',
+            contract: 'Env',
+            key: 'DRIVER',
+            equals: 'broken',
+          },
         }),
         expect.objectContaining({ kind: 'inject', source: 'probed' }),
       ]),

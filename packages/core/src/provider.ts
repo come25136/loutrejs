@@ -1,5 +1,7 @@
+import type { ArgsClass } from './args.js'
+import type { EnvClass } from './env.js'
+import type { RuntimeInputKey } from './runtime-input.js'
 import type { Class, TokenLike, TokenValue } from './token.js'
-import type { EnvClass, EnvKey } from './env.js'
 
 export type Scope = 'application' | 'transient'
 
@@ -36,7 +38,7 @@ export interface ConditionalProvider<
   TToken extends TokenLike = TokenLike,
 > extends ProviderBase<TToken> {
   readonly kind: 'conditional'
-  readonly select: EnvKey<PropertyKey>
+  readonly select: RuntimeInputKey<PropertyKey>
   readonly mapping: Readonly<Record<PropertyKey, Class<TokenValue<TToken>>>>
 }
 
@@ -46,12 +48,19 @@ export interface EnvironmentProvider extends ProviderBase<EnvClass> {
   readonly scope: 'application'
 }
 
+export interface ArgumentsProvider extends ProviderBase<ArgsClass> {
+  readonly kind: 'arguments'
+  readonly provide: ArgsClass
+  readonly scope: 'application'
+}
+
 export type ProviderDescriptor =
   | ClassProvider
   | ValueProvider
   | FactoryProvider
   | ConditionalProvider
   | EnvironmentProvider
+  | ArgumentsProvider
 
 export type ProviderDeclaration = Class | ProviderDescriptor
 
@@ -100,14 +109,14 @@ export function provide<TToken extends TokenLike>(token: TToken) {
     },
 
     select<TKey extends PropertyKey>(
-      key: EnvKey<TKey>,
+      key: RuntimeInputKey<TKey>,
       mapping: Readonly<Record<TKey, Class<TokenValue<TToken>>>>,
       options: ProviderScopeOptions = {},
     ): ConditionalProvider<TToken> {
       return {
         kind: 'conditional',
         provide: token,
-        select: key as EnvKey<PropertyKey>,
+        select: key as RuntimeInputKey<PropertyKey>,
         mapping,
         scope: options.scope ?? 'application',
       }
@@ -122,6 +131,17 @@ export function environmentProvider(
   return {
     kind: 'environment',
     provide: environment,
+    scope: 'application',
+  }
+}
+
+/** @internal Application.argumentsからframework-managed providerを合成する。 */
+export function argumentsProvider(
+  argumentsContract: ArgsClass,
+): ArgumentsProvider {
+  return {
+    kind: 'arguments',
+    provide: argumentsContract,
     scope: 'application',
   }
 }

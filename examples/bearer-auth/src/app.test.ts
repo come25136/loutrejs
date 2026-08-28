@@ -1,8 +1,8 @@
+import { bootstrap } from '@loutrejs/application/host'
 import { afterAll, describe, expect, it } from 'vitest'
 import application from './app.js'
-import { bootstrap } from '@loutrejs/application/host'
 
-const hosted = bootstrap(application)
+const hosted = bootstrap({ application })
 
 afterAll(() => hosted.close())
 

@@ -12,6 +12,13 @@ export interface ImplementationConsumer {
   readonly name: string
 }
 
+export interface TaskConsumer {
+  readonly kind: 'task-consumer'
+  readonly id: string
+  readonly name: string
+}
+
+/** @internal Legacy Graph compiler bridge. */
 export interface EntrypointConsumer {
   readonly kind: 'entrypoint-consumer'
   readonly id: string
@@ -22,6 +29,7 @@ export type DependencyConsumer =
   | TokenLike
   | LayerConsumer
   | ImplementationConsumer
+  | TaskConsumer
   | EntrypointConsumer
 
 export interface InjectionContext {

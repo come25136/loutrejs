@@ -12,7 +12,13 @@ export interface ModuleIR {
 
 export interface ProviderIR {
   readonly token: string
-  readonly kind: 'class' | 'value' | 'factory' | 'conditional' | 'environment'
+  readonly kind:
+    | 'class'
+    | 'value'
+    | 'factory'
+    | 'conditional'
+    | 'environment'
+    | 'arguments'
   readonly scope: 'application' | 'transient'
   readonly dependencies: readonly string[]
 }

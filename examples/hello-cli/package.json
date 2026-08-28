@@ -8,7 +8,7 @@
   },
   "scripts": {
     "check": "loutre check --entry src/app.ts",
-    "start": "loutre run src/app.ts",
+    "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,17 +1,17 @@
 import {
   asModuleInstance,
   childPipelineOf,
+  isArgsClass,
   isEnvClass,
   layerDefinitionOf,
   normalizeProvider,
   runInInjectionContext,
   tokenName,
+  type ArgsClass,
   type Class,
   type DependencyConsumer,
   type EnvClass,
   type EntrypointConsumer,
-  type EntrypointDescriptor,
-  type EntrypointRuntime,
   type ImplementationConsumer,
   type ImplementationDescriptor,
   type LayerConsumer,
@@ -21,6 +21,9 @@ import {
   type ModuleTemplate,
   type ProviderDescriptor,
   type PipelineItem,
+  type TaskConsumer,
+  type TaskDescriptor,
+  type TaskRuntime,
   type TokenLike,
 } from '@loutrejs/core'
 import { Logger } from './logger.js'
@@ -52,6 +55,7 @@ export interface ContainerOptions {
   readonly logger?: Logger
   readonly recorder?: DependencyRecorder
   readonly environment?: ReadonlyMap<EnvClass, object>
+  readonly arguments?: ReadonlyMap<ArgsClass, object>
   readonly probe?: boolean
 }
 
@@ -92,14 +96,11 @@ export class Container {
     ImplementationDescriptor,
     ImplementationConsumer
   >()
-  readonly #entrypointCache = new Map<
-    EntrypointDescriptor<any, any>,
-    EntrypointRuntime<any, any>
+  readonly #taskCache = new Map<
+    TaskDescriptor<any, any>,
+    TaskRuntime<any, any>
   >()
-  readonly #entrypointConsumers = new Map<
-    EntrypointDescriptor<any, any>,
-    EntrypointConsumer
-  >()
+  readonly #taskConsumers = new Map<TaskDescriptor<any, any>, TaskConsumer>()
   readonly #layerCache = new Map<
     LayerDescriptor,
     LayerRuntime<object, readonly [], unknown>
@@ -107,6 +108,7 @@ export class Container {
   readonly #logger: Logger
   readonly #recorder: DependencyRecorder | undefined
   readonly #environment = new Map<EnvClass, object>()
+  readonly #arguments = new Map<ArgsClass, object>()
   readonly #probe: boolean
 
   constructor(
@@ -122,23 +124,32 @@ export class Container {
       for (const [environment, value] of options.environment ?? []) {
         this.#environment.set(environment, value)
       }
+      for (const [argumentsContract, value] of options.arguments ?? []) {
+        this.#arguments.set(argumentsContract, value)
+      }
     }
 
     for (const provider of providers) {
       const existing = this.#providers.get(provider.provide)
       if (existing) {
         if (
-          existing.kind === 'environment' &&
-          provider.kind === 'environment'
+          existing.kind === provider.kind &&
+          isRuntimeInputProvider(provider)
         ) {
           continue
         }
         if (
-          existing.kind === 'environment' ||
-          provider.kind === 'environment'
+          isRuntimeInputProvider(existing) ||
+          isRuntimeInputProvider(provider)
         ) {
+          const source =
+            existing.kind === 'arguments' || provider.kind === 'arguments'
+              ? 'Arguments'
+              : 'Environment'
+          const code =
+            source === 'Arguments' ? 'LUTRE_ARGS_001' : 'LUTRE_ENV_001'
           throw new DependencyResolutionError(
-            `LUTRE_ENV_001: Environment ${tokenName(provider.provide)} is runtime-managed and cannot also be declared as a normal provider.`,
+            `${code}: ${source} ${tokenName(provider.provide)} is runtime-managed and cannot also be declared as a normal provider.`,
           )
         }
         throw new DependencyResolutionError(
@@ -162,6 +173,21 @@ export class Container {
       )
     }
     this.#environment.set(environment, value)
+  }
+
+  bindArguments(argumentsContract: ArgsClass, value: object): void {
+    const provider = this.#providers.get(argumentsContract)
+    if (!provider || provider.kind !== 'arguments') {
+      throw new DependencyResolutionError(
+        `LUTRE_ARGS_002: ${argumentsContract.name} is not declared by Application.arguments.`,
+      )
+    }
+    if (this.#applicationCache.has(argumentsContract)) {
+      throw new DependencyResolutionError(
+        `LUTRE_ARGS_006: Arguments ${argumentsContract.name} was already resolved and cannot be rebound.`,
+      )
+    }
+    this.#arguments.set(argumentsContract, value)
   }
 
   resolve<T>(token: TokenLike<T>): T {
@@ -206,43 +232,63 @@ export class Container {
     return cached
   }
 
-  /** @internal Application construction時にEntrypoint factoryを1回だけ構築する。 */
-  prepareEntrypoint(entrypoint: EntrypointDescriptor): void {
-    if (this.#entrypointCache.has(entrypoint)) return
-    let consumer = this.#entrypointConsumers.get(entrypoint)
+  /** @internal Application construction時にTask factoryを1回だけ構築する。 */
+  prepareTask(task: TaskDescriptor): void {
+    if (this.#taskCache.has(task)) return
+    let consumer = this.#taskConsumers.get(task)
     if (!consumer) {
       consumer = {
-        kind: 'entrypoint-consumer',
-        id: `runtime-entrypoint:${this.#entrypointConsumers.size + 1}`,
-        name: entrypoint.name,
+        kind: 'task-consumer',
+        id: `runtime-task:${this.#taskConsumers.size + 1}`,
+        name: task.name,
       }
-      this.#entrypointConsumers.set(entrypoint, consumer)
+      this.#taskConsumers.set(task, consumer)
     }
-    this.#constructEntrypoint(entrypoint, consumer, true)
+    this.#constructTask(task, consumer, true)
   }
 
-  /** @internal 構築済みEntrypoint runtimeを取得する。 */
-  entrypointRuntime<TInput, TOutput>(
-    entrypoint: EntrypointDescriptor<TInput, TOutput>,
-  ): EntrypointRuntime<TInput, TOutput> {
-    const cached = this.#entrypointCache.get(entrypoint)
+  /** @internal 構築済みTask runtimeを取得する。 */
+  taskRuntime<TInput, TOutput>(
+    task: TaskDescriptor<TInput, TOutput>,
+  ): TaskRuntime<TInput, TOutput> {
+    const cached = this.#taskCache.get(task)
     if (!cached) {
       throw new DependencyResolutionError(
-        `LUTRE_ENTRYPOINT_NOT_PREPARED: Entrypoint ${entrypoint.name} is not prepared during application construction.`,
+        `LUTRE_TASK_NOT_PREPARED: Task ${task.name} is not prepared during application construction.`,
       )
     }
-    return cached as EntrypointRuntime<TInput, TOutput>
+    return cached as TaskRuntime<TInput, TOutput>
   }
 
-  /** @internal Graph Probe用にEntrypoint factoryを同期constructionする。 */
-  probeEntrypoint(
-    entrypoint: EntrypointDescriptor,
-    consumer: EntrypointConsumer,
-  ): void {
+  /** @internal Graph Probe用にTask factoryを同期constructionする。 */
+  probeTask(task: TaskDescriptor, consumer: TaskConsumer): void {
     try {
-      this.#constructEntrypoint(entrypoint, consumer, false)
+      this.#constructTask(task, consumer, false)
     } catch (error) {
       if (isGraphProbeBoundary(error)) return
+      throw error
+    }
+  }
+
+  /** @internal Legacy Graph compiler bridge. */
+  probeEntrypoint(task: TaskDescriptor, consumer: EntrypointConsumer): void {
+    try {
+      this.#constructTask(task, consumer, false)
+    } catch (error) {
+      if (error instanceof DependencyResolutionError) {
+        throw new DependencyResolutionError(
+          error.message
+            .replace(
+              'LUTRE_TASK_ASYNC_FACTORY',
+              'LUTRE_ENTRYPOINT_ASYNC_FACTORY',
+            )
+            .replace(
+              'LUTRE_TASK_FACTORY_RESULT',
+              'LUTRE_ENTRYPOINT_FACTORY_RESULT',
+            )
+            .replace('Task ', 'Entrypoint '),
+        )
+      }
       throw error
     }
   }
@@ -329,6 +375,11 @@ export class Container {
           `LUTRE_ENV_002: ${token.name} is injected by ${source ?? 'Application'} but is not declared by any Module.environment.`,
         )
       }
+      if (isArgsClass(token)) {
+        throw new DependencyResolutionError(
+          `LUTRE_ARGS_002: ${token.name} is injected by ${source ?? 'Application'} but is not declared by Application.arguments.`,
+        )
+      }
       throw new DependencyResolutionError(
         `LUTRE_DI_UNRESOLVED: ${source ?? 'Application'} requires ${tokenName(token)}, but no provider is declared for ${tokenName(token)}.`,
       )
@@ -360,9 +411,19 @@ export class Container {
           if (this.#environment.has(provider.provide)) {
             return this.#environment.get(provider.provide)
           }
-          if (this.#probe) return createProbeEnvironment(provider.provide)
+          if (this.#probe) return createOpaqueProbeValue(provider.provide.name)
           throw new DependencyResolutionError(
             `LUTRE_ENV_005: Environment ${provider.provide.name} requires a runtime Environment source before Application initialization.`,
+          )
+        }
+
+        case 'arguments': {
+          if (this.#arguments.has(provider.provide)) {
+            return this.#arguments.get(provider.provide)
+          }
+          if (this.#probe) return createOpaqueProbeValue(provider.provide.name)
+          throw new DependencyResolutionError(
+            `LUTRE_ARGS_005: Arguments ${provider.provide.name} requires a runtime Arguments source before Application initialization.`,
           )
         }
 
@@ -384,12 +445,12 @@ export class Container {
 
         case 'conditional': {
           if (this.#probe) return Object.create(null)
-          const env = this.#resolve(
-            provider.select.env,
+          const input = this.#resolve(
+            provider.select.contract,
             tokenName(provider.provide),
             lineage,
           ) as Record<string, unknown>
-          const selected = env[provider.select.key]
+          const selected = input[provider.select.key]
           const implementation = provider.mapping[selected as PropertyKey]
           if (!implementation) {
             throw new DependencyResolutionError(
@@ -516,17 +577,17 @@ export class Container {
     return normalized
   }
 
-  #constructEntrypoint(
-    entrypoint: EntrypointDescriptor,
-    consumer: EntrypointConsumer,
+  #constructTask(
+    task: TaskDescriptor,
+    consumer: TaskConsumer | EntrypointConsumer,
     cache: boolean,
-  ): EntrypointRuntime<any, any> {
-    const cached = this.#entrypointCache.get(entrypoint)
+  ): TaskRuntime<any, any> {
+    const cached = this.#taskCache.get(task)
     if (cache && cached) return cached
     const runtime = runInInjectionContext(
       {
         consumer,
-        resolve: (token) => this.#resolve(token, entrypoint.name),
+        resolve: (token) => this.#resolve(token, task.name),
         ...(this.#recorder === undefined
           ? {}
           : {
@@ -536,26 +597,35 @@ export class Container {
               ) => this.#recorder!.record(recordedConsumer, dependency),
             }),
       },
-      () => entrypoint.factory(),
+      () => task.factory(),
     ) as unknown
     if (isThenable(runtime)) {
       throw new DependencyResolutionError(
-        `LUTRE_ENTRYPOINT_ASYNC_FACTORY: Entrypoint ${entrypoint.name} factory must be synchronous.`,
+        `LUTRE_TASK_ASYNC_FACTORY: Task ${task.name} factory must be synchronous.`,
       )
     }
     if (typeof runtime !== 'function') {
       throw new DependencyResolutionError(
-        `LUTRE_ENTRYPOINT_FACTORY_RESULT: Entrypoint ${entrypoint.name} factory must return a runtime function.`,
+        `LUTRE_TASK_FACTORY_RESULT: Task ${task.name} factory must return a runtime function.`,
       )
     }
-    const normalized = runtime as EntrypointRuntime<any, any>
-    if (cache) this.#entrypointCache.set(entrypoint, normalized)
+    const normalized = runtime as TaskRuntime<any, any>
+    if (cache) this.#taskCache.set(task, normalized)
     return normalized
   }
 }
 
-function createProbeEnvironment(environment: EnvClass): object {
-  return createOpaqueProbeValue(environment.name)
+function isRuntimeInputProvider(
+  provider: ProviderDescriptor,
+): provider is Extract<
+  ProviderDescriptor,
+  { kind: 'environment' | 'arguments' }
+> {
+  return provider.kind === 'environment' || provider.kind === 'arguments'
+}
+
+function isGraphProbeBoundary(error: unknown): error is GraphProbeBoundary {
+  return error instanceof GraphProbeBoundary
 }
 
 function createOpaqueProbeValue(source: string): object {
@@ -591,10 +661,6 @@ function createOpaqueProbeValue(source: string): object {
       throw boundary('[[Prototype]]')
     },
   })
-}
-
-function isGraphProbeBoundary(error: unknown): error is GraphProbeBoundary {
-  return error instanceof GraphProbeBoundary
 }
 
 function isThenable(value: unknown): value is PromiseLike<unknown> {

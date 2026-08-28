@@ -1,34 +1,62 @@
-import type { EntrypointDescriptor } from '@loutrejs/core'
+import type { TaskDescriptor } from '@loutrejs/core'
 import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
 import { createHttpExecution, type HttpProtocolExecution } from '@loutrejs/http'
 import { ApplicationRuntime, Logger } from '@loutrejs/runtime'
-import type { ApplicationDefinition, InvocationApplication } from './index.js'
+import type {
+  ApplicationDefinition,
+  BootstrapArguments,
+  InvocationApplication,
+} from './index.js'
 
 export interface InvocationBinding<TDefinition extends ApplicationDefinition> {
   readonly application: InvocationApplication<TDefinition>
   readonly http?: HttpProtocolExecution
 }
 
+export interface InvocationBindingBaseOptions<
+  TDefinition extends ApplicationDefinition,
+> {
+  readonly application: TDefinition
+  readonly environment?: unknown
+}
+
+export type InvocationBindingOptions<
+  TDefinition extends ApplicationDefinition,
+> = InvocationBindingBaseOptions<TDefinition> & BootstrapArguments<TDefinition>
+
 /** @internal build/deployment toolingがcallback runtime bindingを生成する。 */
 export function createInvocationBinding<
   const TDefinition extends ApplicationDefinition,
 >(
-  definition: TDefinition,
-  environment?: unknown,
+  options: InvocationBindingOptions<TDefinition>,
 ): InvocationBinding<TDefinition> {
+  const definition = options.application
   const logger = definition.logger ?? new Logger()
-  const entrypoints = registeredEntrypoints(definition)
+  const tasks = registeredTasks(definition)
   const graph = assertValidCompilation(
     compileApplication({
       modules: definition.modules,
-      entrypoint: definition.entrypoint,
+      ...(definition.arguments === undefined
+        ? {}
+        : { arguments: definition.arguments }),
+      tasks: definition.tasks,
       triggers: definition.triggers,
     }),
   )
   const runtime = new ApplicationRuntime(definition.modules, {
     logger,
-    entrypoints,
-    ...(environment === undefined ? {} : { environmentSource: environment }),
+    tasks,
+    publicTasks: definition.tasks,
+    ...(definition.arguments === undefined
+      ? {}
+      : {
+          arguments: definition.arguments,
+          argumentsSource:
+            'arguments' in options ? options.arguments : Object.freeze({}),
+        }),
+    ...('environment' in options
+      ? { environmentSource: options.environment }
+      : {}),
   })
   const application = {
     graph,
@@ -36,13 +64,10 @@ export function createInvocationBinding<
       await runtime.initialize()
       return application
     },
-    ...(definition.entrypoint
+    ...(definition.tasks.length > 0
       ? {
-          run(...args: readonly unknown[]) {
-            return Reflect.apply(runtime.run, runtime, [
-              definition.entrypoint,
-              ...args,
-            ])
+          run(task: TaskDescriptor, ...args: readonly unknown[]) {
+            return Reflect.apply(runtime.run, runtime, [task, ...args])
           },
         }
       : {}),
@@ -57,13 +82,13 @@ export function createInvocationBinding<
   }
 }
 
-function registeredEntrypoints(
+function registeredTasks(
   definition: ApplicationDefinition,
-): readonly EntrypointDescriptor<any, any>[] {
+): readonly TaskDescriptor<any, any>[] {
   return [
     ...new Set([
-      ...(definition.entrypoint ? [definition.entrypoint] : []),
-      ...definition.triggers.map((trigger) => trigger.entrypoint),
+      ...definition.tasks,
+      ...definition.triggers.map((trigger) => trigger.task),
     ]),
   ]
 }

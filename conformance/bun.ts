@@ -2,8 +2,9 @@ import { createInvocationBinding } from '@loutrejs/application/binding'
 import { createBunFetchDriver } from '@loutrejs/runtime-bun'
 import usersDefinition from '../dist/conformance/http-crud/application.mjs'
 import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
-const usersBinding = createInvocationBinding(usersDefinition)
-const eventsBinding = createInvocationBinding(eventsDefinition)
+
+const usersBinding = createInvocationBinding({ application: usersDefinition })
+const eventsBinding = createInvocationBinding({ application: eventsDefinition })
 const handler = createBunFetchDriver(usersBinding.http!)
 const response = await handler(
   new Request('https://bun.fixture/users/bun-user'),

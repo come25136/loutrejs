@@ -1,19 +1,6 @@
-import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import {
-  existsSync,
-  statSync,
-  watch as watchFile,
-  type FSWatcher,
-} from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { createServer as createNetServer } from 'node:net'
-import { tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
-import type {
-  HttpApplicationCapability,
-  TriggerApplicationCapability,
-} from '@loutrejs/application'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import type {
   ApplicationGraphIR,
   DependencyEdgeIR,
@@ -27,17 +14,7 @@ import { electronRuntime } from '@loutrejs/runtime-electron'
 import { lambdaRuntime } from '@loutrejs/runtime-lambda'
 import { nodeRuntime } from '@loutrejs/runtime-node'
 import { workerdRuntime } from '@loutrejs/runtime-workerd'
-import {
-  emitApplication,
-  importApplication,
-  loadApplication,
-  loadApplicationGraph,
-  type LoadedHostedApplication,
-} from './application-loader.js'
-import {
-  printStartupBanner,
-  type StartupBannerRenderOptions,
-} from './startup-banner.js'
+import { emitApplication, loadApplicationGraph } from './application-loader.js'
 
 export {
   detectStartupBannerTerminal,
@@ -52,7 +29,6 @@ export interface CliIO {
   readonly cwd: string
   readonly stdout: (value: string) => void
   readonly stderr: (value: string) => void
-  readonly terminal?: StartupBannerRenderOptions
 }
 
 const runtimes: Readonly<Record<string, RuntimeCapabilities>> = {
@@ -69,7 +45,12 @@ export async function runCli(
   io: CliIO,
 ): Promise<number> {
   const [command, subject] = args
-  if (!command || command === 'help' || command === '--help') {
+  if (
+    !command ||
+    command === 'help' ||
+    command === '--help' ||
+    command === '-h'
+  ) {
     io.stdout(helpText())
     return 0
   }
@@ -97,6 +78,7 @@ export async function runCli(
       writeDiagnostics(graph, io)
       return 1
     }
+
     case 'doctor': {
       const runtimeName = subject ?? 'node'
       const runtime = runtimes[runtimeName]
@@ -115,6 +97,7 @@ export async function runCli(
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
       return check.ok && graph.diagnostics.length === 0 ? 0 : 1
     }
+
     case 'graph': {
       if (!isGraphSubject(subject)) {
         io.stderr(
@@ -132,14 +115,17 @@ export async function runCli(
         )
         return 2
       }
-      if (format === 'json')
+      if (format === 'json') {
         io.stdout(`${JSON.stringify(graphData(graph, subject), null, 2)}\n`)
-      else if (format === 'mermaid')
+      } else if (format === 'mermaid') {
         io.stdout(renderMermaidGraph(graph, subject))
-      else renderTextGraph(graph, subject, io.stdout)
+      } else {
+        renderTextGraph(graph, subject, io.stdout)
+      }
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
       return graph.diagnostics.length === 0 ? 0 : 1
     }
+
     case 'explain': {
       if (!subject) {
         io.stderr('explainには対象が必要です。')
@@ -155,6 +141,7 @@ export async function runCli(
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
       return graph.diagnostics.length === 0 ? 0 : 1
     }
+
     case 'build': {
       if (!subject) {
         io.stderr('buildには明示的なApplication entryが必要です。')
@@ -186,82 +173,7 @@ export async function runCli(
       io.stdout(`Graph Manifestを出力しました: ${manifestOutput}`)
       return 0
     }
-    case 'run': {
-      if (!subject) {
-        io.stderr(
-          'runには明示的なApplication entryが必要です。filesystem discoveryは行いません。',
-        )
-        return 2
-      }
-      const rawInput = readOption(args, '--input')
-      let input: unknown
-      if (rawInput !== undefined) {
-        try {
-          input = JSON.parse(rawInput)
-        } catch {
-          io.stderr('run --inputには有効なJSONを指定してください。')
-          return 2
-        }
-      }
-      const loaded = await loadApplication(resolve(io.cwd, subject))
-      if (!loaded.definition.entrypoint || !('run' in loaded.application)) {
-        io.stderr(
-          'LUTRE_CLI_ENTRYPOINT_REQUIRED: runにはentrypointを持つApplicationが必要です。',
-        )
-        return 2
-      }
-      await loaded.application.init()
-      try {
-        const run = loaded.application.run as (
-          ...args: readonly unknown[]
-        ) => Promise<unknown>
-        const result = await Reflect.apply(
-          run,
-          loaded.application,
-          rawInput === undefined ? [] : [input],
-        )
-        if (result !== undefined) io.stdout(formatRunResult(result))
-        return 0
-      } finally {
-        await loaded.application.close('run-complete')
-      }
-    }
-    case 'dev': {
-      if (!subject) {
-        io.stderr(
-          'devには明示的なApplication entryが必要です。filesystem discoveryは行いません。',
-        )
-        return 2
-      }
-      return startDevelopmentServer(
-        resolve(io.cwd, subject),
-        resolve(io.cwd, 'tsconfig.json'),
-        readPort(args),
-        io,
-      )
-    }
-    case 'start': {
-      if (!subject) {
-        io.stderr(
-          'startには明示的なApplication entryが必要です。filesystem discoveryは行いません。',
-        )
-        return 2
-      }
-      const startedAt = performance.now()
-      const [applicationName, frameworkVersion, loaded] = await Promise.all([
-        readApplicationName(io.cwd),
-        readFrameworkVersion(),
-        loadApplication(resolve(io.cwd, subject)),
-      ])
-      await startHostedApplication(loaded.application, readPort(args), io, {
-        application: applicationName,
-        version: frameworkVersion,
-        environment: process.env.NODE_ENV ?? 'production',
-        startedAt,
-      })
-      registerShutdown(loaded.application, io)
-      return 0
-    }
+
     default:
       io.stderr(`不明なcommandです: ${command}`)
       return 2
@@ -295,6 +207,7 @@ function graphData(
       return {
         version: graph.version,
         modules: graph.modules,
+        arguments: graph.arguments,
         diagnostics: graph.diagnostics,
       }
     case 'di':
@@ -322,6 +235,7 @@ function graphData(
     case 'executions':
       return {
         version: graph.version,
+        tasks: graph.tasks,
         executions: graph.executions,
         queues: graph.queues,
         diagnostics: graph.diagnostics,
@@ -342,13 +256,16 @@ function renderTextGraph(
       if (module.description !== undefined)
         write(`  description: ${module.description}`)
       write(`  imports: ${module.imports.join(', ') || '(なし)'}`)
+      write(`  environment: ${module.environment.join(', ') || '(なし)'}`)
       write(`  providers: ${module.providers.join(', ') || '(なし)'}`)
       write(`  exports: ${module.exports.join(', ') || '(なし)'}`)
       write(`  lifecycle: ${module.lifecycle.join(', ') || '(なし)'}`)
       write(`  requires: ${module.requires.join(', ') || '(なし)'}`)
     }
+    if (graph.arguments) write(`Application Arguments: ${graph.arguments.name}`)
     return
   }
+
   if (subject === 'contracts') {
     for (const pipeline of graph.pipelines) {
       write(`${pipeline.contract}.${pipeline.procedure} [${pipeline.protocol}]`)
@@ -356,17 +273,23 @@ function renderTextGraph(
     }
     return
   }
+
   if (subject === 'runtime') {
     for (const capability of requiredCapabilities(graph)) write(capability)
     for (const capability of graph.hostCapabilities) write(`host:${capability}`)
     return
   }
+
   if (subject === 'executions') {
+    for (const task of graph.tasks) {
+      write(`task: ${task.name}${task.public ? ' [public]' : ' [internal]'}`)
+    }
     for (const execution of graph.executions)
       write(`${execution.kind}: ${execution.id}`)
     for (const queue of graph.queues) write(`queue: ${queue.name}`)
     return
   }
+
   renderDiText(graph, write)
 }
 
@@ -382,6 +305,7 @@ function renderDiText(
     current.push(edge)
     outgoing.set(edge.from, current)
   }
+
   const renderedRoots = new Set<string>()
   const render = (id: string, prefix: string, lineage: readonly string[]) => {
     const edges = outgoing.get(id) ?? []
@@ -391,7 +315,7 @@ function renderDiText(
       const last = index === edges.length - 1
       const cycle = lineage.includes(edge.to)
       const condition = edge.condition
-        ? ` [${edge.condition.key}=${String(edge.condition.equals)}]`
+        ? ` [${edge.condition.source}:${edge.condition.contract}.${edge.condition.key}=${String(edge.condition.equals)}]`
         : ''
       const unresolved = graph.diagnostics.some(
         (diagnostic) =>
@@ -401,13 +325,15 @@ function renderDiText(
       write(
         `${prefix}${last ? '└──' : '├──'}${condition} ${nodeLabel(child)}${cycle ? ' ↺ cycle' : unresolved ? ' ✗ UNRESOLVED' : ''}`,
       )
-      if (!cycle)
+      if (!cycle) {
         render(edge.to, `${prefix}${last ? '    ' : '│   '}`, [
           ...lineage,
           edge.to,
         ])
+      }
     })
   }
+
   const roots = graph.nodes.filter(
     (node) =>
       !incoming.has(node.id) && (outgoing.get(node.id)?.length ?? 0) > 0,
@@ -443,6 +369,7 @@ function renderMermaidGraph(
     lines.push(`  ${id}["${mermaidText(label)}"]`)
   const edge = (from: string, to: string, label?: string) =>
     lines.push(`  ${from} -->${label ? `|"${mermaidText(label)}"|` : ''} ${to}`)
+
   if (subject === 'di') {
     const ids = new Map(
       graph.nodes.map((candidate, index) => [candidate.id, `n${index}`]),
@@ -451,7 +378,7 @@ function renderMermaidGraph(
       node(ids.get(candidate.id)!, nodeLabel(candidate))
     for (const dependency of graph.edges) {
       const condition = dependency.condition
-        ? `${dependency.kind}: ${dependency.condition.key}=${String(dependency.condition.equals)}`
+        ? `${dependency.kind}: ${dependency.condition.source}:${dependency.condition.contract}.${dependency.condition.key}=${String(dependency.condition.equals)}`
         : `${dependency.kind}/${dependency.source}`
       edge(
         ids.get(dependency.from) ?? mermaidId(dependency.from),
@@ -465,9 +392,12 @@ function renderMermaidGraph(
     )
     for (const module of graph.modules) {
       node(ids.get(module.id)!, module.name ?? module.description ?? module.id)
-      for (const imported of module.imports)
+      for (const imported of module.imports) {
         edge(ids.get(module.id)!, ids.get(imported) ?? mermaidId(imported))
+      }
     }
+    if (graph.arguments)
+      node('application_arguments', `Arguments: ${graph.arguments.name}`)
   } else if (subject === 'contracts') {
     graph.pipelines.forEach((pipeline, pipelineIndex) => {
       const procedureId = `p${pipelineIndex}`
@@ -485,6 +415,7 @@ function renderMermaidGraph(
     })
   } else if (subject === 'executions') {
     for (const queue of graph.queues) node(mermaidId(queue.id), queue.name)
+    for (const task of graph.tasks) node(mermaidId(task.id), task.name)
     for (const execution of graph.executions) {
       const id = mermaidId(execution.id)
       node(
@@ -495,7 +426,7 @@ function renderMermaidGraph(
         if (execution.trigger === 'queue-consumer') {
           edge(mermaidId(`queue:${execution.queue}`), id, 'consume')
         }
-        edge(id, mermaidId(`entrypoint:${execution.entrypoint}`), 'trigger')
+        edge(id, mermaidId(`task:${execution.task}`), 'trigger')
       }
     }
   } else {
@@ -506,6 +437,7 @@ function renderMermaidGraph(
       edge('application', capabilityId)
     })
   }
+
   return lines.join('\n')
 }
 
@@ -523,10 +455,12 @@ function renderExplanation(
       pipeline.contract === subject,
   )
   if (!node && pipelines.length === 0) return false
+
   for (const pipeline of pipelines) {
     write(`${pipeline.contract}.${pipeline.procedure} [${pipeline.protocol}]`)
     renderLayerText(pipeline.layers, write, '')
   }
+
   if (node) {
     write(node.label)
     write(`kind: ${node.kind}`)
@@ -546,6 +480,7 @@ function renderExplanation(
       if (dependency.module) write(`    provided by: ${dependency.module}`)
     }
   }
+
   return true
 }
 
@@ -573,7 +508,7 @@ function renderLayerMermaid(
     const currentId = `${idPrefix}l${current.index}`
     node(currentId, `${current.index + 1} ${current.name}`)
     edge(previous, currentId)
-    if (current.pipeline)
+    if (current.pipeline) {
       renderLayerMermaid(
         current.pipeline,
         `${currentId}c`,
@@ -581,6 +516,7 @@ function renderLayerMermaid(
         node,
         edge,
       )
+    }
     previous = currentId
   }
   return previous
@@ -602,382 +538,9 @@ function mermaidText(value: string): string {
     .replaceAll('>', '&gt;')
 }
 
-interface DevelopmentBuild {
-  readonly application: LoadedHostedApplication
-  readonly sourceFiles: readonly string[]
-}
-
-async function startDevelopmentServer(
-  entry: string,
-  tsconfigPath: string,
-  port: number,
-  io: CliIO,
-): Promise<number> {
-  const directory = await mkdtemp(join(tmpdir(), 'loutre-dev-'))
-  let generation = 0
-  let listenPort = port
-  let active: { readonly application: LoadedHostedApplication } | undefined
-  const [applicationName, frameworkVersion] = await Promise.all([
-    readApplicationName(io.cwd),
-    readFrameworkVersion(),
-  ])
-
-  const build = async (): Promise<DevelopmentBuild> => {
-    await runTypeCheck(tsconfigPath)
-    const output = join(directory, `application-${generation++}.mjs`)
-    const sourceFiles = await emitApplication(entry, output, {
-      nodeCompatibility: true,
-    })
-    return { application: await importApplication(output), sourceFiles }
-  }
-  const launch = async (candidate: DevelopmentBuild, startedAt: number) => {
-    if (hasHttpCapability(candidate.application) && listenPort === 0) {
-      listenPort = await reservePort()
-    }
-    await startHostedApplication(candidate.application, listenPort, io, {
-      application: applicationName,
-      version: frameworkVersion,
-      environment: process.env.NODE_ENV ?? 'development',
-      startedAt,
-    })
-    active = { application: candidate.application }
-  }
-  const stop = async (signal: string) => {
-    const current = active
-    active = undefined
-    if (!current) return
-    await current.application.close(signal)
-  }
-
-  const first = await build()
-  await launch(first, performance.now())
-  let stopping = false
-  let reloading = false
-  let pending = false
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let activeReload: Promise<void> | undefined
-  const watcher = new SourceWatchSet(() => {
-    if (stopping) return
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(requestReload, 75)
-  })
-  watcher.replace([...first.sourceFiles, tsconfigPath])
-
-  function requestReload() {
-    timer = undefined
-    if (stopping) return
-    if (reloading) {
-      pending = true
-      return
-    }
-    activeReload = reload().finally(() => {
-      activeReload = undefined
-    })
-  }
-
-  async function reload(): Promise<void> {
-    reloading = true
-    try {
-      do {
-        pending = false
-        let candidate: DevelopmentBuild | undefined
-        try {
-          await stop('reload')
-          candidate = await build()
-          if (stopping) {
-            await candidate.application.close('reload-cancelled')
-            return
-          }
-          await launch(candidate, performance.now())
-          watcher.replace([...candidate.sourceFiles, tsconfigPath])
-          candidate = undefined
-        } catch (error) {
-          if (candidate)
-            await candidate.application
-              .close('reload-failed')
-              .catch(() => undefined)
-          io.stderr(
-            `Applicationの再起動に失敗しました。Applicationは停止しています。\n${errorMessage(error)}`,
-          )
-        }
-      } while (pending && !stopping)
-    } finally {
-      reloading = false
-    }
-  }
-
-  const shutdown = async (signal: string) => {
-    if (stopping) return
-    stopping = true
-    if (timer) clearTimeout(timer)
-    watcher.close()
-    await activeReload
-    await stop(signal)
-    await rm(directory, { recursive: true, force: true })
-  }
-  const report = (error: unknown) =>
-    io.stderr(
-      `Development serverの終了処理に失敗しました: ${errorMessage(error)}`,
-    )
-  process.once('SIGINT', () => void shutdown('SIGINT').catch(report))
-  process.once('SIGTERM', () => void shutdown('SIGTERM').catch(report))
-  return 0
-}
-
-async function startHostedApplication(
-  application: LoadedHostedApplication,
-  port: number,
-  io: CliIO,
-  details: {
-    readonly application: string
-    readonly version: string
-    readonly environment: string
-    readonly startedAt: number
-  },
-): Promise<void> {
-  const http = hasHttpCapability(application)
-  const triggers = hasTriggerCapability(application)
-  if (!http && !triggers) {
-    throw new Error(
-      'LUTRE_CLI_HOST_REQUIRED: dev/startにはHTTPまたはTriggerを持つApplicationが必要です。',
-    )
-  }
-  await application.init()
-  let server: string | undefined
-  try {
-    if (http) {
-      const listenPort = port === 0 ? await reservePort() : port
-      await application.listen({ port: listenPort, hostname: '127.0.0.1' })
-      server = `http://127.0.0.1:${listenPort}`
-    }
-    if (triggers) await application.triggers.start()
-  } catch (error) {
-    await application.close('startup-failure').catch(() => undefined)
-    throw error
-  }
-  if (server) {
-    writeStartupBanner(io, { ...details, server })
-  } else {
-    io.stdout(`${details.application} started`)
-    io.stdout(`Loutre ${details.version}`)
-    io.stdout(`Runtime Node.js ${process.versions.node}`)
-    io.stdout(`Environment ${details.environment}`)
-    io.stdout(
-      `Triggers ${application.graph.executions.filter((execution) => execution.kind === 'trigger').length}`,
-    )
-  }
-}
-
-function registerShutdown(
-  application: LoadedHostedApplication,
-  io: CliIO,
-): void {
-  let closing = false
-  const shutdown = async (signal: string) => {
-    if (closing) return
-    closing = true
-    await application.close(signal)
-  }
-  const report = (error: unknown) =>
-    io.stderr(`Applicationの終了処理に失敗しました: ${errorMessage(error)}`)
-  process.once('SIGINT', () => void shutdown('SIGINT').catch(report))
-  process.once('SIGTERM', () => void shutdown('SIGTERM').catch(report))
-}
-
-function hasHttpCapability(
-  application: LoadedHostedApplication,
-): application is LoadedHostedApplication & HttpApplicationCapability {
-  return 'listen' in application && typeof application.listen === 'function'
-}
-
-function hasTriggerCapability(
-  application: LoadedHostedApplication,
-): application is LoadedHostedApplication & TriggerApplicationCapability {
-  return 'triggers' in application
-}
-
-async function runTypeCheck(tsconfigPath: string): Promise<void> {
-  await new Promise<void>((resolveCheck, reject) => {
-    const child = spawn(
-      'tsc',
-      ['-p', tsconfigPath, '--noEmit', '--pretty', 'false'],
-      {
-        cwd: dirname(tsconfigPath),
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    )
-    let output = ''
-    child.stdout.on('data', (chunk) => {
-      output += chunk.toString()
-    })
-    child.stderr.on('data', (chunk) => {
-      output += chunk.toString()
-    })
-    child.once('error', reject)
-    child.once('exit', (code) => {
-      if (code === 0) resolveCheck()
-      else
-        reject(
-          new Error(
-            output.trim() ||
-              `TypeScript type checkが終了code ${code}で失敗しました`,
-          ),
-        )
-    })
-  })
-}
-
-class SourceWatchSet {
-  readonly #watchers = new Map<string, FSWatcher>()
-  readonly #versions = new Map<string, string>()
-
-  constructor(readonly onChange: () => void) {}
-
-  add(paths: readonly string[]): void {
-    const targets = new Map<string, boolean>()
-    for (const requested of paths) {
-      const absolute = resolve(requested)
-      this.#versions.set(absolute, sourceVersion(absolute))
-      targets.set(absolute, targets.get(absolute) ?? false)
-      targets.set(dirname(absolute), true)
-    }
-    for (const [path, directory] of targets) {
-      if (this.#watchers.has(path) || !existsSync(path)) continue
-      const watcher = watchFile(path, (_event, fileName) => {
-        const changed =
-          directory && fileName ? resolve(path, fileName.toString()) : path
-        if (!/\.(?:[cm]?[jt]sx?|json)$/.test(changed)) return
-        const version = sourceVersion(changed)
-        if (this.#versions.get(changed) === version) return
-        this.#versions.set(changed, version)
-        this.onChange()
-      })
-      watcher.on('error', () => {
-        watcher.close()
-        this.#watchers.delete(path)
-        this.onChange()
-      })
-      this.#watchers.set(path, watcher)
-    }
-  }
-
-  replace(paths: readonly string[]): void {
-    for (const watcher of this.#watchers.values()) watcher.close()
-    this.#watchers.clear()
-    this.add(paths)
-  }
-
-  close(): void {
-    for (const watcher of this.#watchers.values()) watcher.close()
-    this.#watchers.clear()
-    this.#versions.clear()
-  }
-}
-
-function sourceVersion(path: string): string {
-  try {
-    const stats = statSync(path, { bigint: true })
-    return [
-      stats.dev,
-      stats.ino,
-      stats.size,
-      stats.mtimeNs,
-      stats.ctimeNs,
-    ].join(':')
-  } catch {
-    return 'missing'
-  }
-}
-
-async function reservePort(): Promise<number> {
-  const server = createNetServer()
-  await new Promise<void>((resolveListening, reject) => {
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', resolveListening)
-  })
-  const address = server.address()
-  if (!address || typeof address === 'string') {
-    server.close()
-    throw new Error('利用可能なHTTP portを確保できませんでした。')
-  }
-  const port = address.port
-  await new Promise<void>((resolveClosed, reject) => {
-    server.close((error) => (error ? reject(error) : resolveClosed()))
-  })
-  return port
-}
-
-function writeStartupBanner(
-  io: CliIO,
-  details: {
-    readonly application: string
-    readonly version: string
-    readonly server: string
-    readonly environment: string
-    readonly startedAt: number
-  },
-): void {
-  printStartupBanner(
-    {
-      application: details.application,
-      version: details.version,
-      server: details.server,
-      runtime: `Node.js ${process.versions.node}`,
-      environment: details.environment,
-      startupDurationMs: performance.now() - details.startedAt,
-    },
-    io.terminal ?? { isTTY: false, color: false },
-    io.stdout,
-  )
-}
-
-async function readApplicationName(cwd: string): Promise<string> {
-  try {
-    const manifest = JSON.parse(
-      await readFile(resolve(cwd, 'package.json'), 'utf8'),
-    ) as { readonly name?: unknown }
-    if (typeof manifest.name === 'string' && manifest.name.length > 0)
-      return manifest.name.split('/').at(-1) ?? manifest.name
-  } catch {
-    // package.jsonがないApplicationではdirectory名を使用する。
-  }
-  return basename(cwd)
-}
-
-async function readFrameworkVersion(): Promise<string> {
-  try {
-    const manifest = JSON.parse(
-      await readFile(new URL('../package.json', import.meta.url), 'utf8'),
-    ) as { readonly version?: unknown }
-    if (typeof manifest.version === 'string') return manifest.version
-  } catch {
-    // package metadataを読めない実行形態ではunknownを表示する。
-  }
-  return 'unknown'
-}
-
 function readOption(args: readonly string[], name: string): string | undefined {
   const index = args.indexOf(name)
   return index < 0 ? undefined : args[index + 1]
-}
-
-function readPort(args: readonly string[]): number {
-  const value = readOption(args, '--port')
-  if (value === undefined) return 3000
-  const port = Number(value)
-  if (!Number.isInteger(port) || port < 0 || port > 65_535)
-    throw new Error(`不正なportです: ${value}`)
-  return port
-}
-
-function formatRunResult(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (typeof value === 'bigint') return value.toString()
-  return JSON.stringify(value, null, 2) ?? String(value)
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function helpText(): string {
@@ -988,8 +551,7 @@ function helpText(): string {
     '  loutre graph modules|di|contracts|executions|runtime --entry <明示entry> [--format text|json|mermaid]',
     '  loutre explain <target> --entry <明示entry>',
     '  loutre build <明示entry> [--out-dir <directory>]',
-    '  loutre run <明示entry> [--input <json>]',
-    '  loutre dev <明示entry> [--port <port>]',
-    '  loutre start <明示entry> [--port <port>]',
+    '',
+    'Applicationの実行方法はHostが所有します。run/dev/startはLoutre CLIにはありません。',
   ].join('\n')
 }

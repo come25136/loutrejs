@@ -1,15 +1,18 @@
 import {
+  argumentsProvider,
+  loadArgs,
   loadEnv,
   normalizeProvider,
+  type ArgsClass,
   type EnvClass,
-  type EntrypointArguments,
-  type EntrypointDescriptor,
-  type EntrypointOutput,
   type LifecycleHook,
   type ModuleInstance,
   type ModuleTemplate,
   type ProviderDescriptor,
   type PipelineItem,
+  type TaskArguments,
+  type TaskDescriptor,
+  type TaskOutput,
   type TokenLike,
 } from '@loutrejs/core'
 import {
@@ -22,7 +25,10 @@ import { Logger } from './logger.js'
 export interface ApplicationRuntimeOptions {
   readonly logger?: Logger
   readonly environmentSource?: unknown
-  readonly entrypoints?: readonly EntrypointDescriptor<any, any>[]
+  readonly arguments?: ArgsClass
+  readonly argumentsSource?: unknown
+  readonly tasks?: readonly TaskDescriptor<any, any>[]
+  readonly publicTasks?: readonly TaskDescriptor<any, any>[]
 }
 
 export interface InitializableApplication {
@@ -54,13 +60,27 @@ export class EnvironmentBindingError extends Error {
   }
 }
 
+export class ArgumentsBindingError extends Error {
+  readonly code = 'LUTRE_ARGS_003'
+
+  constructor(argumentsContract: ArgsClass, cause: unknown) {
+    super(`Arguments validation failed for ${argumentsContract.name}.`, {
+      cause,
+    })
+    this.name = 'ArgumentsBindingError'
+  }
+}
+
 export class ApplicationRuntime {
   readonly graph: RuntimeModuleGraph
   readonly container: Container
   readonly #instancesByModule = new Map<ModuleInstance, unknown[]>()
   readonly #logger: Logger
   readonly #environmentSource: unknown
-  readonly #entrypoints: ReadonlySet<EntrypointDescriptor<any, any>>
+  readonly #arguments: ArgsClass | undefined
+  readonly #argumentsSource: unknown
+  readonly #tasks: ReadonlySet<TaskDescriptor<any, any>>
+  readonly #publicTasks: ReadonlySet<TaskDescriptor<any, any>>
   #initialized = false
   #initializing: Promise<void> | undefined
   #prepared = false
@@ -79,9 +99,17 @@ export class ApplicationRuntime {
       'environmentSource' in options
         ? options.environmentSource
         : NO_ENVIRONMENT_SOURCE
-    this.#entrypoints = new Set(options.entrypoints ?? [])
+    this.#arguments = options.arguments
+    this.#argumentsSource =
+      'argumentsSource' in options ? options.argumentsSource : Object.freeze({})
+    this.#tasks = new Set(options.tasks ?? [])
+    this.#publicTasks = new Set(options.publicTasks ?? [])
     this.graph = collectRuntimeModuleGraph(roots)
-    this.container = new Container(this.graph.providers, {
+    const providers = [
+      ...this.graph.providers,
+      ...(this.#arguments ? [argumentsProvider(this.#arguments)] : []),
+    ]
+    this.container = new Container(providers, {
       logger: this.#logger,
     })
   }
@@ -113,6 +141,7 @@ export class ApplicationRuntime {
     this.#state = 'initializing'
     try {
       await this.#bindEnvironment(environmentSource)
+      await this.#bindArguments()
       this.#prepareRuntime()
 
       for (const module of this.graph.modules) {
@@ -167,6 +196,16 @@ export class ApplicationRuntime {
     }
   }
 
+  async #bindArguments(): Promise<void> {
+    if (!this.#arguments) return
+    try {
+      const value = await loadArgs(this.#arguments, this.#argumentsSource)
+      this.container.bindArguments(this.#arguments, value)
+    } catch (error) {
+      throw new ArgumentsBindingError(this.#arguments, error)
+    }
+  }
+
   #prepareRuntime(): void {
     if (this.#prepared) return
     for (const module of this.graph.modules) {
@@ -177,27 +216,49 @@ export class ApplicationRuntime {
     for (const pipeline of collectApplicationPipelines(this.graph.modules)) {
       this.container.preparePipeline(pipeline)
     }
-    for (const entrypoint of this.#entrypoints) {
-      this.container.prepareEntrypoint(entrypoint)
+    for (const task of this.#tasks) {
+      this.container.prepareTask(task)
     }
     this.#prepared = true
   }
 
-  run<TEntrypoint extends EntrypointDescriptor<any, any>>(
-    entrypoint: TEntrypoint,
-    ...args: EntrypointArguments<TEntrypoint>
-  ): Promise<EntrypointOutput<TEntrypoint>> {
-    if (!this.#entrypoints.has(entrypoint)) {
+  run<TTask extends TaskDescriptor<any, any>>(
+    task: TTask,
+    ...args: TaskArguments<TTask>
+  ): Promise<TaskOutput<TTask>> {
+    if (!this.#publicTasks.has(task)) {
       return Promise.reject(
         new Error(
-          `LUTRE_APP_ENTRYPOINT_NOT_REGISTERED: Entrypoint ${entrypoint.name} is not registered in this Application.`,
+          `LUTRE_TASK_002: Task ${task.name} is not registered in Application.tasks.`,
         ),
       )
     }
+    return this.#invokeTask(task, args)
+  }
+
+  /** @internal Trigger Host invokes registered non-public Tasks through this path. */
+  runTask<TTask extends TaskDescriptor<any, any>>(
+    task: TTask,
+    ...args: TaskArguments<TTask>
+  ): Promise<TaskOutput<TTask>> {
+    if (!this.#tasks.has(task)) {
+      return Promise.reject(
+        new Error(
+          `LUTRE_TASK_NOT_REGISTERED: Task ${task.name} is not registered in this Application.`,
+        ),
+      )
+    }
+    return this.#invokeTask(task, args)
+  }
+
+  #invokeTask<TTask extends TaskDescriptor<any, any>>(
+    task: TTask,
+    args: TaskArguments<TTask>,
+  ): Promise<TaskOutput<TTask>> {
     return this.execute(async () => {
-      const runtime = this.container.entrypointRuntime(entrypoint)
+      const runtime = this.container.taskRuntime(task)
       return Reflect.apply(runtime, undefined, args) as Promise<
-        EntrypointOutput<TEntrypoint>
+        TaskOutput<TTask>
       >
     })
   }
@@ -322,7 +383,9 @@ export class ApplicationRuntime {
     const providers = (module.definition.providers ?? []).map(normalizeProvider)
     const applicationProviders = providers.filter(
       (provider): provider is ProviderDescriptor =>
-        provider.scope === 'application' && provider.kind !== 'environment',
+        provider.scope === 'application' &&
+        provider.kind !== 'environment' &&
+        provider.kind !== 'arguments',
     )
     const instances: unknown[] = []
     this.#instancesByModule.set(module, instances)

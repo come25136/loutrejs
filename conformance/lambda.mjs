@@ -12,8 +12,14 @@ if (!process.version.startsWith('v24.')) {
   )
 }
 
-const usersBinding = createInvocationBinding(usersDefinition, process.env)
-const eventsBinding = createInvocationBinding(eventsDefinition, process.env)
+const usersBinding = createInvocationBinding({
+  application: usersDefinition,
+  environment: process.env,
+})
+const eventsBinding = createInvocationBinding({
+  application: eventsDefinition,
+  environment: process.env,
+})
 const unary = await createLambdaHttpDriver(usersBinding.http)({
   rawPath: '/users/lambda-user',
   requestContext: { http: { method: 'GET' } },

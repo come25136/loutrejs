@@ -3,25 +3,13 @@ import { builtinModules } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type {
-  ApplicationDefinition,
-  HostedApplication,
-} from '@loutrejs/application'
-import { bootstrap } from '@loutrejs/application/host'
+import type { ApplicationDefinition } from '@loutrejs/application'
 import {
   assertValidCompilation,
   compileApplication,
   type ApplicationGraphIR,
 } from '@loutrejs/graph'
 import { build as buildWithEsbuild } from 'esbuild'
-
-export type LoadedHostedApplication = HostedApplication<ApplicationDefinition>
-
-export interface LoadedApplication {
-  readonly application: LoadedHostedApplication
-  readonly definition: ApplicationDefinition
-  readonly sourceFiles: readonly string[]
-}
 
 export interface EmitApplicationOptions {
   readonly nodeCompatibility?: boolean
@@ -62,14 +50,6 @@ export async function emitApplication(
   )
 }
 
-export async function importApplication(
-  output: string,
-): Promise<LoadedHostedApplication> {
-  const definition = await importApplicationDefinition(output)
-  compileDefinition(definition)
-  return bootstrap(definition) as LoadedHostedApplication
-}
-
 async function importApplicationDefinition(
   output: string,
 ): Promise<ApplicationDefinition> {
@@ -91,7 +71,10 @@ function compileDefinition(
   return assertValidCompilation(
     compileApplication({
       modules: definition.modules,
-      entrypoint: definition.entrypoint,
+      ...(definition.arguments === undefined
+        ? {}
+        : { arguments: definition.arguments }),
+      tasks: definition.tasks,
       triggers: definition.triggers,
     }),
   )
@@ -105,24 +88,6 @@ export async function loadApplicationDefinition(
   try {
     await emitApplication(entry, output, { nodeCompatibility: true })
     return await importApplicationDefinition(output)
-  } finally {
-    await rm(directory, { recursive: true, force: true })
-  }
-}
-
-export async function loadApplication(
-  entry: string,
-): Promise<LoadedApplication> {
-  const directory = await mkdtemp(join(tmpdir(), 'loutre-application-'))
-  const output = join(directory, 'application.mjs')
-  try {
-    const sourceFiles = await emitApplication(entry, output, {
-      nodeCompatibility: true,
-    })
-    const definition = await importApplicationDefinition(output)
-    compileDefinition(definition)
-    const application = bootstrap(definition) as LoadedHostedApplication
-    return { application, definition, sourceFiles }
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
