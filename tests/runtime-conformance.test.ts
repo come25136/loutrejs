@@ -17,10 +17,7 @@ const eventsDefinition = () =>
 
 describe('Runtime conformance harness', () => {
   it.each([
-    [
-      'Deno 2.9 LTS',
-      () => denoRuntime.bind({ application: usersDefinition() }),
-    ],
+    ['Deno', () => denoRuntime.bind({ application: usersDefinition() })],
     ['workerd', () => workerdRuntime.bind({ application: usersDefinition() })],
   ])('%s bind()で同じFixture Aを実行する', async (_name, createBinding) => {
     const runtimeBinding = createBinding()
@@ -35,7 +32,7 @@ describe('Runtime conformance harness', () => {
     await runtimeBinding.close()
   })
 
-  it('AWS Lambda nodejs24.x managed形状へunary responseをadaptする', async () => {
+  it('AWS Lambda managed形状へunary responseをadaptする', async () => {
     const handler = lambdaRuntime.bind({ application: usersDefinition() })
     const response = await handler({
       rawPath: '/users/lambda-user',
@@ -80,6 +77,15 @@ describe('Runtime conformance harness', () => {
     expect(new TextDecoder().decode(Buffer.concat(chunks))).toContain(
       'data:{"sequence":3,"message":"event-3"}',
     )
+  })
+
+  it('runtime identityはversionから独立している', () => {
+    expect(nodeRuntime.runtime).toBe('node')
+    expect(bunRuntime.runtime).toBe('bun')
+    expect(denoRuntime.runtime).toBe('deno')
+    expect(workerdRuntime.runtime).toBe('workerd')
+    expect(lambdaRuntime.runtime).toBe('lambda')
+    expect(electronRuntime.runtime).toBe('electron')
   })
 
   it('lifecycle ownershipに対応するhigh-level APIを公開する', () => {

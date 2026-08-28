@@ -22,7 +22,7 @@
     "provenance": true
   },
   "engines": {
-    "node": "26.x"
+    "node": ">=22"
   },
   "dependencies": {
     "@loutrejs/loutre": "^0.1.0",

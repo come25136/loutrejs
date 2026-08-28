@@ -32,7 +32,7 @@ export interface BunServeHandle<
 }
 
 export const bunRuntime = {
-  runtime: 'bun-1.4-stable',
+  runtime: 'bun',
   capabilities: new Set([
     'http.server',
     'http.request.streaming',

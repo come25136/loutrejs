@@ -44,7 +44,7 @@ export interface ElectronAttachment<
 }
 
 export const electronRuntime = {
-  runtime: 'electron-43',
+  runtime: 'electron',
   capabilities: new Set([
     'messagePort.send',
     'messagePort.receive',
