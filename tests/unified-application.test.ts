@@ -197,7 +197,6 @@ describe('Unified Application', () => {
       }),
     })
 
-    expect(application.graph.version).toBe(5)
     expect(application.graph.queues).toEqual([
       expect.objectContaining({ id: 'queue:orders', name: 'orders' }),
     ])

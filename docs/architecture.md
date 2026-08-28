@@ -654,15 +654,14 @@ Cleanupも失敗した場合は`AggregateError`へ集約する。
 
 ## 9. Application Graph / Graph Probe
 
-### 9.1 Graph IR は v5 のみ
+### 9.1 Application Graph
 
-public `@loutrejs/loutre/graph`が公開・生成するGraph IRは`version: 5`だけである。
-Graph compilerはv5 IRを直接構築し、v3 / v4 compiler、IR type、変換bridge、forwarding entryは保持しない。
+public `@loutrejs/loutre/graph`が公開・生成する`ApplicationGraphIR`はLoutre本体のPublic APIとして管理する。
+Graphだけに独立したschema versionは持たせず、Graph shapeの破壊的変更はLoutre本体のversioningで扱う。旧Graph compiler、IR type、変換bridge、forwarding entryは保持しない。
 
 `ApplicationGraphIR`は少なくとも次を持つ。
 
 ```text
-version = 5
 modules
 arguments?
 providers
@@ -977,7 +976,7 @@ Runtime固有機能はCapabilityとしてGraphとHost / Runtime Adapterの境界
 Capability IRはApplication全体requirementと特定execution requirementを区別する。
 Environment Contractを1つ以上宣言したModuleは`env.runtime` capabilityを自動要求する。
 
-Graph v5はApplication側requirementsに加えて`hostCapabilities`も保持する。
+Application GraphはApplication側requirementsに加えて`hostCapabilities`も保持する。
 CLI `doctor`はGraphからrequired capabilityを抽出し、選択runtimeのcapability setと照合する。
 
 Node capability metadataは`@loutrejs/loutre/runtime`側にも置く。
@@ -1058,8 +1057,8 @@ HttpApplication / createHttpApplication / initializeHttpApplication
 MessagePortApplication / createMessagePortApplication
 Protocolごとに分裂したApplication Definition
 Application Definitionへのruntime / adapter指定
-Graph v3 / v4 compatibility layer
-versioned legacy Graph compiler / IR forwarding entry
+Graph-specific schema versioning
+legacy Graph compiler / IR compatibility layer
 Entrypoint as public execution model
 Application.entrypoint
 loutre run / loutre dev / loutre start
@@ -1091,7 +1090,7 @@ Loutre v0.1 architectureを短くまとめると次。
 
 > **Applicationは一種類のportable Definition。Protocol / Task / TriggerがExecution RootとしてGraphに載る。**
 
-> **Application Graph v5がType System / Runtime / Toolingをつなぐ。Compilerは中心ではない。**
+> **Application GraphがType System / Runtime / Toolingをつなぐ。Compilerは中心ではない。**
 
 > **ContractとProtocolはstatic descriptor、Implementation / Layer / Taskはstatic descriptor + synchronous factory。**
 

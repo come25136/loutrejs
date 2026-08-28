@@ -280,21 +280,18 @@ function graphData(
   switch (subject) {
     case 'modules':
       return {
-        version: graph.version,
         modules: graph.modules,
         arguments: graph.arguments,
         diagnostics: graph.diagnostics,
       }
     case 'di':
       return {
-        version: graph.version,
         nodes: graph.nodes,
         edges: graph.edges,
         diagnostics: graph.diagnostics,
       }
     case 'contracts':
       return {
-        version: graph.version,
         contracts: graph.contracts,
         pipelines: graph.pipelines,
         implementations: graph.implementations,
@@ -302,14 +299,12 @@ function graphData(
       }
     case 'runtime':
       return {
-        version: graph.version,
         capabilities: graph.capabilities,
         hostCapabilities: graph.hostCapabilities,
         diagnostics: graph.diagnostics,
       }
     case 'executions':
       return {
-        version: graph.version,
         tasks: graph.tasks,
         executions: graph.executions,
         queues: graph.queues,

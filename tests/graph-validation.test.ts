@@ -107,7 +107,6 @@ describe('Application Graph IRとsemantic validation', () => {
 
     const { graph, diagnostics } = compileApplication({ modules: [Module()] })
     expect(diagnostics).toEqual([])
-    expect(graph.version).toBe(5)
     const root = graph.pipelines[0]?.layers[0]
     expect(root).toMatchObject({
       index: 0,

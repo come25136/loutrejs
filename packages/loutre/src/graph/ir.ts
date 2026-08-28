@@ -184,7 +184,6 @@ export interface QueueIR {
 }
 
 export interface ApplicationGraphIR {
-  readonly version: 5
   readonly modules: readonly ModuleIR[]
   readonly arguments?: ApplicationArgumentsIR
   readonly providers: readonly ProviderIR[]

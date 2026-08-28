@@ -211,7 +211,6 @@ export function compileApplication(
     .map((node) => node.label)
   const publicTaskSet = new Set(publicTasks)
   const graph: ApplicationGraphIR = {
-    version: 5,
     modules: visibleModules.map((module) => {
       const index = modules.indexOf(module)
       return {

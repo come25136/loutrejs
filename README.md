@@ -37,7 +37,7 @@ Contract、DI、Pipeline、Environment、Arguments、Task、Trigger、Lifecycle�
 Application Definition
         │
         ▼
- Application Graph v5
+ Application Graph
    ┌────┼─────┐
    ▼    ▼     ▼
  Types Runtime Tooling
