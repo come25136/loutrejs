@@ -1,6 +1,6 @@
 import type {
   ArgsClass,
-  ModuleCapabilities,
+  ModuleProtocols,
   ModuleInstance,
   SchemaInput,
   TaskArguments,
@@ -95,13 +95,7 @@ export interface TaskApplicationCapability<
   ): Promise<TaskOutput<TTask>>
 }
 
-export interface HttpListenOptions {
-  readonly port: number
-  readonly hostname?: string
-}
-
 export interface HttpApplicationCapability {
-  listen(options: HttpListenOptions): Promise<void>
   fetch(request: Request): Promise<Response>
 }
 
@@ -122,21 +116,23 @@ export interface QueueConsumerDriver {
   }): Promise<QueueConsumerHandle>
 }
 
-export type HasCapability<
+export type HasProtocol<
   TDefinition extends ApplicationDefinition,
-  TCapability extends string,
-> =
-  Extract<
-    ModuleCapabilities<TDefinition['modules'][number]>,
-    TCapability
-  > extends never
-    ? false
-    : true
+  TProtocol extends string,
+> = Extract<
+  ModuleProtocols<TDefinition['modules'][number]>,
+  TProtocol
+> extends never
+  ? false
+  : true
 
-export type HasHttp<TDefinition extends ApplicationDefinition> = HasCapability<
+export type HasHttp<TDefinition extends ApplicationDefinition> = HasProtocol<
   TDefinition,
   'http'
 >
+
+export type HasMessagePort<TDefinition extends ApplicationDefinition> =
+  HasProtocol<TDefinition, 'messagePort'>
 
 export type HasTasks<TDefinition extends ApplicationDefinition> =
   TDefinition['tasks'] extends readonly [] ? false : true
@@ -158,4 +154,11 @@ export type HostedApplication<TDefinition extends ApplicationDefinition> =
 export type InvocationApplication<TDefinition extends ApplicationDefinition> =
   BaseApplication & TaskCapability<TDefinition>
 
-export { bindQueueDriver } from './queue.js'
+export { binding } from './binding.js'
+export type {
+  HostBinding,
+  HostBindingApplication,
+  InvocationBinding,
+  InvocationBindingBaseOptions,
+  InvocationBindingOptions,
+} from './binding.js'

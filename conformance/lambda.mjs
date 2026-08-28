@@ -1,8 +1,4 @@
-import {
-  createLambdaHttpDriver,
-  createLambdaStreamingHttpDriver,
-} from '@loutrejs/runtime-lambda'
-import { createInvocationBinding } from '@loutrejs/application/binding'
+import { lambdaRuntime } from '@loutrejs/runtime-lambda'
 import usersDefinition from '../dist/conformance/http-crud/application.mjs'
 import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
 
@@ -12,15 +8,8 @@ if (!process.version.startsWith('v24.')) {
   )
 }
 
-const usersBinding = createInvocationBinding({
-  application: usersDefinition,
-  environment: process.env,
-})
-const eventsBinding = createInvocationBinding({
-  application: eventsDefinition,
-  environment: process.env,
-})
-const unary = await createLambdaHttpDriver(usersBinding.http)({
+const unaryHandler = lambdaRuntime.bind({ application: usersDefinition })
+const unary = await unaryHandler({
   rawPath: '/users/lambda-user',
   requestContext: { http: { method: 'GET' } },
 })
@@ -30,11 +19,14 @@ if (unary.statusCode !== 200 || body.id !== 'lambda-user') {
     `Lambda unary conformanceに失敗しました: ${JSON.stringify(body)}`,
   )
 }
-await usersBinding.application.close()
 
+const streamingHandler = lambdaRuntime.bind({
+  application: eventsDefinition,
+  response: 'streaming',
+})
 const chunks = []
 let ended = false
-await createLambdaStreamingHttpDriver(eventsBinding.http)(
+await streamingHandler(
   {
     rawPath: '/events',
     requestContext: { http: { method: 'GET' } },
@@ -53,5 +45,4 @@ const streamed = new TextDecoder().decode(Buffer.concat(chunks))
 if (!ended || !streamed.includes('"sequence":3')) {
   throw new Error('Lambda response streaming conformanceに失敗しました')
 }
-await eventsBinding.application.close()
 console.log('AWS Lambda nodejs24.x conformance: 成功')

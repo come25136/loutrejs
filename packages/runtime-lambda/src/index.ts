@@ -1,16 +1,36 @@
-import { type HttpProtocolExecution } from '@loutrejs/http'
+import {
+  binding,
+  type ApplicationDefinition,
+  type BootstrapArguments,
+  type HasHttp,
+  type InvocationBindingOptions,
+} from '@loutrejs/application'
+import type { HttpProtocolExecution } from '@loutrejs/http'
 
-export const lambdaRuntime = {
-  runtime: 'aws-lambda-nodejs24.x',
-  capabilities: new Set([
-    'http.server',
-    'http.response.streaming',
-    'stream.readable',
-    'stream.writable',
-    'env.runtime',
-    'crypto.random',
-  ]),
-} as const
+type IsAny<TValue> = 0 extends 1 & TValue ? true : false
+
+type HttpApplication<TDefinition extends ApplicationDefinition> =
+  IsAny<TDefinition> extends true
+    ? TDefinition
+    : HasHttp<TDefinition> extends true
+      ? TDefinition
+      : never
+
+export type LambdaBindBaseOptions<TDefinition extends ApplicationDefinition> = {
+  readonly application: HttpApplication<TDefinition>
+  readonly environment?: unknown
+} & BootstrapArguments<TDefinition>
+
+export type LambdaBindOptions<TDefinition extends ApplicationDefinition> =
+  LambdaBindBaseOptions<TDefinition> & {
+    readonly response?: 'buffered'
+  }
+
+export type LambdaStreamingBindOptions<
+  TDefinition extends ApplicationDefinition,
+> = LambdaBindBaseOptions<TDefinition> & {
+  readonly response: 'streaming'
+}
 
 export interface LambdaHttpEvent {
   readonly rawPath?: string
@@ -31,10 +51,79 @@ export interface LambdaHttpResult {
   readonly isBase64Encoded: boolean
 }
 
-/** @internal generated bindingが利用するLambda HTTP driver。 */
-export function createLambdaHttpDriver(application: HttpProtocolExecution) {
+export type LambdaHttpHandler = (
+  event: LambdaHttpEvent,
+) => Promise<LambdaHttpResult>
+
+export interface LambdaResponseStream {
+  write(chunk: Uint8Array): boolean
+  end(): void
+  once?(event: 'drain', listener: () => void): unknown
+  setMetadata?(metadata: {
+    readonly statusCode: number
+    readonly headers: Readonly<Record<string, string>>
+    readonly cookies?: readonly string[]
+  }): void
+}
+
+export type LambdaStreamingHttpHandler = (
+  event: LambdaHttpEvent,
+  output: LambdaResponseStream,
+  context?: unknown,
+) => Promise<void>
+
+export const lambdaRuntime = {
+  runtime: 'aws-lambda-nodejs24.x',
+  capabilities: new Set([
+    'http.server',
+    'http.response.streaming',
+    'stream.readable',
+    'stream.writable',
+    'env.runtime',
+    'crypto.random',
+  ]),
+  bind,
+} as const
+
+function bind<const TDefinition extends ApplicationDefinition>(
+  options: LambdaStreamingBindOptions<TDefinition>,
+): LambdaStreamingHttpHandler
+function bind<const TDefinition extends ApplicationDefinition>(
+  options: LambdaBindOptions<TDefinition>,
+): LambdaHttpHandler
+function bind<const TDefinition extends ApplicationDefinition>(
+  options:
+    | LambdaBindOptions<TDefinition>
+    | LambdaStreamingBindOptions<TDefinition>,
+): LambdaHttpHandler | LambdaStreamingHttpHandler {
+  const invocation = binding.invocation({
+    application: options.application,
+    environment:
+      'environment' in options ? options.environment : process.env,
+    ...('arguments' in options ? { arguments: options.arguments } : {}),
+  } as InvocationBindingOptions<TDefinition>)
+  const http =
+    'http' in invocation ? (invocation.http as HttpProtocolExecution) : undefined
+  if (!http) {
+    void invocation.application.close()
+    throw new Error(
+      'LUTRE_RUNTIME_HTTP_REQUIRED: lambdaRuntime.bind() requires an HTTP-capable Application.',
+    )
+  }
+
+  if (options.response === 'streaming') {
+    const handler = createLambdaStreamingHttpDriver(http)
+    const aws = awsLambdaGlobal()
+    return aws?.streamifyResponse ? aws.streamifyResponse(handler) : handler
+  }
+  return createLambdaHttpDriver(http)
+}
+
+function createLambdaHttpDriver(
+  application: HttpProtocolExecution,
+): LambdaHttpHandler {
   let initialization: Promise<void> | undefined
-  return async (event: LambdaHttpEvent): Promise<LambdaHttpResult> => {
+  return async (event) => {
     initialization ??= application.initialize()
     await initialization
     const response = await application.handle(toRequest(event))
@@ -48,47 +137,45 @@ export function createLambdaHttpDriver(application: HttpProtocolExecution) {
   }
 }
 
-export interface LambdaResponseStream {
-  write(chunk: Uint8Array): boolean
-  end(): void
-  once?(event: 'drain', listener: () => void): unknown
-  setMetadata?(metadata: {
-    readonly statusCode: number
-    readonly headers: Readonly<Record<string, string>>
-    readonly cookies?: readonly string[]
-  }): void
-}
-
-/** @internal generated bindingが利用するLambda streaming HTTP driver。 */
-export function createLambdaStreamingHttpDriver(
+function createLambdaStreamingHttpDriver(
   application: HttpProtocolExecution,
-) {
+): LambdaStreamingHttpHandler {
   let initialization: Promise<void> | undefined
-  return async (
-    event: LambdaHttpEvent,
-    output: LambdaResponseStream,
-  ): Promise<void> => {
+  return async (event, output) => {
     initialization ??= application.initialize()
     await initialization
     const response = await application.handle(toRequest(event))
     const metadata = responseMetadata(response)
-    output.setMetadata?.({
+    const aws = awsLambdaGlobal()
+    const outputMetadata = {
       statusCode: response.status,
-      ...metadata,
-    })
+      headers: metadata.headers,
+      ...(metadata.cookies === undefined
+        ? {}
+        : { multiValueHeaders: { 'Set-Cookie': metadata.cookies } }),
+    }
+    const stream = aws?.HttpResponseStream?.from
+      ? aws.HttpResponseStream.from(output, outputMetadata)
+      : output
+    if (stream === output) {
+      output.setMetadata?.({
+        statusCode: response.status,
+        ...metadata,
+      })
+    }
     const reader = response.body?.getReader()
     if (reader) {
       while (true) {
         const chunk = await reader.read()
         if (chunk.done) break
-        if (!output.write(chunk.value) && output.once) {
+        if (!stream.write(chunk.value) && stream.once) {
           await new Promise<void>((resolve) => {
-            output.once?.('drain', resolve)
+            stream.once?.('drain', resolve)
           })
         }
       }
     }
-    output.end()
+    stream.end()
   }
 }
 
@@ -122,4 +209,27 @@ function toRequest(event: LambdaHttpEvent): Request {
     ),
     ...(body === undefined ? {} : { body }),
   })
+}
+
+interface AwsLambdaGlobal {
+  streamifyResponse(
+    handler: LambdaStreamingHttpHandler,
+  ): LambdaStreamingHttpHandler
+  readonly HttpResponseStream?: {
+    from(
+      output: LambdaResponseStream,
+      metadata: {
+        readonly statusCode: number
+        readonly headers: Readonly<Record<string, string>>
+        readonly multiValueHeaders?: Readonly<
+          Record<string, readonly string[]>
+        >
+      },
+    ): LambdaResponseStream
+  }
+}
+
+function awsLambdaGlobal(): AwsLambdaGlobal | undefined {
+  return (globalThis as typeof globalThis & { awslambda?: unknown })
+    .awslambda as AwsLambdaGlobal | undefined
 }

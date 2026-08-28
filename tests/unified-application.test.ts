@@ -1,4 +1,4 @@
-import { bindQueueDriver, defineApplication } from '@loutrejs/application'
+import { binding, defineApplication } from '@loutrejs/application'
 import { bootstrap } from '@loutrejs/application/host'
 import {
   consume,
@@ -147,7 +147,7 @@ describe('Unified Application', () => {
     })
     const Module = defineModule(() => ({
       providers: [
-        bindQueueDriver(orders, {
+        binding.queue(orders, {
           async start({ consume: dispatch }) {
             consumePayload = dispatch
             return { stop: async () => undefined }
