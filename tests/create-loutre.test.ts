@@ -38,13 +38,24 @@ describe('create-loutre', () => {
         type: 'module',
         scripts: {
           dev: 'tsx watch src/main.ts',
-          build: 'tsc',
+          build: 'tsc -p tsconfig.build.json',
           start: 'node dist/main.js',
-          check: 'tsc --noEmit && loutre check --entry src/app.ts',
+          typecheck: 'tsc --noEmit',
+          check: 'npm run typecheck && loutre check --entry src/app.ts',
+          test: 'vitest run',
+          lint: 'oxlint',
+          format: 'oxfmt',
+          'format:check': 'oxfmt --check',
         },
         dependencies: {
           '@loutrejs/loutre': '^0.1.0',
           '@loutrejs/node': '^0.1.0',
+        },
+        devDependencies: {
+          '@loutrejs/cli': '^0.1.0',
+          oxfmt: '^0.65.0',
+          oxlint: '^1.80.0',
+          vitest: '^4.1.11',
         },
       })
       expect(
@@ -53,6 +64,21 @@ describe('create-loutre', () => {
       expect(
         await readFile(join(result.targetDirectory, 'src/main.ts'), 'utf8'),
       ).toContain('nodeRuntime.serve')
+      expect(
+        await readFile(join(result.targetDirectory, 'src/app.test.ts'), 'utf8'),
+      ).toContain('GET / がLoutre Applicationのレスポンスを返す')
+      expect(
+        await readFile(join(result.targetDirectory, '.oxlintrc.json'), 'utf8'),
+      ).toContain('correctness')
+      expect(
+        await readFile(join(result.targetDirectory, '.oxfmtrc.json'), 'utf8'),
+      ).toContain('singleQuote')
+      expect(
+        await readFile(
+          join(result.targetDirectory, 'vitest.config.ts'),
+          'utf8',
+        ),
+      ).toContain('src/**/*.test.ts')
     } finally {
       await app.close('test-complete')
     }
@@ -125,7 +151,7 @@ describe('create-loutre', () => {
     expect(installed).toBe(false)
   })
 
-  it('未知のoptionをargのparse errorとして拒否する', async () => {
+  it('未知のoptionをCommanderのparse errorとして拒否する', async () => {
     const errors: string[] = []
     const io: CreateLoutreCliIO = {
       cwd: root,

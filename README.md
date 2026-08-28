@@ -75,6 +75,7 @@ npm create loutre@latest my-app -- --no-install
 ```
 
 `create-loutre`自身もLoutre Applicationとして実装され、project生成をpublic `Task`として実行します。argv parsing、対話prompt、package installはHost側が所有します。
+生成されるstarterにはVitest、Oxlint、OxfmtのLoutre公式presetとサンプルtestが含まれ、`npm run verify`でformat、lint、型 / Application Graph、test、buildをまとめて検証できます。
 
 ### Repositoryで試す
 

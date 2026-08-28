@@ -1,7 +1,7 @@
-import { mkdir, readdir, writeFile } from 'node:fs/promises'
-import { basename, dirname, resolve } from 'node:path'
+import { readdir } from 'node:fs/promises'
+import { basename, resolve } from 'node:path'
 import { defineApplication, defineModule, inject, task } from '@loutrejs/loutre'
-import { starterFiles } from './starter.js'
+import { writeStarter } from './starter.js'
 
 export interface CreateProjectInput {
   readonly cwd: string
@@ -19,11 +19,7 @@ export class ProjectScaffolder {
     const packageName = packageNameFor(targetDirectory)
     await assertTargetIsEmpty(targetDirectory)
 
-    for (const [relativePath, content] of starterFiles(packageName)) {
-      const output = resolve(targetDirectory, relativePath)
-      await mkdir(dirname(output), { recursive: true })
-      await writeFile(output, content, 'utf8')
-    }
+    await writeStarter(targetDirectory, packageName)
 
     return { packageName, targetDirectory }
   }

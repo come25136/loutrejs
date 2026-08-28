@@ -1,4 +1,7 @@
 import { readFileSync } from 'node:fs'
+import { cp, rename, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const packageManifest = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -7,15 +10,32 @@ const loutreVersion = packageManifest.dependencies['@loutrejs/loutre']
 if (!loutreVersion)
   throw new Error('@loutrejs/loutreのversionがpackage.jsonにありません。')
 
-export function starterFiles(packageName: string): ReadonlyMap<string, string> {
-  return new Map([
-    ['package.json', renderPackageJson(packageName)],
-    ['tsconfig.json', tsconfig],
-    ['.gitignore', gitignore],
-    ['README.md', readme],
-    ['src/app.ts', applicationSource],
-    ['src/main.ts', mainSource],
-  ])
+const templateDirectory = fileURLToPath(
+  new URL('../templates/default/', import.meta.url),
+)
+
+const renamedTemplateFiles = new Map([
+  ['_gitignore', '.gitignore'],
+  ['_oxlintrc.json', '.oxlintrc.json'],
+  ['_oxfmtrc.json', '.oxfmtrc.json'],
+])
+
+export async function writeStarter(
+  targetDirectory: string,
+  packageName: string,
+): Promise<void> {
+  await cp(templateDirectory, targetDirectory, { recursive: true })
+  for (const [source, destination] of renamedTemplateFiles) {
+    await rename(
+      join(targetDirectory, source),
+      join(targetDirectory, destination),
+    )
+  }
+  await writeFile(
+    join(targetDirectory, 'package.json'),
+    renderPackageJson(packageName),
+    'utf8',
+  )
 }
 
 function renderPackageJson(packageName: string): string {
@@ -30,9 +50,18 @@ function renderPackageJson(packageName: string): string {
       },
       scripts: {
         dev: 'tsx watch src/main.ts',
-        build: 'tsc',
+        build: 'tsc -p tsconfig.build.json',
         start: 'node dist/main.js',
-        check: 'tsc --noEmit && loutre check --entry src/app.ts',
+        typecheck: 'tsc --noEmit',
+        check: 'npm run typecheck && loutre check --entry src/app.ts',
+        test: 'vitest run',
+        'test:watch': 'vitest',
+        lint: 'oxlint',
+        'lint:fix': 'oxlint --fix',
+        format: 'oxfmt',
+        'format:check': 'oxfmt --check',
+        verify:
+          'npm run format:check && npm run lint && npm run check && npm test && npm run build',
       },
       dependencies: {
         '@loutrejs/loutre': loutreVersion,
@@ -42,130 +71,14 @@ function renderPackageJson(packageName: string): string {
       devDependencies: {
         '@loutrejs/cli': loutreVersion,
         '@types/node': '^22.20.1',
+        oxfmt: '^0.65.0',
+        oxlint: '^1.80.0',
         tsx: '^4.23.12',
         typescript: '^7.0.2',
+        vitest: '^4.1.11',
       },
     },
     null,
     2,
   )}\n`
 }
-
-const tsconfig = `{
-  "compilerOptions": {
-    "target": "ES2024",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "useDefineForClassFields": true,
-    "rootDir": "src",
-    "outDir": "dist",
-    "skipLibCheck": true,
-    "types": ["node"]
-  },
-  "include": ["src/**/*.ts"]
-}
-`
-
-const gitignore = `node_modules/
-dist/
-.env
-`
-
-const readme = `# Loutre Application
-
-Loutreで作成したNode.js HTTP Applicationです。
-
-## 開発
-
-\`\`\`sh
-npm run dev
-\`\`\`
-
-<http://127.0.0.1:3000> へアクセスするとJSONレスポンスを返します。
-
-## 検証
-
-\`\`\`sh
-npm run check
-npm run build
-npm start
-\`\`\`
-`
-
-const applicationSource = `import {
-  contract,
-  defineApplication,
-  defineModule,
-  implementation,
-  procedure,
-} from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
-import { z } from 'zod'
-
-const AppContract = contract(
-  {
-    hello: procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/',
-          responses: {
-            ok: {
-              status: 200,
-              body: z.object({
-                message: z.string(),
-              }),
-            },
-          },
-          pipeline: [http.controller],
-        }),
-      },
-    }),
-  },
-  { name: 'AppContract' },
-)
-
-const AppController = implementation({
-  name: 'AppController',
-  contract: AppContract,
-  protocol: http,
-  factory: () => ({
-    async hello(ctx) {
-      return ctx.response.ok({
-        body: { message: 'Hello from Loutre!' },
-      })
-    },
-  }),
-})
-
-const AppModule = defineModule(() => ({
-  name: 'AppModule',
-  description: 'HTTP Applicationのentry module',
-  implementations: [AppController],
-}))
-
-export default defineApplication({
-  modules: [AppModule()],
-})
-`
-
-const mainSource = `import { nodeRuntime } from '@loutrejs/node'
-import application from './app.js'
-
-const server = await nodeRuntime.serve({
-  application,
-  hostname: '127.0.0.1',
-  port: 3000,
-})
-
-console.log('Loutre is swimming at http://127.0.0.1:3000')
-
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.once(signal, () => {
-    void server.close(signal)
-  })
-}
-`
