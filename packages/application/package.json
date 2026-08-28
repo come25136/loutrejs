@@ -34,7 +34,7 @@
     "@loutrejs/core": "^0.1.0",
     "@loutrejs/graph": "^0.1.0",
     "@loutrejs/http": "^0.1.0",
-    "@loutrejs/runtime": "^0.1.0",
-    "@loutrejs/runtime-node": "^0.1.0"
+    "@loutrejs/message-port": "^0.1.0",
+    "@loutrejs/runtime": "^0.1.0"
   }
 }

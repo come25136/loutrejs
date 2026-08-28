@@ -221,4 +221,65 @@ describe('Loutre CLI', () => {
       await rm(directory, { recursive: true, force: true })
     }
   })
+
+  it.each([
+    [
+      'lambda',
+      "import { lambdaRuntime } from '@loutrejs/runtime-lambda'",
+      'export const handler = lambdaRuntime.bind({ application })',
+    ],
+    [
+      'workerd',
+      "import { workerdRuntime } from '@loutrejs/runtime-workerd'",
+      'export default workerdRuntime.bind({ application })',
+    ],
+    [
+      'deno',
+      "import { denoRuntime } from '@loutrejs/runtime-deno'",
+      'export default denoRuntime.bind({ application })',
+    ],
+  ])(
+    'build --runtime %sでdeployment entryを生成する',
+    async (runtime, runtimeImport, runtimeExport) => {
+      const output = io()
+      const directory = await mkdtemp(join(tmpdir(), `loutre-${runtime}-`))
+      try {
+        expect(
+          await runCli(
+            [
+              'build',
+              'fixtures/http-crud/src/app.ts',
+              '--runtime',
+              runtime,
+              '--out-dir',
+              directory,
+            ],
+            output.value,
+          ),
+        ).toBe(0)
+        const source = await readFile(join(directory, 'entry.mjs'), 'utf8')
+        expect(source).toContain("import application from './application.mjs'")
+        expect(source).toContain(runtimeImport)
+        expect(source).toContain(runtimeExport)
+        expect(output.stdout.join('\n')).toContain(
+          'Runtime entryを出力しました:',
+        )
+      } finally {
+        await rm(directory, { recursive: true, force: true })
+      }
+    },
+  )
+
+  it('build --runtimeはdeployment entryを必要とするruntimeだけ受け付ける', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        ['build', 'fixtures/http-crud/src/app.ts', '--runtime', 'node'],
+        output.value,
+      ),
+    ).toBe(2)
+    expect(output.stderr.join('\n')).toContain(
+      'build --runtimeにはlambda、workerd、denoのいずれかを指定してください。',
+    )
+  })
 })

@@ -1,5 +1,4 @@
-import { defineApplication } from '@loutrejs/application'
-import { createInvocationBinding } from '@loutrejs/application/binding'
+import { binding, defineApplication } from '@loutrejs/application'
 import { bootstrap } from '@loutrejs/application/host'
 import {
   consume,
@@ -14,6 +13,7 @@ import {
   task,
 } from '@loutrejs/core'
 import { http } from '@loutrejs/http'
+import { nodeRuntime } from '@loutrejs/runtime-node'
 import { z } from 'zod'
 
 const HealthContract = contract({
@@ -82,12 +82,12 @@ const orderConsumer = consume({
 
 const httpDefinition = defineApplication({ modules: [ImportedHttpModule()] })
 const httpApplication = bootstrap({ application: httpDefinition })
-httpApplication.listen({ port: 3000 })
 httpApplication.fetch(new Request('http://localhost/health'))
+nodeRuntime.serve({ application: httpDefinition, port: 3000 })
 // @ts-expect-error public Taskが無いApplicationにはrunを公開しない
 httpApplication.run
-// @ts-expect-error listenはobject formのみを受け付ける
-httpApplication.listen(3000)
+// @ts-expect-error listener ownershipはApplication hostではなくruntime adapterが持つ
+httpApplication.listen
 // @ts-expect-error Triggerが無いApplicationにはtriggersを公開しない
 httpApplication.triggers
 // @ts-expect-error Arguments Contractが無いApplicationにargumentsは渡せない
@@ -110,10 +110,14 @@ workerApplication.triggers.stop()
 workerApplication.run(calculate, '41')
 // @ts-expect-error Trigger-only Taskはpublic run surfaceに含めない
 workerApplication.run(cleanup)
-// @ts-expect-error HTTPが無いApplicationにはlistenを公開しない
-workerApplication.listen
 // @ts-expect-error HTTPが無いApplicationにはfetchを公開しない
 workerApplication.fetch
+nodeRuntime.serve({
+  // @ts-expect-error HTTPが無いApplicationはNode HTTP serverへserveできない
+  application: workerDefinition,
+  port: 3000,
+  arguments: { instance: 'worker-1' },
+})
 // @ts-expect-error required Argumentsはbootstrap時に必要
 bootstrap({ application: workerDefinition })
 
@@ -133,15 +137,23 @@ const triggerOnlyApplication = bootstrap({
 // @ts-expect-error Triggerから参照されるTaskはmanual run rootではない
 triggerOnlyApplication.run
 
-const invocationApplication = createInvocationBinding({
+const invocationBinding = binding.invocation({
   application: defineApplication({ modules: [HttpModule()] }),
-}).application
+})
+invocationBinding.http
+const invocationApplication = invocationBinding.application
 // @ts-expect-error callback runtimeにはlistenを公開しない
 invocationApplication.listen
 // @ts-expect-error callback runtimeにはtriggersを公開しない
 invocationApplication.triggers
 // @ts-expect-error public Taskが無いcallback Applicationにはrunを公開しない
 invocationApplication.run
+
+const nonHttpInvocationBinding = binding.invocation({
+  application: defineApplication({ modules: [WorkerModule()] }),
+})
+// @ts-expect-error HTTP capabilityが無いInvocation Bindingにはhttpを公開しない
+nonHttpInvocationBinding.http
 
 const wrongInput = task<string, void>({
   name: 'wrong.input',

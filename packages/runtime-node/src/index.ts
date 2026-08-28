@@ -1,7 +1,39 @@
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import { Readable } from 'node:stream'
+import {
+  binding,
+  type ApplicationDefinition,
+  type BootstrapArguments,
+  type HasHttp,
+  type HostBindingApplication,
+  type InvocationBindingOptions,
+} from '@loutrejs/application'
 import { type HttpProtocolExecution } from '@loutrejs/http'
+
+type IsAny<TValue> = 0 extends 1 & TValue ? true : false
+
+type HttpApplication<TDefinition extends ApplicationDefinition> =
+  IsAny<TDefinition> extends true
+    ? TDefinition
+    : HasHttp<TDefinition> extends true
+      ? TDefinition
+      : never
+
+export type NodeServeOptions<TDefinition extends ApplicationDefinition> = {
+  readonly application: HttpApplication<TDefinition>
+  readonly port: number
+  readonly hostname?: string
+  readonly environment?: unknown
+} & BootstrapArguments<TDefinition>
+
+export interface NodeServeHandle<
+  TDefinition extends ApplicationDefinition = ApplicationDefinition,
+> {
+  readonly application: HostBindingApplication<TDefinition>
+  readonly server: Server
+  close(signal?: string): Promise<void>
+}
 
 export const nodeRuntime = {
   runtime: 'node-26',
@@ -19,14 +51,67 @@ export const nodeRuntime = {
     'env.runtime',
     'crypto.random',
   ]),
+  serve,
 } as const
 
-export interface NodeHttpServerDriverOptions {
+async function serve<const TDefinition extends ApplicationDefinition>(
+  options: NodeServeOptions<TDefinition>,
+): Promise<NodeServeHandle<TDefinition>> {
+  const host = binding.host({
+    application: options.application,
+    environment: 'environment' in options ? options.environment : process.env,
+    ...('arguments' in options ? { arguments: options.arguments } : {}),
+  } as unknown as InvocationBindingOptions<TDefinition>)
+  const http = 'http' in host ? (host.http as HttpProtocolExecution) : undefined
+  if (!http) {
+    await host.application.close()
+    throw new Error(
+      'LUTRE_RUNTIME_HTTP_REQUIRED: nodeRuntime.serve() requires an HTTP-capable Application.',
+    )
+  }
+
+  await host.application.init()
+  if ('triggers' in host.application) await host.application.triggers.start()
+
+  const server = createNodeHttpServerDriver(http)
+  try {
+    await listenServer(server, options.port, options.hostname)
+  } catch (error) {
+    server.close()
+    await host.application.close().catch(() => undefined)
+    throw error
+  }
+
+  let closed = false
+  return {
+    application: host.application,
+    server,
+    async close(signal?: string) {
+      if (closed) return
+      closed = true
+      const errors: unknown[] = []
+      try {
+        await closeServer(server)
+      } catch (error) {
+        errors.push(error)
+      }
+      try {
+        await host.application.close(signal)
+      } catch (error) {
+        errors.push(error)
+      }
+      if (errors.length > 0)
+        throw new AggregateError(errors, 'Node runtime shutdown failed')
+    },
+  }
+}
+
+interface NodeHttpServerDriverOptions {
   readonly onListening?: (url: string) => void
 }
 
-/** @internal Unified Application hostが利用するNode.js HTTP driver。 */
-export function createNodeHttpServerDriver(
+/** @internal `nodeRuntime.serve()` が利用するNode.js HTTP driver。 */
+function createNodeHttpServerDriver(
   application: HttpProtocolExecution,
   options: NodeHttpServerDriverOptions = {},
 ): Server {
@@ -54,7 +139,7 @@ export function createNodeHttpServerDriver(
         if (Array.isArray(value)) {
           for (const item of value) headers.append(name, item)
         } else if (value !== undefined) {
-          headers.set(name, value)
+          headers.set(name, String(value))
         }
       }
       const hasBody = incoming.method !== 'GET' && incoming.method !== 'HEAD'
@@ -72,7 +157,7 @@ export function createNodeHttpServerDriver(
       const request = new Request(new URL(incoming.url ?? '/', origin), init)
       const response = await application.handle(request)
       outgoing.statusCode = response.status
-      response.headers.forEach((value, name) => {
+      response.headers.forEach((value: string, name: string) => {
         if (name !== 'set-cookie') outgoing.setHeader(name, value)
       })
       const cookies = response.headers.getSetCookie()
@@ -106,4 +191,30 @@ export function createNodeHttpServerDriver(
     application.onServerListening(url)
   })
   return server
+}
+
+function listenServer(
+  server: Server,
+  port: number,
+  hostname?: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onError = (error: Error) => {
+      server.off('listening', onListening)
+      reject(error)
+    }
+    const onListening = () => {
+      server.off('error', onError)
+      resolve()
+    }
+    server.once('error', onError)
+    server.once('listening', onListening)
+    server.listen(port, hostname)
+  })
+}
+
+function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error?: Error) => (error ? reject(error) : resolve()))
+  })
 }

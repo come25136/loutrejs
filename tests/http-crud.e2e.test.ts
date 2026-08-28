@@ -1,14 +1,16 @@
-import { createLinkedUsersApplication } from './helpers/linked-applications.js'
+import { nodeRuntime } from '@loutrejs/runtime-node'
+import { createUsersApplication } from '../fixtures/http-crud/src/index.js'
 import { reserveHttpPort } from './helpers/http-server.js'
 
 describe('canonical Fixture A', () => {
   it('runs Contract -> HTTP -> Pipeline -> validation -> Controller -> finalization', async () => {
-    const application = createLinkedUsersApplication()
+    const definition = createUsersApplication()
     const port = await reserveHttpPort()
-    await application.listen({ port, hostname: '127.0.0.1' })
-    await expect(
-      application.listen({ port, hostname: '127.0.0.1' }),
-    ).rejects.toThrow('LUTRE_HTTP_ALREADY_LISTENING')
+    const host = await nodeRuntime.serve({
+      application: definition,
+      port,
+      hostname: '127.0.0.1',
+    })
 
     try {
       const response = await fetch(`http://127.0.0.1:${port}/users/user-1`)
@@ -18,7 +20,7 @@ describe('canonical Fixture A', () => {
         'application/json; charset=utf-8',
       )
       expect(await response.json()).toEqual({ id: 'user-1', name: 'test' })
-      expect(application.graph.capabilities).toContainEqual({
+      expect(host.application.graph.capabilities).toContainEqual({
         name: 'http.server',
         scope: 'execution',
         requiredBy: 'UsersContract.get',
@@ -45,7 +47,7 @@ describe('canonical Fixture A', () => {
         error: 'Unsupported Media Type',
       })
     } finally {
-      await application.close()
+      await host.close()
     }
   })
 })
