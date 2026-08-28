@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type {
@@ -9,13 +8,13 @@ import type {
 } from '@loutrejs/loutre/graph'
 import {
   checkCapabilities,
+  nodeRuntimeCapabilities,
   type RuntimeCapabilities,
 } from '@loutrejs/loutre/runtime'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'
-import { nodeRuntime } from '@loutrejs/node'
 import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'
 import { emitApplication, loadApplicationGraph } from './application-loader.js'
 
@@ -35,7 +34,7 @@ export interface CliIO {
 }
 
 const runtimes: Readonly<Record<string, RuntimeCapabilities>> = {
-  node: nodeRuntime,
+  node: nodeRuntimeCapabilities,
   deno: denoRuntime,
   bun: bunRuntime,
   workerd: workerdRuntime,
@@ -182,9 +181,7 @@ export async function runCli(
       await mkdir(outputDirectory, { recursive: true })
       const applicationOutput = join(outputDirectory, 'application.mjs')
       await emitApplication(applicationEntry, applicationOutput)
-      const fingerprint = createHash('sha256')
-        .update(JSON.stringify(graph))
-        .digest('hex')
+      const fingerprint = await sha256(JSON.stringify(graph))
       const manifestOutput = join(outputDirectory, 'loutre.manifest.json')
       await writeFile(
         manifestOutput,
@@ -209,6 +206,16 @@ export async function runCli(
       io.stderr(`不明なcommandです: ${command}`)
       return 2
   }
+}
+
+async function sha256(value: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(value),
+  )
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
 }
 
 function parseDeploymentRuntime(value: string): DeploymentRuntime | undefined {

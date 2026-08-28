@@ -199,9 +199,14 @@ npm run dev --workspace @loutrejs/example-hello-worker
 Application Graphはdeveloper CLIから確認できます。
 
 ```sh
+# Node.js
 npx loutre check --entry fixtures/http-crud/src/app.ts
-npx loutre graph modules --entry fixtures/http-crud/src/app.ts
-npx loutre graph di --entry fixtures/http-crud/src/app.ts
+
+# Bun
+bunx --bun loutre graph modules --entry fixtures/http-crud/src/app.ts
+
+# Deno
+deno task --eval 'loutre graph di --entry fixtures/http-crud/src/app.ts'
 ```
 
 `loutre run` / `loutre dev` / `loutre start`は提供しません。Applicationの実行方法はHostが所有します。
