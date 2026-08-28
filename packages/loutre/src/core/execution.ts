@@ -220,12 +220,3 @@ export type TriggerDescriptor =
 export type TriggerTask<TTrigger> = TTrigger extends TriggerDescriptor
   ? TTrigger['task']
   : never
-
-/** Graph v3互換compiler専用であり、公開execution modelへEntrypointを戻さない。 */
-export type EntrypointRuntime<TInput, TOutput> = TaskRuntime<TInput, TOutput>
-/** Graph v3互換compiler専用であり、公開execution modelへEntrypointを戻さない。 */
-export type EntrypointDescriptor<
-  TInput = unknown,
-  TOutput = unknown,
-  TName extends string = string,
-> = TaskDescriptor<TInput, TOutput, TName>

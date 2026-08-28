@@ -78,7 +78,42 @@ describe('Unified Application', () => {
       arguments: { workers: '8' },
     })
     await expect(application.run(read)).resolves.toBe(8)
+    expect(application.graph.arguments).toEqual({ name: 'AppArgs' })
+    expect(application.graph.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'arguments:AppArgs',
+          kind: 'arguments',
+          label: 'AppArgs',
+        }),
+        expect.objectContaining({
+          id: 'task:arguments.read',
+          kind: 'task',
+          label: 'arguments.read',
+        }),
+      ]),
+    )
+    expect(application.graph.edges).toContainEqual({
+      from: 'task:arguments.read',
+      to: 'arguments:AppArgs',
+      kind: 'inject',
+      source: 'probed',
+    })
     await application.close()
+  })
+
+  test('Task factory違反をTask diagnosticとして直接返す', () => {
+    const invalid = task<void, void>({
+      name: 'invalid.task',
+      factory: (async () => () => undefined) as never,
+    })
+    const result = compileApplication({ modules: [], tasks: [invalid] })
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 'LUTRE_TASK_ASYNC_FACTORY',
+        path: 'task:invalid.task',
+      }),
+    )
   })
 
   test('closeはactive executionを待ち、新規executionを拒否する', async () => {

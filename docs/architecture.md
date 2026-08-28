@@ -654,10 +654,10 @@ Cleanupも失敗した場合は`AggregateError`へ集約する。
 
 ## 9. Application Graph / Graph Probe
 
-### 9.1 Canonical Graph IR は v5
+### 9.1 Graph IR は v5 のみ
 
-public `@loutrejs/loutre/graph`が公開するcanonical Graph IRは`version: 5`である。
-内部には旧Graph compilerとの互換bridgeが残るが、公開architecture上のEntrypoint modelへ戻さない。
+public `@loutrejs/loutre/graph`が公開・生成するGraph IRは`version: 5`だけである。
+Graph compilerはv5 IRを直接構築し、v3 / v4 compiler、IR type、変換bridge、forwarding entryは保持しない。
 
 `ApplicationGraphIR`は少なくとも次を持つ。
 
@@ -1058,6 +1058,8 @@ HttpApplication / createHttpApplication / initializeHttpApplication
 MessagePortApplication / createMessagePortApplication
 Protocolごとに分裂したApplication Definition
 Application Definitionへのruntime / adapter指定
+Graph v3 / v4 compatibility layer
+versioned legacy Graph compiler / IR forwarding entry
 Entrypoint as public execution model
 Application.entrypoint
 loutre run / loutre dev / loutre start

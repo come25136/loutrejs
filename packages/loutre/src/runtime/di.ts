@@ -11,7 +11,6 @@ import {
   type Class,
   type DependencyConsumer,
   type EnvClass,
-  type EntrypointConsumer,
   type ImplementationConsumer,
   type ImplementationDescriptor,
   type LayerConsumer,
@@ -260,29 +259,6 @@ export class Container {
       this.#constructTask(task, consumer, false)
     } catch (error) {
       if (isGraphProbeBoundary(error)) return
-      throw error
-    }
-  }
-
-  /** Graph v3互換compilerを残しているため、Taskを旧Entrypoint形式へ接続する。 */
-  probeEntrypoint(task: TaskDescriptor, consumer: EntrypointConsumer): void {
-    try {
-      this.#constructTask(task, consumer, false)
-    } catch (error) {
-      if (error instanceof DependencyResolutionError) {
-        throw new DependencyResolutionError(
-          error.message
-            .replace(
-              'LUTRE_TASK_ASYNC_FACTORY',
-              'LUTRE_ENTRYPOINT_ASYNC_FACTORY',
-            )
-            .replace(
-              'LUTRE_TASK_FACTORY_RESULT',
-              'LUTRE_ENTRYPOINT_FACTORY_RESULT',
-            )
-            .replace('Task ', 'Entrypoint '),
-        )
-      }
       throw error
     }
   }
@@ -569,7 +545,7 @@ export class Container {
 
   #constructTask(
     task: TaskDescriptor,
-    consumer: TaskConsumer | EntrypointConsumer,
+    consumer: TaskConsumer,
     cache: boolean,
   ): TaskRuntime<any, any> {
     const cached = this.#taskCache.get(task)

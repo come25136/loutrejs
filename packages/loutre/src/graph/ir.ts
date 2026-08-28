@@ -32,9 +32,10 @@ export interface DependencyNodeIR {
     | 'factory'
     | 'conditional'
     | 'environment'
+    | 'arguments'
     | 'implementation'
     | 'layer'
-    | 'entrypoint'
+    | 'task'
     | 'framework'
   readonly scope?: 'application' | 'transient'
   readonly module?: string
@@ -51,6 +52,8 @@ export interface DependencyEdgeIR {
     | 'framework'
   readonly source: 'declared' | 'probed'
   readonly condition?: {
+    readonly source: 'environment' | 'arguments'
+    readonly contract: string
     readonly key: string
     readonly equals: PropertyKey
   }
@@ -118,54 +121,83 @@ export interface ProtocolExecutionRootIR {
   readonly implementation: string
 }
 
-export interface EntrypointExecutionRootIR {
-  readonly id: `entrypoint:${string}`
-  readonly kind: 'entrypoint'
+export interface ApplicationArgumentsIR {
   readonly name: string
 }
 
-export interface ScheduleExecutionRootIR {
-  readonly id: `schedule:${string}`
-  readonly kind: 'schedule'
+export interface TaskIR {
+  readonly id: `task:${string}`
   readonly name: string
-  readonly cron: {
-    readonly expression: string
-    readonly timezone: string
-  }
-  readonly entrypoint: string
+  readonly public: boolean
 }
 
-export interface QueueConsumerExecutionRootIR {
-  readonly id: `queue-consumer:${string}`
-  readonly kind: 'queue-consumer'
+export interface TaskExecutionRootIR {
+  readonly id: `task:${string}`
+  readonly kind: 'task'
+  readonly name: string
+}
+
+export interface CronTriggerExecutionRootIR {
+  readonly id: `trigger:${string}`
+  readonly kind: 'trigger'
+  readonly trigger: 'cron'
+  readonly name: string
+  readonly expression: string
+  readonly timezone: string
+  readonly overlap: 'allow' | 'skip'
+  readonly task: string
+}
+
+export interface FixedDelayTriggerExecutionRootIR {
+  readonly id: `trigger:${string}`
+  readonly kind: 'trigger'
+  readonly trigger: 'fixed-delay'
+  readonly name: string
+  readonly delay: number
+  readonly immediate: boolean
+  readonly task: string
+}
+
+export interface QueueConsumerTriggerExecutionRootIR {
+  readonly id: `trigger:${string}`
+  readonly kind: 'trigger'
+  readonly trigger: 'queue-consumer'
   readonly name: string
   readonly queue: string
-  readonly entrypoint: string
+  readonly task: string
 }
+
+export type TriggerExecutionRootIR =
+  | CronTriggerExecutionRootIR
+  | FixedDelayTriggerExecutionRootIR
+  | QueueConsumerTriggerExecutionRootIR
 
 export type ExecutionRootIR =
   | ProtocolExecutionRootIR
-  | EntrypointExecutionRootIR
-  | ScheduleExecutionRootIR
-  | QueueConsumerExecutionRootIR
+  | TaskExecutionRootIR
+  | TriggerExecutionRootIR
 
 export interface QueueIR {
   readonly id: `queue:${string}`
   readonly name: string
+  readonly payloadSchema: string
 }
 
 export interface ApplicationGraphIR {
-  readonly version: 3
+  readonly version: 5
   readonly modules: readonly ModuleIR[]
+  readonly arguments?: ApplicationArgumentsIR
   readonly providers: readonly ProviderIR[]
   readonly tokens: readonly TokenIR[]
   readonly contextKeys: readonly ContextKeyIR[]
   readonly contracts: readonly string[]
   readonly pipelines: readonly PipelineIR[]
   readonly implementations: readonly ImplementationIR[]
+  readonly tasks: readonly TaskIR[]
   readonly queues: readonly QueueIR[]
   readonly executions: readonly ExecutionRootIR[]
   readonly capabilities: readonly CapabilityIR[]
+  readonly hostCapabilities: readonly string[]
   readonly nodes: readonly DependencyNodeIR[]
   readonly edges: readonly DependencyEdgeIR[]
   readonly diagnostics: readonly Diagnostic[]

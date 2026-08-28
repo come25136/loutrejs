@@ -18,19 +18,11 @@ export interface TaskConsumer {
   readonly name: string
 }
 
-/** Graph v3互換compilerが旧Entrypoint consumerを参照するため残す。 */
-export interface EntrypointConsumer {
-  readonly kind: 'entrypoint-consumer'
-  readonly id: string
-  readonly name: string
-}
-
 export type DependencyConsumer =
   | TokenLike
   | LayerConsumer
   | ImplementationConsumer
   | TaskConsumer
-  | EntrypointConsumer
 
 export interface InjectionContext {
   readonly consumer: DependencyConsumer
