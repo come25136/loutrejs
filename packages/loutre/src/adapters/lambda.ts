@@ -73,7 +73,7 @@ export type LambdaStreamingHttpHandler = (
 ) => Promise<void>
 
 export const lambdaRuntime = {
-  runtime: 'aws-lambda-nodejs24.x',
+  runtime: 'lambda',
   capabilities: new Set([
     'http.server',
     'http.response.streaming',

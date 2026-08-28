@@ -2,12 +2,6 @@ import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'
 import usersDefinition from '../dist/conformance/http-crud/application.mjs'
 import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
 
-if (!process.version.startsWith('v24.')) {
-  throw new Error(
-    `Lambda conformanceにはNode.js 24.xが必要です: ${process.version}`,
-  )
-}
-
 const unaryHandler = lambdaRuntime.bind({ application: usersDefinition })
 const unary = await unaryHandler({
   rawPath: '/users/lambda-user',
@@ -45,4 +39,4 @@ const streamed = new TextDecoder().decode(Buffer.concat(chunks))
 if (!ended || !streamed.includes('"sequence":3')) {
   throw new Error('Lambda response streaming conformanceに失敗しました')
 }
-console.log('AWS Lambda nodejs24.x conformance: 成功')
+console.log(`AWS Lambda Node.js ${process.versions.node} conformance: 成功`)

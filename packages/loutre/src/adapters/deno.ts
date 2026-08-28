@@ -41,7 +41,7 @@ export interface DenoServeHandle<
 }
 
 export const denoRuntime = {
-  runtime: 'deno-2.9-lts',
+  runtime: 'deno',
   capabilities: new Set([
     'http.server',
     'http.request.streaming',

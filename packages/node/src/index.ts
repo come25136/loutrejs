@@ -36,7 +36,7 @@ export interface NodeServeHandle<
 }
 
 export const nodeRuntime = {
-  runtime: 'node-26',
+  runtime: 'node',
   capabilities: new Set([
     'http.server',
     'http.request.streaming',

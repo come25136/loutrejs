@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "26.x"
+    "node": ">=22"
   },
   "workspaces": [
     "packages/*",
@@ -25,8 +25,8 @@
     "test:bun": "npm run build:conformance-apps && bun run conformance/bun.ts",
     "test:workerd": "npm run build:conformance-apps && node conformance/run-workerd.mjs",
     "test:electron": "npm run build:conformance-apps && node conformance/run-electron.mjs",
-    "test:lambda": "npm run build:conformance-apps && npx --yes --package node@24.19.0 node conformance/lambda.mjs",
-    "test:node": "node -e \"if (!process.version.startsWith('v26.')) process.exit(1); console.log('Node.js 26 conformance: 成功')\" && vitest run tests/http-crud.e2e.test.ts tests/http-stream.fixture.test.ts tests/runtime-conformance.test.ts",
+    "test:lambda": "npm run build:conformance-apps && node conformance/lambda.mjs",
+    "test:node": "node -e \"const major = Number(process.versions.node.split('.')[0]); if (major < 22) process.exit(1); console.log('Node.js ' + process.versions.node + ' conformance: 成功')\" && vitest run tests/http-crud.e2e.test.ts tests/http-stream.fixture.test.ts tests/runtime-conformance.test.ts",
     "test:conformance": "npm run test:node && npm run test:deno && npm run test:bun && npm run test:workerd && npm run test:electron && npm run test:lambda",
     "verify": "npm run format:check && npm run lint && npm run check && npm run test:types && npm test && npm run build && npm run test:conformance",
     "release:check": "npm run build && node scripts/verify-packages.mjs"
