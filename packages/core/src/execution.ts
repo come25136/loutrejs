@@ -1,60 +1,53 @@
 import { type SchemaOutput, type StandardSchemaV1 } from './schema.js'
 import { token, type Token } from './token.js'
 
-export type EntrypointRuntime<TInput, TOutput> = [TInput] extends [void]
+export type TaskRuntime<TInput, TOutput> = [TInput] extends [void]
   ? () => TOutput | Promise<TOutput>
   : (input: TInput) => TOutput | Promise<TOutput>
 
-export interface EntrypointDescriptor<
+export interface TaskDescriptor<
   TInput = unknown,
   TOutput = unknown,
   TName extends string = string,
 > {
-  readonly kind: 'entrypoint'
+  readonly kind: 'task'
   readonly name: TName
-  readonly factory: () => EntrypointRuntime<TInput, TOutput>
+  readonly factory: () => TaskRuntime<TInput, TOutput>
 }
 
-export type EntrypointInput<T> =
-  T extends EntrypointDescriptor<infer TInput, any, any> ? TInput : never
+export type TaskInput<T> =
+  T extends TaskDescriptor<infer TInput, any, any> ? TInput : never
 
-export type EntrypointOutput<T> =
-  T extends EntrypointDescriptor<any, infer TOutput, any> ? TOutput : never
+export type TaskOutput<T> =
+  T extends TaskDescriptor<any, infer TOutput, any> ? TOutput : never
 
-export type EntrypointArguments<T> = [EntrypointInput<T>] extends [void]
+export type TaskArguments<T> = [TaskInput<T>] extends [void]
   ? readonly []
-  : readonly [input: EntrypointInput<T>]
+  : readonly [input: TaskInput<T>]
 
-export function entrypoint<
+export function task<
   TInput = void,
   TOutput = void,
   const TName extends string = string,
 >(declaration: {
   readonly name: TName
-  readonly factory: () => EntrypointRuntime<TInput, TOutput>
-}): EntrypointDescriptor<TInput, TOutput, TName> {
+  readonly factory: () => TaskRuntime<TInput, TOutput>
+}): TaskDescriptor<TInput, TOutput, TName> {
   return Object.freeze({
-    kind: 'entrypoint',
+    kind: 'task',
     name: declaration.name,
     factory: declaration.factory,
   })
 }
 
-type VoidEntrypointConstraint<TEntrypoint> = [
-  EntrypointInput<TEntrypoint>,
-] extends [void]
-  ? [EntrypointOutput<TEntrypoint>] extends [void]
-    ? unknown
-    : never
+type VoidTaskConstraint<TTask> = [TaskInput<TTask>] extends [void]
+  ? unknown
   : never
 
 export type CronOverlap = 'allow' | 'skip'
 
 export interface CronTriggerDescriptor<
-  TEntrypoint extends EntrypointDescriptor<void, void> = EntrypointDescriptor<
-    void,
-    void
-  >,
+  TTask extends TaskDescriptor<void, any> = TaskDescriptor<void, any>,
   TName extends string = string,
 > {
   readonly kind: 'trigger'
@@ -63,11 +56,11 @@ export interface CronTriggerDescriptor<
   readonly expression: string
   readonly timezone: string
   readonly overlap: CronOverlap
-  readonly entrypoint: TEntrypoint
+  readonly task: TTask
 }
 
 export function cron<
-  const TEntrypoint extends EntrypointDescriptor<any, any>,
+  const TTask extends TaskDescriptor<any, any>,
   const TName extends string,
 >(
   declaration: {
@@ -75,12 +68,9 @@ export function cron<
     readonly expression: string
     readonly timezone: string
     readonly overlap?: CronOverlap
-    readonly entrypoint: TEntrypoint
-  } & VoidEntrypointConstraint<TEntrypoint>,
-): CronTriggerDescriptor<
-  TEntrypoint & EntrypointDescriptor<void, void>,
-  TName
-> {
+    readonly task: TTask
+  } & VoidTaskConstraint<TTask>,
+): CronTriggerDescriptor<TTask & TaskDescriptor<void, any>, TName> {
   return Object.freeze({
     kind: 'trigger',
     trigger: 'cron',
@@ -88,15 +78,12 @@ export function cron<
     expression: declaration.expression,
     timezone: declaration.timezone,
     overlap: declaration.overlap ?? 'skip',
-    entrypoint: declaration.entrypoint,
+    task: declaration.task as TTask & TaskDescriptor<void, any>,
   })
 }
 
 export interface FixedDelayTriggerDescriptor<
-  TEntrypoint extends EntrypointDescriptor<void, void> = EntrypointDescriptor<
-    void,
-    void
-  >,
+  TTask extends TaskDescriptor<void, any> = TaskDescriptor<void, any>,
   TName extends string = string,
 > {
   readonly kind: 'trigger'
@@ -104,23 +91,20 @@ export interface FixedDelayTriggerDescriptor<
   readonly name: TName
   readonly delay: number
   readonly immediate: boolean
-  readonly entrypoint: TEntrypoint
+  readonly task: TTask
 }
 
 export function fixedDelay<
-  const TEntrypoint extends EntrypointDescriptor<any, any>,
+  const TTask extends TaskDescriptor<any, any>,
   const TName extends string,
 >(
   declaration: {
     readonly name: TName
     readonly delay: number
     readonly immediate?: boolean
-    readonly entrypoint: TEntrypoint
-  } & VoidEntrypointConstraint<TEntrypoint>,
-): FixedDelayTriggerDescriptor<
-  TEntrypoint & EntrypointDescriptor<void, void>,
-  TName
-> {
+    readonly task: TTask
+  } & VoidTaskConstraint<TTask>,
+): FixedDelayTriggerDescriptor<TTask & TaskDescriptor<void, any>, TName> {
   if (
     !Number.isFinite(declaration.delay) ||
     !Number.isInteger(declaration.delay) ||
@@ -136,7 +120,7 @@ export function fixedDelay<
     name: declaration.name,
     delay: declaration.delay,
     immediate: declaration.immediate ?? false,
-    entrypoint: declaration.entrypoint,
+    task: declaration.task as TTask & TaskDescriptor<void, any>,
   })
 }
 
@@ -188,42 +172,37 @@ export function queueRuntimeToken(descriptor: QueueDescriptor): Token<unknown> {
 
 export interface QueueConsumerTriggerDescriptor<
   TQueue extends QueueDescriptor<any> = QueueDescriptor<any>,
-  TEntrypoint extends EntrypointDescriptor<any, void> = EntrypointDescriptor<
-    any,
-    void
-  >,
+  TTask extends TaskDescriptor<any, any> = TaskDescriptor<any, any>,
   TName extends string = string,
 > {
   readonly kind: 'trigger'
   readonly trigger: 'queue-consumer'
   readonly name: TName
   readonly queue: TQueue
-  readonly entrypoint: TEntrypoint
+  readonly task: TTask
 }
 
-type ConsumerEntrypointConstraint<TQueue, TEntrypoint> = [
-  EntrypointInput<TEntrypoint>,
-] extends [QueuePayload<TQueue>]
-  ? [QueuePayload<TQueue>] extends [EntrypointInput<TEntrypoint>]
-    ? [EntrypointOutput<TEntrypoint>] extends [void]
-      ? unknown
-      : never
+type ConsumerTaskConstraint<TQueue, TTask> = [TaskInput<TTask>] extends [
+  QueuePayload<TQueue>,
+]
+  ? [QueuePayload<TQueue>] extends [TaskInput<TTask>]
+    ? unknown
     : never
   : never
 
 export function consume<
   const TQueue extends QueueDescriptor<any>,
-  const TEntrypoint extends EntrypointDescriptor<any, any>,
+  const TTask extends TaskDescriptor<any, any>,
   const TName extends string,
 >(
   declaration: {
     readonly name: TName
     readonly queue: TQueue
-    readonly entrypoint: TEntrypoint
-  } & ConsumerEntrypointConstraint<TQueue, TEntrypoint>,
+    readonly task: TTask
+  } & ConsumerTaskConstraint<TQueue, TTask>,
 ): QueueConsumerTriggerDescriptor<
   TQueue,
-  TEntrypoint & EntrypointDescriptor<QueuePayload<TQueue>, void>,
+  TTask & TaskDescriptor<QueuePayload<TQueue>, any>,
   TName
 > {
   return Object.freeze({
@@ -231,7 +210,7 @@ export function consume<
     trigger: 'queue-consumer',
     name: declaration.name,
     queue: declaration.queue,
-    entrypoint: declaration.entrypoint,
+    task: declaration.task as TTask & TaskDescriptor<QueuePayload<TQueue>, any>,
   })
 }
 
@@ -240,6 +219,15 @@ export type TriggerDescriptor =
   | FixedDelayTriggerDescriptor<any, any>
   | QueueConsumerTriggerDescriptor<any, any, any>
 
-export type TriggerEntrypoint<TTrigger> = TTrigger extends TriggerDescriptor
-  ? TTrigger['entrypoint']
+export type TriggerTask<TTrigger> = TTrigger extends TriggerDescriptor
+  ? TTrigger['task']
   : never
+
+/** @internal Legacy Graph compiler bridge. Not part of the public execution model. */
+export type EntrypointRuntime<TInput, TOutput> = TaskRuntime<TInput, TOutput>
+/** @internal Legacy Graph compiler bridge. Not part of the public execution model. */
+export type EntrypointDescriptor<
+  TInput = unknown,
+  TOutput = unknown,
+  TName extends string = string,
+> = TaskDescriptor<TInput, TOutput, TName>

@@ -23,8 +23,8 @@
 
 Loutreは、Applicationを**明示的なGraph**として組み立てるTypeScriptフレームワークです。
 
-Contract、DI、Pipeline、Environment、LifecycleをひとつのApplication modelとして扱い、
-Type System、Runtime、CLIが同じGraphを見ます。
+Contract、DI、Pipeline、Environment、Arguments、LifecycleをひとつのApplication modelとして扱い、
+Type System、Runtime、developer toolingが同じGraphを見ます。
 
 ### 考え方
 
@@ -35,13 +35,16 @@ Type System、Runtime、CLIが同じGraphを見ます。
 decorator、metadata、filesystem discoveryに頼らない。
 
 **TypeScriptらしく書く**  
-DIはconstructor default parameter、Implementationはfactoryで表現する。
+DIはconstructor default parameter、Implementation / Taskはfactoryで表現する。
 
 **Execution dataはContextへ**  
 request、user、tenant、transactionはtyped Contextとして流す。
 
 **Runtimeに縛られない**  
 Application codeとruntime固有APIを分離する。
+
+**Hostが起動方法を決める**  
+LoutreはApplication固有CLIを持たない。CLI、Lambda、Electron、testなどのHostがstructured inputをApplicationへ渡す。
 
 ## Quick Start
 
@@ -111,19 +114,65 @@ export default defineApplication({
 })
 ```
 
-self-hostする場合もApplication sourceは変更せず、host側だけでbootstrapします。
+self-hostする場合もApplication sourceは変更せず、Host側だけでbootstrapします。
 
 ```ts
 import application from './app.js'
 import { bootstrap } from '@loutrejs/application/host'
 
-const app = bootstrap(application)
+const app = bootstrap({ application })
 
 await app.listen({
   port: 3000,
   hostname: '0.0.0.0',
 })
 ```
+
+Application起動時のHost inputは`Arguments`として宣言できます。
+
+```ts
+import { defineApplication } from '@loutrejs/application'
+import { defineArgs, inject, task } from '@loutrejs/core'
+import { z } from 'zod'
+
+class AppArgs extends defineArgs(
+  z.object({
+    workers: z.number().int().positive(),
+  }),
+) {}
+
+const rebuild = task({
+  name: 'search.rebuild',
+  factory:
+    (args = inject(AppArgs)) =>
+    async () => {
+      console.log(`workers=${args.workers}`)
+    },
+})
+
+export const application = defineApplication({
+  modules: [],
+  arguments: AppArgs,
+  tasks: [rebuild],
+})
+```
+
+CLIを使う場合もargv parsingはHostが所有します。
+
+```ts
+const app = bootstrap({
+  application,
+  environment: process.env,
+  arguments: {
+    workers: argv.workers,
+  },
+})
+
+await app.run(rebuild)
+```
+
+`Environment`はRuntime / Deploymentが所有し、Moduleが0..N個のContractを要求できます。
+`Arguments`はHostがApplicationをどう起動するかを表し、Applicationが0..1個だけContractを所有します。
 
 現在はrepository内のexampleから試せます。Node.js 26.xが必要です。
 
@@ -134,36 +183,28 @@ npm install
 npm run dev --workspace @loutrejs/example-hello-http
 ```
 
-別terminalから:
+HTTPなしのone-shot ApplicationはHostからpublic Taskを実行します。
 
 ```sh
-curl http://127.0.0.1:3000/greetings/Loutre
+npm run start --workspace @loutrejs/example-hello-cli -- --name Loutre
+# Hello, Loutre!
 ```
 
-```json
-{ "message": "こんにちは、Loutre！" }
-```
-
-HTTPなしのone-shot Applicationはmanual `entrypoint`を`run`します。
-
-```sh
-npm run start --workspace @loutrejs/example-hello-cli
-# Hello, World!
-```
-
-HTTPなしのlong-lived workerはTriggerだけで起動できます。
+HTTPなしのlong-lived workerもHost entryからTrigger Engineを起動します。
 
 ```sh
 npm run dev --workspace @loutrejs/example-hello-worker
 ```
 
-Application GraphはCLIから確認できます。
+Application Graphはdeveloper CLIから確認できます。
 
 ```sh
 npx loutre check --entry fixtures/http-crud/src/app.ts
 npx loutre graph modules --entry fixtures/http-crud/src/app.ts
 npx loutre graph di --entry fixtures/http-crud/src/app.ts
 ```
+
+`loutre run` / `loutre dev` / `loutre start`は提供しません。Applicationの実行方法はHostが所有します。
 
 より詳しい設計は[`docs/architecture.md`](./docs/architecture.md)、実際の利用例は[`examples/`](./examples/)を参照してください。
 

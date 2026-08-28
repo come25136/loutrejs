@@ -87,8 +87,6 @@ jobs:
             command: LOUTRE_ELECTRON_NO_SANDBOX=1 xvfb-run --auto-servernum npm run test:electron
           - name: Lambda
             command: npm run test:lambda
-          - name: CLI
-            command: npm run test:cli-start && npm run test:cli-dev
     steps:
       - name: Checkout
         uses: actions/checkout@v6

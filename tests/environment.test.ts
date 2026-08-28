@@ -50,8 +50,9 @@ describe('Environment Contract', () => {
     expect(env.port).toBe(3000)
     expect(env.tls).toEqual({ ca: 'test-ca' })
     expect(AppEnv.key('port')).toMatchObject({
-      kind: 'env-key',
-      env: AppEnv,
+      kind: 'runtime-input-key',
+      source: 'environment',
+      contract: AppEnv,
       key: 'port',
     })
   })

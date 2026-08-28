@@ -5,15 +5,17 @@ import {
 import { bootstrap } from '@loutrejs/application/host'
 import type { ModuleInstance } from '@loutrejs/core'
 import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
+import type { HttpProtocolExecution } from '@loutrejs/http'
 import { createMessagePortExecution } from '@loutrejs/message-port'
 import { ApplicationRuntime, type Logger } from '@loutrejs/runtime'
-import type { HttpProtocolExecution } from '@loutrejs/http'
 
 export function createTestApplication<
   const TModules extends readonly ModuleInstance[],
 >(options: { readonly modules: TModules; readonly logger?: Logger }) {
   const definition = defineApplication(options)
-  return bootstrap(definition) as ReturnType<typeof bootstrap> &
+  return bootstrap({ application: definition }) as ReturnType<
+    typeof bootstrap
+  > &
     HttpApplicationCapability
 }
 

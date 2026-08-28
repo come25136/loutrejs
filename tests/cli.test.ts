@@ -1,9 +1,9 @@
+import { bootstrap } from '@loutrejs/application/host'
 import { runCli } from '@loutrejs/cli'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { bootstrap } from '@loutrejs/application/host'
 
 describe('Loutre CLI', () => {
   function io() {
@@ -74,7 +74,6 @@ describe('Loutre CLI', () => {
 
   it('Graphをmachine-readable JSONで出力する', async () => {
     const output = io()
-
     expect(
       await runCli(
         [
@@ -88,9 +87,8 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(0)
-
     const graph = JSON.parse(output.stdout.join('\n'))
-    expect(graph.version).toBe(4)
+    expect(graph.version).toBe(5)
     expect(graph.pipelines).toContainEqual(
       expect.objectContaining({
         contract: 'UsersContract',
@@ -108,7 +106,6 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(0)
-
     expect(output.stdout.join('\n')).toContain(
       'protocol: protocol:http:UsersContract.get',
     )
@@ -116,7 +113,6 @@ describe('Loutre CLI', () => {
 
   it('GraphをMermaidで出力する', async () => {
     const output = io()
-
     expect(
       await runCli(
         [
@@ -130,7 +126,6 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(0)
-
     const graph = output.stdout.join('\n')
     expect(graph).toContain('flowchart LR')
     expect(graph).toContain('UsersController [implementation, application]')
@@ -153,7 +148,6 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(0)
-
     expect(output.stdout.join('\n')).toContain('m0["UsersModule"]')
   })
 
@@ -188,25 +182,15 @@ describe('Loutre CLI', () => {
     expect(output.stderr.join('\n')).toContain('LUTRE_DI_UNRESOLVED')
   })
 
-  it('Applicationの単一Entrypointを1回実行して結果をstdoutへ出力する', async () => {
-    const output = io()
-    expect(
-      await runCli(['run', 'examples/hello-cli/src/app.ts'], output.value),
-    ).toBe(0)
-    expect(output.stdout).toEqual(['Hello, World!'])
+  it('Application host commandは提供しない', async () => {
+    for (const command of ['run', 'dev', 'start']) {
+      const output = io()
+      expect(await runCli([command, 'src/app.ts'], output.value)).toBe(2)
+      expect(output.stderr).toEqual([`不明なcommandです: ${command}`])
+    }
   })
 
-  it('Entrypointを持たないApplicationはrunできない', async () => {
-    const output = io()
-    expect(
-      await runCli(['run', 'examples/hello-worker/src/app.ts'], output.value),
-    ).toBe(2)
-    expect(output.stderr).toEqual([
-      'LUTRE_CLI_ENTRYPOINT_REQUIRED: runにはentrypointを持つApplicationが必要です。',
-    ])
-  })
-
-  it('複雑なimportを持つApplicationをCompiler linkageなしでbuildして起動する', async () => {
+  it('複雑なimportを持つApplicationをCompiler linkageなしでbuildする', async () => {
     const output = io()
     const directory = await mkdtemp(join(tmpdir(), 'loutre-linkage-'))
     try {
@@ -230,7 +214,7 @@ describe('Loutre CLI', () => {
         `${pathToFileURL(applicationPath).href}?test=${Date.now()}`
       )
       expect(built.default.kind).toBe('application-definition')
-      const application = bootstrap(built.default)
+      const application = bootstrap({ application: built.default })
       await expect(application.init()).resolves.toBe(application)
       await application.close()
     } finally {

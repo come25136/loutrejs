@@ -57,9 +57,10 @@ describe('canonical Fixture C', () => {
   it('Env keyは値を含まないsymbolic referenceである', () => {
     const key = AppEnv.key('PRIMARY_DATABASE_URL')
     expect(key).toMatchObject({
-      kind: 'env-key',
+      kind: 'runtime-input-key',
+      source: 'environment',
+      contract: AppEnv,
       key: 'PRIMARY_DATABASE_URL',
-      env: AppEnv,
     })
     expect(JSON.stringify(key)).not.toContain('primary://fixture')
   })

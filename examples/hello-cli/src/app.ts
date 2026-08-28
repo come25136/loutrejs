@@ -1,12 +1,23 @@
 import { defineApplication } from '@loutrejs/application'
-import { entrypoint } from '@loutrejs/core'
+import { defineArgs, inject, task } from '@loutrejs/core'
+import { z } from 'zod'
 
-const hello = entrypoint<void, string>({
+export class AppArgs extends defineArgs(
+  z.object({
+    name: z.string().min(1).default('World'),
+  }),
+) {}
+
+export const hello = task<void, string>({
   name: 'hello',
-  factory: () => () => 'Hello, World!',
+  factory:
+    (args = inject(AppArgs)) =>
+    () =>
+      `Hello, ${args.name}!`,
 })
 
 export default defineApplication({
   modules: [],
-  entrypoint: hello,
+  arguments: AppArgs,
+  tasks: [hello],
 })
