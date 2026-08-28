@@ -8,8 +8,8 @@ import {
   provide,
   procedure,
   token,
-} from '@loutrejs/core'
-import { ContextOf, ControllerOf, http, validate } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import { ContextOf, ControllerOf, http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 interface Session {

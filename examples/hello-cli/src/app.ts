@@ -1,5 +1,5 @@
-import { defineApplication } from '@loutrejs/application'
-import { defineArgs, inject, task } from '@loutrejs/core'
+import { defineApplication } from '@loutrejs/loutre'
+import { defineArgs, inject, task } from '@loutrejs/loutre'
 import { z } from 'zod'
 
 export class AppArgs extends defineArgs(

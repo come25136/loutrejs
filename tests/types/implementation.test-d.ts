@@ -4,9 +4,9 @@ import {
   implementation,
   layer,
   procedure,
-} from '@loutrejs/core'
-import { http, validate } from '@loutrejs/http'
-import { messagePort } from '@loutrejs/message-port'
+} from '@loutrejs/loutre'
+import { http, validate } from '@loutrejs/loutre/http'
+import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
 
 const SESSION = contextKey('implementation.session').of<{

@@ -1,4 +1,4 @@
-import { normalizeUnknownError } from '@loutrejs/runtime'
+import { normalizeUnknownError } from '@loutrejs/loutre/runtime'
 
 describe('Unknown Error normalization', () => {
   it('clientへ安全にmappingするためのerrorIdと内部contextを保持する', () => {

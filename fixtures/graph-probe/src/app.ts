@@ -1,5 +1,11 @@
-import { defineApplication } from '@loutrejs/application'
-import { defineEnv, defineModule, inject, provide, token } from '@loutrejs/core'
+import { defineApplication } from '@loutrejs/loutre'
+import {
+  defineEnv,
+  defineModule,
+  inject,
+  provide,
+  token,
+} from '@loutrejs/loutre'
 import { z } from 'zod'
 
 interface MissingDependency {

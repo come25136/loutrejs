@@ -4,10 +4,13 @@ import {
   defineModule,
   implementation,
   procedure,
-} from '@loutrejs/core'
-import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
-import { http, validate } from '@loutrejs/http'
-import { validateHttpParamsSchemas } from '../packages/http/src/params.js'
+} from '@loutrejs/loutre'
+import {
+  assertValidCompilation,
+  compileApplication,
+} from '@loutrejs/loutre/graph'
+import { http, validate } from '@loutrejs/loutre/http'
+import { validateHttpParamsSchemas } from '../packages/loutre/src/http/params.js'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 

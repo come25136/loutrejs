@@ -164,7 +164,7 @@ Compiler は Application Graph の成立要件ではない。
 標準形:
 
 ```ts
-import { inject } from '@loutrejs/core'
+import { inject } from '@loutrejs/loutre'
 
 class UserRepository {}
 
@@ -708,7 +708,7 @@ Source Compiler の代わりに framework-level Graph Engine を持つ。
 推奨 package 構成:
 
 ```text
-@loutrejs/core
+@loutrejs/loutre
 ├ Contract
 ├ Module
 ├ Provider
@@ -718,7 +718,7 @@ Source Compiler の代わりに framework-level Graph Engine を持つ。
 ├ Layer
 └ ContextKey
 
-@loutrejs/graph
+@loutrejs/loutre/graph
 ├ ApplicationGraphIR
 ├ GraphBuilder
 ├ GraphProbe
@@ -727,7 +727,7 @@ Source Compiler の代わりに framework-level Graph Engine を持つ。
 ├ graph serialization
 └ graph diagnostics
 
-@loutrejs/runtime
+@loutrejs/loutre/runtime
 ├ Container
 ├ InjectionContext
 ├ lifecycle
@@ -744,7 +744,7 @@ Source Compiler の代わりに framework-level Graph Engine を持つ。
 └ build
 ```
 
-package 名 `@loutrejs/graph` は推奨案。必須ではない。
+package 名 `@loutrejs/loutre/graph` は推奨案。必須ではない。
 
 重要なのは責務分離。
 
@@ -1365,7 +1365,7 @@ packages/compiler/src/compiler.ts
 を:
 
 ```text
-@loutrejs/graph
+@loutrejs/loutre/graph
 ```
 
 へ移動・再構成する。

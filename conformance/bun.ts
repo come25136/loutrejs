@@ -1,4 +1,4 @@
-import { bunRuntime } from '@loutrejs/runtime-bun'
+import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import usersDefinition from '../dist/conformance/http-crud/application.mjs'
 import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
 

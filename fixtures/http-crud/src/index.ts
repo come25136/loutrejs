@@ -1,12 +1,12 @@
-import { defineApplication } from '@loutrejs/application'
+import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
   defineModule,
   implementation,
   inject,
   procedure,
-} from '@loutrejs/core'
-import { http, validate } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 export const UserParams = {

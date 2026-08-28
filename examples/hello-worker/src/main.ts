@@ -1,4 +1,4 @@
-import { bootstrap } from '@loutrejs/application/host'
+import { bootstrap } from '@loutrejs/loutre/host'
 import application from './app.js'
 
 const app = bootstrap({ application })

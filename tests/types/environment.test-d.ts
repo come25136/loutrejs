@@ -1,4 +1,4 @@
-import { defineEnv } from '@loutrejs/core'
+import { defineEnv } from '@loutrejs/loutre'
 import { z } from 'zod'
 
 const TransformedSchema = z

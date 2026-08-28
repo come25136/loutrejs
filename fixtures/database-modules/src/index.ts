@@ -11,8 +11,8 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
   type Token,
-} from '@loutrejs/core'
-import { createApplicationRuntime } from '@loutrejs/runtime'
+} from '@loutrejs/loutre'
+import { createApplicationRuntime } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
 const AppEnvSchema = z.object({

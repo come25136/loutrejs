@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util'
-import { bootstrap } from '@loutrejs/application/host'
+import { bootstrap } from '@loutrejs/loutre/host'
 import application, { hello } from './app.js'
 
 const { values } = parseArgs({

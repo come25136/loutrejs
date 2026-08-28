@@ -1,4 +1,4 @@
-import { nodeRuntime } from '@loutrejs/runtime-node'
+import { nodeRuntime } from '@loutrejs/node'
 import { createUsersApplication } from '../fixtures/http-crud/src/index.js'
 import { reserveHttpPort } from './helpers/http-server.js'
 

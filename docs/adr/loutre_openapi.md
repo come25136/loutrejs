@@ -8,10 +8,10 @@ Loutre は、実行可能な HTTP Contract から OpenAPI 3.2.0 ドキュメン�
 
 どの HTTP Procedure が実行可能かは Application Graph が決定する。一方、method、path、request schema、response schema、Content-Type、streaming interaction といった HTTP wire-level の情報については、具体的な HTTP Contract を source of truth とする。実行時の schema object 自体は serializable な Graph IR には埋め込まない。
 
-公開 API は `@loutrejs/application/openapi` から提供する。
+公開 API は `@loutrejs/loutre/openapi` から提供する。
 
 ```ts
-import { generateOpenApi } from '@loutrejs/application/openapi'
+import { generateOpenApi } from '@loutrejs/loutre/openapi'
 
 const document = generateOpenApi(application, {
   info: {

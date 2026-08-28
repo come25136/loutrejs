@@ -1,4 +1,4 @@
-import { contextKey, inject, layer, token } from '@loutrejs/core'
+import { contextKey, inject, layer, token } from '@loutrejs/loutre'
 
 const A = contextKey('a').of<string>()
 const B = contextKey('b').of<number>()

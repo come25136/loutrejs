@@ -51,15 +51,15 @@ LoutreはApplication固有CLIを持たない。CLI、Lambda、Electron、testな
 最小のHTTP Applicationはこんな形です。
 
 ```ts
-import { defineApplication } from '@loutrejs/application'
+import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
   defineModule,
   implementation,
   inject,
   procedure,
-} from '@loutrejs/core'
-import { http, validate } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const GreetingContract = contract({
@@ -118,7 +118,7 @@ self-hostする場合もApplication sourceは変更せず、Host側だけでboot
 
 ```ts
 import application from './app.js'
-import { bootstrap } from '@loutrejs/application/host'
+import { bootstrap } from '@loutrejs/loutre/host'
 
 const app = bootstrap({ application })
 
@@ -131,8 +131,8 @@ await app.listen({
 Application起動時のHost inputは`Arguments`として宣言できます。
 
 ```ts
-import { defineApplication } from '@loutrejs/application'
-import { defineArgs, inject, task } from '@loutrejs/core'
+import { defineApplication } from '@loutrejs/loutre'
+import { defineArgs, inject, task } from '@loutrejs/loutre'
 import { z } from 'zod'
 
 class AppArgs extends defineArgs(

@@ -1,4 +1,4 @@
-import { workerdRuntime } from '@loutrejs/runtime-workerd'
+import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'
 import usersDefinition from '../dist/conformance/http-crud/application.mjs'
 import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
 

@@ -10,10 +10,10 @@ import {
   procedure,
   token,
   type ContractDefinition,
-} from '@loutrejs/core'
-import { compileApplication } from '@loutrejs/graph'
-import { http } from '@loutrejs/http'
-import { messagePort } from '@loutrejs/message-port'
+} from '@loutrejs/loutre'
+import { compileApplication } from '@loutrejs/loutre/graph'
+import { http } from '@loutrejs/loutre/http'
+import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
 
 const Body = z.object({ ok: z.boolean() })

@@ -4,11 +4,11 @@ import {
   implementation,
   inject,
   procedure,
-} from '@loutrejs/core'
-import { compileApplication } from '@loutrejs/graph'
-import { http } from '@loutrejs/http'
-import { messagePort } from '@loutrejs/message-port'
-import { ApplicationRuntime } from '@loutrejs/runtime'
+} from '@loutrejs/loutre'
+import { compileApplication } from '@loutrejs/loutre/graph'
+import { http } from '@loutrejs/loutre/http'
+import { messagePort } from '@loutrejs/loutre/message-port'
+import { ApplicationRuntime } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
 function createContract() {

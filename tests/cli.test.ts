@@ -1,4 +1,4 @@
-import { bootstrap } from '@loutrejs/application/host'
+import { bootstrap } from '@loutrejs/loutre/host'
 import { runCli } from '@loutrejs/cli'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -225,17 +225,17 @@ describe('Loutre CLI', () => {
   it.each([
     [
       'lambda',
-      "import { lambdaRuntime } from '@loutrejs/runtime-lambda'",
+      "import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'",
       'export const handler = lambdaRuntime.bind({ application })',
     ],
     [
       'workerd',
-      "import { workerdRuntime } from '@loutrejs/runtime-workerd'",
+      "import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'",
       'export default workerdRuntime.bind({ application })',
     ],
     [
       'deno',
-      "import { denoRuntime } from '@loutrejs/runtime-deno'",
+      "import { denoRuntime } from '@loutrejs/loutre/runtime/deno'",
       'export default denoRuntime.bind({ application })',
     ],
   ])(

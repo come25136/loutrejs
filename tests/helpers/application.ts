@@ -1,13 +1,16 @@
 import {
   defineApplication,
   type HttpApplicationCapability,
-} from '@loutrejs/application'
-import { bootstrap } from '@loutrejs/application/host'
-import type { ModuleInstance } from '@loutrejs/core'
-import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
-import type { HttpProtocolExecution } from '@loutrejs/http'
-import { createMessagePortExecution } from '@loutrejs/message-port'
-import { ApplicationRuntime, type Logger } from '@loutrejs/runtime'
+} from '@loutrejs/loutre'
+import { bootstrap } from '@loutrejs/loutre/host'
+import type { ModuleInstance } from '@loutrejs/loutre'
+import {
+  assertValidCompilation,
+  compileApplication,
+} from '@loutrejs/loutre/graph'
+import type { HttpProtocolExecution } from '@loutrejs/loutre/http'
+import { createMessagePortExecution } from '@loutrejs/loutre/message-port'
+import { ApplicationRuntime, type Logger } from '@loutrejs/loutre/runtime'
 
 export function createTestApplication<
   const TModules extends readonly ModuleInstance[],

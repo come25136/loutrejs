@@ -13,8 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@loutrejs/application": "0.1.0",
-    "@loutrejs/core": "0.1.0"
+    "@loutrejs/loutre": "0.1.0"
   },
   "devDependencies": {
     "@loutrejs/cli": "0.1.0",

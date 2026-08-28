@@ -1,4 +1,4 @@
-import { denoRuntime } from '@loutrejs/runtime-deno'
+import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import usersDefinition from '../dist/conformance/http-crud/application.mjs'
 import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
 

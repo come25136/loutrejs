@@ -1,5 +1,5 @@
-import { binding, defineApplication } from '@loutrejs/application'
-import { bootstrap } from '@loutrejs/application/host'
+import { binding, defineApplication } from '@loutrejs/loutre'
+import { bootstrap } from '@loutrejs/loutre/host'
 import {
   consume,
   contract,
@@ -11,9 +11,9 @@ import {
   procedure,
   queue,
   task,
-} from '@loutrejs/core'
-import { http } from '@loutrejs/http'
-import { nodeRuntime } from '@loutrejs/runtime-node'
+} from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
+import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
 
 const HealthContract = contract({

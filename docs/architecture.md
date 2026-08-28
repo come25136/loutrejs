@@ -69,7 +69,7 @@ TypeScript Source Compiler、Runtime Linkage Artifact、decorator metadata は A
 現行 package boundary は概ね次のとおり。
 
 ```text
-@loutrejs/core
+@loutrejs/loutre
 ├ Contract / Procedure / Protocol descriptor
 ├ Module / Provider / Token
 ├ Environment Contract / defineEnv()
@@ -79,14 +79,14 @@ TypeScript Source Compiler、Runtime Linkage Artifact、decorator metadata は A
 ├ Pipeline / Layer / Context Key
 └ Lifecycle descriptor
 
-@loutrejs/application
+@loutrejs/loutre
 ├ portable ApplicationDefinition / defineApplication()
 ├ Base / Hosted / Invocation Application type
 ├ self-host bootstrap facade
 ├ callback runtime invocation binding
 └ process-local Scheduler execution
 
-@loutrejs/graph
+@loutrejs/loutre/graph
 ├ ApplicationGraphIR v3
 ├ descriptor / execution-root traversal
 ├ Graph Probe / Dependency Recorder
@@ -95,7 +95,7 @@ TypeScript Source Compiler、Runtime Linkage Artifact、decorator metadata は A
 ├ Environment / Capability topology
 └ graph serialization source
 
-@loutrejs/runtime
+@loutrejs/loutre/runtime
 ├ synchronous DI Container
 ├ runtime Environment binding
 ├ application / transient scope
@@ -104,7 +104,7 @@ TypeScript Source Compiler、Runtime Linkage Artifact、decorator metadata は A
 ├ Lifecycle execution
 └ Pipeline execution
 
-@loutrejs/http
+@loutrejs/loutre/http
 ├ HTTP Protocol descriptor
 ├ HTTP path grammar / routing
 ├ request decode / validation
@@ -112,17 +112,17 @@ TypeScript Source Compiler、Runtime Linkage Artifact、decorator metadata は A
 ├ response finalization
 └ HTTP protocol execution
 
-@loutrejs/message-port
+@loutrejs/loutre/message-port
 ├ MessagePort Protocol descriptor
 ├ message invocation / finalization
 └ MessagePort protocol execution
 
-@loutrejs/runtime-node
-@loutrejs/runtime-deno
-@loutrejs/runtime-bun
-@loutrejs/runtime-workerd
-@loutrejs/runtime-electron
-@loutrejs/runtime-lambda
+@loutrejs/node
+@loutrejs/loutre/runtime/deno
+@loutrejs/loutre/runtime/bun
+@loutrejs/loutre/runtime/workerd
+@loutrejs/loutre/runtime/electron
+@loutrejs/loutre/runtime/lambda
 └ low-level runtime driver / Environment source / Capability bridge
 
 @loutrejs/cli
@@ -639,7 +639,7 @@ self-hostではportable Definitionを `bootstrap()` してHosted Applicationを�
 
 ```ts
 import application from './app.js'
-import { bootstrap } from '@loutrejs/application/host'
+import { bootstrap } from '@loutrejs/loutre/host'
 
 const app = bootstrap(application)
 ```
@@ -1233,7 +1233,7 @@ Server streamは `AsyncIterable` を利用する。
 
 ## 12. Unified Validation
 
-Contract coverage、Protocol dispatch identity、Pipeline、DI、Module、Environment topology、Runtime capability等のsemantic validationは、可能な限り `@loutrejs/graph` の同じApplication Graphをsource of truthとする。
+Contract coverage、Protocol dispatch identity、Pipeline、DI、Module、Environment topology、Runtime capability等のsemantic validationは、可能な限り `@loutrejs/loutre/graph` の同じApplication Graphをsource of truthとする。
 
 ```text
 ApplicationDefinition
@@ -1437,3 +1437,9 @@ Loutre v0.1 architectureを短くまとめると次。
 > **Host / Driver boundaryだけがhost-specific APIを知る。Application Definitionはportableに保つ。**
 
 過去の個別設計資料は詳細な経緯として参照できるが、本書または現行実装と矛盾する記述はhistoricalとみなす。
+
+## Package Distribution
+
+公開distributionは`@loutrejs/loutre`、`@loutrejs/node`、`@loutrejs/bullmq`、`@loutrejs/cli`の4 packageに限定する。Application / Core / Graph / Runtime / Protocolなどのsource architecture境界はnpm package境界とは独立して扱い、本体内のmodule / subpath exportとして維持する。
+
+詳細とmigrationは[Package Distribution ADR](./adr/loutre_package_distribution_architecture.md)を参照。

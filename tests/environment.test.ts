@@ -5,12 +5,12 @@ import {
   loadEnv,
   provide,
   token,
-} from '@loutrejs/core'
-import { compileApplication } from '@loutrejs/graph'
+} from '@loutrejs/loutre'
+import { compileApplication } from '@loutrejs/loutre/graph'
 import {
   createApplicationRuntime,
   EnvironmentBindingError,
-} from '@loutrejs/runtime'
+} from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
 const AppEnvSchema = z

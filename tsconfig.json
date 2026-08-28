@@ -16,32 +16,39 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "skipLibCheck": true,
     "paths": {
-      "@loutrejs/core": ["./packages/core/src/index.ts"],
-      "@loutrejs/application": ["./packages/application/src/index.ts"],
-      "@loutrejs/application/host": ["./packages/application/src/host.ts"],
-      "@loutrejs/application/binding": [
-        "./packages/application/src/binding.ts"
+      "@loutrejs/loutre": ["./packages/loutre/src/index.ts"],
+      "@loutrejs/loutre/host": ["./packages/loutre/src/application/host.ts"],
+      "@loutrejs/loutre/binding": [
+        "./packages/loutre/src/application/binding.ts"
       ],
-      "@loutrejs/application/openapi": [
-        "./packages/application/src/openapi.ts"
+      "@loutrejs/loutre/openapi": [
+        "./packages/loutre/src/application/openapi.ts"
       ],
-      "@loutrejs/graph": ["./packages/graph/src/index.ts"],
-      "@loutrejs/cli": ["./packages/cli/src/index.ts"],
-      "@loutrejs/runtime": ["./packages/runtime/src/index.ts"],
-      "@loutrejs/http": ["./packages/http/src/index.ts"],
-      "@loutrejs/message-port": ["./packages/message-port/src/index.ts"],
-      "@loutrejs/message-port/environment": [
-        "./packages/message-port/src/environment.ts"
+      "@loutrejs/loutre/graph": ["./packages/loutre/src/graph/index.ts"],
+      "@loutrejs/loutre/runtime": ["./packages/loutre/src/runtime/index.ts"],
+      "@loutrejs/loutre/http": ["./packages/loutre/src/http/index.ts"],
+      "@loutrejs/loutre/message-port": [
+        "./packages/loutre/src/message-port/index.ts"
       ],
-      "@loutrejs/queue-bullmq": ["./packages/queue-bullmq/src/index.ts"],
-      "@loutrejs/runtime-node": ["./packages/runtime-node/src/index.ts"],
-      "@loutrejs/runtime-deno": ["./packages/runtime-deno/src/index.ts"],
-      "@loutrejs/runtime-bun": ["./packages/runtime-bun/src/index.ts"],
-      "@loutrejs/runtime-workerd": ["./packages/runtime-workerd/src/index.ts"],
-      "@loutrejs/runtime-electron": [
-        "./packages/runtime-electron/src/index.ts"
+      "@loutrejs/loutre/message-port/environment": [
+        "./packages/loutre/src/message-port/environment.ts"
       ],
-      "@loutrejs/runtime-lambda": ["./packages/runtime-lambda/src/index.ts"]
+      "@loutrejs/loutre/runtime/bun": ["./packages/loutre/src/adapters/bun.ts"],
+      "@loutrejs/loutre/runtime/deno": [
+        "./packages/loutre/src/adapters/deno.ts"
+      ],
+      "@loutrejs/loutre/runtime/workerd": [
+        "./packages/loutre/src/adapters/workerd.ts"
+      ],
+      "@loutrejs/loutre/runtime/lambda": [
+        "./packages/loutre/src/adapters/lambda.ts"
+      ],
+      "@loutrejs/loutre/runtime/electron": [
+        "./packages/loutre/src/adapters/electron.ts"
+      ],
+      "@loutrejs/node": ["./packages/node/src/index.ts"],
+      "@loutrejs/bullmq": ["./packages/bullmq/src/index.ts"],
+      "@loutrejs/cli": ["./packages/cli/src/index.ts"]
     },
     "types": ["node", "vitest/globals"]
   },

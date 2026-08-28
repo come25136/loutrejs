@@ -5,8 +5,8 @@ import {
   defineModule,
   implementation,
   procedure,
-} from '@loutrejs/core'
-import { http } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 

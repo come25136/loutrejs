@@ -1,12 +1,12 @@
-import { defineApplication } from '@loutrejs/application'
+import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
   contract,
   defineModule,
   implementation,
   procedure,
-} from '@loutrejs/core'
-import { basicAuth, http } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import { basicAuth, http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const User = z.object({

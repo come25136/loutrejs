@@ -1,4 +1,4 @@
-import { lambdaRuntime } from '@loutrejs/runtime-lambda'
+import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'
 import usersDefinition from '../dist/conformance/http-crud/application.mjs'
 import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
 

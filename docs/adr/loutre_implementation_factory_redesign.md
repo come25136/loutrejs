@@ -251,7 +251,7 @@ export const UsersModule = defineModule(() => ({
 
 # 5. `implementation()` はprotocol-neutral
 
-`implementation()` は `@loutrejs/core` の概念とする。
+`implementation()` は `@loutrejs/loutre` の概念とする。
 
 HTTP専用の:
 
@@ -1879,7 +1879,7 @@ Frameworkが禁止する必要はない。
 
 # 53. Public exports
 
-`@loutrejs/core` から少なくとも:
+`@loutrejs/loutre` から少なくとも:
 
 ```txt
 implementation

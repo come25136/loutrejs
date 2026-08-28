@@ -6,14 +6,17 @@ import type {
   DependencyEdgeIR,
   DependencyNodeIR,
   LayerIR,
-} from '@loutrejs/graph'
-import { checkCapabilities, type RuntimeCapabilities } from '@loutrejs/runtime'
-import { bunRuntime } from '@loutrejs/runtime-bun'
-import { denoRuntime } from '@loutrejs/runtime-deno'
-import { electronRuntime } from '@loutrejs/runtime-electron'
-import { lambdaRuntime } from '@loutrejs/runtime-lambda'
-import { nodeRuntime } from '@loutrejs/runtime-node'
-import { workerdRuntime } from '@loutrejs/runtime-workerd'
+} from '@loutrejs/loutre/graph'
+import {
+  checkCapabilities,
+  type RuntimeCapabilities,
+} from '@loutrejs/loutre/runtime'
+import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
+import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
+import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
+import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'
+import { nodeRuntime } from '@loutrejs/node'
+import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'
 import { emitApplication, loadApplicationGraph } from './application-loader.js'
 
 export {
@@ -221,7 +224,7 @@ function renderDeploymentEntry(runtime: DeploymentRuntime): string {
     case 'lambda':
       return [
         "import application from './application.mjs'",
-        "import { lambdaRuntime } from '@loutrejs/runtime-lambda'",
+        "import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'",
         '',
         'export const handler = lambdaRuntime.bind({ application })',
         '',
@@ -229,7 +232,7 @@ function renderDeploymentEntry(runtime: DeploymentRuntime): string {
     case 'workerd':
       return [
         "import application from './application.mjs'",
-        "import { workerdRuntime } from '@loutrejs/runtime-workerd'",
+        "import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'",
         '',
         'export default workerdRuntime.bind({ application })',
         '',
@@ -237,7 +240,7 @@ function renderDeploymentEntry(runtime: DeploymentRuntime): string {
     case 'deno':
       return [
         "import application from './application.mjs'",
-        "import { denoRuntime } from '@loutrejs/runtime-deno'",
+        "import { denoRuntime } from '@loutrejs/loutre/runtime/deno'",
         '',
         'export default denoRuntime.bind({ application })',
         '',

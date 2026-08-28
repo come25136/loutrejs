@@ -1,38 +1,48 @@
-import { defineConfig } from 'vitest/config'
 import { resolve } from 'node:path'
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   resolve: {
     alias: {
-      '@loutrejs/application/openapi': resolve(
-        'packages/application/src/openapi.ts',
+      '@loutrejs/loutre/host': resolve(
+        'packages/loutre/src/application/host.ts',
       ),
-      '@loutrejs/application/host': resolve('packages/application/src/host.ts'),
-      '@loutrejs/application/binding': resolve(
-        'packages/application/src/binding.ts',
+      '@loutrejs/loutre/binding': resolve(
+        'packages/loutre/src/application/binding.ts',
       ),
-      '@loutrejs/application': resolve('packages/application/src/index.ts'),
-      '@loutrejs/core': resolve('packages/core/src/index.ts'),
-      '@loutrejs/graph': resolve('packages/graph/src/index.ts'),
+      '@loutrejs/loutre/openapi': resolve(
+        'packages/loutre/src/application/openapi.ts',
+      ),
+      '@loutrejs/loutre/graph': resolve('packages/loutre/src/graph/index.ts'),
+      '@loutrejs/loutre/runtime/bun': resolve(
+        'packages/loutre/src/adapters/bun.ts',
+      ),
+      '@loutrejs/loutre/runtime/deno': resolve(
+        'packages/loutre/src/adapters/deno.ts',
+      ),
+      '@loutrejs/loutre/runtime/workerd': resolve(
+        'packages/loutre/src/adapters/workerd.ts',
+      ),
+      '@loutrejs/loutre/runtime/lambda': resolve(
+        'packages/loutre/src/adapters/lambda.ts',
+      ),
+      '@loutrejs/loutre/runtime/electron': resolve(
+        'packages/loutre/src/adapters/electron.ts',
+      ),
+      '@loutrejs/loutre/runtime': resolve(
+        'packages/loutre/src/runtime/index.ts',
+      ),
+      '@loutrejs/loutre/message-port/environment': resolve(
+        'packages/loutre/src/message-port/environment.ts',
+      ),
+      '@loutrejs/loutre/message-port': resolve(
+        'packages/loutre/src/message-port/index.ts',
+      ),
+      '@loutrejs/loutre/http': resolve('packages/loutre/src/http/index.ts'),
+      '@loutrejs/loutre': resolve('packages/loutre/src/index.ts'),
+      '@loutrejs/node': resolve('packages/node/src/index.ts'),
+      '@loutrejs/bullmq': resolve('packages/bullmq/src/index.ts'),
       '@loutrejs/cli': resolve('packages/cli/src/index.ts'),
-      '@loutrejs/runtime': resolve('packages/runtime/src/index.ts'),
-      '@loutrejs/http': resolve('packages/http/src/index.ts'),
-      '@loutrejs/message-port/environment': resolve(
-        'packages/message-port/src/environment.ts',
-      ),
-      '@loutrejs/message-port': resolve('packages/message-port/src/index.ts'),
-      '@loutrejs/runtime-node': resolve('packages/runtime-node/src/index.ts'),
-      '@loutrejs/runtime-deno': resolve('packages/runtime-deno/src/index.ts'),
-      '@loutrejs/runtime-bun': resolve('packages/runtime-bun/src/index.ts'),
-      '@loutrejs/runtime-workerd': resolve(
-        'packages/runtime-workerd/src/index.ts',
-      ),
-      '@loutrejs/runtime-electron': resolve(
-        'packages/runtime-electron/src/index.ts',
-      ),
-      '@loutrejs/runtime-lambda': resolve(
-        'packages/runtime-lambda/src/index.ts',
-      ),
     },
   },
   test: {

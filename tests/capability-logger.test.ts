@@ -5,8 +5,8 @@ import {
   checkCapabilities,
   type LogRecord,
   type LoggerBackend,
-} from '@loutrejs/runtime'
-import { inject, normalizeProvider } from '@loutrejs/core'
+} from '@loutrejs/loutre/runtime'
+import { inject, normalizeProvider } from '@loutrejs/loutre'
 
 describe('CapabilityとLogger', () => {
   it('Application requirementとRuntime capabilityの差分を返す', () => {

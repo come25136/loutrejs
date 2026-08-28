@@ -1,5 +1,5 @@
 import { app, MessageChannelMain } from 'electron'
-import { electronRuntime } from '@loutrejs/runtime-electron'
+import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import definition from '../dist/conformance/streaming-message-port/application.mjs'
 
 async function main(): Promise<void> {

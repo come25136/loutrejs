@@ -1,4 +1,4 @@
-import { defineApplication } from '@loutrejs/application'
+import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
   contract,
@@ -10,8 +10,8 @@ import {
   procedure,
   type OnModuleDestroy,
   type OnModuleInit,
-} from '@loutrejs/core'
-import { http, validate } from '@loutrejs/http'
+} from '@loutrejs/loutre'
+import { http, validate } from '@loutrejs/loutre/http'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { z } from 'zod'
 import { Prisma, PrismaClient } from './generated/prisma/client.js'

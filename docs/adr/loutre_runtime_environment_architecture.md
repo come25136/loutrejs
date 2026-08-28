@@ -398,7 +398,7 @@ Environment concrete value を Graph Probe 中に読むこと自体は diagnosti
 
 ## 10. `.env` file
 
-`.env` parsing は `@loutrejs/core` の責務にしない。
+`.env` parsing は `@loutrejs/loutre` の責務にしない。
 
 Core は次だけを扱う。
 

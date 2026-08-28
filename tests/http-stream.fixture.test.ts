@@ -1,5 +1,5 @@
-import { defineApplication } from '@loutrejs/application'
-import { nodeRuntime } from '@loutrejs/runtime-node'
+import { defineApplication } from '@loutrejs/loutre'
+import { nodeRuntime } from '@loutrejs/node'
 import { EventsModule } from '../fixtures/streaming/src/index.js'
 import { reserveHttpPort } from './helpers/http-server.js'
 import { silentLogger } from './helpers/silent-logger.js'

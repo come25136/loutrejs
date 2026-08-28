@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { generateOpenApi } from '@loutrejs/application/openapi'
+import { generateOpenApi } from '@loutrejs/loutre/openapi'
 import { loadApplicationDefinition } from './application-loader.js'
 
 export interface OpenApiCliIO {
