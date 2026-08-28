@@ -18,8 +18,6 @@
 個別の ADR / design / handoff docs
 ```
 
-過去の設計資料にはmigration途中の名称や廃止済みAPIが含まれる。この文書と矛盾する場合はhistorical informationとして扱う。
-
 ---
 
 ## 1. Architecture Principle
@@ -59,8 +57,6 @@ Loutreは、portableな **Application Definition** と明示的な **Application
 > **同期的に完成できるobject invariantをframework都合で`undefined`へ落とさない。**
 
 > **Graph Probeが自然なconstructor / factory設計を歪めてはならない。**
-
-TypeScript Source Compiler、Runtime Linkage Artifact、decorator metadataはApplication Graphの成立条件ではない。
 
 ---
 
@@ -657,7 +653,7 @@ Cleanupも失敗した場合は`AggregateError`へ集約する。
 ### 9.1 Application Graph
 
 public `@loutrejs/loutre/graph`が公開・生成する`ApplicationGraphIR`はLoutre本体のPublic APIとして管理する。
-Graphだけに独立したschema versionは持たせず、Graph shapeの破壊的変更はLoutre本体のversioningで扱う。旧Graph compiler、IR type、変換bridge、forwarding entryは保持しない。
+Graphだけに独立したschema versionは持たせず、Graph shapeの破壊的変更はLoutre本体のversioningで扱う。
 
 `ApplicationGraphIR`は少なくとも次を持つ。
 
@@ -934,8 +930,7 @@ repository内でDenoからsource fallbackは行わず、未build時は事前buil
 
 ### 13.2 Build
 
-`build`はSource Compilerによるsource rewriteをしない。
-esbuildでESM Application bundleを生成し、ApplicationGraphから`loutre.manifest.json`を生成する。
+`build`はesbuildでESM Application bundleを生成する。
 
 ```sh
 loutre build src/app.ts --out-dir dist/loutre
@@ -1042,49 +1037,7 @@ architecture変更時は、少なくとも次をpublic type tests / unit tests /
 
 ---
 
-## 16. Removed / Non-Canonical Concepts
-
-次をv0.1 canonical architectureへ戻さない。
-
-```text
-TypeScript Source Compiler as runtime requirement
-Runtime Linkage Artifact
-emitDecoratorMetadata based DI
-@Injectable / @Inject requirement
-implicit class auto-resolution
-class-only Controller / Handler model
-HttpApplication / createHttpApplication / initializeHttpApplication
-MessagePortApplication / createMessagePortApplication
-Protocolごとに分裂したApplication Definition
-Application Definitionへのruntime / adapter指定
-Graph-specific schema versioning
-legacy Graph compiler / IR compatibility layer
-Entrypoint as public execution model
-Application.entrypoint
-loutre run / loutre dev / loutre start
-Application-owned listen()
-implement(Contract).for(protocol).with(Class)
-ImplementationBinding
-Layer inbound / outbound / state
-CompositeLayerDescriptor
-layer.compose()
-Framework-owned DatabaseService abstraction
-ExecutionScope as framework transaction primitive
-HTTP regex-based route identity
-schema-driven route dispatch
-registration-order-dependent HTTP routing
-z.object() as HTTP path params structure declaration
-Application-level direct process.env as canonical Environment wiring
-Graph generation requiring deployment secrets
-constructor resource field forced to T | undefined for framework lifecycle reasons
-```
-
-Database、Transaction、Prisma、Drizzle、AsyncLocalStorage等はCore専用概念にしない。
-必要なApplication primitiveはProvider / Lifecycle / Layer / Contextで表現する。
-
----
-
-## 17. Freeze
+## 16. Freeze
 
 Loutre v0.1 architectureを短くまとめると次。
 
@@ -1107,5 +1060,3 @@ Loutre v0.1 architectureを短くまとめると次。
 > **generic Hostはlistenerを所有しない。Node / Bun / Deno / workerd / Lambda / Electron adapterがHost固有APIを担当する。**
 
 > **Loutre CLIはGraph / build / OpenAPI toolingであり、Applicationのrun / dev / startを所有しない。**
-
-詳細な設計経緯は各ADRを参照できるが、本書または現行実装と矛盾する記述はhistoricalとみなす。

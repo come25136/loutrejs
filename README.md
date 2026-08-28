@@ -296,11 +296,8 @@ Applicationの実行方法はHostが所有します。
 
 ## Architecture
 
-現在のarchitecture source of truthは[`docs/architecture.md`](./docs/architecture.md)です。
-
-`docs/architecture.md`をLoutre v0.1のarchitecture上のsource of truthとします。
+Loutre v0.1のarchitecture source of truthは[`docs/architecture.md`](./docs/architecture.md)です。
 実装・public type tests・runtime conformanceとの差異は放置せず、architectureと実装が一致するように解消します。
-過去の個別ADRは設計経緯として残りますが、`docs/architecture.md`と矛盾する場合はhistorical informationとして扱います。
 
 ## Development
 
