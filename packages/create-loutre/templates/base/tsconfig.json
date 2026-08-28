@@ -10,7 +10,7 @@
     "rootDir": "src",
     "outDir": "dist",
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": "__LOUTRE_TYPES__"
   },
   "include": ["src/**/*.ts"]
 }

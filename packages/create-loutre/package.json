@@ -20,6 +20,7 @@
     "provenance": true
   },
   "dependencies": {
+    "@clack/prompts": "^1.7.0",
     "@loutrejs/loutre": "^0.1.0",
     "commander": "^15.0.0"
   }

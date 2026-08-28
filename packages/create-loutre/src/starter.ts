@@ -1,17 +1,30 @@
 import { readFileSync } from 'node:fs'
-import { cp, rename, writeFile } from 'node:fs/promises'
+import { cp, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  type PackageManager,
+  type ProjectTarget,
+  runScriptCommand,
+  targetLabels,
+} from './options.js'
 
 const packageManifest = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 ) as { readonly dependencies: Readonly<Record<string, string>> }
-const loutreVersion = packageManifest.dependencies['@loutrejs/loutre']
-if (!loutreVersion)
-  throw new Error('@loutrejs/loutreのversionがpackage.jsonにありません。')
+const loutreVersion = requiredDependencyVersion('@loutrejs/loutre')
 
-const templateDirectory = fileURLToPath(
-  new URL('../templates/default/', import.meta.url),
+function requiredDependencyVersion(name: string): string {
+  const version = packageManifest.dependencies[name]
+  if (!version) throw new Error(`${name}のversionがpackage.jsonにありません。`)
+  return version
+}
+
+const baseTemplateDirectory = fileURLToPath(
+  new URL('../templates/base/', import.meta.url),
+)
+const targetsTemplateDirectory = fileURLToPath(
+  new URL('../templates/targets/', import.meta.url),
 )
 
 const renamedTemplateFiles = new Map([
@@ -20,11 +33,20 @@ const renamedTemplateFiles = new Map([
   ['_oxfmtrc.json', '.oxfmtrc.json'],
 ])
 
+export interface StarterOptions {
+  readonly packageName: string
+  readonly packageManager: PackageManager
+  readonly target: ProjectTarget
+}
+
 export async function writeStarter(
   targetDirectory: string,
-  packageName: string,
+  options: StarterOptions,
 ): Promise<void> {
-  await cp(templateDirectory, targetDirectory, { recursive: true })
+  await cp(baseTemplateDirectory, targetDirectory, { recursive: true })
+  await cp(join(targetsTemplateDirectory, options.target), targetDirectory, {
+    recursive: true,
+  })
   for (const [source, destination] of renamedTemplateFiles) {
     await rename(
       join(targetDirectory, source),
@@ -33,52 +55,219 @@ export async function writeStarter(
   }
   await writeFile(
     join(targetDirectory, 'package.json'),
-    renderPackageJson(packageName),
+    renderPackageJson(options),
     'utf8',
   )
+  await replaceText(
+    join(targetDirectory, 'tsconfig.json'),
+    '"__LOUTRE_TYPES__"',
+    JSON.stringify(targetManifest(options.target).types),
+  )
+  await renderTextTemplate(join(targetDirectory, 'README.md'), {
+    targetLabel: targetLabels[options.target],
+    developmentSection: developmentSection(options),
+    verifyCommand: runScriptCommand(options.packageManager, 'verify'),
+    deploymentSection: deploymentSection(options),
+  })
+  if (options.target === 'workerd') {
+    await renderTextTemplate(join(targetDirectory, 'wrangler.jsonc'), {
+      packageName: workerNameFor(options.packageName),
+      compatibilityDate: new Date().toISOString().slice(0, 10),
+    })
+  }
 }
 
-function renderPackageJson(packageName: string): string {
+interface TargetManifest {
+  readonly scripts: Readonly<Record<string, string>>
+  readonly dependencies?: Readonly<Record<string, string>>
+  readonly devDependencies?: Readonly<Record<string, string>>
+  readonly engines?: Readonly<Record<string, string>>
+  readonly typecheck?: string
+  readonly types: readonly string[]
+}
+
+function targetManifest(target: ProjectTarget): TargetManifest {
+  switch (target) {
+    case 'node':
+      return {
+        scripts: {
+          dev: 'tsx watch src/main.ts',
+          build: 'tsc -p tsconfig.build.json',
+          start: 'node dist/main.js',
+        },
+        dependencies: { '@loutrejs/node': loutreVersion },
+        devDependencies: { '@types/node': '^22.20.1', tsx: '^4.23.12' },
+        engines: { node: '>=22' },
+        types: ['node'],
+      }
+    case 'bun':
+      return {
+        scripts: {
+          dev: 'bun --watch src/main.ts',
+          build: 'bun build src/main.ts --outdir dist --target bun',
+          start: 'bun dist/main.js',
+        },
+        devDependencies: { '@types/bun': '^1.4.0' },
+        types: ['bun'],
+      }
+    case 'deno':
+      return {
+        scripts: {
+          dev: 'deno run -A --watch src/main.ts',
+          start: 'deno run -A src/main.ts',
+        },
+        typecheck: 'tsc --noEmit --allowImportingTsExtensions',
+        types: [],
+      }
+    case 'workerd':
+      return {
+        scripts: {
+          dev: 'wrangler dev',
+          build: 'wrangler deploy --dry-run --outdir dist',
+          deploy: 'wrangler deploy',
+        },
+        devDependencies: { wrangler: '^4.127.1' },
+        types: [],
+      }
+    case 'lambda':
+      return {
+        scripts: {
+          build:
+            'esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/index.mjs',
+        },
+        devDependencies: { '@types/node': '^22.20.1', esbuild: '^0.28.2' },
+        engines: { node: '>=22' },
+        types: ['node'],
+      }
+  }
+}
+
+function renderPackageJson(options: StarterOptions): string {
+  const target = targetManifest(options.target)
+  const build = target.scripts.build
+  const typecheck = target.typecheck ?? 'tsc --noEmit'
+  const verifyBuild = build === undefined ? '' : ` && ${build}`
   return `${JSON.stringify(
     {
-      name: packageName,
+      name: options.packageName,
       version: '0.1.0',
       private: true,
       type: 'module',
-      engines: {
-        node: '>=22',
-      },
+      ...(target.engines === undefined ? {} : { engines: target.engines }),
       scripts: {
-        dev: 'tsx watch src/main.ts',
-        build: 'tsc -p tsconfig.build.json',
-        start: 'node dist/main.js',
-        typecheck: 'tsc --noEmit',
-        check: 'npm run typecheck && loutre check --entry src/app.ts',
+        ...target.scripts,
+        typecheck,
+        check: `${typecheck} && loutre check --entry src/app.ts`,
         test: 'vitest run',
         'test:watch': 'vitest',
         lint: 'oxlint',
         'lint:fix': 'oxlint --fix',
         format: 'oxfmt',
         'format:check': 'oxfmt --check',
-        verify:
-          'npm run format:check && npm run lint && npm run check && npm test && npm run build',
+        verify: `oxfmt --check && oxlint && ${typecheck} && loutre check --entry src/app.ts && vitest run${verifyBuild}`,
       },
       dependencies: {
         '@loutrejs/loutre': loutreVersion,
-        '@loutrejs/node': loutreVersion,
         zod: '^4.4.3',
+        ...target.dependencies,
       },
       devDependencies: {
         '@loutrejs/cli': loutreVersion,
-        '@types/node': '^22.20.1',
         oxfmt: '^0.65.0',
         oxlint: '^1.80.0',
-        tsx: '^4.23.12',
         typescript: '^7.0.2',
         vitest: '^4.1.11',
+        ...target.devDependencies,
       },
     },
     null,
     2,
   )}\n`
+}
+
+function developmentSection(options: StarterOptions): string {
+  if (options.target === 'lambda') {
+    return [
+      '## 開発',
+      '',
+      'Lambda targetはlocal HTTP listenerを起動しません。Applicationの挙動はtestで確認します。',
+      '',
+      '```sh',
+      runScriptCommand(options.packageManager, 'test:watch'),
+      '```',
+    ].join('\n')
+  }
+  return [
+    '## 開発',
+    '',
+    '```sh',
+    runScriptCommand(options.packageManager, 'dev'),
+    '```',
+    '',
+    options.target === 'workerd'
+      ? 'Wranglerがlocalのworkerd環境を起動します。'
+      : '<http://127.0.0.1:3000> へアクセスするとJSONレスポンスを返します。',
+  ].join('\n')
+}
+
+function deploymentSection(options: StarterOptions): string {
+  if (options.target === 'workerd') {
+    return [
+      '## Deploy',
+      '',
+      '```sh',
+      runScriptCommand(options.packageManager, 'deploy'),
+      '```',
+    ].join('\n')
+  }
+  if (options.target === 'lambda') {
+    return [
+      '## Build',
+      '',
+      '```sh',
+      runScriptCommand(options.packageManager, 'build'),
+      '```',
+      '',
+      '`dist/index.mjs`の`handler`をAWS Lambdaのhandlerとしてdeployします。',
+    ].join('\n')
+  }
+  return [
+    '## Production',
+    '',
+    '```sh',
+    ...(options.target === 'deno'
+      ? []
+      : [runScriptCommand(options.packageManager, 'build')]),
+    runScriptCommand(options.packageManager, 'start'),
+    '```',
+  ].join('\n')
+}
+
+async function renderTextTemplate(
+  path: string,
+  values: Readonly<Record<string, string>>,
+): Promise<void> {
+  let content = await readFile(path, 'utf8')
+  for (const [name, value] of Object.entries(values)) {
+    content = content.replaceAll(`{{${name}}}`, value)
+  }
+  await writeFile(path, content, 'utf8')
+}
+
+async function replaceText(
+  path: string,
+  search: string,
+  replacement: string,
+): Promise<void> {
+  const content = await readFile(path, 'utf8')
+  await writeFile(path, content.replaceAll(search, replacement), 'utf8')
+}
+
+function workerNameFor(packageName: string): string {
+  return (
+    packageName
+      .replace(/[^a-z0-9-]+/gu, '-')
+      .replace(/^-+|-+$/gu, '')
+      .slice(0, 63) || 'loutre-worker'
+  )
 }

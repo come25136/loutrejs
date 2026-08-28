@@ -60,22 +60,27 @@ Application sourceはHostから分離されます。同じDefinitionをNode.js�
 
 ### npm create
 
-npm公開後は、initializer package `create-loutre` からNode.js HTTP Applicationを生成できます。
+npm公開後は、initializer package `create-loutre` からApplicationを生成できます。
 
 ```sh
 npm create loutre@latest my-app
-cd my-app
-npm run dev
 ```
 
-依存関係のinstallを後回しにする場合は、`--no-install`をinitializerへ渡します。
+対話ではTargetとpackage managerを選択します。
+
+- Target: Node.js / Bun / Deno / Cloudflare Workers / AWS Lambda
+- Package manager: npm / pnpm / Yarn / Bun / Deno
+
+非対話ではoptionで明示できます。
 
 ```sh
-npm create loutre@latest my-app -- --no-install
+npm create loutre@latest my-app -- --target workerd --package-manager pnpm
 ```
 
+依存関係のinstallを後回しにする場合は`--no-install`を指定します。`--yes`ではTargetにNode.js、package managerにinitializerを起動したpackage managerを使用します。
+
 `create-loutre`自身もLoutre Applicationとして実装され、project生成をpublic `Task`として実行します。argv parsing、対話prompt、package installはHost側が所有します。
-生成されるstarterにはVitest、Oxlint、OxfmtのLoutre公式presetとサンプルtestが含まれ、`npm run verify`でformat、lint、型 / Application Graph、test、buildをまとめて検証できます。
+生成されるstarterにはVitest、Oxlint、OxfmtのLoutre公式presetとサンプルtestが含まれ、選択したpackage managerの`verify` scriptでformat、lint、型 / Application Graph、test、target固有buildをまとめて検証できます。
 
 ### Repositoryで試す
 
@@ -246,7 +251,7 @@ Triggerからだけ参照されるTaskは自動execution専用で、public `app.
 | `@loutrejs/node`   | Node.js HTTP runtime adapter                                                |
 | `@loutrejs/bullmq` | BullMQ Queue Consumer Driver binding                                        |
 | `@loutrejs/cli`    | Graph inspection、build、OpenAPI generation                                 |
-| `create-loutre`    | `npm create loutre@latest`用のproject initializer                           |
+| `create-loutre`    | Target / package managerを選べるproject initializer                         |
 
 `@loutrejs/loutre`は`/host`、`/binding`、`/graph`、`/runtime`、`/http`、`/message-port`、`/openapi`等のsubpath exportを持ちます。
 

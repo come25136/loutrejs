@@ -1,0 +1,6 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "{{packageName}}",
+  "main": "src/main.ts",
+  "compatibility_date": "{{compatibilityDate}}",
+}

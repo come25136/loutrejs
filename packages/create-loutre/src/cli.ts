@@ -1,14 +1,41 @@
 import { spawn } from 'node:child_process'
 import { relative } from 'node:path'
-import { createInterface } from 'node:readline/promises'
-import { Command, CommanderError } from 'commander'
+import { isCancel, select, text } from '@clack/prompts'
+import { Command, CommanderError, Option } from 'commander'
 import { bootstrap } from '@loutrejs/loutre/host'
 import application, { createProject } from './app.js'
+import {
+  installCommand,
+  type PackageManager,
+  packageManagerLabels,
+  packageManagers,
+  type ProjectTarget,
+  projectTargets,
+  runScriptCommand,
+  targetLabels,
+} from './options.js'
+
+interface SelectOption {
+  readonly value: string
+  readonly label: string
+}
 
 export interface CreateLoutreCliIO {
   readonly cwd: string
-  readonly prompt?: (message: string) => Promise<string>
-  readonly install: (directory: string) => Promise<number>
+  readonly detectedPackageManager?: PackageManager
+  readonly prompt?: (
+    message: string,
+    initialValue: string,
+  ) => Promise<string | undefined>
+  readonly select?: (
+    message: string,
+    options: readonly SelectOption[],
+    initialValue: string,
+  ) => Promise<string | undefined>
+  readonly install: (
+    directory: string,
+    packageManager: PackageManager,
+  ) => Promise<number>
   readonly stdout: (value: string) => void
   readonly stderr: (value: string) => void
 }
@@ -28,19 +55,39 @@ export async function runCreateLoutre(
     return 0
   }
 
+  const directory = await resolveDirectory(parsed.directory, parsed.yes, io)
+  if (!directory) return 2
   const target = await resolveTarget(parsed.target, parsed.yes, io)
   if (!target) return 2
+  const packageManager = await resolvePackageManager(
+    parsed.packageManager,
+    parsed.yes,
+    io,
+  )
+  if (!packageManager) return 2
 
   const app = bootstrap({ application })
   try {
-    const result = await app.run(createProject, { cwd: io.cwd, target })
+    const result = await app.run(createProject, {
+      cwd: io.cwd,
+      directory,
+      packageManager,
+      target,
+    })
     io.stdout(`Loutre Applicationを作成しました: ${result.targetDirectory}`)
+    io.stdout(`Target: ${targetLabels[target]}`)
+    io.stdout(`Package manager: ${packageManagerLabels[packageManager]}`)
 
     if (parsed.install) {
       io.stdout('依存関係をインストールします。')
-      const installCode = await io.install(result.targetDirectory)
+      const installCode = await io.install(
+        result.targetDirectory,
+        packageManager,
+      )
       if (installCode !== 0) {
-        io.stderr('npm installに失敗しました。生成したファイルは残しています。')
+        io.stderr(
+          `${installCommand(packageManager)}に失敗しました。生成したファイルは残しています。`,
+        )
         return installCode
       }
     }
@@ -51,8 +98,8 @@ export async function runCreateLoutre(
     if (nextDirectory && nextDirectory !== '.') {
       io.stdout(`  cd ${quoteShellArgument(nextDirectory)}`)
     }
-    if (!parsed.install) io.stdout('  npm install')
-    io.stdout('  npm run dev')
+    if (!parsed.install) io.stdout(`  ${installCommand(packageManager)}`)
+    io.stdout(`  ${nextCommand(packageManager, target)}`)
     return 0
   } catch (error) {
     io.stderr(error instanceof Error ? error.message : String(error))
@@ -63,7 +110,9 @@ export async function runCreateLoutre(
 }
 
 interface ParsedArgs {
-  readonly target?: string
+  readonly directory?: string
+  readonly target?: ProjectTarget
+  readonly packageManager?: PackageManager
   readonly help: boolean
   readonly yes: boolean
   readonly install: boolean
@@ -81,8 +130,14 @@ function parseArgs(
       writeErr: () => undefined,
     })
     .argument('[directory]')
-    .option('-y, --yes', '生成先未指定時にloutre-appを使用する')
-    .option('--no-install', 'npm installを実行しない')
+    .addOption(new Option('--target <target>').choices([...projectTargets]))
+    .addOption(
+      new Option('--package-manager <package-manager>').choices([
+        ...packageManagers,
+      ]),
+    )
+    .option('-y, --yes', '未指定の選択肢に既定値を使用する')
+    .option('--no-install', '依存関係をinstallしない')
     .option('-h, --help', 'helpを表示する')
     .allowExcessArguments(false)
 
@@ -97,21 +152,27 @@ function parseArgs(
   }
 
   const options = command.opts<{
+    readonly target?: ProjectTarget
+    readonly packageManager?: PackageManager
     readonly yes?: boolean
     readonly install: boolean
     readonly help?: boolean
   }>()
-  const target = command.processedArgs[0] as string | undefined
+  const directory = command.processedArgs[0] as string | undefined
 
   return {
-    ...(target === undefined ? {} : { target }),
+    ...(directory === undefined ? {} : { directory }),
+    ...(options.target === undefined ? {} : { target: options.target }),
+    ...(options.packageManager === undefined
+      ? {}
+      : { packageManager: options.packageManager }),
     help: options.help ?? false,
     yes: options.yes ?? false,
     install: options.install,
   }
 }
 
-async function resolveTarget(
+async function resolveDirectory(
   requested: string | undefined,
   yes: boolean,
   io: CreateLoutreCliIO,
@@ -122,36 +183,81 @@ async function resolveTarget(
     io.stderr('生成先を指定してください。例: npm create loutre@latest my-app')
     return undefined
   }
-  const answer = (await io.prompt('Project name (loutre-app): ')).trim()
-  return answer || 'loutre-app'
+  const answer = await io.prompt('Project name', 'loutre-app')
+  if (answer === undefined) return undefined
+  return answer.trim() || 'loutre-app'
+}
+
+async function resolveTarget(
+  requested: ProjectTarget | undefined,
+  yes: boolean,
+  io: CreateLoutreCliIO,
+): Promise<ProjectTarget | undefined> {
+  if (requested) return requested
+  if (yes || !io.select) return 'node'
+  const selected = await io.select(
+    'Target',
+    projectTargets.map((value) => ({ value, label: targetLabels[value] })),
+    'node',
+  )
+  return projectTargets.find((target) => target === selected)
+}
+
+async function resolvePackageManager(
+  requested: PackageManager | undefined,
+  yes: boolean,
+  io: CreateLoutreCliIO,
+): Promise<PackageManager | undefined> {
+  if (requested) return requested
+  const initialValue = io.detectedPackageManager ?? 'npm'
+  if (yes || !io.select) return initialValue
+  const selected = await io.select(
+    'Package manager',
+    packageManagers.map((value) => ({
+      value,
+      label: packageManagerLabels[value],
+    })),
+    initialValue,
+  )
+  return packageManagers.find((packageManager) => packageManager === selected)
 }
 
 function createProcessIO(): CreateLoutreCliIO {
-  const prompt =
-    process.stdin.isTTY && process.stdout.isTTY ? terminalPrompt : undefined
+  const interactive = process.stdin.isTTY && process.stdout.isTTY
   return {
     cwd: process.cwd(),
-    ...(prompt === undefined ? {} : { prompt }),
+    detectedPackageManager: detectPackageManager(
+      process.env.npm_config_user_agent,
+    ),
+    ...(interactive ? { prompt: terminalPrompt, select: terminalSelect } : {}),
     install: installDependencies,
     stdout: (value) => process.stdout.write(`${value}\n`),
     stderr: (value) => process.stderr.write(`${value}\n`),
   }
 }
 
-async function terminalPrompt(message: string): Promise<string> {
-  const readline = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  })
-  try {
-    return await readline.question(message)
-  } finally {
-    readline.close()
-  }
+async function terminalPrompt(
+  message: string,
+  initialValue: string,
+): Promise<string | undefined> {
+  const result = await text({ message, defaultValue: initialValue })
+  return isCancel(result) ? undefined : result
 }
 
-function installDependencies(directory: string): Promise<number> {
-  const command = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+async function terminalSelect(
+  message: string,
+  options: readonly SelectOption[],
+  initialValue: string,
+): Promise<string | undefined> {
+  const result = await select({ message, options: [...options], initialValue })
+  return isCancel(result) ? undefined : result
+}
+
+function installDependencies(
+  directory: string,
+  packageManager: PackageManager,
+): Promise<number> {
+  const command = executableFor(packageManager)
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, ['install'], {
       cwd: directory,
@@ -164,6 +270,29 @@ function installDependencies(directory: string): Promise<number> {
   })
 }
 
+function executableFor(packageManager: PackageManager): string {
+  if (process.platform !== 'win32') return packageManager
+  return packageManager === 'npm' ||
+    packageManager === 'pnpm' ||
+    packageManager === 'yarn'
+    ? `${packageManager}.cmd`
+    : packageManager
+}
+
+function detectPackageManager(userAgent: string | undefined): PackageManager {
+  const name = userAgent?.split('/')[0]
+  return (
+    packageManagers.find((packageManager) => packageManager === name) ?? 'npm'
+  )
+}
+
+function nextCommand(
+  packageManager: PackageManager,
+  target: ProjectTarget,
+): string {
+  return runScriptCommand(packageManager, target === 'lambda' ? 'build' : 'dev')
+}
+
 function quoteShellArgument(value: string): string {
   return /^[A-Za-z0-9_./-]+$/u.test(value)
     ? value
@@ -172,11 +301,13 @@ function quoteShellArgument(value: string): string {
 
 function helpText(): string {
   return [
-    'Usage: npm create loutre@latest [directory] [-- --no-install]',
+    'Usage: create-loutre [directory] [options]',
     '',
     'Options:',
-    '  -y, --yes      生成先未指定時にloutre-appを使用する',
-    '  --no-install   npm installを実行しない',
-    '  -h, --help     helpを表示する',
+    '  --target <target>                    node | bun | deno | workerd | lambda',
+    '  --package-manager <package-manager>  npm | pnpm | yarn | bun | deno',
+    '  -y, --yes                            未指定の選択肢に既定値を使用する',
+    '  --no-install                         依存関係をinstallしない',
+    '  -h, --help                           helpを表示する',
   ].join('\n')
 }

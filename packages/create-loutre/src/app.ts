@@ -1,11 +1,14 @@
 import { readdir } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 import { defineApplication, defineModule, inject, task } from '@loutrejs/loutre'
+import type { PackageManager, ProjectTarget } from './options.js'
 import { writeStarter } from './starter.js'
 
 export interface CreateProjectInput {
   readonly cwd: string
-  readonly target: string
+  readonly directory: string
+  readonly packageManager: PackageManager
+  readonly target: ProjectTarget
 }
 
 export interface CreateProjectResult {
@@ -15,11 +18,15 @@ export interface CreateProjectResult {
 
 export class ProjectScaffolder {
   async create(input: CreateProjectInput): Promise<CreateProjectResult> {
-    const targetDirectory = resolve(input.cwd, input.target)
+    const targetDirectory = resolve(input.cwd, input.directory)
     const packageName = packageNameFor(targetDirectory)
     await assertTargetIsEmpty(targetDirectory)
 
-    await writeStarter(targetDirectory, packageName)
+    await writeStarter(targetDirectory, {
+      packageName,
+      packageManager: input.packageManager,
+      target: input.target,
+    })
 
     return { packageName, targetDirectory }
   }
