@@ -58,6 +58,24 @@ Application sourceはHostから分離されます。同じDefinitionをNode.js�
 
 ## Quick Start
 
+### npm create
+
+npm公開後は、initializer package `create-loutre` からNode.js HTTP Applicationを生成できます。
+
+```sh
+npm create loutre@latest my-app
+cd my-app
+npm run dev
+```
+
+依存関係のinstallを後回しにする場合は、`--no-install`をinitializerへ渡します。
+
+```sh
+npm create loutre@latest my-app -- --no-install
+```
+
+`create-loutre`自身もLoutre Applicationとして実装され、project生成をpublic `Task`として実行します。argv parsing、対話prompt、package installはHost側が所有します。
+
 ### Repositoryで試す
 
 現在はnpm公開前なので、まずrepositoryをcloneして実行します。Node.jsは`>=22`が必要です。
@@ -227,6 +245,7 @@ Triggerからだけ参照されるTaskは自動execution専用で、public `app.
 | `@loutrejs/node`   | Node.js HTTP runtime adapter                                                |
 | `@loutrejs/bullmq` | BullMQ Queue Consumer Driver binding                                        |
 | `@loutrejs/cli`    | Graph inspection、build、OpenAPI generation                                 |
+| `create-loutre`    | `npm create loutre@latest`用のproject initializer                           |
 
 `@loutrejs/loutre`は`/host`、`/binding`、`/graph`、`/runtime`、`/http`、`/message-port`、`/openapi`等のsubpath exportを持ちます。
 
