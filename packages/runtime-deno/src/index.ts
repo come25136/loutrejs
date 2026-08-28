@@ -61,10 +61,15 @@ function bind<const TDefinition extends ApplicationDefinition>(
   options: DenoRuntimeOptions<TDefinition>,
 ): DenoBinding {
   const invocation = binding.invocation(
-    bindingOptions(options, denoEnvironment()) as InvocationBindingOptions<TDefinition>,
+    bindingOptions(
+      options,
+      denoEnvironment(),
+    ) as InvocationBindingOptions<TDefinition>,
   )
   const http =
-    'http' in invocation ? (invocation.http as HttpProtocolExecution) : undefined
+    'http' in invocation
+      ? (invocation.http as HttpProtocolExecution)
+      : undefined
   if (!http) {
     void invocation.application.close()
     throw new Error(
@@ -86,7 +91,10 @@ async function serve<const TDefinition extends ApplicationDefinition>(
     throw new Error('LUTRE_DENO_UNAVAILABLE: Deno.serve() is not available.')
   }
   const host = binding.host(
-    bindingOptions(options, denoEnvironment()) as InvocationBindingOptions<TDefinition>,
+    bindingOptions(
+      options,
+      denoEnvironment(),
+    ) as InvocationBindingOptions<TDefinition>,
   )
   const http = 'http' in host ? (host.http as HttpProtocolExecution) : undefined
   if (!http) {
@@ -103,7 +111,9 @@ async function serve<const TDefinition extends ApplicationDefinition>(
     server = deno.serve(
       {
         port: options.port,
-        ...(options.hostname === undefined ? {} : { hostname: options.hostname }),
+        ...(options.hostname === undefined
+          ? {}
+          : { hostname: options.hostname }),
       },
       createDenoFetchDriver(http),
     )

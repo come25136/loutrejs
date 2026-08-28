@@ -185,16 +185,16 @@ electronRuntime.attach({
 
 handler exportの要否はProtocolではなくhostの起動モデルによって決まる。
 
-| Execution | Host lifecycle | User module export |
-| --- | --- | --- |
-| Node long-lived service | Application / process | 不要 |
-| `Bun.serve()` | Application / process | 不要 |
-| `Deno.serve()` | Application / process | 不要 |
-| `deno serve` | Deno CLI runtime | default export必要 |
-| Cloudflare Workers / workerd | Worker runtime | default export必要 |
-| AWS Lambda | Lambda runtime | configured named export必要 |
-| Electron MessagePort | existing Electron lifecycle | 不要 |
-| test / custom embedding | caller | 不要 |
+| Execution                    | Host lifecycle              | User module export          |
+| ---------------------------- | --------------------------- | --------------------------- |
+| Node long-lived service      | Application / process       | 不要                        |
+| `Bun.serve()`                | Application / process       | 不要                        |
+| `Deno.serve()`               | Application / process       | 不要                        |
+| `deno serve`                 | Deno CLI runtime            | default export必要          |
+| Cloudflare Workers / workerd | Worker runtime              | default export必要          |
+| AWS Lambda                   | Lambda runtime              | configured named export必要 |
+| Electron MessagePort         | existing Electron lifecycle | 不要                        |
+| test / custom embedding      | caller                      | 不要                        |
 
 Loutre public APIはこの差を`createXXXExport()`等の名前へ反映しない。
 
@@ -371,10 +371,7 @@ const UsersController = implementation({
   name: 'UsersController',
   contract: UsersContract,
   protocol: http,
-  factory: (
-    users = inject(UserService),
-    database = inject(Database),
-  ) => ({
+  factory: (users = inject(UserService), database = inject(Database)) => ({
     async get(ctx) {
       // ...
     },

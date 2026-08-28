@@ -58,7 +58,7 @@ function bind<const TDefinition extends ApplicationDefinition>(
       application: options.application,
       environment,
       ...('arguments' in options ? { arguments: options.arguments } : {}),
-    } as InvocationBindingOptions<TDefinition>)
+    } as unknown as InvocationBindingOptions<TDefinition>)
     const http =
       'http' in invocation
         ? (invocation.http as HttpProtocolExecution)

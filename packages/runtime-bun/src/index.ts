@@ -59,7 +59,7 @@ async function serve<const TDefinition extends ApplicationDefinition>(
     environment:
       'environment' in options ? options.environment : (bun.env ?? undefined),
     ...('arguments' in options ? { arguments: options.arguments } : {}),
-  } as InvocationBindingOptions<TDefinition>)
+  } as unknown as InvocationBindingOptions<TDefinition>)
   const http = 'http' in host ? (host.http as HttpProtocolExecution) : undefined
   if (!http) {
     await host.application.close()

@@ -1,37 +1,15 @@
 import { app, MessageChannelMain } from 'electron'
-import { assertValidCompilation, compileApplication } from '@loutrejs/graph'
-import { createMessagePortExecution } from '@loutrejs/message-port'
-import { ApplicationRuntime } from '@loutrejs/runtime'
-import { attachElectronMessagePort } from '@loutrejs/runtime-electron'
+import { electronRuntime } from '@loutrejs/runtime-electron'
 import definition from '../dist/conformance/streaming-message-port/application.mjs'
 
 async function main(): Promise<void> {
   await app.whenReady()
+  const { port1, port2 } = new MessageChannelMain()
+  const attachment = electronRuntime.attach({
+    application: definition,
+    port: port1,
+  })
   try {
-    const graph = assertValidCompilation(
-      compileApplication({
-        modules: definition.modules,
-        ...(definition.arguments === undefined
-          ? {}
-          : { arguments: definition.arguments }),
-        tasks: definition.tasks,
-        triggers: definition.triggers,
-      }),
-    )
-    const runtime = new ApplicationRuntime(definition.modules, {
-      environmentSource: process.env,
-      ...(definition.arguments === undefined
-        ? {}
-        : { arguments: definition.arguments }),
-      tasks: [
-        ...definition.tasks,
-        ...definition.triggers.map((trigger: any) => trigger.task),
-      ],
-      publicTasks: definition.tasks,
-    })
-    const application = createMessagePortExecution({ runtime, graph })
-    const { port1, port2 } = new MessageChannelMain()
-    attachElectronMessagePort(application, port1)
     const messages: unknown[] = []
 
     await new Promise<void>((resolve, reject) => {
@@ -58,12 +36,15 @@ async function main(): Promise<void> {
         `Electron conformanceに失敗しました: ${JSON.stringify(messages)}`,
       )
     }
-    await application.shutdown('conformance')
+    await attachment.close('conformance')
     port1.close()
     port2.close()
     console.log('Electron 43 MessagePort conformance: 成功')
     app.exit(0)
   } catch (error) {
+    await attachment.close('conformance').catch(() => undefined)
+    port1.close()
+    port2.close()
     console.error(error)
     app.exit(1)
   }

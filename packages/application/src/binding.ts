@@ -99,7 +99,10 @@ function createInvocationBinding<
 ): InvocationBinding<TDefinition> {
   const state = createRuntimeState(options)
   const application = createInvocationApplication(state)
-  return createProtocolBinding(state, application) as InvocationBinding<TDefinition>
+  return createProtocolBinding(
+    state,
+    application,
+  ) as InvocationBinding<TDefinition>
 }
 
 /** @internal `binding.host()` の実装。 */
@@ -107,7 +110,7 @@ function createHostBinding<const TDefinition extends ApplicationDefinition>(
   options: InvocationBindingOptions<TDefinition>,
 ): HostBinding<TDefinition> {
   const state = createRuntimeState(options)
-  const base = createInvocationApplication(state)
+  const application = createInvocationApplication(state)
   let triggersStarted = false
   let triggerHandles: TriggerHandle[] = []
 
@@ -125,8 +128,7 @@ function createHostBinding<const TDefinition extends ApplicationDefinition>(
       throw new AggregateError(errors, 'Trigger stop failed')
   }
 
-  const application = {
-    ...base,
+  Object.assign(application, {
     async close(signal?: string) {
       state.runtime.stopAcceptingExecutions()
       const errors: unknown[] = []
@@ -174,7 +176,7 @@ function createHostBinding<const TDefinition extends ApplicationDefinition>(
           },
         }
       : {}),
-  } as HostBindingApplication<TDefinition>
+  })
 
   return createProtocolBinding(state, application) as HostBinding<TDefinition>
 }
@@ -220,9 +222,9 @@ function createRuntimeState<const TDefinition extends ApplicationDefinition>(
   return { definition, logger, runtime, graph }
 }
 
-function createInvocationApplication<
-  TDefinition extends ApplicationDefinition,
->(state: RuntimeState<TDefinition>): InvocationApplication<TDefinition> {
+function createInvocationApplication<TDefinition extends ApplicationDefinition>(
+  state: RuntimeState<TDefinition>,
+): InvocationApplication<TDefinition> {
   const application = {
     graph: state.graph,
     async init() {
@@ -232,7 +234,10 @@ function createInvocationApplication<
     ...(state.definition.tasks.length > 0
       ? {
           run(task: TaskDescriptor, ...args: readonly unknown[]) {
-            return Reflect.apply(state.runtime.run, state.runtime, [task, ...args])
+            return Reflect.apply(state.runtime.run, state.runtime, [
+              task,
+              ...args,
+            ])
           },
         }
       : {}),

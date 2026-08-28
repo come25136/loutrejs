@@ -98,12 +98,13 @@ function bind<const TDefinition extends ApplicationDefinition>(
 ): LambdaHttpHandler | LambdaStreamingHttpHandler {
   const invocation = binding.invocation({
     application: options.application,
-    environment:
-      'environment' in options ? options.environment : process.env,
+    environment: 'environment' in options ? options.environment : process.env,
     ...('arguments' in options ? { arguments: options.arguments } : {}),
-  } as InvocationBindingOptions<TDefinition>)
+  } as unknown as InvocationBindingOptions<TDefinition>)
   const http =
-    'http' in invocation ? (invocation.http as HttpProtocolExecution) : undefined
+    'http' in invocation
+      ? (invocation.http as HttpProtocolExecution)
+      : undefined
   if (!http) {
     void invocation.application.close()
     throw new Error(
@@ -221,9 +222,7 @@ interface AwsLambdaGlobal {
       metadata: {
         readonly statusCode: number
         readonly headers: Readonly<Record<string, string>>
-        readonly multiValueHeaders?: Readonly<
-          Record<string, readonly string[]>
-        >
+        readonly multiValueHeaders?: Readonly<Record<string, readonly string[]>>
       },
     ): LambdaResponseStream
   }

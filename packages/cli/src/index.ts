@@ -40,6 +40,9 @@ const runtimes: Readonly<Record<string, RuntimeCapabilities>> = {
   lambda: lambdaRuntime,
 }
 
+const deploymentRuntimes = ['lambda', 'workerd', 'deno'] as const
+type DeploymentRuntime = (typeof deploymentRuntimes)[number]
+
 export async function runCli(
   args: readonly string[],
   io: CliIO,
@@ -147,10 +150,26 @@ export async function runCli(
         io.stderr('buildには明示的なApplication entryが必要です。')
         return 2
       }
+      const runtimeOption = readOption(args, '--runtime')
+      const deploymentRuntime = runtimeOption
+        ? parseDeploymentRuntime(runtimeOption)
+        : undefined
+      if (runtimeOption && !deploymentRuntime) {
+        io.stderr(
+          `build --runtimeには${deploymentRuntimes.join('、')}のいずれかを指定してください。`,
+        )
+        return 2
+      }
       const applicationEntry = resolve(io.cwd, subject)
       const graph = await loadApplicationGraph(applicationEntry)
       if (graph.diagnostics.length > 0) {
         writeDiagnostics(graph, io)
+        return 1
+      }
+      if (deploymentRuntime && !hasHttpExecution(graph)) {
+        io.stderr(
+          `Runtime ${deploymentRuntime} のgenerated entryにはHTTP-capable Applicationが必要です。`,
+        )
         return 1
       }
       const outputDirectory = resolve(
@@ -171,12 +190,58 @@ export async function runCli(
       )
       io.stdout(`Applicationを出力しました: ${applicationOutput}`)
       io.stdout(`Graph Manifestを出力しました: ${manifestOutput}`)
+      if (deploymentRuntime) {
+        const deploymentOutput = join(outputDirectory, 'entry.mjs')
+        await writeFile(
+          deploymentOutput,
+          renderDeploymentEntry(deploymentRuntime),
+          'utf8',
+        )
+        io.stdout(`Runtime entryを出力しました: ${deploymentOutput}`)
+      }
       return 0
     }
 
     default:
       io.stderr(`不明なcommandです: ${command}`)
       return 2
+  }
+}
+
+function parseDeploymentRuntime(value: string): DeploymentRuntime | undefined {
+  return deploymentRuntimes.find((runtime) => runtime === value)
+}
+
+function hasHttpExecution(graph: ApplicationGraphIR): boolean {
+  return graph.pipelines.some((pipeline) => pipeline.protocol === 'http')
+}
+
+function renderDeploymentEntry(runtime: DeploymentRuntime): string {
+  switch (runtime) {
+    case 'lambda':
+      return [
+        "import application from './application.mjs'",
+        "import { lambdaRuntime } from '@loutrejs/runtime-lambda'",
+        '',
+        'export const handler = lambdaRuntime.bind({ application })',
+        '',
+      ].join('\n')
+    case 'workerd':
+      return [
+        "import application from './application.mjs'",
+        "import { workerdRuntime } from '@loutrejs/runtime-workerd'",
+        '',
+        'export default workerdRuntime.bind({ application })',
+        '',
+      ].join('\n')
+    case 'deno':
+      return [
+        "import application from './application.mjs'",
+        "import { denoRuntime } from '@loutrejs/runtime-deno'",
+        '',
+        'export default denoRuntime.bind({ application })',
+        '',
+      ].join('\n')
   }
 }
 
@@ -550,7 +615,7 @@ function helpText(): string {
     '  loutre doctor [node|deno|bun|workerd|electron|lambda] --entry <明示entry>',
     '  loutre graph modules|di|contracts|executions|runtime --entry <明示entry> [--format text|json|mermaid]',
     '  loutre explain <target> --entry <明示entry>',
-    '  loutre build <明示entry> [--out-dir <directory>]',
+    '  loutre build <明示entry> [--runtime lambda|workerd|deno] [--out-dir <directory>]',
     '',
     'Applicationの実行方法はHostが所有します。run/dev/startはLoutre CLIにはありません。',
   ].join('\n')

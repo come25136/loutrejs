@@ -17,7 +17,10 @@ const eventsDefinition = () =>
 
 describe('Runtime conformance harness', () => {
   it.each([
-    ['Deno 2.9 LTS', () => denoRuntime.bind({ application: usersDefinition() })],
+    [
+      'Deno 2.9 LTS',
+      () => denoRuntime.bind({ application: usersDefinition() }),
+    ],
     ['workerd', () => workerdRuntime.bind({ application: usersDefinition() })],
   ])('%s bind()で同じFixture Aを実行する', async (_name, createBinding) => {
     const runtimeBinding = createBinding()

@@ -119,12 +119,13 @@ export interface QueueConsumerDriver {
 export type HasProtocol<
   TDefinition extends ApplicationDefinition,
   TProtocol extends string,
-> = Extract<
-  ModuleProtocols<TDefinition['modules'][number]>,
-  TProtocol
-> extends never
-  ? false
-  : true
+> =
+  Extract<
+    ModuleProtocols<TDefinition['modules'][number]>,
+    TProtocol
+  > extends never
+    ? false
+    : true
 
 export type HasHttp<TDefinition extends ApplicationDefinition> = HasProtocol<
   TDefinition,

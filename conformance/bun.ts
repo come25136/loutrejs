@@ -10,7 +10,11 @@ try {
     readonly id?: string
     readonly name?: string
   }
-  if (response.status !== 200 || body.id !== 'bun-user' || body.name !== 'test') {
+  if (
+    response.status !== 200 ||
+    body.id !== 'bun-user' ||
+    body.name !== 'test'
+  ) {
     throw new Error(`Bun conformanceに失敗しました: ${JSON.stringify(body)}`)
   }
 } finally {

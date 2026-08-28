@@ -70,7 +70,7 @@ function attach<const TDefinition extends ApplicationDefinition>(
           ? undefined
           : process.env,
     ...('arguments' in options ? { arguments: options.arguments } : {}),
-  } as InvocationBindingOptions<TDefinition>)
+  } as unknown as InvocationBindingOptions<TDefinition>)
   const messagePort =
     'messagePort' in invocation
       ? (invocation.messagePort as MessagePortProtocolExecution)

@@ -112,8 +112,12 @@ workerApplication.run(calculate, '41')
 workerApplication.run(cleanup)
 // @ts-expect-error HTTPが無いApplicationにはfetchを公開しない
 workerApplication.fetch
-// @ts-expect-error HTTPが無いApplicationはNode HTTP serverへserveできない
-nodeRuntime.serve({ application: workerDefinition, port: 3000, arguments: { instance: 'worker-1' } })
+nodeRuntime.serve({
+  // @ts-expect-error HTTPが無いApplicationはNode HTTP serverへserveできない
+  application: workerDefinition,
+  port: 3000,
+  arguments: { instance: 'worker-1' },
+})
 // @ts-expect-error required Argumentsはbootstrap時に必要
 bootstrap({ application: workerDefinition })
 
