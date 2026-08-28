@@ -1,24 +1,24 @@
 # Loutre Architecture
 
-- 状態: **現行実装基準 / source of truth**
+- 状態: **Loutre v0.1 architecture source of truth**
 - 対象: Loutre v0.1
 - 更新日: 2026-08-29 JST
 
 ## 0. Source of Truth
 
-Loutre v0.1 のarchitecture判断は、現行 `develop` の実装を正とする。
+この文書を Loutre v0.1 の architecture 上の source of truth とする。
 
 優先順位は次のとおり。
 
 ```text
-現行 develop の実コード / public type tests / runtime conformance
-        ↓
 この architecture.md
+        ↓
+現行 develop の実コード / public type tests / runtime conformance
         ↓
 個別の ADR / design / handoff docs
 ```
 
-過去の設計資料にはmigration途中の名称や廃止済みAPIが含まれる。現行実装と矛盾する場合はhistorical informationとして扱う。
+過去の設計資料にはmigration途中の名称や廃止済みAPIが含まれる。この文書と矛盾する場合はhistorical informationとして扱う。
 
 ---
 
