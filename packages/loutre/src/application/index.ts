@@ -38,7 +38,7 @@ export interface ApplicationDefinition<
   readonly arguments: TArguments
   readonly tasks: TTasks
   readonly triggers: TTriggers
-  /** @internal Legacy source bridge. ApplicationDefinition never owns an Entrypoint. */
+  /** 旧Graph compilerとの互換専用であり、ApplicationDefinitionにEntrypointを再導入しない。 */
   readonly entrypoint?: undefined
   readonly logger?: Logger
 }

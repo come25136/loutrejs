@@ -37,7 +37,7 @@ import type {
 export interface ApplicationCompilationInput {
   readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
   readonly arguments?: ArgsClass | undefined
-  /** @internal Legacy source bridge. Entrypoints are not part of Graph v5. */
+  /** Graph v3互換compilerへ渡すためだけに残し、Graph v5へEntrypointを公開しない。 */
   readonly entrypoint?: undefined
   readonly tasks?: readonly TaskDescriptor<any, any>[]
   readonly triggers?: readonly TriggerDescriptor[]

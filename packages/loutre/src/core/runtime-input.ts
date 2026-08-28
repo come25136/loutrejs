@@ -8,7 +8,7 @@ export interface RuntimeInputKey<TValue = unknown> {
   readonly kind: 'runtime-input-key'
   readonly source: 'environment' | 'arguments'
   readonly contract: RuntimeInputContract
-  /** @internal Legacy Graph compiler bridge. Use `contract` in new code. */
+  /** Graph v3互換compiler専用の別名であり、新しい処理では`contract`を使う。 */
   readonly env: RuntimeInputContract
   readonly key: string
   readonly '~value'?: TValue

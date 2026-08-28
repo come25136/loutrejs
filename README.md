@@ -6,54 +6,85 @@
 
 <p align="center">
   <strong>型でつないで、どこでも泳ぐ。</strong><br>
-  Contract・DI・PipelineをApplication Graphで束ねる、ポータブルなTypeScriptフレームワーク。
+  Contract・DI・PipelineをApplication Graphで束ねる、ポータブルなTypeScript Application Framework。
 </p>
 
 <p align="center">
-  <a href="#loutreとは">Loutreとは</a> ・
+  <a href="https://github.com/come25136/loutrejs/actions/workflows/ci.yml"><img src="https://github.com/come25136/loutrejs/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+</p>
+
+<p align="center">
+  <a href="#特徴">特徴</a> ・
   <a href="#quick-start">Quick Start</a> ・
+  <a href="#packages">Packages</a> ・
+  <a href="#runtime-support">Runtime Support</a> ・
+  <a href="#developer-tooling">Developer Tooling</a> ・
   <a href="./docs/architecture.md">Architecture</a>
 </p>
 
 > [!WARNING]
 > Loutreは現在v0.1開発中です。Public APIには破壊的変更が入る可能性があります。
-> 各packageはまだnpmへ公開していません。
+> 公開packageはまだnpmへpublishしていません。
 
 ## Loutreとは
 
-Loutreは、Applicationを**明示的なGraph**として組み立てるTypeScriptフレームワークです。
+Loutreは、Applicationを**明示的なGraph**として組み立てるTypeScript Application Frameworkです。
 
-Contract、DI、Pipeline、Environment、Arguments、LifecycleをひとつのApplication modelとして扱い、
-Type System、Runtime、developer toolingが同じGraphを見ます。
+Contract、DI、Pipeline、Environment、Arguments、Task、Trigger、LifecycleをひとつのApplication modelとして扱い、Type System、Runtime、Developer Toolingが同じApplication Graphを見ます。
 
-### 考え方
+```text
+Application Definition
+        │
+        ▼
+ Application Graph v5
+   ┌────┼─────┐
+   ▼    ▼     ▼
+ Types Runtime Tooling
+```
 
-**Graph-first**  
-依存関係と実行境界を、検査・説明できるGraphとして持つ。
+Application sourceはHostから分離されます。同じDefinitionをNode.jsのHTTP server、Bun、Deno、workerd、AWS Lambda、Electronなどへ接続できます。
 
-**Explicit over magic**  
-decorator、metadata、filesystem discoveryに頼らない。
+## 特徴
 
-**TypeScriptらしく書く**  
-DIはconstructor default parameter、Implementation / Taskはfactoryで表現する。
-
-**Execution dataはContextへ**  
-request、user、tenant、transactionはtyped Contextとして流す。
-
-**Runtimeに縛られない**  
-Application codeとruntime固有APIを分離する。
-
-**Hostが起動方法を決める**  
-LoutreはApplication固有CLIを持たない。CLI、Lambda、Electron、testなどのHostがstructured inputをApplicationへ渡す。
+- **Graph-first** — Module、DI、Protocol、Task、Trigger、Capabilityを検査・説明できるGraphとして持つ
+- **Explicit over magic** — decorator、metadata、filesystem discoveryへ依存しない
+- **Type-safe DI** — constructor default parameterと`inject()`でdependencyを宣言する
+- **Portable Application Definition** — Application codeからruntime固有APIとlistener ownershipを分離する
+- **Typed Pipeline** — request / user / tenant / transaction等のexecution dataをContextとして流す
+- **Standard Schema** — Environment、Arguments、HTTP validation、Queue payloadに共通schema boundaryを使う
+- **Host-owned execution** — argv parsing、HTTP listener、Lambda handler等はHost / Runtime Adapterが所有する
+- **Graph tooling** — `check`、`graph`、`explain`、`doctor`、`build`、`openapi`を同じApplication modelから実行する
 
 ## Quick Start
 
-最小のHTTP Applicationはこんな形です。
+### Repositoryで試す
+
+現在はnpm公開前なので、まずrepositoryをcloneして実行します。Node.jsは`>=22`が必要です。
+
+```sh
+git clone https://github.com/come25136/loutrejs.git
+cd loutrejs
+npm install
+npm run build
+```
+
+最小のone-shot Applicationは`examples/hello-cli`で試せます。
+
+```sh
+npm run start --workspace @loutrejs/example-hello-cli -- --name Loutre
+# Hello, Loutre!
+```
+
+### HTTP Application
+
+Application DefinitionはHTTP serverを直接起動しません。
+Contract / Implementation / Moduleを組み立ててportableなDefinitionをexportします。
 
 ```ts
-import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
+  defineApplication,
   defineModule,
   implementation,
   inject,
@@ -114,25 +145,40 @@ export default defineApplication({
 })
 ```
 
-self-hostする場合もApplication sourceは変更せず、Host側だけでbootstrapします。
+Node.jsでself-hostする場合はHost entry側だけで`nodeRuntime`へ接続します。
 
 ```ts
+import { nodeRuntime } from '@loutrejs/node'
 import application from './app.js'
-import { bootstrap } from '@loutrejs/loutre/host'
 
-const app = bootstrap({ application })
-
-await app.listen({
+const server = await nodeRuntime.serve({
+  application,
   port: 3000,
   hostname: '0.0.0.0',
 })
+
+process.once('SIGTERM', () => void server.close('SIGTERM'))
 ```
 
-Application起動時のHost inputは`Arguments`として宣言できます。
+`bootstrap()`を使う場合もlistenerは所有せず、HTTP-capable ApplicationにはWeb Standardの`fetch(request)`だけを公開します。
 
 ```ts
-import { defineApplication } from '@loutrejs/loutre'
-import { defineArgs, inject, task } from '@loutrejs/loutre'
+import { bootstrap } from '@loutrejs/loutre/host'
+import application from './app.js'
+
+const app = bootstrap({ application })
+const response = await app.fetch(
+  new Request('http://localhost/greetings/Loutre'),
+)
+await app.close()
+```
+
+### Task / Arguments
+
+ApplicationがHostから受け取るstructured inputは`Arguments`、明示的に実行する処理はpublic `Task`として宣言できます。
+
+```ts
+import { defineApplication, defineArgs, inject, task } from '@loutrejs/loutre'
 import { z } from 'zod'
 
 class AppArgs extends defineArgs(
@@ -141,7 +187,7 @@ class AppArgs extends defineArgs(
   }),
 ) {}
 
-const rebuild = task({
+export const rebuild = task<void, void>({
   name: 'search.rebuild',
   factory:
     (args = inject(AppArgs)) =>
@@ -157,61 +203,103 @@ export const application = defineApplication({
 })
 ```
 
-CLIを使う場合もargv parsingはHostが所有します。
+argv parsingはHostが所有します。
 
 ```ts
 const app = bootstrap({
   application,
-  environment: process.env,
   arguments: {
     workers: argv.workers,
   },
 })
 
 await app.run(rebuild)
+await app.close('complete')
 ```
 
-`Environment`はRuntime / Deploymentが所有し、Moduleが0..N個のContractを要求できます。
-`Arguments`はHostがApplicationをどう起動するかを表し、Applicationが0..1個だけContractを所有します。
+Triggerからだけ参照されるTaskは自動execution専用で、public `app.run()`には公開されません。
 
-現在はrepository内のexampleから試せます。Node.js 26.xが必要です。
+## Packages
+
+| Package            | 役割                                                                        |
+| ------------------ | --------------------------------------------------------------------------- |
+| `@loutrejs/loutre` | Core、Application、Graph、Runtime、HTTP、MessagePort、runtime adapterの本体 |
+| `@loutrejs/node`   | Node.js HTTP runtime adapter                                                |
+| `@loutrejs/bullmq` | BullMQ Queue Consumer Driver binding                                        |
+| `@loutrejs/cli`    | Graph inspection、build、OpenAPI generation                                 |
+
+`@loutrejs/loutre`は`/host`、`/binding`、`/graph`、`/runtime`、`/http`、`/message-port`、`/openapi`等のsubpath exportを持ちます。
+
+## Runtime Support
+
+CIでは次のruntimeを継続的にconformance testしています。
+
+| Runtime    | CI baseline                      |
+| ---------- | -------------------------------- |
+| Node.js    | 22.x / 24.x / 26.x               |
+| Deno       | 2.9 LTS                          |
+| Bun        | 1.3 / 1.4                        |
+| workerd    | lockfile version                 |
+| Electron   | 42 / 43 / 44                     |
+| AWS Lambda | Node.js 22 / 24相当のconformance |
+
+Runtimeごとの接続APIは用途に合わせて分かれます。
+
+```text
+Node.js      nodeRuntime.serve()
+Bun          bunRuntime.serve()
+Deno         denoRuntime.bind() / serve()
+workerd      workerdRuntime.bind()
+AWS Lambda   lambdaRuntime.bind()
+Electron     electronRuntime.attach()
+```
+
+## Developer Tooling
+
+Loutre CLIはApplicationの起動コマンドではなく、Application Graphとdeployment artifactを扱うdeveloper toolingです。
+
+repository内では次のように実行できます。
 
 ```sh
-git clone https://github.com/come25136/loutrejs.git
-cd loutrejs
-npm install
-npm run dev --workspace @loutrejs/example-hello-http
+node packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
+node packages/cli/bin/loutre.js graph di --entry fixtures/http-crud/src/app.ts
+node packages/cli/bin/loutre.js graph contracts --entry fixtures/http-crud/src/app.ts --format mermaid
+node packages/cli/bin/loutre.js explain GreetingService --entry examples/hello-http/src/app.ts
+node packages/cli/bin/loutre.js doctor node --entry fixtures/http-crud/src/app.ts
+node packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/loutre
+node packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts
 ```
 
-HTTPなしのone-shot ApplicationはHostからpublic Taskを実行します。
+`build --runtime`は現時点で`lambda`、`workerd`、`deno`のdeployment entry生成に対応します。
 
 ```sh
-npm run start --workspace @loutrejs/example-hello-cli -- --name Loutre
-# Hello, Loutre!
+node packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --runtime lambda
 ```
 
-HTTPなしのlong-lived workerもHost entryからTrigger Engineを起動します。
+`loutre run` / `loutre dev` / `loutre start`は提供しません。
+Applicationの実行方法はHostが所有します。
 
-```sh
-npm run dev --workspace @loutrejs/example-hello-worker
-```
+## Examples
 
-Application Graphはdeveloper CLIから確認できます。
+`examples/`にはHTTP、Auth、CORS、Task / Worker、Database integrationの利用例があります。
 
-```sh
-# Node.js
-npx loutre check --entry fixtures/http-crud/src/app.ts
+- [`examples/hello-http`](./examples/hello-http/) — Contract / Pipeline / HTTP Implementation
+- [`examples/hello-cli`](./examples/hello-cli/) — Arguments / public Task / Host-owned argv parsing
+- [`examples/hello-worker`](./examples/hello-worker/) — fixed-delay Trigger
+- [`examples/basic-auth`](./examples/basic-auth/) — Basic Auth Layer
+- [`examples/bearer-auth`](./examples/bearer-auth/) — custom authentication Layer
+- [`examples/cors`](./examples/cors/) — CORS Layer
+- [`examples/database-postgres`](./examples/database-postgres/) — Provider / LifecycleによるPostgreSQL integration
+- [`examples/database-drizzle-postgres`](./examples/database-drizzle-postgres/) — Drizzle integration
+- [`examples/database-prisma-postgres`](./examples/database-prisma-postgres/) — Prisma integration
+- [`examples/database-transactions`](./examples/database-transactions/) — Layer / Contextによるtransaction boundary
 
-# Bun
-bunx --bun loutre graph modules --entry fixtures/http-crud/src/app.ts
+## Architecture
 
-# Deno
-deno task --eval 'loutre graph di --entry fixtures/http-crud/src/app.ts'
-```
+現在のarchitecture source of truthは[`docs/architecture.md`](./docs/architecture.md)です。
 
-`loutre run` / `loutre dev` / `loutre start`は提供しません。Applicationの実行方法はHostが所有します。
-
-より詳しい設計は[`docs/architecture.md`](./docs/architecture.md)、実際の利用例は[`examples/`](./examples/)を参照してください。
+設計変更時は実コード、public type tests、runtime conformanceを正とし、architecture documentを追従させます。
+過去の個別ADRは設計経緯として残りますが、現行実装と矛盾する場合はhistorical informationとして扱います。
 
 ## Development
 
@@ -219,6 +307,20 @@ deno task --eval 'loutre graph di --entry fixtures/http-crud/src/app.ts'
 npm install
 npm run verify
 ```
+
+個別checkも実行できます。
+
+```sh
+npm run format:check
+npm run lint
+npm run check
+npm run test:types
+npm test
+npm run build
+npm run test:conformance
+```
+
+CIはNode.js 22 / 24 / 26のunit・E2E testと、Deno / Bun / workerd / Electron / AWS Lambdaのruntime conformanceを並列実行します。
 
 ## License
 

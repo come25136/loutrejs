@@ -157,7 +157,6 @@ interface Route {
   readonly implementation: ImplementationDescriptor
 }
 
-/** @internal MessagePort driverとUnified Applicationの境界。 */
 export interface MessagePortProtocolExecution {
   readonly graph: ApplicationGraphIR
   initialize(): Promise<void>
@@ -165,7 +164,6 @@ export interface MessagePortProtocolExecution {
   invoke(procedure: string, input?: unknown): Promise<LogicalMessagePortResult>
 }
 
-/** @internal Unified Application bindingがMessagePort executionを構築する。 */
 export function createMessagePortExecution(options: {
   readonly runtime: ApplicationRuntime
   readonly graph: ApplicationGraphIR

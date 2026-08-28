@@ -133,7 +133,6 @@ export interface QueueDescriptor<
   readonly kind: 'queue'
   readonly name: TName
   readonly payload: TSchema
-  /** @internal Queue transport binding token. */
   readonly [queueDriverToken]: Token<unknown>
 }
 
@@ -165,7 +164,6 @@ export function queue<
   })
 }
 
-/** @internal Queue transport adapter and Application Host use this token. */
 export function queueRuntimeToken(descriptor: QueueDescriptor): Token<unknown> {
   return descriptor[queueDriverToken]
 }
@@ -223,9 +221,9 @@ export type TriggerTask<TTrigger> = TTrigger extends TriggerDescriptor
   ? TTrigger['task']
   : never
 
-/** @internal Legacy Graph compiler bridge. Not part of the public execution model. */
+/** Graph v3互換compiler専用であり、公開execution modelへEntrypointを戻さない。 */
 export type EntrypointRuntime<TInput, TOutput> = TaskRuntime<TInput, TOutput>
-/** @internal Legacy Graph compiler bridge. Not part of the public execution model. */
+/** Graph v3互換compiler専用であり、公開execution modelへEntrypointを戻さない。 */
 export type EntrypointDescriptor<
   TInput = unknown,
   TOutput = unknown,

@@ -84,17 +84,13 @@ interface BindingApi {
   ): ProviderDescriptor
 }
 
-/**
- * Applicationと外部runtime/resourceのbindingを構築する公開namespace。
- * Binding種別ごとのfactoryをflatなcreateXXX/bindXXX APIとして増やさない。
- */
+/** flatなcreateXXX/bindXXX APIを増殖させないため、外部bindingをnamespaceへ集約する。 */
 export const binding: Readonly<BindingApi> = Object.freeze({
   invocation: createInvocationBinding,
   host: createHostBinding,
   queue: bindQueueDriver,
 })
 
-/** @internal `binding.invocation()` の実装。 */
 function createInvocationBinding<
   const TDefinition extends ApplicationDefinition,
 >(
@@ -108,7 +104,6 @@ function createInvocationBinding<
   ) as InvocationBinding<TDefinition>
 }
 
-/** @internal `binding.host()` の実装。 */
 function createHostBinding<const TDefinition extends ApplicationDefinition>(
   options: InvocationBindingOptions<TDefinition>,
 ): HostBinding<TDefinition> {

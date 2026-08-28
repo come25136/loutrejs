@@ -43,7 +43,6 @@ interface HttpRoute {
   readonly procedure: string
 }
 
-/** @internal HTTP protocol driverとUnified Applicationの境界。 */
 export interface HttpProtocolExecution {
   readonly graph: ApplicationGraphIR
   initialize(): Promise<void>
@@ -56,7 +55,6 @@ export interface HttpProtocolExecutionLifecycle {
   readonly onServerListening?: (url: string) => void
 }
 
-/** @internal Unified ApplicationがHTTP protocol executionを構築する。 */
 export function createHttpExecution(options: {
   readonly runtime: ApplicationRuntime
   readonly graph: ApplicationGraphIR

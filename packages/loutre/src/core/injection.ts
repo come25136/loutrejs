@@ -18,7 +18,7 @@ export interface TaskConsumer {
   readonly name: string
 }
 
-/** @internal Legacy Graph compiler bridge. */
+/** Graph v3互換compilerが旧Entrypoint consumerを参照するため残す。 */
 export interface EntrypointConsumer {
   readonly kind: 'entrypoint-consumer'
   readonly id: string
@@ -57,7 +57,6 @@ function setCurrentInjectionContext(
   else storage[injectionContextKey] = context
 }
 
-/** @internal framework-managedな同期constructionに利用する。 */
 export function runInInjectionContext<T>(
   context: InjectionContext,
   run: () => T,
