@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   conformance:
-    name: Runtime Conformance
+    name: AWS Lambda Node.js ${{ inputs.node-version }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

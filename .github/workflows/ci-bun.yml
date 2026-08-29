@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   conformance:
-    name: Runtime Conformance
+    name: Bun ${{ inputs.bun-version }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   tests:
-    name: Unit & E2E Tests
+    name: Node.js ${{ inputs.node-version }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

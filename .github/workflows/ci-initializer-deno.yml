@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   native:
-    name: Native Initializer
+    name: Deno ${{ inputs.deno-version }} LTS
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

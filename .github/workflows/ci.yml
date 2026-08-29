@@ -14,15 +14,15 @@ concurrency:
 
 jobs:
   quality-checks:
-    name: Quality Checks / Node.js 24
+    name: Quality Checks
     uses: ./.github/workflows/ci-node-quality.yml
 
   minimum-node-types:
-    name: Minimum API Compatibility / Node.js 22
+    name: Minimum API Compatibility
     uses: ./.github/workflows/ci-node-minimum.yml
 
   node-tests:
-    name: Unit & E2E Tests / Node.js ${{ matrix.node }}
+    name: Unit & E2E Tests
     strategy:
       fail-fast: false
       matrix:
@@ -32,7 +32,7 @@ jobs:
       node-version: ${{ matrix.node }}
 
   bun-conformance:
-    name: Runtime Conformance / Bun ${{ matrix.version }}
+    name: Runtime Conformance
     strategy:
       fail-fast: false
       matrix:
@@ -42,17 +42,17 @@ jobs:
       bun-version: ${{ matrix.version }}
 
   deno-conformance:
-    name: Runtime Conformance / Deno 2.9 LTS
+    name: Runtime Conformance
     uses: ./.github/workflows/ci-deno.yml
     with:
       deno-version: 2.9.5
 
   cloudflare-workers-conformance:
-    name: Runtime Conformance / Cloudflare Workers
+    name: Runtime Conformance
     uses: ./.github/workflows/ci-cloudflare-workers.yml
 
   electron-conformance:
-    name: Runtime Conformance / Electron ${{ matrix.version }}
+    name: Runtime Conformance
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +62,7 @@ jobs:
       electron-version: ${{ matrix.version }}
 
   aws-lambda-conformance:
-    name: Runtime Conformance / AWS Lambda Node.js ${{ matrix.node }}
+    name: Runtime Conformance
     strategy:
       fail-fast: false
       matrix:
@@ -72,7 +72,7 @@ jobs:
       node-version: ${{ matrix.node }}
 
   bun-initializer:
-    name: Native Initializer / Bun ${{ matrix.version }}
+    name: Native Initializer
     needs: quality-checks
     strategy:
       fail-fast: false
@@ -83,7 +83,7 @@ jobs:
       bun-version: ${{ matrix.version }}
 
   deno-initializer:
-    name: Native Initializer / Deno 2.9 LTS
+    name: Native Initializer
     needs: quality-checks
     uses: ./.github/workflows/ci-initializer-deno.yml
     with:
