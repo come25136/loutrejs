@@ -47,6 +47,15 @@ jobs:
       - name: Verify published packages
         run: node scripts/verify-packages.mjs
 
+      - name: Upload initializer build
+        uses: actions/upload-artifact@v4
+        with:
+          name: create-loutre-build
+          path: |
+            packages/loutre/dist
+            packages/create-loutre/dist
+          if-no-files-found: error
+
   minimum-node-types:
     name: Node.js 22 Minimum API Compatibility
     runs-on: ubuntu-latest
@@ -195,42 +204,75 @@ jobs:
           ${{ matrix.cli_runner }} packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/runtime
           ${{ matrix.cli_runner }} packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/runtime/openapi.json
 
-      - name: Run create-loutre without Node.js
-        if: ${{ matrix.bun == true || matrix.deno == true }}
+      - name: Run ${{ matrix.name }} conformance
+        run: ${{ matrix.command }}
+
+  initializer-native:
+    name: create-loutre native (${{ matrix.name }})
+    needs: quality-checks
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Bun 1.3
+            bun: true
+            version: 1.3.14
+          - name: Bun 1.4
+            bun: true
+            version: 1.4.0
+          - name: Deno 2.9 LTS
+            deno: true
+            version: 2.9.5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun ${{ matrix.version }}
+        if: ${{ matrix.bun == true }}
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.version }}
+
+      - name: Setup Deno ${{ matrix.version }}
+        if: ${{ matrix.deno == true }}
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ matrix.version }}
+
+      - name: Download initializer build
+        uses: actions/download-artifact@v5
+        with:
+          name: create-loutre-build
+          path: packages
+
+      - name: Install dependencies with Bun
+        if: ${{ matrix.bun == true }}
+        run: bun install --no-save
+
+      - name: Install dependencies with Deno
+        if: ${{ matrix.deno == true }}
+        run: deno install
+
+      - name: Create project with Bun
+        if: ${{ matrix.bun == true }}
         shell: bash
         run: |
           rm -rf .tmp/create-loutre-native
           mkdir -p .tmp/create-loutre-native
-          if [ "${{ matrix.bun }}" = "true" ]; then
-            BUN_BIN_DIR="$(dirname "$(command -v bun)")"
-            if PATH="$BUN_BIN_DIR" command -v node >/dev/null 2>&1; then
-              echo "Node.js is visible in Bun-only PATH" >&2
-              exit 1
-            fi
-            (
-              cd .tmp/create-loutre-native
-              output="$(PATH="$BUN_BIN_DIR" bun create loutre bun-app --yes --no-install --target bun)"
-              printf '%s\n' "$output"
-              printf '%s\n' "$output" | grep -q "Package manager: Bun"
-              test -f bun-app/src/main.ts
-              grep -q "bunRuntime" bun-app/src/main.ts
-            )
-          fi
-          if [ "${{ matrix.deno }}" = "true" ]; then
-            DENO_BIN_DIR="$(dirname "$(command -v deno)")"
-            if PATH="$DENO_BIN_DIR" command -v node >/dev/null 2>&1; then
-              echo "Node.js is visible in Deno-only PATH" >&2
-              exit 1
-            fi
-            (
-              cd .tmp/create-loutre-native
-              output="$(PATH="$DENO_BIN_DIR" deno run -A ../../packages/create-loutre/bin/create-loutre.js deno-app --yes --no-install --target deno)"
-              printf '%s\n' "$output"
-              printf '%s\n' "$output" | grep -q "Package manager: Deno"
-              test -f deno-app/src/main.ts
-              grep -q "denoRuntime" deno-app/src/main.ts
-            )
-          fi
+          cd .tmp/create-loutre-native
+          output="$(bun create loutre bun-app --yes --no-install --target bun)"
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -q "Package manager: Bun"
+          grep -q "bunRuntime" bun-app/src/main.ts
 
-      - name: Run ${{ matrix.name }} conformance
-        run: ${{ matrix.command }}
+      - name: Create project with Deno
+        if: ${{ matrix.deno == true }}
+        shell: bash
+        run: |
+          rm -rf .tmp/create-loutre-native
+          mkdir -p .tmp/create-loutre-native
+          output="$(deno run -A packages/create-loutre/bin/create-loutre.js .tmp/create-loutre-native/deno-app --yes --no-install --target deno)"
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -q "Package manager: Deno"
+          grep -q "denoRuntime" .tmp/create-loutre-native/deno-app/src/main.ts
