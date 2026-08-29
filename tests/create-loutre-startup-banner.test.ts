@@ -49,27 +49,30 @@ describe('create-loutre startup banner', () => {
     { target: 'node', marker: 'printStartupBanner' },
     { target: 'bun', marker: 'printStartupBanner' },
     { target: 'deno', marker: 'renderStartupBanner' },
-  ])('$targetのgenerated Hostがstartup bannerを描画する', async ({ target, marker }) => {
-    const io = createIO()
+  ])(
+    '$targetのgenerated Hostがstartup bannerを描画する',
+    async ({ target, marker }) => {
+      const io = createIO()
 
-    expect(
-      await runCreateLoutre(
-        [
-          target,
-          '--target',
-          target,
-          '--package-manager',
-          'npm',
-          '--no-install',
-        ],
-        io,
-      ),
-    ).toBe(0)
+      expect(
+        await runCreateLoutre(
+          [
+            target,
+            '--target',
+            target,
+            '--package-manager',
+            'npm',
+            '--no-install',
+          ],
+          io,
+        ),
+      ).toBe(0)
 
-    const main = await readFile(join(root, target, 'src/main.ts'), 'utf8')
-    expect(main).toContain(marker)
-    expect(main).toContain("application: 'Loutre Application'")
-  })
+      const main = await readFile(join(root, target, 'src/main.ts'), 'utf8')
+      expect(main).toContain(marker)
+      expect(main).toContain("application: 'Loutre Application'")
+    },
+  )
 
   function createIO(
     overrides: Partial<CreateLoutreCliIO> = {},

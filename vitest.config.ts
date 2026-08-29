@@ -13,6 +13,9 @@ export default defineConfig({
       '@loutrejs/loutre/openapi': resolve(
         'packages/loutre/src/application/openapi.ts',
       ),
+      '@loutrejs/loutre/presentation': resolve(
+        'packages/loutre/src/presentation.ts',
+      ),
       '@loutrejs/loutre/graph': resolve('packages/loutre/src/graph/index.ts'),
       '@loutrejs/loutre/runtime/bun': resolve(
         'packages/loutre/src/adapters/bun.ts',

@@ -97,9 +97,7 @@ const minimumContentWidth = 68
 const metadataIndent = '        '
 const mascot = 'ʕ•ᴥ•ʔ'
 
-export function renderLoutreBrand(
-  options: StartupBannerRenderOptions,
-): string {
+export function renderLoutreBrand(options: StartupBannerRenderOptions): string {
   if (!options.isTTY) return 'Loutre'
   if (options.columns !== undefined && options.columns < logoWidth()) {
     return `${mascot} Loutre`
@@ -259,7 +257,11 @@ function formatDuration(durationMs: number): string {
 
 function displayWidth(value: string): number {
   let width = 0
-  for (const character of value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, '')) {
+  const ansiControlSequence = new RegExp(
+    `${String.fromCodePoint(0x1b)}\\[[0-?]*[ -/]*[@-~]`,
+    'g',
+  )
+  for (const character of value.replace(ansiControlSequence, '')) {
     const codePoint = character.codePointAt(0)!
     if (/\p{Mark}/u.test(character)) continue
     width += isFullWidth(codePoint) ? 2 : 1

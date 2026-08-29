@@ -24,7 +24,9 @@
       "@loutrejs/loutre/openapi": [
         "./packages/loutre/src/application/openapi.ts"
       ],
-      "@loutrejs/loutre/presentation": ["./packages/loutre/src/presentation.ts"],
+      "@loutrejs/loutre/presentation": [
+        "./packages/loutre/src/presentation.ts"
+      ],
       "@loutrejs/loutre/graph": ["./packages/loutre/src/graph/index.ts"],
       "@loutrejs/loutre/runtime": ["./packages/loutre/src/runtime/index.ts"],
       "@loutrejs/loutre/http": ["./packages/loutre/src/http/index.ts"],
