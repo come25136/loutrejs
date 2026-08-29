@@ -117,9 +117,21 @@ jobs:
             '@loutrejs/cli'
             'create-loutre'
           )
+          max_attempts=12
+          retry_delay_seconds=5
           for package in "${packages[@]}"; do
-            published="$(npm view "${package}@${version}" version)"
-            test "$published" = "$version"
+            for attempt in $(seq 1 "$max_attempts"); do
+              published="$(npm view "${package}@${version}" version 2>/dev/null || true)"
+              if test "$published" = "$version"; then
+                break
+              fi
+              if test "$attempt" -eq "$max_attempts"; then
+                echo "${package}@${version} was not available from npm after ${max_attempts} attempts." >&2
+                exit 1
+              fi
+              echo "Waiting for ${package}@${version} to become available from npm (${attempt}/${max_attempts})..."
+              sleep "$retry_delay_seconds"
+            done
           done
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
