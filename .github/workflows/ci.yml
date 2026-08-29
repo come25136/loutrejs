@@ -14,15 +14,15 @@ concurrency:
 
 jobs:
   quality-checks:
-    name: Node.js 24
+    name: Quality Checks / Node.js 24
     uses: ./.github/workflows/ci-node-quality.yml
 
   minimum-node-types:
-    name: Node.js 22
+    name: Minimum API Compatibility / Node.js 22
     uses: ./.github/workflows/ci-node-minimum.yml
 
   node-tests:
-    name: Node.js ${{ matrix.node }}
+    name: Unit & E2E Tests / Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
       matrix:
@@ -32,7 +32,7 @@ jobs:
       node-version: ${{ matrix.node }}
 
   bun-conformance:
-    name: Bun ${{ matrix.version }}
+    name: Runtime Conformance / Bun ${{ matrix.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -42,17 +42,17 @@ jobs:
       bun-version: ${{ matrix.version }}
 
   deno-conformance:
-    name: Deno 2.9 LTS
+    name: Runtime Conformance / Deno 2.9 LTS
     uses: ./.github/workflows/ci-deno.yml
     with:
       deno-version: 2.9.5
 
   cloudflare-workers-conformance:
-    name: Cloudflare Workers
+    name: Runtime Conformance / Cloudflare Workers
     uses: ./.github/workflows/ci-cloudflare-workers.yml
 
   electron-conformance:
-    name: Electron ${{ matrix.version }}
+    name: Runtime Conformance / Electron ${{ matrix.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +62,7 @@ jobs:
       electron-version: ${{ matrix.version }}
 
   aws-lambda-conformance:
-    name: AWS Lambda Node.js ${{ matrix.node }}
+    name: Runtime Conformance / AWS Lambda Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
       matrix:
@@ -72,7 +72,7 @@ jobs:
       node-version: ${{ matrix.node }}
 
   bun-initializer:
-    name: create-loutre Bun ${{ matrix.version }}
+    name: Native Initializer / Bun ${{ matrix.version }}
     needs: quality-checks
     strategy:
       fail-fast: false
@@ -83,7 +83,7 @@ jobs:
       bun-version: ${{ matrix.version }}
 
   deno-initializer:
-    name: create-loutre Deno 2.9 LTS
+    name: Native Initializer / Deno 2.9 LTS
     needs: quality-checks
     uses: ./.github/workflows/ci-initializer-deno.yml
     with:
