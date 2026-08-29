@@ -46,9 +46,9 @@ describe('create-loutre startup presentation', () => {
     '%sのgenerated Hostはstartup presentationの責務を持たない',
     async (target) => {
       const main = await generateMain(target)
-      expect(main).toContain(
-        `${target}Runtime.serve({ application, hostname })`,
-      )
+      expect(main).toContain(`${target}Runtime.serve({ application })`)
+      expect(main).not.toContain('hostname')
+      expect(main).not.toContain('127.0.0.1')
       expect(main).not.toContain('presentation')
       expect(main).not.toContain('renderStartupPrelude')
       expect(main).not.toContain('renderStartupStatus')
