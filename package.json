@@ -33,7 +33,7 @@
     "verify": "npm run format:check && npm run lint && npm run check && npm run test:types && npm test && npm run build && npm run test:conformance",
     "release:check": "npm run build && node scripts/verify-release-version.mjs && node scripts/verify-packages.mjs",
     "changeset": "changeset",
-    "release:version": "changeset version && node scripts/sync-release-version.mjs && npm install --package-lock-only --ignore-scripts --no-audit --no-fund",
+    "release:version": "changeset version && node scripts/sync-release-version.mjs && npm install --package-lock-only --ignore-scripts --no-audit --no-fund && npm run release:check",
     "release:publish": "npm run release:check && changeset publish"
   },
   "devDependencies": {
