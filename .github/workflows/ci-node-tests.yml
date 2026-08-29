@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   tests:
+    name: Unit & E2E Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

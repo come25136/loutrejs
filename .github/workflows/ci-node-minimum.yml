@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   minimum:
+    name: Minimum API Compatibility
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

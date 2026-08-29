@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   conformance:
+    name: Runtime Conformance
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

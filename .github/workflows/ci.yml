@@ -14,15 +14,15 @@ concurrency:
 
 jobs:
   quality-checks:
-    name: Node.js 24 Quality Checks
+    name: Node.js 24
     uses: ./.github/workflows/ci-node-quality.yml
 
   minimum-node-types:
-    name: Node.js 22 Minimum API Compatibility
+    name: Node.js 22
     uses: ./.github/workflows/ci-node-minimum.yml
 
   node-tests:
-    name: Node.js ${{ matrix.node }} Unit & E2E Tests
+    name: Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
       matrix:
@@ -32,7 +32,7 @@ jobs:
       node-version: ${{ matrix.node }}
 
   bun-conformance:
-    name: Bun ${{ matrix.version }} Runtime Conformance
+    name: Bun ${{ matrix.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -42,7 +42,7 @@ jobs:
       bun-version: ${{ matrix.version }}
 
   deno-conformance:
-    name: Deno 2.9 LTS Runtime Conformance
+    name: Deno 2.9 LTS
     uses: ./.github/workflows/ci-deno.yml
     with:
       deno-version: 2.9.5
@@ -52,7 +52,7 @@ jobs:
     uses: ./.github/workflows/ci-cloudflare-workers.yml
 
   electron-conformance:
-    name: Electron ${{ matrix.version }} Runtime Conformance
+    name: Electron ${{ matrix.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -72,7 +72,7 @@ jobs:
       node-version: ${{ matrix.node }}
 
   bun-initializer:
-    name: create-loutre native (Bun ${{ matrix.version }})
+    name: create-loutre Bun ${{ matrix.version }}
     needs: quality-checks
     strategy:
       fail-fast: false
@@ -83,7 +83,7 @@ jobs:
       bun-version: ${{ matrix.version }}
 
   deno-initializer:
-    name: create-loutre native (Deno 2.9 LTS)
+    name: create-loutre Deno 2.9 LTS
     needs: quality-checks
     uses: ./.github/workflows/ci-initializer-deno.yml
     with:

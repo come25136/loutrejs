@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   native:
+    name: Native Initializer
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
