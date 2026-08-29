@@ -12,6 +12,7 @@ import {
   detectPresentationTerminal,
   startStartupPresentation,
 } from '../presentation.js'
+import { assertRuntimeEngine } from '../runtime/engine.js'
 import { serverUrl } from '../runtime/server-url.js'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
@@ -58,6 +59,7 @@ export const bunRuntime = {
 async function serve<const TDefinition extends ApplicationDefinition>(
   options: BunServeOptions<TDefinition>,
 ): Promise<BunServeHandle<TDefinition>> {
+  assertRuntimeEngine('bun')
   const bun = bunGlobal()
   if (!bun?.serve) {
     throw new Error('LUTRE_BUN_UNAVAILABLE: Bun.serve() is not available.')

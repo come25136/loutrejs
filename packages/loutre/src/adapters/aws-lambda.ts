@@ -6,6 +6,7 @@ import {
   type InvocationBindingOptions,
 } from '../application/index.js'
 import type { HttpProtocolExecution } from '../http/index.js'
+import { assertRuntimeEngine } from '../runtime/engine.js'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
@@ -98,6 +99,7 @@ function bind<const TDefinition extends ApplicationDefinition>(
     | AwsLambdaBindOptions<TDefinition>
     | AwsLambdaStreamingBindOptions<TDefinition>,
 ): AwsLambdaHttpHandler | AwsLambdaStreamingHttpHandler {
+  assertRuntimeEngine('aws-lambda')
   const invocation = binding.invocation({
     application: options.application,
     environment: 'environment' in options ? options.environment : process.env,

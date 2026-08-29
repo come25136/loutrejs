@@ -13,6 +13,10 @@ import { reserveHttpPort } from './helpers/http-server.js'
 import { silentLogger } from './helpers/silent-logger.js'
 
 describe('複数値HTTP response header', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('Node runtimeが複数のSet-Cookieを別々に保持する', async () => {
     const port = await reserveHttpPort()
     const runtime = await nodeRuntime.serve({
@@ -33,6 +37,7 @@ describe('複数値HTTP response header', () => {
   })
 
   it('Lambda runtimeがSet-Cookieをcookiesへ分離する', async () => {
+    vi.stubEnv('AWS_EXECUTION_ENV', 'AWS_Lambda_nodejs24.x')
     const handler = awsLambdaRuntime.bind({ application: cookieApplication() })
     const result = await handler({ rawPath: '/cookies' })
 

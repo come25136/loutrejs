@@ -11,6 +11,7 @@ import {
   type MessagePortProtocolExecution,
   type MessagePortLike,
 } from '../message-port/index.js'
+import { assertRuntimeEngine } from '../runtime/engine.js'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
@@ -61,6 +62,7 @@ export const electronRuntime = {
 function attach<const TDefinition extends ApplicationDefinition>(
   options: ElectronAttachOptions<TDefinition>,
 ): ElectronAttachment<TDefinition> {
+  assertRuntimeEngine('electron')
   const invocation = binding.invocation({
     application: options.application,
     environment:
