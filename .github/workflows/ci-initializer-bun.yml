@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   native:
-    name: Bun ${{ inputs.bun-version }}
+    name: Bun
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

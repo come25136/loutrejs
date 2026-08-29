@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   conformance:
-    name: Electron ${{ inputs.electron-version }}
+    name: Electron
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

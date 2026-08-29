@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   consumer:
-    name: Bun ${{ inputs.bun-version }}
+    name: Bun
     runs-on: ubuntu-latest
     steps:
       - name: Setup Bun ${{ inputs.bun-version }}
