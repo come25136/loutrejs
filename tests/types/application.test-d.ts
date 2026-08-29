@@ -13,6 +13,8 @@ import {
   task,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
+import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
+import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
 
@@ -84,6 +86,9 @@ const httpDefinition = defineApplication({ modules: [ImportedHttpModule()] })
 const httpApplication = bootstrap({ application: httpDefinition })
 httpApplication.fetch(new Request('http://localhost/health'))
 nodeRuntime.serve({ application: httpDefinition, port: 3000 })
+nodeRuntime
+  .serve({ application: httpDefinition })
+  .then((runtime) => runtime.port)
 // @ts-expect-error public Taskが無いApplicationにはrunを公開しない
 httpApplication.run
 // @ts-expect-error listener ownershipはApplication hostではなくruntime adapterが持つ

@@ -24,7 +24,7 @@ export type DenoRuntimeOptions<TDefinition extends ApplicationDefinition> = {
 
 export type DenoServeOptions<TDefinition extends ApplicationDefinition> =
   DenoRuntimeOptions<TDefinition> & {
-    readonly port: number
+    readonly port?: number
     readonly hostname?: string
   }
 
@@ -37,6 +37,7 @@ export interface DenoServeHandle<
   TDefinition extends ApplicationDefinition = ApplicationDefinition,
 > {
   readonly application: HostBindingApplication<TDefinition>
+  readonly port: number
   close(signal?: string): Promise<void>
 }
 
@@ -107,24 +108,33 @@ async function serve<const TDefinition extends ApplicationDefinition>(
   await host.application.init()
   if ('triggers' in host.application) await host.application.triggers.start()
   let server: { shutdown(): Promise<void> }
-  try {
-    server = deno.serve(
-      {
-        port: options.port,
-        ...(options.hostname === undefined
-          ? {}
-          : { hostname: options.hostname }),
-        onListen: () => undefined,
-      },
-      createDenoFetchDriver(http),
-    )
-  } catch (error) {
-    await host.application.close().catch(() => undefined)
-    throw error
+  const requestedPort = options.port
+  let port = requestedPort ?? 3000
+  while (true) {
+    try {
+      server = deno.serve(
+        {
+          port,
+          ...(options.hostname === undefined
+            ? {}
+            : { hostname: options.hostname }),
+          onListen: () => undefined,
+        },
+        createDenoFetchDriver(http),
+      )
+      break
+    } catch (error) {
+      if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
+        await host.application.close().catch(() => undefined)
+        throw error
+      }
+      port += 1
+    }
   }
   let closed = false
   return {
     application: host.application,
+    port,
     async close(signal?: string) {
       if (closed) return
       closed = true
@@ -143,6 +153,19 @@ async function serve<const TDefinition extends ApplicationDefinition>(
         throw new AggregateError(errors, 'Deno runtime shutdown failed')
     },
   }
+}
+
+function canRetryOnNextPort(error: unknown, port: number): boolean {
+  return port < 65_535 && isAddressInUseError(error)
+}
+
+function isAddressInUseError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'EADDRINUSE'
+  )
 }
 
 function createDenoFetchDriver(application: HttpProtocolExecution) {

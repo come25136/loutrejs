@@ -6,8 +6,7 @@ import {
 import application from './app.ts'
 
 const hostname = '127.0.0.1'
-const port = 3000
-const serverUrl = `http://${hostname}:${port}`
+const defaultServerUrl = `http://${hostname}:3000`
 const isTTY = Deno.stdout.isTerminal()
 const presentation = {
   isTTY,
@@ -16,7 +15,7 @@ const presentation = {
 const startup = {
   application: 'Loutre Application',
   version: '{{loutreVersion}}',
-  server: serverUrl,
+  server: defaultServerUrl,
   runtime: `Deno ${Deno.version.deno}`,
   environment:
     Deno.env.get('DENO_ENV') ?? Deno.env.get('NODE_ENV') ?? 'development',
@@ -24,10 +23,14 @@ const startup = {
 
 console.log(renderStartupPrelude(startup, presentation))
 const startedAt = performance.now()
-await denoRuntime.serve({ application, hostname, port })
+const server = await denoRuntime.serve({ application, hostname })
 console.log(
   renderStartupStatus(
-    { ...startup, startupDurationMs: performance.now() - startedAt },
+    {
+      ...startup,
+      server: `http://${hostname}:${server.port}`,
+      startupDurationMs: performance.now() - startedAt,
+    },
     presentation,
   ),
 )

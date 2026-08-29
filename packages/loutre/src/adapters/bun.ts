@@ -19,7 +19,7 @@ type HttpApplication<TDefinition extends ApplicationDefinition> =
 
 export type BunServeOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
-  readonly port: number
+  readonly port?: number
   readonly hostname?: string
   readonly environment?: unknown
 } & BootstrapArguments<TDefinition>
@@ -28,6 +28,7 @@ export interface BunServeHandle<
   TDefinition extends ApplicationDefinition = ApplicationDefinition,
 > {
   readonly application: HostBindingApplication<TDefinition>
+  readonly port: number
   close(signal?: string): Promise<void>
 }
 
@@ -71,19 +72,30 @@ async function serve<const TDefinition extends ApplicationDefinition>(
   await host.application.init()
   if ('triggers' in host.application) await host.application.triggers.start()
   let server: { stop(closeActiveConnections?: boolean): void | Promise<void> }
-  try {
-    server = bun.serve({
-      port: options.port,
-      ...(options.hostname === undefined ? {} : { hostname: options.hostname }),
-      fetch: createBunFetchDriver(http),
-    })
-  } catch (error) {
-    await host.application.close().catch(() => undefined)
-    throw error
+  const requestedPort = options.port
+  let port = requestedPort ?? 3000
+  while (true) {
+    try {
+      server = bun.serve({
+        port,
+        ...(options.hostname === undefined
+          ? {}
+          : { hostname: options.hostname }),
+        fetch: createBunFetchDriver(http),
+      })
+      break
+    } catch (error) {
+      if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
+        await host.application.close().catch(() => undefined)
+        throw error
+      }
+      port += 1
+    }
   }
   let closed = false
   return {
     application: host.application,
+    port,
     async close(signal?: string) {
       if (closed) return
       closed = true
@@ -102,6 +114,19 @@ async function serve<const TDefinition extends ApplicationDefinition>(
         throw new AggregateError(errors, 'Bun runtime shutdown failed')
     },
   }
+}
+
+function canRetryOnNextPort(error: unknown, port: number): boolean {
+  return port < 65_535 && isAddressInUseError(error)
+}
+
+function isAddressInUseError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'EADDRINUSE'
+  )
 }
 
 function createBunFetchDriver(application: HttpProtocolExecution) {
