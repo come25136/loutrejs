@@ -1,12 +1,12 @@
 # Loutre Architecture
 
-- 状態: **Loutre v0.1 architecture source of truth**
-- 対象: Loutre v0.1
+- 状態: **Loutre v0.x architecture source of truth**
+- 対象: Loutre v0.x
 - 更新日: 2026-08-29 JST
 
 ## 0. Source of Truth
 
-この文書を Loutre v0.1 の architecture 上の source of truth とする。
+この文書を Loutre v0.x の architecture 上の source of truth とする。
 
 優先順位は次のとおり。
 
@@ -819,7 +819,7 @@ Logical terminalはrecursive depth-first順で全体にexactly one、かつ最�
 
 ### 11.1 Path / params
 
-v0.1 HTTP path grammarはsegment-based。
+v0.x HTTP path grammarはsegment-based。
 
 ```text
 /
@@ -1039,7 +1039,7 @@ architecture変更時は、少なくとも次をpublic type tests / unit tests /
 
 ## 16. Freeze
 
-Loutre v0.1 architectureを短くまとめると次。
+Loutre v0.x architectureを短くまとめると次。
 
 > **Applicationは一種類のportable Definition。Protocol / Task / TriggerがExecution RootとしてGraphに載る。**
 

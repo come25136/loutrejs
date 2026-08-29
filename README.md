@@ -19,7 +19,7 @@ Loutreは、Contract、DI、Pipeline、TaskなどをひとつのApplicationと�
 Applicationをruntimeから分離し、Node.js、Bun、Deno、Cloudflare Workers、AWS Lambda、Electronなどへ同じ設計を持ち運べます。
 
 > [!WARNING]
-> Loutreは現在v0.1です。Public APIには破壊的変更が入る可能性があります。
+> Loutreは現在v0.xです。Public APIには破壊的変更が入る可能性があります。
 
 ## Quick Start
 
