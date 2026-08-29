@@ -228,6 +228,7 @@ function createProcessIO(): CreateLoutreCliIO {
     cwd: process.cwd(),
     detectedPackageManager: detectPackageManager(
       process.env.npm_config_user_agent,
+      globalThis,
     ),
     ...(interactive ? { prompt: terminalPrompt, select: terminalSelect } : {}),
     install: installDependencies,
@@ -279,7 +280,17 @@ function executableFor(packageManager: PackageManager): string {
     : packageManager
 }
 
-function detectPackageManager(userAgent: string | undefined): PackageManager {
+function detectPackageManager(
+  userAgent: string | undefined,
+  runtime: typeof globalThis,
+): PackageManager {
+  const globals = runtime as typeof globalThis & {
+    readonly Bun?: unknown
+    readonly Deno?: unknown
+  }
+  if (globals.Bun !== undefined) return 'bun'
+  if (globals.Deno !== undefined) return 'deno'
+
   const name = userAgent?.split('/')[0]
   return (
     packageManagers.find((packageManager) => packageManager === name) ?? 'npm'

@@ -195,5 +195,40 @@ jobs:
           ${{ matrix.cli_runner }} packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/runtime
           ${{ matrix.cli_runner }} packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/runtime/openapi.json
 
+      - name: Run create-loutre without Node.js
+        if: ${{ matrix.bun == true || matrix.deno == true }}
+        shell: bash
+        run: |
+          NODE_BIN_DIR="$(dirname "$(command -v node)")"
+          CLEAN_PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -Fvx "$NODE_BIN_DIR" | paste -sd: -)"
+          export PATH="$CLEAN_PATH"
+          if command -v node >/dev/null 2>&1; then
+            echo "Node.js is still available in PATH" >&2
+            exit 1
+          fi
+
+          rm -rf .tmp/create-loutre-native
+          mkdir -p .tmp/create-loutre-native
+          if [ "${{ matrix.bun }}" = "true" ]; then
+            (
+              cd .tmp/create-loutre-native
+              output="$(bun create loutre bun-app --yes --no-install --target bun)"
+              printf '%s\n' "$output"
+              printf '%s\n' "$output" | grep -q "Package manager: Bun"
+              test -f bun-app/src/main.ts
+              grep -q "bunRuntime" bun-app/src/main.ts
+            )
+          fi
+          if [ "${{ matrix.deno }}" = "true" ]; then
+            (
+              cd .tmp/create-loutre-native
+              output="$(deno run -A ../../packages/create-loutre/bin/create-loutre.js deno-app --yes --no-install --target deno)"
+              printf '%s\n' "$output"
+              printf '%s\n' "$output" | grep -q "Package manager: Deno"
+              test -f deno-app/src/main.ts
+              grep -q "denoRuntime" deno-app/src/main.ts
+            )
+          fi
+
       - name: Run ${{ matrix.name }} conformance
         run: ${{ matrix.command }}

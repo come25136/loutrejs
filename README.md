@@ -58,12 +58,19 @@ Application sourceはHostから分離されます。同じDefinitionをNode.js�
 
 ## Quick Start
 
-### npm create
+### Create a project
 
-npm公開後は、initializer package `create-loutre` からApplicationを生成できます。
+npm公開後は、initializer package `create-loutre` からApplicationを生成できます。initializer自体はNode.js、Bun、Denoで実行できます。
 
 ```sh
+# npm / Node.js
 npm create loutre@latest my-app
+
+# Bun
+bun create loutre my-app
+
+# Deno
+deno x -A npm:create-loutre@latest my-app
 ```
 
 対話ではTargetとpackage managerを選択します。
