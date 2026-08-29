@@ -188,9 +188,9 @@ function renderPackageJson(options: StarterOptions): string {
 function developmentSection(options: StarterOptions): string {
   if (options.target === 'aws-lambda') {
     return [
-      '## 開発',
+      '## Development',
       '',
-      'LambdaターゲットではローカルHTTPリスナーを起動しません。Applicationの動作はテストで確認します。',
+      'The Lambda target does not start a local HTTP listener. Verify Application behavior with tests.',
       '',
       '```sh',
       runScriptCommand(options.packageManager, 'test:watch'),
@@ -198,22 +198,22 @@ function developmentSection(options: StarterOptions): string {
     ].join('\n')
   }
   return [
-    '## 開発',
+    '## Development',
     '',
     '```sh',
     runScriptCommand(options.packageManager, 'dev'),
     '```',
     '',
     options.target === 'cloudflare-workers'
-      ? 'WranglerがローカルのCloudflare Workers環境を起動します。'
-      : '<http://127.0.0.1:3000> へアクセスするとJSONレスポンスを返します。',
+      ? 'Wrangler starts a local Cloudflare Workers environment.'
+      : 'Open <http://127.0.0.1:3000> to receive a JSON response.',
   ].join('\n')
 }
 
 function deploymentSection(options: StarterOptions): string {
   if (options.target === 'cloudflare-workers') {
     return [
-      '## デプロイ',
+      '## Deploy',
       '',
       '```sh',
       runScriptCommand(options.packageManager, 'deploy'),
@@ -222,17 +222,17 @@ function deploymentSection(options: StarterOptions): string {
   }
   if (options.target === 'aws-lambda') {
     return [
-      '## ビルド',
+      '## Build',
       '',
       '```sh',
       runScriptCommand(options.packageManager, 'build'),
       '```',
       '',
-      '`dist/index.mjs`の`handler`をAWS Lambdaのハンドラーとしてデプロイします。',
+      'Deploy the `handler` export from `dist/index.mjs` as the AWS Lambda handler.',
     ].join('\n')
   }
   return [
-    '## 本番実行',
+    '## Production',
     '',
     '```sh',
     ...(options.target === 'deno'
