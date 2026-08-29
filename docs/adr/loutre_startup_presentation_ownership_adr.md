@@ -16,7 +16,7 @@ Loutre の Node.js / Bun / Deno 向け `serve()` では、Application 起動時�
 │                                                                      │
 │                         LOUTRE ASCII LOGO                             │
 │                                                                      │
-│                        ʕ•ᴥ•ʔ  Loutre 0.1.0                           │
+│                         ʕ•ᴥ•ʔ  version 0.1.0                         │
 │                                                                      │
 │        Server        http://127.0.0.1:3001                           │
 │        Runtime       Node.js 26.1.0                                  │
@@ -413,7 +413,7 @@ generated Host から以下をすべて削除する。
 │                                                                      │
 │                         LOUTRE ASCII LOGO                             │
 │                                                                      │
-│                        ʕ•ᴥ•ʔ  Loutre 0.1.0                           │
+│                         ʕ•ᴥ•ʔ  version 0.1.0                         │
 │                                                                      │
 │        Server        http://127.0.0.1:3001                           │
 │        Runtime       Node.js 26.1.0                                  │

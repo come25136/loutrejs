@@ -57,7 +57,8 @@ describe('presentation', () => {
 
     expect(prelude).toContain('╭')
     expect(prelude).toContain('██╗')
-    expect(prelude).toContain('ʕ•ᴥ•ʔ  Loutre 0.1.0')
+    expect(prelude).toContain('ʕ•ᴥ•ʔ  version 0.1.0')
+    expect(prelude).not.toContain('ʕ•ᴥ•ʔ  Loutre')
     expect(prelude).not.toContain('Application')
     expect(prelude).not.toContain('Server')
     expect(prelude).not.toContain('Ready')
