@@ -199,20 +199,17 @@ jobs:
         if: ${{ matrix.bun == true || matrix.deno == true }}
         shell: bash
         run: |
-          NODE_BIN_DIR="$(dirname "$(command -v node)")"
-          CLEAN_PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -Fvx "$NODE_BIN_DIR" | paste -sd: -)"
-          export PATH="$CLEAN_PATH"
-          if command -v node >/dev/null 2>&1; then
-            echo "Node.js is still available in PATH" >&2
-            exit 1
-          fi
-
           rm -rf .tmp/create-loutre-native
           mkdir -p .tmp/create-loutre-native
           if [ "${{ matrix.bun }}" = "true" ]; then
+            BUN_BIN_DIR="$(dirname "$(command -v bun)")"
+            if PATH="$BUN_BIN_DIR" command -v node >/dev/null 2>&1; then
+              echo "Node.js is visible in Bun-only PATH" >&2
+              exit 1
+            fi
             (
               cd .tmp/create-loutre-native
-              output="$(bun create loutre bun-app --yes --no-install --target bun)"
+              output="$(PATH="$BUN_BIN_DIR" bun create loutre bun-app --yes --no-install --target bun)"
               printf '%s\n' "$output"
               printf '%s\n' "$output" | grep -q "Package manager: Bun"
               test -f bun-app/src/main.ts
@@ -220,9 +217,14 @@ jobs:
             )
           fi
           if [ "${{ matrix.deno }}" = "true" ]; then
+            DENO_BIN_DIR="$(dirname "$(command -v deno)")"
+            if PATH="$DENO_BIN_DIR" command -v node >/dev/null 2>&1; then
+              echo "Node.js is visible in Deno-only PATH" >&2
+              exit 1
+            fi
             (
               cd .tmp/create-loutre-native
-              output="$(deno run -A ../../packages/create-loutre/bin/create-loutre.js deno-app --yes --no-install --target deno)"
+              output="$(PATH="$DENO_BIN_DIR" deno run -A ../../packages/create-loutre/bin/create-loutre.js deno-app --yes --no-install --target deno)"
               printf '%s\n' "$output"
               printf '%s\n' "$output" | grep -q "Package manager: Deno"
               test -f deno-app/src/main.ts
