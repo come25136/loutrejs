@@ -22,50 +22,50 @@ Loutreのソースコード上のアーキテクチャ境界を、そのままnp
 
 `@loutrejs/loutre`は内部モジュール境界をsubpath exportで表現する。
 
-| subpath                             | role                                                           |
-| ----------------------------------- | -------------------------------------------------------------- |
-| `@loutrejs/loutre`                  | Contract / DI / Module / Application definitionなど通常利用API |
-| `@loutrejs/loutre/http`             | HTTP protocol                                                  |
-| `@loutrejs/loutre/message-port`     | MessagePort protocol                                           |
-| `@loutrejs/loutre/graph`            | Application Graph tooling                                      |
-| `@loutrejs/loutre/runtime`          | Runtime abstraction                                            |
-| `@loutrejs/loutre/host`             | Runtime-neutral host primitive                                 |
-| `@loutrejs/loutre/binding`          | Invocation / Host binding                                      |
-| `@loutrejs/loutre/openapi`          | OpenAPI generation                                             |
-| `@loutrejs/loutre/runtime/bun`      | Bun adapter                                                    |
-| `@loutrejs/loutre/runtime/deno`     | Deno adapter                                                   |
-| `@loutrejs/loutre/runtime/workerd`  | workerd / Workers adapter                                      |
-| `@loutrejs/loutre/runtime/lambda`   | AWS Lambda adapter                                             |
-| `@loutrejs/loutre/runtime/electron` | Electron adapter                                               |
+| subpath                                       | role                                                           |
+| --------------------------------------------- | -------------------------------------------------------------- |
+| `@loutrejs/loutre`                            | Contract / DI / Module / Application definitionなど通常利用API |
+| `@loutrejs/loutre/http`                       | HTTP protocol                                                  |
+| `@loutrejs/loutre/message-port`               | MessagePort protocol                                           |
+| `@loutrejs/loutre/graph`                      | Application Graph tooling                                      |
+| `@loutrejs/loutre/runtime`                    | Runtime abstraction                                            |
+| `@loutrejs/loutre/host`                       | Runtime-neutral host primitive                                 |
+| `@loutrejs/loutre/binding`                    | Invocation / Host binding                                      |
+| `@loutrejs/loutre/openapi`                    | OpenAPI generation                                             |
+| `@loutrejs/loutre/runtime/bun`                | Bun adapter                                                    |
+| `@loutrejs/loutre/runtime/deno`               | Deno adapter                                                   |
+| `@loutrejs/loutre/runtime/cloudflare-workers` | workerd / Workers adapter                                      |
+| `@loutrejs/loutre/runtime/aws-lambda`         | AWS Lambda adapter                                             |
+| `@loutrejs/loutre/runtime/electron`           | Electron adapter                                               |
 
 Node adapterはNode.jsのengine/runtime固有制約を持ち、Node Hostとして独立してinstallする理由があるため`@loutrejs/node`に残す。
 BullMQは外部peer dependencyを持つintegrationなので`@loutrejs/bullmq`に分離する。
 CLIはbin・bundler・tsxなどDeveloper Tooling固有依存を持つため`@loutrejs/cli`に分離する。
 
-Bun / Deno / workerd / Lambda / Electron adapterは追加のnpm dependencyを要求しないportable adapterなので本体subpathへ統合する。Runtime固有のsupport matrixはconformance testとdocumentationで保証し、package境界のためだけに分割しない。
+Bun / Deno / Cloudflare Workers / AWS Lambda / Electron adapterは追加のnpm dependencyを要求しないportable adapterなので本体subpathへ統合する。Runtime固有のsupport matrixはconformance testとdocumentationで保証し、package境界のためだけに分割しない。
 
 ## Migration
 
-| before                               | after                                       |
-| ------------------------------------ | ------------------------------------------- |
-| `@loutrejs/core`                     | `@loutrejs/loutre`                          |
-| `@loutrejs/application`              | `@loutrejs/loutre`                          |
-| `@loutrejs/application/host`         | `@loutrejs/loutre/host`                     |
-| `@loutrejs/application/binding`      | `@loutrejs/loutre/binding`                  |
-| `@loutrejs/application/openapi`      | `@loutrejs/loutre/openapi`                  |
-| `@loutrejs/graph`                    | `@loutrejs/loutre/graph`                    |
-| `@loutrejs/runtime`                  | `@loutrejs/loutre/runtime`                  |
-| `@loutrejs/http`                     | `@loutrejs/loutre/http`                     |
-| `@loutrejs/message-port`             | `@loutrejs/loutre/message-port`             |
-| `@loutrejs/message-port/environment` | `@loutrejs/loutre/message-port/environment` |
-| `@loutrejs/runtime-bun`              | `@loutrejs/loutre/runtime/bun`              |
-| `@loutrejs/runtime-deno`             | `@loutrejs/loutre/runtime/deno`             |
-| `@loutrejs/runtime-workerd`          | `@loutrejs/loutre/runtime/workerd`          |
-| `@loutrejs/runtime-lambda`           | `@loutrejs/loutre/runtime/lambda`           |
-| `@loutrejs/runtime-electron`         | `@loutrejs/loutre/runtime/electron`         |
-| `@loutrejs/runtime-node`             | `@loutrejs/node`                            |
-| `@loutrejs/queue-bullmq`             | `@loutrejs/bullmq`                          |
-| `@loutrejs/cli`                      | `@loutrejs/cli`                             |
+| before                               | after                                         |
+| ------------------------------------ | --------------------------------------------- |
+| `@loutrejs/core`                     | `@loutrejs/loutre`                            |
+| `@loutrejs/application`              | `@loutrejs/loutre`                            |
+| `@loutrejs/application/host`         | `@loutrejs/loutre/host`                       |
+| `@loutrejs/application/binding`      | `@loutrejs/loutre/binding`                    |
+| `@loutrejs/application/openapi`      | `@loutrejs/loutre/openapi`                    |
+| `@loutrejs/graph`                    | `@loutrejs/loutre/graph`                      |
+| `@loutrejs/runtime`                  | `@loutrejs/loutre/runtime`                    |
+| `@loutrejs/http`                     | `@loutrejs/loutre/http`                       |
+| `@loutrejs/message-port`             | `@loutrejs/loutre/message-port`               |
+| `@loutrejs/message-port/environment` | `@loutrejs/loutre/message-port/environment`   |
+| `@loutrejs/runtime-bun`              | `@loutrejs/loutre/runtime/bun`                |
+| `@loutrejs/runtime-deno`             | `@loutrejs/loutre/runtime/deno`               |
+| `@loutrejs/runtime-workerd`          | `@loutrejs/loutre/runtime/cloudflare-workers` |
+| `@loutrejs/runtime-lambda`           | `@loutrejs/loutre/runtime/aws-lambda`         |
+| `@loutrejs/runtime-electron`         | `@loutrejs/loutre/runtime/electron`           |
+| `@loutrejs/runtime-node`             | `@loutrejs/node`                              |
+| `@loutrejs/queue-bullmq`             | `@loutrejs/bullmq`                            |
+| `@loutrejs/cli`                      | `@loutrejs/cli`                               |
 
 ## Compatibility policy
 

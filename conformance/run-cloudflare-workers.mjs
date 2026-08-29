@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { build } from 'esbuild'
 
-const directory = await mkdtemp(join(tmpdir(), 'loutre-workerd-'))
+const directory = await mkdtemp(join(tmpdir(), 'loutre-cloudflare-workers-'))
 const worker = join(directory, 'worker.js')
 const config = join(directory, 'config.capnp')
 await build({
-  entryPoints: [resolve('conformance/workerd-entry.ts')],
+  entryPoints: [resolve('conformance/cloudflare-workers-entry.ts')],
   outfile: worker,
   bundle: true,
   format: 'esm',
@@ -42,24 +42,31 @@ try {
   let response
   for (let attempt = 0; attempt < 50; attempt += 1) {
     try {
-      response = await fetch('http://127.0.0.1:18787/users/workerd-user')
+      response = await fetch(
+        'http://127.0.0.1:18787/users/cloudflare-workers-user',
+      )
       break
     } catch {
       await new Promise((resolveWait) => setTimeout(resolveWait, 20))
     }
   }
-  if (!response) throw new Error(`workerdを起動できませんでした: ${stderr}`)
-  const body = await response.json()
-  if (response.status !== 200 || body.id !== 'workerd-user') {
+  if (!response)
     throw new Error(
-      `workerd conformanceに失敗しました: ${JSON.stringify(body)}`,
+      `Cloudflare Workersのworkerd engineを起動できませんでした: ${stderr}`,
+    )
+  const body = await response.json()
+  if (response.status !== 200 || body.id !== 'cloudflare-workers-user') {
+    throw new Error(
+      `Cloudflare Workers conformanceに失敗しました: ${JSON.stringify(body)}`,
     )
   }
   const streamed = await fetch('http://127.0.0.1:18787/events')
   if (!(await streamed.text()).includes('"sequence":3')) {
-    throw new Error('workerd server-stream conformanceに失敗しました')
+    throw new Error(
+      'Cloudflare Workers server-stream conformanceに失敗しました',
+    )
   }
-  console.log('workerd 2026-08-24 conformance: 成功')
+  console.log('Cloudflare Workers (workerd 2026-08-24) conformance: 成功')
 } finally {
   await terminateChild(child)
 }

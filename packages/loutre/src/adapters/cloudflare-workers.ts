@@ -17,11 +17,13 @@ type HttpApplication<TDefinition extends ApplicationDefinition> =
       ? TDefinition
       : never
 
-export type WorkerdBindOptions<TDefinition extends ApplicationDefinition> = {
+export type CloudflareWorkersBindOptions<
+  TDefinition extends ApplicationDefinition,
+> = {
   readonly application: HttpApplication<TDefinition>
 } & BootstrapArguments<TDefinition>
 
-export interface WorkerdBinding {
+export interface CloudflareWorkersBinding {
   fetch(
     request: Request,
     environment?: unknown,
@@ -30,8 +32,8 @@ export interface WorkerdBinding {
   close(signal?: string): Promise<void>
 }
 
-export const workerdRuntime = {
-  runtime: 'workerd',
+export const cloudflareWorkersRuntime = {
+  runtime: 'cloudflare-workers',
   compatibilityDateMinimum: '2026-08-04',
   capabilities: new Set([
     'http.server',
@@ -47,8 +49,8 @@ export const workerdRuntime = {
 } as const
 
 function bind<const TDefinition extends ApplicationDefinition>(
-  options: WorkerdBindOptions<TDefinition>,
-): WorkerdBinding {
+  options: CloudflareWorkersBindOptions<TDefinition>,
+): CloudflareWorkersBinding {
   let invocation: InvocationBinding<TDefinition> | undefined
   let fetch: ((request: Request) => Promise<Response>) | undefined
 
@@ -66,10 +68,10 @@ function bind<const TDefinition extends ApplicationDefinition>(
     if (!http) {
       void invocation.application.close()
       throw new Error(
-        'LUTRE_RUNTIME_HTTP_REQUIRED: workerdRuntime.bind() requires an HTTP-capable Application.',
+        'LUTRE_RUNTIME_HTTP_REQUIRED: cloudflareWorkersRuntime.bind() requires an HTTP-capable Application.',
       )
     }
-    fetch = createWorkerdFetchDriver(http)
+    fetch = createCloudflareWorkersFetchDriver(http)
     return { invocation, fetch }
   }
 
@@ -84,7 +86,9 @@ function bind<const TDefinition extends ApplicationDefinition>(
   }
 }
 
-function createWorkerdFetchDriver(application: HttpProtocolExecution) {
+function createCloudflareWorkersFetchDriver(
+  application: HttpProtocolExecution,
+) {
   let initialization: Promise<void> | undefined
   return async (request: Request): Promise<Response> => {
     initialization ??= application.initialize()

@@ -301,7 +301,10 @@ function nextCommand(
   packageManager: PackageManager,
   target: ProjectTarget,
 ): string {
-  return runScriptCommand(packageManager, target === 'lambda' ? 'build' : 'dev')
+  return runScriptCommand(
+    packageManager,
+    target === 'aws-lambda' ? 'build' : 'dev',
+  )
 }
 
 function quoteShellArgument(value: string): string {
@@ -315,7 +318,7 @@ function helpText(): string {
     'Usage: create-loutre [directory] [options]',
     '',
     'Options:',
-    '  --target <target>                    node | bun | deno | workerd | lambda',
+    '  --target <target>                    node | bun | deno | cloudflare-workers | aws-lambda',
     '  --package-manager <package-manager>  npm | pnpm | yarn | bun | deno',
     '  -y, --yes                            未指定の選択肢に既定値を使用する',
     '  --no-install                         依存関係をinstallしない',

@@ -100,10 +100,14 @@ describe('create-loutre', () => {
       entry: 'denoRuntime.serve',
       script: 'deno run -A --watch src/main.ts',
     },
-    { target: 'workerd', entry: 'workerdRuntime.bind', script: 'wrangler dev' },
     {
-      target: 'lambda',
-      entry: 'lambdaRuntime.bind',
+      target: 'cloudflare-workers',
+      entry: 'cloudflareWorkersRuntime.bind',
+      script: 'wrangler dev',
+    },
+    {
+      target: 'aws-lambda',
+      entry: 'awsLambdaRuntime.bind',
       script: 'esbuild src/main.ts',
     },
   ])(
@@ -129,15 +133,15 @@ describe('create-loutre', () => {
         expect(Object.values(manifest.scripts).join('\n')).toContain(script)
         expect(manifest.dependencies['@loutrejs/node']).toBeUndefined()
 
-        if (target === 'workerd') {
+        if (target === 'cloudflare-workers') {
           const wrangler = await readFile(
             join(result.targetDirectory, 'wrangler.jsonc'),
             'utf8',
           )
-          expect(wrangler).toContain('"name": "workerd"')
+          expect(wrangler).toContain('"name": "cloudflare-workers"')
           expect(manifest.scripts.deploy).toBe('wrangler deploy')
         }
-        if (target === 'lambda') {
+        if (target === 'aws-lambda') {
           expect(manifest.devDependencies.esbuild).toBe('^0.28.2')
         }
       } finally {
@@ -191,7 +195,7 @@ describe('create-loutre', () => {
   })
 
   it('対話時にtargetとpackage managerを選べる', async () => {
-    const selected = ['workerd', 'pnpm']
+    const selected = ['cloudflare-workers', 'pnpm']
     const output: string[] = []
     const io = createIO({
       select: async () => selected.shift(),

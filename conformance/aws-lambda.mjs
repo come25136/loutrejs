@@ -1,20 +1,20 @@
-import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'
+import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import usersDefinition from '../dist/conformance/http-crud/application.mjs'
 import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
 
-const unaryHandler = lambdaRuntime.bind({ application: usersDefinition })
+const unaryHandler = awsLambdaRuntime.bind({ application: usersDefinition })
 const unary = await unaryHandler({
-  rawPath: '/users/lambda-user',
+  rawPath: '/users/aws-lambda-user',
   requestContext: { http: { method: 'GET' } },
 })
 const body = JSON.parse(Buffer.from(unary.body, 'base64').toString('utf8'))
-if (unary.statusCode !== 200 || body.id !== 'lambda-user') {
+if (unary.statusCode !== 200 || body.id !== 'aws-lambda-user') {
   throw new Error(
     `Lambda unary conformanceに失敗しました: ${JSON.stringify(body)}`,
   )
 }
 
-const streamingHandler = lambdaRuntime.bind({
+const streamingHandler = awsLambdaRuntime.bind({
   application: eventsDefinition,
   response: 'streaming',
 })

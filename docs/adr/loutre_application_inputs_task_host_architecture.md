@@ -186,7 +186,7 @@ Loutreが同じ抽象を再実装すると、
 
 - CLI parserの再発明
 - Application GraphとCLI syntaxの結合
-- CLIを使わないLambda / workerd / Electron / testsへの不要な概念流入
+- CLIを使わないAWS Lambda / Cloudflare Workers / Electron / testsへの不要な概念流入
 - `Command` と `Task` の二重execution model
 - Standard SchemaとCLI validation DSLの二重管理
 
@@ -348,7 +348,7 @@ REDIS_URL
 AWS_REGION
 S3_BUCKET
 service bindings
-workerd bindings
+Cloudflare Workers bindings
 ```
 
 Environment ContractはModuleが所有する。
@@ -1709,7 +1709,7 @@ const cleanup = task({
 
 # 23. Callback Runtime
 
-Lambda / workerd等でもApplication sourceは変更しない。
+AWS Lambda / Cloudflare Workers等でもApplication sourceは変更しない。
 
 runtime-specific adapter / generated bindingがHostとしてEnvironment / Arguments sourceを供給する。
 

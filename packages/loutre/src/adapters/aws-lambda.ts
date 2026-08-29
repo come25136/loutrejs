@@ -16,23 +16,25 @@ type HttpApplication<TDefinition extends ApplicationDefinition> =
       ? TDefinition
       : never
 
-export type LambdaBindBaseOptions<TDefinition extends ApplicationDefinition> = {
+export type AwsLambdaBindBaseOptions<
+  TDefinition extends ApplicationDefinition,
+> = {
   readonly application: HttpApplication<TDefinition>
   readonly environment?: unknown
 } & BootstrapArguments<TDefinition>
 
-export type LambdaBindOptions<TDefinition extends ApplicationDefinition> =
-  LambdaBindBaseOptions<TDefinition> & {
+export type AwsLambdaBindOptions<TDefinition extends ApplicationDefinition> =
+  AwsLambdaBindBaseOptions<TDefinition> & {
     readonly response?: 'buffered'
   }
 
-export type LambdaStreamingBindOptions<
+export type AwsLambdaStreamingBindOptions<
   TDefinition extends ApplicationDefinition,
-> = LambdaBindBaseOptions<TDefinition> & {
+> = AwsLambdaBindBaseOptions<TDefinition> & {
   readonly response: 'streaming'
 }
 
-export interface LambdaHttpEvent {
+export interface AwsLambdaHttpEvent {
   readonly rawPath?: string
   readonly rawQueryString?: string
   readonly requestContext?: {
@@ -43,7 +45,7 @@ export interface LambdaHttpEvent {
   readonly isBase64Encoded?: boolean
 }
 
-export interface LambdaHttpResult {
+export interface AwsLambdaHttpResult {
   readonly statusCode: number
   readonly headers: Readonly<Record<string, string>>
   readonly cookies?: readonly string[]
@@ -51,11 +53,11 @@ export interface LambdaHttpResult {
   readonly isBase64Encoded: boolean
 }
 
-export type LambdaHttpHandler = (
-  event: LambdaHttpEvent,
-) => Promise<LambdaHttpResult>
+export type AwsLambdaHttpHandler = (
+  event: AwsLambdaHttpEvent,
+) => Promise<AwsLambdaHttpResult>
 
-export interface LambdaResponseStream {
+export interface AwsLambdaResponseStream {
   write(chunk: Uint8Array): boolean
   end(): void
   once?(event: 'drain', listener: () => void): unknown
@@ -66,14 +68,14 @@ export interface LambdaResponseStream {
   }): void
 }
 
-export type LambdaStreamingHttpHandler = (
-  event: LambdaHttpEvent,
-  output: LambdaResponseStream,
+export type AwsLambdaStreamingHttpHandler = (
+  event: AwsLambdaHttpEvent,
+  output: AwsLambdaResponseStream,
   context?: unknown,
 ) => Promise<void>
 
-export const lambdaRuntime = {
-  runtime: 'lambda',
+export const awsLambdaRuntime = {
+  runtime: 'aws-lambda',
   capabilities: new Set([
     'http.server',
     'http.response.streaming',
@@ -86,16 +88,16 @@ export const lambdaRuntime = {
 } as const
 
 function bind<const TDefinition extends ApplicationDefinition>(
-  options: LambdaStreamingBindOptions<TDefinition>,
-): LambdaStreamingHttpHandler
+  options: AwsLambdaStreamingBindOptions<TDefinition>,
+): AwsLambdaStreamingHttpHandler
 function bind<const TDefinition extends ApplicationDefinition>(
-  options: LambdaBindOptions<TDefinition>,
-): LambdaHttpHandler
+  options: AwsLambdaBindOptions<TDefinition>,
+): AwsLambdaHttpHandler
 function bind<const TDefinition extends ApplicationDefinition>(
   options:
-    | LambdaBindOptions<TDefinition>
-    | LambdaStreamingBindOptions<TDefinition>,
-): LambdaHttpHandler | LambdaStreamingHttpHandler {
+    | AwsLambdaBindOptions<TDefinition>
+    | AwsLambdaStreamingBindOptions<TDefinition>,
+): AwsLambdaHttpHandler | AwsLambdaStreamingHttpHandler {
   const invocation = binding.invocation({
     application: options.application,
     environment: 'environment' in options ? options.environment : process.env,
@@ -108,21 +110,21 @@ function bind<const TDefinition extends ApplicationDefinition>(
   if (!http) {
     void invocation.application.close()
     throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: lambdaRuntime.bind() requires an HTTP-capable Application.',
+      'LUTRE_RUNTIME_HTTP_REQUIRED: awsLambdaRuntime.bind() requires an HTTP-capable Application.',
     )
   }
 
   if (options.response === 'streaming') {
-    const handler = createLambdaStreamingHttpDriver(http)
+    const handler = createAwsLambdaStreamingHttpDriver(http)
     const aws = awsLambdaGlobal()
     return aws?.streamifyResponse ? aws.streamifyResponse(handler) : handler
   }
-  return createLambdaHttpDriver(http)
+  return createAwsLambdaHttpDriver(http)
 }
 
-function createLambdaHttpDriver(
+function createAwsLambdaHttpDriver(
   application: HttpProtocolExecution,
-): LambdaHttpHandler {
+): AwsLambdaHttpHandler {
   let initialization: Promise<void> | undefined
   return async (event) => {
     initialization ??= application.initialize()
@@ -138,9 +140,9 @@ function createLambdaHttpDriver(
   }
 }
 
-function createLambdaStreamingHttpDriver(
+function createAwsLambdaStreamingHttpDriver(
   application: HttpProtocolExecution,
-): LambdaStreamingHttpHandler {
+): AwsLambdaStreamingHttpHandler {
   let initialization: Promise<void> | undefined
   return async (event, output) => {
     initialization ??= application.initialize()
@@ -182,7 +184,7 @@ function createLambdaStreamingHttpDriver(
 
 function responseMetadata(
   response: Response,
-): Pick<LambdaHttpResult, 'headers' | 'cookies'> {
+): Pick<AwsLambdaHttpResult, 'headers' | 'cookies'> {
   const headers = Object.fromEntries(
     [...response.headers.entries()].filter(([name]) => name !== 'set-cookie'),
   )
@@ -193,7 +195,7 @@ function responseMetadata(
   }
 }
 
-function toRequest(event: LambdaHttpEvent): Request {
+function toRequest(event: AwsLambdaHttpEvent): Request {
   const path = event.rawPath ?? '/'
   const query = event.rawQueryString ? `?${event.rawQueryString}` : ''
   const body = event.body
@@ -201,7 +203,7 @@ function toRequest(event: LambdaHttpEvent): Request {
       ? Buffer.from(event.body, 'base64')
       : event.body
     : undefined
-  return new Request(`https://lambda.local${path}${query}`, {
+  return new Request(`https://aws-lambda.local${path}${query}`, {
     method: event.requestContext?.http?.method ?? 'GET',
     headers: Object.fromEntries(
       Object.entries(event.headers ?? {}).filter(
@@ -214,17 +216,17 @@ function toRequest(event: LambdaHttpEvent): Request {
 
 interface AwsLambdaGlobal {
   streamifyResponse(
-    handler: LambdaStreamingHttpHandler,
-  ): LambdaStreamingHttpHandler
+    handler: AwsLambdaStreamingHttpHandler,
+  ): AwsLambdaStreamingHttpHandler
   readonly HttpResponseStream?: {
     from(
-      output: LambdaResponseStream,
+      output: AwsLambdaResponseStream,
       metadata: {
         readonly statusCode: number
         readonly headers: Readonly<Record<string, string>>
         readonly multiValueHeaders?: Readonly<Record<string, readonly string[]>>
       },
-    ): LambdaResponseStream
+    ): AwsLambdaResponseStream
   }
 }
 

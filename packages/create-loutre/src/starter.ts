@@ -69,7 +69,7 @@ export async function writeStarter(
     verifyCommand: runScriptCommand(options.packageManager, 'verify'),
     deploymentSection: deploymentSection(options),
   })
-  if (options.target === 'workerd') {
+  if (options.target === 'cloudflare-workers') {
     await renderTextTemplate(join(targetDirectory, 'wrangler.jsonc'), {
       packageName: workerNameFor(options.packageName),
       compatibilityDate: new Date().toISOString().slice(0, 10),
@@ -119,7 +119,7 @@ function targetManifest(target: ProjectTarget): TargetManifest {
         typecheck: 'tsc --noEmit --allowImportingTsExtensions',
         types: [],
       }
-    case 'workerd':
+    case 'cloudflare-workers':
       return {
         scripts: {
           dev: 'wrangler dev',
@@ -129,7 +129,7 @@ function targetManifest(target: ProjectTarget): TargetManifest {
         devDependencies: { wrangler: '^4.127.1' },
         types: [],
       }
-    case 'lambda':
+    case 'aws-lambda':
       return {
         scripts: {
           build:
@@ -186,7 +186,7 @@ function renderPackageJson(options: StarterOptions): string {
 }
 
 function developmentSection(options: StarterOptions): string {
-  if (options.target === 'lambda') {
+  if (options.target === 'aws-lambda') {
     return [
       '## 開発',
       '',
@@ -204,14 +204,14 @@ function developmentSection(options: StarterOptions): string {
     runScriptCommand(options.packageManager, 'dev'),
     '```',
     '',
-    options.target === 'workerd'
-      ? 'Wranglerがlocalのworkerd環境を起動します。'
+    options.target === 'cloudflare-workers'
+      ? 'WranglerがlocalのCloudflare Workers環境を起動します。'
       : '<http://127.0.0.1:3000> へアクセスするとJSONレスポンスを返します。',
   ].join('\n')
 }
 
 function deploymentSection(options: StarterOptions): string {
-  if (options.target === 'workerd') {
+  if (options.target === 'cloudflare-workers') {
     return [
       '## Deploy',
       '',
@@ -220,7 +220,7 @@ function deploymentSection(options: StarterOptions): string {
       '```',
     ].join('\n')
   }
-  if (options.target === 'lambda') {
+  if (options.target === 'aws-lambda') {
     return [
       '## Build',
       '',

@@ -14,8 +14,8 @@ import {
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
-import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'
-import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'
+import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
+import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
 import { emitApplication, loadApplicationGraph } from './application-loader.js'
 
 export {
@@ -37,12 +37,12 @@ const runtimes: Readonly<Record<string, RuntimeCapabilities>> = {
   node: nodeRuntimeCapabilities,
   deno: denoRuntime,
   bun: bunRuntime,
-  workerd: workerdRuntime,
+  'cloudflare-workers': cloudflareWorkersRuntime,
   electron: electronRuntime,
-  lambda: lambdaRuntime,
+  'aws-lambda': awsLambdaRuntime,
 }
 
-const deploymentRuntimes = ['lambda', 'workerd', 'deno'] as const
+const deploymentRuntimes = ['aws-lambda', 'cloudflare-workers', 'deno'] as const
 type DeploymentRuntime = (typeof deploymentRuntimes)[number]
 
 export async function runCli(
@@ -210,20 +210,20 @@ function hasHttpExecution(graph: ApplicationGraphIR): boolean {
 
 function renderDeploymentEntry(runtime: DeploymentRuntime): string {
   switch (runtime) {
-    case 'lambda':
+    case 'aws-lambda':
       return [
         "import application from './application.mjs'",
-        "import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'",
+        "import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'",
         '',
-        'export const handler = lambdaRuntime.bind({ application })',
+        'export const handler = awsLambdaRuntime.bind({ application })',
         '',
       ].join('\n')
-    case 'workerd':
+    case 'cloudflare-workers':
       return [
         "import application from './application.mjs'",
-        "import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'",
+        "import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'",
         '',
-        'export default workerdRuntime.bind({ application })',
+        'export default cloudflareWorkersRuntime.bind({ application })',
         '',
       ].join('\n')
     case 'deno':
@@ -599,10 +599,10 @@ function helpText(): string {
   return [
     'Loutre CLI',
     '  loutre check --entry <明示entry>',
-    '  loutre doctor [node|deno|bun|workerd|electron|lambda] --entry <明示entry>',
+    '  loutre doctor [node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <明示entry>',
     '  loutre graph modules|di|contracts|executions|runtime --entry <明示entry> [--format text|json|mermaid]',
     '  loutre explain <target> --entry <明示entry>',
-    '  loutre build <明示entry> [--runtime lambda|workerd|deno] [--out-dir <directory>]',
+    '  loutre build <明示entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',
     '',
     'Applicationの実行方法はHostが所有します。run/dev/startはLoutre CLIにはありません。',
   ].join('\n')

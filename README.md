@@ -43,7 +43,7 @@ Application Definition
  Types Runtime Tooling
 ```
 
-Application sourceはHostから分離されます。同じDefinitionをNode.jsのHTTP server、Bun、Deno、workerd、AWS Lambda、Electronなどへ接続できます。
+Application sourceはHostから分離されます。同じDefinitionをNode.jsのHTTP server、Bun、Deno、Cloudflare Workers、AWS Lambda、Electronなどへ接続できます。
 
 ## 特徴
 
@@ -81,7 +81,7 @@ deno x -A npm:create-loutre@latest my-app
 非対話ではoptionで明示できます。
 
 ```sh
-npm create loutre@latest my-app -- --target workerd --package-manager pnpm
+npm create loutre@latest my-app -- --target cloudflare-workers --package-manager pnpm
 ```
 
 依存関係のinstallを後回しにする場合は`--no-install`を指定します。`--yes`ではTargetにNode.js、package managerにinitializerを起動したpackage managerを使用します。
@@ -266,14 +266,14 @@ Triggerからだけ参照されるTaskは自動execution専用で、public `app.
 
 CIでは次のruntimeを継続的にconformance testしています。
 
-| Runtime    | CI baseline                      |
-| ---------- | -------------------------------- |
-| Node.js    | 22.x / 24.x / 26.x               |
-| Deno       | 2.9 LTS                          |
-| Bun        | 1.3 / 1.4                        |
-| workerd    | lockfile version                 |
-| Electron   | 42 / 43 / 44                     |
-| AWS Lambda | Node.js 22 / 24相当のconformance |
+| Runtime            | CI baseline                      |
+| ------------------ | -------------------------------- |
+| Node.js            | 22.x / 24.x / 26.x               |
+| Deno               | 2.9 LTS                          |
+| Bun                | 1.3 / 1.4                        |
+| Cloudflare Workers | workerd lockfile version         |
+| Electron           | 42 / 43 / 44                     |
+| AWS Lambda         | Node.js 22 / 24相当のconformance |
 
 Runtimeごとの接続APIは用途に合わせて分かれます。
 
@@ -281,8 +281,8 @@ Runtimeごとの接続APIは用途に合わせて分かれます。
 Node.js      nodeRuntime.serve()
 Bun          bunRuntime.serve()
 Deno         denoRuntime.bind() / serve()
-workerd      workerdRuntime.bind()
-AWS Lambda   lambdaRuntime.bind()
+Cloudflare Workers  cloudflareWorkersRuntime.bind()
+AWS Lambda   awsLambdaRuntime.bind()
 Electron     electronRuntime.attach()
 ```
 
@@ -302,10 +302,10 @@ node packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir di
 node packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts
 ```
 
-`build --runtime`は現時点で`lambda`、`workerd`、`deno`のdeployment entry生成に対応します。
+`build --runtime`は現時点で`aws-lambda`、`cloudflare-workers`、`deno`のdeployment entry生成に対応します。
 
 ```sh
-node packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --runtime lambda
+node packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --runtime aws-lambda
 ```
 
 `loutre run` / `loutre dev` / `loutre start`は提供しません。
@@ -350,7 +350,7 @@ npm run build
 npm run test:conformance
 ```
 
-CIはNode.js 22 / 24 / 26のunit・E2E testと、Deno / Bun / workerd / Electron / AWS Lambdaのruntime conformanceを並列実行します。
+CIはNode.js 22 / 24 / 26のunit・E2E testと、Deno / Bun / Cloudflare Workers / Electron / AWS Lambdaのruntime conformanceを並列実行します。
 
 ## License
 

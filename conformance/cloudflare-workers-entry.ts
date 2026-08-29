@@ -1,9 +1,9 @@
-import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'
+import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
 import usersDefinition from '../dist/conformance/http-crud/application.mjs'
 import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
 
-const users = workerdRuntime.bind({ application: usersDefinition })
-const events = workerdRuntime.bind({ application: eventsDefinition })
+const users = cloudflareWorkersRuntime.bind({ application: usersDefinition })
+const events = cloudflareWorkersRuntime.bind({ application: eventsDefinition })
 
 export default {
   async fetch(request: Request, environment?: unknown, context?: unknown) {

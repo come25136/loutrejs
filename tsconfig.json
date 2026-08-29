@@ -37,11 +37,11 @@
       "@loutrejs/loutre/runtime/deno": [
         "./packages/loutre/src/adapters/deno.ts"
       ],
-      "@loutrejs/loutre/runtime/workerd": [
-        "./packages/loutre/src/adapters/workerd.ts"
+      "@loutrejs/loutre/runtime/cloudflare-workers": [
+        "./packages/loutre/src/adapters/cloudflare-workers.ts"
       ],
-      "@loutrejs/loutre/runtime/lambda": [
-        "./packages/loutre/src/adapters/lambda.ts"
+      "@loutrejs/loutre/runtime/aws-lambda": [
+        "./packages/loutre/src/adapters/aws-lambda.ts"
       ],
       "@loutrejs/loutre/runtime/electron": [
         "./packages/loutre/src/adapters/electron.ts"

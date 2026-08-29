@@ -353,14 +353,14 @@ if (env.driver === 's3') {
 Node      → process.env
 Bun       → runtime environment
 Deno      → Deno.env
-workerd   → fetch(request, env, ctx) の env bindings
+Cloudflare Workers → fetch(request, env, ctx) の env bindings
 Lambda    → Node process environment
 Electron  → main process environment
 ```
 
 Application code は runtime-specific API を参照しない。
 
-workerd binding object には KV / D1 / Service Binding 等も存在し得るため、raw source を `Record<string, string>` に狭めない。Standard Schema へ `unknown` として渡す。
+Cloudflare Workers binding object には KV / D1 / Service Binding 等も存在し得るため、raw source を `Record<string, string>` に狭めない。Standard Schema へ `unknown` として渡す。
 
 Test / embedding では runtime adapter の Environment override を利用できる。
 
@@ -449,7 +449,7 @@ Prisma CLI が直接実行する `prisma.config.ts` は Loutre Application runti
 - [x] Graph Probe の Environment access は正常な Probe Boundary になる
 - [x] nested Probe Boundary 後も親の後続 default-parameter dependency を収集できる
 - [x] DB examples に framework都合の `Pool | undefined` / `Client | undefined` を残さない
-- [x] Node / Bun / Deno / workerd / Lambda / Electron conformance を維持する
+- [x] Node / Bun / Deno / Cloudflare Workers / AWS Lambda / Electron conformance を維持する
 
 ---
 

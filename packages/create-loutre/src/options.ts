@@ -2,8 +2,8 @@ export const projectTargets = [
   'node',
   'bun',
   'deno',
-  'workerd',
-  'lambda',
+  'cloudflare-workers',
+  'aws-lambda',
 ] as const
 
 export type ProjectTarget = (typeof projectTargets)[number]
@@ -16,8 +16,8 @@ export const targetLabels: Readonly<Record<ProjectTarget, string>> = {
   node: 'Node.js',
   bun: 'Bun',
   deno: 'Deno',
-  workerd: 'Cloudflare Workers',
-  lambda: 'AWS Lambda',
+  'cloudflare-workers': 'Cloudflare Workers',
+  'aws-lambda': 'AWS Lambda',
 }
 
 export const packageManagerLabels: Readonly<Record<PackageManager, string>> = {

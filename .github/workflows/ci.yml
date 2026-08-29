@@ -141,9 +141,9 @@ jobs:
             bun_version: 1.4.0
             cli_runner: bun
             command: npm run build:conformance-apps && bun --version && bun run conformance/bun.ts
-          - name: workerd (lockfile)
+          - name: Cloudflare Workers (workerd lockfile)
             node: 24.x
-            command: npm run test:workerd
+            command: npm run test:cloudflare-workers
           - name: Electron 42
             node: 24.x
             electron: true
@@ -161,10 +161,10 @@ jobs:
             command: LOUTRE_ELECTRON_NO_SANDBOX=1 xvfb-run --auto-servernum npm run test:electron
           - name: AWS Lambda Node.js 22
             node: 22.x
-            command: npm run test:lambda
+            command: npm run test:aws-lambda
           - name: AWS Lambda Node.js 24
             node: 24.x
-            command: npm run test:lambda
+            command: npm run test:aws-lambda
     steps:
       - name: Checkout
         uses: actions/checkout@v6
