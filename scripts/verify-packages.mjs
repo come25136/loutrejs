@@ -22,6 +22,7 @@ for (const directory of await readdir(packagesDirectory)) {
   const required = new Set(['package.json'])
   if (manifest.types) required.add(normalizeTarget(manifest.types))
   collectExportTargets(manifest.exports, required)
+  validateBinTargets(manifest.name, manifest.bin)
   collectBinTargets(manifest.bin, required)
   for (const path of required) {
     if (!files.has(path)) failures.push(`${manifest.name}: ${path}がありません`)
@@ -41,6 +42,22 @@ if (failures.length > 0) {
   throw new Error(`package検証に失敗しました\n${failures.join('\n')}`)
 }
 console.log('全公開packageのtarball検証: 成功')
+
+function validateBinTargets(packageName, value) {
+  const targets =
+    typeof value === 'string'
+      ? [value]
+      : value && typeof value === 'object'
+        ? Object.values(value)
+        : []
+  for (const target of targets) {
+    if (typeof target === 'string' && target.startsWith('./')) {
+      failures.push(
+        `${packageName}: bin path ${target} は ./ なしで指定してください`,
+      )
+    }
+  }
+}
 
 function collectBinTargets(value, targets) {
   if (typeof value === 'string') {

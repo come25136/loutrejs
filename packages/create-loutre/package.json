@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "create-loutre": "./bin/create-loutre.js"
+    "create-loutre": "bin/create-loutre.js"
   },
   "files": [
     "bin",
