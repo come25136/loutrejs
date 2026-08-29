@@ -358,6 +358,12 @@ create-loutre が生成する Host は presentation を一切知らない。
 
 `SIGINT` / `SIGTERM` の購読と `close(signal)` への伝播も Runtime Adapter が所有する。generated Host はruntimeごとのshutdown APIを知らない。
 
+shutdown hook はstandalone serverの標準動作としてデフォルトで有効にする。同一processで複数Applicationを起動し、signal listener数を呼び出し側で管理する場合は`shutdownHooks: false`で無効化できる。
+
+```ts
+await nodeRuntime.serve({ application, shutdownHooks: false })
+```
+
 ### Node
 
 ```ts

@@ -92,6 +92,21 @@ describe('runtime listen failure', () => {
     }
   })
 
+  it('NodeはshutdownHooksをfalseにするとsignal listenerを登録しない', async () => {
+    const signalListeners = currentProcessSignalListenerCounts()
+    const runtime = await nodeRuntime.serve({
+      application: usersDefinition(),
+      hostname: '127.0.0.1',
+      shutdownHooks: false,
+    })
+
+    try {
+      expectProcessSignalListeners(signalListeners, 0)
+    } finally {
+      await runtime.close('test-complete')
+    }
+  })
+
   it('Bunは明示portのlisten失敗を再試行せずserve()からrejectする', async () => {
     const ports: number[] = []
     vi.stubGlobal('Bun', {
@@ -153,6 +168,27 @@ describe('runtime listen failure', () => {
     } finally {
       await runtime?.close('test-complete')
       vi.unstubAllGlobals()
+    }
+  })
+
+  it('BunはshutdownHooksをfalseにするとsignal listenerを登録しない', async () => {
+    const signalListeners = currentProcessSignalListenerCounts()
+    vi.stubGlobal('Bun', {
+      env: { NODE_ENV: 'test' },
+      version: '1.2.3',
+      serve: () => ({ stop: () => undefined }),
+    })
+
+    const runtime = await bunRuntime.serve({
+      application: usersDefinition(),
+      hostname: '127.0.0.1',
+      shutdownHooks: false,
+    })
+
+    try {
+      expectProcessSignalListeners(signalListeners, 0)
+    } finally {
+      await runtime.close('test-complete')
     }
   })
 
@@ -228,6 +264,31 @@ describe('runtime listen failure', () => {
     } finally {
       await runtime?.close('test-complete')
       vi.unstubAllGlobals()
+    }
+  })
+
+  it('DenoはshutdownHooksをfalseにするとsignal listenerを登録しない', async () => {
+    const addSignalListener = vi.fn()
+    const removeSignalListener = vi.fn()
+    vi.stubGlobal('Deno', {
+      env: { get: () => undefined, toObject: () => ({}) },
+      version: { deno: '2.5.0' },
+      addSignalListener,
+      removeSignalListener,
+      serve: () => ({ shutdown: async () => undefined }),
+    })
+
+    const runtime = await denoRuntime.serve({
+      application: usersDefinition(),
+      hostname: '127.0.0.1',
+      shutdownHooks: false,
+    })
+
+    try {
+      expect(addSignalListener).not.toHaveBeenCalled()
+      expect(removeSignalListener).not.toHaveBeenCalled()
+    } finally {
+      await runtime.close('test-complete')
     }
   })
 })

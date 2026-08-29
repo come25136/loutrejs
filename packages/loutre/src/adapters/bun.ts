@@ -27,6 +27,7 @@ export type BunServeOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
   readonly port?: number
   readonly hostname?: string
+  readonly shutdownHooks?: boolean
   readonly environment?: unknown
 } & BootstrapArguments<TDefinition>
 
@@ -136,9 +137,11 @@ async function serve<const TDefinition extends ApplicationDefinition>(
         throw new AggregateError(errors, 'Bun runtime shutdown failed')
     },
   }
-  removeShutdownHooks = registerBunShutdownHooks((signal) =>
-    handle.close(signal),
-  )
+  if (options.shutdownHooks !== false) {
+    removeShutdownHooks = registerBunShutdownHooks((signal) =>
+      handle.close(signal),
+    )
+  }
   return handle
 }
 

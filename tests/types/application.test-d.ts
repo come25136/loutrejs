@@ -89,6 +89,9 @@ nodeRuntime.serve({ application: httpDefinition, port: 3000 })
 nodeRuntime
   .serve({ application: httpDefinition })
   .then((runtime) => runtime.port)
+nodeRuntime.serve({ application: httpDefinition, shutdownHooks: false })
+bunRuntime.serve({ application: httpDefinition, shutdownHooks: false })
+denoRuntime.serve({ application: httpDefinition, shutdownHooks: false })
 nodeRuntime.serve({
   application: httpDefinition,
   // @ts-expect-error startup presentationはFrameworkが所有し、customizeできない
