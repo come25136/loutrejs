@@ -24,6 +24,10 @@
       "types": "./dist/application/openapi.d.ts",
       "import": "./dist/application/openapi.js"
     },
+    "./presentation": {
+      "types": "./dist/presentation.d.ts",
+      "import": "./dist/presentation.js"
+    },
     "./graph": {
       "types": "./dist/graph/index.d.ts",
       "import": "./dist/graph/index.js"

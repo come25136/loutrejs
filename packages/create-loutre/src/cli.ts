@@ -3,6 +3,11 @@ import { relative } from 'node:path'
 import { isCancel, select, text } from '@clack/prompts'
 import { Command, CommanderError, Option } from 'commander'
 import { bootstrap } from '@loutrejs/loutre/host'
+import {
+  detectStartupBannerTerminal,
+  renderLoutreBrand,
+  type StartupBannerRenderOptions,
+} from '@loutrejs/loutre/presentation'
 import application, { createProject } from './app.js'
 import {
   installCommand,
@@ -23,6 +28,7 @@ interface SelectOption {
 export interface CreateLoutreCliIO {
   readonly cwd: string
   readonly detectedPackageManager?: PackageManager
+  readonly terminal?: StartupBannerRenderOptions
   readonly prompt?: (
     message: string,
     initialValue: string,
@@ -54,6 +60,10 @@ export async function runCreateLoutre(
     io.stdout(helpText())
     return 0
   }
+
+  io.stdout(
+    renderLoutreBrand(io.terminal ?? { isTTY: false, color: false }),
+  )
 
   const directory = await resolveDirectory(parsed.directory, parsed.yes, io)
   if (!directory) return 2
@@ -230,6 +240,7 @@ function createProcessIO(): CreateLoutreCliIO {
       process.env.npm_config_user_agent,
       globalThis,
     ),
+    terminal: detectStartupBannerTerminal(process.stdout, process.env),
     ...(interactive ? { prompt: terminalPrompt, select: terminalSelect } : {}),
     install: installDependencies,
     stdout: (value) => process.stdout.write(`${value}\n`),
