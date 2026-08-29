@@ -141,7 +141,7 @@ jobs:
             bun_version: 1.4.0
             cli_runner: bun
             command: npm run build:conformance-apps && bun --version && bun run conformance/bun.ts
-          - name: Cloudflare Workers (workerd lockfile)
+          - name: Cloudflare Workers
             node: 24.x
             command: npm run test:cloudflare-workers
           - name: Electron 42
