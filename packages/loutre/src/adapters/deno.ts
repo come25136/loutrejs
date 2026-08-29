@@ -28,6 +28,7 @@ export type DenoServeOptions<TDefinition extends ApplicationDefinition> =
   DenoRuntimeOptions<TDefinition> & {
     readonly port?: number
     readonly hostname?: string
+    readonly shutdownHooks?: boolean
   }
 
 export interface DenoBinding {
@@ -178,9 +179,11 @@ async function serve<const TDefinition extends ApplicationDefinition>(
         throw new AggregateError(errors, 'Deno runtime shutdown failed')
     },
   }
-  removeShutdownHooks = registerDenoShutdownHooks(deno, (signal) =>
-    handle.close(signal),
-  )
+  if (options.shutdownHooks !== false) {
+    removeShutdownHooks = registerDenoShutdownHooks(deno, (signal) =>
+      handle.close(signal),
+    )
+  }
   return handle
 }
 

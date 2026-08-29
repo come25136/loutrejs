@@ -30,6 +30,7 @@ export type NodeServeOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
   readonly port?: number
   readonly hostname?: string
+  readonly shutdownHooks?: boolean
   readonly environment?: unknown
 } & BootstrapArguments<TDefinition>
 
@@ -123,9 +124,11 @@ async function serve<const TDefinition extends ApplicationDefinition>(
         throw new AggregateError(errors, 'Node runtime shutdown failed')
     },
   }
-  removeShutdownHooks = registerNodeShutdownHooks((signal) =>
-    handle.close(signal),
-  )
+  if (options.shutdownHooks !== false) {
+    removeShutdownHooks = registerNodeShutdownHooks((signal) =>
+      handle.close(signal),
+    )
+  }
   return handle
 }
 
