@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup Deno ${{ inputs.deno-version }}
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: ${{ inputs.deno-version }}
 
@@ -24,7 +24,7 @@ jobs:
         run: test "$(deno eval 'console.log(Deno.version.deno)')" = "${{ inputs.deno-version }}"
 
       - name: Download package tarballs
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: loutre-package-tarballs
           path: ${{ runner.temp }}/loutre-package-tarballs

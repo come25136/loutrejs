@@ -1,0 +1,153 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  select-mode:
+    name: Select release mode
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.changesets.outputs.mode }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Verify release artifacts
+        run: npm run release:check
+
+      - name: Select Changesets mode
+        id: changesets
+        uses: changesets/action/select-mode@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+
+  version:
+    name: Update release PR
+    if: needs.select-mode.outputs.mode == 'version'
+    needs: select-mode
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Create or update release PR
+        uses: changesets/action/version@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+        with:
+          github-token: ${{ github.token }}
+          script: npm run release:version && npm run release:check
+          commit-message: 'chore(release): version packages'
+          pr-title: 'chore(release): version packages'
+          pr-base-branch: main
+
+  publish:
+    name: Publish npm packages
+    if: needs.select-mode.outputs.mode == 'publish'
+    needs: select-mode
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Configure bootstrap npm token
+        if: env.NPM_TOKEN != ''
+        run: npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+
+      - name: Publish packages
+        run: npm run release:publish
+
+  finalize:
+    name: Finalize GitHub release
+    if: >-
+      always() &&
+      needs.select-mode.result == 'success' &&
+      needs.select-mode.outputs.mode != 'version' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    needs: [select-mode, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release version
+        id: release
+        shell: bash
+        run: echo "version=$(node -p \"require('./packages/loutre/package.json').version\")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify npm release
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          packages=(
+            '@loutrejs/loutre'
+            '@loutrejs/node'
+            '@loutrejs/bullmq'
+            '@loutrejs/cli'
+            'create-loutre'
+          )
+          for package in "${packages[@]}"; do
+            published="$(npm view "${package}@${VERSION}" version)"
+            test "$published" = "$VERSION"
+          done
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          tag="v${VERSION}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            exit 0
+          fi
+          if git rev-parse "refs/tags/${tag}" >/dev/null 2>&1; then
+            tagged_sha="$(git rev-list -n 1 "$tag")"
+            test "$tagged_sha" = "$GITHUB_SHA"
+          else
+            git tag "$tag" "$GITHUB_SHA"
+            git push origin "$tag"
+          fi
+          gh release create "$tag" --target "$GITHUB_SHA" --title "Loutre ${tag}" --generate-notes
