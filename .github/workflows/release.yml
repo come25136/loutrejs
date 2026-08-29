@@ -74,8 +74,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -87,10 +85,6 @@ jobs:
         with:
           node-version: 24.x
 
-      - name: Configure bootstrap npm token
-        if: env.NPM_TOKEN != ''
-        run: npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-
       - name: Publish packages
         run: npm run release:publish
 
@@ -99,8 +93,8 @@ jobs:
     if: >-
       always() &&
       needs.select-mode.result == 'success' &&
-      needs.select-mode.outputs.mode != 'version' &&
-      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+      needs.select-mode.outputs.mode == 'publish' &&
+      needs.publish.result == 'success'
     needs: [select-mode, publish]
     runs-on: ubuntu-latest
     permissions:
@@ -111,7 +105,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve published release
+      - name: Resolve release version
         id: release
         shell: bash
         run: |
@@ -123,27 +117,16 @@ jobs:
             '@loutrejs/cli'
             'create-loutre'
           )
-          release_sha=''
           for package in "${packages[@]}"; do
             published="$(npm view "${package}@${version}" version)"
-            git_head="$(npm view "${package}@${version}" gitHead)"
             test "$published" = "$version"
-            test -n "$git_head"
-            if [ -z "$release_sha" ]; then
-              release_sha="$git_head"
-            else
-              test "$git_head" = "$release_sha"
-            fi
           done
-          git cat-file -e "${release_sha}^{commit}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "release-sha=$release_sha" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.release.outputs.version }}
-          RELEASE_SHA: ${{ steps.release.outputs.release-sha }}
         shell: bash
         run: |
           tag="v${VERSION}"
@@ -152,9 +135,9 @@ jobs:
           fi
           if git rev-parse "refs/tags/${tag}" >/dev/null 2>&1; then
             tagged_sha="$(git rev-list -n 1 "$tag")"
-            test "$tagged_sha" = "$RELEASE_SHA"
+            test "$tagged_sha" = "$GITHUB_SHA"
           else
-            git tag "$tag" "$RELEASE_SHA"
+            git tag "$tag" "$GITHUB_SHA"
             git push origin "$tag"
           fi
-          gh release create "$tag" --target "$RELEASE_SHA" --title "Loutre ${tag}" --generate-notes
+          gh release create "$tag" --target "$GITHUB_SHA" --title "Loutre ${tag}" --generate-notes

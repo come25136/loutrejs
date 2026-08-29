@@ -14,14 +14,13 @@ LoutreはChangesetsでreleaseを管理します。
 
 ## npm認証
 
-通常releaseはnpm Trusted Publishingを使用します。npm側で各packageのTrusted Publisherを次のGitHub Actions workflowへ設定します。
+releaseはnpm Trusted Publishingのみを使用します。npm側で各packageのTrusted Publisherを次のGitHub Actions workflowへ設定します。
 
 - Repository: `come25136/loutrejs`
 - Workflow: `release.yml`
+- Allowed action: `npm publish`
 
-初回publish前はpackageがnpm上に存在せずTrusted Publisherを設定できないため、repository secret `NPM_TOKEN`を一時的に使用できます。初回publish後に5 packageすべてへTrusted Publisherを設定し、`NPM_TOKEN`は削除します。
-
-Release workflowは`NPM_TOKEN`が存在する場合だけtoken認証を設定し、存在しない場合はOIDCによるTrusted Publishingを使用します。
+Release workflowは`id-token: write`でOIDC認証し、長期npm tokenは使用しません。
 
 ## Branch
 
