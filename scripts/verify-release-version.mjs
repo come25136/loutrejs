@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const repository = resolve(import.meta.dirname, '..')
 const packagesDirectory = resolve(repository, 'packages')
@@ -32,6 +33,16 @@ const [version] = versions
 if (rootManifest.version !== version) {
   throw new Error(
     `Root version ${rootManifest.version} does not match published package version ${version}`,
+  )
+}
+
+const presentation = await import(
+  pathToFileURL(resolve(packagesDirectory, 'loutre', 'dist', 'presentation.js'))
+    .href
+)
+if (presentation.LOUTRE_VERSION !== version) {
+  throw new Error(
+    `Published LOUTRE_VERSION ${presentation.LOUTRE_VERSION} does not match release version ${version}`,
   )
 }
 
