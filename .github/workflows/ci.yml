@@ -117,3 +117,26 @@ jobs:
     uses: ./.github/workflows/ci-initializer-deno.yml
     with:
       deno-version: 2.9.5
+
+  required:
+    name: CI
+    if: ${{ always() }}
+    needs:
+      - quality-checks
+      - minimum-node-types
+      - node-tests
+      - bun-conformance
+      - deno-conformance
+      - cloudflare-workers-conformance
+      - electron-conformance
+      - aws-lambda-conformance
+      - node-package-consumer
+      - bun-package-consumer
+      - deno-package-consumer
+      - bun-initializer
+      - deno-initializer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless every CI job passed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1
