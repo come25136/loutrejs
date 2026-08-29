@@ -43,21 +43,25 @@ describe('create-loutre startup presentation', () => {
   })
 
   it.each<ProjectTarget>(['node', 'bun', 'deno'])(
-    '%sのgenerated Hostはbrand -> serve -> startup statusの順になる',
+    '%sのgenerated Hostはstartup prelude -> serve -> startup statusの順になる',
     async (target) => {
       const main = await generateMain(target)
-      const brand = main.indexOf('renderLoutreBrand(presentation)')
+      const prelude = main.indexOf(
+        'renderStartupPrelude(startup, presentation)',
+      )
       const serve = main.indexOf(`${target}Runtime.serve`)
       const status = main.indexOf('renderStartupStatus(')
 
-      expect(brand).toBeGreaterThanOrEqual(0)
-      expect(serve).toBeGreaterThan(brand)
+      expect(prelude).toBeGreaterThanOrEqual(0)
+      expect(serve).toBeGreaterThan(prelude)
       expect(status).toBeGreaterThan(serve)
-      expect(main.slice(brand, status)).toContain(
+      expect(main.slice(prelude, status)).toContain(
         `await ${target}Runtime.serve`,
       )
       expect(main.match(/renderStartupStatus\(/g)).toHaveLength(1)
       expect(main).toContain("application: 'Loutre Application'")
+      expect(main).toContain("version: '0.1.0'")
+      expect(main).not.toContain('typed · modular · fast')
     },
   )
 
@@ -80,7 +84,7 @@ describe('create-loutre startup presentation', () => {
     '%sのgenerated Hostはprocess startup presentationを自動表示しない',
     async (target) => {
       const main = await generateMain(target)
-      expect(main).not.toContain('renderLoutreBrand')
+      expect(main).not.toContain('renderStartupPrelude')
       expect(main).not.toContain('renderStartupStatus')
     },
   )

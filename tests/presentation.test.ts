@@ -1,21 +1,27 @@
 import {
   detectPresentationTerminal,
   renderLoutreBrand,
+  renderStartupPrelude,
   renderStartupStatus,
+  type StartupPresentationInfo,
   type StartupStatusInfo,
 } from '@loutrejs/loutre/presentation'
 
-const baseInfo: StartupStatusInfo = {
+const startupInfo: StartupPresentationInfo = {
   application: 'api',
   version: '0.1.0',
   server: 'http://localhost:3000',
   runtime: 'Node.js 26.1.0',
   environment: 'development',
+}
+
+const statusInfo: StartupStatusInfo = {
+  ...startupInfo,
   startupDurationMs: 42,
 }
 
 describe('presentation', () => {
-  it('TTYではLoutre wordmarkを生成する', () => {
+  it('standalone brandはTTYでLoutre wordmarkを生成する', () => {
     const brand = renderLoutreBrand({
       isTTY: true,
       color: true,
@@ -36,61 +42,87 @@ describe('presentation', () => {
     ])
   })
 
-  it('brandはnon-TTYではcompact outputを生成する', () => {
+  it('standalone brandはnon-TTYではcompact outputを生成する', () => {
     expect(renderLoutreBrand({ isTTY: false, color: true })).toBe('Loutre')
   })
 
-  it('brandはterminal幅がwordmarkより狭い場合にmascotへfallbackする', () => {
+  it('standalone brandはterminal幅がwordmarkより狭い場合にmascotへfallbackする', () => {
     expect(renderLoutreBrand({ isTTY: true, color: true, columns: 40 })).toBe(
       'ʕ•ᴥ•ʔ Loutre',
     )
   })
 
-  it('listen成功後のstatusはmetadataとReadyを描画してbrandを含まない', () => {
-    const status = renderStartupStatus(baseInfo, {
-      isTTY: true,
-      color: false,
-      columns: 120,
-    })
+  it('listen前のpreludeはframeを開いてlogoとversion付きbrandだけを描画する', () => {
+    const prelude = renderRichPrelude(startupInfo)
+
+    expect(prelude).toContain('╭')
+    expect(prelude).toContain('██╗')
+    expect(prelude).toContain('ʕ•ᴥ•ʔ  Loutre 0.1.0')
+    expect(prelude).not.toContain('Application')
+    expect(prelude).not.toContain('Server')
+    expect(prelude).not.toContain('Ready')
+    expect(prelude).not.toContain('╰')
+    expect(prelude).not.toContain('typed · modular · fast')
+  })
+
+  it('listen成功後のstatusはmetadataを描画してframeを閉じ、Readyをframe外へ出す', () => {
+    const status = renderRichStatus(statusInfo)
+    const lines = status.split('\n')
+    const bottomBorder = lines.findIndex((line) => line.startsWith('╰'))
+    const ready = lines.findIndex((line) => line.includes('✓ Ready in 42 ms'))
 
     expect(status).toContain('Application')
     expect(status).toContain('api')
-    expect(status).toContain('Framework')
-    expect(status).toContain('Loutre 0.1.0')
-    expect(status).toContain('Listening on')
+    expect(status).toContain('Server')
     expect(status).toContain('http://localhost:3000')
     expect(status).toContain('Runtime')
     expect(status).toContain('Node.js 26.1.0')
     expect(status).toContain('Environment')
     expect(status).toContain('development')
-    expect(status).toContain('✓ Ready in 42 ms')
+    expect(bottomBorder).toBeGreaterThanOrEqual(0)
+    expect(ready).toBeGreaterThan(bottomBorder)
     expect(status).not.toContain('██╗')
     expect(status).not.toContain('ʕ•ᴥ•ʔ')
+    expect(status).not.toContain('Framework')
+    expect(status).not.toContain('Listening on')
   })
 
-  it('color無効時はrich statusにANSI sequenceを出さない', () => {
-    const status = renderRich(baseInfo)
-    expect(status).not.toContain('\u001B[')
+  it('preludeとstatusを順に出すと旧startup banner相当の単一frameになる', () => {
+    const banner = `${renderRichPrelude(startupInfo)}\n${renderRichStatus(statusInfo)}`
+    const frameLines = banner
+      .split('\n')
+      .map(stripAnsi)
+      .filter((line) => /^[╭│╰]/u.test(line))
+    const widths = new Set(frameLines.map((line) => [...line].length))
+
+    expect(banner.match(/╭/gu)).toHaveLength(1)
+    expect(banner.match(/╰/gu)).toHaveLength(1)
+    expect(widths).toEqual(new Set([72]))
+    expect(banner).not.toContain('typed · modular · fast')
   })
 
-  it('color有効時はstatus metadataとReadyを着色する', () => {
-    const status = renderRich(baseInfo, true)
-    expect(status).toContain('\u001B[38;2;103;232;249mListening on')
+  it('color無効時はrich startup presentationにANSI sequenceを出さない', () => {
+    const banner = `${renderRichPrelude(startupInfo)}\n${renderRichStatus(statusInfo)}`
+    expect(banner).not.toContain('\u001B[')
+  })
+
+  it('color有効時はframe・metadata・Readyを着色する', () => {
+    const prelude = renderRichPrelude(startupInfo, true)
+    const status = renderRichStatus(statusInfo, true)
+
+    expect(prelude).toContain('\u001B[38;2;71;85;105m╭')
+    expect(status).toContain('\u001B[38;2;103;232;249mServer')
     expect(status).toContain('\u001B[38;2;74;222;128m✓ Ready')
   })
 
-  it('non-TTYではANSIなしのcompact statusを生成する', () => {
-    expect(
-      renderStartupStatus(baseInfo, {
-        isTTY: false,
-        color: true,
-        columns: 120,
-      }),
-    ).toBe(
+  it('non-TTYではpreludeとstatusをANSIなしのcompact outputへ分離する', () => {
+    const options = { isTTY: false, color: true, columns: 120 } as const
+
+    expect(renderStartupPrelude(startupInfo, options)).toBe('Loutre 0.1.0')
+    expect(renderStartupStatus(statusInfo, options)).toBe(
       [
         'Application: api',
-        'Framework: Loutre 0.1.0',
-        'Listening on http://localhost:3000',
+        'Server: http://localhost:3000',
         'Runtime: Node.js 26.1.0',
         'Environment: development',
         'Ready in 42 ms',
@@ -98,32 +130,21 @@ describe('presentation', () => {
     )
   })
 
-  it('version未指定でもstartup statusを生成できる', () => {
-    const { version: _version, ...withoutVersion } = baseInfo
-    const status = renderStartupStatus(withoutVersion, {
-      isTTY: false,
-      color: false,
-    })
+  it('terminal幅がrich frameより狭い場合はpreludeとstatusをcompact outputへfallbackする', () => {
+    const options = { isTTY: true, color: true, columns: 60 } as const
+    const prelude = renderStartupPrelude(startupInfo, options)
+    const status = renderStartupStatus(statusInfo, options)
 
-    expect(status).not.toContain('Framework:')
-    expect(status).not.toContain('undefined')
-  })
-
-  it('terminal幅がrich status幅より狭い場合はcompact outputへfallbackする', () => {
-    const status = renderStartupStatus(baseInfo, {
-      isTTY: true,
-      color: true,
-      columns: 60,
-    })
-
+    expect(prelude).toBe('Loutre 0.1.0')
     expect(status).toContain('Application: api')
-    expect(status).toContain('Listening on http://localhost:3000')
+    expect(status).toContain('Server: http://localhost:3000')
     expect(status).toContain('Ready in 42 ms')
-    expect(status).not.toContain('\u001B[')
+    expect(`${prelude}\n${status}`).not.toContain('██╗')
+    expect(`${prelude}\n${status}`).not.toContain('\u001B[')
   })
 
   it('startup durationを入力値から丸めて描画する', () => {
-    const status = renderRich({ ...baseInfo, startupDurationMs: 41.6 })
+    const status = renderRichStatus({ ...statusInfo, startupDurationMs: 41.6 })
     expect(status).toContain('✓ Ready in 42 ms')
   })
 
@@ -164,7 +185,14 @@ describe('presentation', () => {
   })
 })
 
-function renderRich(info: StartupStatusInfo, color = false): string {
+function renderRichPrelude(
+  info: StartupPresentationInfo,
+  color = false,
+): string {
+  return renderStartupPrelude(info, { isTTY: true, color, columns: 160 })
+}
+
+function renderRichStatus(info: StartupStatusInfo, color = false): string {
   return renderStartupStatus(info, { isTTY: true, color, columns: 160 })
 }
 
