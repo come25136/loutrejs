@@ -113,12 +113,14 @@ async function serve<const TDefinition extends ApplicationDefinition>(
     startupDurationMs: performance.now() - startedAt,
   })
   let closed = false
-  return {
+  let removeShutdownHooks: (() => void) | undefined
+  const handle: BunServeHandle<TDefinition> = {
     application: host.application,
     port,
     async close(signal?: string) {
       if (closed) return
       closed = true
+      removeShutdownHooks?.()
       const errors: unknown[] = []
       try {
         await server.stop(true)
@@ -134,6 +136,29 @@ async function serve<const TDefinition extends ApplicationDefinition>(
         throw new AggregateError(errors, 'Bun runtime shutdown failed')
     },
   }
+  removeShutdownHooks = registerBunShutdownHooks((signal) =>
+    handle.close(signal),
+  )
+  return handle
+}
+
+function registerBunShutdownHooks(
+  close: (signal: string) => Promise<void>,
+): () => void {
+  const handlers = new Map<NodeJS.Signals, () => void>()
+  const remove = () => {
+    for (const [signal, handler] of handlers) process.off(signal, handler)
+    handlers.clear()
+  }
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    const handler = () => {
+      remove()
+      void close(signal)
+    }
+    handlers.set(signal, handler)
+    process.once(signal, handler)
+  }
+  return remove
 }
 
 function canRetryOnNextPort(error: unknown, port: number): boolean {

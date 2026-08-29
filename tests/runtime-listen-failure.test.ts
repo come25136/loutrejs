@@ -52,6 +52,7 @@ describe('runtime listen failure', () => {
   })
 
   it('Nodeはport省略時に3000が使用中なら次の空きportへlistenする', async () => {
+    const signalListeners = currentProcessSignalListenerCounts()
     const occupied = await Promise.all([
       occupyPortIfAvailable(3000),
       occupyPortIfAvailable(3001),
@@ -76,6 +77,11 @@ describe('runtime listen failure', () => {
         `Environment: ${process.env.NODE_ENV ?? 'development'}`,
       )
       expect(startupOutput.join('\n')).toContain('Ready in')
+      expectProcessSignalListeners(signalListeners, 1)
+
+      await runtime.close('test-complete')
+      runtime = undefined
+      expectProcessSignalListeners(signalListeners, 0)
     } finally {
       await runtime?.close('test-complete')
       await Promise.all(
@@ -114,6 +120,7 @@ describe('runtime listen failure', () => {
   })
 
   it('Bunはport省略時にEADDRINUSEごとにportをincrementする', async () => {
+    const signalListeners = currentProcessSignalListenerCounts()
     const ports: number[] = []
     vi.stubGlobal('Bun', {
       env: { NODE_ENV: 'test' },
@@ -138,6 +145,11 @@ describe('runtime listen failure', () => {
       )
       expect(startupOutput.join('\n')).toContain('Runtime: Bun 1.2.3')
       expect(startupOutput.join('\n')).toContain('Environment: test')
+      expectProcessSignalListeners(signalListeners, 1)
+
+      await runtime.close('test-complete')
+      runtime = undefined
+      expectProcessSignalListeners(signalListeners, 0)
     } finally {
       await runtime?.close('test-complete')
       vi.unstubAllGlobals()
@@ -173,12 +185,21 @@ describe('runtime listen failure', () => {
 
   it('Denoはport省略時にEADDRINUSEごとにportをincrementする', async () => {
     const ports: number[] = []
+    const signalListeners = new Map<string, () => void>()
     vi.stubGlobal('Deno', {
       env: {
         get: (name: string) => (name === 'DENO_ENV' ? 'test' : undefined),
         toObject: () => ({ DENO_ENV: 'test' }),
       },
       version: { deno: '2.5.0' },
+      addSignalListener: (signal: string, handler: () => void) => {
+        signalListeners.set(signal, handler)
+      },
+      removeSignalListener: (signal: string, handler: () => void) => {
+        if (signalListeners.get(signal) === handler) {
+          signalListeners.delete(signal)
+        }
+      },
       serve: ({ port }: { readonly port: number }) => {
         ports.push(port)
         if (port < 3002) throw addressInUseError()
@@ -199,6 +220,11 @@ describe('runtime listen failure', () => {
       )
       expect(startupOutput.join('\n')).toContain('Runtime: Deno 2.5.0')
       expect(startupOutput.join('\n')).toContain('Environment: test')
+      expect([...signalListeners.keys()]).toEqual(['SIGINT', 'SIGTERM'])
+
+      await runtime.close('test-complete')
+      runtime = undefined
+      expect(signalListeners.size).toBe(0)
     } finally {
       await runtime?.close('test-complete')
       vi.unstubAllGlobals()
@@ -242,4 +268,21 @@ function addressInUseError(): Error & { code: string } {
   return Object.assign(new Error('Address already in use'), {
     code: 'EADDRINUSE',
   })
+}
+
+function currentProcessSignalListenerCounts(): Readonly<
+  Record<'SIGINT' | 'SIGTERM', number>
+> {
+  return {
+    SIGINT: process.listenerCount('SIGINT'),
+    SIGTERM: process.listenerCount('SIGTERM'),
+  }
+}
+
+function expectProcessSignalListeners(
+  baseline: Readonly<Record<'SIGINT' | 'SIGTERM', number>>,
+  additional: number,
+): void {
+  expect(process.listenerCount('SIGINT')).toBe(baseline.SIGINT + additional)
+  expect(process.listenerCount('SIGTERM')).toBe(baseline.SIGTERM + additional)
 }

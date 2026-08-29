@@ -356,22 +356,15 @@ await denoRuntime.serve({
 
 create-loutre が生成する Host は presentation を一切知らない。
 
+`SIGINT` / `SIGTERM` の購読と `close(signal)` への伝播も Runtime Adapter が所有する。generated Host はruntimeごとのshutdown APIを知らない。
+
 ### Node
 
 ```ts
 import { nodeRuntime } from '@loutrejs/node'
 import application from './app.js'
 
-const server = await nodeRuntime.serve({
-  application,
-  hostname: '127.0.0.1',
-})
-
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.once(signal, () => {
-    void server.close(signal)
-  })
-}
+await nodeRuntime.serve({ application })
 ```
 
 ### Bun
@@ -380,10 +373,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import application from './app.js'
 
-await bunRuntime.serve({
-  application,
-  hostname: '127.0.0.1',
-})
+await bunRuntime.serve({ application })
 ```
 
 ### Deno
@@ -392,10 +382,7 @@ await bunRuntime.serve({
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import application from './app.ts'
 
-await denoRuntime.serve({
-  application,
-  hostname: '127.0.0.1',
-})
+await denoRuntime.serve({ application })
 ```
 
 generated Host から以下をすべて削除する。

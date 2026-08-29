@@ -99,13 +99,15 @@ async function serve<const TDefinition extends ApplicationDefinition>(
   })
 
   let closed = false
-  return {
+  let removeShutdownHooks: (() => void) | undefined
+  const handle: NodeServeHandle<TDefinition> = {
     application: host.application,
     server,
     port,
     async close(signal?: string) {
       if (closed) return
       closed = true
+      removeShutdownHooks?.()
       const errors: unknown[] = []
       try {
         await closeServer(server)
@@ -121,6 +123,29 @@ async function serve<const TDefinition extends ApplicationDefinition>(
         throw new AggregateError(errors, 'Node runtime shutdown failed')
     },
   }
+  removeShutdownHooks = registerNodeShutdownHooks((signal) =>
+    handle.close(signal),
+  )
+  return handle
+}
+
+function registerNodeShutdownHooks(
+  close: (signal: string) => Promise<void>,
+): () => void {
+  const handlers = new Map<NodeJS.Signals, () => void>()
+  const remove = () => {
+    for (const [signal, handler] of handlers) process.off(signal, handler)
+    handlers.clear()
+  }
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    const handler = () => {
+      remove()
+      void close(signal)
+    }
+    handlers.set(signal, handler)
+    process.once(signal, handler)
+  }
+  return remove
 }
 
 interface NodeHttpServerDriverOptions {
