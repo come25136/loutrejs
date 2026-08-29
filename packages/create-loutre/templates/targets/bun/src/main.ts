@@ -7,23 +7,26 @@ import {
 import application from './app.js'
 
 const hostname = '127.0.0.1'
-const port = 3000
-const serverUrl = `http://${hostname}:${port}`
+const defaultServerUrl = `http://${hostname}:3000`
 const presentation = detectPresentationTerminal(process.stdout, process.env)
 const startup = {
   application: 'Loutre Application',
   version: '{{loutreVersion}}',
-  server: serverUrl,
+  server: defaultServerUrl,
   runtime: `Bun ${Bun.version}`,
   environment: process.env.NODE_ENV ?? 'development',
 } as const
 
 console.log(renderStartupPrelude(startup, presentation))
 const startedAt = performance.now()
-await bunRuntime.serve({ application, hostname, port })
+const server = await bunRuntime.serve({ application, hostname })
 console.log(
   renderStartupStatus(
-    { ...startup, startupDurationMs: performance.now() - startedAt },
+    {
+      ...startup,
+      server: `http://${hostname}:${server.port}`,
+      startupDurationMs: performance.now() - startedAt,
+    },
     presentation,
   ),
 )

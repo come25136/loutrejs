@@ -61,6 +61,13 @@ describe('create-loutre startup presentation', () => {
       expect(main.match(/renderStartupStatus\(/g)).toHaveLength(1)
       expect(main).toContain("application: 'Loutre Application'")
       expect(main).toContain("version: '0.1.0'")
+      expect(main).toContain(
+        `${target}Runtime.serve({ application, hostname })`,
+      )
+      expect(main).not.toContain(
+        `${target}Runtime.serve({ application, hostname, port })`,
+      )
+      expect(main).toContain('server: `http://${hostname}:${server.port}`')
       expect(main).not.toContain('typed · modular · fast')
     },
   )
