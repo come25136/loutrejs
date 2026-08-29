@@ -2,7 +2,7 @@ import { bootstrap } from '@loutrejs/loutre/host'
 import { expect, it } from 'vitest'
 import application from './app.js'
 
-it('GET / がLoutre Applicationのレスポンスを返す', async () => {
+it('GET / returns a response from the Loutre Application', async () => {
   const app = bootstrap({ application })
   try {
     const response = await app.fetch(new Request('http://localhost/'))

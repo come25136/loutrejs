@@ -73,7 +73,7 @@ describe('create-loutre', () => {
       ).toContain('nodeRuntime.serve')
       expect(
         await readFile(join(result.targetDirectory, 'src/app.test.ts'), 'utf8'),
-      ).toContain('GET / がLoutre Applicationのレスポンスを返す')
+      ).toContain('GET / returns a response from the Loutre Application')
       expect(
         await readFile(join(result.targetDirectory, '.oxlintrc.json'), 'utf8'),
       ).toContain('correctness')
