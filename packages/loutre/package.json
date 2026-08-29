@@ -52,13 +52,13 @@
       "types": "./dist/adapters/deno.d.ts",
       "import": "./dist/adapters/deno.js"
     },
-    "./runtime/workerd": {
-      "types": "./dist/adapters/workerd.d.ts",
-      "import": "./dist/adapters/workerd.js"
+    "./runtime/cloudflare-workers": {
+      "types": "./dist/adapters/cloudflare-workers.d.ts",
+      "import": "./dist/adapters/cloudflare-workers.js"
     },
-    "./runtime/lambda": {
-      "types": "./dist/adapters/lambda.d.ts",
-      "import": "./dist/adapters/lambda.js"
+    "./runtime/aws-lambda": {
+      "types": "./dist/adapters/aws-lambda.d.ts",
+      "import": "./dist/adapters/aws-lambda.js"
     },
     "./runtime/electron": {
       "types": "./dist/adapters/electron.d.ts",

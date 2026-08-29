@@ -225,14 +225,14 @@ describe('Loutre CLI', () => {
 
   it.each([
     [
-      'lambda',
-      "import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'",
-      'export const handler = lambdaRuntime.bind({ application })',
+      'aws-lambda',
+      "import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'",
+      'export const handler = awsLambdaRuntime.bind({ application })',
     ],
     [
-      'workerd',
-      "import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'",
-      'export default workerdRuntime.bind({ application })',
+      'cloudflare-workers',
+      "import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'",
+      'export default cloudflareWorkersRuntime.bind({ application })',
     ],
     [
       'deno',
@@ -280,7 +280,7 @@ describe('Loutre CLI', () => {
       ),
     ).toBe(2)
     expect(output.stderr.join('\n')).toContain(
-      'build --runtimeにはlambda、workerd、denoのいずれかを指定してください。',
+      'build --runtimeにはaws-lambda、cloudflare-workers、denoのいずれかを指定してください。',
     )
   })
 })

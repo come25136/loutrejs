@@ -1,0 +1,21 @@
+name: Setup Deno workspace
+description: Denoをsetupし、Denoでrepository dependencyをinstallする
+inputs:
+  deno-version:
+    description: setupするDeno version
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Setup Deno ${{ inputs.deno-version }}
+      uses: denoland/setup-deno@v2
+      with:
+        deno-version: ${{ inputs.deno-version }}
+
+    - name: Verify Deno version
+      shell: bash
+      run: test "$(deno eval 'console.log(Deno.version.deno)')" = "${{ inputs.deno-version }}"
+
+    - name: Install dependencies
+      shell: bash
+      run: deno install

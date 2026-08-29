@@ -1,0 +1,24 @@
+{
+  "name": "create-loutre",
+  "version": "0.1.0",
+  "description": "Loutre project initializer",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "create-loutre": "./bin/create-loutre.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "templates"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.7.0",
+    "@loutrejs/loutre": "^0.1.0",
+    "commander": "^15.0.0"
+  }
+}

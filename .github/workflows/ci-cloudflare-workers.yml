@@ -1,0 +1,26 @@
+name: Cloudflare Workers conformance
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    name: Cloudflare Workers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Run Cloudflare Workers conformance
+        run: npm run test:cloudflare-workers

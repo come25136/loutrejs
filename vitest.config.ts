@@ -20,11 +20,11 @@ export default defineConfig({
       '@loutrejs/loutre/runtime/deno': resolve(
         'packages/loutre/src/adapters/deno.ts',
       ),
-      '@loutrejs/loutre/runtime/workerd': resolve(
-        'packages/loutre/src/adapters/workerd.ts',
+      '@loutrejs/loutre/runtime/cloudflare-workers': resolve(
+        'packages/loutre/src/adapters/cloudflare-workers.ts',
       ),
-      '@loutrejs/loutre/runtime/lambda': resolve(
-        'packages/loutre/src/adapters/lambda.ts',
+      '@loutrejs/loutre/runtime/aws-lambda': resolve(
+        'packages/loutre/src/adapters/aws-lambda.ts',
       ),
       '@loutrejs/loutre/runtime/electron': resolve(
         'packages/loutre/src/adapters/electron.ts',

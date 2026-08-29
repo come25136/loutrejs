@@ -3,9 +3,9 @@ import { checkCapabilities } from '@loutrejs/loutre/runtime'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
-import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'
+import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { nodeRuntime } from '@loutrejs/node'
-import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'
+import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
 import { UsersModule } from '../fixtures/http-crud/src/index.js'
 import { EventsModule } from '../fixtures/streaming/src/index.js'
 import { silentLogger } from './helpers/silent-logger.js'
@@ -18,7 +18,10 @@ const eventsDefinition = () =>
 describe('Runtime conformance harness', () => {
   it.each([
     ['Deno', () => denoRuntime.bind({ application: usersDefinition() })],
-    ['workerd', () => workerdRuntime.bind({ application: usersDefinition() })],
+    [
+      'cloudflare-workers',
+      () => cloudflareWorkersRuntime.bind({ application: usersDefinition() }),
+    ],
   ])('%s bind()で同じFixture Aを実行する', async (_name, createBinding) => {
     const runtimeBinding = createBinding()
     const response = await runtimeBinding.fetch(
@@ -33,23 +36,23 @@ describe('Runtime conformance harness', () => {
   })
 
   it('AWS Lambda managed形状へunary responseをadaptする', async () => {
-    const handler = lambdaRuntime.bind({ application: usersDefinition() })
+    const handler = awsLambdaRuntime.bind({ application: usersDefinition() })
     const response = await handler({
-      rawPath: '/users/lambda-user',
+      rawPath: '/users/aws-lambda-user',
       requestContext: { http: { method: 'GET' } },
     })
 
     expect(response.statusCode).toBe(200)
     expect(
       JSON.parse(Buffer.from(response.body, 'base64').toString('utf8')),
-    ).toEqual({ id: 'lambda-user', name: 'test' })
+    ).toEqual({ id: 'aws-lambda-user', name: 'test' })
   })
 
   it('AWS Lambda response streaming境界へSSE chunkを逐次出力する', async () => {
     const chunks: Uint8Array[] = []
     let ended = false
     let metadata: unknown
-    const handler = lambdaRuntime.bind({
+    const handler = awsLambdaRuntime.bind({
       application: eventsDefinition(),
       response: 'streaming',
     })
@@ -83,8 +86,8 @@ describe('Runtime conformance harness', () => {
     expect(nodeRuntime.runtime).toBe('node')
     expect(bunRuntime.runtime).toBe('bun')
     expect(denoRuntime.runtime).toBe('deno')
-    expect(workerdRuntime.runtime).toBe('workerd')
-    expect(lambdaRuntime.runtime).toBe('lambda')
+    expect(cloudflareWorkersRuntime.runtime).toBe('cloudflare-workers')
+    expect(awsLambdaRuntime.runtime).toBe('aws-lambda')
     expect(electronRuntime.runtime).toBe('electron')
   })
 
@@ -93,8 +96,8 @@ describe('Runtime conformance harness', () => {
     expect(typeof bunRuntime.serve).toBe('function')
     expect(typeof denoRuntime.serve).toBe('function')
     expect(typeof denoRuntime.bind).toBe('function')
-    expect(typeof workerdRuntime.bind).toBe('function')
-    expect(typeof lambdaRuntime.bind).toBe('function')
+    expect(typeof cloudflareWorkersRuntime.bind).toBe('function')
+    expect(typeof awsLambdaRuntime.bind).toBe('function')
     expect(typeof electronRuntime.attach).toBe('function')
   })
 
@@ -103,8 +106,8 @@ describe('Runtime conformance harness', () => {
       nodeRuntime,
       denoRuntime,
       bunRuntime,
-      workerdRuntime,
-      lambdaRuntime,
+      cloudflareWorkersRuntime,
+      awsLambdaRuntime,
     ]) {
       expect(checkCapabilities(['http.server'], runtime).ok).toBe(true)
     }

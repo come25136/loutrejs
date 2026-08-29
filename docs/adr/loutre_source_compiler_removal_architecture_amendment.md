@@ -1120,11 +1120,11 @@ Pipeline explain も同じ Graph を source of truth にする。
 Runtime capability requirement は Source Compiler からではなく Application Graph から取得する。
 
 ```sh
-loutre doctor workerd --entry src/app.ts
+loutre doctor cloudflare-workers --entry src/app.ts
 ```
 
 ```text
-Runtime: workerd
+Runtime: cloudflare-workers
 
 Required:
   http.server
@@ -1682,7 +1682,7 @@ Promise は Lifecycle のみ
 Node
 Bun
 Deno
-workerd
+Cloudflare Workers
 AWS Lambda
 Electron
 ```
@@ -1813,7 +1813,7 @@ new UsersService(mockRepo)
 - [x] Node conformance pass
 - [x] Bun conformance pass
 - [x] Deno conformance pass
-- [x] workerd conformance pass
+- [x] Cloudflare Workers conformance pass
 - [x] Lambda conformance pass
 - [x] Electron conformance pass
 - [x] Source Compiler を無効化した状態ですべての relevant test が pass
@@ -1889,7 +1889,7 @@ loutre explain UsersService --entry src/app.ts
 
 が同じ dependency edge を説明でき、
 
-同時に Node / Bun / Deno / workerd / Lambda / Electron runtime conformance が維持されていること。
+同時に Node / Bun / Deno / Cloudflare Workers / AWS Lambda / Electron runtime conformance が維持されていること。
 
 ---
 

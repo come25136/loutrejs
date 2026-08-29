@@ -1,0 +1,36 @@
+name: Node.js tests
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Node.js
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Run unit & E2E tests
+        run: npm test
+
+      - name: Run Node.js CLI conformance
+        run: |
+          node packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
+          node packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/node
+          node packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/node/openapi.json
+
+      - name: Run Node.js conformance
+        run: npm run test:node

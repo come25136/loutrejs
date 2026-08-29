@@ -22,8 +22,8 @@ bunRuntime.serve({ application, ... })
 denoRuntime.serve({ application, ... })
 
 denoRuntime.bind({ application, ... })
-workerdRuntime.bind({ application, ... })
-lambdaRuntime.bind({ application, ... })
+cloudflareWorkersRuntime.bind({ application, ... })
+awsLambdaRuntime.bind({ application, ... })
 
 electronRuntime.attach({ application, port, ... })
 ```
@@ -125,18 +125,18 @@ Cloudflare Workers / workerd
 
 Loutre自身がJavaScript `export`を行うわけではない。
 
-Lambda:
+AWS Lambda:
 
 ```ts
-export const handler = lambdaRuntime.bind({
+export const handler = awsLambdaRuntime.bind({
   application,
 })
 ```
 
-workerd / Cloudflare Workers:
+Cloudflare Workers:
 
 ```ts
-export default workerdRuntime.bind({
+export default cloudflareWorkersRuntime.bind({
   application,
 })
 ```
@@ -152,7 +152,7 @@ export default denoRuntime.bind({
 同じ戻り値はexportせずtest / embeddingから直接呼び出してよい。
 
 ```ts
-const handler = lambdaRuntime.bind({ application })
+const handler = awsLambdaRuntime.bind({ application })
 await handler(event)
 ```
 
@@ -216,22 +216,22 @@ generated deployment entry
 
 生成例:
 
-Lambda:
+AWS Lambda:
 
 ```ts
 import application from './application.mjs'
-import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'
+import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 
-export const handler = lambdaRuntime.bind({ application })
+export const handler = awsLambdaRuntime.bind({ application })
 ```
 
-workerd:
+Cloudflare Workers:
 
 ```ts
 import application from './application.mjs'
-import { workerdRuntime } from '@loutrejs/loutre/runtime/workerd'
+import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
 
-export default workerdRuntime.bind({ application })
+export default cloudflareWorkersRuntime.bind({ application })
 ```
 
 Deno `serve` target:
@@ -308,13 +308,13 @@ runtime high-level adapterはruntime-native Environment sourceの取得・projec
 Node        -> process.env
 Deno        -> Deno environment source
 Lambda      -> process.env / Lambda runtime environment
-workerd     -> Worker bindings
+cloudflare-workers -> Worker bindings
 ```
 
 ただしApplication Argumentsはdeployment/runtimeから自動推測せず、必要なApplicationには明示的に渡す。
 
 ```ts
-lambdaRuntime.bind({
+awsLambdaRuntime.bind({
   application,
   arguments: { ... },
 })
@@ -322,7 +322,7 @@ lambdaRuntime.bind({
 
 ### 7.1 callbackで初めてEnvironmentが得られるruntime
 
-workerdの`env`等、module evaluation時点でEnvironment sourceが得られずcallback時に初めて供給されるruntimeでは、ApplicationRuntimeをlazyに構築 / 初期化してよい。
+Cloudflare Workersの`env`等、module evaluation時点でEnvironment sourceが得られずcallback時に初めて供給されるruntimeでは、ApplicationRuntimeをlazyに構築 / 初期化してよい。
 
 最初のcallbackでEnvironment sourceをbindし、同一ApplicationRuntimeでは以後rebindしない。
 
@@ -359,7 +359,7 @@ factoryはApplicationRuntimeごとに一度だけ評価し、同一runtime lifet
 
 - Node: process / ApplicationRuntime lifetimeで再利用
 - Lambda: execution environmentのwarm reuse中は再利用。cold startでは新しいApplicationRuntimeを構築
-- workerd:同一isolate / ApplicationRuntime lifetimeで再利用
+- Cloudflare Workers:同一isolate / ApplicationRuntime lifetimeで再利用
 - Deno / Bun: process / ApplicationRuntime lifetimeで再利用
 
 ### 8.2 Dependency injection
@@ -531,7 +531,7 @@ Infrastructure側のbase-path mappingをControllerへ漏らさない。
 Lambda `bind()`はLambda runtimeが呼び出せるhandler functionを返す。
 
 ```ts
-export const handler = lambdaRuntime.bind({ application })
+export const handler = awsLambdaRuntime.bind({ application })
 ```
 
 HTTP eventの場合、Lambda eventをWeb `Request`へ変換してLoutre HTTP Protocol Executionへ渡し、`Response`をLambda resultへ変換する。
@@ -555,7 +555,7 @@ Lambda result
 response streamingは別factoryを増やさず、同一`bind()`のmodeとして表現する。
 
 ```ts
-export const handler = lambdaRuntime.bind({
+export const handler = awsLambdaRuntime.bind({
   application,
   response: 'streaming',
 })
@@ -567,10 +567,10 @@ export const handler = lambdaRuntime.bind({
 
 ## 11. Workerd / Cloudflare Workers specifics
 
-`workerdRuntime.bind()`はWorker moduleのdefault exportとして利用可能なhandler objectを返す。
+`cloudflareWorkersRuntime.bind()`はWorker moduleのdefault exportとして利用可能なhandler objectを返す。
 
 ```ts
-export default workerdRuntime.bind({ application })
+export default cloudflareWorkersRuntime.bind({ application })
 ```
 
 incoming `Request`はそのままLoutre HTTP Protocol Executionへ渡せる。
@@ -655,7 +655,7 @@ ApplicationRuntime scoped Controller / Providerは複数executionから共有さ
 3. runtime差によってController factory lifetimeを変更しない
 4. Lambda warm reuse / Worker concurrent executionでも同じsemanticsを維持する
 
-このinvariantにより、同じApplication codeをNode / Deno / Bun / Lambda / workerdへportableに配置できる。
+このinvariantにより、同じApplication codeをNode / Deno / Bun / AWS Lambda / Cloudflare Workersへportableに配置できる。
 
 ---
 

@@ -115,8 +115,8 @@ Loutreは、portableな **Application Definition** と明示的な **Application
 
 @loutrejs/loutre/runtime/bun
 @loutrejs/loutre/runtime/deno
-@loutrejs/loutre/runtime/workerd
-@loutrejs/loutre/runtime/lambda
+@loutrejs/loutre/runtime/cloudflare-workers
+@loutrejs/loutre/runtime/aws-lambda
 @loutrejs/loutre/runtime/electron
 └ runtime adapter
 
@@ -370,14 +370,14 @@ Environment Contractを持つApplicationでsourceが供給されない場合は`
 
 runtime adapterは各Hostの自然なEnvironment sourceを既定値として利用する。
 
-| Runtime adapter                  | 既定Environment source                       |
-| -------------------------------- | -------------------------------------------- |
-| `nodeRuntime.serve()`            | `process.env`                                |
-| `bunRuntime.serve()`             | `Bun.env`                                    |
-| `denoRuntime.bind()` / `serve()` | `Deno.env.toObject()`                        |
-| `workerdRuntime.bind()`          | `fetch(request, environment)`の`environment` |
-| `lambdaRuntime.bind()`           | `process.env`                                |
-| `electronRuntime.attach()`       | 利用可能なら`process.env`                    |
+| Runtime adapter                   | 既定Environment source                       |
+| --------------------------------- | -------------------------------------------- |
+| `nodeRuntime.serve()`             | `process.env`                                |
+| `bunRuntime.serve()`              | `Bun.env`                                    |
+| `denoRuntime.bind()` / `serve()`  | `Deno.env.toObject()`                        |
+| `cloudflareWorkersRuntime.bind()` | `fetch(request, environment)`の`environment` |
+| `awsLambdaRuntime.bind()`         | `process.env`                                |
+| `electronRuntime.attach()`        | 利用可能なら`process.env`                    |
 
 すべて明示`environment`でoverrideできるruntimeについては、その明示値を優先する。
 Application source自体からHost固有Environment APIを直接読む構成をcanonicalにしない。
@@ -535,14 +535,14 @@ HTTPをself-hostする場合はruntime adapterを使う。
 
 現行adapter surfaceは次。
 
-| Runtime    | Public API                       | 主な役割                                 |
-| ---------- | -------------------------------- | ---------------------------------------- |
-| Node.js    | `nodeRuntime.serve()`            | Node HTTP server ownership               |
-| Bun        | `bunRuntime.serve()`             | `Bun.serve()` ownership                  |
-| Deno       | `denoRuntime.bind()` / `serve()` | fetch binding / `Deno.serve()` ownership |
-| workerd    | `workerdRuntime.bind()`          | Worker `fetch` binding                   |
-| AWS Lambda | `lambdaRuntime.bind()`           | buffered / streaming HTTP handler        |
-| Electron   | `electronRuntime.attach()`       | MessagePort attachment                   |
+| Runtime            | Public API                        | 主な役割                                 |
+| ------------------ | --------------------------------- | ---------------------------------------- |
+| Node.js            | `nodeRuntime.serve()`             | Node HTTP server ownership               |
+| Bun                | `bunRuntime.serve()`              | `Bun.serve()` ownership                  |
+| Deno               | `denoRuntime.bind()` / `serve()`  | fetch binding / `Deno.serve()` ownership |
+| Cloudflare Workers | `cloudflareWorkersRuntime.bind()` | Worker `fetch` binding                   |
+| AWS Lambda         | `awsLambdaRuntime.bind()`         | buffered / streaming HTTP handler        |
+| Electron           | `electronRuntime.attach()`        | MessagePort attachment                   |
 
 Node / Bun / Denoの`serve()`はHTTP-capable Applicationだけを受け付ける。
 Applicationをinitializeし、TriggerがあればTrigger Engineも起動してからlistenerを開始する。
@@ -560,7 +560,7 @@ const server = await nodeRuntime.serve({
 await server.close('shutdown')
 ```
 
-workerd / Lambda等のcallback runtimeはruntime-specific handlerをexportするため、Application sourceではなくHost entry側でbindingする。
+Cloudflare Workers / AWS Lambda等のcallback runtimeはruntime-specific handlerをexportするため、Application sourceではなくHost entry側でbindingする。
 
 ---
 
@@ -936,11 +936,11 @@ repository内でDenoからsource fallbackは行わず、未build時は事前buil
 loutre build src/app.ts --out-dir dist/loutre
 ```
 
-deployment runtimeを指定できるのは現行`lambda | workerd | deno`。
+deployment runtimeを指定できるのは現行`aws-lambda | cloudflare-workers | deno`。
 
 ```sh
-loutre build src/app.ts --runtime lambda
-loutre build src/app.ts --runtime workerd
+loutre build src/app.ts --runtime aws-lambda
+loutre build src/app.ts --runtime cloudflare-workers
 loutre build src/app.ts --runtime deno
 ```
 
@@ -982,7 +982,7 @@ CLIが`@loutrejs/node`をimportするとBun / DenoでもNode.js専用built-in mo
 - Node.js
 - Deno
 - Bun
-- workerd
+- Cloudflare Workers
 - Electron
 - AWS Lambda
 
@@ -1057,6 +1057,6 @@ Loutre v0.1 architectureを短くまとめると次。
 
 > **public Taskだけが`run()` surfaceへ載り、Trigger-only Taskは自動execution専用に保つ。**
 
-> **generic Hostはlistenerを所有しない。Node / Bun / Deno / workerd / Lambda / Electron adapterがHost固有APIを担当する。**
+> **generic Hostはlistenerを所有しない。Node / Bun / Deno / Cloudflare Workers / AWS Lambda / Electron adapterがHost固有APIを担当する。**
 
 > **Loutre CLIはGraph / build / OpenAPI toolingであり、Applicationのrun / dev / startを所有しない。**

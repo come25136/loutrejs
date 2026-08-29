@@ -24,4 +24,10 @@ if (!(await streamResponse.text()).includes('"sequence":3')) {
 }
 await users.close()
 await events.close()
-console.log('Deno 2.9 LTS conformance: 成功')
+const denoVersion =
+  (
+    globalThis as typeof globalThis & {
+      readonly Deno?: { readonly version?: { readonly deno?: string } }
+    }
+  ).Deno?.version?.deno ?? 'unknown'
+console.log(`Deno ${denoVersion} conformance: 成功`)

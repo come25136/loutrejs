@@ -74,7 +74,7 @@ await app.listen({
 })
 ```
 
-Lambda / workerd 等の callback runtime では Application source を変更しない。
+AWS Lambda / Cloudflare Workers 等の callback runtime では Application source を変更しない。
 
 ```ts
 export default application
@@ -82,7 +82,7 @@ export default application
 
 runtime-specific bridge は build / deployment / framework-internal binding が生成・所有する。
 
-> **Application code は Node / Bun / Deno / Lambda / workerd 等の runtime 名を知らない。**
+> **Application code は Node / Bun / Deno / AWS Lambda / Cloudflare Workers 等の runtime 名を知らない。**
 
 さらに Application Graph の構成を TypeScript の API surface に反映する。
 
@@ -1452,7 +1452,7 @@ runtime-specific driver package は framework-internal / low-level implementatio
 
 # 28. Callback runtime
 
-Lambda / workerd 等では `bootstrap()` を user code に要求しない。
+AWS Lambda / Cloudflare Workers 等では `bootstrap()` を user code に要求しない。
 
 Application source:
 
@@ -2193,8 +2193,8 @@ runtime drivers
   node
   bun
   deno
-  workerd
-  lambda
+  cloudflare-workers
+  aws-lambda
   electron
 ```
 
@@ -2334,7 +2334,7 @@ export default defineApplication({
 })
 ```
 
-Lambda / workerd deployment bridge は framework tooling が生成する。
+AWS Lambda / Cloudflare Workers deployment bridge は framework tooling が生成する。
 
 Application source に以下を書かせない。
 
@@ -2630,7 +2630,7 @@ callback:
 
 ```text
 Lambda
-workerd
+cloudflare-workers
 ```
 
 canonical user API に runtime-specific factory を露出させない。
@@ -2659,7 +2659,7 @@ scheduler
 queue consumer
 Lambda worker
 Lambda scheduled
-workerd
+cloudflare-workers
 Node/Bun/Deno conformance
 ```
 

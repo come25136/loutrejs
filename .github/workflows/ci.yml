@@ -14,186 +14,106 @@ concurrency:
 
 jobs:
   quality-checks:
-    name: Node.js 24 Quality Checks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24.x
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Check formatting
-        run: npm run format:check
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Type check
-        run: npm run check
-
-      - name: Public type tests
-        run: npm run test:types
-
-      - name: Build packages
-        run: npm run build
-
-      - name: Verify published packages
-        run: node scripts/verify-packages.mjs
+    name: Quality Checks
+    uses: ./.github/workflows/ci-node-quality.yml
 
   minimum-node-types:
-    name: Node.js 22 Minimum API Compatibility
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+    name: Minimum API Compatibility
+    uses: ./.github/workflows/ci-node-minimum.yml
 
-      - name: Setup Node.js 22
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22.x
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Install Node.js 22 type baseline
-        run: npm install --no-save --package-lock=false @types/node@22.20.1
-
-      - name: Type check
-        run: npm run check
-
-      - name: Public type tests
-        run: npm run test:types
-
-      - name: Build packages
-        run: npm run build
-
-  tests:
-    name: Node.js ${{ matrix.node }} Unit & E2E Tests
-    runs-on: ubuntu-latest
+  node-tests:
+    name: Unit & E2E Tests
     strategy:
       fail-fast: false
       matrix:
         node: [22.x, 24.x, 26.x]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+    uses: ./.github/workflows/ci-node-tests.yml
+    with:
+      node-version: ${{ matrix.node }}
 
-      - name: Setup Node.js ${{ matrix.node }}
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Run unit & E2E tests
-        run: npm test
-
-      - name: Run Node.js CLI conformance
-        run: |
-          node packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
-          node packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/node
-          node packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/node/openapi.json
-
-      - name: Run Node.js conformance
-        run: npm run test:node
-
-  runtime-conformance:
-    name: Runtime Conformance (${{ matrix.name }})
-    runs-on: ubuntu-latest
+  bun-conformance:
+    name: Runtime Conformance
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: Deno 2.9 LTS
-            node: 24.x
-            deno: true
-            deno_version: 2.9.5
-            cli_runner: deno run -A
-            command: npm run test:deno
-          - name: Bun 1.3
-            node: 24.x
-            bun: true
-            bun_version: 1.3.14
-            cli_runner: bun
-            command: npm run build:conformance-apps && bun --version && bun run conformance/bun.ts
-          - name: Bun 1.4
-            node: 24.x
-            bun: true
-            bun_version: 1.4.0
-            cli_runner: bun
-            command: npm run build:conformance-apps && bun --version && bun run conformance/bun.ts
-          - name: workerd (lockfile)
-            node: 24.x
-            command: npm run test:workerd
-          - name: Electron 42
-            node: 24.x
-            electron: true
-            electron_version: 42.10.1
-            command: LOUTRE_ELECTRON_NO_SANDBOX=1 xvfb-run --auto-servernum npm run test:electron
-          - name: Electron 43
-            node: 24.x
-            electron: true
-            electron_version: 43.4.1
-            command: LOUTRE_ELECTRON_NO_SANDBOX=1 xvfb-run --auto-servernum npm run test:electron
-          - name: Electron 44
-            node: 24.x
-            electron: true
-            electron_version: 44.0.0
-            command: LOUTRE_ELECTRON_NO_SANDBOX=1 xvfb-run --auto-servernum npm run test:electron
-          - name: AWS Lambda Node.js 22
-            node: 22.x
-            command: npm run test:lambda
-          - name: AWS Lambda Node.js 24
-            node: 24.x
-            command: npm run test:lambda
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+        version: [1.3.14, 1.4.0]
+    uses: ./.github/workflows/ci-bun.yml
+    with:
+      bun-version: ${{ matrix.version }}
 
-      - name: Setup Node.js ${{ matrix.node }}
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node }}
-          cache: npm
+  deno-conformance:
+    name: Runtime Conformance
+    uses: ./.github/workflows/ci-deno.yml
+    with:
+      deno-version: 2.9.5
 
-      - name: Setup Deno baseline
-        if: ${{ matrix.deno == true }}
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: ${{ matrix.deno_version }}
+  cloudflare-workers-conformance:
+    name: Runtime Conformance
+    uses: ./.github/workflows/ci-cloudflare-workers.yml
 
-      - name: Setup Bun baseline
-        if: ${{ matrix.bun == true }}
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ matrix.bun_version }}
+  electron-conformance:
+    name: Runtime Conformance
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [42.10.1, 43.4.1, 44.0.0]
+    uses: ./.github/workflows/ci-electron.yml
+    with:
+      electron-version: ${{ matrix.version }}
 
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+  aws-lambda-conformance:
+    name: Runtime Conformance
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22.x, 24.x]
+    uses: ./.github/workflows/ci-aws-lambda.yml
+    with:
+      node-version: ${{ matrix.node }}
 
-      - name: Install Electron baseline
-        if: ${{ matrix.electron == true }}
-        run: npm install --no-save --package-lock=false electron@${{ matrix.electron_version }}
+  node-package-consumer:
+    name: Package Consumer
+    needs: quality-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22.x, 24.x]
+    uses: ./.github/workflows/ci-package-node.yml
+    with:
+      node-version: ${{ matrix.node }}
 
-      - name: Build packages
-        run: npm run build
+  bun-package-consumer:
+    name: Package Consumer
+    needs: quality-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [1.3.14, 1.4.0]
+    uses: ./.github/workflows/ci-package-bun.yml
+    with:
+      bun-version: ${{ matrix.version }}
 
-      - name: Run native CLI conformance
-        if: ${{ matrix.cli_runner != null }}
-        run: |
-          ${{ matrix.cli_runner }} packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
-          ${{ matrix.cli_runner }} packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/runtime
-          ${{ matrix.cli_runner }} packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/runtime/openapi.json
+  deno-package-consumer:
+    name: Package Consumer
+    needs: quality-checks
+    uses: ./.github/workflows/ci-package-deno.yml
+    with:
+      deno-version: 2.9.5
 
-      - name: Run ${{ matrix.name }} conformance
-        run: ${{ matrix.command }}
+  bun-initializer:
+    name: Native Initializer
+    needs: quality-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [1.3.14, 1.4.0]
+    uses: ./.github/workflows/ci-initializer-bun.yml
+    with:
+      bun-version: ${{ matrix.version }}
+
+  deno-initializer:
+    name: Native Initializer
+    needs: quality-checks
+    uses: ./.github/workflows/ci-initializer-deno.yml
+    with:
+      deno-version: 2.9.5

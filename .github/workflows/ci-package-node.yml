@@ -1,0 +1,43 @@
+name: Node.js package consumer
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  consumer:
+    name: Node.js
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Download package tarballs
+        uses: actions/download-artifact@v5
+        with:
+          name: loutre-package-tarballs
+          path: ${{ runner.temp }}/loutre-package-tarballs
+
+      - name: Verify packed packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          consumer="${RUNNER_TEMP}/loutre-package-consumer-node"
+          rm -rf "$consumer"
+          mkdir -p "$consumer"
+          cd "$consumer"
+          npm init -y >/dev/null
+          npm install "${RUNNER_TEMP}/loutre-package-tarballs"/*.tgz --no-audit --no-fund
+
+          node --input-type=module -e "import { nodeRuntime } from '@loutrejs/node'; if (nodeRuntime.runtime !== 'node') throw new Error('Node runtime import failed')"
+          node node_modules/@loutrejs/cli/bin/loutre.js --help | grep -q '^Loutre CLI$'
+          node node_modules/create-loutre/bin/create-loutre.js node-app --yes --no-install --target node
+          grep -q 'nodeRuntime' node-app/src/main.ts

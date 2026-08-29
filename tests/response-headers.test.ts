@@ -6,7 +6,7 @@ import {
   procedure,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
-import { lambdaRuntime } from '@loutrejs/loutre/runtime/lambda'
+import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
 import { reserveHttpPort } from './helpers/http-server.js'
@@ -33,7 +33,7 @@ describe('複数値HTTP response header', () => {
   })
 
   it('Lambda runtimeがSet-Cookieをcookiesへ分離する', async () => {
-    const handler = lambdaRuntime.bind({ application: cookieApplication() })
+    const handler = awsLambdaRuntime.bind({ application: cookieApplication() })
     const result = await handler({ rawPath: '/cookies' })
 
     expect(result.cookies).toEqual(['first=one; Path=/', 'second=two; Path=/'])

@@ -15,8 +15,8 @@ runtime identityは実行環境の種類を表し、versionを含めない。
 node
 bun
 deno
-workerd
-lambda
+cloudflare-workers
+aws-lambda
 electron
 ```
 
@@ -79,6 +79,10 @@ CLI implementationは3 runtimeで共通して利用可能なWeb APIとNode.js co
 
 CIはCLIの`check` / `build` / `openapi`を各host runtime自身で実行し、Application runtime conformanceとは別にCLI host portabilityを検証する。
 
+Bun / Denoのruntime conformanceと`create-loutre` native initializerは、それぞれのruntime自身でdependency installと必要なpackage buildを行い、Node.js setupやnpm commandへ依存しない。Node.js系、AWS Lambda、Electron、Cloudflare Workersのconformanceは各検証に必要なNode.js toolingを明示的にsetupする。
+
+公開packageはNode.jsで`npm pack`したtarballをartifactとして固定し、repository sourceをcheckoutしないconsumer jobでNode.js / Bun / Denoからinstall・runtime import・CLI実行・`create-loutre`実行を検証する。Denoはnpm tarballの`file:` dependencyをsupportしないため、tarballを展開したpackage directoryを公式`links`で解決する。
+
 ## 3. Bun
 
 BunにはNode.jsと同じLTS modelを要求しない。
@@ -118,7 +122,7 @@ upstream EOLに到達したmajorはLoutreのsupport matrixからも外す。特�
 
 runtime identityは常に `electron` とする。
 
-## 6. workerd / Cloudflare Workers
+## 6. Cloudflare Workers / workerd
 
 workerdは日付ベースのrelease cadenceを持つため、Loutre独自の長期minimum semverを定義しない。
 
@@ -128,7 +132,7 @@ Cloudflare Workersのbehavioral compatibility boundaryはworkerd package version
 
 adapterが特定compatibility date以降のsemanticsを要求する場合、その条件はversion入りruntime identityではなく明示的なcompatibility metadataとして表現する。
 
-runtime identityは常に `workerd` とする。
+Loutreのruntime identityはサービス名を表す `cloudflare-workers` とする。`workerd`はCloudflare Workersを支える実エンジン名として、package versionやconformance実行時にのみ使用する。
 
 ## 7. AWS Lambda
 
@@ -145,7 +149,7 @@ nodejs24.x
 
 をCIで検証する。
 
-Lambda adapterのidentityはmanaged runtime versionではなくhost familyを表すため、常に `lambda` とする。
+AWS Lambda adapterのidentityはmanaged runtime versionではなくサービスfamilyを表すため、常に `aws-lambda` とする。
 
 ## 8. CI policy
 
@@ -171,8 +175,8 @@ Electron
 ├ 43.4.1
 └ 44.0.0
 
-workerd
-└ package-lock.json pinned release
+Cloudflare Workers
+└ workerd package-lock.json pinned release
 
 AWS Lambda
 ├ Node.js 22
@@ -189,8 +193,8 @@ Canonical identity:
 nodeRuntime.runtime === 'node'
 bunRuntime.runtime === 'bun'
 denoRuntime.runtime === 'deno'
-workerdRuntime.runtime === 'workerd'
-lambdaRuntime.runtime === 'lambda'
+cloudflareWorkersRuntime.runtime === 'cloudflare-workers'
+awsLambdaRuntime.runtime === 'aws-lambda'
 electronRuntime.runtime === 'electron'
 ```
 
@@ -199,7 +203,7 @@ identityへversionを含めない理由:
 - support window更新でpublic identityを変更しない
 - logging / capability reporting / toolingがversion lifecycleから独立する
 - `node-22` / `node-24`のような同一runtime familyの分裂を防ぐ
-- package名とruntime identityの意味を揃える
+- public adapter名とruntime identityの意味を揃える
 
 実際のruntime versionがdiagnosticsで必要な場合は、identityとは別のruntime-specific version情報として取得する。
 

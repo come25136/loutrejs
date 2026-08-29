@@ -1,0 +1,18 @@
+name: Setup Node workspace
+description: Node.jsをsetupし、repository dependencyをinstallする
+inputs:
+  node-version:
+    description: setupするNode.js version
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js ${{ inputs.node-version }}
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci --no-audit --no-fund

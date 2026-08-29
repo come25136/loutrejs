@@ -1,0 +1,40 @@
+name: create-loutre Deno native
+
+on:
+  workflow_call:
+    inputs:
+      deno-version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Deno ${{ inputs.deno-version }} LTS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-deno-workspace
+        with:
+          deno-version: ${{ inputs.deno-version }}
+
+      - name: Download initializer build
+        uses: actions/download-artifact@v5
+        with:
+          name: create-loutre-build
+          path: packages
+
+      - name: Create Deno project
+        shell: bash
+        run: |
+          rm -rf .tmp/create-loutre-native
+          mkdir -p .tmp/create-loutre-native
+          output="$(deno run -A packages/create-loutre/bin/create-loutre.js .tmp/create-loutre-native/deno-app --yes --no-install --target deno)"
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -q "Package manager: Deno"
+          grep -q "denoRuntime" .tmp/create-loutre-native/deno-app/src/main.ts
