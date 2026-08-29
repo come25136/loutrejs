@@ -61,9 +61,7 @@ export async function runCreateLoutre(
     return 0
   }
 
-  io.stdout(
-    renderLoutreBrand(io.terminal ?? { isTTY: false, color: false }),
-  )
+  io.stdout(renderLoutreBrand(io.terminal ?? { isTTY: false, color: false }))
 
   const directory = await resolveDirectory(parsed.directory, parsed.yes, io)
   if (!directory) return 2
