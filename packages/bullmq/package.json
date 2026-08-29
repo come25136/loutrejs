@@ -28,5 +28,10 @@
     "bullmq": {
       "optional": true
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/come25136/loutrejs",
+    "directory": "packages/bullmq"
   }
 }
