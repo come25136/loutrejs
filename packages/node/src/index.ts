@@ -100,36 +100,32 @@ async function serve<const TDefinition extends ApplicationDefinition>(
   })
 
   let closed = false
-  let removeShutdownHooks: (() => void) | undefined
-  const handle: NodeServeHandle<TDefinition> = {
-    application: host.application,
-    server,
-    port,
-    async close(signal?: string) {
-      if (closed) return
-      closed = true
-      removeShutdownHooks?.()
-      const errors: unknown[] = []
-      try {
-        await closeServer(server)
-      } catch (error) {
-        errors.push(error)
-      }
-      try {
-        await host.application.close(signal)
-      } catch (error) {
-        errors.push(error)
-      }
-      if (errors.length > 0)
-        throw new AggregateError(errors, 'Node runtime shutdown failed')
-    },
+  const closeRuntime = async (signal?: string): Promise<void> => {
+    if (closed) return
+    closed = true
+    const errors: unknown[] = []
+    try {
+      await closeServer(server)
+    } catch (error) {
+      errors.push(error)
+    }
+    try {
+      await host.application.close(signal)
+    } catch (error) {
+      errors.push(error)
+    }
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Node runtime shutdown failed')
   }
-  if (options.shutdownHooks !== false) {
-    removeShutdownHooks = registerNodeShutdownHooks((signal) =>
-      handle.close(signal),
-    )
+  const removeShutdownHooks =
+    options.shutdownHooks === false
+      ? undefined
+      : registerNodeShutdownHooks(closeRuntime)
+  const close = async (signal?: string): Promise<void> => {
+    removeShutdownHooks?.()
+    await closeRuntime(signal)
   }
-  return handle
+  return { application: host.application, server, port, close }
 }
 
 function registerNodeShutdownHooks(
