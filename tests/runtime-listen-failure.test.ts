@@ -3,6 +3,7 @@ import { defineApplication } from '@loutrejs/loutre'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { nodeRuntime } from '@loutrejs/node'
+import { LOUTRE_VERSION } from '@loutrejs/loutre/presentation'
 import { UsersModule } from '../fixtures/http-crud/src/index.js'
 import { silentLogger } from './helpers/silent-logger.js'
 
@@ -44,7 +45,7 @@ describe('runtime listen failure', () => {
         }),
       ).rejects.toMatchObject({ code: 'EADDRINUSE' })
       expect(startupOutput).toHaveLength(1)
-      expect(startupOutput.join('\n')).toContain('Loutre 0.1.0')
+      expect(startupOutput.join('\n')).toContain(`Loutre ${LOUTRE_VERSION}`)
       expect(startupOutput.join('\n')).not.toContain('Ready')
     } finally {
       await closeServer(occupied)

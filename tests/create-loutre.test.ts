@@ -14,6 +14,14 @@ import type {
   ProjectTarget,
 } from '../packages/create-loutre/src/options.js'
 
+const createLoutreManifest = JSON.parse(
+  await readFile(
+    new URL('../packages/create-loutre/package.json', import.meta.url),
+    'utf8',
+  ),
+) as { readonly dependencies: Readonly<Record<string, string>> }
+const loutreVersion = createLoutreManifest.dependencies['@loutrejs/loutre']
+
 describe('create-loutre', () => {
   let root: string
 
@@ -54,11 +62,11 @@ describe('create-loutre', () => {
           'format:check': 'oxfmt --check',
         },
         dependencies: {
-          '@loutrejs/loutre': '^0.1.0',
-          '@loutrejs/node': '^0.1.0',
+          '@loutrejs/loutre': loutreVersion,
+          '@loutrejs/node': loutreVersion,
         },
         devDependencies: {
-          '@loutrejs/cli': '^0.1.0',
+          '@loutrejs/cli': loutreVersion,
           oxfmt: '^0.65.0',
           oxlint: '^1.80.0',
           vitest: '^4.1.11',
