@@ -14,9 +14,7 @@ for (const directory of await readdir(packagesDirectory)) {
   )
   if (manifest.private === true) continue
   if (manifest.repository?.url !== repositoryUrl) {
-    failures.push(
-      `${manifest.name}: repository.urlは${repositoryUrl}を指定してください`,
-    )
+    failures.push(`${manifest.name}: repository.url must be ${repositoryUrl}`)
   }
   const result = JSON.parse(
     execFileSync('npm', ['pack', packageDirectory, '--dry-run', '--json'], {
@@ -31,7 +29,7 @@ for (const directory of await readdir(packagesDirectory)) {
   validateBinTargets(manifest.name, manifest.bin)
   collectBinTargets(manifest.bin, required)
   for (const path of required) {
-    if (!files.has(path)) failures.push(`${manifest.name}: ${path}がありません`)
+    if (!files.has(path)) failures.push(`${manifest.name}: missing ${path}`)
   }
   for (const file of files) {
     if (
@@ -39,15 +37,15 @@ for (const directory of await readdir(packagesDirectory)) {
       file.endsWith('.tsbuildinfo') ||
       file.endsWith('.map')
     ) {
-      failures.push(`${manifest.name}: 公開不要な${file}が含まれています`)
+      failures.push(`${manifest.name}: contains unpublished file ${file}`)
     }
   }
 }
 
 if (failures.length > 0) {
-  throw new Error(`package検証に失敗しました\n${failures.join('\n')}`)
+  throw new Error(`Package verification failed\n${failures.join('\n')}`)
 }
-console.log('全公開packageのtarball検証: 成功')
+console.log('Published package tarball verification: passed')
 
 function validateBinTargets(packageName, value) {
   const targets =
@@ -58,9 +56,7 @@ function validateBinTargets(packageName, value) {
         : []
   for (const target of targets) {
     if (typeof target === 'string' && target.startsWith('./')) {
-      failures.push(
-        `${packageName}: bin path ${target} は ./ なしで指定してください`,
-      )
+      failures.push(`${packageName}: bin path ${target} must not start with ./`)
     }
   }
 }

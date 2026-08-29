@@ -514,7 +514,7 @@ async function finalizeResponse(
   )
   if (response.stream === 'server') {
     if (!isAsyncIterable(result.body)) {
-      throw new Error('server-stream responseにはAsyncIterableが必要です')
+      throw new Error('Server-stream response requires an AsyncIterable')
     }
     const encoder = new TextEncoder()
     const iterator = result.body[Symbol.asyncIterator]()
@@ -528,7 +528,7 @@ async function finalizeResponse(
           signal.removeEventListener('abort', abort!)
           void iterator.return?.(signal.reason).finally(() => {
             controller.error(
-              signal.reason ?? new Error('HTTP requestが中断されました'),
+              signal.reason ?? new Error('HTTP request was aborted'),
             )
           })
         }
@@ -584,7 +584,7 @@ async function validateResponseHeaders(
 ): Promise<HttpHeaders | undefined> {
   if (!schema) {
     if (headers !== undefined) {
-      throw new Error('未宣言のHTTP response headerが返されました')
+      throw new Error('Undeclared HTTP response header was returned')
     }
     return undefined
   }
@@ -592,7 +592,7 @@ async function validateResponseHeaders(
   const validated = await validateSchema(schema, headers)
   if (validated === undefined) return undefined
   if (!isHttpHeaders(validated)) {
-    throw new Error('HTTP response header schemaの出力が不正です')
+    throw new Error('HTTP response header schema produced an invalid value')
   }
   return validated
 }
@@ -701,7 +701,7 @@ async function mapDeclaredError(
         result === null ||
         !('body' in result)
       ) {
-        throw new Error('HTTP error mappingはbodyを返す必要があります')
+        throw new Error('HTTP error mapping must return a body')
       }
       return {
         kind: 'http-result',

@@ -164,7 +164,7 @@ describe('create-loutre', () => {
           packageManager: 'npm',
           target: 'node',
         }),
-      ).rejects.toThrow('生成先が空ではありません')
+      ).rejects.toThrow('Target directory is not empty')
       expect(await readFile(join(targetDirectory, 'keep.txt'), 'utf8')).toBe(
         'keep',
       )

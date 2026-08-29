@@ -16,7 +16,7 @@ const loutreVersion = requiredDependencyVersion('@loutrejs/loutre')
 
 function requiredDependencyVersion(name: string): string {
   const version = packageManifest.dependencies[name]
-  if (!version) throw new Error(`${name}のversionがpackage.jsonにありません。`)
+  if (!version) throw new Error(`${name} version is missing from package.json.`)
   return version
 }
 
@@ -190,7 +190,7 @@ function developmentSection(options: StarterOptions): string {
     return [
       '## 開発',
       '',
-      'Lambda targetはlocal HTTP listenerを起動しません。Applicationの挙動はtestで確認します。',
+      'LambdaターゲットではローカルHTTPリスナーを起動しません。Applicationの動作はテストで確認します。',
       '',
       '```sh',
       runScriptCommand(options.packageManager, 'test:watch'),
@@ -205,7 +205,7 @@ function developmentSection(options: StarterOptions): string {
     '```',
     '',
     options.target === 'cloudflare-workers'
-      ? 'WranglerがlocalのCloudflare Workers環境を起動します。'
+      ? 'WranglerがローカルのCloudflare Workers環境を起動します。'
       : '<http://127.0.0.1:3000> へアクセスするとJSONレスポンスを返します。',
   ].join('\n')
 }
@@ -213,7 +213,7 @@ function developmentSection(options: StarterOptions): string {
 function deploymentSection(options: StarterOptions): string {
   if (options.target === 'cloudflare-workers') {
     return [
-      '## Deploy',
+      '## デプロイ',
       '',
       '```sh',
       runScriptCommand(options.packageManager, 'deploy'),
@@ -222,17 +222,17 @@ function deploymentSection(options: StarterOptions): string {
   }
   if (options.target === 'aws-lambda') {
     return [
-      '## Build',
+      '## ビルド',
       '',
       '```sh',
       runScriptCommand(options.packageManager, 'build'),
       '```',
       '',
-      '`dist/index.mjs`の`handler`をAWS Lambdaのhandlerとしてdeployします。',
+      '`dist/index.mjs`の`handler`をAWS Lambdaのハンドラーとしてデプロイします。',
     ].join('\n')
   }
   return [
-    '## Production',
+    '## 本番実行',
     '',
     '```sh',
     ...(options.target === 'deno'

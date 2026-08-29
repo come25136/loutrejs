@@ -16,7 +16,7 @@ curl http://127.0.0.1:3000/greetings/Loutre
 ```
 
 ```json
-{ "message": "こんにちは、Loutre！" }
+{ "message": "Hello, Loutre!" }
 ```
 
 Application Graphと型だけを検証する場合は、次のコマンドを実行します。

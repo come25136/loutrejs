@@ -61,7 +61,7 @@ const GreetingContract = contract({
 
 class GreetingService {
   greet(name: string) {
-    return { message: `こんにちは、${name}！` }
+    return { message: `Hello, ${name}!` }
   }
 }
 
@@ -78,7 +78,7 @@ const GreetingController = implementation({
 
 const GreetingModule = defineModule(() => ({
   name: 'GreetingModule',
-  description: '挨拶HTTP APIのサンプル',
+  description: 'Example greeting HTTP API',
   providers: [GreetingService, RequestTiming],
   implementations: [GreetingController],
 }))

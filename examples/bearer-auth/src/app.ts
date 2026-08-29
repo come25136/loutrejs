@@ -35,7 +35,7 @@ const bearerAuthentication = bearerAuth({
   },
   unauthorized: {
     variant: 'unauthorized',
-    body: { error: 'Bearer tokenが必要です' },
+    body: { error: 'Bearer token required' },
   },
 })
 
@@ -74,7 +74,7 @@ const BearerProfileController = implementation({
 })
 
 const BearerProfileModule = defineModule(() => ({
-  description: 'ユーザー定義Bearer認証で保護したプロフィールAPIのサンプル',
+  description: 'Example profile API protected by custom Bearer authentication',
   implementations: [BearerProfileController],
 }))
 

@@ -192,7 +192,7 @@ export function createMessagePortExecution(options: {
             (candidate) => candidate.procedure === procedure,
           )
           if (!route)
-            throw new Error(`MessagePort procedureがありません: ${procedure}`)
+            throw new Error(`MessagePort procedure not found: ${procedure}`)
           invocationLogger = invocationLogger.child({
             source: `${route.implementation.name}.${route.procedure}`,
           })
@@ -224,7 +224,7 @@ export function createMessagePortExecution(options: {
               ) as Record<string, unknown>
               const method = target[route.procedure]
               if (typeof method !== 'function')
-                throw new Error('Handler methodがありません')
+                throw new Error('Handler method is missing')
               return Reflect.apply(method, target, [
                 terminalContext,
               ]) as Promise<LogicalMessagePortResult>
@@ -269,10 +269,10 @@ async function finalize(
   result: LogicalMessagePortResult,
 ): Promise<LogicalMessagePortResult> {
   const response = definition.responses[result.variant]
-  if (!response) throw new Error(`未宣言variantです: ${result.variant}`)
+  if (!response) throw new Error(`Undeclared variant: ${result.variant}`)
   if (response.stream === 'server') {
     if (!isAsyncIterable(result.value)) {
-      throw new Error('server-stream resultにはAsyncIterableが必要です')
+      throw new Error('Server-stream result requires an AsyncIterable')
     }
     const source = result.value
     return {

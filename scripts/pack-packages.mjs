@@ -33,4 +33,4 @@ for (const directory of await readdir(packagesDirectory)) {
   packed.push(`${manifest.name} -> ${result.filename}`)
 }
 
-console.log(`公開package tarballを生成しました:\n${packed.join('\n')}`)
+console.log(`Created published package tarballs:\n${packed.join('\n')}`)

@@ -221,14 +221,14 @@ function normalizeOrigin(
   for (const value of origins) {
     if (value.length === 0 || /[\u0000-\u001f\u007f]/.test(value)) {
       throw new TypeError(
-        'CORS originには空文字列または制御文字を使用できません',
+        'CORS origin cannot be empty or contain control characters',
       )
     }
   }
   if (origins.includes('*')) {
     if (credentials) {
       throw new TypeError(
-        'credentialsを有効にする場合、CORS originにワイルドカードは使用できません',
+        'CORS origin cannot be a wildcard when credentials are enabled',
       )
     }
     return Object.freeze({ kind: 'wildcard' })
@@ -248,7 +248,7 @@ function normalizeTokens(
     values.map((value) => {
       const token = value.trim()
       if (!httpToken.test(token)) {
-        throw new TypeError(`CORS ${option}に不正なHTTP tokenが含まれています`)
+        throw new TypeError(`CORS ${option} contains an invalid HTTP token`)
       }
       return uppercase ? token.toUpperCase() : token
     }),
@@ -258,7 +258,7 @@ function normalizeTokens(
 function normalizeMaxAge(maxAge: number | undefined): number | undefined {
   if (maxAge === undefined) return undefined
   if (!Number.isSafeInteger(maxAge) || maxAge < 0) {
-    throw new TypeError('CORS maxAgeには0以上の安全な整数を指定してください')
+    throw new TypeError('CORS maxAge must be a non-negative safe integer')
   }
   return maxAge
 }

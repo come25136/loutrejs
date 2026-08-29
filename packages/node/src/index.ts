@@ -167,9 +167,7 @@ function createNodeHttpServerDriver(
     const abortController = new AbortController()
     const abort = () => {
       if (!abortController.signal.aborted) {
-        abortController.abort(
-          new Error('HTTP client connectionが切断されました'),
-        )
+        abortController.abort(new Error('HTTP client connection was closed'))
       }
     }
     incoming.once('aborted', abort)

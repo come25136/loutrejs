@@ -327,7 +327,7 @@ export class Container {
         .map(tokenName)
         .join(' -> ')
       throw new DependencyResolutionError(
-        `LUTRE_DI_CYCLE: 循環依存を検出しました: ${cycle}`,
+        `LUTRE_DI_CYCLE: Circular dependency detected: ${cycle}`,
       )
     }
 
@@ -420,7 +420,7 @@ export class Container {
           const implementation = provider.mapping[selected as PropertyKey]
           if (!implementation) {
             throw new DependencyResolutionError(
-              `${provider.select.key}=${String(selected)}に対応するconditional Providerがありません`,
+              `No conditional Provider matches ${provider.select.key}=${String(selected)}`,
             )
           }
           return this.#instantiate(implementation, lineage)

@@ -37,7 +37,7 @@ child.stderr.on('data', (chunk) => {
   stderr += chunk
 })
 const code = await new Promise((resolveExit) => child.on('exit', resolveExit))
-if (code !== 0 || !stdout.includes('conformance: 成功')) {
-  throw new Error(`Electron conformanceに失敗しました。\n${stdout}\n${stderr}`)
+if (code !== 0 || !stdout.includes('conformance: passed')) {
+  throw new Error(`Electron conformance failed.\n${stdout}\n${stderr}`)
 }
 process.stdout.write(stdout)

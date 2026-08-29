@@ -1,6 +1,6 @@
 # Loutre Application
 
-Loutreで作成した{{targetLabel}}向けApplicationです。
+Loutreで作成した{{targetLabel}}向けのApplicationです。
 
 {{developmentSection}}
 

@@ -221,7 +221,7 @@ describe('continuation Pipeline', () => {
 
     await expect(
       executePipeline([provider, terminal], hooks({ session: 'existing' })),
-    ).rejects.toThrow('上書きできません')
+    ).rejects.toThrow('cannot overwrite')
   })
 
   it('未宣言Context propertyを拒否する', async () => {
@@ -234,7 +234,7 @@ describe('continuation Pipeline', () => {
 
     await expect(
       executePipeline([broken, terminal], hooks({})),
-    ).rejects.toThrow('未宣言のContext property extra')
+    ).rejects.toThrow('undeclared Context property extra')
   })
 
   it('provides内の同名property重複を拒否する', async () => {
@@ -250,7 +250,7 @@ describe('continuation Pipeline', () => {
 
     await expect(
       executePipeline([broken, terminal], hooks({})),
-    ).rejects.toThrow('重複して宣言しました')
+    ).rejects.toThrow('declared duplicate Context property')
   })
 
   it('Prisma風callback wrapperでchildだけを囲み親後段へ戻る', async () => {

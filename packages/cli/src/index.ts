@@ -55,7 +55,7 @@ export async function runCli(
     const requested = readOption(args, '--entry')
     if (!requested) {
       io.stderr(
-        `${command}には--entry <明示entry>が必要です。filesystem discoveryは行いません。`,
+        `${command} requires --entry <entry>. Filesystem discovery is not supported.`,
       )
       return undefined
     }
@@ -68,7 +68,7 @@ export async function runCli(
       if (!target) return 2
       const graph = await loadApplicationGraph(target)
       if (graph.diagnostics.length === 0) {
-        io.stdout('Loutre Application Graphは有効です。')
+        io.stdout('Loutre Application Graph is valid.')
         return 0
       }
       writeDiagnostics(graph, io)
@@ -79,7 +79,7 @@ export async function runCli(
       const runtimeName = subject ?? 'node'
       const runtime = runtimes[runtimeName]
       if (!runtime) {
-        io.stderr(`未定義のRuntimeです: ${runtimeName}`)
+        io.stderr(`Unknown runtime: ${runtimeName}`)
         return 2
       }
       const target = entry()
@@ -88,8 +88,8 @@ export async function runCli(
       const required = requiredCapabilities(graph)
       const check = checkCapabilities(required, runtime)
       io.stdout(`Runtime: ${runtime.runtime}`)
-      io.stdout(`Required: ${check.required.join(', ') || '(なし)'}`)
-      io.stdout(`Missing: ${check.missing.join(', ') || '(なし)'}`)
+      io.stdout(`Required: ${check.required.join(', ') || '(none)'}`)
+      io.stdout(`Missing: ${check.missing.join(', ') || '(none)'}`)
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
       return check.ok && graph.diagnostics.length === 0 ? 0 : 1
     }
@@ -97,7 +97,7 @@ export async function runCli(
     case 'graph': {
       if (!isGraphSubject(subject)) {
         io.stderr(
-          'graphにはmodules、di、contracts、executions、runtimeのいずれかが必要です。',
+          'graph requires one of: modules, di, contracts, executions, runtime.',
         )
         return 2
       }
@@ -106,9 +106,7 @@ export async function runCli(
       const graph = await loadApplicationGraph(target)
       const format = readOption(args, '--format') ?? 'text'
       if (!['text', 'json', 'mermaid'].includes(format)) {
-        io.stderr(
-          'graph --formatにはtext、json、mermaidのいずれかを指定してください。',
-        )
+        io.stderr('graph --format must be one of: text, json, mermaid.')
         return 2
       }
       if (format === 'json') {
@@ -124,14 +122,14 @@ export async function runCli(
 
     case 'explain': {
       if (!subject) {
-        io.stderr('explainには対象が必要です。')
+        io.stderr('explain requires a target.')
         return 2
       }
       const target = entry()
       if (!target) return 2
       const graph = await loadApplicationGraph(target)
       if (!renderExplanation(graph, subject, io.stdout)) {
-        io.stderr(`対象が見つかりません: ${subject}`)
+        io.stderr(`Target not found: ${subject}`)
         return 1
       }
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
@@ -140,7 +138,7 @@ export async function runCli(
 
     case 'build': {
       if (!subject) {
-        io.stderr('buildには明示的なApplication entryが必要です。')
+        io.stderr('build requires an explicit Application entry.')
         return 2
       }
       const runtimeOption = readOption(args, '--runtime')
@@ -149,7 +147,7 @@ export async function runCli(
         : undefined
       if (runtimeOption && !deploymentRuntime) {
         io.stderr(
-          `build --runtimeには${deploymentRuntimes.join('、')}のいずれかを指定してください。`,
+          `build --runtime must be one of: ${deploymentRuntimes.join(', ')}.`,
         )
         return 2
       }
@@ -161,7 +159,7 @@ export async function runCli(
       }
       if (deploymentRuntime && !hasHttpExecution(graph)) {
         io.stderr(
-          `Runtime ${deploymentRuntime} のgenerated entryにはHTTP-capable Applicationが必要です。`,
+          `Runtime ${deploymentRuntime} entry generation requires an HTTP-capable Application.`,
         )
         return 1
       }
@@ -172,7 +170,7 @@ export async function runCli(
       await mkdir(outputDirectory, { recursive: true })
       const applicationOutput = join(outputDirectory, 'application.mjs')
       await emitApplication(applicationEntry, applicationOutput)
-      io.stdout(`Applicationを出力しました: ${applicationOutput}`)
+      io.stdout(`Wrote Application: ${applicationOutput}`)
       if (deploymentRuntime) {
         const deploymentOutput = join(outputDirectory, 'entry.mjs')
         await writeFile(
@@ -180,13 +178,13 @@ export async function runCli(
           renderDeploymentEntry(deploymentRuntime),
           'utf8',
         )
-        io.stdout(`Runtime entryを出力しました: ${deploymentOutput}`)
+        io.stdout(`Wrote runtime entry: ${deploymentOutput}`)
       }
       return 0
     }
 
     default:
-      io.stderr(`不明なcommandです: ${command}`)
+      io.stderr(`Unknown command: ${command}`)
       return 2
   }
 }
@@ -298,12 +296,12 @@ function renderTextGraph(
       )
       if (module.description !== undefined)
         write(`  description: ${module.description}`)
-      write(`  imports: ${module.imports.join(', ') || '(なし)'}`)
-      write(`  environment: ${module.environment.join(', ') || '(なし)'}`)
-      write(`  providers: ${module.providers.join(', ') || '(なし)'}`)
-      write(`  exports: ${module.exports.join(', ') || '(なし)'}`)
-      write(`  lifecycle: ${module.lifecycle.join(', ') || '(なし)'}`)
-      write(`  requires: ${module.requires.join(', ') || '(なし)'}`)
+      write(`  imports: ${module.imports.join(', ') || '(none)'}`)
+      write(`  environment: ${module.environment.join(', ') || '(none)'}`)
+      write(`  providers: ${module.providers.join(', ') || '(none)'}`)
+      write(`  exports: ${module.exports.join(', ') || '(none)'}`)
+      write(`  lifecycle: ${module.lifecycle.join(', ') || '(none)'}`)
+      write(`  requires: ${module.requires.join(', ') || '(none)'}`)
     }
     if (graph.arguments) write(`Application Arguments: ${graph.arguments.name}`)
     return
@@ -395,7 +393,7 @@ function renderDiText(
     write(nodeLabel(node))
     render(node.id, '', [node.id])
   }
-  if (graph.nodes.length === 0) write('(DI nodeなし)')
+  if (graph.nodes.length === 0) write('(no DI nodes)')
 }
 
 function nodeLabel(node: DependencyNodeIR): string {
@@ -511,7 +509,7 @@ function renderExplanation(
     if (node.module) write(`managed by: ${node.module}`)
     const edges = graph.edges.filter((edge) => edge.from === node.id)
     write('dependencies:')
-    if (edges.length === 0) write('  (なし)')
+    if (edges.length === 0) write('  (none)')
     for (const edge of edges) {
       const dependency = graph.nodes.find(
         (candidate) => candidate.id === edge.to,
@@ -589,12 +587,12 @@ function readOption(args: readonly string[], name: string): string | undefined {
 function helpText(): string {
   return [
     'Loutre CLI',
-    '  loutre check --entry <明示entry>',
-    '  loutre doctor [node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <明示entry>',
-    '  loutre graph modules|di|contracts|executions|runtime --entry <明示entry> [--format text|json|mermaid]',
-    '  loutre explain <target> --entry <明示entry>',
-    '  loutre build <明示entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',
+    '  loutre check --entry <entry>',
+    '  loutre doctor [node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
+    '  loutre graph modules|di|contracts|executions|runtime --entry <entry> [--format text|json|mermaid]',
+    '  loutre explain <target> --entry <entry>',
+    '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',
     '',
-    'Applicationの実行方法はHostが所有します。run/dev/startはLoutre CLIにはありません。',
+    'Application execution is owned by the Host. Loutre CLI does not provide run/dev/start.',
   ].join('\n')
 }

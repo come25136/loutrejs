@@ -59,7 +59,7 @@ async function importApplicationDefinition(
   const application = module.default ?? module.application
   if (!application || application.kind !== 'application-definition') {
     throw new Error(
-      'Application entryはdefaultまたはapplication named exportとしてApplicationDefinitionを公開する必要があります。',
+      'Application entry must export an ApplicationDefinition as default or as the named export application.',
     )
   }
   return application as ApplicationDefinition

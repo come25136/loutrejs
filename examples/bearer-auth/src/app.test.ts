@@ -17,7 +17,7 @@ describe('ユーザー定義Bearer認証サンプル', () => {
       'Bearer realm="Loutre Example"',
     )
     await expect(response.json()).resolves.toEqual({
-      error: 'Bearer tokenが必要です',
+      error: 'Bearer token required',
     })
   })
 
