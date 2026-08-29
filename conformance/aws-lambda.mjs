@@ -12,9 +12,7 @@ const unary = await unaryHandler({
 })
 const body = JSON.parse(Buffer.from(unary.body, 'base64').toString('utf8'))
 if (unary.statusCode !== 200 || body.id !== 'aws-lambda-user') {
-  throw new Error(
-    `Lambda unary conformanceに失敗しました: ${JSON.stringify(body)}`,
-  )
+  throw new Error(`Lambda unary conformance failed: ${JSON.stringify(body)}`)
 }
 
 const streamingHandler = awsLambdaRuntime.bind({
@@ -40,6 +38,6 @@ await streamingHandler(
 )
 const streamed = new TextDecoder().decode(Buffer.concat(chunks))
 if (!ended || !streamed.includes('"sequence":3')) {
-  throw new Error('Lambda response streaming conformanceに失敗しました')
+  throw new Error('Lambda response streaming conformance failed')
 }
-console.log(`AWS Lambda Node.js ${process.versions.node} conformance: 成功`)
+console.log(`AWS Lambda Node.js ${process.versions.node} conformance: passed`)

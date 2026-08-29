@@ -54,7 +54,7 @@ async function assertTargetIsEmpty(targetDirectory: string): Promise<void> {
   try {
     const entries = await readdir(targetDirectory)
     if (entries.length > 0) {
-      throw new Error(`生成先が空ではありません: ${targetDirectory}`)
+      throw new Error(`Target directory is not empty: ${targetDirectory}`)
     }
   } catch (error) {
     if (isMissingDirectory(error)) return
@@ -84,7 +84,9 @@ function packageNameFor(targetDirectory: string): string {
     name.startsWith('.') ||
     name.startsWith('_')
   ) {
-    throw new Error(`npm package名を生成できません: ${targetDirectory}`)
+    throw new Error(
+      `Could not derive an npm package name from: ${targetDirectory}`,
+    )
   }
   return name
 }

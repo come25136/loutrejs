@@ -20,7 +20,7 @@ export async function runOpenApiCli(
 
   const entry = readOption(args, '--entry')
   if (!entry) {
-    io.stderr('openapiには--entry <明示entry>が必要です。')
+    io.stderr('openapi requires --entry <entry>.')
     return 2
   }
 
@@ -30,7 +30,7 @@ export async function runOpenApiCli(
     readOption(args, '--api-version') ?? packageInfo.version ?? '0.0.0'
   const output = readOption(args, '--output')
   if (output && !output.toLowerCase().endsWith('.json')) {
-    io.stderr('現時点のopenapi --outputは.jsonのみ対応しています。')
+    io.stderr('openapi --output currently supports only .json files.')
     return 2
   }
 
@@ -46,7 +46,7 @@ export async function runOpenApiCli(
 
   const outputPath = resolve(io.cwd, output)
   await writeFile(outputPath, serialized, 'utf8')
-  io.stdout(`OpenAPI 3.2 documentを出力しました: ${outputPath}`)
+  io.stdout(`Wrote OpenAPI 3.2 document: ${outputPath}`)
   return 0
 }
 
@@ -82,8 +82,8 @@ function openApiHelpText(): string {
     'loutre openapi --entry <application.ts> [options]',
     '',
     'Options:',
-    '  --output <openapi.json>  JSON fileへ出力（省略時はstdout）',
-    '  --title <title>          API title（省略時はpackage.json name）',
-    '  --api-version <version> API version（省略時はpackage.json version）',
+    '  --output <openapi.json>  Write a JSON file (defaults to stdout)',
+    '  --title <title>          API title (defaults to package.json name)',
+    '  --api-version <version> API version (defaults to package.json version)',
   ].join('\n')
 }

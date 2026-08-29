@@ -82,19 +82,19 @@ export async function runCreateLoutre(
       packageManager,
       target,
     })
-    io.stdout(`Loutre Applicationを作成しました: ${result.targetDirectory}`)
+    io.stdout(`Created Loutre Application: ${result.targetDirectory}`)
     io.stdout(`Target: ${targetLabels[target]}`)
     io.stdout(`Package manager: ${packageManagerLabels[packageManager]}`)
 
     if (parsed.install) {
-      io.stdout('依存関係をインストールします。')
+      io.stdout('Installing dependencies...')
       const installCode = await io.install(
         result.targetDirectory,
         packageManager,
       )
       if (installCode !== 0) {
         io.stderr(
-          `${installCommand(packageManager)}に失敗しました。生成したファイルは残しています。`,
+          `${installCommand(packageManager)} failed. Generated files have been kept.`,
         )
         return installCode
       }
@@ -102,7 +102,7 @@ export async function runCreateLoutre(
 
     const nextDirectory = relative(io.cwd, result.targetDirectory)
     io.stdout('')
-    io.stdout('次のコマンド:')
+    io.stdout('Next steps:')
     if (nextDirectory && nextDirectory !== '.') {
       io.stdout(`  cd ${quoteShellArgument(nextDirectory)}`)
     }
@@ -144,9 +144,9 @@ function parseArgs(
         ...packageManagers,
       ]),
     )
-    .option('-y, --yes', '未指定の選択肢に既定値を使用する')
-    .option('--no-install', '依存関係をinstallしない')
-    .option('-h, --help', 'helpを表示する')
+    .option('-y, --yes', 'Use defaults for unspecified options')
+    .option('--no-install', 'Skip dependency installation')
+    .option('-h, --help', 'Show help')
     .allowExcessArguments(false)
 
   try {
@@ -188,7 +188,9 @@ async function resolveDirectory(
   if (requested) return requested
   if (yes) return 'loutre-app'
   if (!io.prompt) {
-    io.stderr('生成先を指定してください。例: npm create loutre@latest my-app')
+    io.stderr(
+      'Specify a target directory. Example: npm create loutre@latest my-app',
+    )
     return undefined
   }
   const answer = await io.prompt('Project name', 'loutre-app')
@@ -329,8 +331,8 @@ function helpText(): string {
     'Options:',
     '  --target <target>                    node | bun | deno | cloudflare-workers | aws-lambda',
     '  --package-manager <package-manager>  npm | pnpm | yarn | bun | deno',
-    '  -y, --yes                            未指定の選択肢に既定値を使用する',
-    '  --no-install                         依存関係をinstallしない',
-    '  -h, --help                           helpを表示する',
+    '  -y, --yes                            Use defaults for unspecified options',
+    '  --no-install                         Skip dependency installation',
+    '  -h, --help                           Show help',
   ].join('\n')
 }

@@ -35,7 +35,7 @@ const basicAuthentication = basicAuth({
   },
   unauthorized: {
     variant: 'unauthorized',
-    body: { error: 'Basic認証が必要です' },
+    body: { error: 'Basic authentication required' },
   },
 })
 
@@ -74,7 +74,7 @@ const ProfileController = implementation({
 })
 
 const ProfileModule = defineModule(() => ({
-  description: 'Basic認証で保護したプロフィールAPIのサンプル',
+  description: 'Example profile API protected by Basic authentication',
   implementations: [ProfileController],
 }))
 

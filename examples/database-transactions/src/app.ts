@@ -58,7 +58,7 @@ const authorization = layer({
   requires: [CURRENT_USER],
   factory: () => async (ctx, next) => {
     if (ctx.currentUser.id.length === 0) {
-      throw new Error('利用者を識別できません')
+      throw new Error('Could not identify the user')
     }
     await next()
   },

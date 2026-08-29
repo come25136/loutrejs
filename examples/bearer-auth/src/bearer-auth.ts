@@ -92,7 +92,7 @@ function readBearerToken(
 function formatBearerChallenge(realm: string): string {
   if (realm.length === 0 || /[\u0000-\u001f\u007f]/.test(realm)) {
     throw new TypeError(
-      'Bearer認証のrealmには空文字列または制御文字を使用できません',
+      'Bearer authentication realm cannot be empty or contain control characters',
     )
   }
   return `Bearer realm="${realm.replace(/[\\"]/g, '\\$&')}"`

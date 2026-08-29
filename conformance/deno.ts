@@ -13,14 +13,14 @@ if (
   body.id !== 'deno-user' ||
   body.name !== 'test'
 ) {
-  throw new Error(`Deno conformanceに失敗しました: ${JSON.stringify(body)}`)
+  throw new Error(`Deno conformance failed: ${JSON.stringify(body)}`)
 }
 
 const streamResponse = await events.fetch(
   new Request('https://deno.fixture/events'),
 )
 if (!(await streamResponse.text()).includes('"sequence":3')) {
-  throw new Error('Deno server-stream conformanceに失敗しました')
+  throw new Error('Deno server-stream conformance failed')
 }
 await users.close()
 await events.close()
@@ -30,4 +30,4 @@ const denoVersion =
       readonly Deno?: { readonly version?: { readonly deno?: string } }
     }
   ).Deno?.version?.deno ?? 'unknown'
-console.log(`Deno ${denoVersion} conformance: 成功`)
+console.log(`Deno ${denoVersion} conformance: passed`)

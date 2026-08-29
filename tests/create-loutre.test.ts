@@ -73,7 +73,7 @@ describe('create-loutre', () => {
       ).toContain('nodeRuntime.serve')
       expect(
         await readFile(join(result.targetDirectory, 'src/app.test.ts'), 'utf8'),
-      ).toContain('GET / がLoutre Applicationのレスポンスを返す')
+      ).toContain('GET / returns a response from the Loutre Application')
       expect(
         await readFile(join(result.targetDirectory, '.oxlintrc.json'), 'utf8'),
       ).toContain('correctness')
@@ -164,7 +164,7 @@ describe('create-loutre', () => {
           packageManager: 'npm',
           target: 'node',
         }),
-      ).rejects.toThrow('生成先が空ではありません')
+      ).rejects.toThrow('Target directory is not empty')
       expect(await readFile(join(targetDirectory, 'keep.txt'), 'utf8')).toBe(
         'keep',
       )

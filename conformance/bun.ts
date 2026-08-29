@@ -15,7 +15,7 @@ try {
     body.id !== 'bun-user' ||
     body.name !== 'test'
   ) {
-    throw new Error(`Bun conformanceに失敗しました: ${JSON.stringify(body)}`)
+    throw new Error(`Bun conformance failed: ${JSON.stringify(body)}`)
   }
 } finally {
   await users.close()
@@ -25,7 +25,7 @@ const events = await bunRuntime.serve({ application: eventsDefinition, port })
 try {
   const streamResponse = await fetch(`http://127.0.0.1:${port}/events`)
   if (!(await streamResponse.text()).includes('"sequence":3')) {
-    throw new Error('Bun server-stream conformanceに失敗しました')
+    throw new Error('Bun server-stream conformance failed')
   }
 } finally {
   await events.close()
@@ -36,4 +36,4 @@ const bunVersion =
       readonly Bun?: { readonly version?: string }
     }
   ).Bun?.version ?? 'unknown'
-console.log(`Bun ${bunVersion} conformance: 成功`)
+console.log(`Bun ${bunVersion} conformance: passed`)

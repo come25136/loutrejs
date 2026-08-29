@@ -22,7 +22,7 @@ for (const directory of await readdir(packagesDirectory)) {
 const versions = new Set(publicPackages.map(({ version }) => version))
 if (versions.size !== 1) {
   throw new Error(
-    `公開packageのversionが一致していません: ${publicPackages
+    `Published package versions do not match: ${publicPackages
       .map(({ name, version }) => `${name}@${version}`)
       .join(', ')}`,
   )
@@ -31,7 +31,7 @@ if (versions.size !== 1) {
 const [version] = versions
 if (rootManifest.version !== version) {
   throw new Error(
-    `root version ${rootManifest.version} と公開package version ${version} が一致していません`,
+    `Root version ${rootManifest.version} does not match published package version ${version}`,
   )
 }
 
@@ -43,11 +43,11 @@ for (const manifest of publicPackages) {
       if (!name.startsWith('@loutrejs/')) continue
       if (range !== `^${version}`) {
         throw new Error(
-          `${manifest.name}の${name} dependency ${range} がrelease version ^${version} と一致していません`,
+          `${manifest.name} ${name} dependency ${range} does not match release version ^${version}`,
         )
       }
     }
   }
 }
 
-console.log(`release version ${version}: 一致`)
+console.log(`release version ${version}: matched`)

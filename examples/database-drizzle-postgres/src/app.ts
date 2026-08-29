@@ -127,7 +127,7 @@ class UserRepository {
         createdBy: 'drizzle-example',
       })
       .returning()
-    if (!user) throw new Error('作成した利用者を取得できません')
+    if (!user) throw new Error('Could not load the created user')
     return user
   }
 }

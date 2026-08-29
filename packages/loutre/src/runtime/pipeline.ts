@@ -50,7 +50,7 @@ export async function executePipeline<TContext extends object, TResult>(
     new Set<ContextKey>(),
   )
   if (flow.kind === 'continue') {
-    throw new Error('Pipelineがresultを生成しませんでした')
+    throw new Error('Pipeline did not produce a result')
   }
   return flow.result
 }
@@ -113,7 +113,7 @@ async function executeLayer<TResult>(
     calls += 1
     if (calls > 1) {
       contractError = new LayerContractError(
-        `LUTRE_LAYER_NEXT_REENTRY: Layer ${layer.name}のnext()は1回だけ実行できます`,
+        `LUTRE_LAYER_NEXT_REENTRY: Layer ${layer.name} can call next() only once`,
       )
       return Promise.reject(contractError)
     }
@@ -155,7 +155,7 @@ async function executeLayer<TResult>(
   if (isShortCircuit(runtimeResult)) {
     if (calls > 0) {
       throw new LayerContractError(
-        `LUTRE_LAYER_SHORT_CIRCUIT_AFTER_NEXT: Layer ${layer.name}はnext()後にshortCircuitできません`,
+        `LUTRE_LAYER_SHORT_CIRCUIT_AFTER_NEXT: Layer ${layer.name} cannot shortCircuit after next()`,
       )
     }
     return {
@@ -165,7 +165,7 @@ async function executeLayer<TResult>(
   }
   if (calls === 0) {
     throw new LayerContractError(
-      `LUTRE_LAYER_NEXT_SKIPPED: Layer ${layer.name}はnext()を1回実行する必要があります`,
+      `LUTRE_LAYER_NEXT_SKIPPED: Layer ${layer.name} must call next() exactly once`,
     )
   }
   return continuationFlow
@@ -179,7 +179,7 @@ function assertRequiredContext(
   for (const required of requiredKeys) {
     if (!availableKeys.has(required)) {
       throw new LayerContractError(
-        `${layerName}が必要とするContext Key ${contextKeyName(required)}は利用できません`,
+        `Context Key ${contextKeyName(required)} required by ${layerName} is unavailable`,
       )
     }
   }
@@ -193,7 +193,7 @@ function applyProvidedContext(
 ): void {
   if (arguments_.length > 1) {
     throw new LayerContractError(
-      `${layer.name}のnext()へ渡せるContext objectは1つだけです`,
+      `Layer ${layer.name} can pass only one Context object to next()`,
     )
   }
   if (layer.provides.length === 0) {
@@ -202,8 +202,8 @@ function applyProvidedContext(
       const property = firstProperty(provided)
       throw new LayerContractError(
         property === undefined
-          ? `${layer.name}はContextをprovideすると宣言していません`
-          : `${layer.name}が未宣言のContext property ${property}をprovideしました`,
+          ? `Layer ${layer.name} does not declare any provided Context`
+          : `Layer ${layer.name} provided undeclared Context property ${property}`,
       )
     }
     return
@@ -216,7 +216,7 @@ function applyProvidedContext(
     Array.isArray(provided)
   ) {
     throw new LayerContractError(
-      `${layer.name}はprovidesで宣言したContextをnext(object)で渡す必要があります`,
+      `Layer ${layer.name} must pass its declared Context to next(object)`,
     )
   }
 
@@ -225,7 +225,7 @@ function applyProvidedContext(
   for (const property of Object.keys(additions)) {
     if (!declaredNames.has(property)) {
       throw new LayerContractError(
-        `${layer.name}が未宣言のContext property ${property}をprovideしました`,
+        `Layer ${layer.name} provided undeclared Context property ${property}`,
       )
     }
   }
@@ -233,18 +233,18 @@ function applyProvidedContext(
   for (const key of layer.provides) {
     if (providedNames.has(key.name)) {
       throw new LayerContractError(
-        `${layer.name}がContext property ${key.name}を重複して宣言しました`,
+        `Layer ${layer.name} declared duplicate Context property ${key.name}`,
       )
     }
     providedNames.add(key.name)
     if (!Object.hasOwn(additions, key.name)) {
       throw new LayerContractError(
-        `${layer.name}が宣言したContext Key ${contextKeyName(key)}をprovideしませんでした`,
+        `Layer ${layer.name} did not provide declared Context Key ${contextKeyName(key)}`,
       )
     }
     if (Object.hasOwn(context, key.name)) {
       throw new LayerContractError(
-        `${layer.name}は既存のContext property ${key.name}を上書きできません`,
+        `Layer ${layer.name} cannot overwrite existing Context property ${key.name}`,
       )
     }
   }

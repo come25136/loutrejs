@@ -46,7 +46,7 @@ const AppController = implementation({
 
 const AppModule = defineModule(() => ({
   name: 'AppModule',
-  description: 'HTTP Applicationのentry module',
+  description: 'HTTP Application entry module',
   implementations: [AppController],
 }))
 

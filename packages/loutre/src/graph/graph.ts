@@ -646,7 +646,7 @@ function buildDependencyGraph(
       ) {
         diagnostics.push({
           code: 'LUTRE_TOKEN_001',
-          message: `Token ID ${token.id}が異なるtoken declarationで重複しています`,
+          message: `Token ID ${token.id} is duplicated across different token declarations`,
           path: `dependency:${token.id}`,
         })
       } else if (!registered) {
@@ -1008,7 +1008,7 @@ function validateDuplicateProviders(
         }
         diagnostics.push({
           code: 'LUTRE_DI_003',
-          message: `Provider ${tokenName(provider.provide)}が${existing.module}と${moduleName}で重複しています`,
+          message: `Provider ${tokenName(provider.provide)} is duplicated in ${existing.module} and ${moduleName}`,
           path: `${moduleName}.providers.${tokenName(provider.provide)}`,
         })
         continue
@@ -1037,7 +1037,7 @@ function collectCustomTokens(
     if (existing && existing !== candidate) {
       diagnostics.push({
         code: 'LUTRE_TOKEN_001',
-        message: `Token ID ${candidate.id}が異なるtoken declarationで重複しています`,
+        message: `Token ID ${candidate.id} is duplicated across different token declarations`,
         path,
       })
       return
@@ -1070,7 +1070,7 @@ function collectContextKeys(
         if (existing && existing !== key) {
           diagnostics.push({
             code: 'LUTRE_CONTEXT_002',
-            message: `Context Key ${key.name}が異なる宣言で重複しています`,
+            message: `Context Key ${key.name} is duplicated across different declarations`,
             path,
           })
           continue
@@ -1204,7 +1204,7 @@ function validatePipeline(
       if (!validated.has(required)) {
         diagnostics.push({
           code: 'LUTRE_VALIDATION_001',
-          message: `${item.name}にはvalidation済みの${required}が必要ですが、validate.${required}より前に配置されています`,
+          message: `${item.name} requires validated ${required} but appears before validate.${required}`,
           path,
         })
       }
@@ -1213,7 +1213,7 @@ function validatePipeline(
       if (!available.has(required)) {
         diagnostics.push({
           code: 'LUTRE_PIPELINE_004',
-          message: `${item.name}が必要とするContext Key ${contextKeyName(required)}は利用できません`,
+          message: `Context Key ${contextKeyName(required)} required by ${item.name} is unavailable`,
           path,
         })
       }
@@ -1222,7 +1222,7 @@ function validatePipeline(
       if (available.has(provided)) {
         diagnostics.push({
           code: 'LUTRE_CONTEXT_003',
-          message: `${item.name}は既存のContext Key ${contextKeyName(provided)}を暗黙に上書きできません`,
+          message: `${item.name} cannot implicitly overwrite existing Context Key ${contextKeyName(provided)}`,
           path,
         })
       }
@@ -1234,7 +1234,7 @@ function validatePipeline(
       if (!response) {
         diagnostics.push({
           code: 'LUTRE_SHORT_CIRCUIT_001',
-          message: `${item.name}のshort circuit variant ${shortCircuit.variant}がresponseに宣言されていません`,
+          message: `Short-circuit variant ${shortCircuit.variant} from ${item.name} is not declared in the response`,
           path,
         })
         continue
@@ -1246,7 +1246,7 @@ function validatePipeline(
       ) {
         diagnostics.push({
           code: 'LUTRE_SHORT_CIRCUIT_002',
-          message: `${item.name}のshort circuit variant ${shortCircuit.variant}はHTTP ${expectedStatus}である必要があります`,
+          message: `Short-circuit variant ${shortCircuit.variant} from ${item.name} must use HTTP ${expectedStatus}`,
           path,
         })
       }

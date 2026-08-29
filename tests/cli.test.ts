@@ -166,7 +166,7 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(2)
-    expect(output.stderr.join('\n')).toContain('text、json、mermaid')
+    expect(output.stderr.join('\n')).toContain('text, json, mermaid')
   })
 
   it('broken DIでもpartial graphとdiagnosticを返す', async () => {
@@ -186,7 +186,7 @@ describe('Loutre CLI', () => {
     for (const command of ['run', 'dev', 'start']) {
       const output = io()
       expect(await runCli([command, 'src/app.ts'], output.value)).toBe(2)
-      expect(output.stderr).toEqual([`不明なcommandです: ${command}`])
+      expect(output.stderr).toEqual([`Unknown command: ${command}`])
     }
   })
 
@@ -262,9 +262,7 @@ describe('Loutre CLI', () => {
         expect(source).toContain("import application from './application.mjs'")
         expect(source).toContain(runtimeImport)
         expect(source).toContain(runtimeExport)
-        expect(output.stdout.join('\n')).toContain(
-          'Runtime entryを出力しました:',
-        )
+        expect(output.stdout.join('\n')).toContain('Wrote runtime entry:')
       } finally {
         await rm(directory, { recursive: true, force: true })
       }
@@ -280,7 +278,7 @@ describe('Loutre CLI', () => {
       ),
     ).toBe(2)
     expect(output.stderr.join('\n')).toContain(
-      'build --runtimeにはaws-lambda、cloudflare-workers、denoのいずれかを指定してください。',
+      'build --runtime must be one of: aws-lambda, cloudflare-workers, deno.',
     )
   })
 })

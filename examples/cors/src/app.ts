@@ -72,7 +72,7 @@ const MessageController = implementation({
 
 const MessageModule = defineModule(() => ({
   name: 'MessageModule',
-  description: 'CORSを有効にしたHTTP APIのサンプル',
+  description: 'Example HTTP API with CORS enabled',
   implementations: [MessageController],
 }))
 

@@ -17,7 +17,7 @@ describe('Basic認証サンプル', () => {
       'Basic realm="Loutre Example", charset="UTF-8"',
     )
     await expect(response.json()).resolves.toEqual({
-      error: 'Basic認証が必要です',
+      error: 'Basic authentication required',
     })
   })
 

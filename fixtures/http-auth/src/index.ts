@@ -51,7 +51,7 @@ export const authenticated = layer({
   requires: [AUTH],
   provides: [SESSION],
   factory: () => async (ctx, next) => {
-    if (!ctx.auth.principal) throw new Error('認証が必要です')
+    if (!ctx.auth.principal) throw new Error('Authentication required')
     await next({ session: { principal: ctx.auth.principal } })
   },
 })
@@ -115,7 +115,8 @@ export const AccountController = implementation({
 })
 
 export const AccountModule = defineModule(() => ({
-  description: 'Bearer認証と任意Execution Contextのcanonical fixture',
+  description:
+    'Canonical fixture for Bearer authentication and optional Execution Context',
   implementations: [AccountController],
 }))
 

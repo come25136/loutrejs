@@ -1,10 +1,10 @@
 # Loutre Application
 
-Loutreで作成した{{targetLabel}}向けApplicationです。
+A Loutre Application for {{targetLabel}}.
 
 {{developmentSection}}
 
-## 検証
+## Verify
 
 ```sh
 {{verifyCommand}}

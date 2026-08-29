@@ -142,7 +142,7 @@ function unauthorizedResult<TVariant extends string, TBody>(
 function formatBasicChallenge(realm: string): string {
   if (realm.length === 0 || /[\u0000-\u001f\u007f]/.test(realm)) {
     throw new TypeError(
-      'Basic認証のrealmには空文字列または制御文字を使用できません',
+      'Basic authentication realm cannot be empty or contain control characters',
     )
   }
   const escaped = realm.replace(/[\\"]/g, '\\$&')

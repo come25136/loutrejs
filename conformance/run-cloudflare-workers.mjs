@@ -52,21 +52,19 @@ try {
   }
   if (!response)
     throw new Error(
-      `Cloudflare Workersのworkerd engineを起動できませんでした: ${stderr}`,
+      `Failed to start the Cloudflare Workers workerd engine: ${stderr}`,
     )
   const body = await response.json()
   if (response.status !== 200 || body.id !== 'cloudflare-workers-user') {
     throw new Error(
-      `Cloudflare Workers conformanceに失敗しました: ${JSON.stringify(body)}`,
+      `Cloudflare Workers conformance failed: ${JSON.stringify(body)}`,
     )
   }
   const streamed = await fetch('http://127.0.0.1:18787/events')
   if (!(await streamed.text()).includes('"sequence":3')) {
-    throw new Error(
-      'Cloudflare Workers server-stream conformanceに失敗しました',
-    )
+    throw new Error('Cloudflare Workers server-stream conformance failed')
   }
-  console.log('Cloudflare Workers (workerd 2026-08-24) conformance: 成功')
+  console.log('Cloudflare Workers (workerd 2026-08-24) conformance: passed')
 } finally {
   await terminateChild(child)
 }

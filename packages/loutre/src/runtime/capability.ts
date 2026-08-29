@@ -30,7 +30,9 @@ export function checkCapabilities(
 
 export class MissingCapabilitiesError extends Error {
   constructor(readonly check: CapabilityCheck) {
-    super(`Runtimeに必要なCapabilityがありません: ${check.missing.join(', ')}`)
+    super(
+      `Runtime is missing required capabilities: ${check.missing.join(', ')}`,
+    )
     this.name = 'MissingCapabilitiesError'
   }
 }

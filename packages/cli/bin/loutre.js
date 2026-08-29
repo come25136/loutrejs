@@ -31,7 +31,7 @@ async function loadCliModule(distributionPath, sourcePath) {
     if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error
     if (host.runtime === 'deno') {
       throw new Error(
-        'Denoでrepository内のLoutre CLIを実行する前にpackageをbuildしてください。',
+        'Build the packages before running the repository Loutre CLI with Deno.',
         { cause: error },
       )
     }
@@ -58,7 +58,7 @@ function createCliHost() {
 
   const runtimeProcess = globalThis.process
   if (!runtimeProcess) {
-    throw new Error('Loutre CLIを実行できるruntimeを検出できませんでした。')
+    throw new Error('Could not detect a runtime capable of running Loutre CLI.')
   }
   return {
     runtime: globalThis.Bun?.version ? 'bun' : 'node',

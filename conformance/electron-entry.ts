@@ -14,10 +14,7 @@ async function main(): Promise<void> {
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(
-        () =>
-          reject(
-            new Error('Electron MessagePort conformanceがtimeoutしました'),
-          ),
+        () => reject(new Error('Electron MessagePort conformance timed out')),
         5_000,
       )
       port2.on('message', (event) => {
@@ -33,13 +30,13 @@ async function main(): Promise<void> {
 
     if (messages.length !== 4) {
       throw new Error(
-        `Electron conformanceに失敗しました: ${JSON.stringify(messages)}`,
+        `Electron conformance failed: ${JSON.stringify(messages)}`,
       )
     }
     await attachment.close('conformance')
     port1.close()
     port2.close()
-    console.log('Electron 43 MessagePort conformance: 成功')
+    console.log('Electron 43 MessagePort conformance: passed')
     app.exit(0)
   } catch (error) {
     await attachment.close('conformance').catch(() => undefined)

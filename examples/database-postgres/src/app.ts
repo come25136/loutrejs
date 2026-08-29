@@ -120,7 +120,7 @@ class UserRepository {
       [crypto.randomUUID(), name, 'postgres-example'],
     )
     const user = result.rows[0]
-    if (!user) throw new Error('作成した利用者を取得できません')
+    if (!user) throw new Error('Could not load the created user')
     return {
       id: user.id,
       name: user.name,
