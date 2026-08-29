@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup Bun ${{ inputs.bun-version }}
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ inputs.bun-version }}
 
@@ -24,7 +24,7 @@ jobs:
         run: test "$(bun --version)" = "${{ inputs.bun-version }}"
 
       - name: Download package tarballs
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: loutre-package-tarballs
           path: ${{ runner.temp }}/loutre-package-tarballs
