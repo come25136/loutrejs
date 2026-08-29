@@ -10,20 +10,22 @@
     "check": "loutre check --entry src/app.ts",
     "db:start": "docker compose up -d --wait",
     "db:stop": "docker compose down",
-    "dev": "loutre dev src/app.ts --port 3002",
+    "dev": "tsx watch src/main.ts",
     "graph": "loutre graph contracts --entry src/app.ts",
-    "start": "loutre start src/app.ts --port 3002",
+    "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@loutrejs/loutre": "0.1.0",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.23.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@loutrejs/node": "0.1.0"
   },
   "devDependencies": {
     "@loutrejs/cli": "0.1.0",
     "@types/pg": "^8.23.1",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "tsx": "^4.23.12"
   }
 }

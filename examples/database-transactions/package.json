@@ -8,17 +8,19 @@
   },
   "scripts": {
     "check": "loutre check --entry src/app.ts",
-    "dev": "loutre dev src/app.ts --port 3000",
+    "dev": "tsx watch src/main.ts",
     "graph": "loutre graph contracts --entry src/app.ts",
-    "start": "loutre start src/app.ts --port 3000",
+    "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@loutrejs/loutre": "0.1.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@loutrejs/node": "0.1.0"
   },
   "devDependencies": {
     "@loutrejs/cli": "0.1.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "tsx": "^4.23.12"
   }
 }
