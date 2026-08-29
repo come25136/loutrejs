@@ -10,7 +10,12 @@ import {
   type InvocationBindingOptions,
 } from '@loutrejs/loutre'
 import { type HttpProtocolExecution } from '@loutrejs/loutre/http'
-import { nodeRuntimeCapabilities } from '@loutrejs/loutre/runtime'
+import {
+  LOUTRE_VERSION,
+  detectPresentationTerminal,
+  startStartupPresentation,
+} from '@loutrejs/loutre/presentation'
+import { nodeRuntimeCapabilities, serverUrl } from '@loutrejs/loutre/runtime'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
@@ -45,6 +50,14 @@ export const nodeRuntime = {
 async function serve<const TDefinition extends ApplicationDefinition>(
   options: NodeServeOptions<TDefinition>,
 ): Promise<NodeServeHandle<TDefinition>> {
+  const startedAt = performance.now()
+  const presentation = startStartupPresentation(
+    { version: LOUTRE_VERSION },
+    {
+      terminal: detectPresentationTerminal(process.stdout, process.env),
+      write: (value) => console.log(value),
+    },
+  )
   const host = binding.host({
     application: options.application,
     environment: 'environment' in options ? options.environment : process.env,
@@ -77,6 +90,13 @@ async function serve<const TDefinition extends ApplicationDefinition>(
       port += 1
     }
   }
+
+  presentation.ready({
+    server: serverUrl(options.hostname, port),
+    runtime: `Node.js ${process.versions.node}`,
+    environment: process.env.NODE_ENV ?? 'development',
+    startupDurationMs: performance.now() - startedAt,
+  })
 
   let closed = false
   return {

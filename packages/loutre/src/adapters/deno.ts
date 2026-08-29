@@ -7,6 +7,8 @@ import {
   type InvocationBindingOptions,
 } from '../application/index.js'
 import type { HttpProtocolExecution } from '../http/index.js'
+import { LOUTRE_VERSION, startStartupPresentation } from '../presentation.js'
+import { serverUrl } from '../runtime/server-url.js'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
@@ -91,6 +93,18 @@ async function serve<const TDefinition extends ApplicationDefinition>(
   if (!deno?.serve) {
     throw new Error('LUTRE_DENO_UNAVAILABLE: Deno.serve() is not available.')
   }
+  const startedAt = performance.now()
+  const isTTY = deno.stdout?.isTerminal?.() === true
+  const presentation = startStartupPresentation(
+    { version: LOUTRE_VERSION },
+    {
+      terminal: {
+        isTTY,
+        color: isTTY && deno.env?.get?.('NO_COLOR') === undefined,
+      },
+      write: (value) => console.log(value),
+    },
+  )
   const host = binding.host(
     bindingOptions(
       options,
@@ -131,6 +145,15 @@ async function serve<const TDefinition extends ApplicationDefinition>(
       port += 1
     }
   }
+  presentation.ready({
+    server: serverUrl(options.hostname, port),
+    runtime: `Deno ${deno.version?.deno ?? 'unknown'}`,
+    environment:
+      deno.env?.get?.('DENO_ENV') ??
+      deno.env?.get?.('NODE_ENV') ??
+      'development',
+    startupDurationMs: performance.now() - startedAt,
+  })
   let closed = false
   return {
     application: host.application,
@@ -195,7 +218,12 @@ function denoEnvironment(): unknown {
 
 function denoGlobal():
   | {
-      env?: { toObject?(): Record<string, string> }
+      env?: {
+        get?(name: string): string | undefined
+        toObject?(): Record<string, string>
+      }
+      stdout?: { isTerminal?(): boolean }
+      version?: { deno?: string }
       serve?(
         options: {
           port: number
@@ -208,7 +236,12 @@ function denoGlobal():
   | undefined {
   return (globalThis as typeof globalThis & { Deno?: unknown }).Deno as
     | {
-        env?: { toObject?(): Record<string, string> }
+        env?: {
+          get?(name: string): string | undefined
+          toObject?(): Record<string, string>
+        }
+        stdout?: { isTerminal?(): boolean }
+        version?: { deno?: string }
         serve?(
           options: {
             port: number

@@ -89,6 +89,21 @@ nodeRuntime.serve({ application: httpDefinition, port: 3000 })
 nodeRuntime
   .serve({ application: httpDefinition })
   .then((runtime) => runtime.port)
+nodeRuntime.serve({
+  application: httpDefinition,
+  // @ts-expect-error startup presentationはFrameworkが所有し、customizeできない
+  presentation: { version: '0.1.0' },
+})
+bunRuntime.serve({
+  application: httpDefinition,
+  // @ts-expect-error startup presentationはFrameworkが所有し、customizeできない
+  presentation: { version: '0.1.0' },
+})
+denoRuntime.serve({
+  application: httpDefinition,
+  // @ts-expect-error startup presentationはFrameworkが所有し、customizeできない
+  presentation: { version: '0.1.0' },
+})
 // @ts-expect-error public Taskが無いApplicationにはrunを公開しない
 httpApplication.run
 // @ts-expect-error listener ownershipはApplication hostではなくruntime adapterが持つ

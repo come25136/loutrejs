@@ -7,6 +7,12 @@ import {
   type InvocationBindingOptions,
 } from '../application/index.js'
 import type { HttpProtocolExecution } from '../http/index.js'
+import {
+  LOUTRE_VERSION,
+  detectPresentationTerminal,
+  startStartupPresentation,
+} from '../presentation.js'
+import { serverUrl } from '../runtime/server-url.js'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
@@ -55,10 +61,18 @@ async function serve<const TDefinition extends ApplicationDefinition>(
   if (!bun?.serve) {
     throw new Error('LUTRE_BUN_UNAVAILABLE: Bun.serve() is not available.')
   }
+  const startedAt = performance.now()
+  const environment = bun.env ?? {}
+  const presentation = startStartupPresentation(
+    { version: LOUTRE_VERSION },
+    {
+      terminal: detectPresentationTerminal(process.stdout, environment),
+      write: (value) => console.log(value),
+    },
+  )
   const host = binding.host({
     application: options.application,
-    environment:
-      'environment' in options ? options.environment : (bun.env ?? undefined),
+    environment: 'environment' in options ? options.environment : environment,
     ...('arguments' in options ? { arguments: options.arguments } : {}),
   } as unknown as InvocationBindingOptions<TDefinition>)
   const http = 'http' in host ? (host.http as HttpProtocolExecution) : undefined
@@ -92,6 +106,12 @@ async function serve<const TDefinition extends ApplicationDefinition>(
       port += 1
     }
   }
+  presentation.ready({
+    server: serverUrl(options.hostname, port),
+    runtime: `Bun ${bun.version ?? 'unknown'}`,
+    environment: environment.NODE_ENV ?? 'development',
+    startupDurationMs: performance.now() - startedAt,
+  })
   let closed = false
   return {
     application: host.application,
@@ -141,6 +161,7 @@ function createBunFetchDriver(application: HttpProtocolExecution) {
 function bunGlobal():
   | {
       env?: Record<string, string | undefined>
+      version?: string
       serve(options: {
         port: number
         hostname?: string
@@ -151,6 +172,7 @@ function bunGlobal():
   return (globalThis as typeof globalThis & { Bun?: unknown }).Bun as
     | {
         env?: Record<string, string | undefined>
+        version?: string
         serve(options: {
           port: number
           hostname?: string

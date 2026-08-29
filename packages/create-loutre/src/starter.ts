@@ -13,23 +13,10 @@ const packageManifest = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 ) as { readonly dependencies: Readonly<Record<string, string>> }
 const loutreVersion = requiredDependencyVersion('@loutrejs/loutre')
-const loutrePresentationVersion = presentationVersion(loutreVersion)
 
 function requiredDependencyVersion(name: string): string {
   const version = packageManifest.dependencies[name]
   if (!version) throw new Error(`${name}のversionがpackage.jsonにありません。`)
-  return version
-}
-
-function presentationVersion(dependencyVersion: string): string {
-  const version = dependencyVersion.match(
-    /\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?/u,
-  )?.[0]
-  if (!version) {
-    throw new Error(
-      `Loutreの表示用versionを${dependencyVersion}から取得できません。`,
-    )
-  }
   return version
 }
 
@@ -76,11 +63,6 @@ export async function writeStarter(
     '"__LOUTRE_TYPES__"',
     JSON.stringify(targetManifest(options.target).types),
   )
-  if (['node', 'bun', 'deno'].includes(options.target)) {
-    await renderTextTemplate(join(targetDirectory, 'src/main.ts'), {
-      loutreVersion: loutrePresentationVersion,
-    })
-  }
   await renderTextTemplate(join(targetDirectory, 'README.md'), {
     targetLabel: targetLabels[options.target],
     developmentSection: developmentSection(options),

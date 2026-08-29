@@ -1,14 +1,26 @@
+import { LOUTRE_VERSION } from './generated/version.js'
+
 export interface StartupPresentationInfo {
-  readonly application: string
   readonly version: string
+}
+
+export interface StartupStatusInfo {
   readonly server: string
   readonly runtime: string
   readonly environment: string
-}
-
-export interface StartupStatusInfo extends StartupPresentationInfo {
   readonly startupDurationMs: number
 }
+
+export interface StartupPresentationSession {
+  ready(info: StartupStatusInfo): void
+}
+
+export interface StartupPresentationStartOptions {
+  readonly terminal: PresentationRenderOptions
+  readonly write: (value: string) => void
+}
+
+export { LOUTRE_VERSION }
 
 export interface PresentationRenderOptions {
   readonly isTTY: boolean
@@ -37,6 +49,18 @@ export function detectPresentationTerminal(
     isTTY,
     color: isTTY && !colorDisabled && output.getColorDepth(environment) >= 24,
     ...(columns !== undefined && columns > 0 ? { columns } : {}),
+  }
+}
+
+export function startStartupPresentation(
+  info: StartupPresentationInfo,
+  options: StartupPresentationStartOptions,
+): StartupPresentationSession {
+  options.write(renderStartupPrelude(info, options.terminal))
+  return {
+    ready(status) {
+      options.write(renderStartupStatus(status, options.terminal))
+    },
   }
 }
 
@@ -144,7 +168,6 @@ function renderCompactPrelude(info: StartupPresentationInfo): string {
 
 function renderCompactStatus(info: StartupStatusInfo): string {
   return [
-    `Application: ${info.application}`,
     `Server: ${info.server}`,
     `Runtime: ${info.runtime}`,
     `Environment: ${info.environment}`,
@@ -180,10 +203,9 @@ function renderRichStatus(
   color: boolean,
 ): string {
   const layout = createFrameLayout(contentWidth, color)
-  const labels = ['Application', 'Server', 'Runtime', 'Environment'] as const
+  const labels = ['Server', 'Runtime', 'Environment'] as const
   const labelWidth = Math.max(...labels.map(displayWidth))
   const metadata = [
-    ['Application', info.application],
     ['Server', info.server],
     ['Runtime', info.runtime],
     ['Environment', info.environment],
@@ -203,24 +225,25 @@ function renderRichStatus(
   ].join('\n')
 }
 
-function createStartupLayout(info: StartupPresentationInfo): {
+function createStartupLayout(
+  info: StartupPresentationInfo | StartupStatusInfo,
+): {
   readonly contentWidth: number
   readonly frameWidth: number
 } {
   const labelWidth = displayWidth('Environment')
-  const metadata = [
-    info.application,
-    info.server,
-    info.runtime,
-    info.environment,
-  ].map(
+  const metadata = (
+    'server' in info ? [info.server, info.runtime, info.environment] : []
+  ).map(
     (value) =>
       displayWidth(metadataIndent) + labelWidth + 3 + displayWidth(value),
   )
   const contentWidth = Math.max(
     minimumContentWidth,
     logoWidth(),
-    displayWidth(`${mascot}  Loutre ${info.version}`),
+    'version' in info
+      ? displayWidth(`${mascot}  Loutre ${info.version}`)
+      : minimumContentWidth,
     ...metadata,
   )
   return { contentWidth, frameWidth: contentWidth + 4 }

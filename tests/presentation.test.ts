@@ -1,22 +1,22 @@
 import {
+  LOUTRE_VERSION,
   detectPresentationTerminal,
   renderLoutreBrand,
   renderStartupPrelude,
   renderStartupStatus,
+  startStartupPresentation,
   type StartupPresentationInfo,
   type StartupStatusInfo,
 } from '@loutrejs/loutre/presentation'
 
 const startupInfo: StartupPresentationInfo = {
-  application: 'api',
   version: '0.1.0',
-  server: 'http://localhost:3000',
-  runtime: 'Node.js 26.1.0',
-  environment: 'development',
 }
 
 const statusInfo: StartupStatusInfo = {
-  ...startupInfo,
+  server: 'http://localhost:3000',
+  runtime: 'Node.js 26.1.0',
+  environment: 'development',
   startupDurationMs: 42,
 }
 
@@ -71,14 +71,13 @@ describe('presentation', () => {
     const bottomBorder = lines.findIndex((line) => line.startsWith('╰'))
     const ready = lines.findIndex((line) => line.includes('✓ Ready in 42 ms'))
 
-    expect(status).toContain('Application')
-    expect(status).toContain('api')
     expect(status).toContain('Server')
     expect(status).toContain('http://localhost:3000')
     expect(status).toContain('Runtime')
     expect(status).toContain('Node.js 26.1.0')
     expect(status).toContain('Environment')
     expect(status).toContain('development')
+    expect(status).not.toContain('Application')
     expect(bottomBorder).toBeGreaterThanOrEqual(0)
     expect(ready).toBeGreaterThan(bottomBorder)
     expect(status).not.toContain('██╗')
@@ -121,7 +120,6 @@ describe('presentation', () => {
     expect(renderStartupPrelude(startupInfo, options)).toBe('Loutre 0.1.0')
     expect(renderStartupStatus(statusInfo, options)).toBe(
       [
-        'Application: api',
         'Server: http://localhost:3000',
         'Runtime: Node.js 26.1.0',
         'Environment: development',
@@ -136,7 +134,7 @@ describe('presentation', () => {
     const status = renderStartupStatus(statusInfo, options)
 
     expect(prelude).toBe('Loutre 0.1.0')
-    expect(status).toContain('Application: api')
+    expect(status).not.toContain('Application')
     expect(status).toContain('Server: http://localhost:3000')
     expect(status).toContain('Ready in 42 ms')
     expect(`${prelude}\n${status}`).not.toContain('██╗')
@@ -146,6 +144,25 @@ describe('presentation', () => {
   it('startup durationを入力値から丸めて描画する', () => {
     const status = renderRichStatus({ ...statusInfo, startupDurationMs: 41.6 })
     expect(status).toContain('✓ Ready in 42 ms')
+  })
+
+  it('startup sessionはpreludeを開始時、statusをready時だけ出力する', () => {
+    const output: string[] = []
+    const session = startStartupPresentation(
+      { version: LOUTRE_VERSION },
+      {
+        terminal: { isTTY: false, color: false },
+        write: (value) => output.push(value),
+      },
+    )
+
+    expect(output).toEqual([`Loutre ${LOUTRE_VERSION}`])
+
+    session.ready(statusInfo)
+
+    expect(output).toHaveLength(2)
+    expect(output[1]).toContain('Server: http://localhost:3000')
+    expect(output[1]).toContain('Ready in 42 ms')
   })
 
   it('Node.jsのcolor depthと環境変数からterminal capabilityを判定する', () => {

@@ -43,47 +43,21 @@ describe('create-loutre startup presentation', () => {
   })
 
   it.each<ProjectTarget>(['node', 'bun', 'deno'])(
-    '%sのgenerated Hostはstartup prelude -> serve -> startup statusの順になる',
+    '%sのgenerated Hostはstartup presentationの責務を持たない',
     async (target) => {
       const main = await generateMain(target)
-      const prelude = main.indexOf(
-        'renderStartupPrelude(startup, presentation)',
-      )
-      const serve = main.indexOf(`${target}Runtime.serve`)
-      const status = main.indexOf('renderStartupStatus(')
-
-      expect(prelude).toBeGreaterThanOrEqual(0)
-      expect(serve).toBeGreaterThan(prelude)
-      expect(status).toBeGreaterThan(serve)
-      expect(main.slice(prelude, status)).toContain(
-        `await ${target}Runtime.serve`,
-      )
-      expect(main.match(/renderStartupStatus\(/g)).toHaveLength(1)
-      expect(main).toContain("application: 'Loutre Application'")
-      expect(main).toContain("version: '0.1.0'")
       expect(main).toContain(
         `${target}Runtime.serve({ application, hostname })`,
       )
-      expect(main).not.toContain(
-        `${target}Runtime.serve({ application, hostname, port })`,
-      )
-      expect(main).toContain('server: `http://${hostname}:${server.port}`')
-      expect(main).not.toContain('typed · modular · fast')
-    },
-  )
-
-  it.each<ProjectTarget>(['node', 'bun', 'deno'])(
-    '%sのgenerated Hostはserve失敗時にReady描画へ到達しない制御フローを生成する',
-    async (target) => {
-      const main = await generateMain(target)
-      const serveStatement = `await ${target}Runtime.serve`
-      const serve = main.indexOf(serveStatement)
-      const ready = main.indexOf('renderStartupStatus(', serve)
-
-      expect(serve).toBeGreaterThanOrEqual(0)
-      expect(ready).toBeGreaterThan(serve)
-      expect(main.slice(serve, ready)).not.toContain('catch')
-      expect(main.slice(serve, ready)).not.toContain('finally')
+      expect(main).not.toContain('presentation')
+      expect(main).not.toContain('renderStartupPrelude')
+      expect(main).not.toContain('renderStartupStatus')
+      expect(main).not.toContain('detectPresentationTerminal')
+      expect(main).not.toContain('Loutre Application')
+      expect(main).not.toContain('{{loutreVersion}}')
+      expect(main).not.toContain('performance.now')
+      expect(main).not.toContain('Runtime:')
+      expect(main).not.toContain('Environment:')
     },
   )
 
