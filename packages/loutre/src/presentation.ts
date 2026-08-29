@@ -1,4 +1,4 @@
-export interface StartupBannerInfo {
+export interface StartupStatusInfo {
   readonly application: string
   readonly version?: string
   readonly server: string
@@ -7,13 +7,13 @@ export interface StartupBannerInfo {
   readonly startupDurationMs: number
 }
 
-export interface StartupBannerRenderOptions {
+export interface PresentationRenderOptions {
   readonly isTTY: boolean
   readonly color: boolean
   readonly columns?: number
 }
 
-export interface StartupBannerTerminalOutput {
+export interface PresentationTerminalOutput {
   readonly isTTY?: boolean
   readonly columns?: number
   readonly getColorDepth: (
@@ -21,10 +21,10 @@ export interface StartupBannerTerminalOutput {
   ) => number
 }
 
-export function detectStartupBannerTerminal(
-  output: StartupBannerTerminalOutput,
+export function detectPresentationTerminal(
+  output: PresentationTerminalOutput,
   environment: Readonly<Record<string, string | undefined>>,
-): StartupBannerRenderOptions {
+): PresentationRenderOptions {
   const isTTY = output.isTTY === true
   const colorDisabled =
     environment.NO_COLOR !== undefined ||
@@ -49,9 +49,7 @@ const colors = {
   lavenderSoft: [196, 181, 253],
   label: [103, 232, 249],
   value: [74, 222, 128],
-  muted: [100, 116, 139],
   text: [148, 163, 184],
-  frame: [71, 85, 105],
 } as const satisfies Record<string, RGB>
 
 const logoGlyphs = [
@@ -94,10 +92,10 @@ const logoColors = [
 ] as const
 
 const minimumContentWidth = 68
-const metadataIndent = '        '
+const metadataIndent = '  '
 const mascot = 'ʕ•ᴥ•ʔ'
 
-export function renderLoutreBrand(options: StartupBannerRenderOptions): string {
+export function renderLoutreBrand(options: PresentationRenderOptions): string {
   if (!options.isTTY) return 'Loutre'
   if (options.columns !== undefined && options.columns < logoWidth()) {
     return `${mascot} Loutre`
@@ -110,132 +108,87 @@ export function renderLoutreBrand(options: StartupBannerRenderOptions): string {
   return [...logo.styled, '', brand].join('\n')
 }
 
-export function renderStartupBanner(
-  info: StartupBannerInfo,
-  options: StartupBannerRenderOptions,
+export function renderStartupStatus(
+  info: StartupStatusInfo,
+  options: PresentationRenderOptions,
 ): string {
-  if (!options.isTTY) return renderCompactBanner(info)
+  if (!options.isTTY) return renderCompactStatus(info)
 
-  const layout = createRichLayout(info)
-  if (options.columns !== undefined && options.columns < layout.frameWidth) {
-    return renderCompactBanner(info)
+  const contentWidth = startupStatusWidth(info)
+  if (options.columns !== undefined && options.columns < contentWidth) {
+    return renderCompactStatus(info)
   }
-  return renderRichBanner(info, layout.contentWidth, options.color)
+  return renderRichStatus(info, options.color)
 }
 
-export function printStartupBanner(
-  info: StartupBannerInfo,
-  options: StartupBannerRenderOptions,
-  write: (value: string) => void,
-): void {
-  write(renderStartupBanner(info, options))
-}
-
-function renderCompactBanner(info: StartupBannerInfo): string {
+function renderCompactStatus(info: StartupStatusInfo): string {
   return [
-    `${loutreName(info.version)} (${info.application})`,
-    `Server: ${info.server}`,
+    `Application: ${info.application}`,
+    ...(info.version === undefined
+      ? []
+      : [`Framework: ${loutreName(info.version)}`]),
+    `Listening on ${info.server}`,
+    `Runtime: ${info.runtime}`,
+    `Environment: ${info.environment}`,
     `Ready in ${formatDuration(info.startupDurationMs)}`,
   ].join('\n')
 }
 
-function renderRichBanner(
-  info: StartupBannerInfo,
-  contentWidth: number,
-  color: boolean,
-): string {
+function renderRichStatus(info: StartupStatusInfo, color: boolean): string {
   const style = (rgb: RGB, value: string) => (color ? paint(rgb, value) : value)
-  const frame = (value: string) => style(colors.frame, value)
-  const row = (plain: string, styled = plain) =>
-    `${frame('│')} ${styled}${' '.repeat(contentWidth - displayWidth(plain))} ${frame('│')}`
-  const centered = (plain: string, styled = plain) => {
-    const remaining = contentWidth - displayWidth(plain)
-    const left = Math.floor(remaining / 2)
-    return row(`${' '.repeat(left)}${plain}`, `${' '.repeat(left)}${styled}`)
-  }
-  const logo = renderLogo(color)
-  const labels = ['Application', 'Server', 'Runtime', 'Environment'] as const
-  const labelWidth = Math.max(...labels.map(displayWidth))
-  const metadata = [
-    ['Application', info.application],
-    ['Server', info.server],
-    ['Runtime', info.runtime],
-    ['Environment', info.environment],
-  ] as const
-  const brand = `${mascot}  ${loutreName(info.version)}`
-  const border = frame('─'.repeat(contentWidth + 2))
+  const metadata = statusMetadata(info)
+  const labelWidth = Math.max(...metadata.map(([label]) => displayWidth(label)))
 
   return [
-    `${frame('╭')}${border}${frame('╮')}`,
-    row(''),
-    ...logo.plain.map((line, index) => centered(line, logo.styled[index])),
-    row(''),
-    centered(
-      brand,
-      `${style(colors.lavender, mascot)}  ${style(colors.lavenderSoft, loutreName(info.version))}`,
-    ),
-    centered(
-      'typed · modular · fast',
-      style(colors.muted, 'typed · modular · fast'),
-    ),
-    row(''),
     ...metadata.map(([label, value]) => {
       const gap = ' '.repeat(labelWidth - displayWidth(label) + 3)
-      const plain = `${metadataIndent}${label}${gap}${value}`
-      const styled = `${metadataIndent}${style(colors.label, label)}${gap}${style(colors.value, value)}`
-      return row(plain, styled)
+      return `${metadataIndent}${style(colors.label, label)}${gap}${style(colors.value, value)}`
     }),
-    row(''),
-    `${frame('╰')}${border}${frame('╯')}`,
     '',
-    `  ${style(colors.value, '✓ Ready')} ${style(colors.text, `in ${formatDuration(info.startupDurationMs)}`)}`,
+    `${metadataIndent}${style(colors.value, '✓ Ready')} ${style(colors.text, `in ${formatDuration(info.startupDurationMs)}`)}`,
   ].join('\n')
 }
 
-function createRichLayout(info: StartupBannerInfo): {
-  readonly contentWidth: number
-  readonly frameWidth: number
-} {
-  const labelWidth = displayWidth('Environment')
-  const metadata = [
-    info.application,
-    info.server,
-    info.runtime,
-    info.environment,
-  ].map(
-    (value) =>
-      displayWidth(metadataIndent) + labelWidth + 3 + displayWidth(value),
-  )
-  const contentWidth = Math.max(
-    minimumContentWidth,
-    logoWidth(),
-    displayWidth(`${mascot}  ${loutreName(info.version)}`),
-    ...metadata,
-  )
-  return { contentWidth, frameWidth: contentWidth + 4 }
+function statusMetadata(
+  info: StartupStatusInfo,
+): readonly (readonly [label: string, value: string])[] {
+  return [
+    ['Application', info.application],
+    ...(info.version === undefined
+      ? []
+      : ([['Framework', loutreName(info.version)]] as const)),
+    ['Listening on', info.server],
+    ['Runtime', info.runtime],
+    ['Environment', info.environment],
+  ]
 }
 
-function renderLogo(color: boolean): {
-  readonly plain: readonly string[]
-  readonly styled: readonly string[]
-} {
+function startupStatusWidth(info: StartupStatusInfo): number {
+  const metadata = statusMetadata(info)
+  const labelWidth = Math.max(...metadata.map(([label]) => displayWidth(label)))
+  const metadataWidth = Math.max(
+    ...metadata.map(
+      ([, value]) =>
+        displayWidth(metadataIndent) + labelWidth + 3 + displayWidth(value),
+    ),
+  )
+  return Math.max(minimumContentWidth, metadataWidth)
+}
+
+function renderLogo(color: boolean): { readonly styled: readonly string[] } {
   const widths = logoGlyphs.map((glyph) => Math.max(...glyph.map(displayWidth)))
-  const plain: string[] = []
   const styled: string[] = []
   for (let row = 0; row < logoGlyphs[0].length; row += 1) {
-    const plainParts: string[] = []
     const styledParts: string[] = []
     for (let letter = 0; letter < logoGlyphs.length; letter += 1) {
       const value = logoGlyphs[letter]![row]!
       const padded = `${value}${' '.repeat(widths[letter]! - displayWidth(value))}`
       const rgb = logoColors[letter]!
-      plainParts.push(padded)
       styledParts.push(color ? paint(rgb, padded) : padded)
     }
-    plain.push(plainParts.join(' '))
     styled.push(styledParts.join(' '))
   }
-  return { plain, styled }
+  return { styled }
 }
 
 function logoWidth(): number {
@@ -243,8 +196,8 @@ function logoWidth(): number {
   return widths.reduce((sum, width) => sum + width, logoGlyphs.length - 1)
 }
 
-function loutreName(version: string | undefined): string {
-  return version ? `Loutre ${version}` : 'Loutre'
+function loutreName(version: string): string {
+  return `Loutre ${version}`
 }
 
 function paint(rgb: RGB, value: string): string {

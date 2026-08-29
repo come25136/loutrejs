@@ -4,9 +4,9 @@ import { isCancel, select, text } from '@clack/prompts'
 import { Command, CommanderError, Option } from 'commander'
 import { bootstrap } from '@loutrejs/loutre/host'
 import {
-  detectStartupBannerTerminal,
+  detectPresentationTerminal,
   renderLoutreBrand,
-  type StartupBannerRenderOptions,
+  type PresentationRenderOptions,
 } from '@loutrejs/loutre/presentation'
 import application, { createProject } from './app.js'
 import {
@@ -28,7 +28,7 @@ interface SelectOption {
 export interface CreateLoutreCliIO {
   readonly cwd: string
   readonly detectedPackageManager?: PackageManager
-  readonly terminal?: StartupBannerRenderOptions
+  readonly terminal?: PresentationRenderOptions
   readonly prompt?: (
     message: string,
     initialValue: string,
@@ -238,7 +238,7 @@ function createProcessIO(): CreateLoutreCliIO {
       process.env.npm_config_user_agent,
       globalThis,
     ),
-    terminal: detectStartupBannerTerminal(process.stdout, process.env),
+    terminal: detectPresentationTerminal(process.stdout, process.env),
     ...(interactive ? { prompt: terminalPrompt, select: terminalSelect } : {}),
     install: installDependencies,
     stdout: (value) => process.stdout.write(`${value}\n`),

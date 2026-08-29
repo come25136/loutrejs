@@ -114,6 +114,7 @@ async function serve<const TDefinition extends ApplicationDefinition>(
         ...(options.hostname === undefined
           ? {}
           : { hostname: options.hostname }),
+        onListen: () => undefined,
       },
       createDenoFetchDriver(http),
     )
@@ -173,7 +174,11 @@ function denoGlobal():
   | {
       env?: { toObject?(): Record<string, string> }
       serve?(
-        options: { port: number; hostname?: string },
+        options: {
+          port: number
+          hostname?: string
+          onListen?: () => void
+        },
         handler: (request: Request) => Response | Promise<Response>,
       ): { shutdown(): Promise<void> }
     }
@@ -182,7 +187,11 @@ function denoGlobal():
     | {
         env?: { toObject?(): Record<string, string> }
         serve?(
-          options: { port: number; hostname?: string },
+          options: {
+            port: number
+            hostname?: string
+            onListen?: () => void
+          },
           handler: (request: Request) => Response | Promise<Response>,
         ): { shutdown(): Promise<void> }
       }

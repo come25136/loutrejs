@@ -18,15 +18,6 @@ import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
 import { emitApplication, loadApplicationGraph } from './application-loader.js'
 
-export {
-  detectStartupBannerTerminal,
-  printStartupBanner,
-  renderStartupBanner,
-  type StartupBannerInfo,
-  type StartupBannerRenderOptions,
-  type StartupBannerTerminalOutput,
-} from './startup-banner.js'
-
 export interface CliIO {
   readonly cwd: string
   readonly stdout: (value: string) => void
