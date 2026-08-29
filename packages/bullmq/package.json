@@ -1,6 +1,6 @@
 {
   "name": "@loutrejs/bullmq",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "type": "module",
   "files": [
@@ -19,7 +19,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@loutrejs/loutre": "^0.1.0"
+    "@loutrejs/loutre": "^0.2.0"
   },
   "peerDependencies": {
     "bullmq": "^6.3.0"
