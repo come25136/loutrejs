@@ -20,5 +20,10 @@
     "@clack/prompts": "^1.7.0",
     "@loutrejs/loutre": "^0.1.0",
     "commander": "^15.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/come25136/loutrejs",
+    "directory": "packages/create-loutre"
   }
 }

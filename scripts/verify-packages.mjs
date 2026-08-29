@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 const repository = resolve(import.meta.dirname, '..')
 const packagesDirectory = resolve(repository, 'packages')
 const failures = []
+const repositoryUrl = 'https://github.com/come25136/loutrejs'
 
 for (const directory of await readdir(packagesDirectory)) {
   const packageDirectory = resolve(packagesDirectory, directory)
@@ -12,6 +13,11 @@ for (const directory of await readdir(packagesDirectory)) {
     await readFile(resolve(packageDirectory, 'package.json'), 'utf8'),
   )
   if (manifest.private === true) continue
+  if (manifest.repository?.url !== repositoryUrl) {
+    failures.push(
+      `${manifest.name}: repository.urlは${repositoryUrl}を指定してください`,
+    )
+  }
   const result = JSON.parse(
     execFileSync('npm', ['pack', packageDirectory, '--dry-run', '--json'], {
       cwd: repository,
