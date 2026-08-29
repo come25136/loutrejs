@@ -7,6 +7,8 @@ import {
   type InvocationBindingOptions,
 } from '../application/index.js'
 import type { HttpProtocolExecution } from '../http/index.js'
+import { LOUTRE_VERSION, startStartupPresentation } from '../presentation.js'
+import { serverUrl } from '../runtime/server-url.js'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
@@ -24,8 +26,9 @@ export type DenoRuntimeOptions<TDefinition extends ApplicationDefinition> = {
 
 export type DenoServeOptions<TDefinition extends ApplicationDefinition> =
   DenoRuntimeOptions<TDefinition> & {
-    readonly port: number
+    readonly port?: number
     readonly hostname?: string
+    readonly shutdownHooks?: boolean
   }
 
 export interface DenoBinding {
@@ -37,6 +40,7 @@ export interface DenoServeHandle<
   TDefinition extends ApplicationDefinition = ApplicationDefinition,
 > {
   readonly application: HostBindingApplication<TDefinition>
+  readonly port: number
   close(signal?: string): Promise<void>
 }
 
@@ -90,6 +94,18 @@ async function serve<const TDefinition extends ApplicationDefinition>(
   if (!deno?.serve) {
     throw new Error('LUTRE_DENO_UNAVAILABLE: Deno.serve() is not available.')
   }
+  const startedAt = performance.now()
+  const isTTY = deno.stdout?.isTerminal?.() === true
+  const presentation = startStartupPresentation(
+    { version: LOUTRE_VERSION },
+    {
+      terminal: {
+        isTTY,
+        color: isTTY && deno.env?.get?.('NO_COLOR') === undefined,
+      },
+      write: (value) => console.log(value),
+    },
+  )
   const host = binding.host(
     bindingOptions(
       options,
@@ -107,41 +123,103 @@ async function serve<const TDefinition extends ApplicationDefinition>(
   await host.application.init()
   if ('triggers' in host.application) await host.application.triggers.start()
   let server: { shutdown(): Promise<void> }
-  try {
-    server = deno.serve(
-      {
-        port: options.port,
-        ...(options.hostname === undefined
-          ? {}
-          : { hostname: options.hostname }),
-      },
-      createDenoFetchDriver(http),
-    )
-  } catch (error) {
-    await host.application.close().catch(() => undefined)
-    throw error
+  const requestedPort = options.port
+  let port = requestedPort ?? 3000
+  while (true) {
+    try {
+      server = deno.serve(
+        {
+          port,
+          ...(options.hostname === undefined
+            ? {}
+            : { hostname: options.hostname }),
+          onListen: () => undefined,
+        },
+        createDenoFetchDriver(http),
+      )
+      break
+    } catch (error) {
+      if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
+        await host.application.close().catch(() => undefined)
+        throw error
+      }
+      port += 1
+    }
   }
+  presentation.ready({
+    server: serverUrl(options.hostname, port),
+    runtime: `Deno ${deno.version?.deno ?? 'unknown'}`,
+    environment:
+      deno.env?.get?.('DENO_ENV') ??
+      deno.env?.get?.('NODE_ENV') ??
+      'development',
+    startupDurationMs: performance.now() - startedAt,
+  })
   let closed = false
-  return {
-    application: host.application,
-    async close(signal?: string) {
-      if (closed) return
-      closed = true
-      const errors: unknown[] = []
-      try {
-        await server.shutdown()
-      } catch (error) {
-        errors.push(error)
-      }
-      try {
-        await host.application.close(signal)
-      } catch (error) {
-        errors.push(error)
-      }
-      if (errors.length > 0)
-        throw new AggregateError(errors, 'Deno runtime shutdown failed')
-    },
+  const closeRuntime = async (signal?: string): Promise<void> => {
+    if (closed) return
+    closed = true
+    const errors: unknown[] = []
+    try {
+      await server.shutdown()
+    } catch (error) {
+      errors.push(error)
+    }
+    try {
+      await host.application.close(signal)
+    } catch (error) {
+      errors.push(error)
+    }
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Deno runtime shutdown failed')
   }
+  const removeShutdownHooks =
+    options.shutdownHooks === false
+      ? undefined
+      : registerDenoShutdownHooks(deno, closeRuntime)
+  const close = async (signal?: string): Promise<void> => {
+    removeShutdownHooks?.()
+    await closeRuntime(signal)
+  }
+  return { application: host.application, port, close }
+}
+
+function registerDenoShutdownHooks(
+  deno: NonNullable<ReturnType<typeof denoGlobal>>,
+  close: (signal: string) => Promise<void>,
+): (() => void) | undefined {
+  if (!deno.addSignalListener || !deno.removeSignalListener) {
+    return undefined
+  }
+  const handlers = new Map<'SIGINT' | 'SIGTERM', () => void>()
+  const remove = () => {
+    for (const [signal, handler] of handlers) {
+      deno.removeSignalListener?.(signal, handler)
+    }
+    handlers.clear()
+  }
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    const handler = () => {
+      remove()
+      void close(signal)
+    }
+    handlers.set(signal, handler)
+    deno.addSignalListener(signal, handler)
+  }
+  return remove
+}
+
+function canRetryOnNextPort(error: unknown, port: number): boolean {
+  return port < 65_535 && isAddressInUseError(error)
+}
+
+function isAddressInUseError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'EADDRINUSE'
+  )
 }
 
 function createDenoFetchDriver(application: HttpProtocolExecution) {
@@ -171,18 +249,40 @@ function denoEnvironment(): unknown {
 
 function denoGlobal():
   | {
-      env?: { toObject?(): Record<string, string> }
+      env?: {
+        get?(name: string): string | undefined
+        toObject?(): Record<string, string>
+      }
+      stdout?: { isTerminal?(): boolean }
+      version?: { deno?: string }
+      addSignalListener?(signal: string, handler: () => void): void
+      removeSignalListener?(signal: string, handler: () => void): void
       serve?(
-        options: { port: number; hostname?: string },
+        options: {
+          port: number
+          hostname?: string
+          onListen?: () => void
+        },
         handler: (request: Request) => Response | Promise<Response>,
       ): { shutdown(): Promise<void> }
     }
   | undefined {
   return (globalThis as typeof globalThis & { Deno?: unknown }).Deno as
     | {
-        env?: { toObject?(): Record<string, string> }
+        env?: {
+          get?(name: string): string | undefined
+          toObject?(): Record<string, string>
+        }
+        stdout?: { isTerminal?(): boolean }
+        version?: { deno?: string }
+        addSignalListener?(signal: string, handler: () => void): void
+        removeSignalListener?(signal: string, handler: () => void): void
         serve?(
-          options: { port: number; hostname?: string },
+          options: {
+            port: number
+            hostname?: string
+            onListen?: () => void
+          },
           handler: (request: Request) => Response | Promise<Response>,
         ): { shutdown(): Promise<void> }
       }
