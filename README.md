@@ -350,7 +350,7 @@ npm run build
 npm run test:conformance
 ```
 
-CIはNode.js 22 / 24 / 26のunit・E2E testと、Deno / Bun / Cloudflare Workers / Electron / AWS Lambdaのruntime conformanceを並列実行します。
+CIはNode.js 22 / 24 / 26のunit・E2E testと、Deno / Bun / Cloudflare Workers / Electron / AWS Lambdaのruntime conformanceを並列実行します。公開packageは`npm pack`したtarballをrepository sourceなしのNode.js / Bun / Deno consumerからも検証します。
 
 ## License
 

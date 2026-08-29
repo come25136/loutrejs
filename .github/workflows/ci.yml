@@ -71,6 +71,35 @@ jobs:
     with:
       node-version: ${{ matrix.node }}
 
+  node-package-consumer:
+    name: Package Consumer
+    needs: quality-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22.x, 24.x]
+    uses: ./.github/workflows/ci-package-node.yml
+    with:
+      node-version: ${{ matrix.node }}
+
+  bun-package-consumer:
+    name: Package Consumer
+    needs: quality-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [1.3.14, 1.4.0]
+    uses: ./.github/workflows/ci-package-bun.yml
+    with:
+      bun-version: ${{ matrix.version }}
+
+  deno-package-consumer:
+    name: Package Consumer
+    needs: quality-checks
+    uses: ./.github/workflows/ci-package-deno.yml
+    with:
+      deno-version: 2.9.5
+
   bun-initializer:
     name: Native Initializer
     needs: quality-checks

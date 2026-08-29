@@ -81,6 +81,8 @@ CIはCLIの`check` / `build` / `openapi`を各host runtime自身で実行し、A
 
 Bun / Denoのruntime conformanceと`create-loutre` native initializerは、それぞれのruntime自身でdependency installと必要なpackage buildを行い、Node.js setupやnpm commandへ依存しない。Node.js系、AWS Lambda、Electron、Cloudflare Workersのconformanceは各検証に必要なNode.js toolingを明示的にsetupする。
 
+公開packageはNode.jsで`npm pack`したtarballをartifactとして固定し、repository sourceをcheckoutしないconsumer jobでNode.js / Bun / Denoからinstall・runtime import・CLI実行・`create-loutre`実行を検証する。Denoはnpm tarballの`file:` dependencyをsupportしないため、tarballを展開したpackage directoryを公式`links`で解決する。
+
 ## 3. Bun
 
 BunにはNode.jsと同じLTS modelを要求しない。

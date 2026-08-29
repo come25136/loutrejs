@@ -8,6 +8,14 @@ const nativeCiFiles = [
   '.github/workflows/ci-deno.yml',
   '.github/workflows/ci-initializer-bun.yml',
   '.github/workflows/ci-initializer-deno.yml',
+  '.github/workflows/ci-package-bun.yml',
+  '.github/workflows/ci-package-deno.yml',
+] as const
+
+const packedConsumerFiles = [
+  '.github/workflows/ci-package-node.yml',
+  '.github/workflows/ci-package-bun.yml',
+  '.github/workflows/ci-package-deno.yml',
 ] as const
 
 describe('native runtime CI isolation', () => {
@@ -20,6 +28,17 @@ describe('native runtime CI isolation', () => {
       expect(source).not.toContain('setup-node-workspace')
       expect(source).not.toMatch(/^\s*(?:node|npm|npx)\s+/gmu)
       expect(source).not.toMatch(/^\s*run:\s*(?:node|npm|npx)\s+/gmu)
+    },
+  )
+
+  it.each(packedConsumerFiles)(
+    '%sはrepository sourceをcheckoutせずtarball artifactだけを使う',
+    async (file) => {
+      const source = await readFile(file, 'utf8')
+
+      expect(source).not.toContain('actions/checkout')
+      expect(source).toContain('actions/download-artifact')
+      expect(source).toContain('loutre-package-tarballs')
     },
   )
 

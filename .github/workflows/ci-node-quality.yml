@@ -37,6 +37,16 @@ jobs:
       - name: Verify published packages
         run: node scripts/verify-packages.mjs
 
+      - name: Pack published packages
+        run: node scripts/pack-packages.mjs
+
+      - name: Upload package tarballs
+        uses: actions/upload-artifact@v4
+        with:
+          name: loutre-package-tarballs
+          path: dist/package-tarballs/*.tgz
+          if-no-files-found: error
+
       - name: Upload initializer build
         uses: actions/upload-artifact@v4
         with:
