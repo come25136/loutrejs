@@ -8,6 +8,7 @@ import {
 } from '../application/index.js'
 import type { HttpProtocolExecution } from '../http/index.js'
 import { LOUTRE_VERSION, startStartupPresentation } from '../presentation.js'
+import { assertRuntimeEngine } from '../runtime/engine.js'
 import { serverUrl } from '../runtime/server-url.js'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
@@ -64,6 +65,7 @@ export const denoRuntime = {
 function bind<const TDefinition extends ApplicationDefinition>(
   options: DenoRuntimeOptions<TDefinition>,
 ): DenoBinding {
+  assertRuntimeEngine('deno')
   const invocation = binding.invocation(
     bindingOptions(
       options,
@@ -90,6 +92,7 @@ function bind<const TDefinition extends ApplicationDefinition>(
 async function serve<const TDefinition extends ApplicationDefinition>(
   options: DenoServeOptions<TDefinition>,
 ): Promise<DenoServeHandle<TDefinition>> {
+  assertRuntimeEngine('deno')
   const deno = denoGlobal()
   if (!deno?.serve) {
     throw new Error('LUTRE_DENO_UNAVAILABLE: Deno.serve() is not available.')

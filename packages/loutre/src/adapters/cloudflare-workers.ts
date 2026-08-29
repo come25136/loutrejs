@@ -7,6 +7,7 @@ import {
   type InvocationBindingOptions,
 } from '../application/index.js'
 import type { HttpProtocolExecution } from '../http/index.js'
+import { assertRuntimeEngine } from '../runtime/engine.js'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
@@ -51,6 +52,7 @@ export const cloudflareWorkersRuntime = {
 function bind<const TDefinition extends ApplicationDefinition>(
   options: CloudflareWorkersBindOptions<TDefinition>,
 ): CloudflareWorkersBinding {
+  assertRuntimeEngine('cloudflare-workers')
   let invocation: InvocationBinding<TDefinition> | undefined
   let fetch: ((request: Request) => Promise<Response>) | undefined
 

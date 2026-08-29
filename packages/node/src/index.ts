@@ -15,7 +15,11 @@ import {
   detectPresentationTerminal,
   startStartupPresentation,
 } from '@loutrejs/loutre/presentation'
-import { nodeRuntimeCapabilities, serverUrl } from '@loutrejs/loutre/runtime'
+import {
+  assertRuntimeEngine,
+  nodeRuntimeCapabilities,
+  serverUrl,
+} from '@loutrejs/loutre/runtime'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
@@ -51,6 +55,7 @@ export const nodeRuntime = {
 async function serve<const TDefinition extends ApplicationDefinition>(
   options: NodeServeOptions<TDefinition>,
 ): Promise<NodeServeHandle<TDefinition>> {
+  assertRuntimeEngine('node')
   const startedAt = performance.now()
   const presentation = startStartupPresentation(
     { version: LOUTRE_VERSION },

@@ -16,11 +16,27 @@ const eventsDefinition = () =>
   defineApplication({ modules: [EventsModule()], logger: silentLogger })
 
 describe('Runtime conformance harness', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  })
+
   it.each([
-    ['Deno', () => denoRuntime.bind({ application: usersDefinition() })],
+    [
+      'Deno',
+      () => {
+        vi.stubGlobal('Deno', { version: { deno: '2.9.5' } })
+        return denoRuntime.bind({ application: usersDefinition() })
+      },
+    ],
     [
       'cloudflare-workers',
-      () => cloudflareWorkersRuntime.bind({ application: usersDefinition() }),
+      () => {
+        vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' })
+        return cloudflareWorkersRuntime.bind({
+          application: usersDefinition(),
+        })
+      },
     ],
   ])('%s bind()で同じFixture Aを実行する', async (_name, createBinding) => {
     const runtimeBinding = createBinding()
@@ -36,6 +52,7 @@ describe('Runtime conformance harness', () => {
   })
 
   it('AWS Lambda managed形状へunary responseをadaptする', async () => {
+    vi.stubEnv('AWS_EXECUTION_ENV', 'AWS_Lambda_nodejs24.x')
     const handler = awsLambdaRuntime.bind({ application: usersDefinition() })
     const response = await handler({
       rawPath: '/users/aws-lambda-user',
@@ -49,6 +66,7 @@ describe('Runtime conformance harness', () => {
   })
 
   it('AWS Lambda response streaming境界へSSE chunkを逐次出力する', async () => {
+    vi.stubEnv('AWS_EXECUTION_ENV', 'AWS_Lambda_nodejs24.x')
     const chunks: Uint8Array[] = []
     let ended = false
     let metadata: unknown
