@@ -1,9 +1,10 @@
 import {
   detectStartupBannerTerminal,
   printStartupBanner,
+  renderLoutreBrand,
   renderStartupBanner,
   type StartupBannerInfo,
-} from '@loutrejs/cli'
+} from '@loutrejs/loutre/presentation'
 
 const baseInfo: StartupBannerInfo = {
   application: 'api',
@@ -41,6 +42,21 @@ describe('startup banner', () => {
     ])
   })
 
+  it('create向けbrandもTTYではwordmarkを生成する', () => {
+    const brand = renderLoutreBrand({
+      isTTY: true,
+      color: false,
+      columns: 120,
+    })
+
+    expect(brand).toContain('██╗')
+    expect(brand).toContain('ʕ•ᴥ•ʔ Loutre')
+  })
+
+  it('create向けbrandはnon-TTYではcompact outputを生成する', () => {
+    expect(renderLoutreBrand({ isTTY: false, color: true })).toBe('Loutre')
+  })
+
   it('color無効時はrich layoutを維持してANSI sequenceを出さない', () => {
     const banner = renderStartupBanner(baseInfo, {
       isTTY: true,
@@ -66,6 +82,17 @@ describe('startup banner', () => {
         'Ready in 42 ms',
       ].join('\n'),
     )
+  })
+
+  it('version未指定でもHostからstartup bannerを生成できる', () => {
+    const { version: _version, ...withoutVersion } = baseInfo
+    const banner = renderStartupBanner(withoutVersion, {
+      isTTY: false,
+      color: false,
+    })
+
+    expect(banner).toContain('Loutre (api)')
+    expect(banner).not.toContain('undefined')
   })
 
   it('terminal幅がrich banner幅より狭い場合はcompact outputへfallbackする', () => {
