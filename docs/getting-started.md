@@ -1,0 +1,232 @@
+# Getting Started
+
+このドキュメントでは、Loutre Applicationの作成と主要な利用方法をまとめます。
+
+## Create a project
+
+`create-loutre`はTargetとpackage managerを対話形式で選択できます。
+
+```sh
+# npm / Node.js
+npm create loutre@latest my-app
+
+# Bun
+bun create loutre my-app
+
+# Deno
+deno x -A npm:create-loutre@latest my-app
+```
+
+対応Target:
+
+- Node.js
+- Bun
+- Deno
+- Cloudflare Workers
+- AWS Lambda
+
+対応package manager:
+
+- npm
+- pnpm
+- Yarn
+- Bun
+- Deno
+
+非対話ではoptionで指定できます。
+
+```sh
+npm create loutre@latest my-app -- --target cloudflare-workers --package-manager pnpm
+```
+
+依存関係のinstallを後回しにする場合は`--no-install`を指定します。`--yes`ではTargetにNode.js、package managerにinitializerを起動したpackage managerを使用します。
+
+生成されるstarterにはVitest、Oxlint、Oxfmtとサンプルtestが含まれます。`verify` scriptでformat、lint、型 / Application Graph、test、target固有buildをまとめて確認できます。
+
+## HTTP Application
+
+Application DefinitionはHTTP serverそのものではありません。Contract / Implementation / ModuleとしてApplicationを定義し、実行環境はHost側で接続します。
+
+```ts
+import {
+  contract,
+  defineApplication,
+  defineModule,
+  implementation,
+  inject,
+  procedure,
+} from '@loutrejs/loutre'
+import { http, validate } from '@loutrejs/loutre/http'
+import { z } from 'zod'
+
+const GreetingContract = contract({
+  greet: procedure({
+    protocols: {
+      http: http({
+        method: 'GET',
+        path: '/greetings/{name}',
+        request: {
+          params: {
+            name: z.string().min(1),
+          },
+        },
+        responses: {
+          ok: {
+            status: 200,
+            body: z.object({ message: z.string() }),
+          },
+        },
+        pipeline: [validate.params, http.controller],
+      }),
+    },
+  }),
+})
+
+class GreetingService {
+  greet(name: string) {
+    return { message: `こんにちは、${name}！` }
+  }
+}
+
+const GreetingController = implementation({
+  name: 'GreetingController',
+  contract: GreetingContract,
+  protocol: http,
+  factory: (greetings = inject(GreetingService)) => ({
+    async greet(ctx) {
+      return ctx.response.ok({ body: greetings.greet(ctx.params.name) })
+    },
+  }),
+})
+
+const GreetingModule = defineModule(() => ({
+  providers: [GreetingService],
+  implementations: [GreetingController],
+}))
+
+export default defineApplication({
+  modules: [GreetingModule()],
+})
+```
+
+Node.jsでは`@loutrejs/node`からApplicationをserveできます。
+
+```ts
+import { nodeRuntime } from '@loutrejs/node'
+import application from './app.js'
+
+await nodeRuntime.serve({ application, port: 3000 })
+```
+
+HTTP listenerを持たずにApplicationを組み込みたい場合は、`bootstrap()`からWeb Standardの`fetch(request)`を利用できます。
+
+```ts
+import { bootstrap } from '@loutrejs/loutre/host'
+import application from './app.js'
+
+const app = bootstrap({ application })
+const response = await app.fetch(
+  new Request('http://localhost/greetings/Loutre'),
+)
+await app.close()
+```
+
+## Task / Arguments
+
+Hostから受け取るstructured inputは`Arguments`、明示的に実行する処理はpublic `Task`として宣言できます。
+
+```ts
+import { defineApplication, defineArgs, inject, task } from '@loutrejs/loutre'
+import { z } from 'zod'
+
+class AppArgs extends defineArgs(
+  z.object({
+    workers: z.number().int().positive(),
+  }),
+) {}
+
+export const rebuild = task<void, void>({
+  name: 'search.rebuild',
+  factory:
+    (args = inject(AppArgs)) =>
+    async () => {
+      console.log(`workers=${args.workers}`)
+    },
+})
+
+export const application = defineApplication({
+  modules: [],
+  arguments: AppArgs,
+  tasks: [rebuild],
+})
+```
+
+HostからArgumentsを渡してTaskを実行します。
+
+```ts
+const app = bootstrap({
+  application,
+  arguments: {
+    workers: argv.workers,
+  },
+})
+
+await app.run(rebuild)
+await app.close('complete')
+```
+
+## Runtime Support
+
+次のruntimeを継続的に動作確認しています。
+
+| Runtime            | Tested versions |
+| ------------------ | --------------- |
+| Node.js            | 22 / 24 / 26    |
+| Deno               | 2.9             |
+| Bun                | 1.3 / 1.4       |
+| Cloudflare Workers | workerd         |
+| Electron           | 42 / 43 / 44    |
+| AWS Lambda         | Node.js 22 / 24 |
+
+Runtimeごとの主な接続API:
+
+```text
+Node.js             nodeRuntime.serve()
+Bun                 bunRuntime.serve()
+Deno                denoRuntime.bind() / serve()
+Cloudflare Workers  cloudflareWorkersRuntime.bind()
+AWS Lambda          awsLambdaRuntime.bind()
+Electron            electronRuntime.attach()
+```
+
+## Developer Tooling
+
+`@loutrejs/cli`はApplication Graphとdeployment artifactを扱うdeveloper toolingです。
+
+```sh
+npm install --save-dev @loutrejs/cli
+```
+
+主なコマンド:
+
+```sh
+npm exec loutre -- check --entry src/app.ts
+npm exec loutre -- graph di --entry src/app.ts
+npm exec loutre -- graph contracts --entry src/app.ts --format mermaid
+npm exec loutre -- explain GreetingService --entry src/app.ts
+npm exec loutre -- doctor node --entry src/app.ts
+npm exec loutre -- build src/app.ts --out-dir dist/loutre
+npm exec loutre -- openapi --entry src/app.ts
+```
+
+`build --runtime`は`aws-lambda`、`cloudflare-workers`、`deno`のdeployment entry生成に対応します。
+
+```sh
+npm exec loutre -- build src/app.ts --runtime aws-lambda
+```
+
+`loutre run` / `loutre dev` / `loutre start`は提供しません。Applicationの実行方法はHostが所有します。
+
+## Examples
+
+用途ごとのexampleは[`examples/`](../examples/)を参照してください。
