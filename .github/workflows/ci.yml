@@ -14,109 +14,481 @@ concurrency:
 
 jobs:
   quality-checks:
-    name: Quality Checks
-    uses: ./.github/workflows/ci-node-quality.yml
+    name: Quality Checks / Node.js 24.x
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run check
+
+      - name: Public type tests
+        run: npm run test:types
+
+      - name: Verify release version
+        run: node scripts/verify-release-version.mjs
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Verify published packages
+        run: node scripts/verify-packages.mjs
+
+      - name: Pack published packages
+        run: node scripts/pack-packages.mjs
+
+      - name: Upload package tarballs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: loutre-package-tarballs
+          path: dist/package-tarballs/*.tgz
+          if-no-files-found: error
+
+      - name: Upload initializer build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: create-loutre-build
+          path: |
+            packages/loutre/dist
+            packages/create-loutre/dist
+          if-no-files-found: error
 
   minimum-node-types:
-    name: Minimum API Compatibility
-    uses: ./.github/workflows/ci-node-minimum.yml
+    name: Minimum API Compatibility / Node.js 22.x
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 22.x
+
+      - name: Install Node.js 22 type baseline
+        run: npm install --no-save --package-lock=false @types/node@22.20.1
+
+      - name: Type check
+        run: npm run check
+
+      - name: Public type tests
+        run: npm run test:types
+
+      - name: Build packages
+        run: npm run build
 
   node-tests:
-    name: Unit & E2E Tests
+    name: Unit & E2E Tests / Node.js ${{ matrix.version }}
     strategy:
       fail-fast: false
       matrix:
-        node: [22.x, 24.x, 26.x]
-    uses: ./.github/workflows/ci-node-tests.yml
-    with:
-      node-version: ${{ matrix.node }}
+        version: [22.x, 24.x, 26.x]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: ${{ matrix.version }}
+
+      - name: Run unit & E2E tests
+        run: npm test
+
+      - name: Run Node.js CLI conformance
+        run: |
+          node packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
+          node packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/node
+          node packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/node/openapi.json
+
+      - name: Run Node.js conformance
+        run: npm run test:node
 
   bun-conformance:
-    name: Runtime Conformance
+    name: Runtime Conformance / Bun ${{ matrix.version }}
     strategy:
       fail-fast: false
       matrix:
         version: [1.3.14, 1.4.0]
-    uses: ./.github/workflows/ci-bun.yml
-    with:
-      bun-version: ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-bun-workspace
+        with:
+          bun-version: ${{ matrix.version }}
+
+      - name: Build packages with Bun
+        run: |
+          BUN_BIN="$(command -v bun)"
+          BUNX_BIN="$(command -v bunx)"
+          "$BUN_BIN" scripts/clean-dist.mjs
+          "$BUNX_BIN" tsc -p tsconfig.packages.json --pretty false
+          "$BUN_BIN" scripts/prepare-packages.mjs
+
+      - name: Run Bun CLI conformance
+        run: |
+          BUN_BIN="$(command -v bun)"
+          "$BUN_BIN" packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
+          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
+          "$BUN_BIN" packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
+
+      - name: Build Bun conformance applications
+        run: |
+          BUN_BIN="$(command -v bun)"
+          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/conformance/http-crud
+          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
+          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
+
+      - name: Run Bun conformance
+        run: |
+          BUN_BIN="$(command -v bun)"
+          "$BUN_BIN" conformance/bun.ts
 
   deno-conformance:
-    name: Runtime Conformance
-    uses: ./.github/workflows/ci-deno.yml
-    with:
-      deno-version: 2.9.5
+    name: Runtime Conformance / Deno 2.9.5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-deno-workspace
+        with:
+          deno-version: 2.9.5
+
+      - name: Build packages with Deno
+        run: |
+          DENO_BIN="$(command -v deno)"
+          "$DENO_BIN" run -A scripts/clean-dist.mjs
+          "$DENO_BIN" run -A npm:typescript@7.0.2/tsc -p tsconfig.packages.json --pretty false
+          "$DENO_BIN" run -A scripts/prepare-packages.mjs
+
+      - name: Run Deno CLI conformance
+        run: |
+          DENO_BIN="$(command -v deno)"
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json
+
+      - name: Build Deno conformance applications
+        run: |
+          DENO_BIN="$(command -v deno)"
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/conformance/http-crud
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
+
+      - name: Run Deno conformance
+        run: |
+          DENO_BIN="$(command -v deno)"
+          "$DENO_BIN" run -A --sloppy-imports conformance/deno.ts
 
   cloudflare-workers-conformance:
-    name: Runtime Conformance
-    uses: ./.github/workflows/ci-cloudflare-workers.yml
+    name: Runtime Conformance / Cloudflare Workers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Run Cloudflare Workers conformance
+        run: npm run test:cloudflare-workers
 
   electron-conformance:
-    name: Runtime Conformance
+    name: Runtime Conformance / Electron ${{ matrix.version }}
     strategy:
       fail-fast: false
       matrix:
         version: [42.10.1, 43.4.1, 44.0.0]
-    uses: ./.github/workflows/ci-electron.yml
-    with:
-      electron-version: ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Install Electron ${{ matrix.version }}
+        run: npm install --no-save --package-lock=false electron@${{ matrix.version }}
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Run Electron conformance
+        run: LOUTRE_ELECTRON_NO_SANDBOX=1 xvfb-run --auto-servernum npm run test:electron
 
   aws-lambda-conformance:
-    name: Runtime Conformance
+    name: Runtime Conformance / AWS Lambda / Node.js ${{ matrix.version }}
     strategy:
       fail-fast: false
       matrix:
-        node: [22.x, 24.x]
-    uses: ./.github/workflows/ci-aws-lambda.yml
-    with:
-      node-version: ${{ matrix.node }}
+        version: [22.x, 24.x]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: ${{ matrix.version }}
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Run AWS Lambda conformance
+        run: npm run test:aws-lambda
 
   node-package-consumer:
-    name: Package Consumer
+    name: Package Consumer / Node.js ${{ matrix.version }}
     needs: quality-checks
     strategy:
       fail-fast: false
       matrix:
-        node: [22.x, 24.x]
-    uses: ./.github/workflows/ci-package-node.yml
-    with:
-      node-version: ${{ matrix.node }}
+        version: [22.x, 24.x]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node.js ${{ matrix.version }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ matrix.version }}
+
+      - name: Download package tarballs
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: loutre-package-tarballs
+          path: ${{ runner.temp }}/loutre-package-tarballs
+
+      - name: Verify packed packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          consumer="${RUNNER_TEMP}/loutre-package-consumer-node"
+          rm -rf "$consumer"
+          mkdir -p "$consumer"
+          cd "$consumer"
+          npm init -y >/dev/null
+          npm install "${RUNNER_TEMP}/loutre-package-tarballs"/*.tgz --no-audit --no-fund
+
+          node --input-type=module -e "import { nodeRuntime } from '@loutrejs/node'; if (nodeRuntime.runtime !== 'node') throw new Error('Node runtime import failed')"
+          node node_modules/@loutrejs/cli/bin/loutre.js --help | grep -q '^Loutre CLI$'
+          node node_modules/create-loutre/bin/create-loutre.js node-app --yes --no-install --target node
+          grep -q 'nodeRuntime' node-app/src/main.ts
 
   bun-package-consumer:
-    name: Package Consumer
+    name: Package Consumer / Bun ${{ matrix.version }}
     needs: quality-checks
     strategy:
       fail-fast: false
       matrix:
         version: [1.3.14, 1.4.0]
-    uses: ./.github/workflows/ci-package-bun.yml
-    with:
-      bun-version: ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Bun ${{ matrix.version }}
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: ${{ matrix.version }}
+
+      - name: Verify Bun version
+        run: test "$(bun --version)" = "${{ matrix.version }}"
+
+      - name: Download package tarballs
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: loutre-package-tarballs
+          path: ${{ runner.temp }}/loutre-package-tarballs
+
+      - name: Verify packed packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarballs="${RUNNER_TEMP}/loutre-package-tarballs"
+          consumer="${RUNNER_TEMP}/loutre-package-consumer-bun"
+          rm -rf "$consumer"
+          mkdir -p "$consumer"
+          cd "$consumer"
+
+          loutre="$(realpath "$tarballs"/loutrejs-loutre-*.tgz)"
+          cli="$(realpath "$tarballs"/loutrejs-cli-*.tgz)"
+          create="$(realpath "$tarballs"/create-loutre-*.tgz)"
+          cat > package.json <<JSON
+          {
+            "name": "loutre-package-consumer-bun",
+            "private": true,
+            "type": "module",
+            "dependencies": {
+              "@loutrejs/loutre": "file:$loutre",
+              "@loutrejs/cli": "file:$cli",
+              "create-loutre": "file:$create"
+            },
+            "overrides": {
+              "@loutrejs/loutre": "file:$loutre"
+            }
+          }
+          JSON
+
+          bun install
+          bun --eval "import { bunRuntime } from '@loutrejs/loutre/runtime/bun'; if (bunRuntime.runtime !== 'bun') throw new Error('Bun runtime import failed')"
+          bun node_modules/@loutrejs/cli/bin/loutre.js --help | grep -q '^Loutre CLI$'
+          bun node_modules/create-loutre/bin/create-loutre.js bun-app --yes --no-install --target bun
+          grep -q 'bunRuntime' bun-app/src/main.ts
 
   deno-package-consumer:
-    name: Package Consumer
+    name: Package Consumer / Deno 2.9.5
     needs: quality-checks
-    uses: ./.github/workflows/ci-package-deno.yml
-    with:
-      deno-version: 2.9.5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Deno 2.9.5
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.9.5
+
+      - name: Verify Deno version
+        run: test "$(deno eval 'console.log(Deno.version.deno)')" = "2.9.5"
+
+      - name: Download package tarballs
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: loutre-package-tarballs
+          path: ${{ runner.temp }}/loutre-package-tarballs
+
+      - name: Verify packed packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarballs="${RUNNER_TEMP}/loutre-package-tarballs"
+          extracted="${RUNNER_TEMP}/loutre-package-extracted-deno"
+          consumer="${RUNNER_TEMP}/loutre-package-consumer-deno"
+          rm -rf "$extracted" "$consumer"
+          mkdir -p "$extracted" "$consumer"
+
+          extract_package() {
+            local archive="$1"
+            local destination="$2"
+            mkdir -p "$extracted/$destination"
+            tar -xzf "$archive" -C "$extracted/$destination" --strip-components=1
+          }
+          extract_package "$tarballs"/loutrejs-loutre-*.tgz loutre
+          extract_package "$tarballs"/loutrejs-cli-*.tgz cli
+          extract_package "$tarballs"/create-loutre-*.tgz create-loutre
+
+          version="$(deno eval "const manifest = JSON.parse(Deno.readTextFileSync('$extracted/loutre/package.json')); console.log(manifest.version)")"
+          cd "$consumer"
+          cat > package.json <<JSON
+          {
+            "name": "loutre-package-consumer-deno",
+            "private": true,
+            "type": "module",
+            "dependencies": {
+              "@loutrejs/loutre": "$version",
+              "@loutrejs/cli": "$version",
+              "create-loutre": "$version"
+            }
+          }
+          JSON
+          cat > deno.json <<JSON
+          {
+            "nodeModulesDir": "manual",
+            "links": [
+              "$extracted/loutre",
+              "$extracted/cli",
+              "$extracted/create-loutre"
+            ]
+          }
+          JSON
+
+          deno install
+          deno eval "import { denoRuntime } from '@loutrejs/loutre/runtime/deno'; if (denoRuntime.runtime !== 'deno') throw new Error('Deno runtime import failed')"
+          deno run -A node_modules/@loutrejs/cli/bin/loutre.js --help | grep -q '^Loutre CLI$'
+          deno run -A node_modules/create-loutre/bin/create-loutre.js deno-app --yes --no-install --target deno
+          grep -q 'denoRuntime' deno-app/src/main.ts
 
   bun-initializer:
-    name: Native Initializer
+    name: Native Initializer / Bun ${{ matrix.version }}
     needs: quality-checks
     strategy:
       fail-fast: false
       matrix:
         version: [1.3.14, 1.4.0]
-    uses: ./.github/workflows/ci-initializer-bun.yml
-    with:
-      bun-version: ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-bun-workspace
+        with:
+          bun-version: ${{ matrix.version }}
+
+      - name: Download initializer build
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: create-loutre-build
+          path: packages
+
+      - name: Create Bun project
+        shell: bash
+        run: |
+          rm -rf .tmp/create-loutre-native
+          mkdir -p .tmp/create-loutre-native
+          cd .tmp/create-loutre-native
+          output="$(bun create loutre bun-app --yes --no-install --target bun)"
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -q "Package manager: Bun"
+          grep -q "bunRuntime" bun-app/src/main.ts
 
   deno-initializer:
-    name: Native Initializer
+    name: Native Initializer / Deno 2.9.5
     needs: quality-checks
-    uses: ./.github/workflows/ci-initializer-deno.yml
-    with:
-      deno-version: 2.9.5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-deno-workspace
+        with:
+          deno-version: 2.9.5
+
+      - name: Download initializer build
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: create-loutre-build
+          path: packages
+
+      - name: Create Deno project
+        shell: bash
+        run: |
+          rm -rf .tmp/create-loutre-native
+          mkdir -p .tmp/create-loutre-native
+          output="$(deno run -A packages/create-loutre/bin/create-loutre.js .tmp/create-loutre-native/deno-app --yes --no-install --target deno)"
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -q "Package manager: Deno"
+          grep -q "denoRuntime" .tmp/create-loutre-native/deno-app/src/main.ts
 
   required:
     name: CI
