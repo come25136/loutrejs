@@ -1,0 +1,40 @@
+name: Bun runtime conformance
+
+on:
+  workflow_call:
+    inputs:
+      bun-version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Setup Bun ${{ inputs.bun-version }}
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ inputs.bun-version }}
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Run Bun CLI conformance
+        run: |
+          bun packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
+          bun packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
+          bun packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
+
+      - name: Run Bun conformance
+        run: npm run build:conformance-apps && bun --version && bun run conformance/bun.ts

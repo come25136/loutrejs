@@ -1,0 +1,40 @@
+name: Deno runtime conformance
+
+on:
+  workflow_call:
+    inputs:
+      deno-version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Setup Deno ${{ inputs.deno-version }}
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ inputs.deno-version }}
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Run Deno CLI conformance
+        run: |
+          deno run -A packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
+          deno run -A packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
+          deno run -A packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json
+
+      - name: Run Deno conformance
+        run: npm run test:deno

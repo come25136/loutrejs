@@ -1,0 +1,32 @@
+name: Electron runtime conformance
+
+on:
+  workflow_call:
+    inputs:
+      electron-version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Install Electron ${{ inputs.electron-version }}
+        run: npm install --no-save --package-lock=false electron@${{ inputs.electron-version }}
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Run Electron conformance
+        run: LOUTRE_ELECTRON_NO_SANDBOX=1 xvfb-run --auto-servernum npm run test:electron

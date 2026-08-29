@@ -1,0 +1,29 @@
+name: AWS Lambda conformance
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Run AWS Lambda conformance
+        run: npm run test:aws-lambda

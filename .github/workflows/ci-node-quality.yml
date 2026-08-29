@@ -1,0 +1,46 @@
+name: Node.js quality
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run check
+
+      - name: Public type tests
+        run: npm run test:types
+
+      - name: Build packages
+        run: npm run build
+
+      - name: Verify published packages
+        run: node scripts/verify-packages.mjs
+
+      - name: Upload initializer build
+        uses: actions/upload-artifact@v4
+        with:
+          name: create-loutre-build
+          path: |
+            packages/loutre/dist
+            packages/create-loutre/dist
+          if-no-files-found: error
