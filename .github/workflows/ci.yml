@@ -37,11 +37,11 @@ jobs:
       - name: Public type tests
         run: npm run test:types
 
-      - name: Verify release version
-        run: node scripts/verify-release-version.mjs
-
       - name: Build packages
         run: npm run build
+
+      - name: Verify release version
+        run: node scripts/verify-release-version.mjs
 
       - name: Verify published packages
         run: node scripts/verify-packages.mjs

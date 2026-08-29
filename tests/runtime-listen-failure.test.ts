@@ -3,7 +3,6 @@ import { defineApplication } from '@loutrejs/loutre'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { nodeRuntime } from '@loutrejs/node'
-import { LOUTRE_VERSION } from '@loutrejs/loutre/presentation'
 import { UsersModule } from '../fixtures/http-crud/src/index.js'
 import { silentLogger } from './helpers/silent-logger.js'
 
@@ -25,7 +24,7 @@ describe('runtime listen failure', () => {
     vi.unstubAllGlobals()
   })
 
-  it('Nodeは明示portが使用中ならEADDRINUSEでrejectする', async () => {
+  it('Nodeは明示portが使用中ならpreludeだけを出してEADDRINUSEでrejectする', async () => {
     const occupied = createServer()
     await new Promise<void>((resolve, reject) => {
       occupied.once('error', reject)
@@ -45,7 +44,7 @@ describe('runtime listen failure', () => {
         }),
       ).rejects.toMatchObject({ code: 'EADDRINUSE' })
       expect(startupOutput).toHaveLength(1)
-      expect(startupOutput.join('\n')).toContain(`Loutre ${LOUTRE_VERSION}`)
+      expect(startupOutput[0]).toMatch(/^Loutre /u)
       expect(startupOutput.join('\n')).not.toContain('Ready')
     } finally {
       await closeServer(occupied)

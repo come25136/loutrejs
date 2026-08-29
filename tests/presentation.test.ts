@@ -1,5 +1,4 @@
 import {
-  LOUTRE_VERSION,
   detectPresentationTerminal,
   renderLoutreBrand,
   renderStartupPrelude,
@@ -10,7 +9,7 @@ import {
 } from '@loutrejs/loutre/presentation'
 
 const startupInfo: StartupPresentationInfo = {
-  version: '0.1.0',
+  version: '1.2.3',
 }
 
 const statusInfo: StartupStatusInfo = {
@@ -57,7 +56,7 @@ describe('presentation', () => {
 
     expect(prelude).toContain('╭')
     expect(prelude).toContain('██╗')
-    expect(prelude).toContain('ʕ•ᴥ•ʔ  version 0.1.0')
+    expect(prelude).toContain('ʕ•ᴥ•ʔ  version 1.2.3')
     expect(prelude).not.toContain('ʕ•ᴥ•ʔ  Loutre')
     expect(prelude).not.toContain('Application')
     expect(prelude).not.toContain('Server')
@@ -118,7 +117,7 @@ describe('presentation', () => {
   it('non-TTYではpreludeとstatusをANSIなしのcompact outputへ分離する', () => {
     const options = { isTTY: false, color: true, columns: 120 } as const
 
-    expect(renderStartupPrelude(startupInfo, options)).toBe('Loutre 0.1.0')
+    expect(renderStartupPrelude(startupInfo, options)).toBe('Loutre 1.2.3')
     expect(renderStartupStatus(statusInfo, options)).toBe(
       [
         'Server: http://localhost:3000',
@@ -134,7 +133,7 @@ describe('presentation', () => {
     const prelude = renderStartupPrelude(startupInfo, options)
     const status = renderStartupStatus(statusInfo, options)
 
-    expect(prelude).toBe('Loutre 0.1.0')
+    expect(prelude).toBe('Loutre 1.2.3')
     expect(status).not.toContain('Application')
     expect(status).toContain('Server: http://localhost:3000')
     expect(status).toContain('Ready in 42 ms')
@@ -149,15 +148,12 @@ describe('presentation', () => {
 
   it('startup sessionはpreludeを開始時、statusをready時だけ出力する', () => {
     const output: string[] = []
-    const session = startStartupPresentation(
-      { version: LOUTRE_VERSION },
-      {
-        terminal: { isTTY: false, color: false },
-        write: (value) => output.push(value),
-      },
-    )
+    const session = startStartupPresentation(startupInfo, {
+      terminal: { isTTY: false, color: false },
+      write: (value) => output.push(value),
+    })
 
-    expect(output).toEqual([`Loutre ${LOUTRE_VERSION}`])
+    expect(output).toEqual(['Loutre 1.2.3'])
 
     session.ready(statusInfo)
 
