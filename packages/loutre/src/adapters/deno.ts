@@ -155,12 +155,14 @@ async function serve<const TDefinition extends ApplicationDefinition>(
     startupDurationMs: performance.now() - startedAt,
   })
   let closed = false
-  return {
+  let removeShutdownHooks: (() => void) | undefined
+  const handle: DenoServeHandle<TDefinition> = {
     application: host.application,
     port,
     async close(signal?: string) {
       if (closed) return
       closed = true
+      removeShutdownHooks?.()
       const errors: unknown[] = []
       try {
         await server.shutdown()
@@ -176,6 +178,35 @@ async function serve<const TDefinition extends ApplicationDefinition>(
         throw new AggregateError(errors, 'Deno runtime shutdown failed')
     },
   }
+  removeShutdownHooks = registerDenoShutdownHooks(deno, (signal) =>
+    handle.close(signal),
+  )
+  return handle
+}
+
+function registerDenoShutdownHooks(
+  deno: NonNullable<ReturnType<typeof denoGlobal>>,
+  close: (signal: string) => Promise<void>,
+): (() => void) | undefined {
+  if (!deno.addSignalListener || !deno.removeSignalListener) {
+    return undefined
+  }
+  const handlers = new Map<'SIGINT' | 'SIGTERM', () => void>()
+  const remove = () => {
+    for (const [signal, handler] of handlers) {
+      deno.removeSignalListener?.(signal, handler)
+    }
+    handlers.clear()
+  }
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    const handler = () => {
+      remove()
+      void close(signal)
+    }
+    handlers.set(signal, handler)
+    deno.addSignalListener(signal, handler)
+  }
+  return remove
 }
 
 function canRetryOnNextPort(error: unknown, port: number): boolean {
@@ -224,6 +255,8 @@ function denoGlobal():
       }
       stdout?: { isTerminal?(): boolean }
       version?: { deno?: string }
+      addSignalListener?(signal: string, handler: () => void): void
+      removeSignalListener?(signal: string, handler: () => void): void
       serve?(
         options: {
           port: number
@@ -242,6 +275,8 @@ function denoGlobal():
         }
         stdout?: { isTerminal?(): boolean }
         version?: { deno?: string }
+        addSignalListener?(signal: string, handler: () => void): void
+        removeSignalListener?(signal: string, handler: () => void): void
         serve?(
           options: {
             port: number

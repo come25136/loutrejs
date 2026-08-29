@@ -58,6 +58,9 @@ describe('create-loutre startup presentation', () => {
       expect(main).not.toContain('performance.now')
       expect(main).not.toContain('Runtime:')
       expect(main).not.toContain('Environment:')
+      expect(main).not.toContain('SIGINT')
+      expect(main).not.toContain('SIGTERM')
+      expect(main).not.toContain('.close(')
     },
   )
 
