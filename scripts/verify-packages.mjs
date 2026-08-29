@@ -23,7 +23,7 @@ for (const directory of await readdir(packagesDirectory)) {
     }),
   )[0]
   const files = new Set(result.files.map(({ path }) => path))
-  const required = new Set(['package.json'])
+  const required = new Set(['package.json', 'README.md'])
   if (manifest.types) required.add(normalizeTarget(manifest.types))
   collectExportTargets(manifest.exports, required)
   validateBinTargets(manifest.name, manifest.bin)

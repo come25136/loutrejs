@@ -225,8 +225,6 @@ npm exec loutre -- openapi --entry src/app.ts
 npm exec loutre -- build src/app.ts --runtime aws-lambda
 ```
 
-`loutre run` / `loutre dev` / `loutre start`は提供しません。Applicationの実行方法はHostが所有します。
-
 ## Examples
 
 用途ごとのexampleは[`examples/`](../examples/)を参照してください。
