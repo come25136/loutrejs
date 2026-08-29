@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   minimum:
-    name: Node.js 22
+    name: Node.js
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

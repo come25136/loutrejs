@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   quality:
-    name: Node.js 24
+    name: Node.js
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

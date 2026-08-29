@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   consumer:
-    name: Deno ${{ inputs.deno-version }} LTS
+    name: Deno
     runs-on: ubuntu-latest
     steps:
       - name: Setup Deno ${{ inputs.deno-version }}
