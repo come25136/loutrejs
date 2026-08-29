@@ -30,4 +30,10 @@ try {
 } finally {
   await events.close()
 }
-console.log('Bun 1.4 Stable conformance: 成功')
+const bunVersion =
+  (
+    globalThis as typeof globalThis & {
+      readonly Bun?: { readonly version?: string }
+    }
+  ).Bun?.version ?? 'unknown'
+console.log(`Bun ${bunVersion} conformance: 成功`)

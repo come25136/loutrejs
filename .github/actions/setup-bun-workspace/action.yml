@@ -1,0 +1,21 @@
+name: Setup Bun workspace
+description: Bunをsetupし、Bunでrepository dependencyをinstallする
+inputs:
+  bun-version:
+    description: setupするBun version
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun ${{ inputs.bun-version }}
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: ${{ inputs.bun-version }}
+
+    - name: Verify Bun version
+      shell: bash
+      run: test "$(bun --version)" = "${{ inputs.bun-version }}"
+
+    - name: Install dependencies
+      shell: bash
+      run: bun install --no-save

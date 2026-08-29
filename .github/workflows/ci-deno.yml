@@ -18,24 +18,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Node workspace
-        uses: ./.github/actions/setup-node-workspace
-        with:
-          node-version: 24.x
-
-      - name: Setup Deno ${{ inputs.deno-version }}
-        uses: denoland/setup-deno@v2
+      - name: Setup workspace
+        uses: ./.github/actions/setup-deno-workspace
         with:
           deno-version: ${{ inputs.deno-version }}
 
-      - name: Build packages
-        run: npm run build
+      - name: Build packages with Deno
+        run: |
+          DENO_BIN="$(command -v deno)"
+          "$DENO_BIN" run -A scripts/clean-dist.mjs
+          "$DENO_BIN" run -A npm:typescript@7.0.2/tsc -p tsconfig.packages.json --pretty false
+          "$DENO_BIN" run -A scripts/prepare-packages.mjs
 
       - name: Run Deno CLI conformance
         run: |
-          deno run -A packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
-          deno run -A packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
-          deno run -A packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json
+          DENO_BIN="$(command -v deno)"
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json
+
+      - name: Build Deno conformance applications
+        run: |
+          DENO_BIN="$(command -v deno)"
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/conformance/http-crud
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
 
       - name: Run Deno conformance
-        run: npm run test:deno
+        run: |
+          DENO_BIN="$(command -v deno)"
+          "$DENO_BIN" run -A --sloppy-imports conformance/deno.ts

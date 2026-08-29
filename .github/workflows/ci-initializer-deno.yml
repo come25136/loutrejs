@@ -18,8 +18,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Deno ${{ inputs.deno-version }}
-        uses: denoland/setup-deno@v2
+      - name: Setup workspace
+        uses: ./.github/actions/setup-deno-workspace
         with:
           deno-version: ${{ inputs.deno-version }}
 
@@ -28,9 +28,6 @@ jobs:
         with:
           name: create-loutre-build
           path: packages
-
-      - name: Install dependencies
-        run: deno install
 
       - name: Create Deno project
         shell: bash

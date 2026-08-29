@@ -79,6 +79,8 @@ CLI implementationは3 runtimeで共通して利用可能なWeb APIとNode.js co
 
 CIはCLIの`check` / `build` / `openapi`を各host runtime自身で実行し、Application runtime conformanceとは別にCLI host portabilityを検証する。
 
+Bun / Denoのruntime conformanceと`create-loutre` native initializerは、それぞれのruntime自身でdependency installと必要なpackage buildを行い、Node.js setupやnpm commandへ依存しない。Node.js系、AWS Lambda、Electron、Cloudflare Workersのconformanceは各検証に必要なNode.js toolingを明示的にsetupする。
+
 ## 3. Bun
 
 BunにはNode.jsと同じLTS modelを要求しない。

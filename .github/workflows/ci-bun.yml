@@ -18,24 +18,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Node workspace
-        uses: ./.github/actions/setup-node-workspace
-        with:
-          node-version: 24.x
-
-      - name: Setup Bun ${{ inputs.bun-version }}
-        uses: oven-sh/setup-bun@v2
+      - name: Setup workspace
+        uses: ./.github/actions/setup-bun-workspace
         with:
           bun-version: ${{ inputs.bun-version }}
 
-      - name: Build packages
-        run: npm run build
+      - name: Build packages with Bun
+        run: |
+          BUN_BIN="$(command -v bun)"
+          BUNX_BIN="$(command -v bunx)"
+          "$BUN_BIN" scripts/clean-dist.mjs
+          "$BUNX_BIN" tsc -p tsconfig.packages.json --pretty false
+          "$BUN_BIN" scripts/prepare-packages.mjs
 
       - name: Run Bun CLI conformance
         run: |
-          bun packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
-          bun packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
-          bun packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
+          BUN_BIN="$(command -v bun)"
+          "$BUN_BIN" packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
+          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
+          "$BUN_BIN" packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
+
+      - name: Build Bun conformance applications
+        run: |
+          BUN_BIN="$(command -v bun)"
+          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/conformance/http-crud
+          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
+          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
 
       - name: Run Bun conformance
-        run: npm run build:conformance-apps && bun --version && bun run conformance/bun.ts
+        run: |
+          BUN_BIN="$(command -v bun)"
+          "$BUN_BIN" conformance/bun.ts
