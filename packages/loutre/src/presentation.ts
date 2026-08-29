@@ -182,8 +182,8 @@ function renderRichPrelude(
 ): string {
   const layout = createFrameLayout(contentWidth, color)
   const logo = renderLogo(color)
-  const brand = `${mascot}  Loutre ${info.version}`
-  const styledBrand = `${paintWhen(color, colors.lavender, mascot)}  ${paintWhen(color, colors.lavenderSoft, `Loutre ${info.version}`)}`
+  const brand = `${mascot}  version ${info.version}`
+  const styledBrand = `${paintWhen(color, colors.lavender, mascot)}  ${paintWhen(color, colors.lavenderSoft, `version ${info.version}`)}`
 
   return [
     layout.topBorder,
@@ -242,7 +242,7 @@ function createStartupLayout(
     minimumContentWidth,
     logoWidth(),
     'version' in info
-      ? displayWidth(`${mascot}  Loutre ${info.version}`)
+      ? displayWidth(`${mascot}  version ${info.version}`)
       : minimumContentWidth,
     ...metadata,
   )
