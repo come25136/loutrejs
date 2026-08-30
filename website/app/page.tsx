@@ -414,9 +414,9 @@ export default function Home() {
           </div>
           <Image
             className="absolute -right-16 -bottom-16 h-auto w-36 drop-shadow-sm max-sm:hidden"
-            src="/loutre.png"
-            width={512}
-            height={493}
+            src="/loutre.svg"
+            width={1254}
+            height={1254}
             alt=""
           />
         </div>

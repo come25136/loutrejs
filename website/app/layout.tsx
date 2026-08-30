@@ -57,9 +57,9 @@ function Brand() {
     >
       <Image
         className="h-7 w-auto"
-        src="/loutre.png"
-        width={512}
-        height={493}
+        src="/loutre.svg"
+        width={1254}
+        height={1254}
         alt=""
         loading="eager"
       />
