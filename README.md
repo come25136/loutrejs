@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/assets/loutre.png" alt="Loutreのカワウソアイコン" width="180">
+  <img src="./docs/assets/loutre.svg" alt="Loutreのカワウソアイコン" width="180">
 </p>
 
 <h1 align="center">Loutre</h1>
