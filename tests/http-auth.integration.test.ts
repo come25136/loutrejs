@@ -8,18 +8,18 @@ import {
   authenticated,
   bearerAuthentication,
   tenantAccess,
-} from '../fixtures/http-auth/src/index.js'
+} from '../examples/http-auth/src/index.js'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
-describe('canonical Fixture B', () => {
+describe('HTTP auth example', () => {
   it('Layerが生成したContext propertyをControllerのctxから取得する', async () => {
     const application = createTestApplication({
       modules: [AccountModule()],
       logger: silentLogger,
     })
     const response = await application.fetch(
-      new Request('http://fixture.test/account', {
-        headers: { authorization: 'Bearer fixture-token' },
+      new Request('http://example.test/account', {
+        headers: { authorization: 'Bearer example-token' },
       }),
     )
     expect(response.status).toBe(200)

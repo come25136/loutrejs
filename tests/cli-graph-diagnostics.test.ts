@@ -23,7 +23,7 @@ describe('Graph-driven CLI diagnostics', () => {
 
     expect(
       await runCli(
-        ['doctor', 'electron', '--entry', 'fixtures/http-crud/src/app.ts'],
+        ['doctor', 'electron', '--entry', 'examples/http-crud/src/app.ts'],
         output.value,
       ),
     ).toBe(1)
@@ -44,7 +44,7 @@ describe('Graph-driven CLI diagnostics', () => {
           'explain',
           'UsersController',
           '--entry',
-          'fixtures/http-crud/src/app.ts',
+          'examples/http-crud/src/app.ts',
         ],
         output.value,
       ),
@@ -64,7 +64,7 @@ describe('Graph-driven CLI diagnostics', () => {
         await runCli(
           [
             'build',
-            'fixtures/http-crud/src/app.ts',
+            'examples/http-crud/src/app.ts',
             '--runtime',
             'cloudflare-workers',
             '--out-dir',

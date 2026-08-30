@@ -107,17 +107,17 @@ export const DatabaseModule = defineModule<DatabaseModuleArgs>((args) => ({
   },
 }))
 
-export async function createDatabaseFixture(
+export async function createDatabaseExample(
   storageDriver: 'memory' | 's3' = 'memory',
 ) {
   const events: string[] = []
   const environmentSource = {
     STORAGE_DRIVER: storageDriver,
-    PRIMARY_DATABASE_URL: 'primary://fixture',
-    ANALYTICS_DATABASE_URL: 'analytics://fixture',
+    PRIMARY_DATABASE_URL: 'primary://example',
+    ANALYTICS_DATABASE_URL: 'analytics://example',
   }
   const AppModule = defineModule(() => ({
-    description: 'Database fixture application',
+    description: 'Database modules example application',
     imports: [
       DatabaseModule({
         provide: PRIMARY_DB,

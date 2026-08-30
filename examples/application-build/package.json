@@ -1,5 +1,5 @@
 {
-  "name": "@loutrejs/fixture-application-build",
+  "name": "@loutrejs/example-application-build",
   "version": "0.1.0",
   "private": true,
   "type": "module",

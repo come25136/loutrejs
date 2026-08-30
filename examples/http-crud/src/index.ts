@@ -76,7 +76,7 @@ export const UsersController = implementation({
 })
 export const UsersModule = defineModule(() => ({
   name: 'UsersModule',
-  description: 'Canonical HTTP CRUD fixture',
+  description: 'HTTP CRUD example',
   providers: [UsersService],
   implementations: [UsersController],
 }))

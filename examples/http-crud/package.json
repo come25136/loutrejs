@@ -1,5 +1,5 @@
 {
-  "name": "@loutrejs/fixture-http-crud",
+  "name": "@loutrejs/example-http-crud",
   "version": "0.1.0",
   "private": true,
   "type": "module",

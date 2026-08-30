@@ -2,7 +2,7 @@ import { generateOpenApi } from '@loutrejs/loutre/openapi'
 import { defineApplication } from '@loutrejs/loutre'
 import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
-import { createUsersApplication } from '../fixtures/http-crud/src/index.js'
+import { createUsersApplication } from '../examples/http-crud/src/index.js'
 import { z } from 'zod'
 describe('OpenAPI generation', () => {
   it('projects executable HTTP contracts to OpenAPI 3.2', () => {

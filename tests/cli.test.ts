@@ -24,7 +24,7 @@ describe('Loutre CLI', () => {
     const output = io()
     expect(
       await runCli(
-        ['graph', 'contracts', '--entry', 'fixtures/http-crud/src/app.ts'],
+        ['graph', 'contracts', '--entry', 'examples/http-crud/src/app.ts'],
         output.value,
       ),
     ).toBe(0)
@@ -35,7 +35,7 @@ describe('Loutre CLI', () => {
   it('Runtime capability mismatchをdoctorで説明する', async () => {
     const output = io()
     const code = await runCli(
-      ['doctor', 'electron', '--entry', 'fixtures/http-crud/src/app.ts'],
+      ['doctor', 'electron', '--entry', 'examples/http-crud/src/app.ts'],
       output.value,
     )
     expect(code).toBe(1)
@@ -50,7 +50,7 @@ describe('Loutre CLI', () => {
           'explain',
           'UsersController',
           '--entry',
-          'fixtures/http-crud/src/app.ts',
+          'examples/http-crud/src/app.ts',
         ],
         output.value,
       ),
@@ -62,14 +62,14 @@ describe('Loutre CLI', () => {
     const output = io()
     expect(
       await runCli(
-        ['graph', 'modules', '--entry', 'fixtures/http-crud/src/app.ts'],
+        ['graph', 'modules', '--entry', 'examples/http-crud/src/app.ts'],
         output.value,
       ),
     ).toBe(0)
     const graph = output.stdout.join('\n')
     expect(graph).toContain('UsersModule')
     expect(graph).toContain('module:1')
-    expect(graph).toContain('description: Canonical HTTP CRUD fixture')
+    expect(graph).toContain('description: HTTP CRUD example')
   })
 
   it('Graphをmachine-readable JSONで出力する', async () => {
@@ -82,7 +82,7 @@ describe('Loutre CLI', () => {
           '--format',
           'json',
           '--entry',
-          'fixtures/http-crud/src/app.ts',
+          'examples/http-crud/src/app.ts',
         ],
         output.value,
       ),
@@ -112,7 +112,7 @@ describe('Loutre CLI', () => {
     const output = io()
     expect(
       await runCli(
-        ['graph', 'executions', '--entry', 'fixtures/http-crud/src/app.ts'],
+        ['graph', 'executions', '--entry', 'examples/http-crud/src/app.ts'],
         output.value,
       ),
     ).toBe(0)
@@ -131,7 +131,7 @@ describe('Loutre CLI', () => {
           '--format',
           'mermaid',
           '--entry',
-          'fixtures/http-crud/src/app.ts',
+          'examples/http-crud/src/app.ts',
         ],
         output.value,
       ),
@@ -153,7 +153,7 @@ describe('Loutre CLI', () => {
           '--format',
           'mermaid',
           '--entry',
-          'fixtures/http-crud/src/app.ts',
+          'examples/http-crud/src/app.ts',
         ],
         output.value,
       ),
@@ -171,7 +171,7 @@ describe('Loutre CLI', () => {
           '--format',
           'dot',
           '--entry',
-          'fixtures/http-crud/src/app.ts',
+          'examples/http-crud/src/app.ts',
         ],
         output.value,
       ),
@@ -183,7 +183,7 @@ describe('Loutre CLI', () => {
     const output = io()
     expect(
       await runCli(
-        ['graph', 'di', '--entry', 'fixtures/graph-probe/src/app.ts'],
+        ['graph', 'di', '--entry', 'examples/graph-probe/src/app.ts'],
         output.value,
       ),
     ).toBe(1)
@@ -208,7 +208,7 @@ describe('Loutre CLI', () => {
         await runCli(
           [
             'build',
-            'fixtures/application-build/src/app.ts',
+            'examples/application-build/src/app.ts',
             '--out-dir',
             directory,
           ],
@@ -259,7 +259,7 @@ describe('Loutre CLI', () => {
           await runCli(
             [
               'build',
-              'fixtures/http-crud/src/app.ts',
+              'examples/http-crud/src/app.ts',
               '--runtime',
               runtime,
               '--out-dir',
@@ -283,7 +283,7 @@ describe('Loutre CLI', () => {
     const output = io()
     expect(
       await runCli(
-        ['build', 'fixtures/http-crud/src/app.ts', '--runtime', 'node'],
+        ['build', 'examples/http-crud/src/app.ts', '--runtime', 'node'],
         output.value,
       ),
     ).toBe(2)

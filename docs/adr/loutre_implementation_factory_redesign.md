@@ -57,7 +57,6 @@ ApplicationRuntime
 Graph Probe
 HTTP terminal dispatch
 MessagePort terminal dispatch
-fixtures
 examples
 tests
 documentation
@@ -688,7 +687,7 @@ MessageContextOf
 
 はadvanced type utilityとして残してよい。
 
-ただしcanonical examples / fixtures / READMEでは、新しい `implementation()` contextual typingを優先する。
+ただしcanonical examples / READMEでは、新しい `implementation()` contextual typingを優先する。
 
 つまり:
 
@@ -2226,7 +2225,7 @@ implementation({
 
 ```txt
 unary invocation
-server-stream if existing fixture has it
+server-stream if existing example has it
 DI injection
 source logging
 Graph implementation edge
@@ -2234,7 +2233,7 @@ Graph implementation edge
 
 ---
 
-# 63. fixtures / examplesを全移行
+# 63. examplesを全移行
 
 repository内を検索し、以下を全て新APIへ移行する。
 
@@ -2691,7 +2690,7 @@ cached UsersController runtime.get(ctx)
 8. Graph procedure validationをprototype inspectionからprobe resultへ変更
 9. HTTP runtime dispatchをdescriptorへ変更
 10. MessagePort runtime dispatchをdescriptorへ変更
-11. fixtures/examplesを移行
+11. examples/examplesを移行
 12. type tests追加
 13. runtime tests追加
 14. Graph tests追加

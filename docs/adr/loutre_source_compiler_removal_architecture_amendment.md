@@ -1981,9 +1981,9 @@ packages/cli/src/linked-application.ts
 
 tests/di.test.ts
 
-fixtures/database-modules/src/index.ts
-fixtures/http-auth/src/index.ts
-fixtures/http-crud/src/index.ts
+examples/database-modules/src/index.ts
+examples/http-auth/src/index.ts
+examples/http-crud/src/index.ts
 ```
 
 CLI には現在すでに:

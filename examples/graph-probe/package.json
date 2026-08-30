@@ -1,5 +1,5 @@
 {
-  "name": "@loutrejs/fixture-graph-probe",
+  "name": "@loutrejs/example-graph-probe",
   "version": "0.1.0",
   "private": true,
   "type": "module",

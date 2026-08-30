@@ -6,8 +6,8 @@ import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { nodeRuntime } from '@loutrejs/node'
 import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
-import { UsersModule } from '../fixtures/http-crud/src/index.js'
-import { EventsModule } from '../fixtures/streaming/src/index.js'
+import { UsersModule } from '../examples/http-crud/src/index.js'
+import { EventsModule } from '../examples/streaming/src/index.js'
 import { silentLogger } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>
@@ -38,18 +38,21 @@ describe('Runtime conformance harness', () => {
         })
       },
     ],
-  ])('%s bind()で同じFixture Aを実行する', async (_name, createBinding) => {
-    const runtimeBinding = createBinding()
-    const response = await runtimeBinding.fetch(
-      new Request('https://runtime.fixture/users/runtime-user'),
-    )
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({
-      id: 'runtime-user',
-      name: 'test',
-    })
-    await runtimeBinding.close()
-  })
+  ])(
+    '%s bind()で同じHTTP CRUD exampleを実行する',
+    async (_name, createBinding) => {
+      const runtimeBinding = createBinding()
+      const response = await runtimeBinding.fetch(
+        new Request('https://runtime.example/users/runtime-user'),
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        id: 'runtime-user',
+        name: 'test',
+      })
+      await runtimeBinding.close()
+    },
+  )
 
   it('AWS Lambda managed形状へunary responseをadaptする', async () => {
     vi.stubEnv('AWS_EXECUTION_ENV', 'AWS_Lambda_nodejs24.x')

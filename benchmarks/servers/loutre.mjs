@@ -1,4 +1,4 @@
-import { createUsersApplication } from '../../dist/fixtures/http-crud/src/index.js'
+import { createUsersApplication } from '../../dist/examples/http-crud/src/index.js'
 import { nodeRuntime } from '@loutrejs/node'
 
 const port = Number(process.env.BENCHMARK_PORT ?? 43110)

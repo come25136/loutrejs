@@ -38,7 +38,7 @@ export const bearerAuthentication = layer({
     const value = ctx.headers.authorization
     await next({
       auth: {
-        principal: value === 'Bearer fixture-token' ? { id: 'user-1' } : null,
+        principal: value === 'Bearer example-token' ? { id: 'user-1' } : null,
       },
     })
   },
@@ -107,8 +107,7 @@ export const AccountController = implementation({
   }),
 })
 export const AccountModule = defineModule(() => ({
-  description:
-    'Canonical fixture for Bearer authentication and optional Execution Context',
+  description: 'Bearer authentication and optional Execution Context example',
   implementations: [AccountController],
 }))
 export function createAccountApplication() {

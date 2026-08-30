@@ -90,7 +90,7 @@ jobs:
         run: npm run build
 
   node-tests:
-    name: Unit & E2E Tests / Node.js ${{ matrix.version }}
+    name: Unit & Integration Tests / Node.js ${{ matrix.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -105,14 +105,14 @@ jobs:
         with:
           node-version: ${{ matrix.version }}
 
-      - name: Run unit & E2E tests
+      - name: Run unit & integration tests
         run: npm test
 
       - name: Run Node.js CLI conformance
         run: |
-          node packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
-          node packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/node
-          node packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/node/openapi.json
+          node packages/cli/bin/loutre.js check --entry examples/http-crud/src/app.ts
+          node packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/cli-conformance/node
+          node packages/cli/bin/loutre.js openapi --entry examples/http-crud/src/app.ts > dist/cli-conformance/node/openapi.json
 
       - name: Run Node.js conformance
         run: npm run test:node
@@ -144,16 +144,16 @@ jobs:
       - name: Run Bun CLI conformance
         run: |
           BUN_BIN="$(command -v bun)"
-          "$BUN_BIN" packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
-          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
-          "$BUN_BIN" packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
+          "$BUN_BIN" packages/cli/bin/loutre.js check --entry examples/http-crud/src/app.ts
+          "$BUN_BIN" packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
+          "$BUN_BIN" packages/cli/bin/loutre.js openapi --entry examples/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
 
       - name: Build Bun conformance applications
         run: |
           BUN_BIN="$(command -v bun)"
-          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/conformance/http-crud
-          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
-          "$BUN_BIN" packages/cli/bin/loutre.js build fixtures/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
+          "$BUN_BIN" packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/conformance/http-crud
+          "$BUN_BIN" packages/cli/bin/loutre.js build examples/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
+          "$BUN_BIN" packages/cli/bin/loutre.js build examples/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
 
       - name: Run Bun conformance
         run: |
@@ -182,16 +182,16 @@ jobs:
       - name: Run Deno CLI conformance
         run: |
           DENO_BIN="$(command -v deno)"
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js check --entry fixtures/http-crud/src/app.ts
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js openapi --entry fixtures/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js check --entry examples/http-crud/src/app.ts
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js openapi --entry examples/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json
 
       - name: Build Deno conformance applications
         run: |
           DENO_BIN="$(command -v deno)"
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/http-crud/src/app.ts --out-dir dist/conformance/http-crud
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build fixtures/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/conformance/http-crud
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build examples/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build examples/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
 
       - name: Run Deno conformance
         run: |

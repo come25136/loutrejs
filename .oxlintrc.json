@@ -21,7 +21,14 @@
       }
     },
     {
-      "files": ["fixtures/**/*.ts"],
+      "files": [
+        "examples/application-build/**/*.ts",
+        "examples/database-modules/**/*.ts",
+        "examples/graph-probe/**/*.ts",
+        "examples/http-auth/**/*.ts",
+        "examples/http-crud/**/*.ts",
+        "examples/streaming/**/*.ts"
+      ],
       "rules": {
         "typescript/no-extraneous-class": "off",
         "unicorn/require-module-specifiers": "off"

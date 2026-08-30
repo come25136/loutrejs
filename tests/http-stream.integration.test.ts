@@ -1,10 +1,10 @@
 import { defineApplication } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
-import { EventsModule } from '../fixtures/streaming/src/index.js'
+import { EventsModule } from '../examples/streaming/src/index.js'
 import { reserveHttpPort } from './helpers/http-server.js'
 import { silentLogger } from './helpers/silent-logger.js'
 
-describe('canonical Fixture D HTTP server-stream', () => {
+describe('HTTP streaming example', () => {
   it('各itemをschema validationしてSSEとして逐次serializeする', async () => {
     const definition = defineApplication({
       modules: [EventsModule()],

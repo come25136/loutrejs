@@ -2,7 +2,7 @@ import { MessageChannel } from 'node:worker_threads'
 import { attachMessagePort } from '@loutrejs/loutre/message-port'
 import { createLinkedEventsMessagePortApplication } from './helpers/linked-applications.js'
 
-describe('canonical Fixture D MessagePort/Electron', () => {
+describe('MessagePort streaming example', () => {
   it('同じdomain streamをMessagePortの複数messageへadaptする', async () => {
     const application = createLinkedEventsMessagePortApplication()
     const channel = new MessageChannel()

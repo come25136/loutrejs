@@ -70,7 +70,7 @@ Bun / Deno / Cloudflare Workers / AWS Lambda / Electron adapterは追加のnpm d
 ## Compatibility policy
 
 まだnpm未公開のv0.1段階なので、旧packageを互換shimとして残さない。
-repository内のsource / fixtures / examples / tests / conformance / docsは同時に新しいimport pathへ移行する。
+repository内のsource / examples / tests / conformance / docsは同時に新しいimport pathへ移行する。
 
 ## Consequences
 
