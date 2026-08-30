@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "build": "node scripts/generate-version.mjs && node scripts/clean-dist.mjs && tsc -b && node scripts/prepare-packages.mjs",
+    "benchmark:http": "npm run build && node benchmarks/run.mjs",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint",
