@@ -911,7 +911,7 @@ Application Moduleをfilesystem conventionで探索せず、entry fileを明示�
 
 ```sh
 loutre check --entry src/app.ts
-loutre doctor node --entry src/app.ts
+loutre doctor --runtime node --entry src/app.ts
 loutre graph modules --entry src/app.ts
 loutre graph di --entry src/app.ts --format mermaid
 loutre graph contracts --entry src/app.ts

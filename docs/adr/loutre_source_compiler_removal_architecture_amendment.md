@@ -1120,7 +1120,7 @@ Pipeline explain も同じ Graph を source of truth にする。
 Runtime capability requirement は Source Compiler からではなく Application Graph から取得する。
 
 ```sh
-loutre doctor cloudflare-workers --entry src/app.ts
+loutre doctor --runtime cloudflare-workers --entry src/app.ts
 ```
 
 ```text

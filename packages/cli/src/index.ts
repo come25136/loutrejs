@@ -8,6 +8,7 @@ import type {
 } from '@loutrejs/loutre/graph'
 import {
   checkCapabilities,
+  detectRuntimeEngine,
   nodeRuntimeCapabilities,
   type RuntimeCapabilities,
 } from '@loutrejs/loutre/runtime'
@@ -33,6 +34,7 @@ const runtimes: Readonly<Record<string, RuntimeCapabilities>> = {
   'aws-lambda': awsLambdaRuntime,
 }
 
+const runtimeNames = Object.keys(runtimes)
 const deploymentRuntimes = ['aws-lambda', 'cloudflare-workers', 'deno'] as const
 type DeploymentRuntime = (typeof deploymentRuntimes)[number]
 
@@ -40,7 +42,7 @@ export async function runCli(
   args: readonly string[],
   io: CliIO,
 ): Promise<number> {
-  const [command, subject] = args
+  const [command, subject] = readPositionals(args)
   if (
     !command ||
     command === 'help' ||
@@ -76,10 +78,19 @@ export async function runCli(
     }
 
     case 'doctor': {
-      const runtimeName = subject ?? 'node'
+      if (subject) {
+        io.stderr(`Unexpected argument: ${subject}`)
+        return 2
+      }
+      const runtimeOption = readOption(args, '--runtime')
+      const runtimeName = runtimeOption ?? detectRuntimeEngine()
       const runtime = runtimes[runtimeName]
       if (!runtime) {
-        io.stderr(`Unknown runtime: ${runtimeName}`)
+        io.stderr(
+          runtimeOption
+            ? `doctor --runtime must be one of: ${runtimeNames.join(', ')}.`
+            : 'Could not detect the current runtime. Use --runtime <runtime>.',
+        )
         return 2
       }
       const target = entry()
@@ -664,6 +675,21 @@ function mermaidText(value: string): string {
     .replaceAll('>', '&gt;')
 }
 
+const valueOptions = new Set(['--entry', '--format', '--runtime', '--out-dir'])
+
+function readPositionals(args: readonly string[]): string[] {
+  const positionals: string[] = []
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]!
+    if (valueOptions.has(argument)) {
+      index += 1
+      continue
+    }
+    positionals.push(argument)
+  }
+  return positionals
+}
+
 function readOption(args: readonly string[], name: string): string | undefined {
   const index = args.indexOf(name)
   return index < 0 ? undefined : args[index + 1]
@@ -673,7 +699,7 @@ function helpText(): string {
   return [
     'Loutre CLI',
     '  loutre check --entry <entry>',
-    '  loutre doctor [node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
+    '  loutre doctor [--runtime node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
     '  loutre graph modules|di|contracts|executions|runtime --entry <entry> [--format text|json|mermaid]',
     '  loutre explain <target> --entry <entry>',
     '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',

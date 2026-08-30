@@ -32,10 +32,61 @@ describe('Loutre CLI', () => {
     expect(output.stdout.join('\n')).toContain('http.controller terminal')
   })
 
+  it.each([
+    ['Node.js', undefined, 'node'],
+    ['Bun', { Bun: { version: '1.3.7' } }, 'bun'],
+    ['Deno', { Deno: { version: { deno: '2.9.6' } } }, 'deno'],
+  ])(
+    'doctorでruntimeを省略すると実行中の%sを使用する',
+    async (_runtime, globals, expected) => {
+      if (globals) {
+        for (const [name, value] of Object.entries(globals)) {
+          vi.stubGlobal(name, value)
+        }
+      }
+      try {
+        const output = io()
+        const code = await runCli(
+          ['doctor', '--entry', 'integrations/http-crud/src/app.ts'],
+          output.value,
+        )
+        expect(code).toBe(0)
+        expect(output.stdout.join('\n')).toContain(`Runtime: ${expected}`)
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    },
+  )
+
+  it('doctor --runtimeは既知のruntimeだけ受け付ける', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'doctor',
+          '--runtime',
+          'unknown-runtime',
+          '--entry',
+          'integrations/http-crud/src/app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(2)
+    expect(output.stderr).toEqual([
+      'doctor --runtime must be one of: node, deno, bun, cloudflare-workers, electron, aws-lambda.',
+    ])
+  })
+
   it('Runtime capability mismatchをdoctorで説明する', async () => {
     const output = io()
     const code = await runCli(
-      ['doctor', 'electron', '--entry', 'integrations/http-crud/src/app.ts'],
+      [
+        'doctor',
+        '--runtime',
+        'electron',
+        '--entry',
+        'integrations/http-crud/src/app.ts',
+      ],
       output.value,
     )
     expect(code).toBe(1)
