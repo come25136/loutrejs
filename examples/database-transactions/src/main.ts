@@ -1,7 +1,6 @@
 import { nodeRuntime } from '@loutrejs/node'
-import application from './app.js'
+import application, { AppEnv } from './app.js'
 
-await nodeRuntime.serve({
-  application,
-  port: Number(process.env.PORT ?? 3000),
-})
+const app = await nodeRuntime.create({ application })
+
+await app.serve({ port: app.get(AppEnv).port })

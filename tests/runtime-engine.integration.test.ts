@@ -33,7 +33,7 @@ describe('Runtime engine', () => {
     vi.stubGlobal('Bun', { version: '1.3.7' })
 
     await expect(
-      nodeRuntime.serve({ application: usersDefinition() }),
+      nodeRuntime.create({ application: usersDefinition() }),
     ).rejects.toThrow('LUTRE_RUNTIME_MISMATCH: Expected Node.js, detected Bun.')
     expect(startupOutput).not.toHaveBeenCalled()
   })
@@ -42,7 +42,7 @@ describe('Runtime engine', () => {
     vi.stubGlobal('Deno', { version: { deno: '2.9.5' } })
 
     await expect(
-      nodeRuntime.serve({ application: usersDefinition() }),
+      nodeRuntime.create({ application: usersDefinition() }),
     ).rejects.toThrow(
       'LUTRE_RUNTIME_MISMATCH: Expected Node.js, detected Deno.',
     )
@@ -51,7 +51,7 @@ describe('Runtime engine', () => {
 
   it('Node.js上ではbunRuntimeを拒否する', async () => {
     await expect(
-      bunRuntime.serve({ application: usersDefinition() }),
+      bunRuntime.create({ application: usersDefinition() }),
     ).rejects.toThrow('LUTRE_RUNTIME_MISMATCH: Expected Bun, detected Node.js.')
     expect(startupOutput).not.toHaveBeenCalled()
   })

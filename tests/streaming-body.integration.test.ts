@@ -83,8 +83,8 @@ describe('streaming validate.body', () => {
     expect(await response.json()).toEqual({ bytes: 4 })
     await application.close()
     const port = await reserveHttpPort()
-    const host = await nodeRuntime.serve({
-      application: definition,
+    const app = await nodeRuntime.create({ application: definition })
+    await app.serve({
       port,
       hostname: '127.0.0.1',
     })
@@ -97,7 +97,7 @@ describe('streaming validate.body', () => {
       expect(nodeResponse.status).toBe(202)
       expect(await nodeResponse.json()).toEqual({ bytes: 5 })
     } finally {
-      await host.close()
+      await app.close()
     }
   })
 })

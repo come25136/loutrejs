@@ -225,6 +225,9 @@ function createInvocationApplication<TDefinition extends ApplicationDefinition>(
 ): InvocationApplication<TDefinition> {
   const application = {
     graph: state.graph,
+    get(token: Parameters<ApplicationRuntime['get']>[0]) {
+      return state.runtime.get(token)
+    },
     async init() {
       await state.runtime.initialize()
       return application

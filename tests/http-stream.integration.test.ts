@@ -11,8 +11,8 @@ describe('HTTP streaming integration', () => {
       logger: silentLogger,
     })
     const port = await reserveHttpPort()
-    const host = await nodeRuntime.serve({
-      application: definition,
+    const app = await nodeRuntime.create({ application: definition })
+    await app.serve({
       port,
       hostname: '127.0.0.1',
     })
@@ -29,7 +29,7 @@ describe('HTTP streaming integration', () => {
           'data:{"sequence":3,"message":"event-3"}\n\n',
       )
     } finally {
-      await host.close()
+      await app.close()
     }
   })
 })

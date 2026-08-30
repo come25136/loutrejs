@@ -25,14 +25,16 @@ type DrizzleTransactionOptions = Parameters<
 >[1]
 const AppEnvSchema = z
   .object({
+    PORT: z.coerce.number().int().min(1).max(65535).default(3002),
     DRIZZLE_DATABASE_URL: z
       .string()
       .default('postgres://loutre:loutre@127.0.0.1:54322/loutre_drizzle'),
   })
   .transform((env) => ({
+    port: env.PORT,
     databaseUrl: new URL(env.DRIZZLE_DATABASE_URL),
   }))
-class AppEnv extends defineEnv(AppEnvSchema) {}
+export class AppEnv extends defineEnv(AppEnvSchema) {}
 const TRANSACTION = contextKey('transaction').of<DrizzleTransaction>()
 class DrizzleDatabase implements OnModuleInit, OnModuleDestroy {
   readonly pool: Pool

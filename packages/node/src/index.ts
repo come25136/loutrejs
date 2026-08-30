@@ -30,31 +30,36 @@ type HttpApplication<TDefinition extends ApplicationDefinition> =
       ? TDefinition
       : never
 
-export type NodeServeOptions<TDefinition extends ApplicationDefinition> = {
+export type NodeCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
-  readonly port?: number
-  readonly hostname?: string
-  readonly shutdownHooks?: boolean
   readonly environment?: unknown
 } & BootstrapArguments<TDefinition>
 
-export interface NodeServeHandle<
-  TDefinition extends ApplicationDefinition = ApplicationDefinition,
-> {
-  readonly application: HostBindingApplication<TDefinition>
+export interface NodeServeOptions {
+  readonly port?: number
+  readonly hostname?: string
+  readonly shutdownHooks?: boolean
+}
+
+export interface NodeListenerHandle {
   readonly server: Server
   readonly port: number
-  close(signal?: string): Promise<void>
+}
+
+export type NodeRuntimeApplication<
+  TDefinition extends ApplicationDefinition = ApplicationDefinition,
+> = HostBindingApplication<TDefinition> & {
+  serve(options?: NodeServeOptions): Promise<NodeListenerHandle>
 }
 
 export const nodeRuntime = {
   ...nodeRuntimeCapabilities,
-  serve,
+  create,
 } as const
 
-async function serve<const TDefinition extends ApplicationDefinition>(
-  options: NodeServeOptions<TDefinition>,
-): Promise<NodeServeHandle<TDefinition>> {
+async function create<const TDefinition extends ApplicationDefinition>(
+  options: NodeCreateOptions<TDefinition>,
+): Promise<NodeRuntimeApplication<TDefinition>> {
   assertRuntimeEngine('node')
   const startedAt = performance.now()
   const presentation = startStartupPresentation(
@@ -73,64 +78,91 @@ async function serve<const TDefinition extends ApplicationDefinition>(
   if (!http) {
     await host.application.close()
     throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: nodeRuntime.serve() requires an HTTP-capable Application.',
+      'LUTRE_RUNTIME_HTTP_REQUIRED: nodeRuntime.create() requires an HTTP-capable Application.',
     )
   }
 
   await host.application.init()
-  if ('triggers' in host.application) await host.application.triggers.start()
 
-  const server = createNodeHttpServerDriver(http)
-  const requestedPort = options.port
-  let port = requestedPort ?? 3000
-  while (true) {
-    try {
-      await listenServer(server, port, options.hostname)
-      break
-    } catch (error) {
-      if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
-        server.close()
-        await host.application.close().catch(() => undefined)
-        throw error
-      }
-      port += 1
-    }
-  }
-
-  presentation.ready({
-    server: serverUrl(options.hostname, port),
-    runtime: `Node.js ${process.versions.node}`,
-    environment: process.env.NODE_ENV ?? 'development',
-    startupDurationMs: performance.now() - startedAt,
-  })
-
+  const application = host.application as NodeRuntimeApplication<TDefinition>
+  const closeApplication = host.application.close.bind(host.application)
+  let server: Server | undefined
+  let removeShutdownHooks: (() => void) | undefined
+  let serving = false
   let closed = false
-  const closeRuntime = async (signal?: string): Promise<void> => {
+
+  const close = async (signal?: string): Promise<void> => {
     if (closed) return
     closed = true
+    removeShutdownHooks?.()
+    removeShutdownHooks = undefined
     const errors: unknown[] = []
-    try {
-      await closeServer(server)
-    } catch (error) {
-      errors.push(error)
+    if (server?.listening) {
+      try {
+        await closeServer(server)
+      } catch (error) {
+        errors.push(error)
+      }
     }
     try {
-      await host.application.close(signal)
+      await closeApplication(signal)
     } catch (error) {
       errors.push(error)
     }
     if (errors.length > 0)
       throw new AggregateError(errors, 'Node runtime shutdown failed')
   }
-  const removeShutdownHooks =
-    options.shutdownHooks === false
-      ? undefined
-      : registerNodeShutdownHooks(closeRuntime)
-  const close = async (signal?: string): Promise<void> => {
-    removeShutdownHooks?.()
-    await closeRuntime(signal)
+
+  const serve = async (
+    serveOptions: NodeServeOptions = {},
+  ): Promise<NodeListenerHandle> => {
+    if (closed) {
+      throw new Error('LUTRE_APP_STOPPED: Application is stopped.')
+    }
+    if (serving) {
+      throw new Error(
+        'LUTRE_RUNTIME_ALREADY_SERVING: Node runtime Application is already serving.',
+      )
+    }
+    serving = true
+    try {
+      if ('triggers' in application) await application.triggers.start()
+
+      server = createNodeHttpServerDriver(http)
+      const requestedPort = serveOptions.port
+      let port = requestedPort ?? 3000
+      while (true) {
+        try {
+          await listenServer(server, port, serveOptions.hostname)
+          break
+        } catch (error) {
+          if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
+            throw error
+          }
+          port += 1
+        }
+      }
+
+      presentation.ready({
+        server: serverUrl(serveOptions.hostname, port),
+        runtime: `Node.js ${process.versions.node}`,
+        environment: process.env.NODE_ENV ?? 'development',
+        startupDurationMs: performance.now() - startedAt,
+      })
+
+      removeShutdownHooks =
+        serveOptions.shutdownHooks === false
+          ? undefined
+          : registerNodeShutdownHooks(close)
+      return { server, port }
+    } catch (error) {
+      await close().catch(() => undefined)
+      throw error
+    }
   }
-  return { application: host.application, server, port, close }
+
+  Object.assign(application, { serve, close })
+  return application
 }
 
 function registerNodeShutdownHooks(

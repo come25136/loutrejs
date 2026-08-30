@@ -193,6 +193,52 @@ export class Container {
     return this.#resolve(token)
   }
 
+  get<T>(token: TokenLike<T>): T {
+    const provider = this.#providers.get(token)
+    if (!provider) {
+      if (isEnvClass(token)) {
+        throw new DependencyResolutionError(
+          `LUTRE_ENV_002: ${token.name} is not declared by any Module.environment.`,
+        )
+      }
+      if (isArgsClass(token)) {
+        throw new DependencyResolutionError(
+          `LUTRE_ARGS_002: ${token.name} is not declared by Application.arguments.`,
+        )
+      }
+      throw new DependencyResolutionError(
+        `LUTRE_DI_UNRESOLVED: Application requires ${tokenName(token)}, but no provider is declared for ${tokenName(token)}.`,
+      )
+    }
+    if (provider.scope !== 'application') {
+      throw new DependencyResolutionError(
+        `LUTRE_DI_SCOPED_GET: ${tokenName(token)} is ${provider.scope}-scoped and cannot be retrieved with Application.get().`,
+      )
+    }
+    if (provider.kind === 'environment') {
+      if (this.#environment.has(provider.provide)) {
+        return this.#environment.get(provider.provide) as T
+      }
+      throw new DependencyResolutionError(
+        `LUTRE_ENV_005: Environment ${provider.provide.name} requires a runtime Environment source before Application initialization.`,
+      )
+    }
+    if (provider.kind === 'arguments') {
+      if (this.#arguments.has(provider.provide)) {
+        return this.#arguments.get(provider.provide) as T
+      }
+      throw new DependencyResolutionError(
+        `LUTRE_ARGS_005: Arguments ${provider.provide.name} requires runtime Arguments before Application initialization.`,
+      )
+    }
+    if (this.#applicationCache.has(token)) {
+      return this.#applicationCache.get(token) as T
+    }
+    throw new DependencyResolutionError(
+      `LUTRE_DI_NOT_INITIALIZED: ${tokenName(token)} has not been constructed by Application initialization.`,
+    )
+  }
+
   probeClass<T>(target: Class<T>): T {
     try {
       return this.#instantiate(target, [target])

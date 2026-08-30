@@ -4,6 +4,7 @@ import {
   consume,
   contract,
   cron,
+  defineEnv,
   defineArgs,
   defineModule,
   fixedDelay,
@@ -34,9 +35,19 @@ const HealthHttp = implementation({
     get: (context) => context.response.ok({ body: 'ok' }),
   }),
 })
-const HttpModule = defineModule(() => ({ implementations: [HealthHttp] }))
+const HttpModule = defineModule(() => ({
+  environment: [AppEnv],
+  providers: [HealthService],
+  implementations: [HealthHttp],
+}))
 const ImportedHttpModule = defineModule(() => ({ imports: [HttpModule()] }))
 const WorkerModule = defineModule(() => ({}))
+class AppEnv extends defineEnv(
+  z.object({ PORT: z.coerce.number().default(3000) }).transform((env) => ({
+    port: env.PORT,
+  })),
+) {}
+class HealthService {}
 class AppArgs extends defineArgs(
   z.object({ instance: z.string(), workers: z.number().default(4) }),
 ) {}
@@ -83,28 +94,30 @@ const orderConsumer = consume({
 const httpDefinition = defineApplication({ modules: [ImportedHttpModule()] })
 const httpApplication = bootstrap({ application: httpDefinition })
 httpApplication.fetch(new Request('http://localhost/health'))
-nodeRuntime.serve({ application: httpDefinition, port: 3000 })
-nodeRuntime
-  .serve({ application: httpDefinition })
-  .then((runtime) => runtime.port)
-nodeRuntime.serve({ application: httpDefinition, shutdownHooks: false })
-bunRuntime.serve({ application: httpDefinition, shutdownHooks: false })
-denoRuntime.serve({ application: httpDefinition, shutdownHooks: false })
-nodeRuntime.serve({
-  application: httpDefinition,
-  // @ts-expect-error startup presentationはFrameworkが所有し、customizeできない
-  presentation: { version: '0.1.0' },
+nodeRuntime.create({ application: httpDefinition }).then((app) => {
+  const env: AppEnv = app.get(AppEnv)
+  const health: HealthService = app.get(HealthService)
+  void env
+  void health
+  app.serve({ port: 3000 })
+  app.serve({ shutdownHooks: false })
+  app.serve({
+    // @ts-expect-error startup presentationはFrameworkが所有し、customizeできない
+    presentation: { version: '0.1.0' },
+  })
 })
-bunRuntime.serve({
-  application: httpDefinition,
-  // @ts-expect-error startup presentationはFrameworkが所有し、customizeできない
-  presentation: { version: '0.1.0' },
+bunRuntime.create({ application: httpDefinition }).then((app) => {
+  app.serve({ shutdownHooks: false })
 })
-denoRuntime.serve({
-  application: httpDefinition,
-  // @ts-expect-error startup presentationはFrameworkが所有し、customizeできない
-  presentation: { version: '0.1.0' },
+denoRuntime.create({ application: httpDefinition }).then((app) => {
+  app.serve({ shutdownHooks: false })
 })
+// @ts-expect-error static serve APIは公開しない
+nodeRuntime.serve
+// @ts-expect-error static serve APIは公開しない
+bunRuntime.serve
+// @ts-expect-error static serve APIは公開しない
+denoRuntime.serve
 // @ts-expect-error public Taskが無いApplicationにはrunを公開しない
 httpApplication.run
 // @ts-expect-error listener ownershipはApplication hostではなくruntime adapterが持つ
@@ -132,10 +145,9 @@ workerApplication.run(calculate, '41')
 workerApplication.run(cleanup)
 // @ts-expect-error HTTPが無いApplicationにはfetchを公開しない
 workerApplication.fetch
-nodeRuntime.serve({
-  // @ts-expect-error HTTPが無いApplicationはNode HTTP serverへserveできない
+nodeRuntime.create({
+  // @ts-expect-error HTTPが無いApplicationはNode runtime server contextを生成できない
   application: workerDefinition,
-  port: 3000,
   arguments: { instance: 'worker-1' },
 })
 // @ts-expect-error required Argumentsはbootstrap時に必要

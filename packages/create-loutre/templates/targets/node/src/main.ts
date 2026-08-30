@@ -1,4 +1,5 @@
 import { nodeRuntime } from '@loutrejs/node'
 import application from './app.js'
 
-await nodeRuntime.serve({ application })
+const app = await nodeRuntime.create({ application })
+await app.serve()

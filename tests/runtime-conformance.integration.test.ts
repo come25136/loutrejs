@@ -113,9 +113,12 @@ describe('Runtime conformance harness', () => {
   })
 
   it('lifecycle ownershipに対応するhigh-level APIを公開する', () => {
-    expect(typeof nodeRuntime.serve).toBe('function')
-    expect(typeof bunRuntime.serve).toBe('function')
-    expect(typeof denoRuntime.serve).toBe('function')
+    expect(typeof nodeRuntime.create).toBe('function')
+    expect('serve' in nodeRuntime).toBe(false)
+    expect(typeof bunRuntime.create).toBe('function')
+    expect('serve' in bunRuntime).toBe(false)
+    expect(typeof denoRuntime.create).toBe('function')
+    expect('serve' in denoRuntime).toBe(false)
     expect(typeof denoRuntime.bind).toBe('function')
     expect(typeof cloudflareWorkersRuntime.bind).toBe('function')
     expect(typeof awsLambdaRuntime.bind).toBe('function')

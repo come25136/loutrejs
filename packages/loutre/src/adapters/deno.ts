@@ -20,29 +20,35 @@ type HttpApplication<TDefinition extends ApplicationDefinition> =
       ? TDefinition
       : never
 
+type DenoServer = { shutdown(): Promise<void> }
+
 export type DenoRuntimeOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
   readonly environment?: unknown
 } & BootstrapArguments<TDefinition>
 
-export type DenoServeOptions<TDefinition extends ApplicationDefinition> =
-  DenoRuntimeOptions<TDefinition> & {
-    readonly port?: number
-    readonly hostname?: string
-    readonly shutdownHooks?: boolean
-  }
+export type DenoCreateOptions<TDefinition extends ApplicationDefinition> =
+  DenoRuntimeOptions<TDefinition>
+
+export interface DenoServeOptions {
+  readonly port?: number
+  readonly hostname?: string
+  readonly shutdownHooks?: boolean
+}
 
 export interface DenoBinding {
   fetch(request: Request): Promise<Response>
   close(signal?: string): Promise<void>
 }
 
-export interface DenoServeHandle<
-  TDefinition extends ApplicationDefinition = ApplicationDefinition,
-> {
-  readonly application: HostBindingApplication<TDefinition>
+export interface DenoListenerHandle {
   readonly port: number
-  close(signal?: string): Promise<void>
+}
+
+export type DenoRuntimeApplication<
+  TDefinition extends ApplicationDefinition = ApplicationDefinition,
+> = HostBindingApplication<TDefinition> & {
+  serve(options?: DenoServeOptions): Promise<DenoListenerHandle>
 }
 
 export const denoRuntime = {
@@ -59,7 +65,7 @@ export const denoRuntime = {
     'crypto.random',
   ]),
   bind,
-  serve,
+  create,
 } as const
 
 function bind<const TDefinition extends ApplicationDefinition>(
@@ -89,22 +95,19 @@ function bind<const TDefinition extends ApplicationDefinition>(
   }
 }
 
-async function serve<const TDefinition extends ApplicationDefinition>(
-  options: DenoServeOptions<TDefinition>,
-): Promise<DenoServeHandle<TDefinition>> {
+async function create<const TDefinition extends ApplicationDefinition>(
+  options: DenoCreateOptions<TDefinition>,
+): Promise<DenoRuntimeApplication<TDefinition>> {
   assertRuntimeEngine('deno')
   const deno = denoGlobal()
-  if (!deno?.serve) {
-    throw new Error('LUTRE_DENO_UNAVAILABLE: Deno.serve() is not available.')
-  }
   const startedAt = performance.now()
-  const isTTY = deno.stdout?.isTerminal?.() === true
+  const isTTY = deno?.stdout?.isTerminal?.() === true
   const presentation = startStartupPresentation(
     { version: LOUTRE_VERSION },
     {
       terminal: {
         isTTY,
-        color: isTTY && deno.env?.get?.('NO_COLOR') === undefined,
+        color: isTTY && deno?.env?.get?.('NO_COLOR') === undefined,
       },
       write: (value) => console.log(value),
     },
@@ -119,72 +122,105 @@ async function serve<const TDefinition extends ApplicationDefinition>(
   if (!http) {
     await host.application.close()
     throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: denoRuntime.serve() requires an HTTP-capable Application.',
+      'LUTRE_RUNTIME_HTTP_REQUIRED: denoRuntime.create() requires an HTTP-capable Application.',
     )
   }
 
   await host.application.init()
-  if ('triggers' in host.application) await host.application.triggers.start()
-  let server: { shutdown(): Promise<void> }
-  const requestedPort = options.port
-  let port = requestedPort ?? 3000
-  while (true) {
-    try {
-      server = deno.serve(
-        {
-          port,
-          ...(options.hostname === undefined
-            ? {}
-            : { hostname: options.hostname }),
-          onListen: () => undefined,
-        },
-        createDenoFetchDriver(http),
-      )
-      break
-    } catch (error) {
-      if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
-        await host.application.close().catch(() => undefined)
-        throw error
-      }
-      port += 1
-    }
-  }
-  presentation.ready({
-    server: serverUrl(options.hostname, port),
-    runtime: `Deno ${deno.version?.deno ?? 'unknown'}`,
-    environment:
-      deno.env?.get?.('DENO_ENV') ??
-      deno.env?.get?.('NODE_ENV') ??
-      'development',
-    startupDurationMs: performance.now() - startedAt,
-  })
+
+  const application = host.application as DenoRuntimeApplication<TDefinition>
+  const closeApplication = host.application.close.bind(host.application)
+  let server: DenoServer | undefined
+  let removeShutdownHooks: (() => void) | undefined
+  let serving = false
   let closed = false
-  const closeRuntime = async (signal?: string): Promise<void> => {
+
+  const close = async (signal?: string): Promise<void> => {
     if (closed) return
     closed = true
+    removeShutdownHooks?.()
+    removeShutdownHooks = undefined
     const errors: unknown[] = []
-    try {
-      await server.shutdown()
-    } catch (error) {
-      errors.push(error)
+    if (server) {
+      try {
+        await server.shutdown()
+      } catch (error) {
+        errors.push(error)
+      }
     }
     try {
-      await host.application.close(signal)
+      await closeApplication(signal)
     } catch (error) {
       errors.push(error)
     }
     if (errors.length > 0)
       throw new AggregateError(errors, 'Deno runtime shutdown failed')
   }
-  const removeShutdownHooks =
-    options.shutdownHooks === false
-      ? undefined
-      : registerDenoShutdownHooks(deno, closeRuntime)
-  const close = async (signal?: string): Promise<void> => {
-    removeShutdownHooks?.()
-    await closeRuntime(signal)
+
+  const serve = async (
+    serveOptions: DenoServeOptions = {},
+  ): Promise<DenoListenerHandle> => {
+    if (closed) {
+      throw new Error('LUTRE_APP_STOPPED: Application is stopped.')
+    }
+    if (serving) {
+      throw new Error(
+        'LUTRE_RUNTIME_ALREADY_SERVING: Deno runtime Application is already serving.',
+      )
+    }
+    if (!deno?.serve) {
+      await close().catch(() => undefined)
+      throw new Error('LUTRE_DENO_UNAVAILABLE: Deno.serve() is not available.')
+    }
+    serving = true
+    try {
+      if ('triggers' in application) await application.triggers.start()
+
+      const requestedPort = serveOptions.port
+      let port = requestedPort ?? 3000
+      while (true) {
+        try {
+          server = deno.serve(
+            {
+              port,
+              ...(serveOptions.hostname === undefined
+                ? {}
+                : { hostname: serveOptions.hostname }),
+              onListen: () => undefined,
+            },
+            createDenoFetchDriver(http),
+          )
+          break
+        } catch (error) {
+          if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
+            throw error
+          }
+          port += 1
+        }
+      }
+
+      presentation.ready({
+        server: serverUrl(serveOptions.hostname, port),
+        runtime: `Deno ${deno.version?.deno ?? 'unknown'}`,
+        environment:
+          deno.env?.get?.('DENO_ENV') ??
+          deno.env?.get?.('NODE_ENV') ??
+          'development',
+        startupDurationMs: performance.now() - startedAt,
+      })
+      removeShutdownHooks =
+        serveOptions.shutdownHooks === false
+          ? undefined
+          : registerDenoShutdownHooks(deno, close)
+      return { port }
+    } catch (error) {
+      await close().catch(() => undefined)
+      throw error
+    }
   }
-  return { application: host.application, port, close }
+
+  Object.assign(application, { serve, close })
+  return application
 }
 
 function registerDenoShutdownHooks(

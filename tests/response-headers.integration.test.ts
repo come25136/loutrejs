@@ -12,8 +12,8 @@ describe('複数値HTTP response header', () => {
   })
   it('Node runtimeが複数のSet-Cookieを別々に保持する', async () => {
     const port = await reserveHttpPort()
-    const runtime = await nodeRuntime.serve({
-      application: cookieApplication(),
+    const app = await nodeRuntime.create({ application: cookieApplication() })
+    await app.serve({
       port,
       hostname: '127.0.0.1',
     })
@@ -24,7 +24,7 @@ describe('複数値HTTP response header', () => {
         'second=two; Path=/',
       ])
     } finally {
-      await runtime.close()
+      await app.close()
     }
   })
   it('Lambda runtimeがSet-Cookieをcookiesへ分離する', async () => {

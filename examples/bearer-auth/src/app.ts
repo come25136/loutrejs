@@ -2,12 +2,21 @@ import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
   contract,
+  defineEnv,
   defineModule,
   implementation,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { bearerAuth } from './bearer-auth.js'
+const AppEnvSchema = z
+  .object({
+    PORT: z.coerce.number().int().min(1).max(65535).default(3002),
+  })
+  .transform((env) => ({ port: env.PORT }))
+
+export class AppEnv extends defineEnv(AppEnvSchema) {}
+
 const User = z.object({
   id: z.string(),
   name: z.string(),
@@ -64,6 +73,7 @@ const BearerProfileController = implementation({
   }),
 })
 const BearerProfileModule = defineModule(() => ({
+  environment: [AppEnv],
   description: 'Example profile API protected by custom Bearer authentication',
   implementations: [BearerProfileController],
 }))
