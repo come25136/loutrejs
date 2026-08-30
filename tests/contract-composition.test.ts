@@ -135,6 +135,33 @@ describe('Contract composition', () => {
     )
   })
 
+  it('merge時にHTTP methodとroute patternの重複を拒否する', () => {
+    const First = contract([
+      http({
+        get: {
+          method: 'GET',
+          path: '/users/{id}',
+          responses: { ok: { status: 200, body: z.string() } },
+          pipeline: [http.controller],
+        },
+      }),
+    ])
+    const Second = contract([
+      http({
+        find: {
+          method: 'get',
+          path: '/users/{userId}',
+          responses: { ok: { status: 200, body: z.string() } },
+          pipeline: [http.controller],
+        },
+      }),
+    ])
+
+    expect(() => (contract.merge as any)([First, Second])).toThrow(
+      /Duplicate protocol dispatch key "http:GET:\/users\/\{\}"/,
+    )
+  })
+
   it('merge時に同じprocedureとprotocolの二重定義を拒否する', () => {
     const First = contract([
       http({
@@ -157,7 +184,7 @@ describe('Contract composition', () => {
       }),
     ])
 
-    expect(() => contract.merge([First, Second])).toThrow(
+    expect(() => (contract.merge as any)([First, Second])).toThrow(
       /Duplicate contract procedure protocol: get\.http/,
     )
   })

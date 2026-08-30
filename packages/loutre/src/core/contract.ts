@@ -93,9 +93,40 @@ type NonEmptyArrayConstraint<TValues extends readonly unknown[]> =
     ? { readonly __requiresAtLeastOneEntry__: never }
     : unknown
 
+type ProcedureProtocolKeysOfGroup<TGroup> =
+  TGroup extends ProtocolGroup<infer TProtocol, infer TProcedures>
+    ? `${keyof TProcedures & string}.${TProtocol}`
+    : never
+
+type DuplicateGroupProcedureProtocolKeys<
+  TGroups extends readonly ProtocolGroup[],
+  TSeen extends string = never,
+> = number extends TGroups['length']
+  ? never
+  : TGroups extends readonly [
+        infer THead extends ProtocolGroup,
+        ...infer TTail extends readonly ProtocolGroup[],
+      ]
+    ?
+        | Extract<ProcedureProtocolKeysOfGroup<THead>, TSeen>
+        | DuplicateGroupProcedureProtocolKeys<
+            TTail,
+            TSeen | ProcedureProtocolKeysOfGroup<THead>
+          >
+    : never
+
+type GroupProcedureProtocolUniquenessConstraint<
+  TGroups extends readonly ProtocolGroup[],
+> = [DuplicateGroupProcedureProtocolKeys<TGroups>] extends [never]
+  ? unknown
+  : {
+      readonly __duplicateProcedureProtocol__: DuplicateGroupProcedureProtocolKeys<TGroups>
+    }
+
 function defineContract<const TGroups extends readonly ProtocolGroup[]>(
   groups: TGroups &
     NonEmptyArrayConstraint<TGroups> &
+    GroupProcedureProtocolUniquenessConstraint<TGroups> &
     DispatchKeyUniquenessConstraint<ProceduresFromGroups<TGroups>>,
 ): ContractDefinition<ProceduresFromGroups<TGroups>> {
   if (groups.length === 0) {
@@ -162,9 +193,45 @@ type MergedProcedures<TContracts extends readonly ContractDefinition[]> = {
   >
 }
 
+type ProcedureProtocolKeysOfContract<TContract> =
+  TContract extends ContractDefinition<infer TProcedures>
+    ? {
+        [
+          TProcedure in keyof TProcedures & string
+        ]: `${TProcedure}.${keyof TProcedures[TProcedure]['protocols'] &
+          string}`
+      }[keyof TProcedures & string]
+    : never
+
+type DuplicateContractProcedureProtocolKeys<
+  TContracts extends readonly ContractDefinition[],
+  TSeen extends string = never,
+> = number extends TContracts['length']
+  ? never
+  : TContracts extends readonly [
+        infer THead extends ContractDefinition,
+        ...infer TTail extends readonly ContractDefinition[],
+      ]
+    ?
+        | Extract<ProcedureProtocolKeysOfContract<THead>, TSeen>
+        | DuplicateContractProcedureProtocolKeys<
+            TTail,
+            TSeen | ProcedureProtocolKeysOfContract<THead>
+          >
+    : never
+
+type ContractProcedureProtocolUniquenessConstraint<
+  TContracts extends readonly ContractDefinition[],
+> = [DuplicateContractProcedureProtocolKeys<TContracts>] extends [never]
+  ? unknown
+  : {
+      readonly __duplicateProcedureProtocol__: DuplicateContractProcedureProtocolKeys<TContracts>
+    }
+
 function mergeContracts<const TContracts extends readonly ContractDefinition[]>(
   contracts: TContracts &
     NonEmptyArrayConstraint<TContracts> &
+    ContractProcedureProtocolUniquenessConstraint<TContracts> &
     DispatchKeyUniquenessConstraint<MergedProcedures<TContracts>>,
 ): ContractDefinition<MergedProcedures<TContracts>> {
   if (contracts.length === 0) {
