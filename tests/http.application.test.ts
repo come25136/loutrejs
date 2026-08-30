@@ -1,5 +1,6 @@
 import { createTestApplication } from './helpers/application.js'
 import {
+  contract,
   contextKey,
   defineModule,
   implementation,
@@ -21,49 +22,51 @@ describe('HTTP application boundary', () => {
         await next({ executionId: `exec-${executions}` })
       },
     })
-    const Contract = http.contract({
-      update: {
-        method: 'POST',
-        path: '/things/{id}',
-        request: {
-          params: { id: z.string().min(2) },
-          query: z.object({ page: z.coerce.number().int() }),
-          headers: z.object({ 'x-kind': z.literal('fixture') }),
-          body: {
-            contentType: 'application/json',
-            schema: z.object({ name: z.string() }),
-          },
-        },
-        responses: {
-          updated: {
-            status: 200,
-            headers: z.object({
-              'x-dynamic': z.string(),
-              'x-overridden': z.string(),
-              'content-type': z.string(),
-            }),
-            staticHeaders: {
-              'x-declared': 'static',
-              'x-overridden': 'static',
+    const Contract = contract([
+      http({
+        update: {
+          method: 'POST',
+          path: '/things/{id}',
+          request: {
+            params: { id: z.string().min(2) },
+            query: z.object({ page: z.coerce.number().int() }),
+            headers: z.object({ 'x-kind': z.literal('fixture') }),
+            body: {
+              contentType: 'application/json',
+              schema: z.object({ name: z.string() }),
             },
-            body: z.object({
-              id: z.string(),
-              page: z.number(),
-              name: z.string(),
-              executionId: z.string(),
-            }),
           },
+          responses: {
+            updated: {
+              status: 200,
+              headers: z.object({
+                'x-dynamic': z.string(),
+                'x-overridden': z.string(),
+                'content-type': z.string(),
+              }),
+              staticHeaders: {
+                'x-declared': 'static',
+                'x-overridden': 'static',
+              },
+              body: z.object({
+                id: z.string(),
+                page: z.number(),
+                name: z.string(),
+                executionId: z.string(),
+              }),
+            },
+          },
+          pipeline: [
+            validate.params,
+            validate.query,
+            validate.headers,
+            validate.body,
+            execution,
+            http.controller,
+          ],
         },
-        pipeline: [
-          validate.params,
-          validate.query,
-          validate.headers,
-          validate.body,
-          execution,
-          http.controller,
-        ],
-      },
-    })
+      }),
+    ])
     let controllerInstances = 0
     const Implementation = implementation({
       name: 'Implementation',
@@ -190,19 +193,21 @@ describe('HTTP application boundary', () => {
     expect(await response.json()).toEqual({ value: 'カワウソ' })
   })
   it('treats output schema failures as internal finalization errors', async () => {
-    const Contract = http.contract({
-      run: {
-        method: 'GET',
-        path: '/invalid-output',
-        responses: {
-          ok: {
-            status: 200,
-            body: z.object({ value: z.string() }),
+    const Contract = contract([
+      http({
+        run: {
+          method: 'GET',
+          path: '/invalid-output',
+          responses: {
+            ok: {
+              status: 200,
+              body: z.object({ value: z.string() }),
+            },
           },
+          pipeline: [http.controller],
         },
-        pipeline: [http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -228,20 +233,22 @@ describe('HTTP application boundary', () => {
     expect(response.status).toBe(500)
   })
   it('response header schema failuresをinternal finalization errorにする', async () => {
-    const Contract = http.contract({
-      run: {
-        method: 'GET',
-        path: '/invalid-output-header',
-        responses: {
-          ok: {
-            status: 200,
-            body: z.object({ value: z.string() }),
-            headers: z.object({ etag: z.string().startsWith('"') }),
+    const Contract = contract([
+      http({
+        run: {
+          method: 'GET',
+          path: '/invalid-output-header',
+          responses: {
+            ok: {
+              status: 200,
+              body: z.object({ value: z.string() }),
+              headers: z.object({ etag: z.string().startsWith('"') }),
+            },
           },
+          pipeline: [http.controller],
         },
-        pipeline: [http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -271,19 +278,21 @@ describe('HTTP application boundary', () => {
     )
   })
   it('schema未宣言のdynamic response headerを拒否する', async () => {
-    const Contract = http.contract({
-      run: {
-        method: 'GET',
-        path: '/undeclared-output-header',
-        responses: {
-          ok: {
-            status: 200,
-            body: z.object({ value: z.string() }),
+    const Contract = contract([
+      http({
+        run: {
+          method: 'GET',
+          path: '/undeclared-output-header',
+          responses: {
+            ok: {
+              status: 200,
+              body: z.object({ value: z.string() }),
+            },
           },
+          pipeline: [http.controller],
         },
-        pipeline: [http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -323,19 +332,21 @@ describe('HTTP application boundary', () => {
           body: { value: 'cached' },
         }),
     })
-    const Contract = http.contract({
-      run: {
-        method: 'GET',
-        path: '/cached',
-        responses: {
-          ok: {
-            status: 200,
-            body: z.object({ value: z.string() }),
+    const Contract = contract([
+      http({
+        run: {
+          method: 'GET',
+          path: '/cached',
+          responses: {
+            ok: {
+              status: 200,
+              body: z.object({ value: z.string() }),
+            },
           },
+          pipeline: [cached, http.controller],
         },
-        pipeline: [cached, http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -363,26 +374,28 @@ describe('HTTP application boundary', () => {
   })
 })
 function createInputDecodeFixture() {
-  const Contract = http.contract({
-    decode: {
-      method: 'POST',
-      path: '/decode/{value}',
-      request: {
-        params: { value: z.string() },
-        body: {
-          contentType: 'application/json',
-          schema: z.object({}).optional(),
+  const Contract = contract([
+    http({
+      decode: {
+        method: 'POST',
+        path: '/decode/{value}',
+        request: {
+          params: { value: z.string() },
+          body: {
+            contentType: 'application/json',
+            schema: z.object({}).optional(),
+          },
         },
-      },
-      responses: {
-        ok: {
-          status: 200,
-          body: z.object({ value: z.string() }),
+        responses: {
+          ok: {
+            status: 200,
+            body: z.object({ value: z.string() }),
+          },
         },
+        pipeline: [validate.params, validate.body, http.controller],
       },
-      pipeline: [validate.params, validate.body, http.controller],
-    },
-  })
+    }),
+  ])
   const Implementation = implementation({
     name: 'Implementation',
     contract: Contract,

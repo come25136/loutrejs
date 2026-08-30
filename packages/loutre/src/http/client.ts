@@ -142,7 +142,8 @@ export type HttpClient<TContract extends ContractDefinition> = {
 export class HttpClientResponseError extends Error {
   constructor(
     readonly status: number,
-    readonly contract: string,
+    readonly method: string,
+    readonly path: string,
     readonly procedure: string,
     message: string,
     options?: ErrorOptions,
@@ -182,12 +183,7 @@ export function createHttpClient<const TContract extends ContractDefinition>(
           : { contentType: definition.request.body.contentType }),
       })
 
-      return decodeResponse(
-        contract.name ?? 'Contract',
-        procedureName,
-        definition,
-        response,
-      )
+      return decodeResponse(procedureName, definition, response)
     }
   }
 
@@ -227,20 +223,21 @@ function interpolatePath(
 }
 
 async function decodeResponse(
-  contract: string,
   procedure: string,
   definition: HttpProtocolDefinition,
   response: HttpClientTransportResponse,
 ): Promise<unknown> {
+  const target = describeHttpTarget(definition, procedure)
   const candidates = Object.values(definition.responses).filter(
     (candidate) => candidate.status === response.status,
   )
   if (candidates.length === 0) {
     throw new HttpClientResponseError(
       response.status,
-      contract,
+      definition.method,
+      definition.path,
       procedure,
-      `${contract}.${procedure} returned undeclared HTTP status ${response.status}`,
+      `${target} returned undeclared HTTP status ${response.status}`,
     )
   }
 
@@ -251,8 +248,8 @@ async function decodeResponse(
         ? validatedResponseStream(
             candidate.body,
             response.body,
-            contract,
             procedure,
+            definition,
             response.status,
           )
         : await validateSchema(candidate.body, response.body)
@@ -268,9 +265,10 @@ async function decodeResponse(
 
   throw new HttpClientResponseError(
     response.status,
-    contract,
+    definition.method,
+    definition.path,
     procedure,
-    `${contract}.${procedure} returned a response that does not match its Contract`,
+    `${target} returned a response that does not match its Contract`,
     lastValidationError ? { cause: lastValidationError } : undefined,
   )
 }
@@ -278,16 +276,18 @@ async function decodeResponse(
 function validatedResponseStream(
   schema: StandardSchemaV1,
   value: unknown,
-  contract: string,
   procedure: string,
+  definition: HttpProtocolDefinition,
   status: number,
 ): AsyncIterable<unknown> {
+  const target = describeHttpTarget(definition, procedure)
   if (!isAsyncIterable(value)) {
     throw new HttpClientResponseError(
       status,
-      contract,
+      definition.method,
+      definition.path,
       procedure,
-      `${contract}.${procedure} returned a non-stream body for a server-stream response`,
+      `${target} returned a non-stream body for a server-stream response`,
     )
   }
   return {
@@ -297,14 +297,22 @@ function validatedResponseStream(
       } catch (error) {
         throw new HttpClientResponseError(
           status,
-          contract,
+          definition.method,
+          definition.path,
           procedure,
-          `${contract}.${procedure} returned an invalid server-stream item`,
+          `${target} returned an invalid server-stream item`,
           { cause: error },
         )
       }
     },
   }
+}
+
+function describeHttpTarget(
+  definition: HttpProtocolDefinition,
+  procedure: string,
+): string {
+  return `${definition.method.toUpperCase()} ${definition.path} (${procedure})`
 }
 
 function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {

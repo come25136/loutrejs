@@ -1,4 +1,5 @@
 import {
+  contract,
   contextKey,
   defineError,
   defineEnv,
@@ -30,51 +31,57 @@ const wrapperLayer = layer({
     await next()
   },
 })
-const Contract = http.contract({
-  get: {
-    method: 'GET',
-    path: '/users/{id}',
-    request: { params: { id: z.string() } },
-    responses: {
-      found: {
-        status: 200,
-        body: z.object({ id: z.string(), name: z.string() }),
-        headers: z
-          .object({
-            etag: z.string().optional(),
-            vary: z.union([z.string(), z.array(z.string())]).optional(),
-          })
-          .optional(),
+const Contract = contract([
+  http({
+    get: {
+      method: 'GET',
+      path: '/users/{id}',
+      request: { params: { id: z.string() } },
+      responses: {
+        found: {
+          status: 200,
+          body: z.object({ id: z.string(), name: z.string() }),
+          headers: z
+            .object({
+              etag: z.string().optional(),
+              vary: z.union([z.string(), z.array(z.string())]).optional(),
+            })
+            .optional(),
+        },
       },
+      pipeline: [
+        validate.params,
+        wrapperLayer([sessionLayer]),
+        http.controller,
+      ],
     },
-    pipeline: [validate.params, wrapperLayer([sessionLayer]), http.controller],
-  },
-  list: {
-    method: 'GET',
-    path: '/users',
-    responses: { ok: { status: 200, body: z.array(z.string()) } },
-    pipeline: [http.controller],
-  },
-  unvalidated: {
-    method: 'GET',
-    path: '/raw/{id}',
-    request: { params: { id: z.string() } },
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [http.controller],
-  },
-  nestedValidated: {
-    method: 'POST',
-    path: '/nested-validation',
-    request: {
-      body: {
-        contentType: 'application/json',
-        schema: z.object({ name: z.string() }),
+    list: {
+      method: 'GET',
+      path: '/users',
+      responses: { ok: { status: 200, body: z.array(z.string()) } },
+      pipeline: [http.controller],
+    },
+    unvalidated: {
+      method: 'GET',
+      path: '/raw/{id}',
+      request: { params: { id: z.string() } },
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
+    },
+    nestedValidated: {
+      method: 'POST',
+      path: '/nested-validation',
+      request: {
+        body: {
+          contentType: 'application/json',
+          schema: z.object({ name: z.string() }),
+        },
       },
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [wrapperLayer([validate.body]), http.controller],
     },
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [wrapperLayer([validate.body]), http.controller],
-  },
-})
+  }),
+])
 type HttpController = ControllerOf<typeof Contract, 'http'>
 declare const context: ContextOf<HttpController, 'get'>
 const id: string = context.params.id

@@ -1,6 +1,7 @@
 import { bootstrap } from '@loutrejs/loutre/host'
 import { defineApplication } from '@loutrejs/loutre'
 import {
+  contract,
   defineModule,
   implementation,
   type StandardSchemaV1,
@@ -25,25 +26,27 @@ const BodyStreamSchema: StandardSchemaV1<
 }
 describe('streaming validate.body', () => {
   it('binary bodyをbufferせずStandard SchemaからControllerへ1回だけ渡す', async () => {
-    const Contract = http.contract({
-      upload: {
-        method: 'POST',
-        path: '/upload',
-        request: {
-          body: {
-            contentType: 'application/octet-stream',
-            schema: BodyStreamSchema,
+    const Contract = contract([
+      http({
+        upload: {
+          method: 'POST',
+          path: '/upload',
+          request: {
+            body: {
+              contentType: 'application/octet-stream',
+              schema: BodyStreamSchema,
+            },
           },
-        },
-        responses: {
-          accepted: {
-            status: 202,
-            body: z.object({ bytes: z.number() }),
+          responses: {
+            accepted: {
+              status: 202,
+              body: z.object({ bytes: z.number() }),
+            },
           },
+          pipeline: [validate.body, http.controller],
         },
-        pipeline: [validate.body, http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,

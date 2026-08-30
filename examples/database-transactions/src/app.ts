@@ -1,6 +1,7 @@
 import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
+  contract,
   defineModule,
   implementation,
   inject,
@@ -73,8 +74,8 @@ const UserResponse = z.object({
   name: z.string(),
   createdBy: z.string(),
 })
-const UsersContract = http.contract(
-  {
+const UsersContract = contract([
+  http({
     create: {
       method: 'POST',
       path: '/users',
@@ -93,9 +94,8 @@ const UsersContract = http.contract(
         transaction([authorization, http.controller]),
       ],
     },
-  },
-  { name: 'UsersContract' },
-)
+  }),
+])
 class UserRepository {
   create(client: InMemoryClient, name: string, createdBy: string): User {
     const user = { id: crypto.randomUUID(), name, createdBy }

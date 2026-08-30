@@ -1,6 +1,7 @@
 import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
+  contract,
   defineEnv,
   defineModule,
   implementation,
@@ -70,8 +71,8 @@ const UserResponse = z.object({
   name: z.string(),
   createdBy: z.string(),
 })
-const UsersContract = http.contract(
-  {
+const UsersContract = contract([
+  http({
     create: {
       method: 'POST',
       path: '/users',
@@ -86,9 +87,8 @@ const UsersContract = http.contract(
       },
       pipeline: [validate.body, transaction([http.controller])],
     },
-  },
-  { name: 'PostgresUsersContract' },
-)
+  }),
+])
 class UserRepository {
   async create(client: PoolClient, name: string) {
     const result = await client.query<{

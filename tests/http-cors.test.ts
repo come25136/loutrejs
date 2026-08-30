@@ -1,5 +1,5 @@
 import { createTestApplication } from './helpers/application.js'
-import { defineModule, implementation } from '@loutrejs/loutre'
+import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
@@ -155,23 +155,25 @@ describe('cors', () => {
 })
 function createFixture(corsLayer: ReturnType<typeof validate.cors>) {
   let controllerExecutions = 0
-  const Contract = http.contract({
-    create: {
-      method: 'POST',
-      path: '/cors',
-      responses: {
-        created: {
-          status: 200,
-          body: z.object({ ok: z.boolean() }),
-          staticHeaders: {
-            vary: 'Accept',
-            'x-request-id': 'request-1',
+  const Contract = contract([
+    http({
+      create: {
+        method: 'POST',
+        path: '/cors',
+        responses: {
+          created: {
+            status: 200,
+            body: z.object({ ok: z.boolean() }),
+            staticHeaders: {
+              vary: 'Accept',
+              'x-request-id': 'request-1',
+            },
           },
         },
+        pipeline: [corsLayer, http.controller],
       },
-      pipeline: [corsLayer, http.controller],
-    },
-  })
+    }),
+  ])
   const Implementation = implementation({
     name: 'CorsImplementation',
     contract: Contract,
@@ -193,25 +195,27 @@ function createFixture(corsLayer: ReturnType<typeof validate.cors>) {
   }
 }
 function createValidationFixture(corsLayer: ReturnType<typeof validate.cors>) {
-  const Contract = http.contract({
-    create: {
-      method: 'POST',
-      path: '/cors-validation',
-      request: {
-        body: {
-          contentType: 'application/json',
-          schema: z.object({ text: z.string() }),
+  const Contract = contract([
+    http({
+      create: {
+        method: 'POST',
+        path: '/cors-validation',
+        request: {
+          body: {
+            contentType: 'application/json',
+            schema: z.object({ text: z.string() }),
+          },
         },
-      },
-      responses: {
-        created: {
-          status: 200,
-          body: z.object({ ok: z.boolean() }),
+        responses: {
+          created: {
+            status: 200,
+            body: z.object({ ok: z.boolean() }),
+          },
         },
+        pipeline: [corsLayer, validate.body, http.controller],
       },
-      pipeline: [corsLayer, validate.body, http.controller],
-    },
-  })
+    }),
+  ])
   const Implementation = implementation({
     name: 'CorsValidationImplementation',
     contract: Contract,

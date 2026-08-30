@@ -1,5 +1,10 @@
 import { defineApplication } from '@loutrejs/loutre'
-import { contextKey, defineModule, implementation } from '@loutrejs/loutre'
+import {
+  contextKey,
+  contract,
+  defineModule,
+  implementation,
+} from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { bearerAuth } from './bearer-auth.js'
@@ -28,24 +33,26 @@ const bearerAuthentication = bearerAuth({
     body: { error: 'Bearer token required' },
   },
 })
-const BearerProfileContract = http.contract({
-  get: {
-    method: 'GET',
-    path: '/profile',
-    responses: {
-      ok: {
-        status: 200,
-        body: User,
+const BearerProfileContract = contract([
+  http({
+    get: {
+      method: 'GET',
+      path: '/profile',
+      responses: {
+        ok: {
+          status: 200,
+          body: User,
+        },
+        unauthorized: {
+          status: 401,
+          body: UnauthorizedBody,
+          headers: z.object({ 'www-authenticate': z.string() }),
+        },
       },
-      unauthorized: {
-        status: 401,
-        body: UnauthorizedBody,
-        headers: z.object({ 'www-authenticate': z.string() }),
-      },
+      pipeline: [bearerAuthentication, http.controller],
     },
-    pipeline: [bearerAuthentication, http.controller],
-  },
-})
+  }),
+])
 const BearerProfileController = implementation({
   name: 'BearerProfileController',
   contract: BearerProfileContract,

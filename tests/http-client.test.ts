@@ -1,3 +1,4 @@
+import { contract } from '@loutrejs/loutre'
 import {
   HttpClientResponseError,
   createHttpClient,
@@ -7,8 +8,8 @@ import {
 import { z } from 'zod'
 describe('HTTP typed client', () => {
   it('Contractに準拠したHTTP requestとresponseを扱える', async () => {
-    const UsersContract = http.contract(
-      {
+    const UsersContract = contract([
+      http({
         update: {
           method: 'PUT',
           path: '/users/{id}',
@@ -33,9 +34,8 @@ describe('HTTP typed client', () => {
           },
           pipeline: [http.controller],
         },
-      },
-      { name: 'Users' },
-    )
+      }),
+    ])
     let sent: HttpClientTransportRequest | undefined
     const client = createHttpClient(UsersContract, async (request) => {
       sent = request
@@ -66,8 +66,8 @@ describe('HTTP typed client', () => {
     })
   })
   it('Contractにないstatusをtyped client境界で拒否する', async () => {
-    const Contract = http.contract(
-      {
+    const Contract = contract([
+      http({
         get: {
           method: 'GET',
           path: '/',
@@ -76,9 +76,8 @@ describe('HTTP typed client', () => {
           },
           pipeline: [http.controller],
         },
-      },
-      { name: 'Example' },
-    )
+      }),
+    ])
     const client = createHttpClient(Contract, async () => ({
       status: 500,
       body: 'unexpected',
@@ -86,7 +85,8 @@ describe('HTTP typed client', () => {
     await expect(client.get()).rejects.toMatchObject({
       name: 'HttpClientResponseError',
       status: 500,
-      contract: 'Example',
+      method: 'GET',
+      path: '/',
       procedure: 'get',
     } satisfies Partial<HttpClientResponseError>)
   })

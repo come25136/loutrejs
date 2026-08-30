@@ -1,4 +1,4 @@
-import { contextKey, layer } from '@loutrejs/loutre'
+import { contextKey, contract, layer } from '@loutrejs/loutre'
 import {
   HandlerOf,
   MessageContextOf,
@@ -20,14 +20,16 @@ const sessionLayer = layer({
     await next({ session: { userId: 'user-1' } })
   },
 })
-const Contract = messagePort.contract({
-  run: {
-    responses: {
-      ok: { body: z.object({ userId: z.string() }) },
+const Contract = contract([
+  messagePort({
+    run: {
+      responses: {
+        ok: { body: z.object({ userId: z.string() }) },
+      },
+      pipeline: [sessionLayer, messagePort.handler],
     },
-    pipeline: [sessionLayer, messagePort.handler],
-  },
-})
+  }),
+])
 type Handler = HandlerOf<typeof Contract, 'messagePort'>
 declare const context: MessageContextOf<Handler, 'run'>
 const session: Session = context.session

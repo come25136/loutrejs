@@ -1,4 +1,4 @@
-import { type SchemaInput } from '@loutrejs/loutre'
+import { contract, type SchemaInput } from '@loutrejs/loutre'
 import {
   type ContextOf,
   type ControllerOf,
@@ -6,40 +6,42 @@ import {
   validate,
 } from '@loutrejs/loutre/http'
 import { z } from 'zod'
-const RawContract = http.contract({
-  single: {
-    method: 'GET',
-    path: '/users/{id}',
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [http.controller],
-  },
-  multiple: {
-    method: 'GET',
-    path: '/users/{userId}/posts/{postId}',
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [http.controller],
-  },
-  transformed: {
-    method: 'GET',
-    path: '/numbers/{id}',
-    request: { params: { id: z.coerce.number() } },
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [validate.params, http.controller],
-  },
-  declaredOnly: {
-    method: 'GET',
-    path: '/raw/{id}',
-    request: { params: { id: z.coerce.number() } },
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [http.controller],
-  },
-  root: {
-    method: 'GET',
-    path: '/',
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [http.controller],
-  },
-})
+const RawContract = contract([
+  http({
+    single: {
+      method: 'GET',
+      path: '/users/{id}',
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
+    },
+    multiple: {
+      method: 'GET',
+      path: '/users/{userId}/posts/{postId}',
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
+    },
+    transformed: {
+      method: 'GET',
+      path: '/numbers/{id}',
+      request: { params: { id: z.coerce.number() } },
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [validate.params, http.controller],
+    },
+    declaredOnly: {
+      method: 'GET',
+      path: '/raw/{id}',
+      request: { params: { id: z.coerce.number() } },
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
+    },
+    root: {
+      method: 'GET',
+      path: '/',
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
+    },
+  }),
+])
 type RawController = ControllerOf<typeof RawContract, 'http'>
 declare const single: ContextOf<RawController, 'single'>
 declare const multiple: ContextOf<RawController, 'multiple'>
@@ -157,31 +159,35 @@ http.route({
   pipeline: [http.controller],
 })
 // @ts-expect-error param名だけが異なる同一routeは重複する
-http.contract({
-  first: {
-    method: 'GET',
-    path: '/duplicates/{id}',
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [http.controller],
-  },
-  second: {
-    method: 'get',
-    path: '/duplicates/{userId}',
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [http.controller],
-  },
-})
-http.contract({
-  get: {
-    method: 'GET',
-    path: '/method/{id}',
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [http.controller],
-  },
-  post: {
-    method: 'POST',
-    path: '/method/{id}',
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [http.controller],
-  },
-})
+contract([
+  http({
+    first: {
+      method: 'GET',
+      path: '/duplicates/{id}',
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
+    },
+    second: {
+      method: 'get',
+      path: '/duplicates/{userId}',
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
+    },
+  }),
+])
+contract([
+  http({
+    get: {
+      method: 'GET',
+      path: '/method/{id}',
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
+    },
+    post: {
+      method: 'POST',
+      path: '/method/{id}',
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
+    },
+  }),
+])

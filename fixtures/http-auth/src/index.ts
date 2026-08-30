@@ -1,5 +1,6 @@
 import { defineApplication } from '@loutrejs/loutre'
 import {
+  contract,
   contextKey,
   defineModule,
   implementation,
@@ -63,31 +64,33 @@ export const tenantAccess = layer({
     })
   },
 })
-export const AccountContract = http.contract({
-  get: {
-    method: 'GET',
-    path: '/account',
-    request: {
-      headers: z.object({ authorization: z.string() }),
-    },
-    responses: {
-      found: {
-        status: 200,
-        body: z.object({
-          userId: z.string(),
-          tenantId: z.string(),
-        }),
+export const AccountContract = contract([
+  http({
+    get: {
+      method: 'GET',
+      path: '/account',
+      request: {
+        headers: z.object({ authorization: z.string() }),
       },
+      responses: {
+        found: {
+          status: 200,
+          body: z.object({
+            userId: z.string(),
+            tenantId: z.string(),
+          }),
+        },
+      },
+      pipeline: [
+        validate.headers,
+        bearerAuthentication,
+        authenticated,
+        tenantAccess,
+        http.controller,
+      ],
     },
-    pipeline: [
-      validate.headers,
-      bearerAuthentication,
-      authenticated,
-      tenantAccess,
-      http.controller,
-    ],
-  },
-})
+  }),
+])
 export const AccountController = implementation({
   name: 'AccountController',
   contract: AccountContract,

@@ -1,6 +1,6 @@
 import { generateOpenApi } from '@loutrejs/loutre/openapi'
 import { defineApplication } from '@loutrejs/loutre'
-import { defineModule, implementation } from '@loutrejs/loutre'
+import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { createUsersApplication } from '../fixtures/http-crud/src/index.js'
 import { z } from 'zod'
@@ -19,7 +19,7 @@ describe('OpenAPI generation', () => {
     const getUser = document.paths['/users/{id}']?.get as
       | Record<string, any>
       | undefined
-    expect(getUser?.operationId).toBe('UsersContract.get')
+    expect(getUser?.operationId).toBeUndefined()
     expect(getUser?.parameters).toEqual([
       expect.objectContaining({
         name: 'id',
@@ -45,7 +45,7 @@ describe('OpenAPI generation', () => {
     const createUser = document.paths['/users']?.post as
       | Record<string, any>
       | undefined
-    expect(createUser?.operationId).toBe('UsersContract.create')
+    expect(createUser?.operationId).toBeUndefined()
     expect(createUser?.requestBody).toEqual({
       content: {
         'application/json': {
@@ -57,10 +57,24 @@ describe('OpenAPI generation', () => {
     })
     expect(Object.keys(document.components?.schemas ?? {})).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('UsersContract_get_RequestParam_id_Input'),
-        expect.stringContaining('UsersContract_get_Response_found_Output'),
-        expect.stringContaining('UsersContract_create_RequestBody_Input'),
+        expect.stringContaining('GET_users_id_get_RequestParam_id_Input'),
+        expect.stringContaining('GET_users_id_get_Response_found_Output'),
+        expect.stringContaining('POST_users_create_RequestBody_Input'),
       ]),
+    )
+  })
+  it('operationIdをOpenAPI生成側で明示的に決められる', () => {
+    const document = generateOpenApi(createUsersApplication(), {
+      info: { title: 'Users API', version: '1.0.0' },
+      operationId: ({ method, procedure }) =>
+        `${method.toLowerCase()}.${procedure}`,
+    })
+
+    expect(document.paths['/users/{id}']?.get).toEqual(
+      expect.objectContaining({ operationId: 'get.get' }),
+    )
+    expect(document.paths['/users']?.post).toEqual(
+      expect.objectContaining({ operationId: 'post.create' }),
     )
   })
   it('uses querystring, header parameters, response oneOf and additionalOperations', () => {
@@ -72,8 +86,8 @@ describe('OpenAPI generation', () => {
     const Success = z.object({ ok: z.literal(true) })
     const FailureA = z.object({ code: z.literal('A') })
     const FailureB = z.object({ code: z.literal('B') })
-    const ApiContract = http.contract(
-      {
+    const ApiContract = contract([
+      http({
         copy: {
           method: 'COPY',
           path: '/search',
@@ -90,9 +104,8 @@ describe('OpenAPI generation', () => {
           },
           pipeline: [validate.query, validate.headers, http.controller],
         },
-      },
-      { name: 'Api' },
-    )
+      }),
+    ])
     const ApiImplementation = implementation({
       name: 'ApiImplementation',
       contract: ApiContract,

@@ -1,12 +1,17 @@
-import { defineModule, implementation, inject } from '@loutrejs/loutre'
+import {
+  contract,
+  defineModule,
+  implementation,
+  inject,
+} from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import { http } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { ApplicationRuntime } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 function createContract() {
-  return http.contract(
-    {
+  return contract([
+    http({
       get: {
         method: 'GET',
         path: '/implementation/{id}',
@@ -19,9 +24,8 @@ function createContract() {
         responses: { ok: { status: 200, body: z.string() } },
         pipeline: [http.controller],
       },
-    },
-    { name: 'ImplementationContract' },
-  )
+    }),
+  ])
 }
 describe('Implementation descriptorとfactory runtime', () => {
   it('definition時にはfactoryを実行せずmetadataとprocedureを固定する', () => {

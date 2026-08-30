@@ -26,6 +26,12 @@ export function compileApplication(
     modules.map((module, index) => [module, `module:${index + 1}`]),
   )
   const implementationModules = collectImplementationModules(modules, moduleIds)
+  const implementationNames = new Map(
+    base.graph.implementations.map((implementation) => [
+      implementation.id,
+      implementation.name,
+    ]),
+  )
   const graphModules = new Map(
     base.graph.modules.map((module) => [module.id, module]),
   )
@@ -33,7 +39,10 @@ export function compileApplication(
 
   for (const execution of base.graph.executions) {
     if (execution.kind !== 'protocol') continue
-    const module = implementationModules.get(execution.implementation)
+    const implementationName = implementationNames.get(execution.implementation)
+    const module = implementationName
+      ? implementationModules.get(implementationName)
+      : undefined
     if (!module) continue
     executionModules.set(
       `${execution.contract}:${execution.procedure}:${execution.protocol}`,
@@ -160,13 +169,10 @@ function moduleForLayer(
   node: DependencyNodeIR,
   executionModules: ReadonlyMap<string, string>,
 ): string | undefined {
-  if (node.kind !== 'layer' || !node.id.startsWith('layer:')) return undefined
-  const parts = node.id.split(':')
-  if (parts.length < 5) return undefined
-  const contract = parts[1]
-  const procedure = parts[2]
-  const protocol = parts[3]
-  if (!contract || !procedure || !protocol) return undefined
+  if (node.kind !== 'layer') return undefined
+  const match = /^layer:(contract:\d+)\/([^/]+)\/([^/]+)\//.exec(node.id)
+  if (!match) return undefined
+  const [, contract, procedure, protocol] = match
   return executionModules.get(`${contract}:${procedure}:${protocol}`)
 }
 

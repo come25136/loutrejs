@@ -1,3 +1,4 @@
+import { contract } from '@loutrejs/loutre'
 import {
   createHttpClient,
   fetchHttpTransport,
@@ -6,22 +7,24 @@ import {
 import { z } from 'zod'
 describe('HTTP typed client server stream', () => {
   it('server-stream responseの各itemをContractのoutputとして取得できる', async () => {
-    const EventsContract = http.contract({
-      subscribe: {
-        method: 'GET',
-        path: '/events',
-        responses: {
-          events: {
-            status: 200,
-            stream: 'server',
-            body: z.object({
-              sequence: z.string().transform(Number),
-            }),
+    const EventsContract = contract([
+      http({
+        subscribe: {
+          method: 'GET',
+          path: '/events',
+          responses: {
+            events: {
+              status: 200,
+              stream: 'server',
+              body: z.object({
+                sequence: z.string().transform(Number),
+              }),
+            },
           },
+          pipeline: [http.controller],
         },
-        pipeline: [http.controller],
-      },
-    })
+      }),
+    ])
     const encoder = new TextEncoder()
     const client = createHttpClient(
       EventsContract,
@@ -49,20 +52,22 @@ describe('HTTP typed client server stream', () => {
     expect(items).toEqual([{ sequence: 1 }, { sequence: 2 }])
   })
   it('Contractに違反するserver-stream itemをclient境界で拒否する', async () => {
-    const Contract = http.contract({
-      stream: {
-        method: 'GET',
-        path: '/stream',
-        responses: {
-          ok: {
-            status: 200,
-            stream: 'server',
-            body: z.number(),
+    const Contract = contract([
+      http({
+        stream: {
+          method: 'GET',
+          path: '/stream',
+          responses: {
+            ok: {
+              status: 200,
+              stream: 'server',
+              body: z.number(),
+            },
           },
+          pipeline: [http.controller],
         },
-        pipeline: [http.controller],
-      },
-    })
+      }),
+    ])
     const client = createHttpClient(Contract, async () => ({
       status: 200,
       body: (async function* () {

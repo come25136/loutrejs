@@ -23,7 +23,7 @@ describe('canonical Fixture A', () => {
       expect(host.application.graph.capabilities).toContainEqual({
         name: 'http.server',
         scope: 'execution',
-        requiredBy: 'UsersContract.get',
+        requiredBy: 'contract:1.get',
       })
 
       const created = await fetch(`http://127.0.0.1:${port}/users`, {

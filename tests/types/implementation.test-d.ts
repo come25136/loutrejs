@@ -1,4 +1,4 @@
-import { contextKey, implementation, layer } from '@loutrejs/loutre'
+import { contract, contextKey, implementation, layer } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
@@ -12,36 +12,38 @@ const session = layer({
     await next({ 'implementation.session': { userId: 'user-1' } })
   },
 })
-const Contract = http.contract({
-  raw: {
-    method: 'GET',
-    path: '/raw/{id}',
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [http.controller],
-  },
-  transformed: {
-    method: 'POST',
-    path: '/transformed/{id}',
-    request: {
-      params: { id: z.coerce.number() },
-      query: z.object({ page: z.coerce.number() }),
-      headers: z.object({ authorization: z.string() }),
-      body: {
-        contentType: 'application/json',
-        schema: z.object({ name: z.string() }),
-      },
+const Contract = contract([
+  http({
+    raw: {
+      method: 'GET',
+      path: '/raw/{id}',
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
     },
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [
-      validate.params,
-      validate.query,
-      validate.headers,
-      validate.body,
-      session,
-      http.controller,
-    ],
-  },
-})
+    transformed: {
+      method: 'POST',
+      path: '/transformed/{id}',
+      request: {
+        params: { id: z.coerce.number() },
+        query: z.object({ page: z.coerce.number() }),
+        headers: z.object({ authorization: z.string() }),
+        body: {
+          contentType: 'application/json',
+          schema: z.object({ name: z.string() }),
+        },
+      },
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [
+        validate.params,
+        validate.query,
+        validate.headers,
+        validate.body,
+        session,
+        http.controller,
+      ],
+    },
+  }),
+])
 implementation({
   name: 'AllProcedures',
   contract: Contract,

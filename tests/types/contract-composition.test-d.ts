@@ -1,13 +1,12 @@
 import {
   contract,
-  defineProtocolContract,
   protocolGroup,
   type ProtocolDescriptor,
 } from '@loutrejs/loutre'
 import { type ControllerOf, http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
-const HttpContract = http.contract({
+const HttpGroup = http({
   get: {
     method: 'GET',
     path: '/users/{id}',
@@ -21,6 +20,7 @@ const HttpContract = http.contract({
     pipeline: [http.controller],
   },
 })
+const HttpContract = contract([HttpGroup])
 
 type HttpController = ControllerOf<typeof HttpContract, 'http'>
 declare const controller: HttpController
@@ -33,19 +33,26 @@ const graphql = {
   dispatchKey: 'graphql:Mutation.createUser',
 } as const satisfies ProtocolDescriptor<'graphql'>
 
-const GraphqlContract = defineProtocolContract(
-  protocolGroup('graphql', { create: graphql }),
-)
-const MergedContract = contract.merge(HttpContract, GraphqlContract, {
-  name: 'MergedContract',
-})
+const GraphqlGroup = protocolGroup('graphql', { create: graphql })
+const GraphqlContract = contract([GraphqlGroup])
+const DirectContract = contract([HttpGroup, GraphqlGroup])
+const protocolGroups = [HttpGroup, GraphqlGroup]
+const ArrayContract = contract(protocolGroups)
+const directHttp = DirectContract.procedures.create.protocols.http
+const arrayGraphql = ArrayContract.procedures.create.protocols.graphql
+const directGraphql = DirectContract.procedures.create.protocols.graphql
+void [directHttp, directGraphql, arrayGraphql]
+const MergedContract = contract.merge([HttpContract, GraphqlContract])
+const contracts = [HttpContract, GraphqlContract]
+const ArrayMergedContract = contract.merge(contracts)
 
 const mergedHttp = MergedContract.procedures.create.protocols.http
 const mergedGraphql = MergedContract.procedures.create.protocols.graphql
-void [mergedHttp, mergedGraphql]
+const arrayMergedGraphql =
+  ArrayMergedContract.procedures.create.protocols.graphql
+void [mergedHttp, mergedGraphql, arrayMergedGraphql]
 
-// @ts-expect-error param名だけが異なる同一routeはdispatch identityが重複する
-http.contract({
+const DuplicateHttpGroup = http({
   first: {
     method: 'GET',
     path: '/duplicates/{id}',
@@ -59,3 +66,12 @@ http.contract({
     pipeline: [http.controller],
   },
 })
+
+// @ts-expect-error Contract配列内のdispatch identity重複を拒否する
+contract([DuplicateHttpGroup])
+
+// @ts-expect-error 空のprotocol group配列は拒否する
+contract([])
+
+// @ts-expect-error 空のContract配列は拒否する
+contract.merge([])

@@ -24,9 +24,18 @@ export interface OpenApiServer {
   readonly description?: string
 }
 
+export interface OpenApiOperationIdContext {
+  readonly procedure: string
+  readonly method: string
+  readonly path: string
+}
+
 export interface GenerateOpenApiOptions {
   readonly info: OpenApiInfo
   readonly servers?: readonly OpenApiServer[]
+  readonly operationId?: (
+    context: OpenApiOperationIdContext,
+  ) => string | undefined
 }
 
 export interface OpenApiDocument {
@@ -54,7 +63,6 @@ interface SchemaMaterialization {
 
 interface HttpOperationTarget {
   readonly definition: HttpProtocolDefinition
-  readonly contractName?: string
   readonly procedure: string
 }
 
@@ -74,7 +82,7 @@ export function generateOpenApi(
   application: ApplicationDefinition,
   options: GenerateOpenApiOptions,
 ): OpenApiDocument {
-  const graph = assertValidCompilation(
+  assertValidCompilation(
     compileApplication({
       modules: application.modules,
       ...(application.arguments === undefined
@@ -84,18 +92,6 @@ export function generateOpenApi(
       triggers: application.triggers,
     }),
   )
-  const executable = new Set(
-    graph.executions
-      .filter(
-        (execution) =>
-          execution.kind === 'protocol' && execution.protocol === 'http',
-      )
-      .map((execution) =>
-        execution.kind === 'protocol'
-          ? `${execution.implementation}\u0000${execution.procedure}`
-          : '',
-      ),
-  )
   const registry = new SchemaRegistry()
   const paths: Record<string, OpenApiPathItem> = {}
   const operationIds = new Set<string>()
@@ -104,20 +100,20 @@ export function generateOpenApi(
     for (const implementation of module.definition.implementations ?? []) {
       if (implementation.protocol !== 'http') continue
       for (const procedure of implementation.procedures) {
-        if (!executable.has(`${implementation.name}\u0000${procedure}`))
-          continue
         const protocol =
           implementation.contract.procedures[procedure]?.protocols.http
         if (!protocol || protocol.protocol !== 'http') continue
         const typed = protocol as HttpProtocol
         const target: HttpOperationTarget = {
           definition: typed.definition,
-          ...(implementation.contract.name === undefined
-            ? {}
-            : { contractName: implementation.contract.name }),
           procedure,
         }
-        const operation = createOperation(target, registry, operationIds)
+        const operation = createOperation(
+          target,
+          registry,
+          operationIds,
+          options.operationId,
+        )
         attachOperation(paths, typed.definition, operation)
       }
     }
@@ -138,12 +134,21 @@ function createOperation(
   target: HttpOperationTarget,
   registry: SchemaRegistry,
   operationIds: Set<string>,
+  resolveOperationId: GenerateOpenApiOptions['operationId'],
 ): OpenApiObject {
   const definition = target.definition
-  const operationId = target.contractName
-    ? `${target.contractName}.${target.procedure}`
-    : undefined
-  if (operationId) {
+  const operationId = resolveOperationId?.({
+    procedure: target.procedure,
+    method: definition.method,
+    path: definition.path,
+  })
+  if (operationId !== undefined) {
+    if (operationId.length === 0) {
+      throw openApiError(
+        'LUTRE_OPENAPI_OPERATION_ID_002',
+        `operationId must not be empty for ${describeTarget(target)}`,
+      )
+    }
     if (operationIds.has(operationId)) {
       throw openApiError(
         'LUTRE_OPENAPI_OPERATION_ID_001',
@@ -545,7 +550,7 @@ function rebaseLocalDefinitions(
 
 function componentName(target: HttpOperationTarget, suffix: string): string {
   return sanitizeComponentName(
-    `${target.contractName ?? 'AnonymousContract'}_${target.procedure}_${suffix}`,
+    `${target.definition.method} ${target.definition.path} ${target.procedure} ${suffix}`,
   )
 }
 
@@ -569,7 +574,7 @@ function escapeJsonPointer(value: string): string {
 }
 
 function describeTarget(target: HttpOperationTarget): string {
-  return `${target.contractName ?? 'AnonymousContract'}.${target.procedure}`
+  return `${target.definition.method.toUpperCase()} ${target.definition.path} (${target.procedure})`
 }
 
 function dedupeJsonSchemas(schemas: readonly JsonSchema[]): JsonSchema[] {

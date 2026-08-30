@@ -2,6 +2,7 @@ import { binding, defineApplication } from '@loutrejs/loutre'
 import { bootstrap } from '@loutrejs/loutre/host'
 import {
   consume,
+  contract,
   cron,
   defineArgs,
   defineModule,
@@ -15,14 +16,16 @@ import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
-const HealthContract = http.contract({
-  get: {
-    method: 'GET',
-    path: '/health',
-    responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [http.controller],
-  },
-})
+const HealthContract = contract([
+  http({
+    get: {
+      method: 'GET',
+      path: '/health',
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
+    },
+  }),
+])
 const HealthHttp = implementation({
   name: 'HealthHttp',
   contract: HealthContract,

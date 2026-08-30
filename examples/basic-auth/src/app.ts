@@ -1,5 +1,10 @@
 import { defineApplication } from '@loutrejs/loutre'
-import { contextKey, defineModule, implementation } from '@loutrejs/loutre'
+import {
+  contextKey,
+  contract,
+  defineModule,
+  implementation,
+} from '@loutrejs/loutre'
 import { basicAuth, http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 const User = z.object({
@@ -28,24 +33,26 @@ const basicAuthentication = basicAuth({
     body: { error: 'Basic authentication required' },
   },
 })
-const ProfileContract = http.contract({
-  get: {
-    method: 'GET',
-    path: '/profile',
-    responses: {
-      ok: {
-        status: 200,
-        body: User,
+const ProfileContract = contract([
+  http({
+    get: {
+      method: 'GET',
+      path: '/profile',
+      responses: {
+        ok: {
+          status: 200,
+          body: User,
+        },
+        unauthorized: {
+          status: 401,
+          body: UnauthorizedBody,
+          headers: z.object({ 'www-authenticate': z.string() }),
+        },
       },
-      unauthorized: {
-        status: 401,
-        body: UnauthorizedBody,
-        headers: z.object({ 'www-authenticate': z.string() }),
-      },
+      pipeline: [basicAuthentication, http.controller],
     },
-    pipeline: [basicAuthentication, http.controller],
-  },
-})
+  }),
+])
 const ProfileController = implementation({
   name: 'ProfileController',
   contract: ProfileContract,

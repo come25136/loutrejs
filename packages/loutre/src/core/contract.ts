@@ -60,7 +60,6 @@ export interface ContractDefinition<
   >,
 > {
   readonly kind: 'contract'
-  readonly name?: string
   readonly procedures: TProcedures
 }
 
@@ -89,30 +88,18 @@ type ProceduresFromGroups<TGroups extends readonly ProtocolGroup[]> = {
   >
 }
 
-function defineContract<
-  const TGroups extends readonly [ProtocolGroup, ...ProtocolGroup[]],
->(
-  ...groups: TGroups &
-    DispatchKeyUniquenessConstraint<ProceduresFromGroups<TGroups>>
-): ContractDefinition<ProceduresFromGroups<TGroups>>
-function defineContract<
-  const TGroups extends readonly [ProtocolGroup, ...ProtocolGroup[]],
->(
-  ...args: [...TGroups, ContractOptions] &
-    DispatchKeyUniquenessConstraint<ProceduresFromGroups<TGroups>>
-): ContractDefinition<ProceduresFromGroups<TGroups>>
-function defineContract(
-  ...args: readonly (ProtocolGroup | ContractOptions)[]
-): ContractDefinition {
-  const last = args.at(-1)
-  const hasOptions = last !== undefined && !('kind' in last)
-  const options = hasOptions ? (last as ContractOptions) : {}
-  const groups = (
-    hasOptions ? args.slice(0, -1) : args
-  ) as readonly ProtocolGroup[]
+type NonEmptyArrayConstraint<TValues extends readonly unknown[]> =
+  TValues extends readonly []
+    ? { readonly __requiresAtLeastOneEntry__: never }
+    : unknown
 
+function defineContract<const TGroups extends readonly ProtocolGroup[]>(
+  groups: TGroups &
+    NonEmptyArrayConstraint<TGroups> &
+    DispatchKeyUniquenessConstraint<ProceduresFromGroups<TGroups>>,
+): ContractDefinition<ProceduresFromGroups<TGroups>> {
   if (groups.length === 0) {
-    throw new Error('contract() requires at least one protocol group')
+    throw new Error('contract([]) requires at least one protocol group')
   }
 
   const procedures: Record<string, ProcedureDefinition> = {}
@@ -136,44 +123,11 @@ function defineContract(
     }
   }
 
-  assertUniqueDispatchKeys(procedures, options.name)
+  assertUniqueDispatchKeys(procedures)
   return Object.freeze({
     kind: 'contract',
-    ...(options.name === undefined ? {} : { name: options.name }),
     procedures: Object.freeze(procedures),
-  })
-}
-
-export type ProtocolProcedures<
-  TName extends string,
-  TDescriptors extends Record<string, ProtocolDescriptor<TName>>,
-> = {
-  [K in keyof TDescriptors]: ProcedureDefinition<{
-    readonly [P in TName]: TDescriptors[K]
-  }>
-}
-
-export type ProtocolContractConstraint<
-  TName extends string,
-  TDescriptors extends Record<string, ProtocolDescriptor<TName>>,
-> = DispatchKeyUniquenessConstraint<ProtocolProcedures<TName, TDescriptors>>
-
-export function defineProtocolContract<
-  const TName extends string,
-  const TDescriptors extends Record<string, ProtocolDescriptor<TName>>,
->(
-  group: ProtocolGroup<TName, TDescriptors> &
-    ProtocolContractConstraint<TName, TDescriptors>,
-  options: ContractOptions = {},
-): ContractDefinition<ProtocolProcedures<TName, TDescriptors>> {
-  return (
-    defineContract as (
-      group: ProtocolGroup,
-      options: ContractOptions,
-    ) => ContractDefinition
-  )(group, options) as ContractDefinition<
-    ProtocolProcedures<TName, TDescriptors>
-  >
+  }) as unknown as ContractDefinition<ProceduresFromGroups<TGroups>>
 }
 
 type ProcedureNamesOfContract<TContract> =
@@ -208,35 +162,13 @@ type MergedProcedures<TContracts extends readonly ContractDefinition[]> = {
   >
 }
 
-export interface ContractOptions {
-  readonly name?: string
-}
-
-function mergeContracts<
-  const TContracts extends readonly [
-    ContractDefinition,
-    ...ContractDefinition[],
-  ],
->(...contracts: TContracts): ContractDefinition<MergedProcedures<TContracts>>
-function mergeContracts<
-  const TContracts extends readonly [
-    ContractDefinition,
-    ...ContractDefinition[],
-  ],
->(
-  ...args: [...TContracts, ContractOptions]
-): ContractDefinition<MergedProcedures<TContracts>>
-function mergeContracts(
-  ...args: readonly (ContractDefinition | ContractOptions)[]
-): ContractDefinition {
-  const last = args.at(-1)
-  const hasOptions = last !== undefined && !('kind' in last)
-  const options = hasOptions ? (last as ContractOptions) : {}
-  const contracts = (
-    hasOptions ? args.slice(0, -1) : args
-  ) as readonly ContractDefinition[]
+function mergeContracts<const TContracts extends readonly ContractDefinition[]>(
+  contracts: TContracts &
+    NonEmptyArrayConstraint<TContracts> &
+    DispatchKeyUniquenessConstraint<MergedProcedures<TContracts>>,
+): ContractDefinition<MergedProcedures<TContracts>> {
   if (contracts.length === 0) {
-    throw new Error('contract.merge() requires at least one Contract')
+    throw new Error('contract.merge([]) requires at least one Contract')
   }
 
   const procedures: Record<string, ProcedureDefinition> = {}
@@ -261,15 +193,14 @@ function mergeContracts(
     }
   }
 
-  assertUniqueDispatchKeys(procedures, options.name)
+  assertUniqueDispatchKeys(procedures)
   return Object.freeze({
     kind: 'contract',
-    ...(options.name === undefined ? {} : { name: options.name }),
     procedures: Object.freeze(procedures),
-  })
+  }) as unknown as ContractDefinition<MergedProcedures<TContracts>>
 }
 
-export const contract = Object.freeze({
+export const contract = Object.assign(defineContract, {
   merge: mergeContracts,
 })
 
@@ -331,7 +262,6 @@ type DispatchKeyUniquenessConstraint<
 
 function assertUniqueDispatchKeys(
   procedures: Record<string, ProcedureDefinition>,
-  contractName: string | undefined,
 ): void {
   const paths = new Map<string, string>()
   for (const [procedureName, procedureDefinition] of Object.entries(
@@ -347,7 +277,7 @@ function assertUniqueDispatchKeys(
           `Protocol dispatchKey must be a string or null: ${procedureName}.${protocolName}`,
         )
       }
-      const path = `${contractName ?? 'Contract'}.${procedureName}.${protocolName}`
+      const path = `${procedureName}.${protocolName}`
       const existing = paths.get(dispatchKey)
       if (existing) {
         throw new Error(

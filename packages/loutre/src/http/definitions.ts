@@ -1,14 +1,11 @@
 import type {
   ContractDefinition,
-  ContractOptions,
   ContextProvidedBeforeTerminal,
   HasValidationBeforeTerminal,
   IsValidProtocolPipeline,
   PipelineItem,
   ProtocolDescriptor,
   ProtocolFactory,
-  ProtocolContractConstraint,
-  ProtocolProcedures,
   ProtocolGroup,
   SchemaInput,
   SchemaOutput,
@@ -18,11 +15,7 @@ import type {
   TerminalLayerDescriptor,
   ValidationLayerDescriptor,
 } from '../core/index.js'
-import {
-  childPipelineOf,
-  defineProtocolContract,
-  protocolGroup,
-} from '../core/index.js'
+import { childPipelineOf, protocolGroup } from '../core/index.js'
 import type { Logger } from '../runtime/index.js'
 import {
   createHttpDispatchKey,
@@ -451,18 +444,6 @@ type HttpDefinitionsConstraint<
     HttpPathConstraint<TDefinitions[K]>
 }
 
-type HttpDescriptors<
-  TDefinitions extends Record<string, HttpProtocolDefinition>,
-> = {
-  [K in keyof TDefinitions]: HttpProtocol<TDefinitions[K]>
-}
-
-export type HttpContract<
-  TDefinitions extends Record<string, HttpProtocolDefinition>,
-> = ContractDefinition<
-  ProtocolProcedures<'http', HttpDescriptors<TDefinitions>>
->
-
 function defineHttpGroup<
   const TDefinitions extends Record<string, HttpProtocolDefinition>,
 >(
@@ -480,40 +461,21 @@ function defineHttpGroup<
   )
 }
 
-export function httpContract<
-  const TDefinitions extends Record<string, HttpProtocolDefinition>,
->(
-  definitions: TDefinitions &
-    HttpDefinitionsConstraint<TDefinitions> &
-    ProtocolContractConstraint<'http', HttpDescriptors<TDefinitions>>,
-  options: ContractOptions = {},
-): HttpContract<TDefinitions> {
-  const group = (
-    defineHttpGroup as unknown as (
-      definitions: TDefinitions,
-    ) => HttpProtocolGroup<TDefinitions>
-  )(definitions)
-  return defineProtocolContract(
-    group as HttpProtocolGroup<TDefinitions> &
-      ProtocolContractConstraint<'http', HttpDescriptors<TDefinitions>>,
-    options,
-  ) as HttpContract<TDefinitions>
-}
-
 export interface HttpProtocolFactory extends ProtocolFactory<'http'> {
+  <const TDefinitions extends Record<string, HttpProtocolDefinition>>(
+    definitions: TDefinitions & HttpDefinitionsConstraint<TDefinitions>,
+  ): HttpProtocolGroup<TDefinitions>
   readonly route: typeof defineHttp
-  readonly contract: typeof httpContract
   readonly controller: TerminalLayerDescriptor<'http'>
   readonly error: typeof httpError
 }
 
-export const http: HttpProtocolFactory = Object.freeze({
-  protocol: 'http',
+export const http = Object.assign(defineHttpGroup, {
+  protocol: 'http' as const,
   route: defineHttp,
-  contract: httpContract,
   controller,
   error: httpError,
-})
+}) as HttpProtocolFactory
 
 function validationLayer<const TPart extends ValidationLayerDescriptor['part']>(
   part: TPart,

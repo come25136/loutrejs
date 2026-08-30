@@ -1,5 +1,5 @@
 import { defineApplication } from '@loutrejs/loutre'
-import { defineModule, implementation } from '@loutrejs/loutre'
+import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 const CreateMessageBody = z.object({
@@ -9,38 +9,40 @@ const Message = z.object({
   id: z.string(),
   text: z.string(),
 })
-const MessageContract = http.contract({
-  create: {
-    method: 'POST',
-    path: '/messages',
-    request: {
-      body: {
-        contentType: 'application/json',
-        schema: CreateMessageBody,
-      },
-    },
-    responses: {
-      created: {
-        status: 201,
-        body: Message,
-        staticHeaders: {
-          'x-request-id': 'cors-example',
+const MessageContract = contract([
+  http({
+    create: {
+      method: 'POST',
+      path: '/messages',
+      request: {
+        body: {
+          contentType: 'application/json',
+          schema: CreateMessageBody,
         },
       },
+      responses: {
+        created: {
+          status: 201,
+          body: Message,
+          staticHeaders: {
+            'x-request-id': 'cors-example',
+          },
+        },
+      },
+      pipeline: [
+        validate.cors({
+          origin: ['http://localhost:5173'],
+          allowMethods: ['POST'],
+          allowHeaders: ['content-type'],
+          exposeHeaders: ['x-request-id'],
+          maxAge: 600,
+        }),
+        validate.body,
+        http.controller,
+      ],
     },
-    pipeline: [
-      validate.cors({
-        origin: ['http://localhost:5173'],
-        allowMethods: ['POST'],
-        allowHeaders: ['content-type'],
-        exposeHeaders: ['x-request-id'],
-        maxAge: 600,
-      }),
-      validate.body,
-      http.controller,
-    ],
-  },
-})
+  }),
+])
 const MessageController = implementation({
   name: 'MessageController',
   contract: MessageContract,

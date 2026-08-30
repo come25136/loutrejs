@@ -1,5 +1,10 @@
 import { defineApplication } from '@loutrejs/loutre'
-import { defineModule, implementation, inject } from '@loutrejs/loutre'
+import {
+  contract,
+  defineModule,
+  implementation,
+  inject,
+} from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 export const UserParams = {
@@ -12,8 +17,8 @@ export const User = z.object({
 export const CreateUser = z.object({
   name: z.string(),
 })
-export const UsersContract = http.contract(
-  {
+export const UsersContract = contract([
+  http({
     get: {
       method: 'GET',
       path: '/users/{id}',
@@ -45,9 +50,8 @@ export const UsersContract = http.contract(
       },
       pipeline: [validate.body, http.controller],
     },
-  },
-  { name: 'UsersContract' },
-)
+  }),
+])
 export class UsersService {
   create(name: string) {
     return { id: 'created-user', name }

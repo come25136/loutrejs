@@ -1,5 +1,6 @@
 import {
   contextKey,
+  contract,
   defineModule,
   implementation,
   isShortCircuit,
@@ -189,14 +190,16 @@ describe('basicAuth', () => {
               body: z.object({ error: z.string() }),
             },
           }
-    const Contract = http.contract({
-      get: {
-        method: 'GET',
-        path: '/auth-diagnostic',
-        responses,
-        pipeline: [authentication, http.controller],
-      } as never,
-    })
+    const Contract = contract([
+      http({
+        get: {
+          method: 'GET',
+          path: '/auth-diagnostic',
+          responses,
+          pipeline: [authentication, http.controller],
+        } as never,
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -230,19 +233,21 @@ describe('basicAuth', () => {
       },
     })
     const status: number = 403
-    const Contract = http.contract({
-      get: {
-        method: 'GET',
-        path: '/custom-auth-diagnostic',
-        responses: {
-          unauthorized: {
-            status,
-            body: z.object({ error: z.string() }),
+    const Contract = contract([
+      http({
+        get: {
+          method: 'GET',
+          path: '/custom-auth-diagnostic',
+          responses: {
+            unauthorized: {
+              status,
+              body: z.object({ error: z.string() }),
+            },
           },
+          pipeline: [authentication, http.controller],
         },
-        pipeline: [authentication, http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,

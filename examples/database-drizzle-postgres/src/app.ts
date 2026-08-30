@@ -1,6 +1,7 @@
 import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
+  contract,
   defineEnv,
   defineModule,
   implementation,
@@ -79,8 +80,8 @@ const UserResponse = z.object({
   name: z.string(),
   createdBy: z.string(),
 })
-const UsersContract = http.contract(
-  {
+const UsersContract = contract([
+  http({
     create: {
       method: 'POST',
       path: '/users',
@@ -95,9 +96,8 @@ const UsersContract = http.contract(
       },
       pipeline: [validate.body, transaction([http.controller])],
     },
-  },
-  { name: 'DrizzleUsersContract' },
-)
+  }),
+])
 class UserRepository {
   async create(client: DrizzleTransaction, name: string) {
     const [user] = await client

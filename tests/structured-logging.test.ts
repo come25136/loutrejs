@@ -2,7 +2,12 @@ import {
   createTestApplication,
   createTestMessagePortExecution,
 } from './helpers/application.js'
-import { defineError, defineModule, implementation } from '@loutrejs/loutre'
+import {
+  contract,
+  defineError,
+  defineModule,
+  implementation,
+} from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import {
@@ -67,14 +72,16 @@ describe('構造化ログ', () => {
   it('route未一致を相関可能なHTTP完了イベントとして記録する', async () => {
     const records: LogRecord[] = []
     const logger = captureLogger(records, { application: 'fixture' })
-    const Contract = http.contract({
-      health: {
-        method: 'GET',
-        path: '/health',
-        responses: { ok: { status: 200, body: z.string() } },
-        pipeline: [http.controller],
-      },
-    })
+    const Contract = contract([
+      http({
+        health: {
+          method: 'GET',
+          path: '/health',
+          responses: { ok: { status: 200, body: z.string() } },
+          pipeline: [http.controller],
+        },
+      }),
+    ])
     const Implementation = implementation({
       name: 'HealthImplementation',
       contract: Contract,
@@ -107,16 +114,18 @@ describe('構造化ログ', () => {
     expect(records[0]).not.toHaveProperty('body')
   })
   it('未処理例外とHTTP responseを同じerrorIdで関連付ける', async () => {
-    const Contract = http.contract({
-      fail: {
-        method: 'GET',
-        path: '/fail',
-        responses: {
-          ok: { status: 200, body: z.object({ ok: z.boolean() }) },
+    const Contract = contract([
+      http({
+        fail: {
+          method: 'GET',
+          path: '/fail',
+          responses: {
+            ok: { status: 200, body: z.object({ ok: z.boolean() }) },
+          },
+          pipeline: [http.controller],
         },
-        pipeline: [http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -174,20 +183,22 @@ describe('構造化ログ', () => {
       code: 'EXPECTED_ERROR',
       data: z.object({ reason: z.string() }),
     })
-    const Contract = http.contract({
-      fail: {
-        method: 'GET',
-        path: '/expected-failure',
-        responses: {
-          rejected: {
-            status: 409,
-            body: z.object({ reason: z.string() }),
-            error: http.error(ExpectedError),
+    const Contract = contract([
+      http({
+        fail: {
+          method: 'GET',
+          path: '/expected-failure',
+          responses: {
+            rejected: {
+              status: 409,
+              body: z.object({ reason: z.string() }),
+              error: http.error(ExpectedError),
+            },
           },
+          pipeline: [http.controller],
         },
-        pipeline: [http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -222,12 +233,14 @@ describe('構造化ログ', () => {
     )
   })
   it('MessagePortの完了イベントを共通Loggerへ記録する', async () => {
-    const Contract = messagePort.contract({
-      ping: {
-        responses: { ok: { body: z.literal('pong') } },
-        pipeline: [messagePort.handler],
-      },
-    })
+    const Contract = contract([
+      messagePort({
+        ping: {
+          responses: { ok: { body: z.literal('pong') } },
+          pipeline: [messagePort.handler],
+        },
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,

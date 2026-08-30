@@ -28,7 +28,7 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(0)
-    expect(output.stdout.join('\n')).toContain('UsersContract.get [http]')
+    expect(output.stdout.join('\n')).toContain('contract:1.get [http]')
     expect(output.stdout.join('\n')).toContain('http.controller terminal')
   })
 
@@ -89,9 +89,19 @@ describe('Loutre CLI', () => {
     ).toBe(0)
     const graph = JSON.parse(output.stdout.join('\n'))
     expect(graph).not.toHaveProperty('version')
+    expect(graph.contracts).toContainEqual(
+      expect.objectContaining({ id: 'contract:1' }),
+    )
+    expect(graph.implementations).toContainEqual(
+      expect.objectContaining({
+        id: 'implementation:1',
+        name: 'UsersController',
+        contract: 'contract:1',
+      }),
+    )
     expect(graph.pipelines).toContainEqual(
       expect.objectContaining({
-        contract: 'UsersContract',
+        contract: 'contract:1',
         procedure: 'get',
         protocol: 'http',
       }),
@@ -107,7 +117,7 @@ describe('Loutre CLI', () => {
       ),
     ).toBe(0)
     expect(output.stdout.join('\n')).toContain(
-      'protocol: protocol:http:UsersContract.get',
+      'protocol: protocol:contract:1:get:http',
     )
   })
 

@@ -1,5 +1,5 @@
 import { createTestApplication } from './helpers/application.js'
-import { defineModule, implementation } from '@loutrejs/loutre'
+import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import { http, validate } from '@loutrejs/loutre/http'
 import {
@@ -29,31 +29,33 @@ describe('canonical Fixture B', () => {
     })
   })
   it('validationとtoken生成の不正な順序を静的診断する', () => {
-    const InvalidContract = http.contract({
-      get: {
-        method: 'GET',
-        path: '/invalid-account',
-        request: {
-          headers: z.object({ authorization: z.string() }),
-        },
-        responses: {
-          found: {
-            status: 200,
-            body: z.object({
-              userId: z.string(),
-              tenantId: z.string(),
-            }),
+    const InvalidContract = contract([
+      http({
+        get: {
+          method: 'GET',
+          path: '/invalid-account',
+          request: {
+            headers: z.object({ authorization: z.string() }),
           },
+          responses: {
+            found: {
+              status: 200,
+              body: z.object({
+                userId: z.string(),
+                tenantId: z.string(),
+              }),
+            },
+          },
+          pipeline: [
+            authenticated,
+            bearerAuthentication,
+            validate.headers,
+            tenantAccess,
+            http.controller,
+          ],
         },
-        pipeline: [
-          authenticated,
-          bearerAuthentication,
-          validate.headers,
-          tenantAccess,
-          http.controller,
-        ],
-      },
-    })
+      }),
+    ])
     const InvalidImplementation = implementation({
       name: 'AccountController',
       contract: InvalidContract,

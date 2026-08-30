@@ -1,12 +1,13 @@
 import {
+  contract,
   defineApplication,
   defineModule,
   implementation,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
-const AppContract = http.contract(
-  {
+const AppContract = contract([
+  http({
     hello: {
       method: 'GET',
       path: '/',
@@ -20,9 +21,8 @@ const AppContract = http.contract(
       },
       pipeline: [http.controller],
     },
-  },
-  { name: 'AppContract' },
-)
+  }),
+])
 const AppController = implementation({
   name: 'AppController',
   contract: AppContract,

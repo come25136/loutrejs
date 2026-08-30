@@ -1,5 +1,6 @@
 import { createTestApplication } from './helpers/application.js'
 import {
+  contract,
   defineModule,
   implementation,
   type ImplementationDescriptor,
@@ -9,28 +10,30 @@ import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 describe('HTTP request semantics', () => {
   it('header名を小文字へ正規化し、duplicate queryを配列として保持する', async () => {
-    const Contract = http.contract({
-      inspect: {
-        method: 'GET',
-        path: '/inspect',
-        request: {
-          query: z.object({
-            tag: z.union([z.string(), z.array(z.string())]),
-          }),
-          headers: z.object({ 'x-repeat': z.string() }),
-        },
-        responses: {
-          ok: {
-            status: 200,
-            body: z.object({
-              tags: z.array(z.string()),
-              header: z.string(),
+    const Contract = contract([
+      http({
+        inspect: {
+          method: 'GET',
+          path: '/inspect',
+          request: {
+            query: z.object({
+              tag: z.union([z.string(), z.array(z.string())]),
             }),
+            headers: z.object({ 'x-repeat': z.string() }),
           },
+          responses: {
+            ok: {
+              status: 200,
+              body: z.object({
+                tags: z.array(z.string()),
+                header: z.string(),
+              }),
+            },
+          },
+          pipeline: [validate.query, validate.headers, http.controller],
         },
-        pipeline: [validate.query, validate.headers, http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -62,25 +65,27 @@ describe('HTTP request semantics', () => {
     })
   })
   it('multipart/form-dataをFormDataとして1回だけdecodeする', async () => {
-    const Contract = http.contract({
-      upload: {
-        method: 'POST',
-        path: '/multipart',
-        request: {
-          body: {
-            contentType: 'multipart/form-data',
-            schema: z.instanceof(FormData),
+    const Contract = contract([
+      http({
+        upload: {
+          method: 'POST',
+          path: '/multipart',
+          request: {
+            body: {
+              contentType: 'multipart/form-data',
+              schema: z.instanceof(FormData),
+            },
           },
-        },
-        responses: {
-          accepted: {
-            status: 202,
-            body: z.object({ name: z.string(), size: z.number() }),
+          responses: {
+            accepted: {
+              status: 202,
+              body: z.object({ name: z.string(), size: z.number() }),
+            },
           },
+          pipeline: [validate.body, http.controller],
         },
-        pipeline: [validate.body, http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -108,22 +113,24 @@ describe('HTTP request semantics', () => {
     expect(await response.json()).toEqual({ name: 'loutre', size: 5 })
   })
   it('malformed multipart bodyを400 responseへ変換する', async () => {
-    const Contract = http.contract({
-      upload: {
-        method: 'POST',
-        path: '/invalid-multipart',
-        request: {
-          body: {
-            contentType: 'multipart/form-data',
-            schema: z.instanceof(FormData),
+    const Contract = contract([
+      http({
+        upload: {
+          method: 'POST',
+          path: '/invalid-multipart',
+          request: {
+            body: {
+              contentType: 'multipart/form-data',
+              schema: z.instanceof(FormData),
+            },
           },
+          responses: {
+            ok: { status: 200, body: z.object({ ok: z.boolean() }) },
+          },
+          pipeline: [validate.body, http.controller],
         },
-        responses: {
-          ok: { status: 200, body: z.object({ ok: z.boolean() }) },
-        },
-        pipeline: [validate.body, http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -147,21 +154,23 @@ describe('HTTP request semantics', () => {
   })
   it('Request AbortSignalをControllerとserver-stream iteratorへ伝播する', async () => {
     let iteratorReturned = false
-    const Contract = http.contract({
-      subscribe: {
-        method: 'GET',
-        path: '/abort',
-        interaction: 'server-stream',
-        responses: {
-          ok: {
-            status: 200,
-            stream: 'server',
-            body: z.number(),
+    const Contract = contract([
+      http({
+        subscribe: {
+          method: 'GET',
+          path: '/abort',
+          interaction: 'server-stream',
+          responses: {
+            ok: {
+              status: 200,
+              stream: 'server',
+              body: z.number(),
+            },
           },
+          pipeline: [http.controller],
         },
-        pipeline: [http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,

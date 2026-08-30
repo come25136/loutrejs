@@ -1,5 +1,10 @@
 import { createTestApplication } from './helpers/application.js'
-import { defineError, defineModule, implementation } from '@loutrejs/loutre'
+import {
+  contract,
+  defineError,
+  defineModule,
+  implementation,
+} from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
@@ -9,24 +14,26 @@ describe('Domain ErrorとProtocol mapping', () => {
       code: 'USER_NOT_FOUND',
       data: z.object({ userId: z.string() }),
     })
-    const Contract = http.contract({
-      get: {
-        method: 'GET',
-        path: '/missing',
-        responses: {
-          notFound: {
-            status: 404,
-            body: z.object({ userId: z.string() }),
-            headers: z.object({ 'x-error-code': z.string() }),
-            error: http.error(UserNotFound, (error) => ({
-              body: error.data,
-              headers: { 'x-error-code': error.code },
-            })),
+    const Contract = contract([
+      http({
+        get: {
+          method: 'GET',
+          path: '/missing',
+          responses: {
+            notFound: {
+              status: 404,
+              body: z.object({ userId: z.string() }),
+              headers: z.object({ 'x-error-code': z.string() }),
+              error: http.error(UserNotFound, (error) => ({
+                body: error.data,
+                headers: { 'x-error-code': error.code },
+              })),
+            },
           },
+          pipeline: [http.controller],
         },
-        pipeline: [http.controller],
-      },
-    })
+      }),
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,

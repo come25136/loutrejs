@@ -23,8 +23,8 @@ const EventSchema = z.object({
   sequence: z.number().int(),
   message: z.string(),
 })
-export const EventsContract = contract.merge(
-  http.contract({
+export const EventsContract = contract([
+  http({
     subscribe: {
       method: 'GET',
       path: '/events',
@@ -39,7 +39,7 @@ export const EventsContract = contract.merge(
       pipeline: [http.controller],
     },
   }),
-  messagePort.contract({
+  messagePort({
     subscribe: {
       interaction: 'server-stream',
       responses: {
@@ -51,8 +51,7 @@ export const EventsContract = contract.merge(
       pipeline: [messagePort.handler],
     },
   }),
-  { name: 'EventsContract' },
-)
+])
 export const EventsController = implementation({
   name: 'EventsController',
   contract: EventsContract,

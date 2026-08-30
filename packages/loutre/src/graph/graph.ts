@@ -36,6 +36,9 @@ import type {
   DependencyEdgeIR,
   DependencyNodeIR,
   Diagnostic,
+  ContractId,
+  ContractIR,
+  ImplementationId,
   ImplementationIR,
   LayerIR,
   PipelineIR,
@@ -46,7 +49,8 @@ import type {
 
 interface ImplementationTarget {
   readonly implementation: ImplementationDescriptor
-  readonly contractName: string
+  readonly contractId: ContractId
+  readonly implementationId: ImplementationId
   readonly procedure: string
   readonly protocol: string
   readonly dispatchKey: string | null
@@ -116,19 +120,36 @@ export function compileApplication(
   validateCronTriggers(triggers, diagnostics)
   diagnostics.push(...validateQueueDrivers(input.modules, queueTriggers))
 
-  const contractNames = new Map<ContractDefinition, string>()
-  let contractSequence = 0
-  const nameContract = (contract: ContractDefinition) => {
-    const current = contractNames.get(contract)
+  const contractIds = new Map<ContractDefinition, ContractId>()
+  const idContract = (contract: ContractDefinition): ContractId => {
+    const current = contractIds.get(contract)
     if (current) return current
-    const name = contract.name ?? `Contract${++contractSequence}`
-    contractNames.set(contract, name)
-    return name
+    const id = `contract:${contractIds.size + 1}` as const
+    contractIds.set(contract, id)
+    return id
+  }
+
+  const implementationIds = new Map<
+    ImplementationDescriptor,
+    ImplementationId
+  >()
+  const idImplementation = (
+    implementation: ImplementationDescriptor,
+  ): ImplementationId => {
+    const current = implementationIds.get(implementation)
+    if (current) return current
+    const id = `implementation:${implementationIds.size + 1}` as const
+    implementationIds.set(implementation, id)
+    return id
   }
 
   const descriptors = modules.flatMap(
     (module) => module.definition.implementations ?? [],
   )
+  for (const implementation of new Set(descriptors)) {
+    idContract(implementation.contract)
+    idImplementation(implementation)
+  }
   const targets: ImplementationTarget[] = []
 
   for (const implementation of descriptors) {
@@ -152,13 +173,14 @@ export function compileApplication(
         diagnostics.push({
           code: 'LUTRE_IMPL_003',
           message: `${procedureName} is not declared for protocol ${implementation.protocol}`,
-          path: `${nameContract(implementation.contract)}.${procedureName}.${implementation.protocol}`,
+          path: `${idContract(implementation.contract)}.${procedureName}.${implementation.protocol}`,
         })
         continue
       }
       targets.push({
         implementation,
-        contractName: nameContract(implementation.contract),
+        contractId: idContract(implementation.contract),
+        implementationId: idImplementation(implementation),
         procedure: procedureName,
         protocol: implementation.protocol,
         dispatchKey: protocol.dispatchKey,
@@ -173,31 +195,32 @@ export function compileApplication(
   }
 
   validateDispatchKeys(targets, diagnostics)
-  validateCoverage(descriptors, contractNames, diagnostics)
+  validateCoverage(descriptors, contractIds, diagnostics)
   validateDuplicateProviders(modules, diagnostics)
 
   const tokensById = collectCustomTokens(providers, targets, diagnostics)
   const contextKeysByName = collectContextKeys(targets, diagnostics)
 
   const pipelines: PipelineIR[] = []
-  const implementations: ImplementationIR[] = []
   for (const target of targets) {
     validatePipeline(target, diagnostics)
 
     pipelines.push({
-      contract: target.contractName,
+      contract: target.contractId,
       procedure: target.procedure,
       protocol: target.protocol,
       layers: target.pipeline.map(toLayerIR),
     })
-    implementations.push({
-      contract: target.contractName,
-      procedure: target.procedure,
-      protocol: target.protocol,
-      implementation: target.implementation.name,
-      method: target.procedure,
-    })
   }
+  const implementations: ImplementationIR[] = [...new Set(descriptors)].map(
+    (implementation) => ({
+      id: idImplementation(implementation),
+      name: implementation.name,
+      contract: idContract(implementation.contract),
+      protocol: implementation.protocol,
+      procedures: implementation.procedures,
+    }),
+  )
 
   const dependencyGraph = buildDependencyGraph(
     modules,
@@ -263,7 +286,9 @@ export function compileApplication(
       (id) => ({ id }),
     ),
     contextKeys: [...contextKeysByName.keys()].map((name) => ({ name })),
-    contracts: [...contractNames.values()],
+    contracts: [...contractIds.entries()].map(([contract, id]) =>
+      toContractIR(contract, id),
+    ),
     pipelines,
     implementations,
     tasks: tasks.map<TaskIR>((task) => ({
@@ -274,12 +299,12 @@ export function compileApplication(
     queues: queues.map(toQueueIR),
     executions: [
       ...targets.map<ExecutionRootIR>((target) => ({
-        id: `protocol:${target.protocol}:${target.contractName}.${target.procedure}`,
+        id: `protocol:${target.contractId}:${target.procedure}:${target.protocol}`,
         kind: 'protocol',
         protocol: target.protocol,
-        contract: target.contractName,
+        contract: target.contractId,
         procedure: target.procedure,
-        implementation: target.implementation.name,
+        implementation: target.implementationId,
       })),
       ...publicTasks.map<ExecutionRootIR>((task) => ({
         id: `task:${task.name}`,
@@ -290,7 +315,7 @@ export function compileApplication(
     ],
     capabilities: [
       ...targets.flatMap((target) => {
-        const requiredBy = `${target.contractName}.${target.procedure}`
+        const requiredBy = `${target.contractId}.${target.procedure}`
         return [
           { name: 'crypto.random', scope: 'execution' as const, requiredBy },
           ...(target.protocol === 'http'
@@ -374,7 +399,7 @@ function validateDispatchKeys(
   const targetsByKey = new Map<string, ImplementationTarget>()
   for (const target of targets) {
     if (target.dispatchKey === null) continue
-    const path = `${target.contractName}.${target.procedure}.${target.protocol}`
+    const path = `${target.contractId}.${target.procedure}.${target.protocol}`
     const existing = targetsByKey.get(target.dispatchKey)
     if (existing) {
       if (
@@ -384,7 +409,7 @@ function validateDispatchKeys(
       ) {
         continue
       }
-      const existingPath = `${existing.contractName}.${existing.procedure}.${existing.protocol}`
+      const existingPath = `${existing.contractId}.${existing.procedure}.${existing.protocol}`
       diagnostics.push({
         code: 'LUTRE_PROTOCOL_001',
         message: `Duplicate protocol dispatch key "${target.dispatchKey}": ${existingPath}, ${path}`,
@@ -929,7 +954,7 @@ function buildDependencyGraph(
       const definition = layerDefinitionOf(item)
       const consumer: LayerConsumer = {
         kind: 'layer-consumer',
-        id: `layer:${target.contractName}:${target.procedure}:${target.protocol}:${indexPath.join('.')}`,
+        id: `layer:${target.contractId}/${target.procedure}/${target.protocol}/${indexPath.join('.')}`,
         name: definition.name,
       }
       if (!nodes.some(({ id }) => id === consumer.id)) {
@@ -1062,7 +1087,7 @@ function collectContextKeys(
 ): ReadonlyMap<string, ContextKey> {
   const keys = new Map<string, ContextKey>()
   for (const target of targets) {
-    const path = `${target.contractName}.${target.procedure}.${target.protocol}`
+    const path = `${target.contractId}.${target.procedure}.${target.protocol}`
     visitPipelineItems(target.pipeline, (item) => {
       if (item.kind !== 'layer') return
       for (const key of [...item.requires, ...item.provides]) {
@@ -1080,6 +1105,27 @@ function collectContextKeys(
     })
   }
   return keys
+}
+
+function toContractIR(
+  contract: ContractDefinition,
+  id: ContractId,
+): ContractIR {
+  return {
+    id,
+    procedures: Object.entries(contract.procedures).map(
+      ([procedureName, procedure]) => ({
+        name: procedureName,
+        protocols: Object.entries(procedure.protocols).map(
+          ([protocolName, protocol]) => ({
+            name: protocolName,
+            dispatchKey: protocol.dispatchKey,
+            interaction: protocol.interaction ?? 'unary',
+          }),
+        ),
+      }),
+    ),
+  }
 }
 
 export function assertValidCompilation(
@@ -1109,7 +1155,7 @@ function collectModules(
 
 function validateCoverage(
   implementations: readonly ImplementationDescriptor[],
-  contractNames: Map<ContractDefinition, string>,
+  contractIds: Map<ContractDefinition, ContractId>,
   diagnostics: Diagnostic[],
 ) {
   const contracts = new Set(
@@ -1132,7 +1178,7 @@ function validateCoverage(
             implementation.protocol === protocol &&
             implementation.procedures.includes(procedureName),
         )
-        const path = `${contractNames.get(contract) ?? 'Contract'}.${procedureName}.${protocol}`
+        const path = `${contractIds.get(contract) ?? 'contract:unknown'}.${procedureName}.${protocol}`
         if (covering.length === 0) {
           diagnostics.push({
             code: 'LUTRE_IMPL_001',
@@ -1155,7 +1201,7 @@ function validatePipeline(
   target: ImplementationTarget,
   diagnostics: Diagnostic[],
 ) {
-  const path = `${target.contractName}.${target.procedure}.${target.protocol}`
+  const path = `${target.contractId}.${target.procedure}.${target.protocol}`
   const flattened: {
     readonly item: PipelineItem
     readonly indexPath: readonly number[]

@@ -1,5 +1,5 @@
 import { defineApplication } from '@loutrejs/loutre'
-import { defineModule, implementation } from '@loutrejs/loutre'
+import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { nodeRuntime } from '@loutrejs/node'
@@ -36,22 +36,24 @@ describe('複数値HTTP response header', () => {
   })
 })
 function cookieApplication() {
-  const Contract = http.contract({
-    get: {
-      method: 'GET',
-      path: '/cookies',
-      responses: {
-        ok: {
-          status: 200,
-          headers: z.object({
-            'set-cookie': z.array(z.string()),
-          }),
-          body: z.string(),
+  const Contract = contract([
+    http({
+      get: {
+        method: 'GET',
+        path: '/cookies',
+        responses: {
+          ok: {
+            status: 200,
+            headers: z.object({
+              'set-cookie': z.array(z.string()),
+            }),
+            body: z.string(),
+          },
         },
+        pipeline: [http.controller],
       },
-      pipeline: [http.controller],
-    },
-  })
+    }),
+  ])
   const Controller = implementation({
     name: 'CookieController',
     contract: Contract,

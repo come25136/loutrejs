@@ -1,5 +1,11 @@
 import { defineApplication } from '@loutrejs/loutre'
-import { defineModule, implementation, inject, layer } from '@loutrejs/loutre'
+import {
+  contract,
+  defineModule,
+  implementation,
+  inject,
+  layer,
+} from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 const GreetingParams = {
@@ -26,22 +32,24 @@ const requestTiming = layer({
       await timing.measure(next)
     },
 })
-const GreetingContract = http.contract({
-  greet: {
-    method: 'GET',
-    path: '/greetings/{name}',
-    request: {
-      params: GreetingParams,
-    },
-    responses: {
-      ok: {
-        status: 200,
-        body: Greeting,
+const GreetingContract = contract([
+  http({
+    greet: {
+      method: 'GET',
+      path: '/greetings/{name}',
+      request: {
+        params: GreetingParams,
       },
+      responses: {
+        ok: {
+          status: 200,
+          body: Greeting,
+        },
+      },
+      pipeline: [requestTiming([validate.params, http.controller])],
     },
-    pipeline: [requestTiming([validate.params, http.controller])],
-  },
-})
+  }),
+])
 class GreetingService {
   greet(name: string) {
     return { message: `Hello, ${name}!` }

@@ -3,16 +3,12 @@ import {
   type IsValidProtocolPipeline,
   validateSchema,
   type ContractDefinition,
-  type ContractOptions,
   type ImplementationDescriptor,
   type ModuleInstance,
   type PipelineItem,
   type ProtocolDescriptor,
   type ProtocolFactory,
-  type ProtocolContractConstraint,
-  type ProtocolProcedures,
   type ProtocolGroup,
-  defineProtocolContract,
   protocolGroup,
   type SchemaOutput,
   type StandardSchemaV1,
@@ -90,18 +86,6 @@ type MessagePortDefinitionsConstraint<
     MessagePortPipelineConstraint<TDefinitions[K]>
 }
 
-type MessagePortDescriptors<
-  TDefinitions extends Record<string, MessagePortProtocolDefinition>,
-> = {
-  [K in keyof TDefinitions]: MessagePortProtocol<TDefinitions[K]>
-}
-
-export type MessagePortContract<
-  TDefinitions extends Record<string, MessagePortProtocolDefinition>,
-> = ContractDefinition<
-  ProtocolProcedures<'messagePort', MessagePortDescriptors<TDefinitions>>
->
-
 function defineMessagePortGroup<
   const TDefinitions extends Record<string, MessagePortProtocolDefinition>,
 >(
@@ -120,44 +104,19 @@ function defineMessagePortGroup<
   )
 }
 
-export function messagePortContract<
-  const TDefinitions extends Record<string, MessagePortProtocolDefinition>,
->(
-  definitions: TDefinitions &
-    MessagePortDefinitionsConstraint<TDefinitions> &
-    ProtocolContractConstraint<
-      'messagePort',
-      MessagePortDescriptors<TDefinitions>
-    >,
-  options: ContractOptions = {},
-): MessagePortContract<TDefinitions> {
-  const group = (
-    defineMessagePortGroup as unknown as (
-      definitions: TDefinitions,
-    ) => MessagePortProtocolGroup<TDefinitions>
-  )(definitions)
-  return defineProtocolContract(
-    group as MessagePortProtocolGroup<TDefinitions> &
-      ProtocolContractConstraint<
-        'messagePort',
-        MessagePortDescriptors<TDefinitions>
-      >,
-    options,
-  ) as MessagePortContract<TDefinitions>
-}
-
 export interface MessagePortProtocolFactory extends ProtocolFactory<'messagePort'> {
+  <const TDefinitions extends Record<string, MessagePortProtocolDefinition>>(
+    definitions: TDefinitions & MessagePortDefinitionsConstraint<TDefinitions>,
+  ): MessagePortProtocolGroup<TDefinitions>
   readonly route: typeof defineMessagePort
-  readonly contract: typeof messagePortContract
   readonly handler: TerminalLayerDescriptor<'messagePort'>
 }
 
-export const messagePort: MessagePortProtocolFactory = Object.freeze({
-  protocol: 'messagePort',
+export const messagePort = Object.assign(defineMessagePortGroup, {
+  protocol: 'messagePort' as const,
   route: defineMessagePort,
-  contract: messagePortContract,
   handler,
-})
+}) as MessagePortProtocolFactory
 
 export interface LogicalMessagePortResult<
   TVariant extends string = string,

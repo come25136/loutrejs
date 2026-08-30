@@ -1,3 +1,4 @@
+import { contract } from '@loutrejs/loutre'
 import {
   createHttpClient,
   http,
@@ -5,52 +6,54 @@ import {
   type HttpClientTransport,
 } from '@loutrejs/loutre/http'
 import { z } from 'zod'
-const UsersContract = http.contract({
-  get: {
-    method: 'GET',
-    path: '/users/{id}',
-    request: {
-      params: { id: z.string().transform(Number) },
-      query: z.object({ includePosts: z.boolean().optional() }),
-    },
-    responses: {
-      ok: {
-        status: 200,
-        body: z.object({ id: z.string(), name: z.string() }),
+const UsersContract = contract([
+  http({
+    get: {
+      method: 'GET',
+      path: '/users/{id}',
+      request: {
+        params: { id: z.string().transform(Number) },
+        query: z.object({ includePosts: z.boolean().optional() }),
       },
-      notFound: {
-        status: 404,
-        body: z.object({ message: z.string() }),
+      responses: {
+        ok: {
+          status: 200,
+          body: z.object({ id: z.string(), name: z.string() }),
+        },
+        notFound: {
+          status: 404,
+          body: z.object({ message: z.string() }),
+        },
       },
+      pipeline: [http.controller],
     },
-    pipeline: [http.controller],
-  },
-  create: {
-    method: 'POST',
-    path: '/users',
-    request: {
-      body: {
-        contentType: 'application/json',
-        schema: z.object({ name: z.string() }),
+    create: {
+      method: 'POST',
+      path: '/users',
+      request: {
+        body: {
+          contentType: 'application/json',
+          schema: z.object({ name: z.string() }),
+        },
       },
-    },
-    responses: {
-      created: {
-        status: 201,
-        body: z.object({ id: z.string(), name: z.string() }),
+      responses: {
+        created: {
+          status: 201,
+          body: z.object({ id: z.string(), name: z.string() }),
+        },
       },
+      pipeline: [http.controller],
     },
-    pipeline: [http.controller],
-  },
-  health: {
-    method: 'GET',
-    path: '/health',
-    responses: {
-      ok: { status: 200, body: z.literal('ok') },
+    health: {
+      method: 'GET',
+      path: '/health',
+      responses: {
+        ok: { status: 200, body: z.literal('ok') },
+      },
+      pipeline: [http.controller],
     },
-    pipeline: [http.controller],
-  },
-})
+  }),
+])
 declare const transport: HttpClientTransport
 const client = createHttpClient(UsersContract, transport)
 const compatible: HttpClient<typeof UsersContract> = client
