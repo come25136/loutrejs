@@ -2690,7 +2690,7 @@ cached UsersController runtime.get(ctx)
 8. Graph procedure validationをprototype inspectionからprobe resultへ変更
 9. HTTP runtime dispatchをdescriptorへ変更
 10. MessagePort runtime dispatchをdescriptorへ変更
-11. examples/examplesを移行
+11. `integrations/` と `examples/` を移行
 12. type tests追加
 13. runtime tests追加
 14. Graph tests追加
