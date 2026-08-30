@@ -90,6 +90,8 @@ export async function runCli(
       io.stdout(`Runtime: ${runtime.runtime}`)
       io.stdout(`Required: ${check.required.join(', ') || '(none)'}`)
       io.stdout(`Missing: ${check.missing.join(', ') || '(none)'}`)
+      renderApplicationSummary(graph, io.stdout)
+      renderCapabilityReasons(graph, check.missing, io.stdout)
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
       return check.ok && graph.diagnostics.length === 0 ? 0 : 1
     }
@@ -163,6 +165,20 @@ export async function runCli(
         )
         return 1
       }
+      if (deploymentRuntime) {
+        const compatibility = checkCapabilities(
+          requiredCapabilities(graph),
+          runtimes[deploymentRuntime]!,
+        )
+        if (!compatibility.ok) {
+          io.stderr(
+            `Runtime ${deploymentRuntime} is missing: ${compatibility.missing.join(', ')}`,
+          )
+          renderCapabilityReasons(graph, compatibility.missing, io.stderr)
+          return 1
+        }
+      }
+      renderApplicationSummary(graph, io.stdout, deploymentRuntime)
       const outputDirectory = resolve(
         io.cwd,
         readOption(args, '--out-dir') ?? 'dist/loutre',
@@ -507,6 +523,7 @@ function renderExplanation(
     write(`kind: ${node.kind}`)
     if (node.scope) write(`scope: ${node.scope}`)
     if (node.module) write(`managed by: ${node.module}`)
+    if (node.visibility) write(`visibility: ${node.visibility}`)
     const edges = graph.edges.filter((edge) => edge.from === node.id)
     write('dependencies:')
     if (edges.length === 0) write('  (none)')
@@ -519,10 +536,78 @@ function renderExplanation(
       write(`    source: ${edge.kind}/${edge.source}`)
       if (dependency.scope) write(`    scope: ${dependency.scope}`)
       if (dependency.module) write(`    provided by: ${dependency.module}`)
+      if (dependency.visibility)
+        write(`    visibility: ${dependency.visibility}`)
     }
+    write('dependency graph:')
+    renderDependencyTree(graph, node.id, write, '  ', new Set([node.id]))
   }
 
   return true
+}
+
+function renderDependencyTree(
+  graph: ApplicationGraphIR,
+  nodeId: string,
+  write: (value: string) => void,
+  indent: string,
+  lineage: ReadonlySet<string>,
+): void {
+  const edges = graph.edges.filter((edge) => edge.from === nodeId)
+  if (edges.length === 0) {
+    write(`${indent}(none)`)
+    return
+  }
+  for (const edge of edges) {
+    const dependency = graph.nodes.find((candidate) => candidate.id === edge.to)
+    if (!dependency) continue
+    const cycle = lineage.has(dependency.id)
+    write(`${indent}${dependency.label}${cycle ? ' (cycle)' : ''}`)
+    if (cycle) continue
+    renderDependencyTree(
+      graph,
+      dependency.id,
+      write,
+      `${indent}  `,
+      new Set([...lineage, dependency.id]),
+    )
+  }
+}
+
+function renderApplicationSummary(
+  graph: ApplicationGraphIR,
+  write: (value: string) => void,
+  target?: string,
+): void {
+  write('Application:')
+  if (target) write(`  Target: ${target}`)
+  write(`  Graph: ${graph.diagnostics.length === 0 ? 'valid' : 'invalid'}`)
+  write(`  Modules: ${graph.modules.length}`)
+  write(`  Providers: ${graph.providers.length}`)
+  write(`  Implementations: ${graph.implementations.length}`)
+  write(`  Executions: ${graph.executions.length}`)
+  write(`  Tasks: ${graph.tasks.length}`)
+  write(`  Queues: ${graph.queues.length}`)
+  write(`  Diagnostics: ${graph.diagnostics.length}`)
+}
+
+function renderCapabilityReasons(
+  graph: ApplicationGraphIR,
+  capabilities: readonly string[],
+  write: (value: string) => void,
+): void {
+  if (capabilities.length === 0) return
+  write('Capability reasons:')
+  for (const capability of capabilities) {
+    const requiredBy = [
+      ...new Set(
+        graph.capabilities
+          .filter((candidate) => candidate.name === capability)
+          .map((candidate) => candidate.requiredBy),
+      ),
+    ]
+    write(`  ${capability}: ${requiredBy.join(', ') || '(unknown)'}`)
+  }
 }
 
 function renderLayerText(
