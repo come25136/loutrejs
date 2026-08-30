@@ -1,0 +1,61 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+@theme {
+  --color-ink: #17120f;
+  --color-ink-soft: #4d4139;
+  --color-paper: #f6f0e7;
+  --color-paper-deep: #eadfce;
+  --color-cream: #fffaf2;
+  --color-copper: #b56037;
+  --color-copper-dark: #874124;
+  --color-moss: #67745a;
+  --font-sans:
+    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Noto Sans JP', sans-serif;
+  --font-serif:
+    Iowan Old Style, 'Yu Mincho', 'Hiragino Mincho ProN', Georgia, serif;
+  --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --shadow-code: 0 28px 80px rgba(60, 37, 22, 0.18);
+}
+
+@utility shell {
+  width: min(1180px, calc(100vw - 48px));
+  margin-inline: auto;
+
+  @media (width < 40rem) {
+    width: calc(100vw - 32px);
+  }
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply m-0 bg-paper font-sans text-ink antialiased;
+  }
+
+  a,
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  a:focus-visible,
+  button:focus-visible {
+    @apply outline-3 outline-offset-4 outline-copper/35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -2,3 +2,6 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+website/.next/
+website/next-env.d.ts
+website/out/
