@@ -92,19 +92,38 @@ export interface LayerIR {
   }[]
 }
 
+export type ContractId = `contract:${number}`
+export type ImplementationId = `implementation:${number}`
+
+export interface ContractProtocolIR {
+  readonly name: string
+  readonly dispatchKey: string | null
+  readonly interaction: string
+}
+
+export interface ContractProcedureIR {
+  readonly name: string
+  readonly protocols: readonly ContractProtocolIR[]
+}
+
+export interface ContractIR {
+  readonly id: ContractId
+  readonly procedures: readonly ContractProcedureIR[]
+}
+
 export interface PipelineIR {
-  readonly contract: string
+  readonly contract: ContractId
   readonly procedure: string
   readonly protocol: string
   readonly layers: readonly LayerIR[]
 }
 
 export interface ImplementationIR {
-  readonly contract: string
-  readonly procedure: string
+  readonly id: ImplementationId
+  readonly name: string
+  readonly contract: ContractId
   readonly protocol: string
-  readonly implementation: string
-  readonly method: string
+  readonly procedures: readonly string[]
 }
 
 export interface CapabilityIR {
@@ -117,9 +136,9 @@ export interface ProtocolExecutionRootIR {
   readonly id: `protocol:${string}`
   readonly kind: 'protocol'
   readonly protocol: string
-  readonly contract: string
+  readonly contract: ContractId
   readonly procedure: string
-  readonly implementation: string
+  readonly implementation: ImplementationId
 }
 
 export interface ApplicationArgumentsIR {
@@ -190,7 +209,7 @@ export interface ApplicationGraphIR {
   readonly providers: readonly ProviderIR[]
   readonly tokens: readonly TokenIR[]
   readonly contextKeys: readonly ContextKeyIR[]
-  readonly contracts: readonly string[]
+  readonly contracts: readonly ContractIR[]
   readonly pipelines: readonly PipelineIR[]
   readonly implementations: readonly ImplementationIR[]
   readonly tasks: readonly TaskIR[]

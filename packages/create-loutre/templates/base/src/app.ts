@@ -3,34 +3,26 @@ import {
   defineApplication,
   defineModule,
   implementation,
-  procedure,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
-
-const AppContract = contract(
-  {
-    hello: procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/',
-          responses: {
-            ok: {
-              status: 200,
-              body: z.object({
-                message: z.string(),
-              }),
-            },
-          },
-          pipeline: [http.controller],
-        }),
+const AppContract = contract([
+  http({
+    hello: {
+      method: 'GET',
+      path: '/',
+      responses: {
+        ok: {
+          status: 200,
+          body: z.object({
+            message: z.string(),
+          }),
+        },
       },
-    }),
-  },
-  { name: 'AppContract' },
-)
-
+      pipeline: [http.controller],
+    },
+  }),
+])
 const AppController = implementation({
   name: 'AppController',
   contract: AppContract,
@@ -43,13 +35,11 @@ const AppController = implementation({
     },
   }),
 })
-
 const AppModule = defineModule(() => ({
   name: 'AppModule',
   description: 'HTTP Application entry module',
   implementations: [AppController],
 }))
-
 export default defineApplication({
   modules: [AppModule()],
 })

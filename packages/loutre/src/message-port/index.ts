@@ -8,6 +8,8 @@ import {
   type PipelineItem,
   type ProtocolDescriptor,
   type ProtocolFactory,
+  type ProtocolGroup,
+  protocolGroup,
   type SchemaOutput,
   type StandardSchemaV1,
   type TerminalLayerDescriptor,
@@ -70,12 +72,51 @@ type MessagePortPipelineConstraint<
     ? unknown
     : { readonly pipeline: never }
 
-export const messagePort = Object.assign(defineMessagePort, {
-  protocol: 'messagePort' as const,
-  handler,
-}) satisfies ProtocolFactory<'messagePort'> & {
+type MessagePortProtocolGroup<
+  TDefinitions extends Record<string, MessagePortProtocolDefinition>,
+> = ProtocolGroup<
+  'messagePort',
+  { [K in keyof TDefinitions]: MessagePortProtocol<TDefinitions[K]> }
+>
+
+type MessagePortDefinitionsConstraint<
+  TDefinitions extends Record<string, MessagePortProtocolDefinition>,
+> = {
+  [K in keyof TDefinitions]: TDefinitions[K] &
+    MessagePortPipelineConstraint<TDefinitions[K]>
+}
+
+function defineMessagePortGroup<
+  const TDefinitions extends Record<string, MessagePortProtocolDefinition>,
+>(
+  definitions: TDefinitions & MessagePortDefinitionsConstraint<TDefinitions>,
+): MessagePortProtocolGroup<TDefinitions> {
+  return protocolGroup(
+    'messagePort',
+    Object.fromEntries(
+      Object.entries(definitions).map(([name, definition]) => [
+        name,
+        defineMessagePort(definition as never),
+      ]),
+    ) as unknown as {
+      [K in keyof TDefinitions]: MessagePortProtocol<TDefinitions[K]>
+    },
+  )
+}
+
+export interface MessagePortProtocolFactory extends ProtocolFactory<'messagePort'> {
+  <const TDefinitions extends Record<string, MessagePortProtocolDefinition>>(
+    definitions: TDefinitions & MessagePortDefinitionsConstraint<TDefinitions>,
+  ): MessagePortProtocolGroup<TDefinitions>
+  readonly route: typeof defineMessagePort
   readonly handler: TerminalLayerDescriptor<'messagePort'>
 }
+
+export const messagePort = Object.assign(defineMessagePortGroup, {
+  protocol: 'messagePort' as const,
+  route: defineMessagePort,
+  handler,
+}) as MessagePortProtocolFactory
 
 export interface LogicalMessagePortResult<
   TVariant extends string = string,

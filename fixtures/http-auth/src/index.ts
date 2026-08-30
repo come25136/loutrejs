@@ -5,31 +5,30 @@ import {
   defineModule,
   implementation,
   layer,
-  procedure,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
-
 export interface AuthState {
-  readonly principal: { readonly id: string } | null
+  readonly principal: {
+    readonly id: string
+  } | null
 }
-
 export interface Session {
-  readonly principal: { readonly id: string }
+  readonly principal: {
+    readonly id: string
+  }
 }
-
 export interface CurrentTenant {
   readonly id: string
 }
-
 export const AUTH = contextKey('auth').of<AuthState>()
 export const SESSION = contextKey('session').of<Session>()
 export const CURRENT_TENANT = contextKey('currentTenant').of<CurrentTenant>()
-
 interface HeadersContext {
-  readonly headers: { readonly authorization: string }
+  readonly headers: {
+    readonly authorization: string
+  }
 }
-
 export const bearerAuthentication = layer({
   name: 'bearerAuthentication',
   role: 'authentication',
@@ -44,7 +43,6 @@ export const bearerAuthentication = layer({
     })
   },
 })
-
 export const authenticated = layer({
   name: 'authenticated',
   role: 'guard',
@@ -55,7 +53,6 @@ export const authenticated = layer({
     await next({ session: { principal: ctx.auth.principal } })
   },
 })
-
 export const tenantAccess = layer({
   name: 'tenantAccess',
   role: 'guard',
@@ -67,37 +64,33 @@ export const tenantAccess = layer({
     })
   },
 })
-
-export const AccountContract = contract({
-  get: procedure({
-    protocols: {
-      http: http({
-        method: 'GET',
-        path: '/account',
-        request: {
-          headers: z.object({ authorization: z.string() }),
+export const AccountContract = contract([
+  http({
+    get: {
+      method: 'GET',
+      path: '/account',
+      request: {
+        headers: z.object({ authorization: z.string() }),
+      },
+      responses: {
+        found: {
+          status: 200,
+          body: z.object({
+            userId: z.string(),
+            tenantId: z.string(),
+          }),
         },
-        responses: {
-          found: {
-            status: 200,
-            body: z.object({
-              userId: z.string(),
-              tenantId: z.string(),
-            }),
-          },
-        },
-        pipeline: [
-          validate.headers,
-          bearerAuthentication,
-          authenticated,
-          tenantAccess,
-          http.controller,
-        ],
-      }),
+      },
+      pipeline: [
+        validate.headers,
+        bearerAuthentication,
+        authenticated,
+        tenantAccess,
+        http.controller,
+      ],
     },
   }),
-})
-
+])
 export const AccountController = implementation({
   name: 'AccountController',
   contract: AccountContract,
@@ -113,13 +106,11 @@ export const AccountController = implementation({
     },
   }),
 })
-
 export const AccountModule = defineModule(() => ({
   description:
     'Canonical fixture for Bearer authentication and optional Execution Context',
   implementations: [AccountController],
 }))
-
 export function createAccountApplication() {
   return defineApplication({ modules: [AccountModule()] })
 }

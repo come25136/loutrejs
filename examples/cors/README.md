@@ -7,7 +7,7 @@ CORSはrequest body/query/headerなどのvalidationより前に宣言します�
 `OPTIONS` procedureを別途定義する必要もありません。preflightは対象routeのCORS policyを使ってHTTP application境界で処理され、Controllerまでは到達しません。
 
 ```ts
-http({
+http.route({
   method: 'POST',
   path: '/messages',
   request: {

@@ -3,42 +3,30 @@ import {
   defineModule,
   implementation,
   inject,
-  procedure,
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import { http } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { ApplicationRuntime } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
-
 function createContract() {
-  return contract(
-    {
-      get: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/implementation/{id}',
-            responses: { ok: { status: 200, body: z.string() } },
-            pipeline: [http.controller],
-          }),
-        },
-      }),
-      list: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/implementations',
-            responses: { ok: { status: 200, body: z.string() } },
-            pipeline: [http.controller],
-          }),
-        },
-      }),
-    },
-    { name: 'ImplementationContract' },
-  )
+  return contract([
+    http({
+      get: {
+        method: 'GET',
+        path: '/implementation/{id}',
+        responses: { ok: { status: 200, body: z.string() } },
+        pipeline: [http.controller],
+      },
+      list: {
+        method: 'GET',
+        path: '/implementations',
+        responses: { ok: { status: 200, body: z.string() } },
+        pipeline: [http.controller],
+      },
+    }),
+  ])
 }
-
 describe('Implementation descriptorとfactory runtime', () => {
   it('definition時にはfactoryを実行せずmetadataとprocedureを固定する', () => {
     const Contract = createContract()
@@ -59,7 +47,6 @@ describe('Implementation descriptorとfactory runtime', () => {
       },
     })
     selected.push('get')
-
     expect(calls).toBe(0)
     expect(Implementation).toMatchObject({
       kind: 'implementation',
@@ -70,7 +57,6 @@ describe('Implementation descriptorとfactory runtime', () => {
     expect(Object.isFrozen(Implementation)).toBe(true)
     expect(Object.isFrozen(Implementation.procedures)).toBe(true)
   })
-
   it('Environment binding後のinitializeでfactory resultを1回だけ構築してcacheする', async () => {
     const Contract = createContract()
     let constructions = 0
@@ -103,13 +89,10 @@ describe('Implementation descriptorとfactory runtime', () => {
       providers: [Service],
       implementations: [Implementation],
     }))
-
     const runtime = new ApplicationRuntime([Module()])
     expect(constructions).toBe(0)
-
     await runtime.initialize()
     expect(constructions).toBe(1)
-
     const first = runtime.container.implementationRuntime(Implementation)
     runtime.container.prepareImplementation(Implementation)
     const second = runtime.container.implementationRuntime(Implementation)
@@ -117,7 +100,6 @@ describe('Implementation descriptorとfactory runtime', () => {
     expect(constructions).toBe(1)
     expect(lifecycleCalls).toBe(0)
   })
-
   it.each([
     {
       code: 'LUTRE_IMPL_ASYNC_FACTORY',
@@ -141,10 +123,8 @@ describe('Implementation descriptorとfactory runtime', () => {
     } as never)
     const Module = defineModule(() => ({ implementations: [Invalid] }))
     const runtime = new ApplicationRuntime([Module()])
-
     await expect(runtime.initialize()).rejects.toThrow(code)
   })
-
   it('不正または重複したpartial procedureをdefinition時に拒否する', () => {
     const Contract = createContract()
     const declaration = (procedures: readonly string[]) => ({
@@ -154,7 +134,6 @@ describe('Implementation descriptorとfactory runtime', () => {
       procedures,
       factory: () => ({ get() {} }),
     })
-
     expect(() => implementation(declaration(['missing']) as never)).toThrow(
       'LUTRE_IMPL_003',
     )
@@ -168,7 +147,6 @@ describe('Implementation descriptorとfactory runtime', () => {
       } as never),
     ).toThrow('does not declare any procedure')
   })
-
   it('Graph Probeでfactoryをdescriptorごとに1回実行しDI edgeを記録する', () => {
     const Contract = createContract()
     let probes = 0
@@ -193,7 +171,6 @@ describe('Implementation descriptorとfactory runtime', () => {
       providers: [Service],
       implementations: [Implementation],
     }))
-
     const { graph, diagnostics } = compileApplication({ modules: [Module()] })
     expect(diagnostics).toEqual([])
     expect(probes).toBe(1)
@@ -209,7 +186,6 @@ describe('Implementation descriptorとfactory runtime', () => {
       source: 'probed',
     })
   })
-
   it('同名descriptorをobject identityが異なるImplementation nodeとして扱う', () => {
     const Contract = createContract()
     const Get = implementation({
@@ -227,7 +203,6 @@ describe('Implementation descriptorとfactory runtime', () => {
       factory: () => ({ list: () => ({ kind: 'http-result' }) as never }),
     })
     const Module = defineModule(() => ({ implementations: [Get, List] }))
-
     const { graph, diagnostics } = compileApplication({ modules: [Module()] })
     expect(diagnostics).toEqual([])
     const nodes = graph.nodes.filter(

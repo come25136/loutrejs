@@ -4,17 +4,14 @@ import {
   defineModule,
   implementation,
   inject,
-  procedure,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
-
 export interface DomainEvent {
   readonly sequence: number
   readonly message: string
 }
-
 export class EventStreamService {
   async *events(): AsyncIterable<DomainEvent> {
     for (let sequence = 1; sequence <= 3; sequence += 1) {
@@ -22,45 +19,39 @@ export class EventStreamService {
     }
   }
 }
-
 const EventSchema = z.object({
   sequence: z.number().int(),
   message: z.string(),
 })
-
-export const EventsContract = contract(
-  {
-    subscribe: procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/events',
-          interaction: 'server-stream',
-          responses: {
-            events: {
-              status: 200,
-              body: EventSchema,
-              stream: 'server',
-            },
-          },
-          pipeline: [http.controller],
-        }),
-        messagePort: messagePort({
-          interaction: 'server-stream',
-          responses: {
-            events: {
-              body: EventSchema,
-              stream: 'server',
-            },
-          },
-          pipeline: [messagePort.handler],
-        }),
+export const EventsContract = contract([
+  http({
+    subscribe: {
+      method: 'GET',
+      path: '/events',
+      interaction: 'server-stream',
+      responses: {
+        events: {
+          status: 200,
+          body: EventSchema,
+          stream: 'server',
+        },
       },
-    }),
-  },
-  { name: 'EventsContract' },
-)
-
+      pipeline: [http.controller],
+    },
+  }),
+  messagePort({
+    subscribe: {
+      interaction: 'server-stream',
+      responses: {
+        events: {
+          body: EventSchema,
+          stream: 'server',
+        },
+      },
+      pipeline: [messagePort.handler],
+    },
+  }),
+])
 export const EventsController = implementation({
   name: 'EventsController',
   contract: EventsContract,
@@ -71,7 +62,6 @@ export const EventsController = implementation({
     },
   }),
 })
-
 export const EventsMessageHandler = implementation({
   name: 'EventsMessageHandler',
   contract: EventsContract,
@@ -82,14 +72,12 @@ export const EventsMessageHandler = implementation({
     },
   }),
 })
-
 export const EventsModule = defineModule(() => ({
   name: 'EventsModule',
   description: 'HTTP server-stream canonical fixture',
   providers: [EventStreamService],
   implementations: [EventsController, EventsMessageHandler],
 }))
-
 export function createEventsDefinition() {
   return defineApplication({
     modules: [EventsModule()],

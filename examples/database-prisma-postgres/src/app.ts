@@ -7,7 +7,6 @@ import {
   implementation,
   inject,
   layer,
-  procedure,
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@loutrejs/loutre'
@@ -15,9 +14,7 @@ import { http, validate } from '@loutrejs/loutre/http'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { z } from 'zod'
 import { Prisma, PrismaClient } from './generated/prisma/client.js'
-
 type PrismaTransactionOptions = Parameters<PrismaClient['$transaction']>[1]
-
 const AppEnvSchema = z
   .object({
     PRISMA_DATABASE_URL: z
@@ -27,14 +24,10 @@ const AppEnvSchema = z
   .transform((env) => ({
     databaseUrl: new URL(env.PRISMA_DATABASE_URL),
   }))
-
 class AppEnv extends defineEnv(AppEnvSchema) {}
-
 const TRANSACTION = contextKey('transaction').of<Prisma.TransactionClient>()
-
 class PrismaDatabase implements OnModuleInit, OnModuleDestroy {
   readonly client: PrismaClient
-
   constructor(readonly env = inject(AppEnv)) {
     this.client = new PrismaClient({
       adapter: new PrismaPg({
@@ -42,15 +35,12 @@ class PrismaDatabase implements OnModuleInit, OnModuleDestroy {
       }),
     })
   }
-
   async onModuleInit(): Promise<void> {
     await this.client.$connect()
   }
-
   async onModuleDestroy(): Promise<void> {
     await this.client.$disconnect()
   }
-
   transaction<TResult>(
     run: (transaction: Prisma.TransactionClient) => Promise<TResult>,
     options?: PrismaTransactionOptions,
@@ -58,7 +48,6 @@ class PrismaDatabase implements OnModuleInit, OnModuleDestroy {
     return this.client.$transaction(run, options)
   }
 }
-
 const transaction = layer({
   name: 'database.transaction',
   provides: [TRANSACTION],
@@ -71,44 +60,36 @@ const transaction = layer({
         },
         {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-          maxWait: 5_000,
-          timeout: 10_000,
+          maxWait: 5000,
+          timeout: 10000,
         },
       )
     },
 })
-
 const CreateUserBody = z.object({ name: z.string().min(1) })
 const UserResponse = z.object({
   id: z.string(),
   name: z.string(),
   createdBy: z.string(),
 })
-
-const UsersContract = contract(
-  {
-    create: procedure({
-      protocols: {
-        http: http({
-          method: 'POST',
-          path: '/users',
-          request: {
-            body: {
-              contentType: 'application/json',
-              schema: CreateUserBody,
-            },
-          },
-          responses: {
-            created: { status: 201, body: UserResponse },
-          },
-          pipeline: [validate.body, transaction([http.controller])],
-        }),
+const UsersContract = contract([
+  http({
+    create: {
+      method: 'POST',
+      path: '/users',
+      request: {
+        body: {
+          contentType: 'application/json',
+          schema: CreateUserBody,
+        },
       },
-    }),
-  },
-  { name: 'PrismaUsersContract' },
-)
-
+      responses: {
+        created: { status: 201, body: UserResponse },
+      },
+      pipeline: [validate.body, transaction([http.controller])],
+    },
+  }),
+])
 class UserRepository {
   create(client: Prisma.TransactionClient, name: string) {
     return client.user.create({
@@ -120,7 +101,6 @@ class UserRepository {
     })
   }
 }
-
 const UsersController = implementation({
   name: 'UsersController',
   contract: UsersContract,
@@ -133,12 +113,10 @@ const UsersController = implementation({
     },
   }),
 })
-
 const AppModule = defineModule(() => ({
   name: 'DatabasePrismaPostgresExample',
   environment: [AppEnv],
   providers: [PrismaDatabase, UserRepository],
   implementations: [UsersController],
 }))
-
 export default defineApplication({ modules: [AppModule()] })

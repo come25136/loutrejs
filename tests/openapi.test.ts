@@ -1,15 +1,9 @@
 import { generateOpenApi } from '@loutrejs/loutre/openapi'
 import { defineApplication } from '@loutrejs/loutre'
-import {
-  contract,
-  defineModule,
-  implementation,
-  procedure,
-} from '@loutrejs/loutre'
+import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { createUsersApplication } from '../fixtures/http-crud/src/index.js'
 import { z } from 'zod'
-
 describe('OpenAPI generation', () => {
   it('projects executable HTTP contracts to OpenAPI 3.2', () => {
     const document = generateOpenApi(createUsersApplication(), {
@@ -18,16 +12,14 @@ describe('OpenAPI generation', () => {
         version: '1.0.0',
       },
     })
-
     expect(document.openapi).toBe('3.2.0')
     expect(document.jsonSchemaDialect).toBe(
       'https://json-schema.org/draft/2020-12/schema',
     )
-
     const getUser = document.paths['/users/{id}']?.get as
       | Record<string, any>
       | undefined
-    expect(getUser?.operationId).toBe('UsersContract.get')
+    expect(getUser?.operationId).toBeUndefined()
     expect(getUser?.parameters).toEqual([
       expect.objectContaining({
         name: 'id',
@@ -50,11 +42,10 @@ describe('OpenAPI generation', () => {
         },
       }),
     )
-
     const createUser = document.paths['/users']?.post as
       | Record<string, any>
       | undefined
-    expect(createUser?.operationId).toBe('UsersContract.create')
+    expect(createUser?.operationId).toBeUndefined()
     expect(createUser?.requestBody).toEqual({
       content: {
         'application/json': {
@@ -66,13 +57,26 @@ describe('OpenAPI generation', () => {
     })
     expect(Object.keys(document.components?.schemas ?? {})).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('UsersContract_get_RequestParam_id_Input'),
-        expect.stringContaining('UsersContract_get_Response_found_Output'),
-        expect.stringContaining('UsersContract_create_RequestBody_Input'),
+        expect.stringContaining('GET_users_id_get_RequestParam_id_Input'),
+        expect.stringContaining('GET_users_id_get_Response_found_Output'),
+        expect.stringContaining('POST_users_create_RequestBody_Input'),
       ]),
     )
   })
+  it('operationIdをOpenAPI生成側で明示的に決められる', () => {
+    const document = generateOpenApi(createUsersApplication(), {
+      info: { title: 'Users API', version: '1.0.0' },
+      operationId: ({ method, procedure }) =>
+        `${method.toLowerCase()}.${procedure}`,
+    })
 
+    expect(document.paths['/users/{id}']?.get).toEqual(
+      expect.objectContaining({ operationId: 'get.get' }),
+    )
+    expect(document.paths['/users']?.post).toEqual(
+      expect.objectContaining({ operationId: 'post.create' }),
+    )
+  })
   it('uses querystring, header parameters, response oneOf and additionalOperations', () => {
     const Input = z.object({
       q: z.string(),
@@ -82,32 +86,26 @@ describe('OpenAPI generation', () => {
     const Success = z.object({ ok: z.literal(true) })
     const FailureA = z.object({ code: z.literal('A') })
     const FailureB = z.object({ code: z.literal('B') })
-
-    const ApiContract = contract(
-      {
-        copy: procedure({
-          protocols: {
-            http: http({
-              method: 'COPY',
-              path: '/search',
-              summary: 'Copy search result',
-              tags: ['Search'],
-              request: {
-                query: Input,
-                headers: Headers,
-              },
-              responses: {
-                ok: { status: 200, description: 'Success', body: Success },
-                failedA: { status: 400, body: FailureA },
-                failedB: { status: 400, body: FailureB },
-              },
-              pipeline: [validate.query, validate.headers, http.controller],
-            }),
+    const ApiContract = contract([
+      http({
+        copy: {
+          method: 'COPY',
+          path: '/search',
+          summary: 'Copy search result',
+          tags: ['Search'],
+          request: {
+            query: Input,
+            headers: Headers,
           },
-        }),
-      },
-      { name: 'Api' },
-    )
+          responses: {
+            ok: { status: 200, description: 'Success', body: Success },
+            failedA: { status: 400, body: FailureA },
+            failedB: { status: 400, body: FailureB },
+          },
+          pipeline: [validate.query, validate.headers, http.controller],
+        },
+      }),
+    ])
     const ApiImplementation = implementation({
       name: 'ApiImplementation',
       contract: ApiContract,
@@ -122,7 +120,6 @@ describe('OpenAPI generation', () => {
       implementations: [ApiImplementation],
     }))
     const application = defineApplication({ modules: [ApiModule()] })
-
     const document = generateOpenApi(application, {
       info: { title: 'Search API', version: '1.0.0' },
     })
@@ -131,7 +128,6 @@ describe('OpenAPI generation', () => {
         | Record<string, Record<string, any>>
         | undefined
     )?.COPY
-
     expect(operation?.summary).toBe('Copy search result')
     expect(operation?.tags).toEqual(['Search'])
     expect(operation?.parameters).toEqual(
@@ -148,10 +144,9 @@ describe('OpenAPI generation', () => {
       operation?.responses['400'].content['application/json'].schema.oneOf,
     ).toHaveLength(2)
   })
-
   it('rejects an empty request body content type at contract definition', () => {
     expect(() =>
-      http({
+      http.route({
         method: 'POST',
         path: '/invalid',
         request: {

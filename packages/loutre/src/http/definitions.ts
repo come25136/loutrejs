@@ -6,6 +6,7 @@ import type {
   PipelineItem,
   ProtocolDescriptor,
   ProtocolFactory,
+  ProtocolGroup,
   SchemaInput,
   SchemaOutput,
   ShortCircuitDeclarationsOf,
@@ -14,7 +15,7 @@ import type {
   TerminalLayerDescriptor,
   ValidationLayerDescriptor,
 } from '../core/index.js'
-import { childPipelineOf } from '../core/index.js'
+import { childPipelineOf, protocolGroup } from '../core/index.js'
 import type { Logger } from '../runtime/index.js'
 import {
   createHttpDispatchKey,
@@ -425,14 +426,56 @@ function hasParamsValidation(pipeline: readonly PipelineItem[]): boolean {
   )
 }
 
-export const http = Object.assign(defineHttp, {
-  protocol: 'http' as const,
-  controller,
-  error: httpError,
-}) satisfies ProtocolFactory<'http'> & {
+type HttpProtocolGroup<
+  TDefinitions extends Record<string, HttpProtocolDefinition>,
+> = ProtocolGroup<
+  'http',
+  {
+    [K in keyof TDefinitions]: HttpProtocol<TDefinitions[K]>
+  }
+>
+
+type HttpDefinitionsConstraint<
+  TDefinitions extends Record<string, HttpProtocolDefinition>,
+> = {
+  [K in keyof TDefinitions]: TDefinitions[K] &
+    HttpPipelineConstraint<TDefinitions[K]> &
+    HttpResponseConstraint<TDefinitions[K]> &
+    HttpPathConstraint<TDefinitions[K]>
+}
+
+function defineHttpGroup<
+  const TDefinitions extends Record<string, HttpProtocolDefinition>,
+>(
+  definitions: TDefinitions & HttpDefinitionsConstraint<TDefinitions>,
+): HttpProtocolGroup<TDefinitions> {
+  return protocolGroup(
+    'http',
+    Object.fromEntries(
+      Object.entries(definitions as Record<string, HttpProtocolDefinition>).map(
+        ([name, definition]) => [name, defineHttp(definition as never)],
+      ),
+    ) as unknown as {
+      [K in keyof TDefinitions]: HttpProtocol<TDefinitions[K]>
+    },
+  )
+}
+
+export interface HttpProtocolFactory extends ProtocolFactory<'http'> {
+  <const TDefinitions extends Record<string, HttpProtocolDefinition>>(
+    definitions: TDefinitions & HttpDefinitionsConstraint<TDefinitions>,
+  ): HttpProtocolGroup<TDefinitions>
+  readonly route: typeof defineHttp
   readonly controller: TerminalLayerDescriptor<'http'>
   readonly error: typeof httpError
 }
+
+export const http = Object.assign(defineHttpGroup, {
+  protocol: 'http' as const,
+  route: defineHttp,
+  controller,
+  error: httpError,
+}) as HttpProtocolFactory
 
 function validationLayer<const TPart extends ValidationLayerDescriptor['part']>(
   part: TPart,

@@ -7,7 +7,6 @@ import {
   implementation,
   inject,
   layer,
-  procedure,
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@loutrejs/loutre'
@@ -17,7 +16,6 @@ import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { z } from 'zod'
 import * as schema from './schema.js'
-
 type DrizzleDatabaseClient = NodePgDatabase<typeof schema>
 type DrizzleTransaction = Parameters<
   Parameters<DrizzleDatabaseClient['transaction']>[0]
@@ -25,7 +23,6 @@ type DrizzleTransaction = Parameters<
 type DrizzleTransactionOptions = Parameters<
   DrizzleDatabaseClient['transaction']
 >[1]
-
 const AppEnvSchema = z
   .object({
     DRIZZLE_DATABASE_URL: z
@@ -35,30 +32,23 @@ const AppEnvSchema = z
   .transform((env) => ({
     databaseUrl: new URL(env.DRIZZLE_DATABASE_URL),
   }))
-
 class AppEnv extends defineEnv(AppEnvSchema) {}
-
 const TRANSACTION = contextKey('transaction').of<DrizzleTransaction>()
-
 class DrizzleDatabase implements OnModuleInit, OnModuleDestroy {
   readonly pool: Pool
   readonly client: DrizzleDatabaseClient
-
   constructor(readonly env = inject(AppEnv)) {
     this.pool = new Pool({
       connectionString: env.databaseUrl.href,
     })
     this.client = drizzle({ client: this.pool, schema })
   }
-
   async onModuleInit(): Promise<void> {
     await this.client.execute(sql`select 1`)
   }
-
   async onModuleDestroy(): Promise<void> {
     await this.pool.end()
   }
-
   transaction<TResult>(
     run: (transaction: DrizzleTransaction) => Promise<TResult>,
     options?: DrizzleTransactionOptions,
@@ -66,7 +56,6 @@ class DrizzleDatabase implements OnModuleInit, OnModuleDestroy {
     return this.client.transaction(run, options)
   }
 }
-
 const transaction = layer({
   name: 'database.transaction',
   provides: [TRANSACTION],
@@ -85,38 +74,30 @@ const transaction = layer({
       )
     },
 })
-
 const CreateUserBody = z.object({ name: z.string().min(1) })
 const UserResponse = z.object({
   id: z.string(),
   name: z.string(),
   createdBy: z.string(),
 })
-
-const UsersContract = contract(
-  {
-    create: procedure({
-      protocols: {
-        http: http({
-          method: 'POST',
-          path: '/users',
-          request: {
-            body: {
-              contentType: 'application/json',
-              schema: CreateUserBody,
-            },
-          },
-          responses: {
-            created: { status: 201, body: UserResponse },
-          },
-          pipeline: [validate.body, transaction([http.controller])],
-        }),
+const UsersContract = contract([
+  http({
+    create: {
+      method: 'POST',
+      path: '/users',
+      request: {
+        body: {
+          contentType: 'application/json',
+          schema: CreateUserBody,
+        },
       },
-    }),
-  },
-  { name: 'DrizzleUsersContract' },
-)
-
+      responses: {
+        created: { status: 201, body: UserResponse },
+      },
+      pipeline: [validate.body, transaction([http.controller])],
+    },
+  }),
+])
 class UserRepository {
   async create(client: DrizzleTransaction, name: string) {
     const [user] = await client
@@ -131,7 +112,6 @@ class UserRepository {
     return user
   }
 }
-
 const UsersController = implementation({
   name: 'UsersController',
   contract: UsersContract,
@@ -144,12 +124,10 @@ const UsersController = implementation({
     },
   }),
 })
-
 const AppModule = defineModule(() => ({
   name: 'DatabaseDrizzlePostgresExample',
   environment: [AppEnv],
   providers: [DrizzleDatabase, UserRepository],
   implementations: [UsersController],
 }))
-
 export default defineApplication({ modules: [AppModule()] })

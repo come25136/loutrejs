@@ -5,7 +5,6 @@ import {
   implementation,
   isShortCircuit,
   layer,
-  procedure,
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import {
@@ -16,10 +15,10 @@ import {
   type HttpProtocolDefinition,
 } from '@loutrejs/loutre/http'
 import { z } from 'zod'
-
 describe('basicAuth', () => {
-  const PRINCIPAL = contextKey('principal').of<{ readonly id: string }>()
-
+  const PRINCIPAL = contextKey('principal').of<{
+    readonly id: string
+  }>()
   it('credentialsを認証してprincipalをContextへ追加する', async () => {
     const authenticate = vi.fn(() => ({ id: 'user-1' }))
     const authentication = basicAuth({
@@ -31,7 +30,6 @@ describe('basicAuth', () => {
         body: { error: '認証が必要です' },
       },
     })
-
     const execution = await runBasicAuth(authentication, {
       headers: { authorization: `Basic ${btoa('loutre:otter')}` },
     })
@@ -43,7 +41,6 @@ describe('basicAuth', () => {
     expect(authentication.role).toBe('authentication')
     expect(authentication.requiresValidated).toEqual([])
   })
-
   it('最初のコロンだけをusernameとpasswordの境界にする', async () => {
     const authenticate = vi.fn(() => ({ id: 'user-1' }))
     const authentication = basicAuth({
@@ -55,17 +52,14 @@ describe('basicAuth', () => {
         body: { error: '認証が必要です' },
       },
     })
-
     await runBasicAuth(authentication, {
       headers: { authorization: `basic ${btoa('user:pass:word')}` },
     })
-
     expect(authenticate).toHaveBeenCalledWith({
       username: 'user',
       password: 'pass:word',
     })
   })
-
   it('UTF-8の資格情報を認証callbackへ渡す', async () => {
     const bytes = new TextEncoder().encode('るーとる:かわうそ')
     const encoded = btoa(
@@ -81,17 +75,14 @@ describe('basicAuth', () => {
         body: { error: '認証が必要です' },
       },
     })
-
     await runBasicAuth(authentication, {
       headers: { authorization: `Basic ${encoded}` },
     })
-
     expect(authenticate).toHaveBeenCalledWith({
       username: 'るーとる',
       password: 'かわうそ',
     })
   })
-
   it.each([
     undefined,
     null,
@@ -110,11 +101,9 @@ describe('basicAuth', () => {
         body: { error: '認証が必要です' },
       },
     })
-
     const { result } = await runBasicAuth(authentication, {
       headers: authorization == null ? {} : { authorization },
     })
-
     expect(isShortCircuit(result)).toBe(true)
     expect(result).toMatchObject({
       result: {
@@ -128,7 +117,6 @@ describe('basicAuth', () => {
     })
     expect(authenticate).not.toHaveBeenCalled()
   })
-
   it('authenticateがprincipalを返さなければ401へshort circuitする', async () => {
     const authentication = basicAuth({
       realm: 'Loutre Test',
@@ -139,13 +127,11 @@ describe('basicAuth', () => {
         body: { error: '認証が必要です' },
       },
     })
-
     const { result } = await runBasicAuth(authentication, {
       headers: { authorization: `Basic ${btoa('loutre:wrong')}` },
     })
     expect(isShortCircuit(result)).toBe(true)
   })
-
   it('realmをquoted-stringとしてescapeする', async () => {
     const authentication = basicAuth({
       realm: 'Loutre "Admin" \\ Area',
@@ -156,7 +142,6 @@ describe('basicAuth', () => {
         body: { error: '認証が必要です' },
       },
     })
-
     const { result } = await runBasicAuth(authentication, { headers: {} })
     expect(result).toMatchObject({
       result: {
@@ -167,7 +152,6 @@ describe('basicAuth', () => {
       },
     })
   })
-
   it('空または制御文字を含むrealmを拒否する', () => {
     const create = (realm: string) =>
       basicAuth({
@@ -179,11 +163,9 @@ describe('basicAuth', () => {
           body: { error: '認証が必要です' },
         },
       })
-
     expect(() => create('')).toThrow(TypeError)
     expect(() => create('Loutre\nAdmin')).toThrow(TypeError)
   })
-
   it.each([
     { status: undefined, code: 'LUTRE_SHORT_CIRCUIT_001' },
     { status: 403, code: 'LUTRE_SHORT_CIRCUIT_002' },
@@ -208,18 +190,16 @@ describe('basicAuth', () => {
               body: z.object({ error: z.string() }),
             },
           }
-    const Contract = contract({
-      get: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/auth-diagnostic',
-            responses,
-            pipeline: [authentication, http.controller],
-          } as never),
-        },
+    const Contract = contract([
+      http({
+        get: {
+          method: 'GET',
+          path: '/auth-diagnostic',
+          responses,
+          pipeline: [authentication, http.controller],
+        } as never,
       }),
-    })
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -233,12 +213,10 @@ describe('basicAuth', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code }))
   })
-
   it('ユーザー定義Layerのresponse制約を診断する', () => {
     const authentication = layer({
       name: 'customAuthentication',
@@ -255,23 +233,21 @@ describe('basicAuth', () => {
       },
     })
     const status: number = 403
-    const Contract = contract({
-      get: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/custom-auth-diagnostic',
-            responses: {
-              unauthorized: {
-                status,
-                body: z.object({ error: z.string() }),
-              },
+    const Contract = contract([
+      http({
+        get: {
+          method: 'GET',
+          path: '/custom-auth-diagnostic',
+          responses: {
+            unauthorized: {
+              status,
+              body: z.object({ error: z.string() }),
             },
-            pipeline: [authentication, http.controller],
-          }),
+          },
+          pipeline: [authentication, http.controller],
         },
       }),
-    })
+    ])
     const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
@@ -285,7 +261,6 @@ describe('basicAuth', () => {
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
-
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(
@@ -293,7 +268,6 @@ describe('basicAuth', () => {
     )
   })
 })
-
 async function runBasicAuth<
   TPrincipal extends import('@loutrejs/loutre').ContextKey,
   TVariant extends string,

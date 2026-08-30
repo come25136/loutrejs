@@ -54,33 +54,30 @@ import {
   defineModule,
   implementation,
   inject,
-  procedure,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
-export const GreetingContract = contract({
-  greet: procedure({
-    protocols: {
-      http: http({
-        method: 'GET',
-        path: '/greetings/{name}',
-        request: {
-          params: {
-            name: z.string().min(1),
-          },
+export const GreetingContract = contract([
+  http({
+    greet: {
+      method: 'GET',
+      path: '/greetings/{name}',
+      request: {
+        params: {
+          name: z.string().min(1),
         },
-        responses: {
-          ok: {
-            status: 200,
-            body: z.object({ message: z.string() }),
-          },
+      },
+      responses: {
+        ok: {
+          status: 200,
+          body: z.object({ message: z.string() }),
         },
-        pipeline: [validate.params, http.controller],
-      }),
+      },
+      pipeline: [validate.params, http.controller],
     },
   }),
-})
+])
 
 class GreetingService {
   greet(name: string) {
@@ -108,6 +105,8 @@ export default defineApplication({
   modules: [GreetingModule()],
 })
 ```
+
+同じprotocolのprocedureは1つのgroupへまとめられます。複数protocolを同じContractへ載せる場合は`contract([http({...}), graphqlGroup, websocketGroup, sseGroup])`のようにgroupを配列へ並べます。featureやprotocol単位でファイルを分けたい場合は、それぞれを`contract([...])`にして最後に`contract.merge(contracts)`で統合できます。merge時は同じprocedure名に異なるprotocolを重ねられますが、同じ`procedure + protocol`の二重定義は拒否されます。Contract自体は名前を持ちません。
 
 Node.jsでは`@loutrejs/node`からApplicationをserveできます。
 
