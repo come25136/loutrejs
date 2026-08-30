@@ -1,5 +1,12 @@
 # @loutrejs/bullmq
 
+## 0.4.1
+
+### Patch Changes
+
+- 8666927: `bullmq`のpeer dependencyを`^6.3.0`から`^6.2.0`へ広げ、BullMQ 6.2系でも`@loutrejs/bullmq`を利用できるようにしました。
+- @loutrejs/loutre@0.4.1
+
 ## 0.4.0
 
 ### Patch Changes

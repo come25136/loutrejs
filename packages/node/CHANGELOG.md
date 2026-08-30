@@ -1,5 +1,11 @@
 # @loutrejs/node
 
+## 0.4.1
+
+### Patch Changes
+
+- @loutrejs/loutre@0.4.1
+
 ## 0.4.0
 
 ### Patch Changes
