@@ -1,5 +1,12 @@
 # @loutrejs/node
 
+## 0.4.0
+
+### Patch Changes
+
+- Updated dependencies [c8968bb]
+  - @loutrejs/loutre@0.4.0
+
 ## 0.3.0
 
 ### Patch Changes
