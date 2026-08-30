@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
+import { GoogleAnalytics } from '@next/third-parties/google'
 import { ExternalLink, Star } from 'lucide-react'
 import type { ReactNode } from 'react'
 import '@fontsource-variable/inter'
@@ -8,6 +9,7 @@ import '@fontsource-variable/jetbrains-mono'
 import './globals.css'
 
 const siteUrl = 'https://loutrejs.come25136.id'
+const googleAnalyticsId = 'G-46R1D6Y88K'
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -185,6 +187,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </div>
         </footer>
       </body>
+      {process.env.NODE_ENV === 'production' && (
+        <GoogleAnalytics gaId={googleAnalyticsId} />
+      )}
     </html>
   )
 }
