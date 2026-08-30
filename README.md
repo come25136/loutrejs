@@ -88,7 +88,7 @@ HTTP Application、DI、Pipeline、Environment、Argumentsなどを含む例は[
 
 - [Getting Started](./docs/getting-started.md) — project作成、HTTP、Task、Runtime、CLI
 - [Architecture](./docs/architecture.md) — 設計原則とpublic boundary
-- [Examples](./examples/) — HTTP、Auth、CORS、Worker、Database integration
+- [Examples](./examples/) — HTTP、Auth、CORS、Worker、Database
 
 ## Development
 
@@ -96,6 +96,14 @@ HTTP Application、DI、Pipeline、Environment、Argumentsなどを含む例は[
 npm install
 npm run verify
 ```
+
+テストは責務ごとに3層へ分けています。
+
+- `npm run test:unit` — frameworkの部品単体を検証
+- `npm run test:integration` — `integrations/` のApplication / Moduleを使って境界を検証
+- `npm run test:e2e` — `examples/` の実コマンドを起動し、外部境界からproject全体を検証
+
+`integrations/` はテスト専用資産、`examples/` は利用者向けの実行可能projectです。
 
 ## License
 

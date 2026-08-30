@@ -39,7 +39,7 @@ describe('Runtime conformance harness', () => {
       },
     ],
   ])(
-    '%s bind()で同じHTTP CRUD exampleを実行する',
+    '%s bind()で同じHTTP CRUD integrationを実行する',
     async (_name, createBinding) => {
       const runtimeBinding = createBinding()
       const response = await runtimeBinding.fetch(

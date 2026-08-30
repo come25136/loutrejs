@@ -2206,7 +2206,7 @@ Implementation class削除を理由に期待値を旧route semanticsへ戻さな
 
 # 62. MessagePort tests
 
-少なくとも1つ以上のMessagePort fixtureを新Implementation APIへ移行し:
+少なくとも1つ以上のMessagePort integrationを新Implementation APIへ移行し:
 
 ```ts
 implementation({
@@ -2225,7 +2225,7 @@ implementation({
 
 ```txt
 unary invocation
-server-stream if existing example has it
+server-stream if existing integration has it
 DI injection
 source logging
 Graph implementation edge
@@ -2233,7 +2233,7 @@ Graph implementation edge
 
 ---
 
-# 63. examplesを全移行
+# 63. integrations / examplesを全移行
 
 repository内を検索し、以下を全て新APIへ移行する。
 
@@ -2560,7 +2560,7 @@ dispatchKey
 - Source Compiler不要
 - decorator不要
 - global registry不要
-- examples / fixtures移行
+- integrations / examples移行
 - architecture/docs更新
 - type tests追加
 - runtime tests追加

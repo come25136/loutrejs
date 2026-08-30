@@ -69,7 +69,7 @@ describe('Loutre CLI', () => {
     const graph = output.stdout.join('\n')
     expect(graph).toContain('UsersModule')
     expect(graph).toContain('module:1')
-    expect(graph).toContain('description: HTTP CRUD example')
+    expect(graph).toContain('description: HTTP CRUD integration')
   })
 
   it('Graphをmachine-readable JSONで出力する', async () => {

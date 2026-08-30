@@ -5,12 +5,12 @@ import {
   PRIMARY_DB,
   S3Storage,
   STORAGE,
-  createDatabaseExample,
+  createDatabaseIntegration,
 } from '../integrations/database-modules/src/index.js'
 
-describe('database modules example', () => {
+describe('database modules integration', () => {
   it('同じParameterized Moduleの2 instanceを別tokenで解決する', async () => {
-    const { runtime, events, env } = await createDatabaseExample('memory')
+    const { runtime, events, env } = await createDatabaseIntegration('memory')
     await runtime.initialize()
 
     const primary = await runtime.container.resolve(PRIMARY_DB)
@@ -48,7 +48,7 @@ describe('database modules example', () => {
   })
 
   it('finite Env branchからconditional Providerを選ぶ', async () => {
-    const { runtime } = await createDatabaseExample('s3')
+    const { runtime } = await createDatabaseIntegration('s3')
     await runtime.initialize()
     expect(await runtime.container.resolve(STORAGE)).toBeInstanceOf(S3Storage)
     await runtime.shutdown()

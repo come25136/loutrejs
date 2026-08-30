@@ -1542,7 +1542,7 @@ Source Compiler を先に消してはならない。
 
 ## Phase B — Constructor Migration
 
-全 fixture / example / test を:
+`integrations/` / `examples/` / test を:
 
 ```ts
 constructor(service: Service)

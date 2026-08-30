@@ -107,7 +107,7 @@ export const DatabaseModule = defineModule<DatabaseModuleArgs>((args) => ({
   },
 }))
 
-export async function createDatabaseExample(
+export async function createDatabaseIntegration(
   storageDriver: 'memory' | 's3' = 'memory',
 ) {
   const events: string[] = []
@@ -117,7 +117,7 @@ export async function createDatabaseExample(
     ANALYTICS_DATABASE_URL: 'analytics://example',
   }
   const AppModule = defineModule(() => ({
-    description: 'Database modules example application',
+    description: 'Database modules integration application',
     imports: [
       DatabaseModule({
         provide: PRIMARY_DB,

@@ -74,7 +74,7 @@ export const EventsMessageHandler = implementation({
 })
 export const EventsModule = defineModule(() => ({
   name: 'EventsModule',
-  description: 'HTTP server-stream example',
+  description: 'HTTP server-stream integration',
   providers: [EventStreamService],
   implementations: [EventsController, EventsMessageHandler],
 }))

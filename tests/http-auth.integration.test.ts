@@ -11,7 +11,7 @@ import {
 } from '../integrations/http-auth/src/index.js'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
-describe('HTTP auth example', () => {
+describe('HTTP auth integration', () => {
   it('Layerが生成したContext propertyをControllerのctxから取得する', async () => {
     const application = createTestApplication({
       modules: [AccountModule()],

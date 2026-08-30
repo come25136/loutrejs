@@ -1,6 +1,6 @@
 # Release手順
 
-fixtureとexampleは公開対象に含めません。version更新とnpm公開の自動化は現時点では
+`integrations/`と`examples/`は公開対象に含めません。version更新とnpm公開の自動化は現時点では
 リポジトリに含めません。
 
 ## Tarball検証

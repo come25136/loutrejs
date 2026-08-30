@@ -4,7 +4,7 @@ import { EventsModule } from '../integrations/streaming/src/index.js'
 import { reserveHttpPort } from './helpers/http-server.js'
 import { silentLogger } from './helpers/silent-logger.js'
 
-describe('HTTP streaming example', () => {
+describe('HTTP streaming integration', () => {
   it('各itemをschema validationしてSSEとして逐次serializeする', async () => {
     const definition = defineApplication({
       modules: [EventsModule()],

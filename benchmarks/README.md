@@ -12,7 +12,7 @@ npm run benchmark:http
 
 `benchmark:http` は先に repository 全体を build し、その artifact を使って次の server を順番に測定する。
 
-- `loutre` — canonical HTTP CRUD fixture を `@loutrejs/node` で serve
+- `loutre` — canonical HTTP CRUD integration を `@loutrejs/node` で serve
 - `node` — 同じ JSON response を返す Node.js `node:http` baseline
 
 既定条件:

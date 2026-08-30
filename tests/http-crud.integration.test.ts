@@ -2,7 +2,7 @@ import { nodeRuntime } from '@loutrejs/node'
 import { createUsersApplication } from '../integrations/http-crud/src/index.js'
 import { reserveHttpPort } from './helpers/http-server.js'
 
-describe('HTTP CRUD example', () => {
+describe('HTTP CRUD integration', () => {
   it('runs Contract -> HTTP -> Pipeline -> validation -> Controller -> finalization', async () => {
     const definition = createUsersApplication()
     const port = await reserveHttpPort()

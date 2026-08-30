@@ -107,7 +107,8 @@ export const AccountController = implementation({
   }),
 })
 export const AccountModule = defineModule(() => ({
-  description: 'Bearer authentication and optional Execution Context example',
+  description:
+    'Bearer authentication and optional Execution Context integration',
   implementations: [AccountController],
 }))
 export function createAccountApplication() {

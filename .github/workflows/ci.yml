@@ -120,8 +120,8 @@ jobs:
       - name: Run Node.js conformance
         run: npm run test:node
 
-  example-e2e:
-    name: Example E2E / Node.js 24.x
+  examples-e2e:
+    name: Examples E2E / Node.js 24.x
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -132,7 +132,10 @@ jobs:
         with:
           node-version: 24.x
 
-      - name: Run example E2E tests
+      - name: Build packages
+        run: npm run build
+
+      - name: Run examples E2E tests
         run: npm run test:e2e
 
   bun-conformance:
