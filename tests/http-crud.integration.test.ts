@@ -1,5 +1,5 @@
 import { nodeRuntime } from '@loutrejs/node'
-import { createUsersApplication } from '../examples/http-crud/src/index.js'
+import { createUsersApplication } from '../integrations/http-crud/src/index.js'
 import { reserveHttpPort } from './helpers/http-server.js'
 
 describe('HTTP CRUD example', () => {

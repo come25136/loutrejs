@@ -2,8 +2,8 @@ import {
   createTestApplication,
   createTestMessagePortExecution,
 } from './application.js'
-import { UsersModule } from '../../examples/http-crud/src/index.js'
-import { EventsModule } from '../../examples/streaming/src/index.js'
+import { UsersModule } from '../../integrations/http-crud/src/index.js'
+import { EventsModule } from '../../integrations/streaming/src/index.js'
 import { silentLogger } from './silent-logger.js'
 
 export function createLinkedUsersApplication() {

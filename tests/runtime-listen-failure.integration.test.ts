@@ -3,7 +3,7 @@ import { defineApplication } from '@loutrejs/loutre'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { nodeRuntime } from '@loutrejs/node'
-import { UsersModule } from '../examples/http-crud/src/index.js'
+import { UsersModule } from '../integrations/http-crud/src/index.js'
 import { silentLogger } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>

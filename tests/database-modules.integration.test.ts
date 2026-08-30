@@ -6,7 +6,7 @@ import {
   S3Storage,
   STORAGE,
   createDatabaseExample,
-} from '../examples/database-modules/src/index.js'
+} from '../integrations/database-modules/src/index.js'
 
 describe('database modules example', () => {
   it('同じParameterized Moduleの2 instanceを別tokenで解決する', async () => {

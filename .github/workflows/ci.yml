@@ -105,17 +105,35 @@ jobs:
         with:
           node-version: ${{ matrix.version }}
 
-      - name: Run unit & integration tests
-        run: npm test
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run integration tests
+        run: npm run test:integration
 
       - name: Run Node.js CLI conformance
         run: |
-          node packages/cli/bin/loutre.js check --entry examples/http-crud/src/app.ts
-          node packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/cli-conformance/node
-          node packages/cli/bin/loutre.js openapi --entry examples/http-crud/src/app.ts > dist/cli-conformance/node/openapi.json
+          node packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
+          node packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/node
+          node packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/node/openapi.json
 
       - name: Run Node.js conformance
         run: npm run test:node
+
+  example-e2e:
+    name: Example E2E / Node.js 24.x
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-node-workspace
+        with:
+          node-version: 24.x
+
+      - name: Run example E2E tests
+        run: npm run test:e2e
 
   bun-conformance:
     name: Runtime Conformance / Bun ${{ matrix.version }}
@@ -144,16 +162,16 @@ jobs:
       - name: Run Bun CLI conformance
         run: |
           BUN_BIN="$(command -v bun)"
-          "$BUN_BIN" packages/cli/bin/loutre.js check --entry examples/http-crud/src/app.ts
-          "$BUN_BIN" packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
-          "$BUN_BIN" packages/cli/bin/loutre.js openapi --entry examples/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
+          "$BUN_BIN" packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
+          "$BUN_BIN" packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
+          "$BUN_BIN" packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
 
       - name: Build Bun conformance applications
         run: |
           BUN_BIN="$(command -v bun)"
-          "$BUN_BIN" packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/conformance/http-crud
-          "$BUN_BIN" packages/cli/bin/loutre.js build examples/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
-          "$BUN_BIN" packages/cli/bin/loutre.js build examples/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
+          "$BUN_BIN" packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/conformance/http-crud
+          "$BUN_BIN" packages/cli/bin/loutre.js build integrations/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
+          "$BUN_BIN" packages/cli/bin/loutre.js build integrations/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
 
       - name: Run Bun conformance
         run: |
@@ -182,16 +200,16 @@ jobs:
       - name: Run Deno CLI conformance
         run: |
           DENO_BIN="$(command -v deno)"
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js check --entry examples/http-crud/src/app.ts
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js openapi --entry examples/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json
 
       - name: Build Deno conformance applications
         run: |
           DENO_BIN="$(command -v deno)"
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/conformance/http-crud
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build examples/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build examples/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/conformance/http-crud
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build integrations/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js build integrations/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
 
       - name: Run Deno conformance
         run: |

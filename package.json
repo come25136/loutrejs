@@ -8,6 +8,7 @@
   },
   "workspaces": [
     "packages/*",
+    "integrations/*",
     "examples/*"
   ],
   "scripts": {
@@ -18,23 +19,26 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "check": "tsc --noEmit --pretty false",
-    "test": "vitest run",
+    "test": "npm run test:unit && npm run test:integration",
     "test:types": "tsc -p tests/types/tsconfig.json --pretty false",
-    "build:conformance-apps": "loutre build examples/http-crud/src/app.ts --out-dir dist/conformance/http-crud && loutre build examples/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http && loutre build examples/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port",
-    "build:conformance-apps:bun": "bun packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/conformance/http-crud && bun packages/cli/bin/loutre.js build examples/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http && bun packages/cli/bin/loutre.js build examples/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port",
-    "build:conformance-apps:deno": "deno run -A packages/cli/bin/loutre.js build examples/http-crud/src/app.ts --out-dir dist/conformance/http-crud && deno run -A packages/cli/bin/loutre.js build examples/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http && deno run -A packages/cli/bin/loutre.js build examples/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port",
+    "build:conformance-apps": "loutre build integrations/http-crud/src/app.ts --out-dir dist/conformance/http-crud && loutre build integrations/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http && loutre build integrations/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port",
+    "build:conformance-apps:bun": "bun packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/conformance/http-crud && bun packages/cli/bin/loutre.js build integrations/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http && bun packages/cli/bin/loutre.js build integrations/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port",
+    "build:conformance-apps:deno": "deno run -A packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/conformance/http-crud && deno run -A packages/cli/bin/loutre.js build integrations/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http && deno run -A packages/cli/bin/loutre.js build integrations/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port",
     "test:deno": "deno task build:conformance-apps:deno && deno run -A --sloppy-imports conformance/deno.ts",
     "test:bun": "bun run build:conformance-apps:bun && bun run conformance/bun.ts",
     "test:cloudflare-workers": "npm run build:conformance-apps && node conformance/run-cloudflare-workers.mjs",
     "test:electron": "npm run build:conformance-apps && node conformance/run-electron.mjs",
     "test:aws-lambda": "npm run build:conformance-apps && node conformance/aws-lambda.mjs",
-    "test:node": "node -e \"const major = Number(process.versions.node.split('.')[0]); if (major < 22) process.exit(1); console.log('Node.js ' + process.versions.node + ' conformance: passed')\" && vitest run tests/http-crud.e2e.test.ts tests/http-stream.integration.test.ts tests/runtime-conformance.test.ts",
+    "test:node": "node -e \"const major = Number(process.versions.node.split('.')[0]); if (major < 22) process.exit(1); console.log('Node.js ' + process.versions.node + ' conformance: passed')\" && vitest run tests/http-crud.integration.test.ts tests/http-stream.integration.test.ts tests/runtime-conformance.integration.test.ts",
     "test:conformance": "npm run test:node && npm run test:deno && npm run test:bun && npm run test:cloudflare-workers && npm run test:electron && npm run test:aws-lambda",
     "verify": "npm run format:check && npm run lint && npm run check && npm run test:types && npm test && npm run build && npm run test:conformance",
     "release:check": "npm run build && node scripts/verify-release-version.mjs && node scripts/verify-packages.mjs",
     "changeset": "changeset",
     "release:version": "changeset version && node scripts/sync-release-version.mjs && npm install --package-lock-only --ignore-scripts --no-audit --no-fund && npm run release:check",
-    "release:publish": "npm run release:check && changeset publish"
+    "release:publish": "npm run release:check && changeset publish",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts' --exclude '**/*.e2e.test.ts'",
+    "test:integration": "vitest run integration",
+    "test:e2e": "vitest run e2e --testTimeout 60000"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.1",

@@ -1,5 +1,5 @@
 {
-  "name": "@loutrejs/example-database-modules",
+  "name": "@loutrejs/integration-database-modules",
   "version": "0.1.0",
   "private": true,
   "type": "module"

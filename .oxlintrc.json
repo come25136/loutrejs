@@ -22,12 +22,12 @@
     },
     {
       "files": [
-        "examples/application-build/**/*.ts",
-        "examples/database-modules/**/*.ts",
-        "examples/graph-probe/**/*.ts",
-        "examples/http-auth/**/*.ts",
-        "examples/http-crud/**/*.ts",
-        "examples/streaming/**/*.ts"
+        "integrations/application-build/**/*.ts",
+        "integrations/database-modules/**/*.ts",
+        "integrations/graph-probe/**/*.ts",
+        "integrations/http-auth/**/*.ts",
+        "integrations/http-crud/**/*.ts",
+        "integrations/streaming/**/*.ts"
       ],
       "rules": {
         "typescript/no-extraneous-class": "off",

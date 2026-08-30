@@ -2,14 +2,14 @@ import { readdirSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { join, relative } from 'node:path'
 
-const invalidExamples = new Map([
-  ['examples/graph-probe/src/app.ts', 'LUTRE_DI_UNRESOLVED'],
+const invalidIntegrations = new Map([
+  ['integrations/graph-probe/src/app.ts', 'LUTRE_DI_UNRESOLVED'],
 ])
 
-const applicationEntries = readdirSync('examples', { withFileTypes: true })
+const integrationEntries = readdirSync('integrations', { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
   .flatMap((entry) => {
-    const sourceDirectory = join('examples', entry.name, 'src')
+    const sourceDirectory = join('integrations', entry.name, 'src')
     try {
       return readdirSync(sourceDirectory, { withFileTypes: true })
         .filter(
@@ -25,13 +25,13 @@ const applicationEntries = readdirSync('examples', { withFileTypes: true })
   .map((entry) => relative('.', entry))
   .toSorted()
 
-describe('examples', () => {
-  for (const entry of applicationEntries) {
-    const expectedDiagnostic = invalidExamples.get(entry)
+describe('integrations', () => {
+  for (const entry of integrationEntries) {
+    const expectedDiagnostic = invalidIntegrations.get(entry)
 
     if (expectedDiagnostic) {
       it(`${entry} は意図したGraph診断を返す`, () => {
-        const result = checkExample(entry)
+        const result = checkIntegration(entry)
 
         expect(result.status).not.toBe(0)
         expect(result.stderr).toContain(expectedDiagnostic)
@@ -40,15 +40,15 @@ describe('examples', () => {
     }
 
     it(`${entry} は有効なApplication Graphとして読み込める`, () => {
-      const result = checkExample(entry)
+      const result = checkIntegration(entry)
 
       expect(result.status).toBe(0)
-      expect(result.stdout).toContain('Loutre Application Graphは有効です。')
+      expect(result.stdout).toContain('Loutre Application Graph is valid.')
     })
   }
 })
 
-function checkExample(entry: string) {
+function checkIntegration(entry: string) {
   return spawnSync(
     process.execPath,
     ['packages/cli/bin/loutre.js', 'check', '--entry', entry],

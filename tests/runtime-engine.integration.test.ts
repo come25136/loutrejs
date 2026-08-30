@@ -5,8 +5,8 @@ import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-wo
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { nodeRuntime } from '@loutrejs/node'
-import { UsersModule } from '../examples/http-crud/src/index.js'
-import { EventsModule } from '../examples/streaming/src/index.js'
+import { UsersModule } from '../integrations/http-crud/src/index.js'
+import { EventsModule } from '../integrations/streaming/src/index.js'
 import { silentLogger } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>

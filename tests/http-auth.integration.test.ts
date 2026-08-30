@@ -8,7 +8,7 @@ import {
   authenticated,
   bearerAuthentication,
   tenantAccess,
-} from '../examples/http-auth/src/index.js'
+} from '../integrations/http-auth/src/index.js'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 describe('HTTP auth example', () => {

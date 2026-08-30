@@ -12,7 +12,7 @@ import {
   token,
 } from '@loutrejs/loutre'
 import { z } from 'zod'
-import { selectedRuntime } from '@loutrejs/example-application-build/conditional'
+import { selectedRuntime } from '@loutrejs/integration-application-build/conditional'
 
 class AliasService {
   constructor(readonly repository = inject(Repo)) {}

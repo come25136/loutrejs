@@ -57,6 +57,7 @@
   },
   "include": [
     "packages/**/*.ts",
+    "integrations/**/*.ts",
     "examples/**/*.ts",
     "tests/**/*.ts",
     "conformance/**/*.ts"

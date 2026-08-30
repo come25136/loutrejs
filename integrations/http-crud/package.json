@@ -1,5 +1,5 @@
 {
-  "name": "@loutrejs/example-graph-probe",
+  "name": "@loutrejs/integration-http-crud",
   "version": "0.1.0",
   "private": true,
   "type": "module",

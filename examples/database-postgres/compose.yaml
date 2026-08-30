@@ -11,6 +11,6 @@ services:
       timeout: 2s
       retries: 15
     ports:
-      - '54321:5432'
+      - '${POSTGRES_PORT:-54321}:5432'
     volumes:
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
