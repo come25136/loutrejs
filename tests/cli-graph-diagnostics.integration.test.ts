@@ -23,7 +23,13 @@ describe('Graph-driven CLI diagnostics', () => {
 
     expect(
       await runCli(
-        ['doctor', 'electron', '--entry', 'integrations/http-crud/src/app.ts'],
+        [
+          'doctor',
+          '--runtime',
+          'electron',
+          '--entry',
+          'integrations/http-crud/src/app.ts',
+        ],
         output.value,
       ),
     ).toBe(1)

@@ -23,11 +23,14 @@ npm install --save-dev @loutrejs/cli
 
 ```sh
 npm exec loutre -- check --entry src/app.ts
-npm exec loutre -- doctor node --entry src/app.ts
+npm exec loutre -- doctor --entry src/app.ts
+npm exec loutre -- doctor --runtime electron --entry src/app.ts
 npm exec loutre -- graph di --entry src/app.ts
 npm exec loutre -- graph contracts --entry src/app.ts --format mermaid
 npm exec loutre -- explain GreetingService --entry src/app.ts
 ```
+
+`doctor`で`--runtime`を省略した場合は、CLIを実行しているruntimeを使用します。別runtimeとの互換性を確認する場合は`--runtime`で明示します。
 
 Graph outputは`text`、`json`、`mermaid`に対応しています。
 

@@ -263,7 +263,7 @@ npm exec loutre -- check --entry src/app.ts
 npm exec loutre -- graph di --entry src/app.ts
 npm exec loutre -- graph contracts --entry src/app.ts --format mermaid
 npm exec loutre -- explain GreetingService --entry src/app.ts
-npm exec loutre -- doctor node --entry src/app.ts
+npm exec loutre -- doctor --runtime node --entry src/app.ts
 npm exec loutre -- build src/app.ts --out-dir dist/loutre
 npm exec loutre -- openapi --entry src/app.ts
 ```
