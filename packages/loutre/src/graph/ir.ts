@@ -39,6 +39,7 @@ export interface DependencyNodeIR {
     | 'framework'
   readonly scope?: 'application' | 'transient'
   readonly module?: string
+  readonly visibility?: 'private' | 'exported'
 }
 
 export interface DependencyEdgeIR {
