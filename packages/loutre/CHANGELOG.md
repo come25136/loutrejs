@@ -1,5 +1,11 @@
 # @loutrejs/loutre
 
+## 0.3.0
+
+### Minor Changes
+
+- 8573a15: Contract APIをprotocol-first compositionへ変更し、Contractの表示名とGraph上のidentityを分離しました。Moduleのexports境界、typed HTTP client、Graph diagnosticsを追加し、examplesを実コマンドで検証するE2E coverageを整備しました。
+
 ## 0.2.0
 
 ### Minor Changes
