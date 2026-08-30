@@ -1,5 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import hljs from 'highlight.js/lib/core'
+import typescript from 'highlight.js/lib/languages/typescript'
 import {
   ArrowRight,
   Box,
@@ -88,40 +90,57 @@ const applicationModel = [
   },
 ] as const
 
-const codeLines = [
-  <>
-    <span className="text-[#ff7b72]">import</span> {'{'}
-  </>,
-  <> defineApplication,</>,
-  <> task,</>,
-  <>
-    {'}'} <span className="text-[#ff7b72]">from</span>{' '}
-    <span className="text-[#a5d6ff]">'@loutrejs/loutre'</span>
-  </>,
-  <></>,
-  <>
-    <span className="text-[#ff7b72]">export const</span> hello ={' '}
-    <span className="text-[#d2a8ff]">task</span>&lt;void, string&gt;({'{'})
-  </>,
-  <>
-    {' '}
-    name: <span className="text-[#a5d6ff]">'hello'</span>,
-  </>,
-  <>
-    {' '}
-    factory: () =&gt; () =&gt;{' '}
-    <span className="text-[#a5d6ff]">'Hello, Loutre!'</span>,
-  </>,
-  <>{'}'})</>,
-  <></>,
-  <>
-    <span className="text-[#ff7b72]">export default</span>{' '}
-    <span className="text-[#d2a8ff]">defineApplication</span>({'{'})
-  </>,
-  <>{'  '}modules: [],</>,
-  <>{'  '}tasks: [hello],</>,
-  <>{'}'})</>,
-]
+const codeExample = `import {
+  contract,
+  defineApplication,
+  defineModule,
+  implementation,
+} from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
+import { z } from 'zod'
+
+const AppContract = contract([
+  http({
+    hello: {
+      method: 'GET',
+      path: '/',
+      responses: {
+        ok: {
+          status: 200,
+          body: z.object({ message: z.string() }),
+        },
+      },
+      pipeline: [http.controller],
+    },
+  }),
+])
+
+const AppController = implementation({
+  name: 'AppController',
+  contract: AppContract,
+  protocol: http,
+  factory: () => ({
+    async hello(ctx) {
+      return ctx.response.ok({
+        body: { message: 'Hello from Loutre!' },
+      })
+    },
+  }),
+})
+
+const AppModule = defineModule(() => ({
+  implementations: [AppController],
+}))
+
+export default defineApplication({
+  modules: [AppModule()],
+})`
+
+hljs.registerLanguage('typescript', typescript)
+
+const highlightedCodeLines = hljs
+  .highlight(codeExample, { language: 'typescript' })
+  .value.split('\n')
 
 function NumberedSection({
   number,
@@ -216,13 +235,17 @@ export default function Home() {
                 app.ts
               </span>
             </div>
-            <pre className="overflow-x-auto px-2 py-6 font-mono text-[12px] leading-[1.65]">
-              {codeLines.map((line, index) => (
+            <pre className="max-h-[38rem] overflow-auto px-2 py-6 font-mono text-[12px] leading-[1.65] [&_.hljs-attr]:text-[#79c0ff] [&_.hljs-comment]:text-[#8b949e] [&_.hljs-keyword]:text-[#ff7b72] [&_.hljs-literal]:text-[#79c0ff] [&_.hljs-number]:text-[#79c0ff] [&_.hljs-params]:text-[#e6edf3] [&_.hljs-property]:text-[#79c0ff] [&_.hljs-string]:text-[#a5d6ff] [&_.hljs-title]:text-[#d2a8ff] [&_.hljs-type]:text-[#ffa657] [&_.hljs-variable]:text-[#ffa657]">
+              {highlightedCodeLines.map((line, index) => (
                 <span className="grid grid-cols-[2.2rem_1fr]" key={index}>
                   <span className="pr-3 text-right text-gray-600 select-none">
                     {index + 1}
                   </span>
-                  <code>{line || ' '}</code>
+                  <code
+                    dangerouslySetInnerHTML={{
+                      __html: line || ' ',
+                    }}
+                  />
                 </span>
               ))}
             </pre>
@@ -291,10 +314,10 @@ export default function Home() {
             </p>
             <p>
               <span className="text-copper-dark">const</span> application ={' '}
-              <span className="text-[#7c3aed]">defineApplication</span>({'{'})
+              <span className="text-[#7c3aed]">defineApplication</span>(&#123;
             </p>
             <p>　modules: [UsersModule(), HealthModule()],</p>
-            <p>{'}'})</p>
+            <p>&#125;)</p>
             <p className="mt-2 text-emerald-700">// Runtime固有APIは含まない</p>
             <p className="mt-3">
               <span className="text-copper-dark">export default</span>{' '}
