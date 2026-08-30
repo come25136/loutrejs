@@ -22,7 +22,7 @@
     "@loutrejs/loutre": "^0.4.0"
   },
   "peerDependencies": {
-    "bullmq": "^6.3.0"
+    "bullmq": "^6.2.0"
   },
   "peerDependenciesMeta": {
     "bullmq": {

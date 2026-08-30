@@ -18,4 +18,5 @@ runs:
 
     - name: Install dependencies
       shell: bash
-      run: deno install
+      # Deno 2.9.5 は有効な package-lock.json の変換に失敗するため、npm lockfile は読み込ませない。
+      run: deno install --no-lock

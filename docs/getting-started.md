@@ -300,7 +300,7 @@ await app.close('complete')
 | Deno               | 2.9             |
 | Bun                | 1.3 / 1.4       |
 | Cloudflare Workers | workerd         |
-| Electron           | 42 / 43 / 44    |
+| Electron           | 42 / 43         |
 | AWS Lambda         | Node.js 22 / 24 |
 
 Runtimeごとの主な接続APIは次のとおりです。
