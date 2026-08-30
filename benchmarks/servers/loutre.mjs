@@ -1,13 +1,29 @@
-import { createUsersApplication } from '../../dist/integrations/http-crud/src/index.js'
+import { defineApplication, defineEnv, defineModule } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
+import { z } from 'zod'
+import { UsersModule } from '../../dist/integrations/http-crud/src/index.js'
 
-const port = Number(process.env.BENCHMARK_PORT ?? 43110)
-const app = await nodeRuntime.create({
-  application: createUsersApplication(),
+const BenchmarkEnvSchema = z
+  .object({
+    BENCHMARK_PORT: z.coerce.number().int().min(1).max(65_535).default(43110),
+  })
+  .transform((env) => ({
+    port: env.BENCHMARK_PORT,
+  }))
+
+class BenchmarkEnv extends defineEnv(BenchmarkEnvSchema) {}
+
+const BenchmarkModule = defineModule(() => ({
+  environment: [BenchmarkEnv],
+}))
+
+const application = defineApplication({
+  modules: [UsersModule(), BenchmarkModule()],
 })
+const app = await nodeRuntime.create({ application })
 const listener = await app.serve({
   hostname: '127.0.0.1',
-  port,
+  port: app.get(BenchmarkEnv).port,
   shutdownHooks: false,
 })
 
