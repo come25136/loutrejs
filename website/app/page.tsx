@@ -92,52 +92,35 @@ const codeLines = [
   <>
     <span className="text-[#ff7b72]">import</span> {'{'}
   </>,
-  <> application,</>,
-  <> module,</>,
-  <> contract,</>,
-  <> implement,</>,
-  <> controller,</>,
+  <> defineApplication,</>,
+  <> task,</>,
   <>
     {'}'} <span className="text-[#ff7b72]">from</span>{' '}
-    <span className="text-[#a5d6ff]">'loutre'</span>
+    <span className="text-[#a5d6ff]">'@loutrejs/loutre'</span>
   </>,
   <></>,
   <>
-    <span className="text-[#ff7b72]">const</span> users ={' '}
-    <span className="text-[#d2a8ff]">contract</span>({'{'}
+    <span className="text-[#ff7b72]">export const</span> hello ={' '}
+    <span className="text-[#d2a8ff]">task</span>&lt;void, string&gt;({'{'})
   </>,
   <>
     {' '}
-    path: <span className="text-[#a5d6ff]">'/users'</span>,
+    name: <span className="text-[#a5d6ff]">'hello'</span>,
   </>,
   <>
     {' '}
-    method: <span className="text-[#a5d6ff]">'get'</span>,
+    factory: () =&gt; () =&gt;{' '}
+    <span className="text-[#a5d6ff]">'Hello, Loutre!'</span>,
   </>,
   <>{'}'})</>,
   <></>,
   <>
-    <span className="text-[#ff7b72]">const</span> usersImpl ={' '}
-    <span className="text-[#d2a8ff]">implement</span>(users,{' '}
-    <span className="text-[#ff7b72]">async</span> () =&gt; {'{'}
+    <span className="text-[#ff7b72]">export default</span>{' '}
+    <span className="text-[#d2a8ff]">defineApplication</span>({'{'})
   </>,
-  <>
-    {' '}
-    <span className="text-[#ff7b72]">return</span> [ {'{'} id:{' '}
-    <span className="text-[#a5d6ff]">'1'</span>, name:{' '}
-    <span className="text-[#a5d6ff]">'Loutre'</span> {'}'} ]
-  </>,
+  <>{'  '}modules: [],</>,
+  <>{'  '}tasks: [hello],</>,
   <>{'}'})</>,
-  <></>,
-  <>
-    <span className="text-[#ff7b72]">const</span> app ={' '}
-    <span className="text-[#d2a8ff]">application</span>()
-  </>,
-  <>
-    {' '}
-    .<span className="text-[#d2a8ff]">module</span>(
-    <span className="text-[#d2a8ff]">module</span>(users, usersImpl))
-  </>,
 ]
 
 function NumberedSection({
@@ -289,7 +272,8 @@ export default function Home() {
           ))}
         </div>
         <div className="mt-4 overflow-x-auto rounded-lg bg-gray-50 px-5 py-3 text-center font-mono text-xs whitespace-nowrap text-gray-700">
-          contract()　→　implement()　→　module()　→　task()　→　application()　→　graph()
+          Contract + Implementation + Module +
+          Task　→　defineApplication()　→　Application Graph
         </div>
       </NumberedSection>
 
@@ -306,14 +290,15 @@ export default function Home() {
               Loutre Application（共通）
             </p>
             <p>
-              <span className="text-copper-dark">const</span> app =
-              application()
+              <span className="text-copper-dark">const</span> application ={' '}
+              <span className="text-[#7c3aed]">defineApplication</span>({'{'})
             </p>
-            <p>　.module(module(users, usersImpl))</p>
-            <p>　.module(module(health, healthImpl))</p>
-            <p className="text-emerald-700">　// Runtime固有APIは含まない</p>
+            <p>　modules: [UsersModule(), HealthModule()],</p>
+            <p>{'}'})</p>
+            <p className="mt-2 text-emerald-700">// Runtime固有APIは含まない</p>
             <p className="mt-3">
-              <span className="text-copper-dark">export default</span> app
+              <span className="text-copper-dark">export default</span>{' '}
+              application
             </p>
           </div>
           <div>
@@ -342,27 +327,26 @@ export default function Home() {
           Application Graph
         </h2>
         <p className="mt-2 text-center text-sm text-gray-500">
-          loutre graph で依存関係と構成を可視化。
+          loutre graph のviewを指定して依存関係と構成を可視化。
         </p>
         <div className="mx-auto mt-7 grid max-w-4xl grid-cols-2 overflow-hidden rounded-xl border border-gray-200 max-md:grid-cols-1">
           <div className="border-r border-gray-200 bg-[#fbfcfd] p-5 font-mono text-[11px] leading-7 max-md:border-r-0 max-md:border-b">
             <p className="mb-3 flex items-center gap-2 text-gray-700">
-              <Terminal size={14} /> npx loutre graph
+              <Terminal size={14} /> loutre graph modules --entry src/app.ts
             </p>
-            <p className="text-emerald-700">✓ Load application</p>
-            <p className="text-emerald-700">✓ Build graph</p>
-            <p className="text-emerald-700">✓ Generate diagram</p>
-            <p className="mt-3 text-emerald-800">Graph generated: graph.svg</p>
+            <p className="text-emerald-700">AppModule [module:1]</p>
+            <p>　description: HTTP Application entry module</p>
+            <p>　imports: (none)</p>
           </div>
           <div className="relative min-h-56 bg-gray-50 p-5">
             <div className="absolute top-4 left-1/2 z-2 -translate-x-1/2 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 font-mono text-[10px] text-emerald-900">
               Application
             </div>
             <div className="absolute top-20 left-[18%] z-2 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-[9px]">
-              Module (Users)
+              UsersModule
             </div>
             <div className="absolute top-20 right-[18%] z-2 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-[9px]">
-              Module (Health)
+              HealthModule
             </div>
             <div className="absolute bottom-12 left-[14%] z-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 font-mono text-[9px]">
               Contract (GET /users)
