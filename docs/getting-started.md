@@ -59,7 +59,7 @@ import {
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
-const GreetingContract = contract({
+export const GreetingContract = contract({
   greet: procedure({
     protocols: {
       http: http({
@@ -130,6 +130,56 @@ const response = await app.fetch(
 )
 await app.close()
 ```
+
+## Typed HTTP Client
+
+HTTP Contractはserverだけでなくclientのsource of truthとして利用できます。Implementationやhandlerの型をclientへ公開する必要はありません。
+
+```ts
+import { createHttpClient, fetchHttpTransport } from '@loutrejs/loutre/http'
+import { GreetingContract } from './app.js'
+
+const client = createHttpClient(
+  GreetingContract,
+  fetchHttpTransport({ baseUrl: 'https://example.com' }),
+)
+
+const response = await client.greet({
+  params: { name: 'Loutre' },
+})
+
+if (response.status === 200) {
+  console.log(response.body.message)
+}
+```
+
+request型はStandard Schemaのinput、response型はStandard Schemaのoutputから導出されます。responseはContractに宣言されたstatusとschemaでruntime validationされます。
+
+独自transportを使う場合は`HttpClientTransport`を実装して`createHttpClient()`へ渡します。これによりtest、IPC、custom fetch policyなどでも同じContract-derived client surfaceを利用できます。
+
+## Module visibility
+
+Moduleの`exports`はApplication Graph上の正式なdependency boundaryです。別ModuleのProviderへ依存する場合、依存元は宣言元Moduleを`imports`し、宣言元はProviderを`exports`します。
+
+```ts
+class UsersService {}
+
+const UsersModule = defineModule(() => ({
+  providers: [UsersService],
+  exports: [UsersService],
+}))
+
+class BillingService {
+  constructor(readonly users = inject(UsersService)) {}
+}
+
+const BillingModule = defineModule(() => ({
+  imports: [UsersModule()],
+  providers: [BillingService],
+}))
+```
+
+importされていてもexportされていないProviderへのcross-module dependencyはGraph compile時に`LUTRE_MODULE_VISIBILITY`で拒否されます。同一Module内のdependencyに`exports`は不要です。
 
 ## Task / Arguments
 
