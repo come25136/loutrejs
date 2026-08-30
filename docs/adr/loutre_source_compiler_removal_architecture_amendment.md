@@ -1542,7 +1542,7 @@ Source Compiler を先に消してはならない。
 
 ## Phase B — Constructor Migration
 
-全 fixture / example / test を:
+`integrations/` / `examples/` / test を:
 
 ```ts
 constructor(service: Service)
@@ -1981,9 +1981,9 @@ packages/cli/src/linked-application.ts
 
 tests/di.test.ts
 
-fixtures/database-modules/src/index.ts
-fixtures/http-auth/src/index.ts
-fixtures/http-crud/src/index.ts
+integrations/database-modules/src/index.ts
+integrations/http-auth/src/index.ts
+integrations/http-crud/src/index.ts
 ```
 
 CLI には現在すでに:

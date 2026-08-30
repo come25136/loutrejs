@@ -21,7 +21,14 @@
       }
     },
     {
-      "files": ["fixtures/**/*.ts"],
+      "files": [
+        "integrations/application-build/**/*.ts",
+        "integrations/database-modules/**/*.ts",
+        "integrations/graph-probe/**/*.ts",
+        "integrations/http-auth/**/*.ts",
+        "integrations/http-crud/**/*.ts",
+        "integrations/streaming/**/*.ts"
+      ],
       "rules": {
         "typescript/no-extraneous-class": "off",
         "unicorn/require-module-specifiers": "off"
