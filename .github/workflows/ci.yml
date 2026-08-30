@@ -518,6 +518,7 @@ jobs:
       - quality-checks
       - minimum-node-types
       - node-tests
+      - examples-e2e
       - bun-conformance
       - deno-conformance
       - cloudflare-workers-conformance
@@ -530,6 +531,37 @@ jobs:
       - deno-initializer
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Verify required CI dependencies
+        shell: bash
+        run: |
+          awk '
+            /^jobs:$/ { in_jobs = 1; next }
+            in_jobs && /^  [a-z0-9-]+:$/ {
+              job = $1
+              sub(/:$/, "", job)
+              current = job
+              in_needs = 0
+              if (job != "required") jobs[job] = 1
+              next
+            }
+            current == "required" && /^    needs:$/ { in_needs = 1; next }
+            current == "required" && in_needs && /^      - [a-z0-9-]+$/ { needs[$2] = 1; next }
+            END {
+              for (job in jobs) if (!(job in needs)) {
+                print "Missing required CI dependency: " job > "/dev/stderr"
+                failed = 1
+              }
+              for (job in needs) if (!(job in jobs)) {
+                print "Unknown required CI dependency: " job > "/dev/stderr"
+                failed = 1
+              }
+              exit failed
+            }
+          ' .github/workflows/ci.yml
+
       - name: Fail unless every CI job passed
         if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
         run: exit 1
