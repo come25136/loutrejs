@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { ArrowUpRight } from 'lucide-react'
 
 export const metadata: Metadata = {
   title: 'Examples',
@@ -80,18 +81,17 @@ const examples = [
 ] as const
 
 const buttonClass =
-  'inline-flex min-h-13 items-center justify-center gap-3.5 rounded-full border border-transparent bg-ink px-6 text-sm font-bold text-cream transition hover:-translate-y-0.5 hover:bg-copper-dark max-sm:w-full'
+  'inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-transparent bg-ink px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-gray-800 max-sm:w-full'
 
 export default function ExamplesPage() {
   return (
-    <main className="pb-30">
-      <section className="shell py-24 pb-20">
-        <p className="mb-6 flex items-center gap-3 text-xs font-extrabold tracking-[0.17em] text-copper-dark uppercase">
-          <span className="h-0.5 w-6 bg-current" aria-hidden="true" /> Learn by
-          running
+    <main className="border-b border-gray-200 bg-white pb-30">
+      <section className="shell border-b border-gray-200 py-20">
+        <p className="mb-5 font-mono text-xs font-medium tracking-[0.08em] text-copper-dark uppercase">
+          Learn by running
         </p>
         <div className="grid grid-cols-[1.1fr_0.9fr] gap-20 max-sm:grid-cols-1 max-sm:gap-8">
-          <h1 className="m-0 font-serif text-[clamp(3.1rem,6vw,6rem)] leading-[0.98] font-medium tracking-[-0.065em]">
+          <h1 className="m-0 text-[clamp(3rem,6vw,5.25rem)] leading-[0.98] font-bold tracking-[-0.065em]">
             動くコードから、
             <br />
             Loutreを知る。
@@ -104,33 +104,41 @@ export default function ExamplesPage() {
       </section>
 
       <section
-        className="shell grid grid-cols-2 gap-px overflow-hidden rounded-[22px] border border-ink/15 bg-ink/15 max-sm:grid-cols-1"
+        className="shell mt-12 grid grid-cols-2 gap-4 max-sm:grid-cols-1"
         aria-label="Loutreのサンプル一覧"
       >
         {examples.map((example, index) => (
           <a
-            className="flex min-h-75 flex-col bg-cream p-8 transition hover:bg-paper-deep max-sm:min-h-68"
+            className="group flex min-h-70 flex-col rounded-xl border border-gray-200 bg-white p-7 transition hover:-translate-y-0.5 hover:border-gray-400 hover:shadow-[0_14px_36px_rgba(17,24,39,0.08)] max-sm:min-h-64"
             href={`https://github.com/come25136/loutrejs/tree/main/examples/${example.slug}`}
             key={example.slug}
           >
-            <div className="flex justify-between font-mono text-xs text-copper-dark uppercase">
-              <span>{String(index + 1).padStart(2, '0')}</span>
-              <span>{example.kind}</span>
+            <div className="flex items-center justify-between font-mono text-xs uppercase">
+              <span className="text-gray-400">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-copper-dark">
+                {example.kind}
+              </span>
             </div>
-            <h2 className="mt-14 mb-3.5 font-serif text-3xl font-semibold tracking-[-0.04em]">
+            <h2 className="mt-12 mb-3.5 text-2xl font-bold tracking-[-0.04em]">
               {example.name}
             </h2>
             <p className="m-0 max-w-lg text-sm leading-7 text-ink-soft">
               {example.description}
             </p>
-            <span className="mt-auto pt-6 text-xs font-bold">
-              コードを見る ↗
+            <span className="mt-auto flex items-center gap-1.5 pt-6 text-xs font-bold">
+              コードを見る
+              <ArrowUpRight
+                className="size-3.5 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                aria-hidden="true"
+              />
             </span>
           </a>
         ))}
       </section>
 
-      <section className="shell mt-10 flex items-center justify-between gap-8 max-sm:flex-col max-sm:items-stretch">
+      <section className="shell mt-10 flex items-center justify-between gap-8 rounded-xl border border-gray-200 bg-gray-50 px-6 py-5 max-sm:flex-col max-sm:items-stretch">
         <p className="m-0 text-sm text-ink-soft">
           すべてのサンプルはCIで継続的に実行されています。
         </p>
@@ -138,7 +146,8 @@ export default function ExamplesPage() {
           className={buttonClass}
           href="https://github.com/come25136/loutrejs/tree/main/examples"
         >
-          GitHubですべて見る <span aria-hidden="true">↗</span>
+          GitHubですべて見る
+          <ArrowUpRight className="size-4" aria-hidden="true" />
         </a>
       </section>
     </main>

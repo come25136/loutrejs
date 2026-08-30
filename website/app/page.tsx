@@ -1,286 +1,419 @@
 import Image from 'next/image'
 import Link from 'next/link'
-
-const codeExample = `const app = defineApplication({
-  modules: [GreetingModule()],
-})
-
-const runtime = bootstrap({
-  application: app,
-})
-
-await runtime.run(rebuild)`
-
-const features = [
-  {
-    number: '01',
-    title: 'Application Graph',
-    body: 'Module、Contract、Task、依存関係を一つのGraphとして検査。実行前に構造を理解できます。',
-  },
-  {
-    number: '02',
-    title: 'Typed by default',
-    body: 'Contractから実装、HTTP Client、RuntimeまでTypeScriptの型が途切れません。',
-  },
-  {
-    number: '03',
-    title: 'Runtime portable',
-    body: 'Application codeを環境固有APIから分離し、Node.js、Bun、Deno、Workersなどへ接続します。',
-  },
-]
+import {
+  ArrowRight,
+  Box,
+  Braces,
+  Clock3,
+  Copy,
+  ExternalLink,
+  GitBranch,
+  PlugZap,
+  Terminal,
+  Wrench,
+} from 'lucide-react'
+import type { ReactNode } from 'react'
+import {
+  SiBun,
+  SiCloudflare,
+  SiDeno,
+  SiElectron,
+  SiNodedotjs,
+} from 'react-icons/si'
 
 const runtimes = [
-  'Node.js',
-  'Bun',
-  'Deno',
-  'Cloudflare Workers',
-  'AWS Lambda',
-  'Electron',
+  {
+    name: 'Node.js',
+    note: 'LTS support',
+    icon: <SiNodedotjs />,
+    color: 'text-[#339933]',
+  },
+  {
+    name: 'Bun',
+    note: 'Fast & modern',
+    icon: <SiBun />,
+    color: 'text-[#14151a]',
+  },
+  {
+    name: 'Deno',
+    note: 'Secure by default',
+    icon: <SiDeno />,
+    color: 'text-black',
+  },
+  {
+    name: 'Cloudflare Workers',
+    note: 'Edge runtime',
+    icon: <SiCloudflare />,
+    color: 'text-[#f6821f]',
+  },
+  {
+    name: 'AWS Lambda',
+    note: 'Serverless',
+    icon: <PlugZap />,
+    color: 'text-[#ff9900]',
+  },
+  {
+    name: 'Electron',
+    note: 'Desktop apps',
+    icon: <SiElectron />,
+    color: 'text-[#47848f]',
+  },
+] as const
+
+const applicationModel = [
+  {
+    title: 'Contract',
+    body: 'Protocolの仕様と型を定義。',
+    icon: <Braces size={25} strokeWidth={1.7} />,
+  },
+  {
+    title: 'Implementation',
+    body: 'Contractに対する実装を分離。',
+    icon: <Wrench size={25} strokeWidth={1.7} />,
+  },
+  {
+    title: 'Module & DI',
+    body: '依存性をModuleで構成。',
+    icon: <Box size={25} strokeWidth={1.7} />,
+  },
+  {
+    title: 'Task',
+    body: '明示的な処理を型安全に定義。',
+    icon: <Clock3 size={25} strokeWidth={1.7} />,
+  },
+  {
+    title: 'Application Graph',
+    body: 'すべてを検証・可視化。',
+    icon: <GitBranch size={25} strokeWidth={1.7} />,
+  },
+] as const
+
+const codeLines = [
+  <>
+    <span className="text-[#ff7b72]">import</span> {'{'}
+  </>,
+  <> application,</>,
+  <> module,</>,
+  <> contract,</>,
+  <> implement,</>,
+  <> controller,</>,
+  <>
+    {'}'} <span className="text-[#ff7b72]">from</span>{' '}
+    <span className="text-[#a5d6ff]">'loutre'</span>
+  </>,
+  <></>,
+  <>
+    <span className="text-[#ff7b72]">const</span> users ={' '}
+    <span className="text-[#d2a8ff]">contract</span>({'{'}
+  </>,
+  <>
+    {' '}
+    path: <span className="text-[#a5d6ff]">'/users'</span>,
+  </>,
+  <>
+    {' '}
+    method: <span className="text-[#a5d6ff]">'get'</span>,
+  </>,
+  <>{'}'})</>,
+  <></>,
+  <>
+    <span className="text-[#ff7b72]">const</span> usersImpl ={' '}
+    <span className="text-[#d2a8ff]">implement</span>(users,{' '}
+    <span className="text-[#ff7b72]">async</span> () =&gt; {'{'}
+  </>,
+  <>
+    {' '}
+    <span className="text-[#ff7b72]">return</span> [ {'{'} id:{' '}
+    <span className="text-[#a5d6ff]">'1'</span>, name:{' '}
+    <span className="text-[#a5d6ff]">'Loutre'</span> {'}'} ]
+  </>,
+  <>{'}'})</>,
+  <></>,
+  <>
+    <span className="text-[#ff7b72]">const</span> app ={' '}
+    <span className="text-[#d2a8ff]">application</span>()
+  </>,
+  <>
+    {' '}
+    .<span className="text-[#d2a8ff]">module</span>(
+    <span className="text-[#d2a8ff]">module</span>(users, usersImpl))
+  </>,
 ]
 
-const eyebrowClass =
-  'mb-6 flex items-center gap-3 text-xs font-extrabold tracking-[0.17em] text-copper-dark uppercase'
-const buttonClass =
-  'inline-flex min-h-13 items-center justify-center gap-3.5 rounded-full border border-transparent px-6 text-sm font-bold transition hover:-translate-y-0.5 max-sm:w-full'
+function NumberedSection({
+  number,
+  children,
+  muted = false,
+  className = '',
+}: {
+  number: number
+  children: ReactNode
+  muted?: boolean
+  className?: string
+}) {
+  return (
+    <section
+      className={`border-b border-gray-200 ${muted ? 'bg-gray-50/70' : 'bg-white'}`}
+    >
+      <div
+        className={`shell relative pl-16 before:absolute before:top-0 before:bottom-0 before:left-3.5 before:border-l before:border-gray-200 max-sm:pl-0 max-sm:before:hidden ${className}`}
+      >
+        <span className="absolute top-8 left-0 z-2 grid size-7 place-items-center rounded-full bg-black text-xs font-bold text-white max-sm:hidden">
+          {number}
+        </span>
+        {children}
+      </div>
+    </section>
+  )
+}
+
+function InstallCommand({ className = '' }: { className?: string }) {
+  return (
+    <div
+      className={`flex min-h-12 items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 font-mono text-xs text-gray-800 ${className}`}
+    >
+      <span className="text-emerald-700">$</span>
+      <code>npm create loutre@latest my-app</code>
+      <Copy className="ml-auto text-gray-400" size={14} aria-hidden="true" />
+    </div>
+  )
+}
 
 export default function Home() {
   return (
     <main>
-      <section className="overflow-hidden bg-[radial-gradient(circle_at_78%_42%,rgba(181,96,55,0.12),transparent_33%),linear-gradient(180deg,#f6f0e7_0%,#f9f5ee_100%)]">
-        <div className="shell grid min-h-[700px] grid-cols-[minmax(0,1.03fr)_minmax(420px,0.97fr)] items-center gap-[clamp(3rem,7vw,6.25rem)] py-20 max-lg:grid-cols-1 max-lg:pt-16 max-sm:min-h-0 max-sm:gap-10 max-sm:py-14">
-          <div className="max-lg:max-w-3xl">
-            <p className={eyebrowClass}>
-              <span className="h-0.5 w-6 bg-current" aria-hidden="true" />{' '}
-              TypeScript Application Framework
-            </p>
-            <h1 className="m-0 text-[clamp(3.4rem,6.4vw,6.15rem)] leading-[0.98] font-bold tracking-[-0.075em] max-sm:text-[clamp(3rem,14vw,4.4rem)]">
-              ランタイムを選べる。
-              <br />
-              <em className="font-serif font-medium text-copper">
-                設計は、ぶれない。
-              </em>
+      <NumberedSection number={1} className="py-16 lg:py-20">
+        <div className="grid grid-cols-[1.05fr_0.95fr] items-center gap-14 max-lg:grid-cols-1">
+          <div>
+            <h1 className="max-w-2xl text-[clamp(2.7rem,5.6vw,4.3rem)] leading-[1.05] font-bold tracking-[-0.06em] text-balance">
+              TypeScript applications, without runtime lock-in.
             </h1>
-            <p className="mt-8 max-w-xl text-[clamp(1rem,1.4vw,1.18rem)] leading-8 text-ink-soft max-sm:text-base">
-              Loutreは、Application
-              Graphを中心にContract、DI、Task、Runtimeを一つの型安全なモデルへ統合します。
+            <p className="mt-6 max-w-xl text-[15px] leading-7 text-gray-600">
+              Application、Contract、DI、TaskをひとつのGraphとして構築。
+              <br className="max-sm:hidden" />
+              Node.js、Bun、Deno、Workers、Lambda、Electronへ。
             </p>
-            <div className="mt-9 flex flex-wrap gap-3 max-sm:flex-col">
+            <div className="mt-7 flex flex-wrap gap-3">
               <Link
-                className={`${buttonClass} bg-ink text-cream hover:bg-copper-dark`}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-ink px-5 text-sm font-semibold text-white transition hover:bg-gray-800"
                 href="/docs/getting-started/"
               >
-                5分で始める <span aria-hidden="true">→</span>
+                Get Started <ArrowRight size={15} aria-hidden="true" />
               </Link>
               <a
-                className={`${buttonClass} border-ink/15 bg-cream/60 hover:border-ink/35 hover:bg-cream`}
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-gray-300 bg-white px-5 text-sm font-semibold transition hover:bg-gray-50"
                 href="https://github.com/come25136/loutrejs"
               >
-                GitHubで見る <span aria-hidden="true">↗</span>
+                GitHub <ExternalLink size={14} aria-hidden="true" />
               </a>
             </div>
-            <p className="mt-5 flex items-center gap-2.5 font-mono text-xs text-[#75665c]">
-              <span className="text-copper" aria-hidden="true">
-                $
-              </span>
-              <code>npm create loutre@latest my-app</code>
-            </p>
-          </div>
-
-          <div
-            className="relative min-h-[520px] max-lg:mx-auto max-lg:min-h-[470px] max-lg:w-full max-lg:max-w-2xl max-sm:min-h-[405px]"
-            aria-label="LoutreのApplicationモデル"
-          >
-            <div
-              className="absolute -top-10 -right-30 size-[520px] rounded-full border border-copper/20"
-              aria-hidden="true"
-            />
-            <div
-              className="absolute right-20 -bottom-2 size-48 rounded-full border border-copper/20"
-              aria-hidden="true"
-            />
-            <div className="shadow-code absolute top-8 right-1 z-2 w-full max-w-[480px] rotate-[1.3deg] overflow-hidden rounded-[22px] border border-white/10 bg-[#1c1714] text-[#f4e9da] max-lg:right-18 max-lg:left-0 max-lg:w-auto max-lg:max-w-none max-sm:top-2 max-sm:right-6">
-              <div className="flex h-12 items-center gap-2 border-b border-white/10 px-4.5">
-                <span className="size-2 rounded-full bg-copper" />
-                <span className="size-2 rounded-full bg-[#796a60]" />
-                <span className="size-2 rounded-full bg-[#796a60]" />
-                <p className="ml-auto font-mono text-[0.68rem] text-[#9b8a7e]">
-                  application.ts
-                </p>
-              </div>
-              <pre className="m-0 whitespace-pre-wrap p-7 font-mono text-[clamp(0.72rem,1.15vw,0.88rem)] leading-[1.85] text-[#ead1b6] max-sm:p-5">
-                <code>{codeExample}</code>
-              </pre>
-              <div className="flex items-center gap-2 border-t border-white/10 px-6 py-4 font-mono text-[0.68rem] text-[#b8ad9f]">
-                <span
-                  className="size-2 rounded-full bg-[#9caf7d] shadow-[0_0_0_5px_rgba(156,175,125,0.1)]"
-                  aria-hidden="true"
-                />
-                Graph compiled · 6 runtimes ready
+            <InstallCommand className="mt-8 max-w-xl" />
+            <div className="mt-7 flex items-center gap-5">
+              <span className="text-xs text-gray-500">Works with</span>
+              <div className="flex items-center gap-5 text-2xl">
+                {runtimes.map((runtime) => (
+                  <span
+                    className={runtime.color}
+                    title={runtime.name}
+                    key={runtime.name}
+                  >
+                    {runtime.icon}
+                  </span>
+                ))}
               </div>
             </div>
-            <Image
-              className="absolute -right-18 -bottom-11 z-4 h-auto w-[285px] -rotate-7 drop-shadow-[0_24px_28px_rgba(64,39,26,0.22)] max-lg:-right-8 max-sm:-right-14 max-sm:-bottom-5 max-sm:w-[220px]"
-              src="/loutre.png"
-              width={512}
-              height={493}
-              preload
-              alt="Loutreのカワウソのマスコット"
-            />
+          </div>
+
+          <div className="shadow-code overflow-hidden rounded-xl border border-gray-800 bg-[#0d1117] text-[#e6edf3]">
+            <div className="flex h-11 items-center gap-2 border-b border-white/8 px-4">
+              <span className="size-2.5 rounded-full bg-[#ff5f56]" />
+              <span className="size-2.5 rounded-full bg-[#ffbd2e]" />
+              <span className="size-2.5 rounded-full bg-[#27c93f]" />
+              <span className="ml-3 font-mono text-[11px] text-gray-500">
+                app.ts
+              </span>
+            </div>
+            <pre className="overflow-x-auto px-2 py-6 font-mono text-[12px] leading-[1.65]">
+              {codeLines.map((line, index) => (
+                <span className="grid grid-cols-[2.2rem_1fr]" key={index}>
+                  <span className="pr-3 text-right text-gray-600 select-none">
+                    {index + 1}
+                  </span>
+                  <code>{line || ' '}</code>
+                </span>
+              ))}
+            </pre>
           </div>
         </div>
-      </section>
+      </NumberedSection>
 
-      <section
-        className="border-y border-ink/15 bg-paper-deep"
-        aria-label="対応ランタイム"
-      >
-        <div className="shell flex min-h-24 items-center gap-[clamp(2rem,6vw,5rem)] max-lg:flex-col max-lg:items-start max-lg:gap-4 max-lg:py-6">
-          <p className="shrink-0 font-serif text-sm italic text-copper-dark">
-            Run anywhere
-          </p>
-          <div className="flex w-full items-center justify-between gap-5 text-xs font-bold text-[#53473f] max-lg:flex-wrap max-lg:justify-start">
-            {runtimes.map((runtime) => (
-              <span key={runtime}>{runtime}</span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="shell py-36 max-sm:py-24">
-        <div className="grid grid-cols-[1.15fr_0.85fr] gap-x-20 max-sm:grid-cols-1 max-sm:gap-8">
-          <p className={`${eyebrowClass} col-span-full`}>
-            <span className="h-0.5 w-6 bg-current" aria-hidden="true" /> One
-            application, explicit architecture
-          </p>
-          <h2 className="m-0 font-serif text-[clamp(2.7rem,5vw,5rem)] leading-[1.04] font-medium tracking-[-0.055em]">
-            コードから追える。
-            <br />
-            型でつながる。
-          </h2>
-          <p className="m-0 max-w-lg self-end leading-8 text-ink-soft">
-            decoratorやfilesystem
-            discoveryに頼らず、Applicationの構造と実行境界を明示します。
-          </p>
-        </div>
-        <div className="mt-20 grid grid-cols-3 gap-px overflow-hidden rounded-[22px] border border-ink/15 bg-ink/15 max-sm:mt-14 max-sm:grid-cols-1">
-          {features.map((feature, index) => (
+      <NumberedSection number={2} muted className="py-10">
+        <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
+          Runs wherever your application runs
+        </h2>
+        <div className="mt-7 grid grid-cols-6 gap-3 max-lg:grid-cols-3 max-sm:grid-cols-2">
+          {runtimes.map((runtime) => (
             <article
-              className={`min-h-72 p-8 max-sm:min-h-0 ${index === 1 ? 'bg-[#f0e7da]' : 'bg-cream'}`}
-              key={feature.number}
+              className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-gray-200 bg-white p-4 text-center shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+              key={runtime.name}
             >
-              <p className="mb-16 font-mono text-xs text-copper max-sm:mb-10">
-                {feature.number}
-              </p>
-              <h3 className="mb-4 text-xl font-bold tracking-[-0.025em]">
-                {feature.title}
-              </h3>
-              <p className="m-0 text-sm leading-7 text-ink-soft">
-                {feature.body}
+              <span className={`text-4xl ${runtime.color}`}>
+                {runtime.icon}
+              </span>
+              <h3 className="mt-4 text-sm font-semibold">{runtime.name}</h3>
+              <p className="mt-1 text-[11px] text-gray-500">{runtime.note}</p>
+            </article>
+          ))}
+        </div>
+      </NumberedSection>
+
+      <NumberedSection number={3} className="py-10">
+        <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
+          One application model
+        </h2>
+        <p className="mt-2 text-center text-sm text-gray-500">
+          Application、Contract、DI、TaskをGraphとして統一します。
+        </p>
+        <div className="mt-7 grid grid-cols-5 divide-x divide-gray-200 overflow-hidden rounded-xl border border-gray-200 max-lg:grid-cols-2 max-lg:divide-x-0 max-sm:grid-cols-1">
+          {applicationModel.map((item) => (
+            <article
+              className="flex min-h-40 flex-col items-center justify-center p-5 text-center max-lg:border-b max-lg:border-gray-200"
+              key={item.title}
+            >
+              <span className="mb-4 text-gray-900">{item.icon}</span>
+              <h3 className="text-sm font-semibold">{item.title}</h3>
+              <p className="mt-2 max-w-36 text-[11px] leading-5 text-gray-500">
+                {item.body}
               </p>
             </article>
           ))}
         </div>
-      </section>
+        <div className="mt-4 overflow-x-auto rounded-lg bg-gray-50 px-5 py-3 text-center font-mono text-xs whitespace-nowrap text-gray-700">
+          contract()　→　implement()　→　module()　→　task()　→　application()　→　graph()
+        </div>
+      </NumberedSection>
 
-      <section className="overflow-hidden bg-ink text-cream">
-        <div className="shell grid min-h-[710px] grid-cols-[0.9fr_1.1fr] items-center gap-20 py-28 max-lg:gap-8 max-sm:grid-cols-1 max-sm:py-24">
-          <div>
-            <p className={`${eyebrowClass} text-[#d7916d]`}>
-              <span className="h-0.5 w-6 bg-current" aria-hidden="true" />{' '}
-              Graph-first
+      <NumberedSection number={4} muted className="py-10">
+        <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
+          Protocol と Runtime は分離
+        </h2>
+        <p className="mt-2 text-center text-sm text-gray-500">
+          Applicationは変えずに、Runtimeだけを切り替えられます。
+        </p>
+        <div className="mx-auto mt-7 grid max-w-4xl grid-cols-[1fr_0.85fr] items-center gap-12 max-md:grid-cols-1">
+          <div className="rounded-xl border border-gray-200 bg-white p-5 font-mono text-[11px] leading-6 text-gray-700">
+            <p className="mb-4 text-[10px] text-gray-500">
+              Loutre Application（共通）
             </p>
-            <h2 className="m-0 font-serif text-[clamp(2.7rem,5vw,5rem)] leading-[1.04] font-medium tracking-[-0.055em]">
-              実行する前に、
-              <br />
-              構造が見える。
-            </h2>
-            <p className="mt-8 max-w-lg leading-8 text-[#c8bdb3]">
-              Application
-              GraphはRuntimeとToolingが共有する設計図です。依存関係、公開境界、実行能力を検査し、CLIから可視化できます。
+            <p>
+              <span className="text-copper-dark">const</span> app =
+              application()
             </p>
-            <Link
-              className="mt-8 inline-flex items-center gap-5 border-b border-white/20 pb-2 text-sm font-bold"
-              href="/docs/architecture/"
-            >
-              Architectureを読む <span aria-hidden="true">→</span>
-            </Link>
+            <p>　.module(module(users, usersImpl))</p>
+            <p>　.module(module(health, healthImpl))</p>
+            <p className="text-emerald-700">　// Runtime固有APIは含まない</p>
+            <p className="mt-3">
+              <span className="text-copper-dark">export default</span> app
+            </p>
           </div>
-          <div
-            className="relative ml-auto aspect-square w-full max-w-[550px] max-sm:mx-auto max-sm:mt-5"
-            aria-label="Application Graphの概念図"
-          >
-            <div className="absolute top-1/2 left-1/2 z-2 grid min-h-16 min-w-36 -translate-1/2 place-items-center rounded-full border border-[#d7916d]/50 bg-copper-dark font-mono text-xs text-white">
+          <div>
+            <p className="mb-2 text-center text-[10px] font-semibold text-gray-500">
+              Runtimes
+            </p>
+            <div className="space-y-1.5">
+              {runtimes.map((runtime) => (
+                <div
+                  className="relative flex min-h-8 items-center gap-3 rounded-md border border-gray-200 bg-white px-3 text-[11px] before:absolute before:top-1/2 before:right-full before:w-12 before:border-t before:border-dashed before:border-gray-300 max-md:before:hidden"
+                  key={runtime.name}
+                >
+                  <span className={`text-base ${runtime.color}`}>
+                    {runtime.icon}
+                  </span>
+                  {runtime.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </NumberedSection>
+
+      <NumberedSection number={5} className="py-10">
+        <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
+          Application Graph
+        </h2>
+        <p className="mt-2 text-center text-sm text-gray-500">
+          loutre graph で依存関係と構成を可視化。
+        </p>
+        <div className="mx-auto mt-7 grid max-w-4xl grid-cols-2 overflow-hidden rounded-xl border border-gray-200 max-md:grid-cols-1">
+          <div className="border-r border-gray-200 bg-[#fbfcfd] p-5 font-mono text-[11px] leading-7 max-md:border-r-0 max-md:border-b">
+            <p className="mb-3 flex items-center gap-2 text-gray-700">
+              <Terminal size={14} /> npx loutre graph
+            </p>
+            <p className="text-emerald-700">✓ Load application</p>
+            <p className="text-emerald-700">✓ Build graph</p>
+            <p className="text-emerald-700">✓ Generate diagram</p>
+            <p className="mt-3 text-emerald-800">Graph generated: graph.svg</p>
+          </div>
+          <div className="relative min-h-56 bg-gray-50 p-5">
+            <div className="absolute top-4 left-1/2 z-2 -translate-x-1/2 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 font-mono text-[10px] text-emerald-900">
               Application
             </div>
-            <div className="absolute top-[10%] left-1/2 z-2 grid min-h-11 min-w-27 -translate-x-1/2 place-items-center rounded-full border border-white/15 bg-[#27201c] font-mono text-xs text-[#d9cdc2]">
-              Contract
+            <div className="absolute top-20 left-[18%] z-2 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-[9px]">
+              Module (Users)
             </div>
-            <div className="absolute top-1/2 right-[7%] z-2 grid min-h-11 min-w-27 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-[#27201c] font-mono text-xs text-[#d9cdc2]">
-              Runtime
+            <div className="absolute top-20 right-[18%] z-2 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-[9px]">
+              Module (Health)
             </div>
-            <div className="absolute bottom-[10%] left-1/2 z-2 grid min-h-11 min-w-27 -translate-x-1/2 place-items-center rounded-full border border-white/15 bg-[#27201c] font-mono text-xs text-[#d9cdc2]">
-              Tooling
+            <div className="absolute bottom-12 left-[14%] z-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 font-mono text-[9px]">
+              Contract (GET /users)
             </div>
-            <div className="absolute top-1/2 left-[7%] z-2 grid min-h-11 min-w-27 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-[#27201c] font-mono text-xs text-[#d9cdc2]">
-              Module
+            <div className="absolute right-[14%] bottom-12 z-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 font-mono text-[9px]">
+              Contract (GET /health)
             </div>
             <svg
-              className="size-full overflow-visible"
-              viewBox="0 0 500 500"
+              className="absolute inset-0 size-full"
+              viewBox="0 0 500 220"
               aria-hidden="true"
             >
               <path
-                className="fill-none stroke-paper-deep/25 stroke-[1px]"
-                d="M250 205V108"
-              />
-              <path
-                className="fill-none stroke-paper-deep/25 stroke-[1px]"
-                d="M295 250H392"
-              />
-              <path
-                className="fill-none stroke-paper-deep/25 stroke-[1px]"
-                d="M250 295V392"
-              />
-              <path
-                className="fill-none stroke-paper-deep/25 stroke-[1px]"
-                d="M205 250H108"
-              />
-              <circle
-                className="fill-none stroke-paper-deep/25 stroke-[1px] [stroke-dasharray:3_7]"
-                cx="250"
-                cy="250"
-                r="145"
+                d="M250 43V63M250 63L135 88M250 63L365 88M135 115V158M365 115V158"
+                fill="none"
+                stroke="#cbd5e1"
+                strokeWidth="1.2"
               />
             </svg>
           </div>
         </div>
-      </section>
+      </NumberedSection>
 
-      <section className="shell grid grid-cols-[1.05fr_0.95fr] gap-24 py-36 max-sm:grid-cols-1 max-sm:gap-8 max-sm:py-24">
-        <div>
-          <p className={eyebrowClass}>
-            <span className="h-0.5 w-6 bg-current" aria-hidden="true" /> Start
-            building
-          </p>
-          <h2 className="m-0 font-serif text-[clamp(2.7rem,5vw,5rem)] leading-[1.04] font-medium tracking-[-0.055em]">
-            最初のApplicationを、
-            <br />
-            いま作ろう。
-          </h2>
+      <NumberedSection number={6} muted className="overflow-hidden py-10">
+        <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
+          Get started in seconds
+        </h2>
+        <div className="relative mx-auto mt-6 max-w-2xl">
+          <InstallCommand />
+          <div className="mt-5 flex justify-center gap-7 text-xs text-gray-600 max-sm:gap-4">
+            <Link className="hover:text-black" href="/docs/getting-started/">
+              Installation →
+            </Link>
+            <span className="text-gray-300">|</span>
+            <Link className="hover:text-black" href="/docs/getting-started/">
+              First App →
+            </Link>
+            <span className="text-gray-300">|</span>
+            <Link className="hover:text-black" href="/examples/">
+              Examples →
+            </Link>
+          </div>
+          <Image
+            className="absolute -right-16 -bottom-16 h-auto w-36 drop-shadow-sm max-sm:hidden"
+            src="/loutre.png"
+            width={512}
+            height={493}
+            alt=""
+          />
         </div>
-        <div className="self-end">
-          <p className="mb-7 max-w-lg leading-8 text-ink-soft">
-            Node.js 22以上。initializerがTargetとpackage
-            managerの選択から案内します。
-          </p>
-          <Link
-            className={`${buttonClass} bg-ink text-cream hover:bg-copper-dark`}
-            href="/docs/getting-started/"
-          >
-            Getting Started <span aria-hidden="true">→</span>
-          </Link>
-        </div>
-      </section>
+      </NumberedSection>
     </main>
   )
 }
