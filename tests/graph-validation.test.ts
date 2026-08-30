@@ -1,5 +1,6 @@
 import {
-  contract,
+  defineProtocolContract,
+  protocolGroup,
   contextKey,
   defineModule,
   implementation,
@@ -7,7 +8,6 @@ import {
   layer,
   type PipelineItem,
   provide,
-  procedure,
   token,
   type ContractDefinition,
 } from '@loutrejs/loutre'
@@ -15,18 +15,15 @@ import { compileApplication } from '@loutrejs/loutre/graph'
 import { http } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
-
 const Body = z.object({ ok: z.boolean() })
-
 function protocol(pipeline: readonly PipelineItem[], path = '/fixture') {
-  return http({
+  return http.route({
     method: 'GET',
     path,
     responses: { ok: { status: 200, body: Body } },
     pipeline,
   } as never)
 }
-
 function passthrough(name: string) {
   return layer({
     name,
@@ -35,7 +32,6 @@ function passthrough(name: string) {
     },
   })
 }
-
 function graphImplementation(
   contractDefinition: ContractDefinition,
   options: {
@@ -59,7 +55,6 @@ function graphImplementation(
     factory: () => runtime,
   } as never)
 }
-
 describe('Application Graph IRとsemantic validation', () => {
   it('callable Layerのrecursive LayerIRとfactory DI edgeを生成する', () => {
     interface Database {
@@ -88,10 +83,10 @@ describe('Application Graph IRとsemantic validation', () => {
     })
     const nested = transactionLayer([inside])
     const outer = transactionLayer([authorization, nested, http.controller])
-    const Contract = contract(
-      {
-        run: procedure({ protocols: { http: protocol([outer]) } }),
-      },
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([outer]),
+      }),
       { name: 'RecursiveGraphContract' },
     )
     const Module = defineModule(() => ({
@@ -104,7 +99,6 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
       implementations: [graphImplementation(Contract)],
     }))
-
     const { graph, diagnostics } = compileApplication({ modules: [Module()] })
     expect(diagnostics).toEqual([])
     const root = graph.pipelines[0]?.layers[0]
@@ -134,27 +128,25 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     )
   })
-
   it('recursive terminal ruleとprotocol一致を検証する', () => {
     const childOwner = passthrough('terminal-owner')([http.controller])
-    const Contract = contract({
-      run: procedure({
-        protocols: {
-          http: protocol([childOwner, passthrough('too-late')]),
-        },
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([childOwner, passthrough('too-late')]),
       }),
-    })
+    )
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_002' }))
-
     const mismatch = passthrough('mismatch')([messagePort.handler])
-    const MismatchContract = contract({
-      run: procedure({ protocols: { http: protocol([mismatch]) } }),
-    })
+    const MismatchContract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([mismatch]),
+      }),
+    )
     const MismatchModule = defineModule(() => ({
       implementations: [graphImplementation(MismatchContract)],
     }))
@@ -162,7 +154,6 @@ describe('Application Graph IRとsemantic validation', () => {
       compileApplication({ modules: [MismatchModule()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_003' }))
   })
-
   it('Layer factoryの未解決DIを診断する', () => {
     const MISSING = token<object>('layer.missing')
     const injected = layer({
@@ -173,13 +164,11 @@ describe('Application Graph IRとsemantic validation', () => {
           await next()
         },
     })
-    const Contract = contract({
-      run: procedure({
-        protocols: {
-          http: protocol([injected, http.controller]),
-        },
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([injected, http.controller]),
       }),
-    })
+    )
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
@@ -187,7 +176,6 @@ describe('Application Graph IRとsemantic validation', () => {
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_DI_UNRESOLVED' }))
   })
-
   it('Graph Probeでfactoryだけを同期実行しruntimeとchildを実行しない', () => {
     let factoryCalls = 0
     let runtimeCalls = 0
@@ -208,20 +196,18 @@ describe('Application Graph IRとsemantic validation', () => {
         await next()
       },
     })
-    const Contract = contract({
-      run: procedure({
-        protocols: { http: protocol([probeSafe([child, http.controller])]) },
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([probeSafe([child, http.controller])]),
       }),
-    })
+    )
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
-
     expect(compileApplication({ modules: [Module()] }).diagnostics).toEqual([])
     expect(factoryCalls).toBe(1)
     expect(runtimeCalls).toBe(0)
   })
-
   it('recursive PipelineのContextとvalidation stateを順序どおり検証する', () => {
     const SESSION = contextKey('recursive.session').of<string>()
     const provider = layer({
@@ -248,33 +234,31 @@ describe('Application Graph IRとsemantic validation', () => {
         await next()
       },
     })
-    const Contract = contract({
-      run: procedure({
-        protocols: { http: protocol([childOwner, consumer, http.controller]) },
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([childOwner, consumer, http.controller]),
       }),
-    })
+    )
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
-
     expect(compileApplication({ modules: [Module()] }).diagnostics).toEqual([])
   })
-
   it('recursive Pipeline全体のterminal exactly oneを検証する', () => {
     const first = passthrough('first-terminal')([http.controller])
     const second = passthrough('second-terminal')([http.controller])
-    const Contract = contract({
-      run: procedure({ protocols: { http: protocol([first, second]) } }),
-    })
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([first, second]),
+      }),
+    )
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
-
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_001' }))
   })
-
   it('childのshortCircuit declarationをresponseと照合する', () => {
     const child = layer({
       name: 'recursive-short-circuit',
@@ -290,15 +274,14 @@ describe('Application Graph IRとsemantic validation', () => {
       },
     })
     const childOwner = passthrough('short-circuit-owner')([child])
-    const Contract = contract({
-      run: procedure({
-        protocols: { http: protocol([childOwner, http.controller]) },
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([childOwner, http.controller]),
       }),
-    })
+    )
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
-
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(
@@ -306,31 +289,25 @@ describe('Application Graph IRとsemantic validation', () => {
     )
   })
   it('rejects a terminal that is not last', () => {
-    const Contract = contract({
-      run: procedure({
-        protocols: {
-          http: protocol([http.controller, passthrough('too-late')]),
-        },
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([http.controller, passthrough('too-late')]),
       }),
-    })
+    )
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
     const result = compileApplication({ modules: [Module()] })
-
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_PIPELINE_002' }),
     )
   })
-
   it('Protocolと異なるterminalを拒否する', () => {
-    const Contract = contract({
-      run: procedure({
-        protocols: {
-          http: protocol([messagePort.handler]),
-        },
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([messagePort.handler]),
       }),
-    })
+    )
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
@@ -340,14 +317,13 @@ describe('Application Graph IRとsemantic validation', () => {
       ),
     ).toContain('LUTRE_PIPELINE_003')
   })
-
   it('detects missing and duplicate implementation coverage', () => {
-    const Contract = contract({
-      get: procedure({ protocols: { http: protocol([http.controller]) } }),
-      list: procedure({
-        protocols: { http: protocol([http.controller], '/fixture-list') },
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        get: protocol([http.controller]),
+        list: protocol([http.controller], '/fixture-list'),
       }),
-    })
+    )
     const Module = defineModule(() => ({
       implementations: [
         graphImplementation(Contract, {
@@ -363,17 +339,21 @@ describe('Application Graph IRとsemantic validation', () => {
     const codes = compileApplication({ modules: [Module()] }).diagnostics.map(
       (diagnostic) => diagnostic.code,
     )
-
     expect(codes).toContain('LUTRE_IMPL_001')
     expect(codes).toContain('LUTRE_IMPL_002')
   })
-
   it('Implementation factoryにはapplication providerだけを許可する', () => {
-    const SESSION = token<{ id: string }>('session')
-    const SESSION_CONTEXT = contextKey('session').of<{ id: string }>()
-    const Contract = contract({
-      run: procedure({ protocols: { http: protocol([http.controller]) } }),
-    })
+    const SESSION = token<{
+      id: string
+    }>('session')
+    const SESSION_CONTEXT = contextKey('session').of<{
+      id: string
+    }>()
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([http.controller]),
+      }),
+    )
     const createImplementation = (contractDefinition: ContractDefinition) =>
       implementation({
         name: 'Controller',
@@ -390,7 +370,6 @@ describe('Application Graph IRとsemantic validation', () => {
         ({ code }) => code,
       ),
     ).toContain('LUTRE_DI_UNRESOLVED')
-
     const sessionLayer = layer({
       name: 'session',
       role: 'guard',
@@ -399,11 +378,11 @@ describe('Application Graph IRとsemantic validation', () => {
         await next({ session: { id: 'one' } })
       },
     })
-    const LayerOnlyContract = contract({
-      run: procedure({
-        protocols: { http: protocol([sessionLayer, http.controller]) },
+    const LayerOnlyContract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([sessionLayer, http.controller]),
       }),
-    })
+    )
     const LayerOnlyModule = defineModule(() => ({
       implementations: [createImplementation(LayerOnlyContract)],
     }))
@@ -412,7 +391,6 @@ describe('Application Graph IRとsemantic validation', () => {
         ({ code }) => code,
       ),
     ).toContain('LUTRE_DI_UNRESOLVED')
-
     const ValidModule = defineModule(() => ({
       providers: [provide(SESSION).useValue({ id: 'application' })],
       implementations: [Controller],
@@ -421,18 +399,18 @@ describe('Application Graph IRとsemantic validation', () => {
       compileApplication({ modules: [ValidModule()] }).diagnostics,
     ).toEqual([])
   })
-
   it('emits the five initial graph dimensions without runtime-specific core APIs', () => {
-    const Contract = contract({
-      run: procedure({ protocols: { http: protocol([http.controller]) } }),
-    })
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([http.controller]),
+      }),
+    )
     const Module = defineModule(() => ({
       name: 'GraphFixtureModule',
       description: 'graph fixture',
       implementations: [graphImplementation(Contract)],
     }))
     const { graph } = compileApplication({ modules: [Module()] })
-
     expect(graph.modules).toHaveLength(1)
     expect(graph.modules[0]?.name).toBe('GraphFixtureModule')
     expect(graph.providers).toEqual([])
@@ -443,7 +421,6 @@ describe('Application Graph IRとsemantic validation', () => {
       'crypto.random',
     )
   })
-
   it('異なるtoken declarationの重複IDを拒否する', () => {
     const FIRST = token<string>('duplicate-token')
     const SECOND = token<string>('duplicate-token')
@@ -453,7 +430,6 @@ describe('Application Graph IRとsemantic validation', () => {
         provide(SECOND).useValue('second'),
       ],
     }))
-
     const result = compileApplication({ modules: [Module()] })
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_TOKEN_001' }),
@@ -462,7 +438,6 @@ describe('Application Graph IRとsemantic validation', () => {
       expect.objectContaining({ code: 'LUTRE_DI_003' }),
     )
   })
-
   it('同じModule内のduplicate Providerを静的に拒否する', () => {
     const VALUE = token<string>('duplicate-provider.direct')
     const Module = defineModule(() => ({
@@ -471,7 +446,6 @@ describe('Application Graph IRとsemantic validation', () => {
         provide(VALUE).useValue('second'),
       ],
     }))
-
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(
@@ -481,7 +455,6 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     )
   })
-
   it('importされたModule間のduplicate Providerを静的に拒否する', () => {
     const VALUE = token<string>('duplicate-provider.imported')
     const FirstModule = defineModule(() => ({
@@ -495,7 +468,6 @@ describe('Application Graph IRとsemantic validation', () => {
     const RootModule = defineModule(() => ({
       imports: [FirstModule(), SecondModule()],
     }))
-
     expect(
       compileApplication({ modules: [RootModule()] }).diagnostics,
     ).toContainEqual(
@@ -505,9 +477,10 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     )
   })
-
   it('未提供のContext Key requirementを拒否する', () => {
-    const SESSION = contextKey('session').of<{ id: string }>()
+    const SESSION = contextKey('session').of<{
+      id: string
+    }>()
     const guarded = layer({
       name: 'guarded',
       requires: [SESSION],
@@ -515,20 +488,18 @@ describe('Application Graph IRとsemantic validation', () => {
         await next()
       },
     })
-    const Contract = contract({
-      run: procedure({
-        protocols: { http: protocol([guarded, http.controller]) },
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([guarded, http.controller]),
       }),
-    })
+    )
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
-
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_004' }))
   })
-
   it('同名の異なるContext Key宣言を拒否する', () => {
     const FIRST = contextKey('session').of<string>()
     const SECOND = contextKey('session').of<string>()
@@ -546,17 +517,14 @@ describe('Application Graph IRとsemantic validation', () => {
         await next()
       },
     })
-    const Contract = contract({
-      run: procedure({
-        protocols: {
-          http: protocol([firstLayer, secondLayer, http.controller]),
-        },
+    const Contract = defineProtocolContract(
+      protocolGroup('http', {
+        run: protocol([firstLayer, secondLayer, http.controller]),
       }),
-    })
+    )
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
-
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_CONTEXT_002' }))

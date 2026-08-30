@@ -3,11 +3,17 @@ import {
   type IsValidProtocolPipeline,
   validateSchema,
   type ContractDefinition,
+  type ContractOptions,
   type ImplementationDescriptor,
   type ModuleInstance,
   type PipelineItem,
   type ProtocolDescriptor,
   type ProtocolFactory,
+  type ProtocolContractConstraint,
+  type ProtocolProcedures,
+  type ProtocolGroup,
+  defineProtocolContract,
+  protocolGroup,
   type SchemaOutput,
   type StandardSchemaV1,
   type TerminalLayerDescriptor,
@@ -70,12 +76,88 @@ type MessagePortPipelineConstraint<
     ? unknown
     : { readonly pipeline: never }
 
-export const messagePort = Object.assign(defineMessagePort, {
-  protocol: 'messagePort' as const,
-  handler,
-}) satisfies ProtocolFactory<'messagePort'> & {
+type MessagePortProtocolGroup<
+  TDefinitions extends Record<string, MessagePortProtocolDefinition>,
+> = ProtocolGroup<
+  'messagePort',
+  { [K in keyof TDefinitions]: MessagePortProtocol<TDefinitions[K]> }
+>
+
+type MessagePortDefinitionsConstraint<
+  TDefinitions extends Record<string, MessagePortProtocolDefinition>,
+> = {
+  [K in keyof TDefinitions]: TDefinitions[K] &
+    MessagePortPipelineConstraint<TDefinitions[K]>
+}
+
+type MessagePortDescriptors<
+  TDefinitions extends Record<string, MessagePortProtocolDefinition>,
+> = {
+  [K in keyof TDefinitions]: MessagePortProtocol<TDefinitions[K]>
+}
+
+export type MessagePortContract<
+  TDefinitions extends Record<string, MessagePortProtocolDefinition>,
+> = ContractDefinition<
+  ProtocolProcedures<'messagePort', MessagePortDescriptors<TDefinitions>>
+>
+
+function defineMessagePortGroup<
+  const TDefinitions extends Record<string, MessagePortProtocolDefinition>,
+>(
+  definitions: TDefinitions & MessagePortDefinitionsConstraint<TDefinitions>,
+): MessagePortProtocolGroup<TDefinitions> {
+  return protocolGroup(
+    'messagePort',
+    Object.fromEntries(
+      Object.entries(definitions).map(([name, definition]) => [
+        name,
+        defineMessagePort(definition as never),
+      ]),
+    ) as unknown as {
+      [K in keyof TDefinitions]: MessagePortProtocol<TDefinitions[K]>
+    },
+  )
+}
+
+export function messagePortContract<
+  const TDefinitions extends Record<string, MessagePortProtocolDefinition>,
+>(
+  definitions: TDefinitions &
+    MessagePortDefinitionsConstraint<TDefinitions> &
+    ProtocolContractConstraint<
+      'messagePort',
+      MessagePortDescriptors<TDefinitions>
+    >,
+  options: ContractOptions = {},
+): MessagePortContract<TDefinitions> {
+  const group = (
+    defineMessagePortGroup as unknown as (
+      definitions: TDefinitions,
+    ) => MessagePortProtocolGroup<TDefinitions>
+  )(definitions)
+  return defineProtocolContract(
+    group as MessagePortProtocolGroup<TDefinitions> &
+      ProtocolContractConstraint<
+        'messagePort',
+        MessagePortDescriptors<TDefinitions>
+      >,
+    options,
+  ) as MessagePortContract<TDefinitions>
+}
+
+export interface MessagePortProtocolFactory extends ProtocolFactory<'messagePort'> {
+  readonly route: typeof defineMessagePort
+  readonly contract: typeof messagePortContract
   readonly handler: TerminalLayerDescriptor<'messagePort'>
 }
+
+export const messagePort: MessagePortProtocolFactory = Object.freeze({
+  protocol: 'messagePort',
+  route: defineMessagePort,
+  contract: messagePortContract,
+  handler,
+})
 
 export interface LogicalMessagePortResult<
   TVariant extends string = string,

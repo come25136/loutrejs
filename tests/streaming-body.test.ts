@@ -1,10 +1,8 @@
 import { bootstrap } from '@loutrejs/loutre/host'
 import { defineApplication } from '@loutrejs/loutre'
 import {
-  contract,
   defineModule,
   implementation,
-  procedure,
   type StandardSchemaV1,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
@@ -12,7 +10,6 @@ import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 import { reserveHttpPort } from './helpers/http-server.js'
-
 const BodyStreamSchema: StandardSchemaV1<
   unknown,
   ReadableStream<Uint8Array>
@@ -26,31 +23,26 @@ const BodyStreamSchema: StandardSchemaV1<
         : { issues: [{ message: 'ReadableStreamが必要です' }] },
   },
 }
-
 describe('streaming validate.body', () => {
   it('binary bodyをbufferせずStandard SchemaからControllerへ1回だけ渡す', async () => {
-    const Contract = contract({
-      upload: procedure({
-        protocols: {
-          http: http({
-            method: 'POST',
-            path: '/upload',
-            request: {
-              body: {
-                contentType: 'application/octet-stream',
-                schema: BodyStreamSchema,
-              },
-            },
-            responses: {
-              accepted: {
-                status: 202,
-                body: z.object({ bytes: z.number() }),
-              },
-            },
-            pipeline: [validate.body, http.controller],
-          }),
+    const Contract = http.contract({
+      upload: {
+        method: 'POST',
+        path: '/upload',
+        request: {
+          body: {
+            contentType: 'application/octet-stream',
+            schema: BodyStreamSchema,
+          },
         },
-      }),
+        responses: {
+          accepted: {
+            status: 202,
+            body: z.object({ bytes: z.number() }),
+          },
+        },
+        pipeline: [validate.body, http.controller],
+      },
     })
     const Implementation = implementation({
       name: 'Implementation',
@@ -87,7 +79,6 @@ describe('streaming validate.body', () => {
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({ bytes: 4 })
     await application.close()
-
     const port = await reserveHttpPort()
     const host = await nodeRuntime.serve({
       application: definition,

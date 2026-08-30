@@ -1,10 +1,5 @@
 import { createTestApplication } from './helpers/application.js'
-import {
-  contract,
-  defineModule,
-  implementation,
-  procedure,
-} from '@loutrejs/loutre'
+import { defineModule, implementation } from '@loutrejs/loutre'
 import {
   assertValidCompilation,
   compileApplication,
@@ -13,108 +8,70 @@ import { http, validate } from '@loutrejs/loutre/http'
 import { validateHttpParamsSchemas } from '../packages/loutre/src/http/params.js'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
-
 const Result = z.object({ route: z.string(), value: z.unknown() })
-
 function createRoutingApplication() {
-  const Contract = contract({
-    raw: procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/raw/{id}',
-          responses: { ok: { status: 200, body: Result } },
-          pipeline: [http.controller],
-        }),
+  const Contract = http.contract({
+    raw: {
+      method: 'GET',
+      path: '/raw/{id}',
+      responses: { ok: { status: 200, body: Result } },
+      pipeline: [http.controller],
+    },
+    declaredOnly: {
+      method: 'GET',
+      path: '/declared/{id}',
+      request: { params: { id: z.coerce.number() } },
+      responses: { ok: { status: 200, body: Result } },
+      pipeline: [http.controller],
+    },
+    multiple: {
+      method: 'GET',
+      path: '/users/{userId}/posts/{postId}',
+      request: {
+        params: {
+          userId: z.coerce.number(),
+          postId: z.string(),
+        },
       },
-    }),
-    declaredOnly: procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/declared/{id}',
-          request: { params: { id: z.coerce.number() } },
-          responses: { ok: { status: 200, body: Result } },
-          pipeline: [http.controller],
-        }),
-      },
-    }),
-    multiple: procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/users/{userId}/posts/{postId}',
-          request: {
-            params: {
-              userId: z.coerce.number(),
-              postId: z.string(),
-            },
-          },
-          responses: { ok: { status: 200, body: Result } },
-          pipeline: [validate.params, http.controller],
-        }),
-      },
-    }),
-    dynamic: procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/priority/{id}',
-          responses: { ok: { status: 200, body: Result } },
-          pipeline: [http.controller],
-        }),
-      },
-    }),
-    static: procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/priority/me',
-          responses: { ok: { status: 200, body: Result } },
-          pipeline: [http.controller],
-        }),
-      },
-    }),
-    lessSpecific: procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/specific/{x}/c',
-          responses: { ok: { status: 200, body: Result } },
-          pipeline: [http.controller],
-        }),
-      },
-    }),
-    moreSpecific: procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/specific/b/{y}',
-          responses: { ok: { status: 200, body: Result } },
-          pipeline: [http.controller],
-        }),
-      },
-    }),
-    getMethod: procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/method/{id}',
-          responses: { ok: { status: 200, body: Result } },
-          pipeline: [http.controller],
-        }),
-      },
-    }),
-    postMethod: procedure({
-      protocols: {
-        http: http({
-          method: 'POST',
-          path: '/method/{id}',
-          responses: { ok: { status: 200, body: Result } },
-          pipeline: [http.controller],
-        }),
-      },
-    }),
+      responses: { ok: { status: 200, body: Result } },
+      pipeline: [validate.params, http.controller],
+    },
+    dynamic: {
+      method: 'GET',
+      path: '/priority/{id}',
+      responses: { ok: { status: 200, body: Result } },
+      pipeline: [http.controller],
+    },
+    static: {
+      method: 'GET',
+      path: '/priority/me',
+      responses: { ok: { status: 200, body: Result } },
+      pipeline: [http.controller],
+    },
+    lessSpecific: {
+      method: 'GET',
+      path: '/specific/{x}/c',
+      responses: { ok: { status: 200, body: Result } },
+      pipeline: [http.controller],
+    },
+    moreSpecific: {
+      method: 'GET',
+      path: '/specific/b/{y}',
+      responses: { ok: { status: 200, body: Result } },
+      pipeline: [http.controller],
+    },
+    getMethod: {
+      method: 'GET',
+      path: '/method/{id}',
+      responses: { ok: { status: 200, body: Result } },
+      pipeline: [http.controller],
+    },
+    postMethod: {
+      method: 'POST',
+      path: '/method/{id}',
+      responses: { ok: { status: 200, body: Result } },
+      pipeline: [http.controller],
+    },
   })
   const Implementation = implementation({
     name: 'Implementation',
@@ -174,16 +131,13 @@ function createRoutingApplication() {
     logger: silentLogger,
   })
 }
-
 describe('HTTP pathとroute identity', () => {
   it('raw paramsのdecodeとproperty-wise transformを行う', async () => {
     const application = createRoutingApplication()
-
     const raw = await application.fetch(
       new Request('http://fixture.test/raw/hello%20world'),
     )
     expect(await raw.json()).toEqual({ route: 'raw', value: 'hello world' })
-
     const declaredOnly = await application.fetch(
       new Request('http://fixture.test/declared/123'),
     )
@@ -191,7 +145,6 @@ describe('HTTP pathとroute identity', () => {
       route: 'declared',
       value: '123',
     })
-
     const multiple = await application.fetch(
       new Request('http://fixture.test/users/123/posts/456'),
     )
@@ -199,13 +152,11 @@ describe('HTTP pathとroute identity', () => {
       route: 'multiple',
       value: { userId: 123, postId: '456' },
     })
-
     const invalidEncoding = await application.fetch(
       new Request('http://fixture.test/raw/%E0%A4%A'),
     )
     expect(invalidEncoding.status).toBe(400)
   })
-
   it('static優先度と左からのspecificityが登録順に依存しない', async () => {
     const application = createRoutingApplication()
     const staticResponse = await application.fetch(
@@ -215,33 +166,23 @@ describe('HTTP pathとroute identity', () => {
       route: 'static',
       value: null,
     })
-
     const deeperResponse = await application.fetch(
       new Request('http://fixture.test/specific/b/c'),
     )
     expect(await deeperResponse.json()).toEqual({ route: 'more', value: 'c' })
-
-    const ReverseContract = contract({
-      static: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/reverse/me',
-            responses: { ok: { status: 200, body: z.string() } },
-            pipeline: [http.controller],
-          }),
-        },
-      }),
-      dynamic: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/reverse/{id}',
-            responses: { ok: { status: 200, body: z.string() } },
-            pipeline: [http.controller],
-          }),
-        },
-      }),
+    const ReverseContract = http.contract({
+      static: {
+        method: 'GET',
+        path: '/reverse/me',
+        responses: { ok: { status: 200, body: z.string() } },
+        pipeline: [http.controller],
+      },
+      dynamic: {
+        method: 'GET',
+        path: '/reverse/{id}',
+        responses: { ok: { status: 200, body: z.string() } },
+        pipeline: [http.controller],
+      },
     })
     const ReverseImplementation = implementation({
       name: 'ReverseImplementation',
@@ -268,7 +209,6 @@ describe('HTTP pathとroute identity', () => {
     )
     expect(await reverseResponse.json()).toBe('static')
   })
-
   it('methodが異なる同一pathを別routeとしてdispatchする', async () => {
     const application = createRoutingApplication()
     const getResponse = await application.fetch(
@@ -280,13 +220,11 @@ describe('HTTP pathとroute identity', () => {
     expect((await getResponse.json()).route).toBe('get')
     expect((await postResponse.json()).route).toBe('post')
   })
-
   it('validation issue pathへparam名をprefixする', async () => {
     const nestedSchema = z
       .string()
       .transform(() => ({ nested: '' }))
       .pipe(z.object({ nested: z.string().min(1) }))
-
     await expect(
       validateHttpParamsSchemas({ id: nestedSchema }, { id: 'value' }),
     ).rejects.toMatchObject({
@@ -298,7 +236,6 @@ describe('HTTP pathとroute identity', () => {
       issues: [expect.objectContaining({ path: ['id'] })],
     })
   })
-
   it('runtimeでも無効なpathとparams schema keyを拒否する', () => {
     for (const path of [
       '/users/{id?}',
@@ -314,7 +251,7 @@ describe('HTTP pathとroute identity', () => {
       '/users#fragment',
     ]) {
       expect(() =>
-        http({
+        http.route({
           method: 'GET',
           path,
           responses: { ok: { status: 200, body: z.string() } },
@@ -322,9 +259,8 @@ describe('HTTP pathとroute identity', () => {
         } as never),
       ).toThrow()
     }
-
     expect(() =>
-      http({
+      http.route({
         method: 'GET',
         path: '/users/{id}',
         request: { params: { userId: z.string() } },
@@ -332,9 +268,8 @@ describe('HTTP pathとroute identity', () => {
         pipeline: [validate.params, http.controller],
       } as never),
     ).toThrow(/must match/)
-
     expect(() =>
-      http({
+      http.route({
         method: 'GET',
         path: '/users/{id}',
         responses: { ok: { status: 200, body: z.string() } },
@@ -342,89 +277,72 @@ describe('HTTP pathとroute identity', () => {
       } as never),
     ).toThrow(/requires request.params/)
   })
-
   it('method uppercase・param名除外・rootをdispatchKeyへ反映する', () => {
-    const first = http({
+    const first = http.route({
       method: 'get',
       path: '/users/{id}/posts/{postId}',
       responses: { ok: { status: 200, body: z.string() } },
       pipeline: [http.controller],
     })
-    const second = http({
+    const second = http.route({
       method: 'GET',
       path: '/users/{userId}/posts/{id}',
       responses: { ok: { status: 200, body: z.string() } },
       pipeline: [http.controller],
     })
-    const root = http({
+    const root = http.route({
       method: 'GET',
       path: '/',
       responses: { ok: { status: 200, body: z.string() } },
       pipeline: [http.controller],
     })
-
     expect(first.dispatchKey).toBe('http:GET:/users/{}/posts/{}')
     expect(second.dispatchKey).toBe(first.dispatchKey)
     expect(root.dispatchKey).toBe('http:GET:/')
   })
 })
-
 describe('protocol dispatchKeyの重複検査', () => {
   it('unsafe castで型検査を迂回しても同一Contract内の重複を拒否する', () => {
-    const first = procedure({
-      protocols: {
-        http: http({
-          method: 'GET',
-          path: '/duplicate/{id}',
-          responses: { ok: { status: 200, body: z.string() } },
-          pipeline: [http.controller],
-        }),
-      },
-    })
-    const second = procedure({
-      protocols: {
-        http: http({
-          method: 'get',
-          path: '/duplicate/{userId}',
-          responses: { ok: { status: 200, body: z.string() } },
-          pipeline: [http.controller],
-        }),
-      },
-    })
-
     expect(() =>
-      contract({ first, second } as any, { name: 'DuplicateContract' }),
+      (http.contract as any)(
+        {
+          first: {
+            method: 'GET',
+            path: '/duplicate/{id}',
+            responses: { ok: { status: 200, body: z.string() } },
+            pipeline: [http.controller],
+          },
+          second: {
+            method: 'get',
+            path: '/duplicate/{userId}',
+            responses: { ok: { status: 200, body: z.string() } },
+            pipeline: [http.controller],
+          },
+        },
+        { name: 'DuplicateContract' },
+      ),
     ).toThrow(/Duplicate protocol dispatch key "http:GET:\/duplicate\/\{\}"/)
   })
-
   it('別Contract間の重複をGraph diagnosticにする', () => {
-    const FirstContract = contract(
+    const FirstContract = http.contract(
       {
-        get: procedure({
-          protocols: {
-            http: http({
-              method: 'GET',
-              path: '/graph/{id}',
-              responses: { ok: { status: 200, body: z.string() } },
-              pipeline: [http.controller],
-            }),
-          },
-        }),
+        get: {
+          method: 'GET',
+          path: '/graph/{id}',
+          responses: { ok: { status: 200, body: z.string() } },
+          pipeline: [http.controller],
+        },
       },
       { name: 'FirstContract' },
     )
-    const SecondContract = contract(
+    const SecondContract = http.contract(
       {
-        get: procedure({
-          protocols: {
-            http: http({
-              method: 'get',
-              path: '/graph/{userId}',
-              responses: { ok: { status: 200, body: z.string() } },
-              pipeline: [http.controller],
-            }),
-          },
-        }),
+        get: {
+          method: 'get',
+          path: '/graph/{userId}',
+          responses: { ok: { status: 200, body: z.string() } },
+          pipeline: [http.controller],
+        },
       },
       { name: 'SecondContract' },
     )
@@ -454,7 +372,6 @@ describe('protocol dispatchKeyの重複検査', () => {
     const SecondModule = defineModule(() => ({
       implementations: [SecondController],
     }))
-
     const result = compileApplication({
       modules: [FirstModule(), SecondModule()],
     })

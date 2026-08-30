@@ -49,37 +49,31 @@ Application DefinitionはHTTP serverそのものではありません。Contract
 
 ```ts
 import {
-  contract,
   defineApplication,
   defineModule,
   implementation,
   inject,
-  procedure,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
-export const GreetingContract = contract({
-  greet: procedure({
-    protocols: {
-      http: http({
-        method: 'GET',
-        path: '/greetings/{name}',
-        request: {
-          params: {
-            name: z.string().min(1),
-          },
-        },
-        responses: {
-          ok: {
-            status: 200,
-            body: z.object({ message: z.string() }),
-          },
-        },
-        pipeline: [validate.params, http.controller],
-      }),
+export const GreetingContract = http.contract({
+  greet: {
+    method: 'GET',
+    path: '/greetings/{name}',
+    request: {
+      params: {
+        name: z.string().min(1),
+      },
     },
-  }),
+    responses: {
+      ok: {
+        status: 200,
+        body: z.object({ message: z.string() }),
+      },
+    },
+    pipeline: [validate.params, http.controller],
+  },
 })
 
 class GreetingService {
@@ -108,6 +102,8 @@ export default defineApplication({
   modules: [GreetingModule()],
 })
 ```
+
+同じprotocolのprocedureは`http.contract()`のようなprotocol固有のContract builderへまとめられます。複数protocolを同じContractへ載せる場合は、`http.contract()` / `graphql.contract()` / `websocket.contract()` / `sse.contract()`で作ったContractを`contract.merge()`で統合します。featureやprotocol単位のファイル分割も同じcompositionで扱えます。merge時は同じprocedure名に異なるprotocolを重ねられますが、同じ`procedure + protocol`の二重定義は拒否されます。
 
 Node.jsでは`@loutrejs/node`からApplicationをserveできます。
 

@@ -1,17 +1,14 @@
 import { createTestApplication } from './helpers/application.js'
 import {
-  contract,
   contextKey,
   defineModule,
   implementation,
   layer,
-  procedure,
   shortCircuit,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
-
 describe('HTTP application boundary', () => {
   it('全HTTP入力を検証し、Layer stateをctxからapplication-scoped Controllerへ渡す', async () => {
     const EXECUTION_ID = contextKey('executionId').of<string>()
@@ -24,52 +21,48 @@ describe('HTTP application boundary', () => {
         await next({ executionId: `exec-${executions}` })
       },
     })
-    const Contract = contract({
-      update: procedure({
-        protocols: {
-          http: http({
-            method: 'POST',
-            path: '/things/{id}',
-            request: {
-              params: { id: z.string().min(2) },
-              query: z.object({ page: z.coerce.number().int() }),
-              headers: z.object({ 'x-kind': z.literal('fixture') }),
-              body: {
-                contentType: 'application/json',
-                schema: z.object({ name: z.string() }),
-              },
-            },
-            responses: {
-              updated: {
-                status: 200,
-                headers: z.object({
-                  'x-dynamic': z.string(),
-                  'x-overridden': z.string(),
-                  'content-type': z.string(),
-                }),
-                staticHeaders: {
-                  'x-declared': 'static',
-                  'x-overridden': 'static',
-                },
-                body: z.object({
-                  id: z.string(),
-                  page: z.number(),
-                  name: z.string(),
-                  executionId: z.string(),
-                }),
-              },
-            },
-            pipeline: [
-              validate.params,
-              validate.query,
-              validate.headers,
-              validate.body,
-              execution,
-              http.controller,
-            ],
-          }),
+    const Contract = http.contract({
+      update: {
+        method: 'POST',
+        path: '/things/{id}',
+        request: {
+          params: { id: z.string().min(2) },
+          query: z.object({ page: z.coerce.number().int() }),
+          headers: z.object({ 'x-kind': z.literal('fixture') }),
+          body: {
+            contentType: 'application/json',
+            schema: z.object({ name: z.string() }),
+          },
         },
-      }),
+        responses: {
+          updated: {
+            status: 200,
+            headers: z.object({
+              'x-dynamic': z.string(),
+              'x-overridden': z.string(),
+              'content-type': z.string(),
+            }),
+            staticHeaders: {
+              'x-declared': 'static',
+              'x-overridden': 'static',
+            },
+            body: z.object({
+              id: z.string(),
+              page: z.number(),
+              name: z.string(),
+              executionId: z.string(),
+            }),
+          },
+        },
+        pipeline: [
+          validate.params,
+          validate.query,
+          validate.headers,
+          validate.body,
+          execution,
+          http.controller,
+        ],
+      },
     })
     let controllerInstances = 0
     const Implementation = implementation({
@@ -106,7 +99,6 @@ describe('HTTP application boundary', () => {
     })
     const probeConstructionCalls = controllerInstances
     expect(probeConstructionCalls).toBe(1)
-
     const response = await application.fetch(
       new Request('http://fixture.test/things/t1?page=2', {
         method: 'POST',
@@ -117,7 +109,6 @@ describe('HTTP application boundary', () => {
         body: JSON.stringify({ name: 'Loutre' }),
       }),
     )
-
     expect(controllerInstances).toBe(probeConstructionCalls + 1)
     const runtimeConstructionCalls = controllerInstances
     expect(response.status).toBe(200)
@@ -133,7 +124,6 @@ describe('HTTP application boundary', () => {
       name: 'Loutre',
       executionId: 'exec-1',
     })
-
     const second = await application.fetch(
       new Request('http://fixture.test/things/t2?page=3', {
         method: 'POST',
@@ -152,7 +142,6 @@ describe('HTTP application boundary', () => {
       executionId: 'exec-2',
     })
     expect(controllerInstances).toBe(runtimeConstructionCalls)
-
     const invalid = await application.fetch(
       new Request('http://fixture.test/things/x?page=2', {
         method: 'POST',
@@ -165,10 +154,8 @@ describe('HTTP application boundary', () => {
     )
     expect(invalid.status).toBe(400)
   })
-
   it('malformed JSONを内部情報を含まない400 responseへ変換する', async () => {
     const application = createInputDecodeFixture()
-
     const response = await application.fetch(
       new Request('http://fixture.test/decode/item', {
         method: 'POST',
@@ -176,25 +163,19 @@ describe('HTTP application boundary', () => {
         body: '{',
       }),
     )
-
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: 'Invalid request' })
   })
-
   it('malformed path percent encodingをthrowせず400 responseへ変換する', async () => {
     const application = createInputDecodeFixture()
-
     const response = await application.fetch(
       new Request('http://fixture.test/decode/%E0%A4%A', { method: 'POST' }),
     )
-
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: 'Invalid request' })
   })
-
   it('有効なUTF-8 percent encodingをpath parameterとしてdecodeする', async () => {
     const application = createInputDecodeFixture()
-
     const response = await application.fetch(
       new Request(
         'http://fixture.test/decode/%E3%82%AB%E3%83%AF%E3%82%A6%E3%82%BD',
@@ -205,28 +186,22 @@ describe('HTTP application boundary', () => {
         },
       ),
     )
-
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ value: 'カワウソ' })
   })
-
   it('treats output schema failures as internal finalization errors', async () => {
-    const Contract = contract({
-      run: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/invalid-output',
-            responses: {
-              ok: {
-                status: 200,
-                body: z.object({ value: z.string() }),
-              },
-            },
-            pipeline: [http.controller],
-          }),
+    const Contract = http.contract({
+      run: {
+        method: 'GET',
+        path: '/invalid-output',
+        responses: {
+          ok: {
+            status: 200,
+            body: z.object({ value: z.string() }),
+          },
         },
-      }),
+        pipeline: [http.controller],
+      },
     })
     const Implementation = implementation({
       name: 'Implementation',
@@ -247,31 +222,25 @@ describe('HTTP application boundary', () => {
       modules: [Module()],
       logger: silentLogger,
     })
-
     const response = await application.fetch(
       new Request('http://fixture.test/invalid-output'),
     )
     expect(response.status).toBe(500)
   })
-
   it('response header schema failuresをinternal finalization errorにする', async () => {
-    const Contract = contract({
-      run: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/invalid-output-header',
-            responses: {
-              ok: {
-                status: 200,
-                body: z.object({ value: z.string() }),
-                headers: z.object({ etag: z.string().startsWith('"') }),
-              },
-            },
-            pipeline: [http.controller],
-          }),
+    const Contract = http.contract({
+      run: {
+        method: 'GET',
+        path: '/invalid-output-header',
+        responses: {
+          ok: {
+            status: 200,
+            body: z.object({ value: z.string() }),
+            headers: z.object({ etag: z.string().startsWith('"') }),
+          },
         },
-      }),
+        pipeline: [http.controller],
+      },
     })
     const Implementation = implementation({
       name: 'Implementation',
@@ -293,34 +262,27 @@ describe('HTTP application boundary', () => {
       modules: [Module()],
       logger: silentLogger,
     })
-
     const response = await application.fetch(
       new Request('http://fixture.test/invalid-output-header'),
     )
-
     expect(response.status).toBe(500)
     expect(await response.json()).toEqual(
       expect.objectContaining({ error: 'Internal Server Error' }),
     )
   })
-
   it('schema未宣言のdynamic response headerを拒否する', async () => {
-    const Contract = contract({
-      run: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/undeclared-output-header',
-            responses: {
-              ok: {
-                status: 200,
-                body: z.object({ value: z.string() }),
-              },
-            },
-            pipeline: [http.controller],
-          }),
+    const Contract = http.contract({
+      run: {
+        method: 'GET',
+        path: '/undeclared-output-header',
+        responses: {
+          ok: {
+            status: 200,
+            body: z.object({ value: z.string() }),
+          },
         },
-      }),
+        pipeline: [http.controller],
+      },
     })
     const Implementation = implementation({
       name: 'Implementation',
@@ -342,17 +304,14 @@ describe('HTTP application boundary', () => {
       modules: [Module()],
       logger: silentLogger,
     })
-
     const response = await application.fetch(
       new Request('http://fixture.test/undeclared-output-header'),
     )
-
     expect(response.status).toBe(500)
     expect(await response.json()).toEqual(
       expect.objectContaining({ error: 'Internal Server Error' }),
     )
   })
-
   it('short circuit resultもProtocol Finalizationを通す', async () => {
     let controllerCalled = false
     const cached = layer({
@@ -364,22 +323,18 @@ describe('HTTP application boundary', () => {
           body: { value: 'cached' },
         }),
     })
-    const Contract = contract({
-      run: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/cached',
-            responses: {
-              ok: {
-                status: 200,
-                body: z.object({ value: z.string() }),
-              },
-            },
-            pipeline: [cached, http.controller],
-          }),
+    const Contract = http.contract({
+      run: {
+        method: 'GET',
+        path: '/cached',
+        responses: {
+          ok: {
+            status: 200,
+            body: z.object({ value: z.string() }),
+          },
         },
-      }),
+        pipeline: [cached, http.controller],
+      },
     })
     const Implementation = implementation({
       name: 'Implementation',
@@ -402,37 +357,31 @@ describe('HTTP application boundary', () => {
     const response = await application.fetch(
       new Request('https://fixture.test/cached'),
     )
-
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ value: 'cached' })
     expect(controllerCalled).toBe(false)
   })
 })
-
 function createInputDecodeFixture() {
-  const Contract = contract({
-    decode: procedure({
-      protocols: {
-        http: http({
-          method: 'POST',
-          path: '/decode/{value}',
-          request: {
-            params: { value: z.string() },
-            body: {
-              contentType: 'application/json',
-              schema: z.object({}).optional(),
-            },
-          },
-          responses: {
-            ok: {
-              status: 200,
-              body: z.object({ value: z.string() }),
-            },
-          },
-          pipeline: [validate.params, validate.body, http.controller],
-        }),
+  const Contract = http.contract({
+    decode: {
+      method: 'POST',
+      path: '/decode/{value}',
+      request: {
+        params: { value: z.string() },
+        body: {
+          contentType: 'application/json',
+          schema: z.object({}).optional(),
+        },
       },
-    }),
+      responses: {
+        ok: {
+          status: 200,
+          body: z.object({ value: z.string() }),
+        },
+      },
+      pipeline: [validate.params, validate.body, http.controller],
+    },
   })
   const Implementation = implementation({
     name: 'Implementation',

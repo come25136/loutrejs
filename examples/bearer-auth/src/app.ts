@@ -1,27 +1,17 @@
 import { defineApplication } from '@loutrejs/loutre'
-import {
-  contextKey,
-  contract,
-  defineModule,
-  implementation,
-  procedure,
-} from '@loutrejs/loutre'
+import { contextKey, defineModule, implementation } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { bearerAuth } from './bearer-auth.js'
-
 const User = z.object({
   id: z.string(),
   name: z.string(),
 })
-
 const UnauthorizedBody = z.object({
   error: z.string(),
 })
-
 const BEARER_CURRENT_USER =
   contextKey('bearerCurrentUser').of<z.output<typeof User>>()
-
 const bearerAuthentication = bearerAuth({
   name: 'bearerAuthentication',
   realm: 'Loutre Example',
@@ -38,30 +28,24 @@ const bearerAuthentication = bearerAuth({
     body: { error: 'Bearer token required' },
   },
 })
-
-const BearerProfileContract = contract({
-  get: procedure({
-    protocols: {
-      http: http({
-        method: 'GET',
-        path: '/profile',
-        responses: {
-          ok: {
-            status: 200,
-            body: User,
-          },
-          unauthorized: {
-            status: 401,
-            body: UnauthorizedBody,
-            headers: z.object({ 'www-authenticate': z.string() }),
-          },
-        },
-        pipeline: [bearerAuthentication, http.controller],
-      }),
+const BearerProfileContract = http.contract({
+  get: {
+    method: 'GET',
+    path: '/profile',
+    responses: {
+      ok: {
+        status: 200,
+        body: User,
+      },
+      unauthorized: {
+        status: 401,
+        body: UnauthorizedBody,
+        headers: z.object({ 'www-authenticate': z.string() }),
+      },
     },
-  }),
+    pipeline: [bearerAuthentication, http.controller],
+  },
 })
-
 const BearerProfileController = implementation({
   name: 'BearerProfileController',
   contract: BearerProfileContract,
@@ -72,12 +56,10 @@ const BearerProfileController = implementation({
     },
   }),
 })
-
 const BearerProfileModule = defineModule(() => ({
   description: 'Example profile API protected by custom Bearer authentication',
   implementations: [BearerProfileController],
 }))
-
 export default defineApplication({
   modules: [BearerProfileModule()],
 })

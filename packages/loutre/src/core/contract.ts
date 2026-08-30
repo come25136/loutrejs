@@ -30,12 +30,27 @@ export interface ProcedureDefinition<
   readonly protocols: TProtocols
 }
 
-export function procedure<
-  const TProtocols extends Record<string, ProtocolDescriptor>,
->(definition: {
-  readonly protocols: TProtocols
-}): ProcedureDefinition<TProtocols> {
-  return { kind: 'procedure', protocols: definition.protocols }
+export interface ProtocolGroup<
+  TName extends string = string,
+  TProcedures extends Record<string, ProtocolDescriptor<TName>> = Record<
+    string,
+    ProtocolDescriptor<TName>
+  >,
+> {
+  readonly kind: 'protocol-group'
+  readonly protocol: TName
+  readonly procedures: TProcedures
+}
+
+export function protocolGroup<
+  const TName extends string,
+  const TProcedures extends Record<string, ProtocolDescriptor<TName>>,
+>(protocol: TName, procedures: TProcedures): ProtocolGroup<TName, TProcedures> {
+  return Object.freeze({
+    kind: 'protocol-group',
+    protocol,
+    procedures: Object.freeze({ ...procedures }),
+  })
 }
 
 export interface ContractDefinition<
@@ -49,19 +64,214 @@ export interface ContractDefinition<
   readonly procedures: TProcedures
 }
 
-export function contract<
-  const TProcedures extends Record<string, ProcedureDefinition>,
+type ProcedureNamesOfGroup<TGroup> =
+  TGroup extends ProtocolGroup<string, infer TProcedures>
+    ? keyof TProcedures & string
+    : never
+
+type ProcedureNamesOfGroups<TGroups extends readonly ProtocolGroup[]> =
+  ProcedureNamesOfGroup<TGroups[number]>
+
+type ProtocolOfGroupProcedure<TGroup, TProcedure extends string> =
+  TGroup extends ProtocolGroup<infer TProtocol, infer TProcedures>
+    ? TProcedure extends keyof TProcedures
+      ? { readonly [K in TProtocol]: TProcedures[TProcedure] }
+      : never
+    : never
+
+type ProceduresFromGroups<TGroups extends readonly ProtocolGroup[]> = {
+  [TProcedure in ProcedureNamesOfGroups<TGroups>]: ProcedureDefinition<
+    UnionToIntersection<
+      ProtocolOfGroupProcedure<TGroups[number], TProcedure>
+    > extends infer TProtocols extends Record<string, ProtocolDescriptor>
+      ? TProtocols
+      : never
+  >
+}
+
+function defineContract<
+  const TGroups extends readonly [ProtocolGroup, ...ProtocolGroup[]],
 >(
-  procedures: TProcedures & DispatchKeyUniquenessConstraint<TProcedures>,
-  options: { readonly name?: string } = {},
-): ContractDefinition<TProcedures> {
+  ...groups: TGroups &
+    DispatchKeyUniquenessConstraint<ProceduresFromGroups<TGroups>>
+): ContractDefinition<ProceduresFromGroups<TGroups>>
+function defineContract<
+  const TGroups extends readonly [ProtocolGroup, ...ProtocolGroup[]],
+>(
+  ...args: [...TGroups, ContractOptions] &
+    DispatchKeyUniquenessConstraint<ProceduresFromGroups<TGroups>>
+): ContractDefinition<ProceduresFromGroups<TGroups>>
+function defineContract(
+  ...args: readonly (ProtocolGroup | ContractOptions)[]
+): ContractDefinition {
+  const last = args.at(-1)
+  const hasOptions = last !== undefined && !('kind' in last)
+  const options = hasOptions ? (last as ContractOptions) : {}
+  const groups = (
+    hasOptions ? args.slice(0, -1) : args
+  ) as readonly ProtocolGroup[]
+
+  if (groups.length === 0) {
+    throw new Error('contract() requires at least one protocol group')
+  }
+
+  const procedures: Record<string, ProcedureDefinition> = {}
+  for (const group of groups) {
+    for (const [procedureName, descriptor] of Object.entries(
+      group.procedures,
+    )) {
+      const current = procedures[procedureName]
+      if (Object.hasOwn(current?.protocols ?? {}, group.protocol)) {
+        throw new Error(
+          `Duplicate contract procedure protocol: ${procedureName}.${group.protocol}`,
+        )
+      }
+      procedures[procedureName] = {
+        kind: 'procedure',
+        protocols: {
+          ...current?.protocols,
+          [group.protocol]: descriptor,
+        },
+      }
+    }
+  }
+
   assertUniqueDispatchKeys(procedures, options.name)
-  return {
+  return Object.freeze({
     kind: 'contract',
     ...(options.name === undefined ? {} : { name: options.name }),
-    procedures,
-  }
+    procedures: Object.freeze(procedures),
+  })
 }
+
+export type ProtocolProcedures<
+  TName extends string,
+  TDescriptors extends Record<string, ProtocolDescriptor<TName>>,
+> = {
+  [K in keyof TDescriptors]: ProcedureDefinition<{
+    readonly [P in TName]: TDescriptors[K]
+  }>
+}
+
+export type ProtocolContractConstraint<
+  TName extends string,
+  TDescriptors extends Record<string, ProtocolDescriptor<TName>>,
+> = DispatchKeyUniquenessConstraint<ProtocolProcedures<TName, TDescriptors>>
+
+export function defineProtocolContract<
+  const TName extends string,
+  const TDescriptors extends Record<string, ProtocolDescriptor<TName>>,
+>(
+  group: ProtocolGroup<TName, TDescriptors> &
+    ProtocolContractConstraint<TName, TDescriptors>,
+  options: ContractOptions = {},
+): ContractDefinition<ProtocolProcedures<TName, TDescriptors>> {
+  return (
+    defineContract as (
+      group: ProtocolGroup,
+      options: ContractOptions,
+    ) => ContractDefinition
+  )(group, options) as ContractDefinition<
+    ProtocolProcedures<TName, TDescriptors>
+  >
+}
+
+type ProcedureNamesOfContract<TContract> =
+  TContract extends ContractDefinition<infer TProcedures>
+    ? keyof TProcedures & string
+    : never
+
+type ProcedureNamesOfContracts<
+  TContracts extends readonly ContractDefinition[],
+> = ProcedureNamesOfContract<TContracts[number]>
+
+type ProtocolsOfContractProcedure<TContract, TProcedure extends string> =
+  TContract extends ContractDefinition<infer TProcedures>
+    ? TProcedure extends keyof TProcedures
+      ? TProcedures[TProcedure]['protocols']
+      : never
+    : never
+
+type UnionToIntersection<T> = (
+  T extends unknown ? (value: T) => void : never
+) extends (value: infer TIntersection) => void
+  ? TIntersection
+  : never
+
+type MergedProcedures<TContracts extends readonly ContractDefinition[]> = {
+  [TProcedure in ProcedureNamesOfContracts<TContracts>]: ProcedureDefinition<
+    UnionToIntersection<
+      ProtocolsOfContractProcedure<TContracts[number], TProcedure>
+    > extends infer TProtocols extends Record<string, ProtocolDescriptor>
+      ? TProtocols
+      : never
+  >
+}
+
+export interface ContractOptions {
+  readonly name?: string
+}
+
+function mergeContracts<
+  const TContracts extends readonly [
+    ContractDefinition,
+    ...ContractDefinition[],
+  ],
+>(...contracts: TContracts): ContractDefinition<MergedProcedures<TContracts>>
+function mergeContracts<
+  const TContracts extends readonly [
+    ContractDefinition,
+    ...ContractDefinition[],
+  ],
+>(
+  ...args: [...TContracts, ContractOptions]
+): ContractDefinition<MergedProcedures<TContracts>>
+function mergeContracts(
+  ...args: readonly (ContractDefinition | ContractOptions)[]
+): ContractDefinition {
+  const last = args.at(-1)
+  const hasOptions = last !== undefined && !('kind' in last)
+  const options = hasOptions ? (last as ContractOptions) : {}
+  const contracts = (
+    hasOptions ? args.slice(0, -1) : args
+  ) as readonly ContractDefinition[]
+  if (contracts.length === 0) {
+    throw new Error('contract.merge() requires at least one Contract')
+  }
+
+  const procedures: Record<string, ProcedureDefinition> = {}
+
+  for (const source of contracts) {
+    for (const [procedureName, procedureDefinition] of Object.entries(
+      source.procedures,
+    )) {
+      const current = procedures[procedureName]
+      const protocols = { ...current?.protocols }
+      for (const [protocolName, descriptor] of Object.entries(
+        procedureDefinition.protocols,
+      )) {
+        if (Object.hasOwn(protocols, protocolName)) {
+          throw new Error(
+            `Duplicate contract procedure protocol: ${procedureName}.${protocolName}`,
+          )
+        }
+        protocols[protocolName] = descriptor
+      }
+      procedures[procedureName] = { kind: 'procedure', protocols }
+    }
+  }
+
+  assertUniqueDispatchKeys(procedures, options.name)
+  return Object.freeze({
+    kind: 'contract',
+    ...(options.name === undefined ? {} : { name: options.name }),
+    procedures: Object.freeze(procedures),
+  })
+}
+
+export const contract = Object.freeze({
+  merge: mergeContracts,
+})
 
 type ProtocolDispatchEntries<
   TProcedures extends Record<string, ProcedureDefinition>,

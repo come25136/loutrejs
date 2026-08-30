@@ -1,10 +1,5 @@
 import { createTestApplication } from './helpers/application.js'
-import {
-  contract,
-  defineModule,
-  implementation,
-  procedure,
-} from '@loutrejs/loutre'
+import { defineModule, implementation } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import { http, validate } from '@loutrejs/loutre/http'
 import {
@@ -16,7 +11,6 @@ import {
 } from '../fixtures/http-auth/src/index.js'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
-
 describe('canonical Fixture B', () => {
   it('Layerが生成したContext propertyをControllerのctxから取得する', async () => {
     const application = createTestApplication({
@@ -28,43 +22,37 @@ describe('canonical Fixture B', () => {
         headers: { authorization: 'Bearer fixture-token' },
       }),
     )
-
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       userId: 'user-1',
       tenantId: 'tenant-user-1',
     })
   })
-
   it('validationとtoken生成の不正な順序を静的診断する', () => {
-    const InvalidContract = contract({
-      get: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/invalid-account',
-            request: {
-              headers: z.object({ authorization: z.string() }),
-            },
-            responses: {
-              found: {
-                status: 200,
-                body: z.object({
-                  userId: z.string(),
-                  tenantId: z.string(),
-                }),
-              },
-            },
-            pipeline: [
-              authenticated,
-              bearerAuthentication,
-              validate.headers,
-              tenantAccess,
-              http.controller,
-            ],
-          }),
+    const InvalidContract = http.contract({
+      get: {
+        method: 'GET',
+        path: '/invalid-account',
+        request: {
+          headers: z.object({ authorization: z.string() }),
         },
-      }),
+        responses: {
+          found: {
+            status: 200,
+            body: z.object({
+              userId: z.string(),
+              tenantId: z.string(),
+            }),
+          },
+        },
+        pipeline: [
+          authenticated,
+          bearerAuthentication,
+          validate.headers,
+          tenantAccess,
+          http.controller,
+        ],
+      },
     })
     const InvalidImplementation = implementation({
       name: 'AccountController',
@@ -78,7 +66,6 @@ describe('canonical Fixture B', () => {
     const codes = compileApplication({
       modules: [InvalidModule()],
     }).diagnostics.map(({ code }) => code)
-
     expect(codes).toContain('LUTRE_PIPELINE_004')
     expect(codes).toContain('LUTRE_VALIDATION_001')
   })

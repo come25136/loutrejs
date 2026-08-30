@@ -1,20 +1,17 @@
 import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
-  contract,
   defineEnv,
   defineModule,
   implementation,
   inject,
   layer,
-  procedure,
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { Pool, type PoolClient } from 'pg'
 import { z } from 'zod'
-
 const AppEnvSchema = z
   .object({
     DATABASE_URL: z
@@ -24,28 +21,21 @@ const AppEnvSchema = z
   .transform((env) => ({
     databaseUrl: new URL(env.DATABASE_URL),
   }))
-
 class AppEnv extends defineEnv(AppEnvSchema) {}
-
 const TRANSACTION = contextKey('transaction').of<PoolClient>()
-
 class PostgresDatabase implements OnModuleInit, OnModuleDestroy {
   readonly pool: Pool
-
   constructor(readonly env = inject(AppEnv)) {
     this.pool = new Pool({
       connectionString: env.databaseUrl.href,
     })
   }
-
   async onModuleInit(): Promise<void> {
     await this.pool.query('SELECT 1')
   }
-
   async onModuleDestroy(): Promise<void> {
     await this.pool.end()
   }
-
   async transaction<TResult>(
     run: (transaction: PoolClient) => Promise<TResult>,
   ): Promise<TResult> {
@@ -63,7 +53,6 @@ class PostgresDatabase implements OnModuleInit, OnModuleDestroy {
     }
   }
 }
-
 const transaction = layer({
   name: 'database.transaction',
   provides: [TRANSACTION],
@@ -75,38 +64,31 @@ const transaction = layer({
       })
     },
 })
-
 const CreateUserBody = z.object({ name: z.string().min(1) })
 const UserResponse = z.object({
   id: z.string(),
   name: z.string(),
   createdBy: z.string(),
 })
-
-const UsersContract = contract(
+const UsersContract = http.contract(
   {
-    create: procedure({
-      protocols: {
-        http: http({
-          method: 'POST',
-          path: '/users',
-          request: {
-            body: {
-              contentType: 'application/json',
-              schema: CreateUserBody,
-            },
-          },
-          responses: {
-            created: { status: 201, body: UserResponse },
-          },
-          pipeline: [validate.body, transaction([http.controller])],
-        }),
+    create: {
+      method: 'POST',
+      path: '/users',
+      request: {
+        body: {
+          contentType: 'application/json',
+          schema: CreateUserBody,
+        },
       },
-    }),
+      responses: {
+        created: { status: 201, body: UserResponse },
+      },
+      pipeline: [validate.body, transaction([http.controller])],
+    },
   },
   { name: 'PostgresUsersContract' },
 )
-
 class UserRepository {
   async create(client: PoolClient, name: string) {
     const result = await client.query<{
@@ -128,7 +110,6 @@ class UserRepository {
     }
   }
 }
-
 const UsersController = implementation({
   name: 'UsersController',
   contract: UsersContract,
@@ -141,12 +122,10 @@ const UsersController = implementation({
     },
   }),
 })
-
 const AppModule = defineModule(() => ({
   name: 'DatabasePostgresExample',
   environment: [AppEnv],
   providers: [PostgresDatabase, UserRepository],
   implementations: [UsersController],
 }))
-
 export default defineApplication({ modules: [AppModule()] })

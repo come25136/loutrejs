@@ -10,9 +10,9 @@ import {
   http,
 } from '@loutrejs/loutre/http'
 import { z } from 'zod'
-
-const PRINCIPAL = contextKey('principal').of<{ readonly id: string }>()
-
+const PRINCIPAL = contextKey('principal').of<{
+  readonly id: string
+}>()
 const authentication = basicAuth({
   realm: 'Loutre Test',
   principal: PRINCIPAL,
@@ -25,15 +25,15 @@ const authentication = basicAuth({
 // @ts-expect-error short circuit result型を消去したBasicAuthLayerDescriptorは作れない
 type ErasedAuthentication = BasicAuthLayerDescriptor<typeof PRINCIPAL>
 void (undefined as unknown as ErasedAuthentication)
-
 const genericAuthentication: BasicAuthLayerDescriptor<
   typeof PRINCIPAL,
   'unauthorized',
-  { readonly error: string }
+  {
+    readonly error: string
+  }
 > = authentication
 void genericAuthentication
-
-http({
+http.route({
   method: 'GET',
   path: '/protected',
   responses: {
@@ -45,8 +45,7 @@ http({
   },
   pipeline: [genericAuthentication, http.controller],
 })
-
-http({
+http.route({
   // @ts-expect-error short circuit result型がresponse schemaの出力型と一致しない
   method: 'GET',
   path: '/invalid-protected',
@@ -72,8 +71,7 @@ http({
     http.controller,
   ],
 })
-
-http({
+http.route({
   method: 'GET',
   path: '/invalid-basic-auth-status',
   responses: {
@@ -86,12 +84,11 @@ http({
   // @ts-expect-error basicAuthが宣言したresponse status制約と一致する必要がある
   pipeline: [authentication, http.controller],
 })
-
 const widenedPipeline: readonly PipelineItem[] = [
   authentication,
   http.controller,
 ]
-http({
+http.route({
   method: 'GET',
   path: '/widened-pipeline',
   responses: {
@@ -104,11 +101,9 @@ http({
   // @ts-expect-error Pipeline tupleをPipelineItem[]へ型消去できない
   pipeline: widenedPipeline,
 })
-
 interface CustomAuthContext {
   readonly headers: Readonly<Record<string, string | undefined>>
 }
-
 const customAuthentication = layer({
   name: 'customAuthentication',
   role: 'authentication',
@@ -130,8 +125,7 @@ const customAuthentication = layer({
       },
     }),
 })
-
-http({
+http.route({
   method: 'GET',
   path: '/missing-basic-auth-header-schema',
   responses: {
@@ -143,8 +137,7 @@ http({
   // @ts-expect-error basicAuthが返すwww-authenticate headerはresponse schemaで宣言する必要がある
   pipeline: [authentication, http.controller],
 })
-
-http({
+http.route({
   method: 'GET',
   path: '/custom-protected',
   responses: {
@@ -155,8 +148,7 @@ http({
   },
   pipeline: [customAuthentication, http.controller],
 })
-
-http({
+http.route({
   method: 'GET',
   path: '/invalid-custom-status',
   responses: {
@@ -168,8 +160,7 @@ http({
   // @ts-expect-error ユーザー定義Layerが宣言したresponse status制約と一致する必要がある
   pipeline: [customAuthentication, http.controller],
 })
-
-http({
+http.route({
   method: 'GET',
   path: '/invalid-custom-protected',
   responses: {

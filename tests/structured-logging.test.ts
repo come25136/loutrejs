@@ -2,13 +2,7 @@ import {
   createTestApplication,
   createTestMessagePortExecution,
 } from './helpers/application.js'
-import {
-  contract,
-  defineError,
-  defineModule,
-  implementation,
-  procedure,
-} from '@loutrejs/loutre'
+import { defineError, defineModule, implementation } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import {
@@ -19,13 +13,11 @@ import {
   type LoggerBackend,
 } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
-
 describe('構造化ログ', () => {
   it('予約fieldを保護し、JSON化できない値も1行のJSONとして出力する', () => {
     const output = vi.spyOn(console, 'log').mockImplementation(() => undefined)
     const circular: Record<string, unknown> = { count: 1n }
     circular.self = circular
-
     try {
       new Logger(new JsonConsoleLoggerBackend()).info('安全なログ', {
         level: 'error',
@@ -33,7 +25,6 @@ describe('構造化ログ', () => {
         payload: circular,
         error: new Error('fixture'),
       })
-
       expect(output).toHaveBeenCalledOnce()
       const record = JSON.parse(output.mock.calls[0]?.[0] as string)
       expect(record).toMatchObject({
@@ -47,10 +38,8 @@ describe('構造化ログ', () => {
       output.mockRestore()
     }
   })
-
   it('既定Console backendをNestJS風に色付きで整形する', () => {
     const output = vi.spyOn(console, 'log').mockImplementation(() => undefined)
-
     try {
       const logger = new Logger(new ConsoleLoggerBackend({ colors: true }), {
         source: 'UsersService',
@@ -60,7 +49,6 @@ describe('構造化ログ', () => {
         requestId: 'req-1',
         result: { count: 1 },
       })
-
       expect(output).toHaveBeenCalledOnce()
       const formatted = output.mock.calls[0]?.[0] as string
       const plain = stripAnsi(formatted)
@@ -76,21 +64,16 @@ describe('構造化ログ', () => {
       output.mockRestore()
     }
   })
-
   it('route未一致を相関可能なHTTP完了イベントとして記録する', async () => {
     const records: LogRecord[] = []
     const logger = captureLogger(records, { application: 'fixture' })
-    const Contract = contract({
-      health: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/health',
-            responses: { ok: { status: 200, body: z.string() } },
-            pipeline: [http.controller],
-          }),
-        },
-      }),
+    const Contract = http.contract({
+      health: {
+        method: 'GET',
+        path: '/health',
+        responses: { ok: { status: 200, body: z.string() } },
+        pipeline: [http.controller],
+      },
     })
     const Implementation = implementation({
       name: 'HealthImplementation',
@@ -102,11 +85,9 @@ describe('構造化ログ', () => {
     })
     const Module = defineModule(() => ({ implementations: [Implementation] }))
     const application = createTestApplication({ modules: [Module()], logger })
-
     const response = await application.fetch(
       new Request('https://fixture.test/missing?secret=value'),
     )
-
     expect(response.status).toBe(404)
     expect(records).toHaveLength(1)
     expect(records[0]).toEqual(
@@ -125,21 +106,16 @@ describe('構造化ログ', () => {
     expect(records[0]).not.toHaveProperty('headers')
     expect(records[0]).not.toHaveProperty('body')
   })
-
   it('未処理例外とHTTP responseを同じerrorIdで関連付ける', async () => {
-    const Contract = contract({
-      fail: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/fail',
-            responses: {
-              ok: { status: 200, body: z.object({ ok: z.boolean() }) },
-            },
-            pipeline: [http.controller],
-          }),
+    const Contract = http.contract({
+      fail: {
+        method: 'GET',
+        path: '/fail',
+        responses: {
+          ok: { status: 200, body: z.object({ ok: z.boolean() }) },
         },
-      }),
+        pipeline: [http.controller],
+      },
     })
     const Implementation = implementation({
       name: 'Implementation',
@@ -159,12 +135,12 @@ describe('構造化ログ', () => {
       modules: [Module()],
       logger: captureLogger(records),
     })
-
     const response = await application.fetch(
       new Request('https://fixture.test/fail'),
     )
-    const body = (await response.json()) as { errorId: string }
-
+    const body = (await response.json()) as {
+      errorId: string
+    }
     expect(response.status).toBe(500)
     expect(body).toEqual({
       error: 'Internal Server Error',
@@ -193,29 +169,24 @@ describe('構造化ログ', () => {
       }),
     )
   })
-
   it('宣言済みDomain Error mappingをunhandled errorとして重複記録しない', async () => {
     const ExpectedError = defineError({
       code: 'EXPECTED_ERROR',
       data: z.object({ reason: z.string() }),
     })
-    const Contract = contract({
-      fail: procedure({
-        protocols: {
-          http: http({
-            method: 'GET',
-            path: '/expected-failure',
-            responses: {
-              rejected: {
-                status: 409,
-                body: z.object({ reason: z.string() }),
-                error: http.error(ExpectedError),
-              },
-            },
-            pipeline: [http.controller],
-          }),
+    const Contract = http.contract({
+      fail: {
+        method: 'GET',
+        path: '/expected-failure',
+        responses: {
+          rejected: {
+            status: 409,
+            body: z.object({ reason: z.string() }),
+            error: http.error(ExpectedError),
+          },
         },
-      }),
+        pipeline: [http.controller],
+      },
     })
     const Implementation = implementation({
       name: 'Implementation',
@@ -235,11 +206,9 @@ describe('構造化ログ', () => {
       modules: [Module()],
       logger: captureLogger(records),
     })
-
     const response = await application.fetch(
       new Request('https://fixture.test/expected-failure'),
     )
-
     expect(response.status).toBe(409)
     expect(await response.json()).toEqual({ reason: 'expected' })
     expect(records).not.toContainEqual(
@@ -252,17 +221,12 @@ describe('構造化ログ', () => {
       }),
     )
   })
-
   it('MessagePortの完了イベントを共通Loggerへ記録する', async () => {
-    const Contract = contract({
-      ping: procedure({
-        protocols: {
-          messagePort: messagePort({
-            responses: { ok: { body: z.literal('pong') } },
-            pipeline: [messagePort.handler],
-          }),
-        },
-      }),
+    const Contract = messagePort.contract({
+      ping: {
+        responses: { ok: { body: z.literal('pong') } },
+        pipeline: [messagePort.handler],
+      },
     })
     const Implementation = implementation({
       name: 'Implementation',
@@ -282,9 +246,7 @@ describe('構造化ログ', () => {
       [Module()],
       captureLogger(records),
     )
-
     const result = await application.invoke('ping')
-
     expect(result).toEqual({
       kind: 'message-port-result',
       variant: 'ok',
@@ -303,7 +265,6 @@ describe('構造化ログ', () => {
     )
   })
 })
-
 function captureLogger(
   records: LogRecord[],
   context: Readonly<Record<string, unknown>> = {},
@@ -313,7 +274,6 @@ function captureLogger(
   }
   return new Logger(backend, context)
 }
-
 function stripAnsi(value: string): string {
   return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/gu, '')
 }

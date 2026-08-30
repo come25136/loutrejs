@@ -1,14 +1,7 @@
-import {
-  contract,
-  contextKey,
-  implementation,
-  layer,
-  procedure,
-} from '@loutrejs/loutre'
+import { contextKey, implementation, layer } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
-
 const SESSION = contextKey('implementation.session').of<{
   readonly userId: string
 }>()
@@ -19,46 +12,36 @@ const session = layer({
     await next({ 'implementation.session': { userId: 'user-1' } })
   },
 })
-
-const Contract = contract({
-  raw: procedure({
-    protocols: {
-      http: http({
-        method: 'GET',
-        path: '/raw/{id}',
-        responses: { ok: { status: 200, body: z.string() } },
-        pipeline: [http.controller],
-      }),
+const Contract = http.contract({
+  raw: {
+    method: 'GET',
+    path: '/raw/{id}',
+    responses: { ok: { status: 200, body: z.string() } },
+    pipeline: [http.controller],
+  },
+  transformed: {
+    method: 'POST',
+    path: '/transformed/{id}',
+    request: {
+      params: { id: z.coerce.number() },
+      query: z.object({ page: z.coerce.number() }),
+      headers: z.object({ authorization: z.string() }),
+      body: {
+        contentType: 'application/json',
+        schema: z.object({ name: z.string() }),
+      },
     },
-  }),
-  transformed: procedure({
-    protocols: {
-      http: http({
-        method: 'POST',
-        path: '/transformed/{id}',
-        request: {
-          params: { id: z.coerce.number() },
-          query: z.object({ page: z.coerce.number() }),
-          headers: z.object({ authorization: z.string() }),
-          body: {
-            contentType: 'application/json',
-            schema: z.object({ name: z.string() }),
-          },
-        },
-        responses: { ok: { status: 200, body: z.string() } },
-        pipeline: [
-          validate.params,
-          validate.query,
-          validate.headers,
-          validate.body,
-          session,
-          http.controller,
-        ],
-      }),
-    },
-  }),
+    responses: { ok: { status: 200, body: z.string() } },
+    pipeline: [
+      validate.params,
+      validate.query,
+      validate.headers,
+      validate.body,
+      session,
+      http.controller,
+    ],
+  },
 })
-
 implementation({
   name: 'AllProcedures',
   contract: Contract,
@@ -80,7 +63,6 @@ implementation({
     },
   }),
 })
-
 implementation({
   name: 'MissingProcedure',
   contract: Contract,
@@ -92,7 +74,6 @@ implementation({
     },
   }),
 })
-
 const Partial = implementation({
   name: 'Partial',
   contract: Contract,
@@ -106,7 +87,6 @@ const Partial = implementation({
 })
 const selectedProcedure: 'raw' = Partial.procedures[0]
 void selectedProcedure
-
 implementation({
   name: 'InvalidResult',
   contract: Contract,
@@ -115,7 +95,6 @@ implementation({
   // @ts-expect-error procedure resultはProtocolDescriptorのresultに一致する必要がある
   factory: () => ({ raw: () => 1 }),
 })
-
 implementation({
   name: 'InvalidProcedure',
   contract: Contract,
@@ -124,7 +103,6 @@ implementation({
   procedures: ['missing'],
   factory: (() => ({})) as never,
 })
-
 implementation({
   name: 'WrongProtocol',
   contract: Contract,
@@ -132,7 +110,6 @@ implementation({
   protocol: messagePort,
   factory: (() => ({})) as never,
 })
-
 implementation({
   name: 'AsyncFactory',
   contract: Contract,
