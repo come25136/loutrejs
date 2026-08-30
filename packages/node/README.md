@@ -16,41 +16,42 @@ npm install @loutrejs/loutre @loutrejs/node
 import { nodeRuntime } from '@loutrejs/node'
 import application from './app.js'
 
-const server = await nodeRuntime.serve({
-  application,
-  port: 3000,
-})
+const app = await nodeRuntime.create({ application })
+const server = await app.serve({ port: 3000 })
 
-await server.close()
+console.log(server.port)
+await app.close()
 ```
 
-`serve()`はApplicationのinitialization、HTTP listener、shutdownをひとつのlifecycleとして扱います。
+`create()`はApplicationをinitializeしてRuntime Application Contextを返します。`app.serve()`がHTTP listenerとshutdown hookを開始し、`app.close()`がlistenerとApplication lifecycleをまとめて終了します。
 
 ## Port selection
 
 `port`を明示した場合は、そのportでlistenできなければerrorになります。
 
 ```ts
-await nodeRuntime.serve({ application, port: 8080 })
+const app = await nodeRuntime.create({ application })
+await app.serve({ port: 8080 })
 ```
 
 `port`を省略した場合は3000から利用可能なportを探します。
 
 ```ts
-const server = await nodeRuntime.serve({ application })
+const app = await nodeRuntime.create({ application })
+const server = await app.serve()
 console.log(server.port)
 ```
 
 ## Options
 
-| Option          | Description                          |
-| --------------- | ------------------------------------ |
-| `application`   | HTTP-capable Loutre Application      |
-| `port`          | listenするport。省略時は3000から探索 |
-| `hostname`      | listenするhostname                   |
-| `shutdownHooks` | SIGINT / SIGTERM hookの有効化        |
-| `environment`   | Applicationへ渡すEnvironment source  |
-| `arguments`     | Applicationへ渡すArguments           |
+| Option                | Description                          |
+| --------------------- | ------------------------------------ |
+| `create.application`  | HTTP-capable Loutre Application      |
+| `create.environment`  | Applicationへ渡すEnvironment source  |
+| `create.arguments`    | Applicationへ渡すArguments           |
+| `serve.port`          | listenするport。省略時は3000から探索 |
+| `serve.hostname`      | listenするhostname                   |
+| `serve.shutdownHooks` | SIGINT / SIGTERM hookの有効化        |
 
 ## Documentation
 

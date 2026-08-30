@@ -24,20 +24,29 @@ type HttpApplication<TDefinition extends ApplicationDefinition> =
       ? TDefinition
       : never
 
-export type BunServeOptions<TDefinition extends ApplicationDefinition> = {
+type BunServer = {
+  stop(closeActiveConnections?: boolean): void | Promise<void>
+}
+
+export type BunCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
-  readonly port?: number
-  readonly hostname?: string
-  readonly shutdownHooks?: boolean
   readonly environment?: unknown
 } & BootstrapArguments<TDefinition>
 
-export interface BunServeHandle<
-  TDefinition extends ApplicationDefinition = ApplicationDefinition,
-> {
-  readonly application: HostBindingApplication<TDefinition>
+export interface BunServeOptions {
+  readonly port?: number
+  readonly hostname?: string
+  readonly shutdownHooks?: boolean
+}
+
+export interface BunListenerHandle {
   readonly port: number
-  close(signal?: string): Promise<void>
+}
+
+export type BunRuntimeApplication<
+  TDefinition extends ApplicationDefinition = ApplicationDefinition,
+> = HostBindingApplication<TDefinition> & {
+  serve(options?: BunServeOptions): Promise<BunListenerHandle>
 }
 
 export const bunRuntime = {
@@ -53,19 +62,16 @@ export const bunRuntime = {
     'env.runtime',
     'crypto.random',
   ]),
-  serve,
+  create,
 } as const
 
-async function serve<const TDefinition extends ApplicationDefinition>(
-  options: BunServeOptions<TDefinition>,
-): Promise<BunServeHandle<TDefinition>> {
+async function create<const TDefinition extends ApplicationDefinition>(
+  options: BunCreateOptions<TDefinition>,
+): Promise<BunRuntimeApplication<TDefinition>> {
   assertRuntimeEngine('bun')
   const bun = bunGlobal()
-  if (!bun?.serve) {
-    throw new Error('LUTRE_BUN_UNAVAILABLE: Bun.serve() is not available.')
-  }
   const startedAt = performance.now()
-  const environment = bun.env ?? {}
+  const environment = bun?.env ?? {}
   const presentation = startStartupPresentation(
     { version: LOUTRE_VERSION },
     {
@@ -82,66 +88,99 @@ async function serve<const TDefinition extends ApplicationDefinition>(
   if (!http) {
     await host.application.close()
     throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: bunRuntime.serve() requires an HTTP-capable Application.',
+      'LUTRE_RUNTIME_HTTP_REQUIRED: bunRuntime.create() requires an HTTP-capable Application.',
     )
   }
 
   await host.application.init()
-  if ('triggers' in host.application) await host.application.triggers.start()
-  let server: { stop(closeActiveConnections?: boolean): void | Promise<void> }
-  const requestedPort = options.port
-  let port = requestedPort ?? 3000
-  while (true) {
-    try {
-      server = bun.serve({
-        port,
-        ...(options.hostname === undefined
-          ? {}
-          : { hostname: options.hostname }),
-        fetch: createBunFetchDriver(http),
-      })
-      break
-    } catch (error) {
-      if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
-        await host.application.close().catch(() => undefined)
-        throw error
-      }
-      port += 1
-    }
-  }
-  presentation.ready({
-    server: serverUrl(options.hostname, port),
-    runtime: `Bun ${bun.version ?? 'unknown'}`,
-    environment: environment.NODE_ENV ?? 'development',
-    startupDurationMs: performance.now() - startedAt,
-  })
+
+  const application = host.application as BunRuntimeApplication<TDefinition>
+  const closeApplication = host.application.close.bind(host.application)
+  let server: BunServer | undefined
+  let removeShutdownHooks: (() => void) | undefined
+  let serving = false
   let closed = false
-  const closeRuntime = async (signal?: string): Promise<void> => {
+
+  const close = async (signal?: string): Promise<void> => {
     if (closed) return
     closed = true
+    removeShutdownHooks?.()
+    removeShutdownHooks = undefined
     const errors: unknown[] = []
-    try {
-      await server.stop(true)
-    } catch (error) {
-      errors.push(error)
+    if (server) {
+      try {
+        await server.stop(true)
+      } catch (error) {
+        errors.push(error)
+      }
     }
     try {
-      await host.application.close(signal)
+      await closeApplication(signal)
     } catch (error) {
       errors.push(error)
     }
     if (errors.length > 0)
       throw new AggregateError(errors, 'Bun runtime shutdown failed')
   }
-  const removeShutdownHooks =
-    options.shutdownHooks === false
-      ? undefined
-      : registerBunShutdownHooks(closeRuntime)
-  const close = async (signal?: string): Promise<void> => {
-    removeShutdownHooks?.()
-    await closeRuntime(signal)
+
+  const serve = async (
+    serveOptions: BunServeOptions = {},
+  ): Promise<BunListenerHandle> => {
+    if (closed) {
+      throw new Error('LUTRE_APP_STOPPED: Application is stopped.')
+    }
+    if (serving) {
+      throw new Error(
+        'LUTRE_RUNTIME_ALREADY_SERVING: Bun runtime Application is already serving.',
+      )
+    }
+    if (!bun?.serve) {
+      await close().catch(() => undefined)
+      throw new Error('LUTRE_BUN_UNAVAILABLE: Bun.serve() is not available.')
+    }
+    serving = true
+    try {
+      if ('triggers' in application) await application.triggers.start()
+
+      const requestedPort = serveOptions.port
+      let port = requestedPort ?? 3000
+      while (true) {
+        try {
+          server = bun.serve({
+            port,
+            ...(serveOptions.hostname === undefined
+              ? {}
+              : { hostname: serveOptions.hostname }),
+            fetch: createBunFetchDriver(http),
+          })
+          break
+        } catch (error) {
+          if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
+            throw error
+          }
+          port += 1
+        }
+      }
+
+      presentation.ready({
+        server: serverUrl(serveOptions.hostname, port),
+        runtime: `Bun ${bun.version ?? 'unknown'}`,
+        environment: environment.NODE_ENV ?? 'development',
+        startupDurationMs: performance.now() - startedAt,
+      })
+      removeShutdownHooks =
+        serveOptions.shutdownHooks === false
+          ? undefined
+          : registerBunShutdownHooks(close)
+      return { port }
+    } catch (error) {
+      await close().catch(() => undefined)
+      throw error
+    }
   }
-  return { application: host.application, port, close }
+
+  Object.assign(application, { serve, close })
+  return application
 }
 
 function registerBunShutdownHooks(

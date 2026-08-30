@@ -3,7 +3,8 @@ import usersDefinition from '../dist/conformance/http-crud/application.mjs'
 import eventsDefinition from '../dist/conformance/streaming-http/application.mjs'
 
 const port = 28743
-const users = await bunRuntime.serve({ application: usersDefinition, port })
+const users = await bunRuntime.create({ application: usersDefinition })
+await users.serve({ port })
 try {
   const response = await fetch(`http://127.0.0.1:${port}/users/bun-user`)
   const body = (await response.json()) as {
@@ -21,7 +22,8 @@ try {
   await users.close()
 }
 
-const events = await bunRuntime.serve({ application: eventsDefinition, port })
+const events = await bunRuntime.create({ application: eventsDefinition })
+await events.serve({ port })
 try {
   const streamResponse = await fetch(`http://127.0.0.1:${port}/events`)
   if (!(await streamResponse.text()).includes('"sequence":3')) {

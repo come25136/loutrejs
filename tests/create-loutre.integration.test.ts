@@ -78,7 +78,7 @@ describe('create-loutre', () => {
       ).toContain("path: '/'")
       expect(
         await readFile(join(result.targetDirectory, 'src/main.ts'), 'utf8'),
-      ).toContain('nodeRuntime.serve')
+      ).toContain('nodeRuntime.create')
       expect(
         await readFile(join(result.targetDirectory, 'src/app.test.ts'), 'utf8'),
       ).toContain('GET / returns a response from the Loutre Application')
@@ -100,12 +100,12 @@ describe('create-loutre', () => {
   }>([
     {
       target: 'bun',
-      entry: 'bunRuntime.serve',
+      entry: 'bunRuntime.create',
       script: 'bun --watch src/main.ts',
     },
     {
       target: 'deno',
-      entry: 'denoRuntime.serve',
+      entry: 'denoRuntime.create',
       script: 'deno run -A --watch src/main.ts',
     },
     {

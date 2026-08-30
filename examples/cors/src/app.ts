@@ -1,7 +1,20 @@
 import { defineApplication } from '@loutrejs/loutre'
-import { contract, defineModule, implementation } from '@loutrejs/loutre'
+import {
+  contract,
+  defineEnv,
+  defineModule,
+  implementation,
+} from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
+const AppEnvSchema = z
+  .object({
+    PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  })
+  .transform((env) => ({ port: env.PORT }))
+
+export class AppEnv extends defineEnv(AppEnvSchema) {}
+
 const CreateMessageBody = z.object({
   text: z.string().min(1),
 })
@@ -59,6 +72,7 @@ const MessageController = implementation({
   }),
 })
 const MessageModule = defineModule(() => ({
+  environment: [AppEnv],
   name: 'MessageModule',
   description: 'Example HTTP API with CORS enabled',
   implementations: [MessageController],

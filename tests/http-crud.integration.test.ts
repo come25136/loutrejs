@@ -6,8 +6,8 @@ describe('HTTP CRUD integration', () => {
   it('runs Contract -> HTTP -> Pipeline -> validation -> Controller -> finalization', async () => {
     const definition = createUsersApplication()
     const port = await reserveHttpPort()
-    const host = await nodeRuntime.serve({
-      application: definition,
+    const app = await nodeRuntime.create({ application: definition })
+    await app.serve({
       port,
       hostname: '127.0.0.1',
     })
@@ -20,7 +20,7 @@ describe('HTTP CRUD integration', () => {
         'application/json; charset=utf-8',
       )
       expect(await response.json()).toEqual({ id: 'user-1', name: 'test' })
-      expect(host.application.graph.capabilities).toContainEqual({
+      expect(app.graph.capabilities).toContainEqual({
         name: 'http.server',
         scope: 'execution',
         requiredBy: 'contract:1.get',
@@ -47,7 +47,7 @@ describe('HTTP CRUD integration', () => {
         error: 'Unsupported Media Type',
       })
     } finally {
-      await host.close()
+      await app.close()
     }
   })
 })

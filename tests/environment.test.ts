@@ -1,4 +1,5 @@
 import {
+  defineApplication,
   defineEnv,
   defineModule,
   inject,
@@ -7,6 +8,7 @@ import {
   token,
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
+import { bootstrap } from '@loutrejs/loutre/host'
 import {
   createApplicationRuntime,
   EnvironmentBindingError,
@@ -241,5 +243,49 @@ describe('Environment Contract', () => {
     await runtime.initialize()
     expect(runtime.container.resolve(DRIVER)).toBeInstanceOf(SecureDriver)
     await runtime.shutdown()
+  })
+  it('Application Contextは初期化済みapplication scopeとEnvironmentだけをgetする', async () => {
+    let transientConstructions = 0
+
+    class Service {
+      constructor(readonly env = inject(AppEnv)) {}
+    }
+
+    class TransientService {
+      constructor() {
+        transientConstructions += 1
+      }
+    }
+
+    const AppModule = defineModule(() => ({
+      environment: [AppEnv],
+      providers: [
+        Service,
+        provide(TransientService).useClass(TransientService, {
+          scope: 'transient',
+        }),
+      ],
+    }))
+    const application = bootstrap({
+      application: defineApplication({ modules: [AppModule()] }),
+      environment: { PORT: '4321', TLS: 'false' },
+    })
+
+    expect(() => application.get(AppEnv)).toThrow('LUTRE_APP_NOT_INITIALIZED')
+
+    await application.init()
+
+    const env = application.get(AppEnv)
+    const service = application.get(Service)
+    expect(env.port).toBe(4321)
+    expect(service.env).toBe(env)
+    const constructionsBeforeGet = transientConstructions
+    expect(() => application.get(TransientService)).toThrow(
+      'LUTRE_DI_SCOPED_GET',
+    )
+    expect(transientConstructions).toBe(constructionsBeforeGet)
+
+    await application.close()
+    expect(() => application.get(AppEnv)).toThrow('LUTRE_APP_STOPPED')
   })
 })

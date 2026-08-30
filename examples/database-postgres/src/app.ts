@@ -15,14 +15,16 @@ import { Pool, type PoolClient } from 'pg'
 import { z } from 'zod'
 const AppEnvSchema = z
   .object({
+    PORT: z.coerce.number().int().min(1).max(65535).default(3001),
     DATABASE_URL: z
       .string()
       .default('postgres://loutre:loutre@127.0.0.1:54321/loutre'),
   })
   .transform((env) => ({
+    port: env.PORT,
     databaseUrl: new URL(env.DATABASE_URL),
   }))
-class AppEnv extends defineEnv(AppEnvSchema) {}
+export class AppEnv extends defineEnv(AppEnvSchema) {}
 const TRANSACTION = contextKey('transaction').of<PoolClient>()
 class PostgresDatabase implements OnModuleInit, OnModuleDestroy {
   readonly pool: Pool

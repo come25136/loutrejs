@@ -114,7 +114,8 @@ Node.jsでは`@loutrejs/node`からApplicationをserveできます。
 import { nodeRuntime } from '@loutrejs/node'
 import application from './app.js'
 
-await nodeRuntime.serve({ application, port: 3000 })
+const app = await nodeRuntime.create({ application })
+await app.serve({ port: 3000 })
 ```
 
 HTTP listenerを持たずにApplicationを組み込みたい場合は、`bootstrap()`からWeb Standardの`fetch(request)`を利用できます。
@@ -240,8 +241,8 @@ await app.close('complete')
 Runtimeごとの主な接続API:
 
 ```text
-Node.js             nodeRuntime.serve()
-Bun                 bunRuntime.serve()
+Node.js             nodeRuntime.create() → app.serve()
+Bun                 bunRuntime.create() → app.serve()
 Deno                denoRuntime.bind() / serve()
 Cloudflare Workers  cloudflareWorkersRuntime.bind()
 AWS Lambda          awsLambdaRuntime.bind()

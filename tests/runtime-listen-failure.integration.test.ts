@@ -36,12 +36,9 @@ describe('runtime listen failure', () => {
     }
 
     try {
+      const app = await nodeRuntime.create({ application: usersDefinition() })
       await expect(
-        nodeRuntime.serve({
-          application: usersDefinition(),
-          hostname: '127.0.0.1',
-          port: address.port,
-        }),
+        app.serve({ hostname: '127.0.0.1', port: address.port }),
       ).rejects.toMatchObject({ code: 'EADDRINUSE' })
       expect(startupOutput).toHaveLength(1)
       expect(startupOutput[0]).toMatch(/^Loutre /u)
@@ -57,18 +54,15 @@ describe('runtime listen failure', () => {
       occupyPortIfAvailable(3000),
       occupyPortIfAvailable(3001),
     ])
-    let runtime: Awaited<ReturnType<typeof nodeRuntime.serve>> | undefined
+    const app = await nodeRuntime.create({ application: usersDefinition() })
 
     try {
-      runtime = await nodeRuntime.serve({
-        application: usersDefinition(),
-        hostname: '127.0.0.1',
-      })
+      const listener = await app.serve({ hostname: '127.0.0.1' })
 
-      expect(runtime.port).toBeGreaterThanOrEqual(3002)
-      expect(runtime.server.address()).toMatchObject({ port: runtime.port })
+      expect(listener.port).toBeGreaterThanOrEqual(3002)
+      expect(listener.server.address()).toMatchObject({ port: listener.port })
       expect(startupOutput.join('\n')).toContain(
-        `Server: http://127.0.0.1:${runtime.port}`,
+        `Server: http://127.0.0.1:${listener.port}`,
       )
       expect(startupOutput.join('\n')).toContain(
         `Runtime: Node.js ${process.versions.node}`,
@@ -78,12 +72,9 @@ describe('runtime listen failure', () => {
       )
       expect(startupOutput.join('\n')).toContain('Ready in')
       expectProcessSignalListeners(signalListeners, 1)
-
-      await runtime.close('test-complete')
-      runtime = undefined
-      expectProcessSignalListeners(signalListeners, 0)
     } finally {
-      await runtime?.close('test-complete')
+      await app.close('test-complete')
+      expectProcessSignalListeners(signalListeners, 0)
       await Promise.all(
         occupied.map((server) =>
           server ? closeServer(server) : Promise.resolve(),
@@ -94,16 +85,16 @@ describe('runtime listen failure', () => {
 
   it('NodeはshutdownHooksをfalseにするとsignal listenerを登録しない', async () => {
     const signalListeners = currentProcessSignalListenerCounts()
-    const runtime = await nodeRuntime.serve({
-      application: usersDefinition(),
-      hostname: '127.0.0.1',
-      shutdownHooks: false,
-    })
+    const app = await nodeRuntime.create({ application: usersDefinition() })
 
     try {
+      await app.serve({
+        hostname: '127.0.0.1',
+        shutdownHooks: false,
+      })
       expectProcessSignalListeners(signalListeners, 0)
     } finally {
-      await runtime.close('test-complete')
+      await app.close('test-complete')
     }
   })
 
@@ -118,20 +109,13 @@ describe('runtime listen failure', () => {
       },
     })
 
-    try {
-      await expect(
-        bunRuntime.serve({
-          application: usersDefinition(),
-          hostname: '127.0.0.1',
-          port: 3000,
-        }),
-      ).rejects.toMatchObject({ code: 'EADDRINUSE' })
-      expect(ports).toEqual([3000])
-      expect(startupOutput).toHaveLength(1)
-      expect(startupOutput.join('\n')).not.toContain('Ready')
-    } finally {
-      vi.unstubAllGlobals()
-    }
+    const app = await bunRuntime.create({ application: usersDefinition() })
+    await expect(
+      app.serve({ hostname: '127.0.0.1', port: 3000 }),
+    ).rejects.toMatchObject({ code: 'EADDRINUSE' })
+    expect(ports).toEqual([3000])
+    expect(startupOutput).toHaveLength(1)
+    expect(startupOutput.join('\n')).not.toContain('Ready')
   })
 
   it('Bunはport省略時にEADDRINUSEごとにportをincrementする', async () => {
@@ -147,27 +131,20 @@ describe('runtime listen failure', () => {
       },
     })
 
-    let runtime: Awaited<ReturnType<typeof bunRuntime.serve>> | undefined
+    const app = await bunRuntime.create({ application: usersDefinition() })
     try {
-      runtime = await bunRuntime.serve({
-        application: usersDefinition(),
-        hostname: '127.0.0.1',
-      })
+      const listener = await app.serve({ hostname: '127.0.0.1' })
       expect(ports).toEqual([3000, 3001, 3002])
-      expect(runtime.port).toBe(3002)
+      expect(listener.port).toBe(3002)
       expect(startupOutput.join('\n')).toContain(
         'Server: http://127.0.0.1:3002',
       )
       expect(startupOutput.join('\n')).toContain('Runtime: Bun 1.2.3')
       expect(startupOutput.join('\n')).toContain('Environment: test')
       expectProcessSignalListeners(signalListeners, 1)
-
-      await runtime.close('test-complete')
-      runtime = undefined
-      expectProcessSignalListeners(signalListeners, 0)
     } finally {
-      await runtime?.close('test-complete')
-      vi.unstubAllGlobals()
+      await app.close('test-complete')
+      expectProcessSignalListeners(signalListeners, 0)
     }
   })
 
@@ -179,16 +156,12 @@ describe('runtime listen failure', () => {
       serve: () => ({ stop: () => undefined }),
     })
 
-    const runtime = await bunRuntime.serve({
-      application: usersDefinition(),
-      hostname: '127.0.0.1',
-      shutdownHooks: false,
-    })
-
+    const app = await bunRuntime.create({ application: usersDefinition() })
     try {
+      await app.serve({ hostname: '127.0.0.1', shutdownHooks: false })
       expectProcessSignalListeners(signalListeners, 0)
     } finally {
-      await runtime.close('test-complete')
+      await app.close('test-complete')
     }
   })
 
@@ -203,20 +176,13 @@ describe('runtime listen failure', () => {
       },
     })
 
-    try {
-      await expect(
-        denoRuntime.serve({
-          application: usersDefinition(),
-          hostname: '127.0.0.1',
-          port: 3000,
-        }),
-      ).rejects.toMatchObject({ code: 'EADDRINUSE' })
-      expect(ports).toEqual([3000])
-      expect(startupOutput).toHaveLength(1)
-      expect(startupOutput.join('\n')).not.toContain('Ready')
-    } finally {
-      vi.unstubAllGlobals()
-    }
+    const app = await denoRuntime.create({ application: usersDefinition() })
+    await expect(
+      app.serve({ hostname: '127.0.0.1', port: 3000 }),
+    ).rejects.toMatchObject({ code: 'EADDRINUSE' })
+    expect(ports).toEqual([3000])
+    expect(startupOutput).toHaveLength(1)
+    expect(startupOutput.join('\n')).not.toContain('Ready')
   })
 
   it('Denoはport省略時にEADDRINUSEごとにportをincrementする', async () => {
@@ -232,9 +198,8 @@ describe('runtime listen failure', () => {
         signalListeners.set(signal, handler)
       },
       removeSignalListener: (signal: string, handler: () => void) => {
-        if (signalListeners.get(signal) === handler) {
+        if (signalListeners.get(signal) === handler)
           signalListeners.delete(signal)
-        }
       },
       serve: ({ port }: { readonly port: number }) => {
         ports.push(port)
@@ -243,27 +208,20 @@ describe('runtime listen failure', () => {
       },
     })
 
-    let runtime: Awaited<ReturnType<typeof denoRuntime.serve>> | undefined
+    const app = await denoRuntime.create({ application: usersDefinition() })
     try {
-      runtime = await denoRuntime.serve({
-        application: usersDefinition(),
-        hostname: '127.0.0.1',
-      })
+      const listener = await app.serve({ hostname: '127.0.0.1' })
       expect(ports).toEqual([3000, 3001, 3002])
-      expect(runtime.port).toBe(3002)
+      expect(listener.port).toBe(3002)
       expect(startupOutput.join('\n')).toContain(
         'Server: http://127.0.0.1:3002',
       )
       expect(startupOutput.join('\n')).toContain('Runtime: Deno 2.5.0')
       expect(startupOutput.join('\n')).toContain('Environment: test')
       expect([...signalListeners.keys()]).toEqual(['SIGINT', 'SIGTERM'])
-
-      await runtime.close('test-complete')
-      runtime = undefined
-      expect(signalListeners.size).toBe(0)
     } finally {
-      await runtime?.close('test-complete')
-      vi.unstubAllGlobals()
+      await app.close('test-complete')
+      expect(signalListeners.size).toBe(0)
     }
   })
 
@@ -278,17 +236,13 @@ describe('runtime listen failure', () => {
       serve: () => ({ shutdown: async () => undefined }),
     })
 
-    const runtime = await denoRuntime.serve({
-      application: usersDefinition(),
-      hostname: '127.0.0.1',
-      shutdownHooks: false,
-    })
-
+    const app = await denoRuntime.create({ application: usersDefinition() })
     try {
+      await app.serve({ hostname: '127.0.0.1', shutdownHooks: false })
       expect(addSignalListener).not.toHaveBeenCalled()
       expect(removeSignalListener).not.toHaveBeenCalled()
     } finally {
-      await runtime.close('test-complete')
+      await app.close('test-complete')
     }
   })
 })

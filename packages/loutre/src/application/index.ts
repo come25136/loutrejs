@@ -6,6 +6,8 @@ import type {
   TaskArguments,
   TaskDescriptor,
   TaskOutput,
+  TokenLike,
+  TokenValue,
   TriggerDescriptor,
 } from '../core/index.js'
 import type { ApplicationGraphIR } from '../graph/index.js'
@@ -80,6 +82,7 @@ export type BootstrapArguments<TDefinition extends ApplicationDefinition> =
 
 export interface BaseApplication {
   readonly graph: ApplicationGraphIR
+  get<TToken extends TokenLike>(token: TToken): TokenValue<TToken>
   init(): Promise<this>
   close(signal?: string): Promise<void>
 }

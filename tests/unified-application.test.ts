@@ -78,6 +78,7 @@ describe('Unified Application', () => {
       arguments: { workers: '8' },
     })
     await expect(application.run(read)).resolves.toBe(8)
+    expect(application.get(AppArgs).workers).toBe(8)
     expect(application.graph.arguments).toEqual({ name: 'AppArgs' })
     expect(application.graph.nodes).toEqual(
       expect.arrayContaining([

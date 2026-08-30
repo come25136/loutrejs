@@ -2,6 +2,7 @@ import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
   contract,
+  defineEnv,
   defineModule,
   implementation,
   inject,
@@ -33,6 +34,14 @@ class InMemoryDatabase {
     return result
   }
 }
+const AppEnvSchema = z
+  .object({
+    PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  })
+  .transform((env) => ({ port: env.PORT }))
+
+export class AppEnv extends defineEnv(AppEnvSchema) {}
+
 const DATABASE = token<InMemoryDatabase>('database.primary')
 const CURRENT_USER = contextKey('currentUser').of<{
   readonly id: string
@@ -116,6 +125,7 @@ const UsersController = implementation({
   }),
 })
 const AppModule = defineModule(() => ({
+  environment: [AppEnv],
   name: 'DatabaseTransactionsExample',
   providers: [provide(DATABASE).useClass(InMemoryDatabase), UserRepository],
   implementations: [UsersController],

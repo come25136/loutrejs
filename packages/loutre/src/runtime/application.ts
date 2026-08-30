@@ -222,6 +222,19 @@ export class ApplicationRuntime {
     this.#prepared = true
   }
 
+  get<T>(token: TokenLike<T>): T {
+    if (this.#state === 'created' || this.#state === 'initializing') {
+      throw applicationStateError('LUTRE_APP_NOT_INITIALIZED')
+    }
+    if (this.#state === 'stopping') {
+      throw applicationStateError('LUTRE_APP_STOPPING')
+    }
+    if (this.#state === 'stopped') {
+      throw applicationStateError('LUTRE_APP_STOPPED')
+    }
+    return this.container.get(token)
+  }
+
   run<TTask extends TaskDescriptor<any, any>>(
     task: TTask,
     ...args: TaskArguments<TTask>
@@ -404,13 +417,18 @@ export class ApplicationRuntime {
 }
 
 function applicationStateError(
-  code: 'LUTRE_APP_STOPPING' | 'LUTRE_APP_STOPPED',
+  code:
+    | 'LUTRE_APP_NOT_INITIALIZED'
+    | 'LUTRE_APP_STOPPING'
+    | 'LUTRE_APP_STOPPED',
 ) {
-  return new Error(
-    code === 'LUTRE_APP_STOPPING'
-      ? `${code}: Application is stopping and cannot accept new executions.`
-      : `${code}: Application is stopped and cannot accept new executions.`,
-  )
+  const message =
+    code === 'LUTRE_APP_NOT_INITIALIZED'
+      ? 'Application is not initialized.'
+      : code === 'LUTRE_APP_STOPPING'
+        ? 'Application is stopping and cannot accept new executions.'
+        : 'Application is stopped and cannot accept new executions.'
+  return new Error(`${code}: ${message}`)
 }
 
 function collectApplicationPipelines(

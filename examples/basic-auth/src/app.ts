@@ -2,11 +2,20 @@ import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
   contract,
+  defineEnv,
   defineModule,
   implementation,
 } from '@loutrejs/loutre'
 import { basicAuth, http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
+const AppEnvSchema = z
+  .object({
+    PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  })
+  .transform((env) => ({ port: env.PORT }))
+
+export class AppEnv extends defineEnv(AppEnvSchema) {}
+
 const User = z.object({
   id: z.string(),
   name: z.string(),
@@ -64,6 +73,7 @@ const ProfileController = implementation({
   }),
 })
 const ProfileModule = defineModule(() => ({
+  environment: [AppEnv],
   description: 'Example profile API protected by Basic authentication',
   implementations: [ProfileController],
 }))

@@ -372,8 +372,8 @@ runtime adapterは各Hostの自然なEnvironment sourceを既定値として利�
 
 | Runtime adapter                   | 既定Environment source                       |
 | --------------------------------- | -------------------------------------------- |
-| `nodeRuntime.serve()`             | `process.env`                                |
-| `bunRuntime.serve()`              | `Bun.env`                                    |
+| `nodeRuntime.create()`            | `process.env`                                |
+| `bunRuntime.create()`             | `Bun.env`                                    |
 | `denoRuntime.bind()` / `serve()`  | `Deno.env.toObject()`                        |
 | `cloudflareWorkersRuntime.bind()` | `fetch(request, environment)`の`environment` |
 | `awsLambdaRuntime.bind()`         | `process.env`                                |
@@ -537,27 +537,24 @@ HTTPをself-hostする場合はruntime adapterを使う。
 
 | Runtime            | Public API                        | 主な役割                                 |
 | ------------------ | --------------------------------- | ---------------------------------------- |
-| Node.js            | `nodeRuntime.serve()`             | Node HTTP server ownership               |
-| Bun                | `bunRuntime.serve()`              | `Bun.serve()` ownership                  |
-| Deno               | `denoRuntime.bind()` / `serve()`  | fetch binding / `Deno.serve()` ownership |
+| Node.js            | `nodeRuntime.create()`            | Node HTTP server ownership               |
+| Bun                | `bunRuntime.create()`             | `Bun.serve()` ownership                  |
+| Deno               | `denoRuntime.bind()` / `create()` | fetch binding / `Deno.serve()` ownership |
 | Cloudflare Workers | `cloudflareWorkersRuntime.bind()` | Worker `fetch` binding                   |
 | AWS Lambda         | `awsLambdaRuntime.bind()`         | buffered / streaming HTTP handler        |
 | Electron           | `electronRuntime.attach()`        | MessagePort attachment                   |
 
-Node / Bun / Denoの`serve()`はHTTP-capable Applicationだけを受け付ける。
-Applicationをinitializeし、TriggerがあればTrigger Engineも起動してからlistenerを開始する。
-返却Handleの`close()`はlistener停止とApplication shutdownをまとめて行う。
+Node / Bun / Denoの`create()`はHTTP-capable ApplicationをinitializeしてRuntime Application Contextを返す。Environment / Argumentsは`create()`でbindされ、`app.get()`からapplication-scoped instanceを取得できる。Triggerとlistenerは`app.serve()`で開始し、`app.close()`がlistener停止とApplication shutdownをまとめて行う。
 
 ```ts
 import { nodeRuntime } from '@loutrejs/node'
 import application from './app.js'
 
-const server = await nodeRuntime.serve({
-  application,
-  port: 3000,
-})
+const app = await nodeRuntime.create({ application })
+const server = await app.serve({ port: 3000 })
 
-await server.close('shutdown')
+console.log(server.port)
+await app.close('shutdown')
 ```
 
 Cloudflare Workers / AWS Lambda等のcallback runtimeはruntime-specific handlerをexportするため、Application sourceではなくHost entry側でbindingする。

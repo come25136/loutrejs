@@ -1,6 +1,7 @@
 import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
+  defineEnv,
   defineModule,
   implementation,
   inject,
@@ -8,6 +9,14 @@ import {
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
+const AppEnvSchema = z
+  .object({
+    PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  })
+  .transform((env) => ({ port: env.PORT }))
+
+export class AppEnv extends defineEnv(AppEnvSchema) {}
+
 const GreetingParams = {
   name: z.string().min(1),
 } as const
@@ -66,6 +75,7 @@ const GreetingController = implementation({
   }),
 })
 const GreetingModule = defineModule(() => ({
+  environment: [AppEnv],
   name: 'GreetingModule',
   description: 'Example greeting HTTP API',
   providers: [GreetingService, RequestTiming],

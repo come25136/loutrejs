@@ -2,21 +2,23 @@ import { createUsersApplication } from '../../dist/integrations/http-crud/src/in
 import { nodeRuntime } from '@loutrejs/node'
 
 const port = Number(process.env.BENCHMARK_PORT ?? 43110)
-const handle = await nodeRuntime.serve({
+const app = await nodeRuntime.create({
   application: createUsersApplication(),
+})
+const listener = await app.serve({
   hostname: '127.0.0.1',
   port,
   shutdownHooks: false,
 })
 
-process.stdout.write(`BENCHMARK_READY http://127.0.0.1:${handle.port}\n`)
+process.stdout.write(`BENCHMARK_READY http://127.0.0.1:${listener.port}\n`)
 
 let closing = false
 async function close(signal) {
   if (closing) return
   closing = true
   try {
-    await handle.close(signal)
+    await app.close(signal)
     process.exitCode = 0
   } catch (error) {
     console.error(error)
