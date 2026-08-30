@@ -1,5 +1,7 @@
 # ADR: Loutre Unified Application Execution Architecture
 
+> **2026-08-30 amendment:** self-hosted runtimeのcanonical startup APIは`loutre_runtime_application_context_architecture.md`を正とする。本ADR内の`bootstrap(application) -> app.listen()`例は現行startup APIを表さない。
+
 - 状態: **ACCEPTED / DESIGN FROZEN**
 - 対象: Loutre v0.1 breaking change
 - Base: `develop`

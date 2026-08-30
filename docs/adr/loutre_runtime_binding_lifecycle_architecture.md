@@ -1,5 +1,7 @@
 # Loutre Runtime Binding / Lifecycle Architecture
 
+> **2026-08-30 amendment:** long-lived runtimeの起動API shapeは`loutre_runtime_application_context_architecture.md`で更新する。`serve` / `bind` / `attach`のlifecycle ownership分類は本ADRを維持する。
+
 Status: **Frozen**
 
 Date: 2026-08-28

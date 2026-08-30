@@ -1,5 +1,7 @@
 # ADR: Framework-owned Startup Presentation
 
+> **2026-08-30 amendment:** Runtime Application Context導入後のstartup presentation lifecycleは`loutre_runtime_application_context_architecture.md`を正とする。Framework ownershipと`Ready`をlisten成功後だけ表示する原則は本ADRを維持する。
+
 - Status: Proposed
 - Date: 2026-08-29
 - Target PR: https://github.com/come25136/loutrejs/pull/24
