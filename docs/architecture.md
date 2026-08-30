@@ -1,157 +1,96 @@
 # Loutre Architecture
 
-- 状態: **Loutre v0.x architecture source of truth**
-- 対象: Loutre v0.x
-- 更新日: 2026-08-29 JST
+この文書は、Loutreを構成する公開境界と、その境界を分ける理由を説明します。利用手順は[getting started](./getting-started.md)、具体的な振る舞いは公開型とテスト、個別の判断履歴はADRを正本とし、ここでは現在のApplication modelを俯瞰できることを優先します。
 
-## 0. Source of Truth
+## 全体像
 
-この文書を Loutre v0.x の architecture 上の source of truth とする。
-
-優先順位は次のとおり。
+Loutreは、Runtimeから独立したApplication DefinitionをApplication Graphへcompileし、同じGraphをType System、Runtime、Toolingから利用するTypeScript Application Frameworkです。
 
 ```text
-この architecture.md
-        ↓
-現行 develop の実コード / public type tests / runtime conformance
-        ↓
-個別の ADR / design / handoff docs
+Application code
+  ├ Contract / Protocol / Implementation
+  ├ Module / Provider
+  ├ Environment / Arguments
+  ├ Task / Trigger
+  └ Pipeline / Context
+             │
+             ▼
+     Application Definition
+             │ compile
+             ▼
+       Application Graph
+        ┌────┼──────────┐
+        ▼    ▼          ▼
+      Types Runtime   Tooling
+             ▲
+             │ bind
+      Host / Runtime Adapter
 ```
 
----
+中心となる原則は次のとおりです。
 
-## 1. Architecture Principle
+- Applicationは一種類のportableなDefinitionとして宣言する
+- Protocol、public Task、TriggerをExecution RootとしてGraphへ載せる
+- Frameworkが管理する依存関係は明示し、実行ごとのdataはtyped Contextで渡す
+- Application codeからlistener、process、deploymentなどRuntime固有の責務を分離する
+- 利用できないexecution capabilityは、可能な限りTypeScriptのAPI surfaceへ公開しない
+- Graphのためのconstructionは同期的かつ副作用なしで完了させる
 
-Loutreは、portableな **Application Definition** と明示的な **Application Graph** を中心に、Contract、Protocol、Implementation、Task、Trigger、Pipeline、DI、Environment、Arguments、Lifecycle、Runtime Capabilityを統一的に扱うTypeScript Application Frameworkである。
+Graphを中心に置くことで、型が理解している構成、Runtimeが実行する構成、CLIが検査する構成を別々に再定義せずに済みます。
+
+## 公開パッケージ
+
+利用者が直接扱うdistributionは、次の五つです。
+
+| Package            | 責務                                             |
+| ------------------ | ------------------------------------------------ |
+| `@loutrejs/loutre` | Application Definition、Graph、Runtime、Protocol |
+| `@loutrejs/node`   | Node.js Runtime Adapter                          |
+| `@loutrejs/bullmq` | BullMQ Queue Consumer Driver                     |
+| `@loutrejs/cli`    | Graph検査、build、OpenAPI生成                    |
+| `create-loutre`    | TargetごとのApplication starter生成              |
+
+`@loutrejs/loutre`は、関心ごとのsubpathを公開します。
+
+| Subpath                         | 公開境界                                |
+| ------------------------------- | --------------------------------------- |
+| `@loutrejs/loutre`              | Core、Module、DI、Task、Trigger         |
+| `@loutrejs/loutre/host`         | Runtime-neutralな`bootstrap()`          |
+| `@loutrejs/loutre/binding`      | Host、invocation、resource binding      |
+| `@loutrejs/loutre/graph`        | Application Graphとdiagnostics          |
+| `@loutrejs/loutre/runtime`      | Runtime、Lifecycle、Capability metadata |
+| `@loutrejs/loutre/http`         | HTTP Protocol、Layer、Client            |
+| `@loutrejs/loutre/message-port` | MessagePort Protocol                    |
+| `@loutrejs/loutre/openapi`      | OpenAPI 3.2生成                         |
+| `@loutrejs/loutre/presentation` | 起動時presentation                      |
+| `@loutrejs/loutre/runtime/*`    | RuntimeごとのAdapter                    |
+
+Compiler専用packageは置きません。Graphの成立にTypeScript compiler API、decorator metadata、`reflect-metadata`を要求すると、Applicationの実行と解析が特定のbuild環境へ結びつくためです。
+
+## Application Definition
+
+`defineApplication()`は、Applicationを構成する要素への参照だけを持つside-effect freeなDefinitionを返します。
 
 ```text
-                 Loutre
-
-             Application Graph
-                    │
-        ┌───────────┼───────────┐
-        │           │           │
-        ▼           ▼           ▼
-   Type System    Runtime      Tooling
-                                │
-                                ├ graph
-                                ├ check
-                                ├ explain
-                                ├ doctor
-                                ├ build
-                                └ openapi
+Application Definition
+├ modules[]
+├ arguments?
+├ tasks[]
+├ triggers[]
+└ logger?
 ```
 
-設計原則は次とする。
+Definition自身は`init()`、`run()`、`fetch()`、`listen()`、`close()`を持ちません。Definitionを評価しただけでlistenerやtimerが始まると、Graph inspection、テスト、deployment向けbindingが同じ入口を利用できなくなるためです。
 
-> **Graph-first, type-safe runtime.**
+Application Definitionは構成を表し、実行可能なApplication objectはHostまたはRuntime Adapterが作ります。
 
-> **Applicationは一種類のportable Definitionとして宣言し、Protocol / Task / TriggerをExecution RootとしてGraphへ載せる。**
+### Contract、Protocol、Implementation
 
-> **存在しないexecution capabilityは、可能な限りTypeScriptのAPI surfaceから消す。**
+ContractはProcedureの集合です。各ProcedureはProtocol descriptorを持ち、入力、応答、Pipeline、dispatch identityを静的に宣言します。
 
-> **Framework-managed dependencyは明示し、execution dataはtyped Contextで渡す。**
+ProtocolはHTTPやMessagePortなどのinteractionと、dispatchやfinalizationの規則を所有します。CoreとGraphはProtocol固有のroute grammarを解釈せず、Protocolが提供するdescriptorを扱います。
 
-> **Application codeからruntime固有APIを分離し、起動方法はHost / Runtime Adapterが所有する。**
-
-> **同期的に完成できるobject invariantをframework都合で`undefined`へ落とさない。**
-
-> **Graph Probeが自然なconstructor / factory設計を歪めてはならない。**
-
----
-
-## 2. Distribution / Public Boundary
-
-公開distributionは4 packageに限定する。
-
-```text
-@loutrejs/loutre
-@loutrejs/node
-@loutrejs/bullmq
-@loutrejs/cli
-```
-
-`@loutrejs/loutre` は内部architecture boundaryをsubpath exportとして公開する。
-
-```text
-@loutrejs/loutre
-├ Core / Application Definition
-├ Task / Trigger / Queue
-├ Environment / Arguments
-├ Module / Provider / DI descriptor
-└ binding namespace
-
-@loutrejs/loutre/host
-└ runtime-neutral bootstrap
-
-@loutrejs/loutre/binding
-└ Application / runtime / resource binding
-
-@loutrejs/loutre/graph
-├ ApplicationGraphIR v5
-├ Graph Probe
-└ semantic validation
-
-@loutrejs/loutre/runtime
-├ ApplicationRuntime
-├ DI Container
-├ Lifecycle / execution gate
-├ Pipeline runtime
-├ Runtime Capability
-└ Node capability metadata
-
-@loutrejs/loutre/http
-├ HTTP Protocol
-├ path / params / validation
-├ HTTP Layer
-└ HTTP protocol execution
-
-@loutrejs/loutre/message-port
-├ MessagePort Protocol
-└ MessagePort protocol execution
-
-@loutrejs/loutre/openapi
-└ OpenAPI 3.2 generation
-
-@loutrejs/loutre/runtime/bun
-@loutrejs/loutre/runtime/deno
-@loutrejs/loutre/runtime/cloudflare-workers
-@loutrejs/loutre/runtime/aws-lambda
-@loutrejs/loutre/runtime/electron
-└ runtime adapter
-
-@loutrejs/node
-└ Node.js runtime adapter
-
-@loutrejs/bullmq
-└ BullMQ Queue Consumer Driver binding
-
-@loutrejs/cli
-├ graph / check / explain / doctor
-├ build
-└ openapi
-```
-
-`@loutrejs/compiler` packageは存在しない。
-
-Core / Graph / Runtimeの成立にTypeScript compiler API、`emitDecoratorMetadata`、`reflect-metadata`、Node.js固有DI primitiveを要求しない。
-
----
-
-## 3. Contract / Protocol / Implementation
-
-### 3.1 Contract と Protocol
-
-`Contract`はProcedureの集合であり、各ProcedureがProtocol descriptorを持つ。
-
-`ProtocolDescriptor`はprotocol名、interaction、dispatch identity、capability等のstatic metadataを持つ。
-Protocol固有のdispatch identityはProtocol packageが生成し、Core / Graphはその文字列の内部grammarを解釈しない。
-
-同一Contract内の非null `dispatchKey` 重複はdefinition時に拒否し、Application全体の重複はGraph compileで検出する。
-
-### 3.2 Implementation は class ではない
-
-Contract Implementationのcanonical modelは **static descriptor + synchronous factory** である。
+Implementationはclassの別名ではなく、static descriptorと同期factoryの組です。
 
 ```ts
 const UsersController = implementation({
@@ -160,104 +99,44 @@ const UsersController = implementation({
   protocol: http,
   factory: (users = inject(UsersService)) => ({
     async get(ctx) {
-      return ctx.response.found({ body: await users.get(ctx.params.id) })
+      return ctx.response.found({
+        body: await users.get(ctx.params.id),
+      })
     },
   }),
 })
 ```
 
-`Controller` / `Handler`はApplication上の呼称や変数名として使ってよいが、Coreの別component typeではない。
+Descriptorから対象ContractとProtocolを解析でき、factoryからDependency Graphを収集できます。`Controller`や`Handler`はApplication側の命名として利用できますが、Coreの別component typeにはしません。
 
-Implementation descriptorは次を持つ。
+Factoryは同期的にprocedure objectを返し、procedure自体は非同期で実行できます。Implementation runtimeはApplicationRuntimeごとに一度構築してcacheし、requestやmessageごとには再生成しません。
 
-```text
-kind = implementation
-name
-contract
-protocol
-capabilities
-procedures
-factory
-```
+共有resourceとLifecycleが必要な処理はProviderへ置きます。ImplementationをLifecycle participantとして兼用すると、Protocolの実装とresource ownershipが同じobjectへ混ざるためです。
 
-`procedures`省略時は指定Protocolを持つContract procedures全体へdefinition時にnormalizeする。
-Factory resultは選択procedureをcallable propertyとして持つnon-null objectでなければならない。
-Factory自体がthenableを返すことは禁止し、Procedure functionがasyncなのは合法である。
+### Module
 
-### 3.3 Implementation lifetime
-
-Implementation runtime objectはApplicationRuntimeごとに1つ構築してcacheする。
-request / messageごとに再生成しない。
-
-同じfactoryはGraph Probeと実Runtime initializationで別々に実行され得る。
-Implementation descriptor / runtime objectはDI tokenではなく、Provider Lifecycle participantにも自動登録しない。
-Lifecycleを必要とする共有resourceはProviderへ分離する。
-
----
-
-## 4. Module / Provider / Dependency Injection
-
-### 4.1 Module
-
-現行`ModuleDefinition`は概念的に次を持つ。
-
-```ts
-interface ModuleDefinition {
-  readonly name?: string
-  readonly description?: string
-  readonly imports?: readonly ModuleInstance[]
-  readonly environment?: readonly EnvClass[]
-  readonly providers?: readonly ProviderDeclaration[]
-  readonly implementations?: readonly ImplementationDescriptor[]
-  readonly exports?: readonly unknown[]
-  readonly lifecycle?: ModuleLifecycle
-  readonly requires?: readonly string[]
-}
-```
-
-ModuleはImplementation descriptorだけを知ればよく、ContractとImplementationの関係を別APIで再宣言しない。
-`defineModule()`は`environment`宣言からframework-managed Environment Providerを合成し、同じEnvClassをdedupeする。
-
-### 4.2 Provider
-
-Providerのcanonical kindsは次。
+Moduleは、Applicationをfeature単位で構成する境界です。
 
 ```text
-class
-value
-factory
-conditional
-environment
-arguments
+Module
+├ imports
+├ environment
+├ providers
+├ implementations
+├ exports
+├ lifecycle
+└ required capabilities
 ```
 
-Scopeは`application | transient`。
+別ModuleのProviderへ依存する場合、宣言元はProviderを`exports`し、依存元はModuleを`imports`します。同じModule内の依存関係に`exports`は不要です。
 
-classを`providers: [Service]`と直接置いた場合はapplication-scoped class providerへnormalizeする。
-Value Providerはapplication scope。
-Factory Providerはdependencyを`inject` metadataで明示する。
+この可視性をGraph compile時に検証することで、TypeScript上で参照できることと、Applicationとして依存を公開していることを区別します。
 
-```ts
-provide(CACHE).useFactory({
-  inject: [Config],
-  use: (config) => new Cache(config),
-})
-```
+### ProviderとDependency Injection
 
-Conditional ProviderはEnvironmentまたはArgumentsのruntime input keyでcandidate classを選ぶ。
+ProviderはApplicationが所有するresourceです。class、value、factory、conditional、Environment、Argumentsを同じDependency Graphへ載せます。通常のscopeは`application`、必要な場合だけ`transient`を選びます。
 
-```ts
-provide(STORAGE).select(AppEnv.key('storageDriver'), {
-  memory: MemoryStorage,
-  s3: S3Storage,
-})
-```
-
-Graphは現在選択されていないcandidateも含めてtopologyを保持する。
-
-### 4.3 `inject()`
-
-class tokenとcustom tokenは同じ`inject()`で解決する。
+class tokenとcustom tokenは、同じ`inject()`で宣言します。
 
 ```ts
 const DATABASE = token<Database>('database')
@@ -267,51 +146,41 @@ class UserRepository {
 }
 ```
 
-class dependencyのcanonical formはconstructor default parameterである。
-明示argumentを渡せばdefault initializerは評価されないため、unit testでTest Containerを要求しない。
+constructor default parameterをcanonicalな依存宣言にすることで、FrameworkはGraphを収集でき、unit testは明示argumentで依存を差し替えられます。DecoratorやTest Containerを必須にしません。
 
-`@Injectable()`、class dependency用`@Inject()`、`experimentalDecorators`、`emitDecoratorMetadata`、`reflect-metadata`は要求しない。
+Factory Providerの依存関係は`inject` metadataで宣言します。
 
-`inject()`はService Locatorではなく、framework-managedな同期construction中だけ利用できる。
-
-```text
-inject(token)
-    ├ dependency declaration
-    ├ synchronous dependency resolution
-    └ consumer → dependency edge recording
+```ts
+provide(CACHE).useFactory({
+  inject: [Config],
+  use: (config) => new Cache(config),
+})
 ```
 
-主なconsumerは次。
+`inject()`はService Locatorではなく、Frameworkが管理する同期construction中だけ有効です。Procedure bodyから任意のdependencyを取得できる設計にすると、実行時にしか現れないedgeがGraphの外へ漏れるためです。
 
-- Provider class constructor
-- Layer factory
-- Implementation factory
-- Task factory
+request、session、current user、tenant、permissionsなど実行ごとのdataはDIへ入れず、Context KeyとPipelineで渡します。
 
-procedure bodyや通常のApplication処理からの`inject()`は`LUTRE_DI_CONTEXT`で失敗する。
-Injection Contextは同期stack + `try/finally`で復元し、DIのために`AsyncLocalStorage`を要求しない。
+### 同期construction
 
-### 4.4 Execution data は DI ではない
+Provider constructor、Provider factory、Implementation factory、Layer factory、Task factoryは同期的に完成します。非同期処理は、完成したruntime functionまたはLifecycleで実行します。
 
-request、session、current user、tenant、permissions、request/message固有state等はDIへ入れない。
-typed `ctx` / Context Key / Pipelineで扱う。
+同期constructionを保つ理由は、object invariantとDependency Graphを同じ時点で確定するためです。Graph Probeでもconstructorやfactoryを実行するので、次の処理はconstructionへ置きません。
 
-### 4.5 Construction は同期
+- network I/O
+- listenerやlong-running timerの開始
+- process-wideなmutable stateの変更
+- business operation
 
-Container resolution、class constructor、Provider factory、Layer factory、Implementation factory、Task factoryは同期である。
-Factoryがthenableを返す場合はfail-fastする。
+これらはLifecycle、Task、Trigger、Protocol executionへ置きます。
 
-一方で、同期的に完成できるobject invariantはconstructor / factoryで完成させてよい。
-Graph Probeでもconstructor / factoryが実行されるため、network I/O、listener起動、long-running timer起動、process-wide mutable side effect、business operationはconstructionへ置かない。
+## Runtime Input
 
----
+Application codeは、Runtimeから受け取るraw valueを直接読みません。EnvironmentとArgumentsが、HostのinputをApplicationの型へ変換します。
 
-## 5. Runtime Input: Environment / Arguments
+### Environment
 
-### 5.1 Environment
-
-Environmentは`process.env` wrapperではなく、**Raw Runtime Environment → Application Environment**の変換Contractである。
-Standard Schemaをそのまま利用する。
+Environmentは`process.env`のwrapperではなく、Raw Runtime EnvironmentからApplication Environmentへの変換Contractです。Standard Schemaでvalidateとtransformを行います。
 
 ```ts
 const AppEnvSchema = z
@@ -327,22 +196,24 @@ const AppEnvSchema = z
 class AppEnv extends defineEnv(AppEnvSchema) {}
 ```
 
-`defineEnv()`のschema outputはobjectでなければならない。
-`AppEnv.key()`はraw keyではなくtransform後output keyを参照する。
+Moduleは必要なEnvironment Contractを宣言します。`AppEnv.key()`はraw keyではなく、transform後のoutput keyを参照します。
 
-Environment ContractはModuleが0..N個宣言する。
+Runtime Adapterは、それぞれのHostで自然なEnvironment sourceを既定値として渡します。
 
-```ts
-const AppModule = defineModule(() => ({
-  environment: [AppEnv],
-  providers: [Database],
-}))
-```
+| Runtime Adapter                   | 既定のsource                  |
+| --------------------------------- | ----------------------------- |
+| `nodeRuntime.create()`            | `process.env`                 |
+| `bunRuntime.create()`             | `Bun.env`                     |
+| `denoRuntime.bind()` / `create()` | `Deno.env.toObject()`         |
+| `cloudflareWorkersRuntime.bind()` | Workerの`environment`         |
+| `awsLambdaRuntime.bind()`         | `process.env`                 |
+| `electronRuntime.attach()`        | 利用可能な場合は`process.env` |
 
-### 5.2 Arguments
+明示的な`environment`が渡された場合は、その値を優先します。Application sourceがHost固有のEnvironment APIを直接読む構成は、Runtime portabilityを失うためcanonicalにしません。
 
-ArgumentsはHostがApplicationをどう起動するかを表すstructured inputである。
-Applicationが0..1個のArguments Contractを持つ。
+### Arguments
+
+Argumentsは、HostがApplicationをどのinputで起動したかを表すstructured inputです。Applicationは0個または1個のArguments Contractを持ちます。
 
 ```ts
 class AppArgs extends defineArgs(
@@ -357,69 +228,27 @@ const application = defineApplication({
 })
 ```
 
-ArgumentsもStandard Schemaでvalidate / transformし、`inject(AppArgs)`と`AppArgs.key()`を利用できる。
-Graph上では`kind: 'arguments'`のframework-managed Provider / dependency nodeとして表現する。
+ArgumentsもStandard Schemaでvalidateとtransformを行い、ProviderとしてDependency Graphへ載ります。required inputがある場合、Host optionsの`arguments`も型レベルで必須になります。
 
-required inputを持つArguments Contractでは、`bootstrap()`やruntime adapterのoptionsで`arguments`が型レベル必須になる。
-Schema inputが空objectで成立する場合は省略できる。
+EnvironmentとArgumentsのraw valueはRuntimeのinputであり、Graph生成のinputにはしません。Graph Probeがsecretやdeployment固有値へ到達した場合は、diagnostic errorにせずopaque boundaryで停止します。
 
-### 5.3 Raw source ownership
+## Execution Root
 
-runtime-neutralな`bootstrap()` / `binding.host()` / `binding.invocation()`は、`environment`が明示された場合だけそのsourceをApplicationRuntimeへ渡す。
-Environment Contractを持つApplicationでsourceが供給されない場合は`LUTRE_ENV_005`になる。
-
-runtime adapterは各Hostの自然なEnvironment sourceを既定値として利用する。
-
-| Runtime adapter                   | 既定Environment source                       |
-| --------------------------------- | -------------------------------------------- |
-| `nodeRuntime.create()`            | `process.env`                                |
-| `bunRuntime.create()`             | `Bun.env`                                    |
-| `denoRuntime.bind()` / `serve()`  | `Deno.env.toObject()`                        |
-| `cloudflareWorkersRuntime.bind()` | `fetch(request, environment)`の`environment` |
-| `awsLambdaRuntime.bind()`         | `process.env`                                |
-| `electronRuntime.attach()`        | 利用可能なら`process.env`                    |
-
-すべて明示`environment`でoverrideできるruntimeについては、その明示値を優先する。
-Application source自体からHost固有Environment APIを直接読む構成をcanonicalにしない。
-
-Graph Probe中のEnvironment concrete value accessはuser-facing diagnosticではなく、内部Probe Boundaryとして扱う。
-Schema validation failureのframework messageにraw secret valueを含めない。
-
----
-
-## 6. Application Definition / Task / Trigger
-
-### 6.1 Application Definition
-
-`defineApplication()`はside effectを持たないportable Definitionを返す。
-
-```ts
-const application = defineApplication({
-  modules: [AppModule()],
-  arguments: AppArgs,
-  tasks: [rebuildIndex],
-  triggers: [nightlyCleanup, pollRemoteState, orderConsumer],
-  logger,
-})
-```
-
-現行`ApplicationDefinition`が持つcompositionは次。
+Application Graphで実行の入口になるのは、Protocol、public Task、Triggerです。
 
 ```text
-Application Definition
-├ modules[]
-├ arguments?   # 0..1
-├ tasks[]       # public Task roots
-├ triggers[]    # automatic roots
-└ logger?
+Execution Root
+├ Protocol procedure
+├ Public Task
+└ Trigger
+   ├ cron
+   ├ fixed-delay
+   └ queue-consumer
 ```
 
-Definition自体には`init()` / `run()` / `fetch()` / `listen()` / `triggers` / `close()`を生やさない。
-listener ownershipはApplication DefinitionではなくHost / Runtime Adapterが持つ。
+### Task
 
-### 6.2 Task
-
-Taskは **static descriptor + synchronous factory** である。
+Taskは、Hostが明示的に実行できる処理です。static descriptorと同期factoryからなり、factoryが返すruntime functionは非同期にできます。
 
 ```ts
 const processOrder = task<Order, void>({
@@ -432,322 +261,35 @@ const processOrder = task<Order, void>({
 })
 ```
 
-Task factoryは同期でruntime functionを返す。runtime function自体はasyncでよい。
-同一ApplicationRuntimeではTask runtimeを1度だけprepare/cacheする。
+`Application.tasks`へ登録したTaskだけをpublicとし、Hosted Applicationの`run()`から実行できます。Triggerからだけ参照されるTaskはGraphとRuntimeへ登録しますが、public APIには公開しません。
 
-`Application.tasks`へ登録したTaskだけがpublic Taskであり、Applicationの`run(task, ...args)`から実行できる。
-Triggerからだけ参照されるTaskはruntime登録・Graph Probe対象にはなるが、public `run()` surfaceには含めない。
+public Taskを持たないApplicationから`run()`を型surfaceごと消すことで、実行できないoperationをRuntime errorではなく利用時に検出できます。
 
-public Taskが0件のApplicationには`run`自体を型surfaceへ公開しない。
+### Trigger
 
-### 6.3 Trigger
+TriggerはTaskを自動実行する入口です。
 
-Triggerのcanonical kindは次。
+- cronは5-field expressionとIANA timezoneを持ち、overlap policyを選ぶ
+- fixed-delayは前回のexecution完了後から次のdelayを数える
+- queue-consumerはStandard Schemaでpayloadを検証してからTaskへ渡す
 
-```text
-cron
-fixed-delay
-queue-consumer
-```
+Queueはvendor-neutralなlogical resourceとしてCoreへ置き、受信処理はDriver bindingへ分離します。Producer固有option、retry、delayed publishまでCoreで標準化すると、transportの差を不完全な共通APIへ押し込めるためです。
 
-Cronは5-field cron expression + IANA timezoneを持ち、overlap policyは`skip | allow`。
-Cronが参照できるTask inputは`void`。
+## PipelineとContext
 
-Fixed-delayはnon-negative finite integerのdelayを持ち、`immediate`を指定できる。
-execution完了後にdelayを開始するため、同一Trigger自身はoverlapしない。
-参照できるTask inputは`void`。
-
-Queueはvendor-neutralなlogical resourceで、payloadにStandard Schemaを必須とする。
-Queue ConsumerはQueue payloadとTask inputが双方向に互換であることを型で要求する。
-Queue Consumer Driverが受信したunknown payloadをvalidateしてからTaskへ渡す。
-
-transport固有のproducer / delayed publish / retry option等はCoreで標準化しない。
-
----
-
-## 7. Binding / Host / Runtime Adapter
-
-### 7.1 `binding` namespace
-
-外部runtime/resourceとの接続はflatな`createXXX` / `bindXXX` APIを増殖させず、`binding` namespaceへ集約する。
-
-```ts
-binding.invocation({ application, environment, arguments })
-binding.host({ application, environment, arguments })
-binding.queue(queue, driver)
-```
-
-`binding.invocation()`はcallback / transport binding向けで、protocol executionとInvocation Applicationを返す。
+Pipelineは、Protocol procedureの実行順序とContextの変化をGraphへ表します。Layer、Validation、Terminalを再帰的に構成できます。
 
 ```text
-InvocationBinding
-├ application
-├ http?         # HTTP capabilityがある場合
-└ messagePort?  # MessagePort capabilityがある場合
+Pipeline
+├ Layer
+├ Layer
+│  └ child Pipeline
+│     ├ Validation
+│     └ Layer
+└ Terminal
 ```
 
-Invocation Applicationのbase APIは次。
-
-```text
-graph
-init()
-close(signal?)
-```
-
-public Taskがあれば`run(task, ...args)`を追加する。
-`triggers`はInvocation Applicationへ公開しない。
-
-`binding.host()`はInvocation ApplicationにTrigger Engineを追加できるHost bindingである。
-Protocol executionはApplication objectへ埋め込まずbinding側に保持する。
-
-### 7.2 `bootstrap()`
-
-`bootstrap()`はruntime-neutralなHost primitiveで、内部的に`binding.host()`を利用する。
-
-```ts
-const app = bootstrap({
-  application,
-  environment,
-  arguments,
-})
-```
-
-`bootstrap()`が返すHosted Applicationのbase APIは次。
-
-```text
-graph
-init()
-close(signal?)
-```
-
-Definitionに応じて型surfaceを増減させる。
-
-```text
-public Taskあり → run(task, ...args)
-HTTPあり        → fetch(request)
-Triggerあり     → triggers.start() / triggers.stop()
-```
-
-`bootstrap()`はHTTP listenerを所有しないため`listen()`を持たない。
-HTTPをself-hostする場合はruntime adapterを使う。
-
-### 7.3 Runtime Adapter
-
-現行adapter surfaceは次。
-
-| Runtime            | Public API                        | 主な役割                                 |
-| ------------------ | --------------------------------- | ---------------------------------------- |
-| Node.js            | `nodeRuntime.create()`            | Node HTTP server ownership               |
-| Bun                | `bunRuntime.create()`             | `Bun.serve()` ownership                  |
-| Deno               | `denoRuntime.bind()` / `create()` | fetch binding / `Deno.serve()` ownership |
-| Cloudflare Workers | `cloudflareWorkersRuntime.bind()` | Worker `fetch` binding                   |
-| AWS Lambda         | `awsLambdaRuntime.bind()`         | buffered / streaming HTTP handler        |
-| Electron           | `electronRuntime.attach()`        | MessagePort attachment                   |
-
-Node / Bun / Denoの`create()`はHTTP-capable ApplicationをinitializeしてRuntime Application Contextを返す。Environment / Argumentsは`create()`でbindされ、`app.get()`からapplication-scoped instanceを取得できる。Triggerとlistenerは`app.serve()`で開始し、`app.close()`がlistener停止とApplication shutdownをまとめて行う。
-
-```ts
-import { nodeRuntime } from '@loutrejs/node'
-import application from './app.js'
-
-const app = await nodeRuntime.create({ application })
-const server = await app.serve({ port: 3000 })
-
-console.log(server.port)
-await app.close('shutdown')
-```
-
-Cloudflare Workers / AWS Lambda等のcallback runtimeはruntime-specific handlerをexportするため、Application sourceではなくHost entry側でbindingする。
-
----
-
-## 8. Runtime Initialization / Lifecycle / Shutdown
-
-### 8.1 Creation と initialization
-
-Graph inspectionはDefinitionをcompileするだけでruntime initializationを要求しない。
-BindingがApplicationRuntime shellを所有し、`init()`または最初のexecutionでruntimeを完成させる。
-
-概念的な順序は次。
-
-```text
-Application Definition evaluation
-        ↓
-Application Graph compile / Graph Probe
-        ↓
-ApplicationRuntime shell
-        ↓
-raw Environment / Arguments source binding
-        ↓
-Standard Schema validation / transform
-        ↓
-Implementation factory preparation
-Layer factory preparation
-Task factory preparation
-Provider resolution
-        ↓
-Provider / Module Lifecycle initialization
-        ↓
-Application ready
-```
-
-`init()`はidempotent。
-Task / protocol execution / Trigger startは必要ならruntime initializationを開始する。
-
-### 8.2 Lifecycle participant
-
-Lifecycle participantとなるのはapplication-scoped normal Provider instanceとModule lifecycle hookである。
-transient Providerはlifecycle保証を持たない。
-Environment / Arguments Provider、Implementation runtime、Layer runtime、Task runtimeをProvider lifecycle participantとして自動登録しない。
-
-Provider classは次のmethod-based hookを実装できる。
-
-```text
-onModuleInit
-onApplicationBootstrap
-onModuleDestroy
-beforeApplicationShutdown
-onApplicationShutdown
-```
-
-Module-level lifecycleはdependencyを明示するhook descriptorで表す。
-
-### 8.3 Execution gate
-
-ApplicationRuntimeはactive executionを追跡する。
-
-```text
-CREATED
-  ↓
-INITIALIZING
-  ↓
-RUNNING
-  ├ Protocol execution
-  ├ public Task execution
-  └ Trigger → Task execution
-  ↓ close()/shutdown()
-STOPPING
-  ├ reject new execution
-  └ wait active executions
-  ↓
-Lifecycle cleanup
-  ↓
-STOPPED
-```
-
-shutdown開始後の新規executionは拒否する。
-Application-scoped Providerをactive execution中に破棄しない。
-`close()` / runtime shutdownはidempotent。
-
-Trigger Engineの二重開始は`LUTRE_TRIGGERS_ALREADY_STARTED`で拒否する。
-初期化途中で失敗した場合は開始済みapplication-scoped Provider / Moduleをreverse orderでcleanupする。
-Cleanupも失敗した場合は`AggregateError`へ集約する。
-
----
-
-## 9. Application Graph / Graph Probe
-
-### 9.1 Application Graph
-
-public `@loutrejs/loutre/graph`が公開・生成する`ApplicationGraphIR`はLoutre本体のPublic APIとして管理する。
-Graphだけに独立したschema versionは持たせず、Graph shapeの破壊的変更はLoutre本体のversioningで扱う。
-
-`ApplicationGraphIR`は少なくとも次を持つ。
-
-```text
-modules
-arguments?
-providers
-tokens
-contextKeys
-contracts
-pipelines
-implementations
-tasks
-queues
-executions
-capabilities
-hostCapabilities
-nodes
-edges
-diagnostics
-```
-
-`TaskIR`は`public: boolean`を持ち、`Application.tasks`由来のpublic TaskとTrigger-only Taskを区別する。
-
-Execution Rootは次。
-
-```text
-ProtocolExecutionRootIR
-TaskExecutionRootIR
-TriggerExecutionRootIR
-  ├ CronTriggerExecutionRootIR
-  ├ FixedDelayTriggerExecutionRootIR
-  └ QueueConsumerTriggerExecutionRootIR
-```
-
-Queueは`QueueIR`として別resourceに載る。
-TaskはDI rootなので`DependencyNodeIR.kind = 'task'`としてGraph Probe対象になる。
-Argumentsも`DependencyNodeIR.kind = 'arguments'`として表現する。
-
-### 9.2 Declared Graph + Graph Probe
-
-Graphはstatic descriptor情報とProbeの両方から作る。
-
-```text
-Application entry evaluation
-        ↓
-Descriptor traversal
-        ↓
-Declared Graph
-        ↓
-Graph Probe Container
-        ↓
-managed class / Layer / Implementation / Taskを
-Lifecycleなしで同期construction
-        ↓
-inject() edge record
-        ↓
-ApplicationGraph + diagnostics
-```
-
-Provider Factoryの`inject`、Lifecycle Hookのdependency、conditional mapping等はdeclared edgeとして収集する。
-Class / Layer / Implementation / Taskのdefault parameter `inject()`はProbeで実際にconstructor / factoryを呼び、probed edgeとして収集する。
-
-Dependency conditionはEnvironmentだけでなくArgumentsも表現できる。
-
-```ts
-condition?: {
-  source: 'environment' | 'arguments'
-  contract: string
-  key: string
-  equals: PropertyKey
-}
-```
-
-### 9.3 Environment Probe Boundary
-
-Graph生成にdeployment secretを要求しない。
-Probe用Environment / Argumentsのruntime-dependent concrete valueへ到達した場合はopaque Probe Boundaryでconstructionを止める。
-これはuser-facing diagnostic failureではない。
-
-Nested dependencyがBoundaryへ到達した場合はopaque placeholderを親へ返し、親constructorの後続default parameterを継続してprobeする。
-Graph Probeは任意JavaScriptのsymbolic interpreterではないため、dependency topologyをimperative runtime branchへ隠さない。
-
-> **値の正当性はSchema。Dependency topologyはGraph。**
-
-### 9.4 Partial graph
-
-unresolved dependencyやcycle等があっても、取得済みnode / edgeとdiagnosticsを持つpartial graphを返せることを重視する。
-CLIの`graph` / `check` / `explain` / `doctor`は同じGraph compile結果を利用する。
-
----
-
-## 10. Pipeline / Layer / Context
-
-### 10.1 Layer
-
-Layerは **static metadata + synchronous factory** を持つcallable descriptorである。
+Layerはstatic metadataと同期factoryを持ちます。
 
 ```ts
 const auth = layer({
@@ -763,297 +305,190 @@ const auth = layer({
 })
 ```
 
-static metadataはfactoryを実行せず解析できる。
-Layer factoryはruntime functionを返す同期factoryで、runtime function自体はasyncでよい。
+`requires`はLayerが読むContext Key、`provides`は後段へ追加するContext Keyを宣言します。Runtimeは未宣言のproperty、required valueの不足、Context Keyの重複、既存Contextの暗黙上書きを拒否します。
 
-### 10.2 Recursive Pipeline
+正常なLayerは`next()`を一度だけ呼ぶか、`shortCircuit()`で終了します。Pipeline全体のTerminalも一つに限定します。この制約により、Graphに宣言した実行順序とRuntimeの制御フローが一致します。
 
-Pipeline itemはLayer occurrence / Validation / Terminalで構成する。
+Contextはexecution dataを運びます。Dependency GraphのresourceとContextのdataを分けることで、Provider lifetimeとrequest lifetimeを混同しません。
+
+## Application Graph
+
+Application Graphは、Definitionから得られるstatic descriptorと、同期constructionを観測するGraph Probeを統合して作ります。
 
 ```text
-Pipeline
-├ Layer
-├ Layer(child Pipeline)
-│  ├ Layer
-│  └ Layer(child Pipeline)
-└ Terminal
+Application Definition
+        │
+        ├ Descriptor traversal ── Declared nodes / edges
+        │
+        └ Graph Probe ─────────── inject() nodes / edges
+                         │
+                         ▼
+                 Application Graph
 ```
+
+### Declared Graph
+
+Module imports、Provider Factoryの依存metadata、Contract、Pipeline、Task、Trigger、Capabilityなど、factoryを実行せずに読める構成を収集します。
+
+### Graph Probe
+
+class、Implementation、Layer、Taskのdefault parameterにある`inject()`は、Probe用Containerで同期constructionしてedgeを記録します。Graph ProbeはLifecycleを実行せず、ApplicationRuntimeも起動しません。
+
+同じconstructorやfactoryはGraph ProbeとRuntime initializationで別々に実行される可能性があります。そのためconstructionへI/Oやprocess-wideな副作用を置かず、外部resourceの開始はLifecycleへ分離します。
+
+EnvironmentやArgumentsのconcrete valueがないと先へ進めない依存はopaque boundaryとして扱い、取得済みのnodeとedgeは保持します。Graph ProbeはJavaScriptのsymbolic interpreterではないため、dependency topologyをimperativeなruntime branchへ隠しません。
+
+### Graphの利用者
+
+Graphは少なくとも次の関係を表します。
+
+- Moduleと公開境界
+- Provider、token、Context Key
+- Contract、Pipeline、Implementation
+- Task、Queue、Execution Root
+- Capability requirementとHost Capability
+- diagnostics
+
+unresolved dependencyやcycleがあっても、取得できた構成とdiagnosticsをpartial graphとして返せます。CLIの`graph`、`check`、`explain`、`doctor`は同じcompile結果を利用します。
+
+Graphの公開shapeはLoutre本体のPublic APIとしてversioningします。Graphだけに別の互換性ルールを持たせません。
+
+## BindingとHost
+
+Definitionを実行可能なApplicationへ変える境界がBindingです。
 
 ```ts
-pipeline: [transaction([auth, http.controller])]
+binding.invocation({ application, environment, arguments })
+binding.host({ application, environment, arguments })
+binding.queue(queue, driver)
 ```
 
-`transaction([...])`は別種類のLayerを作らず、同じLayer definitionとchild pipelineを関連付ける。
-呼び出し時にfactoryを実行しない。
+`binding.invocation()`はcallbackやtransport binding向けで、Protocol executionとApplicationRuntimeを返します。Trigger Engineは所有しません。
 
-Runtimeは同じLayer descriptorのruntime functionをcacheする。
-Graph Probeでは別途factoryを実行し得る。
+`binding.host()`はlong-livedなHost向けで、必要な場合にTrigger Engineを追加します。
 
-### 10.3 Context / next / short circuit
+`bootstrap()`はRuntime-neutralなHost primitiveで、内部では`binding.host()`を利用します。HTTP listenerは所有せず、Web Standardの`fetch(request)`でHTTP-capable Applicationを実行します。
 
-`requires`はLayerが読むContext Key、`provides`は`next(provided)`で後段へ追加するContext Keyを宣言する。
-Runtimeはundeclared property、required provided property不足、Context Key重複、既存Contextの暗黙上書きを拒否する。
-
-child pipelineで追加されたContext / validation stateはchild終了後も親pipeline後段へ伝播する。
-Nested Pipelineはlexical Context scopeではない。
-
-正常なLayer終了は原則として次のどちらか。
+Hosted Applicationのbase surfaceは`graph`、`get()`、`init()`、`close()`です。Definitionに応じて、利用可能なoperationだけを追加します。
 
 ```text
-next() exactly once
-OR
-shortCircuit(...)
+public Taskあり  → run(task, ...args)
+HTTPあり         → fetch(request)
+Host + Trigger   → triggers.start() / triggers.stop()
 ```
 
-Runtimeはnextのskip / reentry、next後のshortCircuitを拒否する。
-Downstream errorをLayerがcatchして握り潰してもPipeline runtimeは保持した元errorを再throwする。
+Listenerをgeneric Hostへ置かないのは、Node.js、Bun、Deno、Worker、Lambdaでownershipとshutdown方法が異なるためです。
 
-Logical terminalはrecursive depth-first順で全体にexactly one、かつ最後でなければならない。
+## Runtime Adapter
 
----
+Runtime Adapterは、Host固有APIとLoutreのBindingを接続します。
 
-## 11. HTTP Architecture
+| Runtime            | Public API                        | 所有する境界                   |
+| ------------------ | --------------------------------- | ------------------------------ |
+| Node.js            | `nodeRuntime.create()`            | Node HTTP server               |
+| Bun                | `bunRuntime.create()`             | `Bun.serve()`                  |
+| Deno               | `denoRuntime.bind()` / `create()` | fetch binding / `Deno.serve()` |
+| Cloudflare Workers | `cloudflareWorkersRuntime.bind()` | Worker `fetch`                 |
+| AWS Lambda         | `awsLambdaRuntime.bind()`         | buffered / streaming handler   |
+| Electron           | `electronRuntime.attach()`        | MessagePort                    |
 
-### 11.1 Path / params
+Node.js、Bun、Denoの`create()`はApplicationを初期化し、`serve()`でlistenerとTriggerを開始します。`close()`はlistener停止、active executionのdrain、Application shutdownをまとめて行います。
 
-v0.x HTTP path grammarはsegment-based。
+Cloudflare Workers、AWS Lambda、Electronのようなcallback Runtimeは、Application sourceではなくHost entryでbindingします。deployment形式をApplication Definitionへ混ぜないためです。
+
+### Capability
+
+Runtime固有機能はCapabilityとしてApplication Graphへ記録し、Runtime Adapterが提供するCapabilityと照合します。
+
+CapabilityはApplication全体のrequirementと、特定Execution Rootのrequirementを区別します。CLIの`doctor`はGraphと選択RuntimeのCapability setを比較します。
+
+Capability metadataとAdapter実装は分離できます。たとえばNode.jsのmetadataを読むためにNode.js built-in moduleまで評価すると、BunやDenoでのinspectionがNode.js実装へ依存するためです。
+
+## InitializationとLifecycle
+
+Graph inspectionはApplicationRuntimeを起動しません。BindingがRuntime shellを作り、`init()`または最初のexecutionで初期化を完了します。
 
 ```text
-/
-/users
-/users/{id}
-/users/{userId}/posts/{postId}
-```
-
-Param nameは`[A-Za-z_][A-Za-z0-9_]*`。
-Paramはsegment全体を占有する。
-optional / wildcard / inline regex / inline param / trailing slash alias / query / fragment / duplicate param nameはサポートしない。
-
-Runtime routerはparsed segment matcherを使う。
-
-Path paramはvalidation前からraw `string`として型付き。
-`request.params`はobject schemaではなくpropertyごとのStandard Schema mapで宣言する。
-
-```ts
-request: {
-  params: {
-    id: z.coerce.number(),
-  },
-}
-```
-
-schema mapのkey集合はpath paramsと完全一致する必要がある。
-`validate.params`をPipelineへ置いた地点がrefinement boundaryになる。
-`request.params`を書いただけでは自動validationしない。
-
-### 11.2 Dispatch identity
-
-HTTP dispatch keyはmethod + normalized pathである。
-Param名やschema内容はroute identityへ影響しない。
-
-```text
-GET /users/{id}
-GET /users/{userId}
+Definition evaluation
         ↓
-http:GET:/users/{}
+Graph compile / Probe
+        ↓
+Environment / Arguments binding
+        ↓
+Schema validation / transform
+        ↓
+Runtime factory preparation
+        ↓
+Provider / Module initialization
+        ↓
+Application ready
 ```
 
-Route dispatchはregistration orderへ依存しない。
-Path specificityは左から`static > param`で比較する。
+Lifecycle participantはapplication-scoped ProviderとModule lifecycleです。transient Provider、Environment、Arguments、Implementation、Layer、Task runtimeは自動的なLifecycle participantにしません。
 
-### 11.3 Decode / validation / finalization
+Providerは次のmethod-based hookを実装できます。
 
-HTTP protocol executionはWeb Standard `Request` / `Response`をprotocol boundaryとして使う。
-
-request decodeはpath params、query、headers、JSON、text、FormData、ReadableStreamを扱う。
-ValidationはPipeline上の`validate.*` Layerが実行する。
-decode failure / validation failureは400へfinalizeする。
-
-Implementationはtransport `Response`を直接構築せずLogical Resultを返す。
-Protocol Finalizationがresponse schema validation、headers、serialization、streamingを担当する。
-Server streamは`AsyncIterable`を使い、request abort時にiterator cleanupを行う。
-
-### 11.4 CORS / Auth
-
-CORSはHTTP packageのframework Layerとして宣言する。
-preflightはController実行前にHTTP boundaryで処理し、actual responseだけでなくvalidation error等のfinalizationにもCORS headersを適用する。
-
-Basic AuthもLayerとして提供し、認証結果はtyped Contextへ追加する。
-
----
-
-## 12. MessagePort Architecture
-
-MessagePortもHTTPと同じImplementation / Pipeline / Layer / ApplicationRuntimeを使う。
-独立した`MessagePortApplication`は持たない。
-
-`messagePort.handler`はPipeline terminalである。
-現行MessagePort Protocolの`dispatchKey`は`null`で、procedure名でrouteを選択する。
-
-ResponseはLogical MessagePort ResultとしてImplementationから返し、finalization時にdeclared response schemaでvalidationする。
-Server streamは`AsyncIterable`を利用する。
-
-Electron runtime adapterはMessagePort protocol executionをElectron MessagePortへattachする。
-
----
-
-## 13. CLI / Build / OpenAPI
-
-### 13.1 CLI ownership
-
-Loutre CLIはApplicationを起動するHostではなく、Graph inspection / build / OpenAPI generationを担うdeveloper toolingである。
-Application Moduleをfilesystem conventionで探索せず、entry fileを明示する。
-
-現行commandは次。
-
-```sh
-loutre check --entry src/app.ts
-loutre doctor --runtime node --entry src/app.ts
-loutre graph modules --entry src/app.ts
-loutre graph di --entry src/app.ts --format mermaid
-loutre graph contracts --entry src/app.ts
-loutre graph executions --entry src/app.ts
-loutre graph runtime --entry src/app.ts
-loutre explain UsersService --entry src/app.ts
-loutre build src/app.ts
-loutre openapi --entry src/app.ts
+```text
+onModuleInit
+onApplicationBootstrap
+onModuleDestroy
+beforeApplicationShutdown
+onApplicationShutdown
 ```
 
-`loutre run` / `loutre dev` / `loutre start`は提供しない。
-Applicationの実行方法、argv parsing、listener ownershipはHostが所有する。
+Runtimeはactive executionを追跡します。
 
-CLI host wrapperはNode.js / Bun / Denoを判定してargs / cwd / stdout / stderrを抽象化する。
-repository内でDenoからsource fallbackは行わず、未build時は事前buildを要求する。
-
-### 13.2 Build
-
-`build`はesbuildでESM Application bundleを生成する。
-
-```sh
-loutre build src/app.ts --out-dir dist/loutre
+```text
+CREATED → INITIALIZING → RUNNING → STOPPING → STOPPED
+                            │          │
+                            │          ├ 新しいexecutionを拒否
+                            │          └ active executionを待機
+                            └ Protocol / Task / Trigger execution
 ```
 
-deployment runtimeを指定できるのは現行`aws-lambda | cloudflare-workers | deno`。
+`init()`と`close()`はidempotentです。初期化途中で失敗した場合は、開始済みresourceを逆順でcleanupします。複数のcleanup errorは`AggregateError`へ集約し、最初のerrorだけで残りの破棄を止めません。
 
-```sh
-loutre build src/app.ts --runtime aws-lambda
-loutre build src/app.ts --runtime cloudflare-workers
-loutre build src/app.ts --runtime deno
-```
+## Protocol
 
-指定時は`entry.mjs`も生成し、runtime-specific bindingをHost entryへ閉じ込める。
-HTTP-capable Applicationでない場合はdeployment entry生成を拒否する。
+Protocolは、ContractのProcedureを外部interactionへ接続します。Implementationはtransport固有responseを直接構築せず、logical resultを返します。Protocol finalizationがschema validation、serialization、streaming、transport responseの生成を担当します。
 
-### 13.3 OpenAPI
+### HTTP
 
-`@loutrejs/loutre/openapi`はApplication DefinitionからOpenAPI 3.2 documentを生成する。
-CLIではstdoutまたはJSON fileへ出力できる。
+HTTP ProtocolはWeb Standardの`Request`と`Response`を境界に使います。
 
-```sh
-loutre openapi \
-  --entry src/app.ts \
-  --output openapi.json \
-  --title 'Example API' \
-  --api-version 1.0.0
-```
+- path、query、headers、bodyをdecodeする
+- `validate.*`を置いたPipeline位置でStandard Schemaによるrefinementを行う
+- methodとnormalized pathからdispatch identityを作る
+- logical responseを宣言済みstatusとschemaで検証してfinalizeする
+- request abort時にstream iteratorをcleanupする
 
-Graph command / check / OpenAPI generationはApplication Definitionをloadするが、ApplicationRuntime initializationを要求しない。
+Path parameterはsegment単位で宣言し、validation前はraw `string`として扱います。`request.params`へSchemaを書いただけでは自動変換せず、Pipeline上の`validate.params`を明示的なrefinement boundaryにします。
 
----
+CORSやBasic AuthはHTTPの外側へ特別処理として埋め込まず、Layerとtyped Contextで構成します。Validation errorやpreflightを含むfinalizationはHTTP Protocolが所有します。
 
-## 14. Runtime Portability / Capability
+### MessagePort
 
-Runtime固有機能はCapabilityとしてGraphとHost / Runtime Adapterの境界で照合する。
+MessagePortもHTTPと同じImplementation、Pipeline、Layer、ApplicationRuntimeを利用します。独立したApplication modelは作りません。
 
-Capability IRはApplication全体requirementと特定execution requirementを区別する。
-Environment Contractを1つ以上宣言したModuleは`env.runtime` capabilityを自動要求する。
+`messagePort.handler`がTerminalとなり、Implementationはlogical MessagePort resultを返します。Electron Runtime AdapterはProtocol executionをElectron MessagePortへattachします。
 
-Application GraphはApplication側requirementsに加えて`hostCapabilities`も保持する。
-CLI `doctor`はGraphからrequired capabilityを抽出し、選択runtimeのcapability setと照合する。
+Protocolごとにtransportは異なっても、Application compositionとDependency Graphを共有することがLoutreの境界です。
 
-Node capability metadataは`@loutrejs/loutre/runtime`側にも置く。
-CLIが`@loutrejs/node`をimportするとBun / DenoでもNode.js専用built-in moduleを評価してしまうため、metadataと実Node adapterを分離する。
+## Tooling
 
-現行conformance対象は次。
+Loutre CLIはApplicationを起動するHostではありません。Application DefinitionをloadしてGraphをcompileし、次の用途へ利用します。
 
-- Node.js
-- Deno
-- Bun
-- Cloudflare Workers
-- Electron
-- AWS Lambda
+- `graph`でModule、DI、Contract、Execution、Runtimeの関係を表示する
+- `check`でGraph diagnosticsを検査する
+- `explain`で特定nodeへの依存経路を説明する
+- `doctor`でRuntime Capabilityを照合する
+- `build`でApplication bundleとdeployment entryを生成する
+- `openapi`でOpenAPI 3.2 documentを生成する
 
-Application Definitionへruntime package名やHost APIを漏らさない。
+Graph inspectionとOpenAPI生成はApplicationRuntime initializationを要求しません。CLIが`run`、`dev`、`start`を所有しないのは、argv parsing、listener、process lifecycleがHostの責務だからです。
 
----
+deployment向けbuildはRuntime-specific entryをHost側へ生成します。AWS Lambda、Cloudflare Workers、DenoへのbindingをApplication sourceへ書き戻しません。
 
-## 15. Testing Contract
+## 関連資料
 
-architecture変更時は、少なくとも次をpublic type tests / unit tests / runtime conformanceで維持する。
-
-- class/custom tokenの同期`inject()`
-- constructor default parameterによるunit-test override
-- Injection Contextのnested / exception restoration
-- application / transient scope
-- Provider factory explicit dependency metadata
-- Environment / Arguments Providerとconditional selection
-- async Provider / Layer / Implementation / Task factory拒否
-- side-effect-free `ApplicationDefinition`
-- public Taskがある場合だけ`run()`を公開すること
-- Trigger-only Taskをpublic `run()`へ公開しないこと
-- HTTPがある`bootstrap()`だけ`fetch()`を公開すること
-- listener ownershipをApplicationへ生やさないこと
-- TriggerがあるHostだけ`triggers`を公開すること
-- Invocation Applicationへ`triggers`を公開しないこと
-- required Argumentsのbootstrap時型制約
-- Task factory contextual typing / application-lifetime cache
-- Task DI Probe dependency recording
-- cron / fixed-delay / queue-consumer semanticsと型制約
-- Graph IR v5 / TaskIR / ExecutionRootIR / QueueIR
-- hostCapabilities
-- execution gate / active execution drain / close idempotency
-- Implementation / Layer runtime cache
-- recursive Pipeline / Context requires / provides
-- next exactly-once / short circuit semantics
-- conditional全candidate Graph topology
-- Environment opaque Probe Boundary
-- Environment / Arguments schema validation / transform
-- lifecycle非実行のGraph Probe
-- initialization rollback / shutdown cleanup
-- HTTP path grammar / params refinement / route specificity
-- CORS preflight / actual response / error response semantics
-- dispatchKey uniqueness
-- logical response finalization / streaming abort
-- partial Graph diagnostics
-- graph text / json / mermaid
-- check / explain / doctorのGraph共有
-- build deployment entry生成
-- OpenAPI 3.2 generation
-- Node / Bun / Deno native CLI conformance
-- 全runtime conformance
-
----
-
-## 16. Freeze
-
-Loutre v0.x architectureを短くまとめると次。
-
-> **Applicationは一種類のportable Definition。Protocol / Task / TriggerがExecution RootとしてGraphに載る。**
-
-> **Application GraphがType System / Runtime / Toolingをつなぐ。Compilerは中心ではない。**
-
-> **ContractとProtocolはstatic descriptor、Implementation / Layer / Taskはstatic descriptor + synchronous factory。**
-
-> **DI dependencyは明示し、execution dataはtyped Contextへ置く。**
-
-> **ModuleはEnvironment Contract、ApplicationはArguments Contractを宣言し、Host / Runtime Adapterがraw sourceを供給する。**
-
-> **Standard Schemaがraw valueをApplication valueへ変換する。**
-
-> **Graph Probeはdeployment secretなしでdependencyを収集し、runtime-dependent valueへ到達したらopaque boundaryとして止める。**
-
-> **public Taskだけが`run()` surfaceへ載り、Trigger-only Taskは自動execution専用に保つ。**
-
-> **generic Hostはlistenerを所有しない。Node / Bun / Deno / Cloudflare Workers / AWS Lambda / Electron adapterがHost固有APIを担当する。**
-
-> **Loutre CLIはGraph / build / OpenAPI toolingであり、Applicationのrun / dev / startを所有しない。**
+最初のApplicationを作る場合は[getting started](./getting-started.md)、実行可能な構成を確認する場合は[`examples/`](../examples/)を参照してください。設計判断の経緯や採用しなかった案は`docs/adr/`に記録します。

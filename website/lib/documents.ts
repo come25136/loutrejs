@@ -5,7 +5,7 @@ import GithubSlugger from 'github-slugger'
 export const documentNavigation = [
   {
     slug: 'getting-started',
-    label: 'Getting Started',
+    label: 'はじめる',
     title: 'Loutreをはじめる',
     description:
       'プロジェクト作成からHTTP、Task、Runtime、CLIまでを順に解説します。',
@@ -14,9 +14,9 @@ export const documentNavigation = [
   {
     slug: 'architecture',
     label: 'Architecture',
-    title: 'Loutreの設計',
+    title: 'Loutre Architecture',
     description:
-      'Graph-firstの原則と、Applicationを構成する公開境界を解説します。',
+      'Graph-firstの原則と、Application、Runtime、Toolingをつなぐ公開境界を解説します。',
     filename: 'architecture.md',
   },
 ] as const

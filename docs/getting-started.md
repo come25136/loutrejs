@@ -1,51 +1,46 @@
-# Getting Started
+# Loutreをはじめる
 
-このドキュメントでは、Loutre Applicationの作成と主要な利用方法をまとめます。
+このガイドでは、Loutre Applicationを作成し、型付きHTTP APIをテストして、Runtimeへ接続するところまで進めます。
 
-## Create a project
+例の責務は分けています。Applicationコードは処理をどう構成するか、テストは外から見て何を保証するかを示します。コミットには変更が必要な理由を残し、コードコメントは自然に見える別の選択肢を採用しなかった理由がある場合だけ使います。
 
-`create-loutre`はTargetとpackage managerを対話形式で選択できます。
+## プロジェクトを作成する
+
+`create-loutre`を起動すると、Targetとパッケージマネージャーを対話形式で選択できます。最初はNode.jsとnpmを選ぶと、このガイドのコマンドをそのまま実行できます。
 
 ```sh
-# npm / Node.js
 npm create loutre@latest my-app
-
-# Bun
 bun create loutre my-app
-
-# Deno
 deno x -A npm:create-loutre@latest my-app
 ```
 
-対応Target:
+作成先へ移動します。
 
-- Node.js
-- Bun
-- Deno
-- Cloudflare Workers
-- AWS Lambda
+```sh
+cd my-app
+```
 
-対応package manager:
+生成される主なファイルには、次の役割があります。
 
-- npm
-- pnpm
-- Yarn
-- Bun
-- Deno
+```text
+src/app.ts       Contract、Implementation、Module、Applicationの構成
+src/main.ts      Applicationと選択したRuntimeの接続
+src/app.test.ts  Applicationが外部へ提供する振る舞いの検証
+```
 
-非対話ではoptionで指定できます。
+Targetとパッケージマネージャーを先に決めている場合は、非対話で作成できます。
 
 ```sh
 npm create loutre@latest my-app -- --target cloudflare-workers --package-manager pnpm
 ```
 
-依存関係のinstallを後回しにする場合は`--no-install`を指定します。`--yes`ではTargetにNode.js、package managerにinitializerを起動したpackage managerを使用します。
+利用できるTargetはNode.js、Bun、Deno、Cloudflare Workers、AWS Lambdaです。パッケージマネージャーはnpm、pnpm、Yarn、Bun、Denoに対応しています。
 
-生成されるstarterにはVitest、Oxlint、Oxfmtとサンプルtestが含まれます。`verify` scriptでformat、lint、型 / Application Graph、test、target固有buildをまとめて確認できます。
+依存関係を後からインストールする場合は`--no-install`、質問を省略して既定値を使う場合は`--yes`を指定します。`--yes`ではTargetにNode.js、パッケージマネージャーにinitializerを起動したものを使います。
 
-## HTTP Application
+## HTTP Applicationを定義する
 
-Application DefinitionはHTTP serverそのものではありません。Contract / Implementation / ModuleとしてApplicationを定義し、実行環境はHost側で接続します。
+`src/app.ts`を、名前を受け取って挨拶を返すApplicationへ置き換えます。
 
 ```ts
 import {
@@ -91,7 +86,9 @@ const GreetingController = implementation({
   protocol: http,
   factory: (greetings = inject(GreetingService)) => ({
     async greet(ctx) {
-      return ctx.response.ok({ body: greetings.greet(ctx.params.name) })
+      return ctx.response.ok({
+        body: greetings.greet(ctx.params.name),
+      })
     },
   }),
 })
@@ -106,34 +103,99 @@ export default defineApplication({
 })
 ```
 
-同じprotocolのprocedureは1つのgroupへまとめられます。複数protocolを同じContractへ載せる場合は`contract([http({...}), graphqlGroup, websocketGroup, sseGroup])`のようにgroupを配列へ並べます。featureやprotocol単位でファイルを分けたい場合は、それぞれを`contract([...])`にして最後に`contract.merge(contracts)`で統合できます。merge時は同じprocedure名に異なるprotocolを重ねられますが、同じ`procedure + protocol`の二重定義は拒否されます。Contract自体は名前を持ちません。
+このコードでは、`GreetingContract`が入力、応答、Pipelineを定め、`GreetingController`がContractをHTTPで実装します。`GreetingService`の生成はModuleへ集約し、Applicationは起動するModuleだけを選びます。`GreetingContract`だけは、後段のHTTP Clientから同じ定義を使うためにexportしています。
 
-Node.jsでは`@loutrejs/node`からApplicationをserveできます。
+Application DefinitionはHTTP serverそのものではありません。Runtimeに依存しないApplication Graphを先に定義し、HTTP listenerなど実行環境固有の機能はHostから接続します。
+
+同じProtocolのprocedureは一つのgroupへまとめられます。複数のProtocolを扱う場合は、`contract([http({...}), graphqlGroup, websocketGroup, sseGroup])`のようにgroupを並べます。featureごとに分割したContractは、`contract.merge(contracts)`で統合できます。
+
+## 振る舞いをテストする
+
+`src/app.test.ts`では内部クラスの呼び出し順ではなく、HTTP境界から観測できる振る舞いを検証します。テスト名と期待値だけで、Applicationが何を保証するのか分かる状態にします。
+
+```ts
+import { bootstrap } from '@loutrejs/loutre/host'
+import { expect, it } from 'vitest'
+import application from './app.js'
+
+it('GET /greetings/{name}は名前を含む挨拶を返す', async () => {
+  // Hostをテスト間で共有しない。Application stateを持ち越さないため。
+  const app = bootstrap({ application })
+
+  try {
+    const response = await app.fetch(
+      new Request('http://localhost/greetings/Loutre'),
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      message: 'こんにちは、Loutre！',
+    })
+  } finally {
+    await app.close('test-complete')
+  }
+})
+```
+
+テストを実行します。
+
+```sh
+npm run test
+```
+
+`bootstrap()`は実際のportを使わず、Web Standardの`fetch(request)`でApplicationを実行します。テスト、組み込み用途、Runtime adapterのいずれでも、同じApplication Definitionを再利用できます。
+
+## Node.jsへ接続する
+
+Node.js Targetの`src/main.ts`は、ApplicationをNode.js Runtimeへ接続します。
 
 ```ts
 import { nodeRuntime } from '@loutrejs/node'
 import application from './app.js'
 
 const app = await nodeRuntime.create({ application })
+
 await app.serve({ port: 3000 })
 ```
 
-HTTP listenerを持たずにApplicationを組み込みたい場合は、`bootstrap()`からWeb Standardの`fetch(request)`を利用できます。
+開発サーバーを起動します。
 
-```ts
-import { bootstrap } from '@loutrejs/loutre/host'
-import application from './app.js'
-
-const app = bootstrap({ application })
-const response = await app.fetch(
-  new Request('http://localhost/greetings/Loutre'),
-)
-await app.close()
+```sh
+npm run dev
 ```
 
-## Typed HTTP Client
+別のターミナルからリクエストを送ります。
 
-HTTP Contractはserverだけでなくclientのsource of truthとして利用できます。Implementationやhandlerの型をclientへ公開する必要はありません。
+```sh
+curl http://localhost:3000/greetings/Loutre
+```
+
+```json
+{ "message": "こんにちは、Loutre！" }
+```
+
+Runtimeだけを変更しても、`src/app.ts`のContract、Implementation、Moduleは変わりません。Bun、Deno、Cloudflare Workers、AWS Lambdaでは、生成された`src/main.ts`がそれぞれのRuntime adapterを接続します。
+
+## 変更を検証して記録する
+
+starterの`verify` scriptは、format、lint、型検査、Application Graph、テスト、Target固有のbuildをまとめて確認します。
+
+```sh
+npm run verify
+```
+
+検証が通ったら、変更したファイルの一覧ではなく、変更によって可能になったことをコミットへ残します。
+
+```sh
+git add src/app.ts src/app.test.ts
+git commit -m "feat: 名前ごとの挨拶を返せるようにする"
+```
+
+`feat: app.tsを更新する`では変更の理由を後から判断できません。履歴だけを読んでも、何のために境界や振る舞いを変えたのか分かるメッセージにします。
+
+## ContractからHTTP Clientを作る
+
+HTTP Contractはserverだけでなく、clientのsource of truthとしても利用できます。Implementationやhandlerの型を公開する必要はありません。
 
 ```ts
 import { createHttpClient, fetchHttpTransport } from '@loutrejs/loutre/http'
@@ -153,13 +215,13 @@ if (response.status === 200) {
 }
 ```
 
-request型はStandard Schemaのinput、response型はStandard Schemaのoutputから導出されます。responseはContractに宣言されたstatusとschemaでruntime validationされます。
+request型はStandard Schemaのinput、response型はStandard Schemaのoutputから導出されます。responseはContractに宣言されたstatusとschemaで実行時に検証されます。
 
-独自transportを使う場合は`HttpClientTransport`を実装して`createHttpClient()`へ渡します。これによりtest、IPC、custom fetch policyなどでも同じContract-derived client surfaceを利用できます。
+独自の通信境界が必要な場合は、`HttpClientTransport`を実装して`createHttpClient()`へ渡します。テスト、IPC、独自のfetch policyでも、Contractから導出された同じclient surfaceを利用できます。
 
-## Module visibility
+## Moduleの公開境界を作る
 
-Moduleの`exports`はApplication Graph上の正式なdependency boundaryです。別ModuleのProviderへ依存する場合、依存元は宣言元Moduleを`imports`し、宣言元はProviderを`exports`します。
+Moduleの`exports`は、Application Graph上のdependency boundaryです。別ModuleのProviderへ依存するときだけ、宣言元ModuleがProviderを`exports`し、依存元Moduleが宣言元を`imports`します。
 
 ```ts
 class UsersService {}
@@ -179,11 +241,11 @@ const BillingModule = defineModule(() => ({
 }))
 ```
 
-importされていてもexportされていないProviderへのcross-module dependencyはGraph compile時に`LUTRE_MODULE_VISIBILITY`で拒否されます。同一Module内のdependencyに`exports`は不要です。
+同じModule内の依存関係に`exports`は不要です。importされていてもexportされていないProviderへのcross-module dependencyは、Graph compile時に`LUTRE_MODULE_VISIBILITY`で拒否されます。
 
-## Task / Arguments
+## ArgumentsとTaskを定義する
 
-Hostから受け取るstructured inputは`Arguments`、明示的に実行する処理はpublic `Task`として宣言できます。
+Hostから受け取るstructured inputは`Arguments`、Hostが明示的に実行する処理はpublic `Task`として宣言できます。
 
 ```ts
 import { defineApplication, defineArgs, inject, task } from '@loutrejs/loutre'
@@ -204,16 +266,19 @@ export const rebuild = task<void, void>({
     },
 })
 
-export const application = defineApplication({
+export default defineApplication({
   modules: [],
   arguments: AppArgs,
   tasks: [rebuild],
 })
 ```
 
-HostからArgumentsを渡してTaskを実行します。
+HostはArgumentsを渡してからTaskを実行します。`rebuild`をexportしたのは、Hostが実行対象として参照するためです。
 
 ```ts
+import { bootstrap } from '@loutrejs/loutre/host'
+import application, { rebuild } from './app.js'
+
 const app = bootstrap({
   application,
   arguments: {
@@ -225,11 +290,11 @@ await app.run(rebuild)
 await app.close('complete')
 ```
 
-## Runtime Support
+## 対応Runtime
 
-次のruntimeを継続的に動作確認しています。
+次のRuntimeを継続的に動作確認しています。
 
-| Runtime            | Tested versions |
+| Runtime            | 検証バージョン  |
 | ------------------ | --------------- |
 | Node.js            | 22 / 24 / 26    |
 | Deno               | 2.9             |
@@ -238,7 +303,7 @@ await app.close('complete')
 | Electron           | 42 / 43 / 44    |
 | AWS Lambda         | Node.js 22 / 24 |
 
-Runtimeごとの主な接続API:
+Runtimeごとの主な接続APIは次のとおりです。
 
 ```text
 Node.js             nodeRuntime.create() → app.serve()
@@ -249,15 +314,9 @@ AWS Lambda          awsLambdaRuntime.bind()
 Electron            electronRuntime.attach()
 ```
 
-## Developer Tooling
+## Application Graphを調べる
 
-`@loutrejs/cli`はApplication Graphとdeployment artifactを扱うdeveloper toolingです。
-
-```sh
-npm install --save-dev @loutrejs/cli
-```
-
-主なコマンド:
+`@loutrejs/cli`はApplication Graphの検査、図示、説明、deployment artifactの生成を担当します。starterには開発依存として含まれています。
 
 ```sh
 npm exec loutre -- check --entry src/app.ts
@@ -269,12 +328,18 @@ npm exec loutre -- build src/app.ts --out-dir dist/loutre
 npm exec loutre -- openapi --entry src/app.ts
 ```
 
+既存プロジェクトへ追加する場合は、`@loutrejs/cli`を開発依存としてインストールします。
+
+```sh
+npm install --save-dev @loutrejs/cli
+```
+
 `build --runtime`は`aws-lambda`、`cloudflare-workers`、`deno`のdeployment entry生成に対応します。
 
 ```sh
 npm exec loutre -- build src/app.ts --runtime aws-lambda
 ```
 
-## Examples
+## 次に読む
 
-用途ごとのexampleは[`examples/`](../examples/)を参照してください。
+Application Graph、Contract、Implementation、Module、Runtimeの境界を詳しく知るには、[Loutreの設計](./architecture.md)へ進んでください。用途別の実行可能な構成は、[`examples/`](../examples/)から確認できます。
