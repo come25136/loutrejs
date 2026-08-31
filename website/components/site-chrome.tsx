@@ -132,14 +132,26 @@ export function SiteChrome({ children }: { children: ReactNode }) {
   const targetLocale = alternateLocale(currentLocale)
   const prefix = localePrefix(currentLocale)
   const copy = chromeCopy[currentLocale]
+  const [isScrolled, setIsScrolled] = useState(false)
 
   useEffect(() => {
     document.documentElement.lang = currentLocale
   }, [currentLocale])
 
+  useEffect(() => {
+    const syncScrollState = () => setIsScrolled(window.scrollY > 0)
+
+    syncScrollState()
+    window.addEventListener('scroll', syncScrollState, { passive: true })
+
+    return () => window.removeEventListener('scroll', syncScrollState)
+  }, [])
+
   return (
     <div lang={currentLocale}>
-      <header className="animate-header-in sticky top-0 z-30 border-b border-line bg-paper/95 backdrop-blur-xl motion-reduce:animate-none">
+      <header
+        className={`animate-header-in sticky top-0 z-30 border-b transition-[background-color,border-color,box-shadow,backdrop-filter] duration-200 motion-reduce:animate-none ${isScrolled ? 'border-line bg-paper/78 shadow-[0_8px_28px_rgba(2,8,23,0.08)] backdrop-blur-xl' : 'border-transparent bg-transparent shadow-none backdrop-blur-none'}`}
+      >
         <div className="shell flex min-h-16 items-center gap-9 max-lg:gap-4">
           <Brand prefix={prefix} label={copy.brandLabel} />
           <nav
@@ -147,25 +159,25 @@ export function SiteChrome({ children }: { children: ReactNode }) {
             aria-label={copy.navigationLabel}
           >
             <Link
-              className="transition hover:text-copper"
+              className="transition hover:text-interaction"
               href={`${prefix}/docs/getting-started/`}
             >
               {copy.documentation}
             </Link>
             <Link
-              className="transition hover:text-copper"
+              className="transition hover:text-interaction"
               href={`${prefix}/examples/`}
             >
               {copy.examples}
             </Link>
             <Link
-              className="transition hover:text-copper"
+              className="transition hover:text-interaction"
               href={`${prefix}/docs/architecture/`}
             >
               Architecture
             </Link>
             <a
-              className="inline-flex items-center gap-1 transition hover:text-copper"
+              className="inline-flex items-center gap-1 transition hover:text-interaction"
               href="https://github.com/come25136/loutrejs"
             >
               GitHub <ExternalLink size={12} aria-hidden="true" />

@@ -228,7 +228,7 @@ export function DocumentPage({
   const nextDocument = documentNavigation[currentIndex + 1]
 
   return (
-    <main className="border-b border-line bg-paper">
+    <main className="border-b border-line bg-paper dark:bg-transparent">
       <div className="shell grid min-h-[calc(100vh-4.5rem)] grid-cols-[210px_minmax(0,720px)_190px] items-start gap-[clamp(2rem,5vw,4.5rem)] py-18 pb-30 max-lg:grid-cols-[190px_minmax(0,1fr)] max-sm:grid-cols-1 max-sm:py-8 max-sm:pb-20">
         <aside className="animate-reveal-up sticky top-28 motion-reduce:animate-none max-sm:static max-sm:overflow-x-auto">
           <p className="mb-4.5 text-xs font-bold tracking-[0.13em] text-ink uppercase max-sm:hidden">
@@ -240,7 +240,7 @@ export function DocumentPage({
           >
             {documentNavigation.map((entry) => (
               <Link
-                className={`flex flex-col gap-1 rounded-lg border-l-2 px-3 py-2.5 text-ink-soft transition hover:bg-surface-muted hover:text-ink max-sm:min-w-36 ${entry.slug === slug ? 'border-copper bg-surface-muted text-ink' : 'border-transparent'}`}
+                className={`flex flex-col gap-1 rounded-lg border-l-2 px-3 py-2.5 text-ink-soft transition hover:bg-surface-muted hover:text-ink max-sm:min-w-36 ${entry.slug === slug ? 'border-interaction bg-surface-muted text-ink' : 'border-transparent'}`}
                 href={`${prefix}/docs/${entry.slug}/`}
                 key={entry.slug}
               >

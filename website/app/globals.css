@@ -19,24 +19,26 @@
   --site-code-inline: #f3f4f6;
   --site-code-inline-text: #9a3412;
   --site-accent-text: #e84f16;
+  --site-interaction: #38bdf8;
 }
 
 html[data-theme='dark'] {
-  --site-canvas: #0b0f14;
-  --site-surface: #11161c;
-  --site-surface-muted: #0f1419;
-  --site-surface-subtle: #171d25;
-  --site-line: #252c35;
-  --site-line-strong: #39424e;
-  --site-ink: #f3f4f6;
-  --site-ink-soft: #9ca3af;
-  --site-ink-muted: #7d8790;
+  --site-canvas: #081018;
+  --site-surface: #0d1722;
+  --site-surface-muted: #0a131d;
+  --site-surface-subtle: #122030;
+  --site-line: #203044;
+  --site-line-strong: #32465f;
+  --site-ink: #f3f6f9;
+  --site-ink-soft: #9aa9ba;
+  --site-ink-muted: #718398;
   --site-action: #f9fafb;
   --site-action-hover: #e5e7eb;
   --site-action-foreground: #111827;
   --site-code-inline: #171d25;
   --site-code-inline-text: #ff9d76;
   --site-accent-text: #ff7a45;
+  --site-interaction: #38bdf8;
 }
 
 @theme inline {
@@ -57,6 +59,7 @@ html[data-theme='dark'] {
   --color-code-inline: var(--site-code-inline);
   --color-code-inline-text: var(--site-code-inline-text);
   --color-copper-dark: var(--site-accent-text);
+  --color-interaction: var(--site-interaction);
 }
 
 @theme {
@@ -141,14 +144,35 @@ html[data-theme='dark'] {
     @apply m-0 bg-paper font-sans text-ink antialiased;
   }
 
+  html[data-theme='dark'] body {
+    background-color: var(--site-canvas);
+    background-image:
+      radial-gradient(
+        circle at 18% -10%,
+        rgb(14 165 233 / 0.11),
+        transparent 34rem
+      ),
+      radial-gradient(
+        circle at 88% 8%,
+        rgb(37 99 235 / 0.08),
+        transparent 30rem
+      ),
+      linear-gradient(180deg, #09121b 0%, #081018 48%, #070d13 100%);
+    background-attachment: fixed;
+  }
+
   a,
   button {
     -webkit-tap-highlight-color: transparent;
   }
 
+  button {
+    @apply cursor-pointer;
+  }
+
   a:focus-visible,
   button:focus-visible {
-    @apply outline-3 outline-offset-4 outline-copper/35;
+    @apply outline-3 outline-offset-4 outline-interaction/35;
   }
 }
 
