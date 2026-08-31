@@ -1,12 +1,10 @@
 import { ArrowUpRight } from 'lucide-react'
 import type { Locale } from '../lib/i18n'
+import { stackblitzHelloHttpUrl } from '../lib/links'
 import { ScrollReveal } from './scroll-reveal'
 
 const buttonClass =
   'inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-transparent bg-action px-5 text-sm font-semibold text-action-foreground transition hover:-translate-y-0.5 hover:bg-action-hover max-sm:w-full'
-
-const stackblitzHelloHttpUrl =
-  'https://stackblitz.com/fork/github/come25136/loutrejs/tree/main/examples/hello-http?startScript=dev&title=Loutre%20Hello%20HTTP'
 
 const examples = [
   {
@@ -14,8 +12,8 @@ const examples = [
     slug: 'hello-http',
     stackblitzUrl: stackblitzHelloHttpUrl,
     description: {
-      en: 'A minimal HTTP API built with a Controller and Provider',
-      ja: 'ControllerとProviderを使った最小構成のHTTP API',
+      en: 'A minimal HTTP API built with a Contract and Controller',
+      ja: 'ContractとControllerを使った最小構成のHTTP API',
     },
   },
   {

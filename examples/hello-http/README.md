@@ -1,7 +1,6 @@
 # Hello HTTPサンプル
 
-Loutreで最小のHTTP APIを作るサンプルです。path parameterの検証、型付きController、
-Providerの依存注入を含みます。
+Loutreで最小のHTTP APIを作るサンプルです。ContractとControllerだけで、root endpointから固定レスポンスを返します。
 
 リポジトリルートで依存関係をインストールしたあと、次のコマンドで起動します。
 
@@ -12,11 +11,11 @@ npm run dev --workspace @loutrejs/example-hello-http
 別のターミナルからリクエストします。
 
 ```sh
-curl http://127.0.0.1:3000/greetings/Loutre
+curl http://127.0.0.1:3000/
 ```
 
 ```json
-{ "message": "Hello, Loutre!" }
+{ "message": "Hello from Loutre!" }
 ```
 
 Application Graphと型だけを検証する場合は、次のコマンドを実行します。

@@ -25,9 +25,9 @@ describe.sequential('example projects', () => {
     })
     try {
       await waitForPort(port)
-      const response = await fetch(`http://127.0.0.1:${port}/greetings/Loutre`)
+      const response = await fetch(`http://127.0.0.1:${port}/`)
       expect(response.status).toBe(200)
-      expect(await response.json()).toEqual({ message: 'Hello, Loutre!' })
+      expect(await response.json()).toEqual({ message: 'Hello from Loutre!' })
     } finally {
       await example.stop()
     }

@@ -1,14 +1,13 @@
-import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
+  defineApplication,
   defineEnv,
   defineModule,
   implementation,
-  inject,
-  layer,
 } from '@loutrejs/loutre'
-import { http, validate } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
+
 const AppEnvSchema = z
   .object({
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
@@ -17,70 +16,40 @@ const AppEnvSchema = z
 
 export class AppEnv extends defineEnv(AppEnvSchema) {}
 
-const GreetingParams = {
-  name: z.string().min(1),
-} as const
-const Greeting = z.object({
-  message: z.string(),
-})
-class RequestTiming {
-  async measure(next: () => Promise<void>): Promise<void> {
-    const startedAt = performance.now()
-    try {
-      await next()
-    } finally {
-      void (performance.now() - startedAt)
-    }
-  }
-}
-const requestTiming = layer({
-  name: 'request.timing',
-  factory:
-    (timing = inject(RequestTiming)) =>
-    async (_ctx, next) => {
-      await timing.measure(next)
-    },
-})
-const GreetingContract = contract([
+const AppContract = contract([
   http({
-    greet: {
+    hello: {
       method: 'GET',
-      path: '/greetings/{name}',
-      request: {
-        params: GreetingParams,
-      },
+      path: '/',
       responses: {
         ok: {
           status: 200,
-          body: Greeting,
+          body: z.object({ message: z.string() }),
         },
       },
-      pipeline: [requestTiming([validate.params, http.controller])],
+      pipeline: [http.controller],
     },
   }),
 ])
-class GreetingService {
-  greet(name: string) {
-    return { message: `Hello, ${name}!` }
-  }
-}
-const GreetingController = implementation({
-  name: 'GreetingController',
-  contract: GreetingContract,
+
+const AppController = implementation({
+  name: 'AppController',
+  contract: AppContract,
   protocol: http,
-  factory: (greetings = inject(GreetingService)) => ({
-    async greet(ctx) {
-      return ctx.response.ok({ body: greetings.greet(ctx.params.name) })
+  factory: () => ({
+    async hello(ctx) {
+      return ctx.response.ok({
+        body: { message: 'Hello from Loutre!' },
+      })
     },
   }),
 })
-const GreetingModule = defineModule(() => ({
+
+const AppModule = defineModule(() => ({
   environment: [AppEnv],
-  name: 'GreetingModule',
-  description: 'Example greeting HTTP API',
-  providers: [GreetingService, RequestTiming],
-  implementations: [GreetingController],
+  implementations: [AppController],
 }))
+
 export default defineApplication({
-  modules: [GreetingModule()],
+  modules: [AppModule()],
 })
