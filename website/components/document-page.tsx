@@ -262,7 +262,7 @@ export function DocumentPage({
           </nav>
         </aside>
 
-        <article className="animate-reveal-up [animation-delay:90ms] motion-reduce:animate-none">
+        <article className="min-w-0 animate-reveal-up [animation-delay:90ms] motion-reduce:animate-none">
           <header className="border-b border-line pb-12 max-sm:pt-5">
             <p className="mb-5 font-mono text-xs font-medium tracking-[0.08em] text-copper-dark uppercase">
               {copy.documentation} / {document.label}
@@ -275,7 +275,7 @@ export function DocumentPage({
             </p>
           </header>
 
-          <div className={`${proseClass} pt-8`}>
+          <div className={`${proseClass} min-w-0 pt-8`}>
             <ReactMarkdown
               rehypePlugins={[rehypeSlug, rehypeHighlight, rehypeShellPrompts]}
               remarkPlugins={[remarkGfm]}
@@ -284,6 +284,11 @@ export function DocumentPage({
                   <ScrollReveal>
                     <h2 {...props}>{children}</h2>
                   </ScrollReveal>
+                ),
+                table: ({ children, ...props }) => (
+                  <div className="max-w-full overflow-x-auto">
+                    <table {...props}>{children}</table>
+                  </div>
                 ),
                 pre: ({ children, ...props }) => {
                   const code = Array.isArray(children) ? children[0] : children
