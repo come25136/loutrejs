@@ -465,7 +465,7 @@ export function HomePage({ locale }: { locale: Locale }) {
               aria-hidden="true"
             >
               <path
-                d="M250 43V63M250 63L135 88M250 63L365 88M135 115V158M365 115V158"
+                d="M250 43V63M250 63L135 88M250 63L365 88M135 115V181M365 115V181"
                 fill="none"
                 stroke="#cbd5e1"
                 strokeWidth="1.2"
