@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { isValidElement, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeSlug from 'rehype-slug'
@@ -8,6 +9,7 @@ import {
   getDocument,
   type DocumentSlug,
 } from '../lib/documents'
+import { MermaidDiagram } from './mermaid-diagram'
 import { ScrollReveal } from './scroll-reveal'
 
 function resolveDocumentHref(href: string | undefined) {
@@ -251,6 +253,25 @@ export function DocumentPage({ slug }: { slug: DocumentSlug }) {
                     <h2 {...props}>{children}</h2>
                   </ScrollReveal>
                 ),
+                pre: ({ children, ...props }) => {
+                  const code = Array.isArray(children) ? children[0] : children
+
+                  if (
+                    isValidElement<{
+                      className?: string
+                      children?: ReactNode
+                    }>(code) &&
+                    code.props.className?.includes('language-mermaid')
+                  ) {
+                    return (
+                      <MermaidDiagram
+                        chart={String(code.props.children).trim()}
+                      />
+                    )
+                  }
+
+                  return <pre {...props}>{children}</pre>
+                },
                 a: ({ href, children, ...props }) => {
                   const resolvedHref = resolveDocumentHref(href)
                   const external = resolvedHref?.startsWith('http')
