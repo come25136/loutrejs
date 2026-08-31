@@ -65,7 +65,6 @@ export type Document = {
   headings: DocumentHeading[]
   label: string
   slug: DocumentSlug
-  sourceUrl: string
   title: string
 }
 
@@ -129,7 +128,6 @@ export function getDocument(slug: DocumentSlug, locale: Locale): Document {
     headings: collectHeadings(content),
     label: entry.label,
     slug: entry.slug,
-    sourceUrl: `https://github.com/come25136/loutrejs/blob/main/${localizedDirectory}/${entry.filename}`,
     title: entry.title,
   }
 }

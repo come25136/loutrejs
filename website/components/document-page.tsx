@@ -260,12 +260,6 @@ export function DocumentPage({
               </small>
             </Link>
           </nav>
-          <a
-            className="mt-6 flex justify-between border-t border-gray-200 px-3 pt-4 text-xs font-semibold text-ink-soft transition hover:text-ink max-sm:hidden"
-            href={document.sourceUrl}
-          >
-            Edit on GitHub <span aria-hidden="true">↗</span>
-          </a>
         </aside>
 
         <article className="animate-reveal-up [animation-delay:90ms] motion-reduce:animate-none">
