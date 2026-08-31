@@ -1,27 +1,65 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
-  <rect width="1280" height="640" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">Loutre — TypeScript Application Framework</title>
+  <desc id="desc">GitHub Social Preview for Loutre with an otter illustration and dark blue background.</desc>
 
-  <g opacity="0.9" fill="none" stroke="#e5e7eb" stroke-width="2">
-    <path d="M825 472 C900 472 908 414 978 414"/>
-    <path d="M825 472 C900 472 908 472 978 472"/>
-    <path d="M825 472 C900 472 908 530 978 530"/>
-    <path d="M978 414 C1045 414 1054 448 1128 448"/>
-    <path d="M978 530 C1045 530 1054 494 1128 494"/>
-  </g>
-  <g>
-    <circle cx="825" cy="472" r="7" fill="#ff6a30"/>
-    <circle cx="978" cy="414" r="6" fill="#111827"/>
-    <circle cx="978" cy="472" r="6" fill="#111827"/>
-    <circle cx="978" cy="530" r="6" fill="#111827"/>
-    <circle cx="1128" cy="448" r="6" fill="#15803d"/>
-    <circle cx="1128" cy="494" r="6" fill="#15803d"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#081018"/>
+      <stop offset="0.52" stop-color="#0a1420"/>
+      <stop offset="1" stop-color="#070d13"/>
+    </linearGradient>
+    <radialGradient id="cyanGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(178 46) rotate(41) scale(520 420)">
+      <stop stop-color="#0ea5e9" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#0ea5e9" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="blueGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1110 122) rotate(143) scale(520 400)">
+      <stop stop-color="#2563eb" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#2563eb" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orangeGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(966 324) rotate(90) scale(250)">
+      <stop stop-color="#ff6a30" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ff6a30" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#132131" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#0d1722" stop-opacity="0.78"/>
+    </linearGradient>
+    <pattern id="dotGrid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="#9aa9ba" fill-opacity="0.11"/>
+    </pattern>
+    <filter id="cardShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="24" stdDeviation="30" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+    <clipPath id="logoClip">
+      <rect x="760" y="100" width="420" height="440" rx="50"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <rect width="1280" height="640" fill="url(#cyanGlow)"/>
+  <rect width="1280" height="640" fill="url(#blueGlow)"/>
+  <rect width="1280" height="640" fill="url(#dotGrid)"/>
+
+  <!-- Copy -->
+  <g font-family="Inter, Arial, Helvetica, sans-serif">
+    <text x="82" y="232" fill="#f3f6f9" font-size="86" font-weight="760" letter-spacing="-4.5">Loutre</text>
+    <text x="82" y="298" fill="#f3f6f9" font-size="34" font-weight="700" letter-spacing="-1.2">TypeScript Application Framework</text>
+    <text x="82" y="364" fill="#9aa9ba" font-size="25" font-weight="500">One application. Any runtime.</text>
+    <text x="82" y="401" fill="#9aa9ba" font-size="25" font-weight="500">Visible architecture.</text>
+
   </g>
 
-  <image href="loutre.svg" x="72" y="142" width="356" height="356" preserveAspectRatio="xMidYMid meet"/>
-
-  <g font-family="Inter, Arial, sans-serif" fill="#111827">
-    <text x="500" y="200" font-size="66" font-weight="750" letter-spacing="-2.4">Loutre</text>
-    <text x="500" y="306" font-size="39" font-weight="700" letter-spacing="-1.2">TypeScript Application Framework</text>
-    <text x="500" y="373" font-size="24" font-weight="500" fill="#6b7280">One application. Any runtime.</text>
+  <!-- Otter card -->
+  <rect x="760" y="100" width="420" height="440" rx="50" fill="url(#card)" stroke="#203044" filter="url(#cardShadow)"/>
+  <rect x="760" y="100" width="420" height="440" rx="50" fill="url(#orangeGlow)" opacity="0.65"/>
+  <g clip-path="url(#logoClip)">
+    <circle cx="970" cy="326" r="170" fill="#38bdf8" fill-opacity="0.035"/>
+    <circle cx="970" cy="326" r="124" fill="#ff6a30" fill-opacity="0.045"/>
+    <image href="loutre.svg" x="812" y="162" width="316" height="316" preserveAspectRatio="xMidYMid meet"/>
   </g>
+  <circle cx="1122" cy="130" r="6" fill="#38bdf8"/>
+  <circle cx="1098" cy="130" r="6" fill="#ff6a30"/>
+
+  <!-- Frame -->
+  <rect x="1" y="1" width="1278" height="638" rx="1" fill="none" stroke="#203044" stroke-opacity="0.75" stroke-width="2"/>
 </svg>
