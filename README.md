@@ -5,8 +5,18 @@
 <h1 align="center">Loutre</h1>
 
 <p align="center">
-  <strong>型でつないで、どこでも泳ぐ。</strong><br>
-  ポータブルなTypeScript Application Framework。
+  <strong>Graph-first TypeScript Application Framework</strong><br>
+  One application. Any runtime. Visible architecture.
+</p>
+
+<p align="center">
+  HTTP、Task、Trigger、Queueなどを明示的なApplication Graphとして組み立て、RuntimeとDeveloper Toolingから同じApplication modelを利用します。
+</p>
+
+<p align="center">
+  <a href="https://loutrejs.come25136.id">Website</a> ·
+  <a href="./docs/getting-started.md">Getting Started</a> ·
+  <a href="./examples/">Examples</a>
 </p>
 
 <p align="center">
@@ -15,17 +25,36 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
 </p>
 
-Loutreは、Contract、DI、Pipeline、Task、TriggerなどをひとつのApplicationとして組み立てるTypeScript Frameworkです。
-Applicationをruntime固有APIから分離し、Node.js、Bun、Deno、Cloudflare Workers、AWS Lambda、Electronなどへ同じ設計を持ち運べます。
+## Application Graph
 
-> [!WARNING]
-> Loutreは現在v0.xです。Public APIには破壊的変更が入る可能性があります。
+LoutreではApplication DefinitionをRuntime固有の起動処理から分離し、Application Graphへcompileします。HTTP endpointもbackground executionも同じGraphに参加するため、Runtimeと`loutre check`、`loutre graph`、OpenAPI、buildが同じ構成を参照できます。
 
-## Why Loutre
+たとえば、HTTP Moduleと定期TaskをひとつのApplicationとして宣言します。
 
-Applicationが大きくなるほど、HTTP、background task、queue、configuration、DI、deploymentの境界は複雑になります。Loutreはそれらを個別の仕組みとして増やすのではなく、ひとつのApplication DefinitionとApplication Graphから扱います。
+```ts
+export default defineApplication({
+  modules: [ApiModule()],
+  triggers: [heartbeat],
+})
+```
 
-構成を明示的なTypeScript codeとして保つことで、RuntimeとDeveloper Toolingが同じApplication modelを共有できます。Frameworkのmagicより、型と構造から追える設計を優先しています。
+GraphはCLIからそのまま確認できます。
+
+```sh
+npm exec loutre -- graph executions --entry src/app.ts --format mermaid
+```
+
+次の図は、この構成に対する`loutre graph`のMermaid出力です。
+
+```mermaid
+flowchart LR
+  generated_task_cleanup["cleanup"]
+  generated_protocol_contract_1_status_http["protocol: status"]
+  generated_trigger_heartbeat["trigger: heartbeat"]
+  generated_trigger_heartbeat -->|"trigger"| generated_task_cleanup
+```
+
+Application Graphは可視化専用の表現ではありません。Module、dependency、Contract、execution、Runtime capabilityを検査し、Developer ToolingとRuntimeの共通モデルとして利用します。
 
 ## Quick Start
 
@@ -44,35 +73,50 @@ deno x -A npm:create-loutre@latest my-app
 
 Node.js、Bun、Deno、Cloudflare Workers、AWS Lambda向けのstarterを選択できます。
 
-## Application
+## Why Loutre
 
-LoutreではHTTPだけでなく、TaskやTriggerもApplicationの一部として宣言できます。
+Applicationが大きくなるほど、HTTP、background task、queue、configuration、DI、deploymentの境界は複雑になります。Loutreはそれらを個別の仕組みとして増やすのではなく、ひとつのApplication DefinitionとApplication Graphから扱います。
 
-```ts
-import { defineApplication, task } from '@loutrejs/loutre'
+構成を明示的なTypeScript codeとして保つことで、RuntimeとDeveloper Toolingが同じApplication modelを共有できます。Frameworkのmagicより、型と構造から追える設計を優先しています。
 
-export const hello = task<void, string>({
-  name: 'hello',
-  factory: () => () => 'Hello, Loutre!',
-})
+## Runtime Support
 
-export default defineApplication({
-  modules: [],
-  tasks: [hello],
-})
-```
+Application codeをRuntime固有APIから分離し、Host / Runtime Adapterから実行環境へ接続します。
 
-HTTP Application、DI、Pipeline、Environment、Argumentsなどを含む例は[Getting Started](./docs/getting-started.md)を参照してください。
+- Node.js
+- Bun
+- Deno
+- Cloudflare Workers
+- AWS Lambda
+- Electron
+
+Runtimeごとの役割と対応範囲は[Getting Started](./docs/getting-started.md)と[Architecture](./docs/architecture.md)を参照してください。
 
 ## Features
 
-- **Portable Application** — Application codeをruntime固有APIから分離
+- **Application Graph** — Module、dependency、Contract、execution、Runtime capabilityをひとつのGraphとして検査
+- **Unified execution model** — HTTP、Task、Trigger、Queueを同じApplication modelで表現
+- **Portable Application** — Application DefinitionとRuntime固有のHostを分離
 - **Type-safe composition** — Contract、DI、Pipeline、Environment、ArgumentsをTypeScriptで接続
 - **Explicit architecture** — decoratorやfilesystem discoveryに依存せず、構成をcodeから追跡可能
-- **Unified execution model** — HTTP、Task、Trigger、Queueを同じApplication modelで表現
-- **Multi-runtime** — Node.js、Bun、Deno、Cloudflare Workers、AWS Lambda、Electronをサポート
-- **Application Graph** — Module、dependency、Contract、execution、runtime requirementを検査可能
 - **Developer Tooling** — validation、Graph visualization、OpenAPI、deployment artifact生成を提供
+
+## Examples
+
+実行可能なprojectを[`examples/`](./examples/)に置いています。
+
+- [`hello-http`](./examples/hello-http/) — Contract、Implementation、DIを使うHTTP Application
+- [`hello-cli`](./examples/hello-cli/) — Argumentsを受け取りTaskを実行するApplication
+- [`hello-worker`](./examples/hello-worker/) — `fixedDelay` TriggerでTaskを定期実行するWorker
+- [`basic-auth`](./examples/basic-auth/) / [`bearer-auth`](./examples/bearer-auth/) — HTTP認証
+- [`database-postgres`](./examples/database-postgres/) / [`database-drizzle-postgres`](./examples/database-drizzle-postgres/) / [`database-prisma-postgres`](./examples/database-prisma-postgres/) — Database integration
+
+## Documentation
+
+- [Website](https://loutrejs.come25136.id)
+- [Getting Started](./docs/getting-started.md) — project作成、HTTP、Task、Runtime、CLI
+- [Architecture](./docs/architecture.md) — Application Definition、Application Graph、Runtimeの境界
+- [Examples](./examples/) — HTTP、Auth、CORS、Worker、Database
 
 ## Packages
 
@@ -84,13 +128,14 @@ HTTP Application、DI、Pipeline、Environment、Argumentsなどを含む例は[
 | [`@loutrejs/cli`](https://www.npmjs.com/package/@loutrejs/cli)       | Graph / build / OpenAPI tooling         |
 | [`create-loutre`](https://www.npmjs.com/package/create-loutre)       | Project initializer                     |
 
-## Documentation
+## Project Status
 
-- [Getting Started](./docs/getting-started.md) — project作成、HTTP、Task、Runtime、CLI
-- [Architecture](./docs/architecture.md) — 設計原則とpublic boundary
-- [Examples](./examples/) — HTTP、Auth、CORS、Worker、Database
+> [!WARNING]
+> Loutreは現在v0.xです。Public APIには破壊的変更が入る可能性があります。
 
-## Development
+設計の一貫性を優先しながらPublic APIを整備しています。Productionで利用する場合は、利用するversionを固定し、release notesを確認してください。
+
+## Contributing
 
 ```sh
 npm install
