@@ -108,7 +108,7 @@ Definitionが表すのは、**Applicationが何で構成されているか**で�
 ```ts
 const application = defineApplication({
   modules: [UsersModule],
-});
+})
 ```
 
 実際にApplicationを起動するのはHostやRuntime Adapterです。
@@ -139,7 +139,7 @@ ImplementationはContractに定義されたProcedureの実装です。
 
 ```ts
 const UsersController = implementation({
-  name: "UsersController",
+  name: 'UsersController',
   contract: UsersContract,
   protocol: http,
 
@@ -147,10 +147,10 @@ const UsersController = implementation({
     async get(ctx) {
       return ctx.response.found({
         body: await users.get(ctx.params.id),
-      });
+      })
     },
   }),
-});
+})
 ```
 
 Implementationはstatic descriptorと同期factoryから構成されます。
@@ -199,7 +199,7 @@ class、value、factory、conditional Provider、Environment、Argumentsなど�
 class tokenとcustom tokenは、どちらも`inject()`で依存を宣言できます。
 
 ```ts
-const DATABASE = token<Database>("database");
+const DATABASE = token<Database>('database')
 
 class UserRepository {
   constructor(readonly database = inject(DATABASE)) {}
@@ -218,7 +218,7 @@ Factory Providerでは`inject` metadataを使います。
 provide(CACHE).useFactory({
   inject: [Config],
   use: (config) => new Cache(config),
-});
+})
 ```
 
 `inject()`はApplicationのどこからでもdependencyを取得するService Locatorではありません。
@@ -246,9 +246,9 @@ const task = task({
   factory:
     (service = inject(Service)) =>
     async () => {
-      await service.run();
+      await service.run()
     },
-});
+})
 ```
 
 construction中には、次のような処理を行いません。
@@ -281,12 +281,12 @@ validationとtransformにはStandard Schemaを利用します。
 const AppEnvSchema = z
   .object({
     DATABASE_URL: z.string(),
-    STORAGE_DRIVER: z.enum(["memory", "s3"]),
+    STORAGE_DRIVER: z.enum(['memory', 's3']),
   })
   .transform((raw) => ({
     databaseUrl: new URL(raw.DATABASE_URL),
     storageDriver: raw.STORAGE_DRIVER,
-  }));
+  }))
 
 class AppEnv extends defineEnv(AppEnvSchema) {}
 ```
@@ -294,7 +294,7 @@ class AppEnv extends defineEnv(AppEnvSchema) {}
 Application codeが扱うのはtransform後の値です。
 
 ```ts
-AppEnv.key("databaseUrl");
+AppEnv.key('databaseUrl')
 ```
 
 Moduleは必要なEnvironment Contractを宣言できます。
@@ -330,7 +330,7 @@ class AppArgs extends defineArgs(
 const application = defineApplication({
   modules: [],
   arguments: AppArgs,
-});
+})
 ```
 
 ArgumentsもStandard Schemaでvalidate、transformされ、ApplicationからはProviderとして利用できます。
@@ -363,14 +363,14 @@ TaskはHostから明示的に実行できる処理です。
 
 ```ts
 const processOrder = task<Order, void>({
-  name: "orders.process",
+  name: 'orders.process',
 
   factory:
     (service = inject(OrderService)) =>
     async (order) => {
-      await service.process(order);
+      await service.process(order)
     },
-});
+})
 ```
 
 Task自体はstatic descriptorと同期factoryで定義し、factoryから返すruntime functionは非同期にできます。
@@ -423,17 +423,17 @@ Layerはstatic metadataと同期factoryで定義します。
 
 ```ts
 const auth = layer({
-  name: "auth",
+  name: 'auth',
   requires: [SESSION],
   provides: [CURRENT_USER],
 
   factory:
     (users = inject(UserService)) =>
     async (ctx, next) => {
-      const currentUser = await users.resolve(ctx.session);
-      await next({ currentUser });
+      const currentUser = await users.resolve(ctx.session)
+      await next({ currentUser })
     },
-});
+})
 ```
 
 `requires`はLayerが必要とするContext Key、`provides`は後続の処理へ追加するContext Keyを表します。
@@ -521,9 +521,9 @@ Application GraphはLoutreのPublic APIの一部です。本体と同じversioni
 Application Definitionを実際に実行できるApplicationへ変換する境界がBindingです。
 
 ```ts
-binding.invocation({ application, environment, arguments });
-binding.host({ application, environment, arguments });
-binding.queue(queue, driver);
+binding.invocation({ application, environment, arguments })
+binding.host({ application, environment, arguments })
+binding.queue(queue, driver)
 ```
 
 `binding.invocation()`は、callbackやtransport bindingのような短いexecution boundary向けです。
