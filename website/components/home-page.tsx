@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { localePrefix, type Locale } from '../lib/i18n'
+import { stackblitzHelloHttpUrl } from '../lib/links'
 import { ScrollReveal } from './scroll-reveal'
 import { MermaidDiagram } from './mermaid-diagram'
 
@@ -183,6 +184,7 @@ const homeCopy = {
     wordSeparator: ' ',
     introduction: 'Build Application, Contract, DI, and Task as one Graph',
     getStarted: 'Get started',
+    tryInStackBlitz: 'Try in StackBlitz',
     runAnywhere: 'Run TypeScript anywhere',
     applicationModelTitle: 'One Application Model',
     applicationModelDescription:
@@ -205,6 +207,7 @@ const homeCopy = {
     wordSeparator: '',
     introduction: 'Application、Contract、DI、Taskを一つのGraphとして構築',
     getStarted: 'はじめる',
+    tryInStackBlitz: 'StackBlitzで試す',
     runAnywhere: 'TypeScriptが動く場所なら、どこでも',
     applicationModelTitle: '一つのApplication Model',
     applicationModelDescription:
@@ -291,9 +294,12 @@ export function HomePage({ locale }: { locale: Locale }) {
               </Link>
               <a
                 className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-surface px-5 text-sm font-semibold transition hover:bg-surface-muted"
-                href="https://github.com/come25136/loutrejs"
+                href={stackblitzHelloHttpUrl}
+                target="_blank"
+                rel="noreferrer"
               >
-                GitHub <ExternalLink size={14} aria-hidden="true" />
+                {copy.tryInStackBlitz}{' '}
+                <ExternalLink size={14} aria-hidden="true" />
               </a>
             </div>
             <InstallCommand className="mt-8 max-w-xl" />
