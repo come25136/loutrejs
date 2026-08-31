@@ -5,79 +5,59 @@ import { ScrollReveal } from '../../components/scroll-reveal'
 export const metadata: Metadata = {
   title: 'Example',
   description:
-    'HTTP、認証、Task、Worker、Databaseを扱うLoutreの実行可能なサンプル集',
+    'HTTP、Auth、Task、Worker、Databaseを扱うLoutreの実行可能なサンプル集',
 }
 
 const examples = [
   {
-    name: 'Hello HTTP',
-    slug: 'hello-http',
-    kind: 'HTTP',
-    description:
-      'path parameterを検証し、型付きControllerとProviderの依存注入を備えた最小のHTTP API',
-  },
-  {
     name: 'Hello CLI',
     slug: 'hello-cli',
-    kind: 'Task',
-    description:
-      'CLI引数をApplication Argumentsにbindし、public Taskを明示的に実行する構成',
+    description: '引数を受け取り、Taskを実行するCLI application',
   },
   {
     name: 'Hello Worker',
     slug: 'hello-worker',
-    kind: 'Trigger',
-    description:
-      'HTTPを使わず、fixedDelay Triggerだけで常駐する最小のApplication',
+    description: 'fixedDelayでTaskを繰り返し実行するWorker',
+  },
+  {
+    name: 'Hello HTTP',
+    slug: 'hello-http',
+    description: 'ControllerとProviderを使った最小構成のHTTP API',
   },
   {
     name: 'Basic Auth',
     slug: 'basic-auth',
-    kind: 'Security',
-    description:
-      '認証Layer、Context Key、short circuitを使ってHTTP Basic認証を構成します',
+    description: 'HTTP Basic認証でAPIを保護する',
   },
   {
     name: 'Bearer Auth',
     slug: 'bearer-auth',
-    kind: 'Security',
-    description:
-      '公開APIだけを使ってユーザー定義のBearer認証Layerを組み立てます',
+    description: 'Bearer tokenを検証してAPIを保護する',
   },
   {
     name: 'CORS',
     slug: 'cors',
-    kind: 'HTTP',
-    description:
-      'CORS policyをPipelineに組み込み、preflightをApplication境界で処理します',
+    description: 'PipelineでCORSとpreflight requestを処理する',
   },
   {
     name: 'Database Transactions',
     slug: 'database-transactions',
-    kind: 'Database',
-    description:
-      'typed Contextと再帰Pipelineを使い、外部DBなしでtransaction境界を確認できます',
+    description: 'Transactionの基本的な使い方',
   },
   {
     name: 'PostgreSQL',
     slug: 'database-postgres',
-    kind: 'Database',
-    description:
-      'pgのPoolClientをtransaction LayerからControllerへ型安全に渡します',
+    description: 'pgを使ったPostgreSQL transaction',
   },
   {
     name: 'Drizzle + PostgreSQL',
     slug: 'database-drizzle-postgres',
-    kind: 'Database',
-    description:
-      'Drizzleのnative transaction clientを、その型を保ったままContextへ渡します',
+    description: 'DrizzleとPostgreSQLを使ったtransaction',
   },
   {
     name: 'Prisma + PostgreSQL',
     slug: 'database-prisma-postgres',
-    kind: 'Database',
-    description:
-      'Prismaのinteractive transactionを再帰Pipeline内で直接利用します',
+    description: 'Prisma interactive transactionをPipelineから使う',
   },
 ] as const
 
@@ -89,17 +69,20 @@ export default function ExamplesPage() {
     <main className="border-b border-gray-200 bg-white pb-30">
       <section className="shell animate-reveal-up border-b border-gray-200 py-20 motion-reduce:animate-none">
         <p className="mb-5 font-mono text-xs font-medium tracking-[0.08em] text-copper-dark uppercase">
-          サンプルで学ぶ
+          Examples
         </p>
         <div className="grid grid-cols-[1.1fr_0.9fr] gap-20 max-sm:grid-cols-1 max-sm:gap-8">
           <h1 className="m-0 text-[clamp(3rem,6vw,5.25rem)] leading-[0.98] font-bold tracking-[-0.065em]">
-            動くコードから、
-            <br />
-            Loutreを知る
+            <span className="block whitespace-nowrap">動くコードから</span>
+            <span className="block whitespace-nowrap">Loutreを学ぶ</span>
           </h1>
           <p className="m-0 max-w-lg self-end leading-8 text-ink-soft">
-            HTTP APIからAuth、Worker、Database
-            transactionまで、サンプルからそのまま試せます
+            <span className="block whitespace-nowrap">
+              HTTP、CLI、Worker、Auth、Database
+            </span>
+            <span className="block whitespace-nowrap">
+              用途別のサンプルから使い方を確認できます
+            </span>
           </p>
         </div>
       </section>
