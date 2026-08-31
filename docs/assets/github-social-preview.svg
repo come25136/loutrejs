@@ -21,8 +21,7 @@
 
   <g font-family="Inter, Arial, sans-serif" fill="#111827">
     <text x="500" y="200" font-size="66" font-weight="750" letter-spacing="-2.4">Loutre</text>
-    <text x="500" y="286" font-size="39" font-weight="700" letter-spacing="-1.2">Graph-first TypeScript</text>
-    <text x="500" y="334" font-size="39" font-weight="700" letter-spacing="-1.2">Application Framework</text>
-    <text x="500" y="397" font-size="24" font-weight="500" fill="#6b7280">One application. Any runtime.</text>
+    <text x="500" y="306" font-size="39" font-weight="700" letter-spacing="-1.2">TypeScript Application Framework</text>
+    <text x="500" y="373" font-size="24" font-weight="500" fill="#6b7280">One application. Any runtime.</text>
   </g>
 </svg>

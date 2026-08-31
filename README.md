@@ -5,7 +5,7 @@
 <h1 align="center">Loutre</h1>
 
 <p align="center">
-  <strong>Graph-first TypeScript Application Framework</strong><br>
+  <strong>TypeScript Application Framework</strong><br>
   One application. Any runtime. Visible architecture.
 </p>
 
