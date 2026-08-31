@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <rect width="1280" height="640" fill="#ffffff"/>
+
+  <g opacity="0.9" fill="none" stroke="#e5e7eb" stroke-width="2">
+    <path d="M825 472 C900 472 908 414 978 414"/>
+    <path d="M825 472 C900 472 908 472 978 472"/>
+    <path d="M825 472 C900 472 908 530 978 530"/>
+    <path d="M978 414 C1045 414 1054 448 1128 448"/>
+    <path d="M978 530 C1045 530 1054 494 1128 494"/>
+  </g>
+  <g>
+    <circle cx="825" cy="472" r="7" fill="#ff6a30"/>
+    <circle cx="978" cy="414" r="6" fill="#111827"/>
+    <circle cx="978" cy="472" r="6" fill="#111827"/>
+    <circle cx="978" cy="530" r="6" fill="#111827"/>
+    <circle cx="1128" cy="448" r="6" fill="#15803d"/>
+    <circle cx="1128" cy="494" r="6" fill="#15803d"/>
+  </g>
+
+  <image href="loutre.svg" x="72" y="142" width="356" height="356" preserveAspectRatio="xMidYMid meet"/>
+
+  <g font-family="Inter, Arial, sans-serif" fill="#111827">
+    <text x="500" y="200" font-size="66" font-weight="750" letter-spacing="-2.4">Loutre</text>
+    <text x="500" y="286" font-size="39" font-weight="700" letter-spacing="-1.2">Graph-first TypeScript</text>
+    <text x="500" y="334" font-size="39" font-weight="700" letter-spacing="-1.2">Application Framework</text>
+    <text x="500" y="397" font-size="24" font-weight="500" fill="#6b7280">One application. Any runtime.</text>
+  </g>
+</svg>
