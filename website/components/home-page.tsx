@@ -16,6 +16,7 @@ import {
 import type { ReactNode } from 'react'
 import { localePrefix, type Locale } from '../lib/i18n'
 import { ScrollReveal } from './scroll-reveal'
+import { MermaidDiagram } from './mermaid-diagram'
 
 function RuntimeLogo({
   src,
@@ -468,36 +469,53 @@ export function HomePage({ locale }: { locale: Locale }) {
             <p>　description: HTTP Application entry module</p>
             <p>　imports: (none)</p>
           </div>
-          <div className="relative min-h-56 overflow-hidden bg-gray-50 p-5">
-            <svg
-              className="absolute inset-0 size-full"
-              viewBox="0 0 500 220"
-              aria-hidden="true"
-            >
-              <path
-                d="M250 43V63M250 63L135 88M250 63L365 88M135 115V181M365 115V181"
-                fill="none"
-                stroke="#cbd5e1"
-                strokeWidth="1.2"
-              />
-            </svg>
-            <div className="relative z-2 grid min-h-48 grid-cols-2 grid-rows-3 items-center gap-x-3 gap-y-5">
-              <div className="col-span-2 justify-self-center rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 font-mono text-[10px] text-emerald-900">
-                Application
-              </div>
-              <div className="justify-self-center rounded-md border border-gray-300 bg-white px-2 py-2 font-mono text-[9px]">
-                UsersModule
-              </div>
-              <div className="justify-self-center rounded-md border border-gray-300 bg-white px-2 py-2 font-mono text-[9px]">
-                HealthModule
-              </div>
-              <div className="w-full min-w-0 rounded-md border border-blue-200 bg-blue-50 px-1.5 py-2 text-center font-mono text-[8px] whitespace-nowrap sm:text-[9px]">
-                Contract (GET /users)
-              </div>
-              <div className="w-full min-w-0 rounded-md border border-blue-200 bg-blue-50 px-1.5 py-2 text-center font-mono text-[8px] whitespace-nowrap sm:text-[9px]">
-                Contract (GET /health)
-              </div>
-            </div>
+          <div className="relative flex min-h-56 items-center overflow-hidden bg-gray-50 p-5">
+            <MermaidDiagram
+              locale={locale}
+              variant="embedded"
+              chart={`%%{init: {
+  "theme": "base",
+  "flowchart": {
+    "curve": "basis",
+    "diagramPadding": 8,
+    "nodeSpacing": 52,
+    "rankSpacing": 40,
+    "useMaxWidth": true
+  },
+  "themeVariables": {
+    "background": "#F9FAFB",
+    "fontFamily": "monospace",
+    "fontSize": "10px",
+    "lineColor": "#CBD5E1",
+    "primaryTextColor": "#172033"
+  }
+}}%%
+
+flowchart TD
+    A["Application"]
+
+    U["UsersModule"]
+    H["HealthModule"]
+
+    UC["Contract (GET /users)"]
+    HC["Contract (GET /health)"]
+
+    A --- U
+    A --- H
+
+    U --- UC
+    H --- HC
+
+    classDef application fill:#ECFDF5,stroke:#6EE7B7,stroke-width:1px,color:#164E3B;
+    classDef module fill:#FFFFFF,stroke:#CBD5E1,stroke-width:1px,color:#172033;
+    classDef contract fill:#F8FAFF,stroke:#AFCBFF,stroke-width:1px,color:#172033;
+
+    class A application;
+    class U,H module;
+    class UC,HC contract;
+
+    linkStyle default stroke:#CBD5E1,stroke-width:1.5px;`}
+            />
           </div>
         </div>
       </NumberedSection>

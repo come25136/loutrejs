@@ -44,13 +44,16 @@ mermaid.initialize({
 export function MermaidDiagram({
   chart,
   locale,
+  variant = 'card',
 }: {
   chart: string
   locale: Locale
+  variant?: 'card' | 'embedded'
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [renderFailed, setRenderFailed] = useState(false)
   const copy = mermaidCopy[locale]
+  const embedded = variant === 'embedded'
 
   useEffect(() => {
     const container = containerRef.current
@@ -98,10 +101,20 @@ export function MermaidDiagram({
   }
 
   return (
-    <figure className="not-prose my-7 overflow-x-auto rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-[0_16px_36px_rgba(17,24,39,0.08)] sm:px-5">
+    <figure
+      className={
+        embedded
+          ? 'not-prose m-0 w-full min-w-0 bg-transparent'
+          : 'not-prose my-7 overflow-x-auto rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-[0_16px_36px_rgba(17,24,39,0.08)] sm:px-5'
+      }
+    >
       <div
         ref={containerRef}
-        className="grid min-h-48 min-w-[36rem] place-items-center text-sm text-gray-500 [&_svg]:h-auto [&_svg]:max-w-full"
+        className={
+          embedded
+            ? 'grid min-h-48 w-full min-w-0 place-items-center text-sm text-gray-500 [&_svg]:block [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-full'
+            : 'grid min-h-48 min-w-[36rem] place-items-center text-sm text-gray-500 [&_svg]:h-auto [&_svg]:max-w-full'
+        }
         role="img"
         aria-label={copy.label}
       >
