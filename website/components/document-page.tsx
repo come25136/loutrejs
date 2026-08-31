@@ -5,14 +5,15 @@ import rehypeHighlight from 'rehype-highlight'
 import rehypeSlug from 'rehype-slug'
 import remarkGfm from 'remark-gfm'
 import {
-  documentNavigation,
   getDocument,
+  getDocumentNavigation,
   type DocumentSlug,
 } from '../lib/documents'
+import type { Locale } from '../lib/i18n'
 import { MermaidDiagram } from './mermaid-diagram'
 import { ScrollReveal } from './scroll-reveal'
 
-function resolveDocumentHref(href: string | undefined) {
+function resolveDocumentHref(href: string | undefined, locale: Locale) {
   if (!href) {
     return href
   }
@@ -20,11 +21,12 @@ function resolveDocumentHref(href: string | undefined) {
   const markdownLink = /^\.\/([^/]+)\.md(#[\w-]+)?$/.exec(href)
 
   if (markdownLink) {
-    return `/docs/${markdownLink[1]}/${markdownLink[2] ?? ''}`
+    const prefix = locale === 'ja' ? '/ja' : ''
+    return `${prefix}/docs/${markdownLink[1]}/${markdownLink[2] ?? ''}`
   }
 
   if (href.startsWith('../examples')) {
-    return '/examples/'
+    return locale === 'ja' ? '/ja/examples/' : '/examples/'
   }
 
   return href
@@ -181,8 +183,17 @@ const proseClass = [
   '[&_.hljs-comment]:text-[#7d8790] [&_.hljs-comment]:italic [&_.hljs-quote]:text-[#7d8790] [&_.hljs-quote]:italic',
 ].join(' ')
 
-export function DocumentPage({ slug }: { slug: DocumentSlug }) {
-  const document = getDocument(slug)
+export function DocumentPage({
+  slug,
+  locale,
+}: {
+  slug: DocumentSlug
+  locale: Locale
+}) {
+  const documentNavigation = getDocumentNavigation(locale)
+  const document = getDocument(slug, locale)
+  const isJapanese = locale === 'ja'
+  const prefix = isJapanese ? '/ja' : ''
   const currentIndex = documentNavigation.findIndex(
     (entry) => entry.slug === slug,
   )
@@ -194,16 +205,20 @@ export function DocumentPage({ slug }: { slug: DocumentSlug }) {
       <div className="shell grid min-h-[calc(100vh-4.5rem)] grid-cols-[210px_minmax(0,720px)_190px] items-start gap-[clamp(2rem,5vw,4.5rem)] py-18 pb-30 max-lg:grid-cols-[190px_minmax(0,1fr)] max-sm:grid-cols-1 max-sm:py-8 max-sm:pb-20">
         <aside className="animate-reveal-up sticky top-28 motion-reduce:animate-none max-sm:static max-sm:overflow-x-auto">
           <p className="mb-4.5 text-xs font-bold tracking-[0.13em] text-ink uppercase max-sm:hidden">
-            ドキュメント
+            {isJapanese ? 'ドキュメント' : 'Documentation'}
           </p>
           <nav
             className="flex flex-col gap-1 max-sm:w-max max-sm:flex-row"
-            aria-label="ドキュメントナビゲーション"
+            aria-label={
+              isJapanese
+                ? 'ドキュメントナビゲーション'
+                : 'Documentation navigation'
+            }
           >
             {documentNavigation.map((entry) => (
               <Link
                 className={`flex flex-col gap-1 rounded-lg border-l-2 px-3 py-2.5 text-ink-soft transition hover:bg-gray-50 hover:text-ink max-sm:min-w-36 ${entry.slug === slug ? 'border-copper bg-gray-50 text-ink' : 'border-transparent'}`}
-                href={`/docs/${entry.slug}/`}
+                href={`${prefix}/docs/${entry.slug}/`}
                 key={entry.slug}
               >
                 <span className="text-sm font-bold">{entry.label}</span>
@@ -214,11 +229,13 @@ export function DocumentPage({ slug }: { slug: DocumentSlug }) {
             ))}
             <Link
               className="flex flex-col gap-1 rounded-lg border-l-2 border-transparent px-3 py-2.5 text-ink-soft transition hover:bg-gray-50 hover:text-ink max-sm:min-w-36"
-              href="/examples/"
+              href={`${prefix}/examples/`}
             >
-              <span className="text-sm font-bold">サンプル</span>
+              <span className="text-sm font-bold">
+                {isJapanese ? 'サンプル' : 'Examples'}
+              </span>
               <small className="text-[0.67rem] text-gray-500">
-                実行可能なサンプル
+                {isJapanese ? '実行可能なサンプル' : 'Runnable examples'}
               </small>
             </Link>
           </nav>
@@ -233,7 +250,7 @@ export function DocumentPage({ slug }: { slug: DocumentSlug }) {
         <article className="animate-reveal-up [animation-delay:90ms] motion-reduce:animate-none">
           <header className="border-b border-gray-200 pb-12 max-sm:pt-5">
             <p className="mb-5 font-mono text-xs font-medium tracking-[0.08em] text-copper-dark uppercase">
-              ドキュメント / {document.label}
+              {isJapanese ? 'ドキュメント' : 'Documentation'} / {document.label}
             </p>
             <h1 className="m-0 text-[clamp(2.75rem,5vw,4.25rem)] leading-[1.02] font-bold tracking-[-0.055em] max-sm:text-[3rem]">
               {document.title}
@@ -266,6 +283,7 @@ export function DocumentPage({ slug }: { slug: DocumentSlug }) {
                     return (
                       <MermaidDiagram
                         chart={String(code.props.children).trim()}
+                        locale={locale}
                       />
                     )
                   }
@@ -273,7 +291,7 @@ export function DocumentPage({ slug }: { slug: DocumentSlug }) {
                   return <pre {...props}>{children}</pre>
                 },
                 a: ({ href, children, ...props }) => {
-                  const resolvedHref = resolveDocumentHref(href)
+                  const resolvedHref = resolveDocumentHref(href, locale)
                   const external = resolvedHref?.startsWith('http')
 
                   if (external) {
@@ -303,14 +321,18 @@ export function DocumentPage({ slug }: { slug: DocumentSlug }) {
 
           <nav
             className="mt-20 grid grid-cols-2 gap-3 border-t border-gray-200 pt-7 max-sm:grid-cols-1"
-            aria-label="前後のドキュメント"
+            aria-label={
+              isJapanese ? '前後のドキュメント' : 'Adjacent documents'
+            }
           >
             {previousDocument ? (
               <Link
                 className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4.5 transition hover:-translate-y-0.5 hover:border-gray-400 hover:shadow-sm"
-                href={`/docs/${previousDocument.slug}/`}
+                href={`${prefix}/docs/${previousDocument.slug}/`}
               >
-                <span className="text-[0.67rem] text-gray-500">← 前へ</span>
+                <span className="text-[0.67rem] text-gray-500">
+                  ← {isJapanese ? '前へ' : 'Previous'}
+                </span>
                 <strong className="text-sm">{previousDocument.label}</strong>
               </Link>
             ) : (
@@ -319,17 +341,21 @@ export function DocumentPage({ slug }: { slug: DocumentSlug }) {
             {nextDocument ? (
               <Link
                 className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4.5 text-right transition hover:-translate-y-0.5 hover:border-gray-400 hover:shadow-sm max-sm:text-left"
-                href={`/docs/${nextDocument.slug}/`}
+                href={`${prefix}/docs/${nextDocument.slug}/`}
               >
-                <span className="text-[0.67rem] text-gray-500">次へ →</span>
+                <span className="text-[0.67rem] text-gray-500">
+                  {isJapanese ? '次へ' : 'Next'} →
+                </span>
                 <strong className="text-sm">{nextDocument.label}</strong>
               </Link>
             ) : (
               <Link
                 className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4.5 text-right transition hover:-translate-y-0.5 hover:border-gray-400 hover:shadow-sm max-sm:text-left"
-                href="/examples/"
+                href={`${prefix}/examples/`}
               >
-                <span className="text-[0.67rem] text-gray-500">次へ →</span>
+                <span className="text-[0.67rem] text-gray-500">
+                  {isJapanese ? '次へ' : 'Next'} →
+                </span>
                 <strong className="text-sm">Example</strong>
               </Link>
             )}
@@ -338,11 +364,13 @@ export function DocumentPage({ slug }: { slug: DocumentSlug }) {
 
         <aside className="animate-reveal-up sticky top-28 [animation-delay:180ms] motion-reduce:animate-none max-lg:hidden">
           <p className="mb-4.5 text-xs font-bold tracking-[0.13em] text-ink uppercase">
-            このページ
+            {isJapanese ? 'このページ' : 'On this page'}
           </p>
           <nav
             className="flex max-h-[calc(100vh-180px)] flex-col gap-2 overflow-y-auto border-l border-gray-200 pl-4"
-            aria-label="ページ内ナビゲーション"
+            aria-label={
+              isJapanese ? 'ページ内ナビゲーション' : 'On-page navigation'
+            }
           >
             {document.headings.map((heading) => (
               <a

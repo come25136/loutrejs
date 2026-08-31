@@ -2,6 +2,7 @@
 
 import mermaid from 'mermaid'
 import { useEffect, useRef, useState } from 'react'
+import type { Locale } from '../lib/i18n'
 
 let renderSequence = 0
 
@@ -29,7 +30,13 @@ mermaid.initialize({
   },
 })
 
-export function MermaidDiagram({ chart }: { chart: string }) {
+export function MermaidDiagram({
+  chart,
+  locale,
+}: {
+  chart: string
+  locale: Locale
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [renderFailed, setRenderFailed] = useState(false)
 
@@ -57,7 +64,7 @@ export function MermaidDiagram({ chart }: { chart: string }) {
       })
       .catch((error: unknown) => {
         document.getElementById(renderId)?.remove()
-        console.error('Mermaidの描画に失敗しました。', error)
+        console.error('Failed to render the Mermaid diagram.', error)
 
         if (!cancelled) {
           setRenderFailed(true)
@@ -84,9 +91,11 @@ export function MermaidDiagram({ chart }: { chart: string }) {
         ref={containerRef}
         className="grid min-h-48 min-w-[36rem] place-items-center text-sm text-gray-500 [&_svg]:h-auto [&_svg]:max-w-full"
         role="img"
-        aria-label="ドキュメントの構成図"
+        aria-label={
+          locale === 'ja' ? 'ドキュメントの構成図' : 'Document diagram'
+        }
       >
-        図を読み込んでいます…
+        {locale === 'ja' ? '図を読み込んでいます…' : 'Loading diagram…'}
       </div>
     </figure>
   )

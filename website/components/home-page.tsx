@@ -1,0 +1,482 @@
+import Image from 'next/image'
+import Link from 'next/link'
+import hljs from 'highlight.js/lib/core'
+import typescript from 'highlight.js/lib/languages/typescript'
+import {
+  ArrowRight,
+  Box,
+  Braces,
+  Clock3,
+  Copy,
+  ExternalLink,
+  GitBranch,
+  Terminal,
+  Wrench,
+} from 'lucide-react'
+import type { ReactNode } from 'react'
+import type { Locale } from '../lib/i18n'
+import { ScrollReveal } from './scroll-reveal'
+
+function RuntimeLogo({
+  src,
+  width,
+  height,
+}: {
+  src: string
+  width: number
+  height: number
+}) {
+  return (
+    <Image
+      className="h-[1em] w-[1.35em] object-contain"
+      src={src}
+      width={width}
+      height={height}
+      alt=""
+      aria-hidden="true"
+    />
+  )
+}
+
+const runtimes = [
+  {
+    name: 'Node.js',
+    icon: <RuntimeLogo src="/runtimes/nodejs.svg" width={44} height={50} />,
+  },
+  {
+    name: 'Bun',
+    icon: <RuntimeLogo src="/runtimes/bun.svg" width={80} height={70} />,
+  },
+  {
+    name: 'Deno',
+    icon: <RuntimeLogo src="/runtimes/deno.svg" width={441} height={441} />,
+  },
+  {
+    name: 'Cloudflare Workers',
+    icon: <RuntimeLogo src="/runtimes/cloudflare.svg" width={66} height={30} />,
+  },
+  {
+    name: 'AWS Lambda',
+    icon: <RuntimeLogo src="/runtimes/aws-lambda.png" width={64} height={64} />,
+  },
+  {
+    name: 'Electron',
+    icon: <RuntimeLogo src="/runtimes/electron.svg" width={128} height={128} />,
+  },
+] as const
+
+const runtimeConnectionPaths = [
+  'M 0 122.5 C 38 122.5 62 39 112 39',
+  'M 0 122.5 C 38 122.5 62 77 112 77',
+  'M 0 122.5 C 38 122.5 62 115 112 115',
+  'M 0 122.5 C 38 122.5 62 153 112 153',
+  'M 0 122.5 C 38 122.5 62 191 112 191',
+  'M 0 122.5 C 38 122.5 62 229 112 229',
+] as const
+
+const codeExample = `import {
+  contract,
+  defineApplication,
+  defineModule,
+  implementation,
+} from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
+import { z } from 'zod'
+
+const AppContract = contract([
+  http({
+    hello: {
+      method: 'GET',
+      path: '/',
+      responses: {
+        ok: {
+          status: 200,
+          body: z.object({ message: z.string() }),
+        },
+      },
+      pipeline: [http.controller],
+    },
+  }),
+])
+
+const AppController = implementation({
+  name: 'AppController',
+  contract: AppContract,
+  protocol: http,
+  factory: () => ({
+    async hello(ctx) {
+      return ctx.response.ok({
+        body: { message: 'Hello from Loutre!' },
+      })
+    },
+  }),
+})
+
+const AppModule = defineModule(() => ({
+  implementations: [AppController],
+}))
+
+export default defineApplication({
+  modules: [AppModule()],
+})`
+
+hljs.registerLanguage('typescript', typescript)
+
+const highlightedCodeLines = hljs
+  .highlight(codeExample, { language: 'typescript' })
+  .value.split('\n')
+
+function NumberedSection({
+  number,
+  children,
+  muted = false,
+  className = '',
+}: {
+  number: number
+  children: ReactNode
+  muted?: boolean
+  className?: string
+}) {
+  const section = (
+    <section
+      className={`border-b border-gray-200 ${muted ? 'bg-gray-50/70' : 'bg-white'}`}
+    >
+      <div
+        className={`shell relative pl-16 before:absolute before:top-0 before:bottom-0 before:left-3.5 before:border-l before:border-gray-200 max-sm:pl-0 max-sm:before:hidden ${className}`}
+      >
+        <span className="absolute top-8 left-0 z-2 grid size-7 place-items-center rounded-full bg-black text-xs font-bold text-white max-sm:hidden">
+          {number}
+        </span>
+        {children}
+      </div>
+    </section>
+  )
+
+  return number === 1 ? section : <ScrollReveal>{section}</ScrollReveal>
+}
+
+function InstallCommand({ className = '' }: { className?: string }) {
+  return (
+    <div
+      className={`flex min-h-12 items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 font-mono text-xs text-gray-800 ${className}`}
+    >
+      <span className="text-emerald-700">$</span>
+      <code>npm create loutre@latest my-app</code>
+      <Copy className="ml-auto text-gray-400" size={14} aria-hidden="true" />
+    </div>
+  )
+}
+
+export function HomePage({ locale }: { locale: Locale }) {
+  const isJapanese = locale === 'ja'
+  const routePrefix = isJapanese ? '/ja' : ''
+  const applicationModel = [
+    {
+      title: 'Contract',
+      body: isJapanese ? 'Protocolと型を定義' : 'Define protocols and types',
+      icon: <Braces size={25} strokeWidth={1.7} />,
+    },
+    {
+      title: 'Implementation',
+      body: isJapanese
+        ? 'Contractと実装を分離'
+        : 'Separate contracts from implementations',
+      icon: <Wrench size={25} strokeWidth={1.7} />,
+    },
+    {
+      title: 'Module & DI',
+      body: isJapanese
+        ? 'Moduleで依存性を構成'
+        : 'Compose dependencies with modules',
+      icon: <Box size={25} strokeWidth={1.7} />,
+    },
+    {
+      title: 'Task',
+      body: isJapanese
+        ? 'JobやCLIも型安全に定義'
+        : 'Define jobs and CLIs with type safety',
+      icon: <Clock3 size={25} strokeWidth={1.7} />,
+    },
+    {
+      title: 'Application Graph',
+      body: isJapanese
+        ? '依存関係をすべて可視化'
+        : 'Visualize every dependency',
+      icon: <GitBranch size={25} strokeWidth={1.7} />,
+    },
+  ] as const
+
+  return (
+    <main>
+      <NumberedSection number={1} className="py-16 lg:py-20">
+        <div className="grid grid-cols-[1.05fr_0.95fr] items-center gap-14 max-lg:grid-cols-1">
+          <div className="animate-reveal-up motion-reduce:animate-none">
+            <h1 className="max-w-2xl text-[clamp(2.7rem,5.6vw,4.3rem)] leading-[1.05] font-bold tracking-[-0.06em] text-balance">
+              <span className="animate-word-in inline-block motion-reduce:animate-none">
+                {isJapanese ? 'ランタイムに' : 'TypeScript'}
+              </span>
+              <wbr />
+              <span className="animate-word-in inline-block [animation-delay:70ms] motion-reduce:animate-none">
+                {isJapanese ? '縛られない' : 'applications'}
+              </span>
+              <wbr />
+              <span className="animate-word-in inline-block [animation-delay:140ms] motion-reduce:animate-none">
+                {isJapanese ? 'TypeScript' : 'for any'}
+              </span>
+              <wbr />
+              <span className="animate-word-in inline-block [animation-delay:210ms] motion-reduce:animate-none">
+                {isJapanese ? 'アプリケーション' : 'runtime'}
+              </span>
+            </h1>
+            <p className="mt-6 max-w-xl text-[15px] leading-7 text-gray-600">
+              {isJapanese
+                ? 'Application、Contract、DI、Taskを一つのGraphとして構築'
+                : 'Build Application, Contract, DI, and Task as one Graph'}
+            </p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Link
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-ink px-5 text-sm font-semibold text-white transition hover:bg-gray-800"
+                href={`${routePrefix}/docs/getting-started/`}
+              >
+                {isJapanese ? 'はじめる' : 'Get started'}{' '}
+                <ArrowRight size={15} aria-hidden="true" />
+              </Link>
+              <a
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-gray-300 bg-white px-5 text-sm font-semibold transition hover:bg-gray-50"
+                href="https://github.com/come25136/loutrejs"
+              >
+                GitHub <ExternalLink size={14} aria-hidden="true" />
+              </a>
+            </div>
+            <InstallCommand className="mt-8 max-w-xl" />
+          </div>
+
+          <div className="animate-reveal-up shadow-code overflow-hidden rounded-xl border border-gray-800 bg-[#0d1117] text-[#e6edf3] [animation-delay:160ms] motion-reduce:animate-none">
+            <div className="flex h-11 items-center gap-2 border-b border-white/8 px-4">
+              <span className="size-2.5 rounded-full bg-[#ff5f56]" />
+              <span className="size-2.5 rounded-full bg-[#ffbd2e]" />
+              <span className="size-2.5 rounded-full bg-[#27c93f]" />
+              <span className="ml-3 font-mono text-[11px] text-gray-500">
+                app.ts
+              </span>
+            </div>
+            <pre className="max-h-[38rem] overflow-auto px-2 py-6 font-mono text-[12px] leading-[1.65] [&_.hljs-attr]:text-[#79c0ff] [&_.hljs-comment]:text-[#8b949e] [&_.hljs-keyword]:text-[#ff7b72] [&_.hljs-literal]:text-[#79c0ff] [&_.hljs-number]:text-[#79c0ff] [&_.hljs-params]:text-[#e6edf3] [&_.hljs-property]:text-[#79c0ff] [&_.hljs-string]:text-[#a5d6ff] [&_.hljs-title]:text-[#d2a8ff] [&_.hljs-type]:text-[#ffa657] [&_.hljs-variable]:text-[#ffa657]">
+              {highlightedCodeLines.map((line, index) => (
+                <span className="grid grid-cols-[2.2rem_1fr]" key={index}>
+                  <span className="pr-3 text-right text-gray-600 select-none">
+                    {index + 1}
+                  </span>
+                  <code
+                    dangerouslySetInnerHTML={{
+                      __html: line || ' ',
+                    }}
+                  />
+                </span>
+              ))}
+            </pre>
+          </div>
+        </div>
+      </NumberedSection>
+
+      <NumberedSection number={2} muted className="py-10">
+        <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
+          {isJapanese
+            ? 'TypeScriptが動く場所なら、どこでも'
+            : 'Run TypeScript anywhere'}
+        </h2>
+        <div className="mt-7 grid grid-cols-6 gap-3 max-lg:grid-cols-3 max-sm:grid-cols-2">
+          {runtimes.map((runtime) => (
+            <article
+              className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-gray-200 bg-white p-4 text-center shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+              key={runtime.name}
+            >
+              <span className="text-4xl">{runtime.icon}</span>
+              <h3 className="mt-4 text-sm font-semibold">{runtime.name}</h3>
+            </article>
+          ))}
+        </div>
+      </NumberedSection>
+
+      <NumberedSection number={3} className="py-10">
+        <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
+          {isJapanese ? '一つのApplication Model' : 'One Application Model'}
+        </h2>
+        <p className="mt-2 text-center text-sm text-gray-500">
+          {isJapanese
+            ? 'Application、Contract、DI、Taskを一つのGraphで表現します'
+            : 'Represent Application, Contract, DI, and Task in one Graph'}
+        </p>
+        <div className="mt-7 grid grid-cols-5 divide-x divide-gray-200 overflow-hidden rounded-xl border border-gray-200 max-lg:grid-cols-2 max-lg:divide-x-0 max-sm:grid-cols-1">
+          {applicationModel.map((item) => (
+            <article
+              className="flex min-h-40 flex-col items-center justify-center p-5 text-center max-lg:border-b max-lg:border-gray-200"
+              key={item.title}
+            >
+              <span className="mb-4 text-gray-900">{item.icon}</span>
+              <h3 className="text-sm font-semibold">{item.title}</h3>
+              <p className="mt-0.5 max-w-36 text-[11px] leading-5 text-gray-500">
+                {item.body}
+              </p>
+            </article>
+          ))}
+        </div>
+      </NumberedSection>
+
+      <NumberedSection number={4} muted className="py-10">
+        <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
+          {isJapanese
+            ? 'ApplicationとRuntimeを分離'
+            : 'Separate Application from Runtime'}
+        </h2>
+        <p className="mt-2 text-center text-sm text-gray-500">
+          {isJapanese
+            ? 'コードは変えずに、Runtimeだけを切り替えられます'
+            : 'Switch runtimes without changing application code'}
+        </p>
+        <div className="isolate mx-auto mt-7 grid max-w-4xl grid-cols-[1fr_7rem_0.85fr] items-center max-md:grid-cols-1">
+          <div className="relative z-10 rounded-xl border border-gray-200 bg-white p-5 font-mono text-[11px] leading-6 text-gray-700 after:absolute after:top-1/2 after:-right-1 after:size-2 after:-translate-y-1/2 after:rounded-full after:bg-copper max-md:after:hidden">
+            <p>
+              <span className="text-copper-dark">const</span> application ={' '}
+              <span className="text-[#7c3aed]">defineApplication</span>(&#123;
+            </p>
+            <p>　modules: [UsersModule(), HealthModule()],</p>
+            <p>&#125;)</p>
+            <p className="mt-3">
+              <span className="text-copper-dark">export default</span>{' '}
+              application
+            </p>
+          </div>
+          <div
+            className="relative z-0 hidden self-stretch md:block"
+            aria-hidden="true"
+          >
+            <svg
+              className="absolute inset-0 size-full overflow-visible"
+              viewBox="0 0 112 245"
+              preserveAspectRatio="none"
+            >
+              <g
+                fill="none"
+                stroke="#cbd5e1"
+                strokeWidth="1.2"
+                strokeDasharray="4 5"
+                vectorEffect="non-scaling-stroke"
+              >
+                {runtimeConnectionPaths.map((path, index) => (
+                  <path
+                    id={`runtime-connection-${index}`}
+                    d={path}
+                    key={path}
+                  />
+                ))}
+              </g>
+              <g className="motion-reduce:hidden">
+                {runtimeConnectionPaths.map((path, index) => (
+                  <circle r="2.6" fill="#ff6a30" key={path}>
+                    <animateMotion
+                      dur={`${2.6 + index * 0.08}s`}
+                      begin={`${index * 0.18}s`}
+                      repeatCount="indefinite"
+                    >
+                      <mpath href={`#runtime-connection-${index}`} />
+                    </animateMotion>
+                    <animate
+                      attributeName="opacity"
+                      values="0;1;1;0"
+                      keyTimes="0;0.12;0.82;1"
+                      dur={`${2.6 + index * 0.08}s`}
+                      begin={`${index * 0.18}s`}
+                      repeatCount="indefinite"
+                    />
+                  </circle>
+                ))}
+              </g>
+            </svg>
+          </div>
+          <div className="relative z-10">
+            <p className="mb-2 text-center text-[10px] font-semibold text-gray-500">
+              Runtimes
+            </p>
+            <div className="space-y-1.5">
+              {runtimes.map((runtime) => (
+                <div
+                  className="relative flex min-h-8 items-center gap-3 rounded-md border border-gray-200 bg-white px-3 text-[11px]"
+                  key={runtime.name}
+                >
+                  <span className="text-base">{runtime.icon}</span>
+                  {runtime.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </NumberedSection>
+
+      <NumberedSection number={5} className="py-10">
+        <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
+          Application Graph
+        </h2>
+        <p className="mt-2 text-center text-sm text-gray-500">
+          {isJapanese
+            ? 'Loutre Graph APIで、依存関係と構成を可視化'
+            : 'Visualize dependencies and structure with the Loutre Graph API'}
+        </p>
+        <div className="mx-auto mt-7 grid max-w-4xl grid-cols-2 overflow-hidden rounded-xl border border-gray-200 max-md:grid-cols-1">
+          <div className="border-r border-gray-200 bg-[#fbfcfd] p-5 font-mono text-[11px] leading-7 max-md:border-r-0 max-md:border-b">
+            <p className="mb-3 flex items-center gap-2 text-gray-700">
+              <Terminal size={14} /> loutre graph modules --entry src/app.ts
+            </p>
+            <p className="text-emerald-700">AppModule [module:1]</p>
+            <p>　description: HTTP Application entry module</p>
+            <p>　imports: (none)</p>
+          </div>
+          <div className="relative min-h-56 bg-gray-50 p-5">
+            <div className="absolute top-4 left-1/2 z-2 -translate-x-1/2 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 font-mono text-[10px] text-emerald-900">
+              Application
+            </div>
+            <div className="absolute top-20 left-[18%] z-2 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-[9px]">
+              UsersModule
+            </div>
+            <div className="absolute top-20 right-[18%] z-2 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-[9px]">
+              HealthModule
+            </div>
+            <div className="absolute bottom-12 left-[14%] z-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 font-mono text-[9px]">
+              Contract (GET /users)
+            </div>
+            <div className="absolute right-[14%] bottom-12 z-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 font-mono text-[9px]">
+              Contract (GET /health)
+            </div>
+            <svg
+              className="absolute inset-0 size-full"
+              viewBox="0 0 500 220"
+              aria-hidden="true"
+            >
+              <path
+                d="M250 43V63M250 63L135 88M250 63L365 88M135 115V158M365 115V158"
+                fill="none"
+                stroke="#cbd5e1"
+                strokeWidth="1.2"
+              />
+            </svg>
+          </div>
+        </div>
+      </NumberedSection>
+
+      <NumberedSection number={6} muted className="overflow-hidden py-10">
+        <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
+          {isJapanese ? '今すぐ始める' : 'Start building now'}
+        </h2>
+        <div className="relative mx-auto mt-6 max-w-2xl">
+          <InstallCommand />
+          <Image
+            className="absolute -right-16 -bottom-16 h-auto w-36 drop-shadow-sm max-sm:hidden"
+            src="/loutre.svg"
+            width={1254}
+            height={1254}
+            alt=""
+          />
+        </div>
+      </NumberedSection>
+    </main>
+  )
+}

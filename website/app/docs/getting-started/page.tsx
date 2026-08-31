@@ -2,11 +2,11 @@ import type { Metadata } from 'next'
 import { DocumentPage } from '../../../components/document-page'
 
 export const metadata: Metadata = {
-  title: 'はじめる',
+  title: 'Getting Started',
   description:
-    'Loutreのプロジェクト作成からHTTP、Task、Runtime、CLIまでを順に解説します。',
+    'Learn how to create a Loutre project and work with HTTP, Tasks, Runtimes, and the CLI.',
 }
 
 export default function GettingStartedPage() {
-  return <DocumentPage slug="getting-started" />
+  return <DocumentPage slug="getting-started" locale="en" />
 }
