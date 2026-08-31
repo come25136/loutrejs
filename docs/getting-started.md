@@ -1,12 +1,12 @@
-# Loutreをはじめる
+# Start Loutre
 
-このガイドでは、Loutre Applicationを作成し、型付きHTTP APIをテストして、Runtimeへ接続するところまで進めます。
+In this guide, we will create a Loutre Application, test the typed HTTP API, and connect to the Runtime.
 
-例の責務は分けています。Applicationコードは処理をどう構成するか、テストは外から見て何を保証するかを示します。コミットには変更が必要な理由を残し、コードコメントは自然に見える別の選択肢を採用しなかった理由がある場合だけ使います。
+Example responsibilities are divided. The Application code shows how to configure the process, and the tests show what to ensure from the outside. Leave the reason why the change is needed in the commit, and use code comments only when there is a reason why you didn't go with a more natural-looking alternative.
 
-## プロジェクトを作成する
+## Create a project
 
-`create-loutre`を起動すると、Targetとパッケージマネージャーを対話形式で選択できます。最初はNode.jsとnpmを選ぶと、このガイドのコマンドをそのまま実行できます。
+When you start `create-loutre`, you can interactively select a Target and a package manager. If you start with Node.js and npm, you can run the commands in this guide as is.
 
 ```sh
 npm create loutre@latest my-app
@@ -14,33 +14,33 @@ bun create loutre my-app
 deno x -A npm:create-loutre@latest my-app
 ```
 
-作成先へ移動します。
+Move to the creation destination.
 
 ```sh
 cd my-app
 ```
 
-生成される主なファイルには、次の役割があります。
+The main files generated have the following responsibilities:
 
 ```text
-src/app.ts       Contract、Implementation、Module、Applicationの構成
-src/main.ts      Applicationと選択したRuntimeの接続
-src/app.test.ts  Applicationが外部へ提供する振る舞いの検証
+src/app.ts Contract, Implementation, Module, Application configuration
+src/main.ts Connection between Application and selected Runtime
+src/app.test.ts Verification of behavior provided externally by Application
 ```
 
-Targetとパッケージマネージャーを先に決めている場合は、非対話で作成できます。
+If you have decided on the target and package manager in advance, you can create them non-interactively.
 
 ```sh
 npm create loutre@latest my-app -- --target cloudflare-workers --package-manager pnpm
 ```
 
-利用できるTargetはNode.js、Bun、Deno、Cloudflare Workers、AWS Lambdaです。パッケージマネージャーはnpm、pnpm、Yarn、Bun、Denoに対応しています。
+Available targets are Node.js, Bun, Deno, Cloudflare Workers, and AWS Lambda. The package manager supports npm, pnpm, Yarn, Bun, and Deno.
 
-依存関係を後からインストールする場合は`--no-install`、質問を省略して既定値を使う場合は`--yes`を指定します。`--yes`ではTargetにNode.js、パッケージマネージャーにinitializerを起動したものを使います。
+Specify `--no-install` to install the dependencies later, or specify `--yes` to skip the questions and use the default values. `--yes` uses Node.js as Target and initializer as the package manager.
 
-## HTTP Applicationを定義する
+## Define HTTP Application
 
-`src/app.ts`を、名前を受け取って挨拶を返すApplicationへ置き換えます。
+Replace `src/app.ts` with an Application that receives the name and returns a greeting.
 
 ```ts
 import {
@@ -76,7 +76,7 @@ export const GreetingContract = contract([
 
 class GreetingService {
   greet(name: string) {
-    return { message: `こんにちは、${name}！` }
+    return { message: `Hello, ${name}!` }
   }
 }
 
@@ -103,23 +103,23 @@ export default defineApplication({
 })
 ```
 
-このコードでは、`GreetingContract`が入力、応答、Pipelineを定め、`GreetingController`がContractをHTTPで実装します。`GreetingService`の生成はModuleへ集約し、Applicationは起動するModuleだけを選びます。`GreetingContract`だけは、後段のHTTP Clientから同じ定義を使うためにexportしています。
+In this code, `GreetingContract` defines the input, response, and Pipeline, and `GreetingController` implements the Contract using HTTP. The generation of `GreetingService` is consolidated into Modules, and Application selects only the Module to start. Only `GreetingContract` is exported to use the same definition from the subsequent HTTP Client.
 
-Application DefinitionはHTTP serverそのものではありません。Runtimeに依存しないApplication Graphを先に定義し、HTTP listenerなど実行環境固有の機能はHostから接続します。
+Application Definition is not an HTTP server itself. Define the Application Graph, which does not depend on Runtime, first, and connect execution environment-specific functions such as HTTP listener from the Host.
 
-同じProtocolのprocedureは一つのgroupへまとめられます。複数のProtocolを扱う場合は、`contract([http({...}), graphqlGroup, websocketGroup, sseGroup])`のようにgroupを並べます。featureごとに分割したContractは、`contract.merge(contracts)`で統合できます。
+Procedures of the same protocol are grouped together. When handling multiple protocols, arrange groups like `contract([http({...}), graphqlGroup, websocketGroup, sseGroup])`. Contracts divided by feature can be integrated with `contract.merge(contracts)`.
 
-## 振る舞いをテストする
+## Test the behavior
 
-`src/app.test.ts`では内部クラスの呼び出し順ではなく、HTTP境界から観測できる振る舞いを検証します。テスト名と期待値だけで、Applicationが何を保証するのか分かる状態にします。
+`src/app.test.ts` verifies the behavior that can be observed from the HTTP boundary, not the calling order of internal classes. Make it clear what the Application guarantees just by the test name and expected value.
 
 ```ts
 import { bootstrap } from '@loutrejs/loutre/host'
 import { expect, it } from 'vitest'
 import application from './app.js'
 
-it('GET /greetings/{name}は名前を含む挨拶を返す', async () => {
-  // Hostをテスト間で共有しない。Application stateを持ち越さないため。
+it('GET /greetings/{name} returns greetings including name', async () => {
+  // Don't share Host between tests. To avoid carrying over Application state.
   const app = bootstrap({ application })
 
   try {
@@ -129,7 +129,7 @@ it('GET /greetings/{name}は名前を含む挨拶を返す', async () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
-      message: 'こんにちは、Loutre！',
+      message: 'Hello, Loutre!',
     })
   } finally {
     await app.close('test-complete')
@@ -137,17 +137,17 @@ it('GET /greetings/{name}は名前を含む挨拶を返す', async () => {
 })
 ```
 
-テストを実行します。
+Run the test.
 
 ```sh
 npm run test
 ```
 
-`bootstrap()`は実際のportを使わず、Web Standardの`fetch(request)`でApplicationを実行します。テスト、組み込み用途、Runtime adapterのいずれでも、同じApplication Definitionを再利用できます。
+`bootstrap()` does not use the actual port and runs Application on Web Standard `fetch(request)`. You can reuse the same Application Definition whether for testing, embedded use, or runtime adapter.
 
-## Node.jsへ接続する
+## Connect to Node.js
 
-Node.js Targetの`src/main.ts`は、ApplicationをNode.js Runtimeへ接続します。
+Node.js Target `src/main.ts` connects Application to Node.js Runtime.
 
 ```ts
 import { nodeRuntime } from '@loutrejs/node'
@@ -158,44 +158,44 @@ const app = await nodeRuntime.create({ application })
 await app.serve({ port: 3000 })
 ```
 
-開発サーバーを起動します。
+Start the development server.
 
 ```sh
 npm run dev
 ```
 
-別のターミナルからリクエストを送ります。
+Send the request from another terminal.
 
 ```sh
 curl http://localhost:3000/greetings/Loutre
 ```
 
 ```json
-{ "message": "こんにちは、Loutre！" }
+{ "message": "Hello, Loutre!" }
 ```
 
-Runtimeだけを変更しても、`src/app.ts`のContract、Implementation、Moduleは変わりません。Bun、Deno、Cloudflare Workers、AWS Lambdaでは、生成された`src/main.ts`がそれぞれのRuntime adapterを接続します。
+Even if you change only Runtime, Contract, Implementation, and Module of `src/app.ts` will not change. For Bun, Deno, Cloudflare Workers, and AWS Lambda, the generated `src/main.ts` connects their respective Runtime adapters.
 
-## 変更を検証して記録する
+## Validate and record changes
 
-starterの`verify` scriptは、format、lint、型検査、Application Graph、テスト、Target固有のbuildをまとめて確認します。
+The starter `verify` script checks format, lint, type checking, Application Graph, tests, and Target-specific builds all at once.
 
 ```sh
 npm run verify
 ```
 
-検証が通ったら、変更したファイルの一覧ではなく、変更によって可能になったことをコミットへ残します。
+If the validation passes, we leave a commit not just a list of changed files, but what the changes made possible.
 
 ```sh
 git add src/app.ts src/app.test.ts
-git commit -m "feat: 名前ごとの挨拶を返せるようにする"
+git commit -m "feat: Enable to return greetings by name"
 ```
 
-`feat: app.tsを更新する`では変更の理由を後から判断できません。履歴だけを読んでも、何のために境界や振る舞いを変えたのか分かるメッセージにします。
+With `feat: Update app.ts`, the reason for the change cannot be determined later. Even if you only read the history, the message should make it clear why the boundaries and behavior were changed.
 
-## ContractからHTTP Clientを作る
+## Create HTTP Client from Contract
 
-HTTP Contractはserverだけでなく、clientのsource of truthとしても利用できます。Implementationやhandlerの型を公開する必要はありません。
+HTTP Contract can be used not only as a server but also as a source of truth for clients. There is no need to expose the implementation or handler types.
 
 ```ts
 import { createHttpClient, fetchHttpTransport } from '@loutrejs/loutre/http'
@@ -215,13 +215,13 @@ if (response.status === 200) {
 }
 ```
 
-request型はStandard Schemaのinput、response型はStandard Schemaのoutputから導出されます。responseはContractに宣言されたstatusとschemaで実行時に検証されます。
+The request type is derived from Standard Schema input, and the response type is derived from Standard Schema output. The response is validated at runtime using the status and schema declared in the Contract.
 
-独自の通信境界が必要な場合は、`HttpClientTransport`を実装して`createHttpClient()`へ渡します。テスト、IPC、独自のfetch policyでも、Contractから導出された同じclient surfaceを利用できます。
+If you want your own communication boundary, implement `HttpClientTransport` and pass it to `createHttpClient()`. Tests, IPC, and custom fetch policies can also utilize the same client surface derived from Contract.
 
-## Moduleの公開境界を作る
+## Create public boundaries for Module
 
-Moduleの`exports`は、Application Graph上のdependency boundaryです。別ModuleのProviderへ依存するときだけ、宣言元ModuleがProviderを`exports`し、依存元Moduleが宣言元を`imports`します。
+Module `exports` is a dependency boundary on the Application Graph. Only when depending on another module's Provider, the declaring module sets the provider to `exports`, and the dependent module sets the declaring source to `imports`.
 
 ```ts
 class UsersService {}
@@ -241,11 +241,11 @@ const BillingModule = defineModule(() => ({
 }))
 ```
 
-同じModule内の依存関係に`exports`は不要です。importされていてもexportされていないProviderへのcross-module dependencyは、Graph compile時に`LUTRE_MODULE_VISIBILITY`で拒否されます。
+`exports` is not required for dependencies within the same Module. Cross-module dependencies to Providers that are imported but not exported will be rejected with `LUTRE_MODULE_VISIBILITY` during Graph compile.
 
-## ArgumentsとTaskを定義する
+## Define Arguments and Tasks
 
-Hostから受け取るstructured inputは`Arguments`、Hostが明示的に実行する処理はpublic `Task`として宣言できます。
+Structured input received from the Host can be declared as `Arguments`, and processing explicitly executed by the Host can be declared as public `Task`.
 
 ```ts
 import { defineApplication, defineArgs, inject, task } from '@loutrejs/loutre'
@@ -273,7 +273,7 @@ export default defineApplication({
 })
 ```
 
-HostはArgumentsを渡してからTaskを実行します。`rebuild`をexportしたのは、Hostが実行対象として参照するためです。
+The Host passes the Arguments and then executes the Task. The reason why I exported `rebuild` is because the Host references it as an execution target.
 
 ```ts
 import { bootstrap } from '@loutrejs/loutre/host'
@@ -290,20 +290,20 @@ await app.run(rebuild)
 await app.close('complete')
 ```
 
-## 対応Runtime
+## Supported Runtime
 
-次のRuntimeを継続的に動作確認しています。
+We are continuously checking the operation of the following Runtimes.
 
-| Runtime            | 検証バージョン  |
-| ------------------ | --------------- |
-| Node.js            | 22 / 24 / 26    |
-| Deno               | 2.9             |
-| Bun                | 1.3 / 1.4       |
-| Cloudflare Workers | workerd         |
-| Electron           | 42 / 43         |
-| AWS Lambda         | Node.js 22 / 24 |
+| Runtime            | Validation version |
+| ------------------ | ------------------ |
+| Node.js            | 22 / 24 / 26       |
+| Deno               | 2.9                |
+| Bun                | 1.3 / 1.4          |
+| Cloudflare Workers | workerd            |
+| Electron           | 42 / 43            |
+| AWS Lambda         | Node.js 22 / 24    |
 
-Runtimeごとの主な接続APIは次のとおりです。
+The main connection APIs for each Runtime are:
 
 ```text
 Node.js             nodeRuntime.create() → app.serve()
@@ -314,9 +314,9 @@ AWS Lambda          awsLambdaRuntime.bind()
 Electron            electronRuntime.attach()
 ```
 
-## Application Graphを調べる
+## Examine the Application Graph
 
-`@loutrejs/cli`はApplication Graphの検査、図示、説明、deployment artifactの生成を担当します。starterには開発依存として含まれています。
+`@loutrejs/cli` is responsible for inspecting, illustrating, and explaining the Application Graph and generating deployment artifacts. Starter includes it as a development dependency.
 
 ```sh
 npm exec loutre -- check --entry src/app.ts
@@ -328,18 +328,18 @@ npm exec loutre -- build src/app.ts --out-dir dist/loutre
 npm exec loutre -- openapi --entry src/app.ts
 ```
 
-既存プロジェクトへ追加する場合は、`@loutrejs/cli`を開発依存としてインストールします。
+When adding to an existing project, install `@loutrejs/cli` as a development dependency.
 
 ```sh
 npm install --save-dev @loutrejs/cli
 ```
 
-`build --runtime`は`aws-lambda`、`cloudflare-workers`、`deno`のdeployment entry生成に対応します。
+`build --runtime` supports deployment entry generation for `aws-lambda`, `cloudflare-workers`, and `deno`.
 
 ```sh
 npm exec loutre -- build src/app.ts --runtime aws-lambda
 ```
 
-## 次に読む
+## Read next
 
-Application Graph、Contract、Implementation、Module、Runtimeの境界を詳しく知るには、[Loutreの設計](./architecture.md)へ進んでください。用途別の実行可能な構成は、[`examples/`](../examples/)から確認できます。
+To learn more about the boundaries between the Application Graph, Contracts, Implementations, Modules, and Runtimes, see [Loutre Architecture](./architecture.md). Runnable configurations are available in [`examples/`](../examples/).

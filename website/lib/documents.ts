@@ -1,27 +1,57 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import GithubSlugger from 'github-slugger'
+import type { Locale } from './i18n'
 
-export const documentNavigation = [
-  {
-    slug: 'getting-started',
-    label: 'はじめる',
-    title: 'Loutreをはじめる',
-    description:
-      'プロジェクト作成からHTTP、Task、Runtime、CLIまでを順に解説します。',
-    filename: 'getting-started.md',
-  },
-  {
-    slug: 'architecture',
-    label: 'Architecture',
-    title: 'Loutre Architecture',
-    description:
-      'Graph-firstの原則と、Application、Runtime、Toolingをつなぐ公開境界を解説します。',
-    filename: 'architecture.md',
-  },
-] as const
+const documentMetadata = {
+  en: [
+    {
+      slug: 'getting-started',
+      label: 'Getting Started',
+      title: 'Get started with Loutre',
+      description:
+        'Learn how to create a project and work with HTTP, Tasks, Runtimes, and the CLI.',
+      filename: 'getting-started.md',
+    },
+    {
+      slug: 'architecture',
+      label: 'Architecture',
+      title: 'Loutre Architecture',
+      description:
+        'Explore the public boundaries that connect Application, Runtime, and Tooling.',
+      filename: 'architecture.md',
+    },
+  ],
+  ja: [
+    {
+      slug: 'getting-started',
+      label: 'はじめる',
+      title: 'Loutreをはじめる',
+      description:
+        'プロジェクト作成からHTTP、Task、Runtime、CLIまでを順に解説します。',
+      filename: 'getting-started.md',
+    },
+    {
+      slug: 'architecture',
+      label: 'Architecture',
+      title: 'Loutre Architecture',
+      description:
+        'Application、Runtime、Toolingをつなぐ公開境界を解説します。',
+      filename: 'architecture.md',
+    },
+  ],
+} as const
 
-export type DocumentSlug = (typeof documentNavigation)[number]['slug']
+const documentDirectories: Record<Locale, string> = {
+  en: 'docs',
+  ja: path.join('docs', 'ja'),
+}
+
+export type DocumentSlug = (typeof documentMetadata.en)[number]['slug']
+
+export function getDocumentNavigation(locale: Locale) {
+  return documentMetadata[locale]
+}
 
 export type DocumentHeading = {
   depth: 2 | 3
@@ -35,7 +65,6 @@ export type Document = {
   headings: DocumentHeading[]
   label: string
   slug: DocumentSlug
-  sourceUrl: string
   title: string
 }
 
@@ -75,14 +104,21 @@ function collectHeadings(markdown: string) {
   })
 }
 
-export function getDocument(slug: DocumentSlug): Document {
-  const entry = documentNavigation.find((document) => document.slug === slug)
+export function getDocument(slug: DocumentSlug, locale: Locale): Document {
+  const entry = getDocumentNavigation(locale).find(
+    (document) => document.slug === slug,
+  )
 
   if (!entry) {
-    throw new Error(`公開対象ではないドキュメントです: ${slug}`)
+    throw new Error(`Document is not published: ${slug}`)
   }
 
-  const sourcePath = path.join(getRepositoryRoot(), 'docs', entry.filename)
+  const localizedDirectory = documentDirectories[locale]
+  const sourcePath = path.join(
+    getRepositoryRoot(),
+    localizedDirectory,
+    entry.filename,
+  )
   const source = fs.readFileSync(sourcePath, 'utf8')
   const content = source.replace(/^#\s+.+\n+/, '')
 
@@ -92,7 +128,6 @@ export function getDocument(slug: DocumentSlug): Document {
     headings: collectHeadings(content),
     label: entry.label,
     slug: entry.slug,
-    sourceUrl: `https://github.com/come25136/loutrejs/blob/main/docs/${entry.filename}`,
     title: entry.title,
   }
 }
