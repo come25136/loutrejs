@@ -111,7 +111,7 @@ export function ExamplesPage({ locale }: { locale: Locale }) {
   const copy = examplesCopy[locale]
 
   return (
-    <main className="border-b border-line bg-paper pb-30">
+    <main className="border-b border-line bg-paper pb-30 dark:bg-transparent">
       <section className="shell animate-reveal-up border-b border-line py-20 motion-reduce:animate-none">
         <p className="mb-5 font-mono text-xs font-medium tracking-[0.08em] text-copper-dark uppercase">
           Examples

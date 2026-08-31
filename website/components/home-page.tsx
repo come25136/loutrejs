@@ -149,7 +149,7 @@ function NumberedSection({
 }) {
   const section = (
     <section
-      className={`border-b border-line ${muted ? 'bg-surface-muted/70' : 'bg-paper'}`}
+      className={`border-b border-line ${muted ? 'bg-surface-muted/70 dark:bg-surface-muted/35' : 'bg-paper dark:bg-transparent'}`}
     >
       <div
         className={`shell relative pl-16 before:absolute before:top-0 before:bottom-0 before:left-3.5 before:border-l before:border-line max-sm:pl-0 max-sm:before:hidden ${className}`}
