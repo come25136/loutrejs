@@ -215,14 +215,17 @@ export function HomePage({ locale }: { locale: Locale }) {
               <span className="animate-word-in inline-block motion-reduce:animate-none">
                 {isJapanese ? 'ランタイムに' : 'TypeScript'}
               </span>
+              {!isJapanese && ' '}
               <wbr />
               <span className="animate-word-in inline-block [animation-delay:70ms] motion-reduce:animate-none">
                 {isJapanese ? '縛られない' : 'applications'}
               </span>
+              {!isJapanese && ' '}
               <wbr />
               <span className="animate-word-in inline-block [animation-delay:140ms] motion-reduce:animate-none">
                 {isJapanese ? 'TypeScript' : 'for any'}
               </span>
+              {!isJapanese && ' '}
               <wbr />
               <span className="animate-word-in inline-block [animation-delay:210ms] motion-reduce:animate-none">
                 {isJapanese ? 'アプリケーション' : 'runtime'}
@@ -430,22 +433,7 @@ export function HomePage({ locale }: { locale: Locale }) {
             <p>　description: HTTP Application entry module</p>
             <p>　imports: (none)</p>
           </div>
-          <div className="relative min-h-56 bg-gray-50 p-5">
-            <div className="absolute top-4 left-1/2 z-2 -translate-x-1/2 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 font-mono text-[10px] text-emerald-900">
-              Application
-            </div>
-            <div className="absolute top-20 left-[18%] z-2 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-[9px]">
-              UsersModule
-            </div>
-            <div className="absolute top-20 right-[18%] z-2 rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-[9px]">
-              HealthModule
-            </div>
-            <div className="absolute bottom-12 left-[14%] z-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 font-mono text-[9px]">
-              Contract (GET /users)
-            </div>
-            <div className="absolute right-[14%] bottom-12 z-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 font-mono text-[9px]">
-              Contract (GET /health)
-            </div>
+          <div className="relative min-h-56 overflow-hidden bg-gray-50 p-5">
             <svg
               className="absolute inset-0 size-full"
               viewBox="0 0 500 220"
@@ -458,6 +446,23 @@ export function HomePage({ locale }: { locale: Locale }) {
                 strokeWidth="1.2"
               />
             </svg>
+            <div className="relative z-2 grid min-h-48 grid-cols-2 grid-rows-3 items-center gap-x-3 gap-y-5">
+              <div className="col-span-2 justify-self-center rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 font-mono text-[10px] text-emerald-900">
+                Application
+              </div>
+              <div className="justify-self-center rounded-md border border-gray-300 bg-white px-2 py-2 font-mono text-[9px]">
+                UsersModule
+              </div>
+              <div className="justify-self-center rounded-md border border-gray-300 bg-white px-2 py-2 font-mono text-[9px]">
+                HealthModule
+              </div>
+              <div className="w-full min-w-0 rounded-md border border-blue-200 bg-blue-50 px-1.5 py-2 text-center font-mono text-[8px] whitespace-nowrap sm:text-[9px]">
+                Contract (GET /users)
+              </div>
+              <div className="w-full min-w-0 rounded-md border border-blue-200 bg-blue-50 px-1.5 py-2 text-center font-mono text-[8px] whitespace-nowrap sm:text-[9px]">
+                Contract (GET /health)
+              </div>
+            </div>
           </div>
         </div>
       </NumberedSection>

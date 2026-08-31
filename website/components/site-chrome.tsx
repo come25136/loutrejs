@@ -9,7 +9,7 @@ import { useEffect, type ReactNode } from 'react'
 function Brand({ prefix, label }: { prefix: string; label: string }) {
   return (
     <Link
-      className="inline-flex items-center gap-2 text-lg font-bold tracking-[-0.03em]"
+      className="inline-flex shrink-0 items-center gap-2 text-lg font-bold tracking-[-0.03em]"
       href={`${prefix}/`}
       aria-label={label}
     >
@@ -69,10 +69,10 @@ export function SiteChrome({ children }: { children: ReactNode }) {
   return (
     <div lang={isJapanese ? 'ja' : 'en'}>
       <header className="animate-header-in sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur-xl motion-reduce:animate-none">
-        <div className="shell flex min-h-16 items-center gap-9">
+        <div className="shell flex min-h-16 items-center gap-9 max-lg:gap-4">
           <Brand prefix={prefix} label={copy.brandLabel} />
           <nav
-            className="flex items-center gap-7 text-sm font-medium max-md:hidden"
+            className="flex items-center gap-7 text-sm font-medium max-lg:hidden"
             aria-label={copy.navigationLabel}
           >
             <Link
@@ -100,9 +100,9 @@ export function SiteChrome({ children }: { children: ReactNode }) {
               GitHub <ExternalLink size={12} aria-hidden="true" />
             </a>
           </nav>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <Link
-              className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
+              className="inline-flex min-h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
               href={languageDestination(pathname, isJapanese)}
               hrefLang={isJapanese ? 'en' : 'ja'}
               aria-label={copy.languageLabel}
@@ -110,13 +110,13 @@ export function SiteChrome({ children }: { children: ReactNode }) {
               <Languages size={14} aria-hidden="true" /> {copy.language}
             </Link>
             <a
-              className="hidden min-h-9 items-center gap-2 rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:bg-gray-50 sm:inline-flex"
+              className="hidden min-h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:bg-gray-50 sm:inline-flex"
               href="https://github.com/come25136/loutrejs"
             >
               <Star size={14} aria-hidden="true" /> GitHub
             </a>
             <Link
-              className="hidden min-h-9 items-center rounded-lg bg-ink px-4 text-xs font-semibold text-white transition hover:bg-gray-800 sm:inline-flex"
+              className="hidden min-h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-ink px-4 text-xs font-semibold text-white transition hover:bg-gray-800 sm:inline-flex"
               href={`${prefix}/docs/getting-started/`}
             >
               {copy.getStarted}

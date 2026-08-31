@@ -86,22 +86,22 @@ export function ExamplesPage({ locale }: { locale: Locale }) {
         <p className="mb-5 font-mono text-xs font-medium tracking-[0.08em] text-copper-dark uppercase">
           Examples
         </p>
-        <div className="grid grid-cols-[1.1fr_0.9fr] gap-20 max-sm:grid-cols-1 max-sm:gap-8">
-          <h1 className="m-0 text-[clamp(3rem,6vw,5.25rem)] leading-[0.98] font-bold tracking-[-0.065em]">
-            <span className="block whitespace-nowrap">
+        <div className="grid grid-cols-[1.1fr_0.9fr] gap-20 max-lg:grid-cols-1 max-lg:gap-8">
+          <h1 className="m-0 min-w-0 text-[clamp(3rem,6vw,5.25rem)] leading-[0.98] font-bold tracking-[-0.065em]">
+            <span className="block">
               {isJapanese ? '動くコードから' : 'Learn Loutre'}
             </span>
-            <span className="block whitespace-nowrap">
+            <span className="block">
               {isJapanese ? 'Loutreを学ぶ' : 'from working code'}
             </span>
           </h1>
-          <p className="m-0 max-w-lg self-end leading-8 text-ink-soft">
-            <span className="block whitespace-nowrap">
+          <p className="m-0 min-w-0 max-w-lg self-end leading-8 text-ink-soft">
+            <span className="block">
               {isJapanese
                 ? 'HTTP、CLI、Worker、Auth、Database'
                 : 'HTTP, CLI, Worker, Auth, and Database'}
             </span>
-            <span className="block whitespace-nowrap">
+            <span className="block">
               {isJapanese
                 ? '用途別のサンプルから使い方を確認できます'
                 : 'Explore focused examples for each use case'}
