@@ -1,14 +1,66 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+:root {
+  --site-canvas: #ffffff;
+  --site-surface: #ffffff;
+  --site-surface-muted: #f9fafb;
+  --site-surface-subtle: #f3f4f6;
+  --site-line: #e5e7eb;
+  --site-line-strong: #d1d5db;
+  --site-ink: #111827;
+  --site-ink-soft: #6b7280;
+  --site-ink-muted: #9ca3af;
+  --site-action: #111827;
+  --site-action-hover: #1f2937;
+  --site-action-foreground: #ffffff;
+  --site-code-inline: #f3f4f6;
+  --site-code-inline-text: #9a3412;
+  --site-accent-text: #e84f16;
+}
+
+html[data-theme='dark'] {
+  --site-canvas: #0b0f14;
+  --site-surface: #11161c;
+  --site-surface-muted: #0f1419;
+  --site-surface-subtle: #171d25;
+  --site-line: #252c35;
+  --site-line-strong: #39424e;
+  --site-ink: #f3f4f6;
+  --site-ink-soft: #9ca3af;
+  --site-ink-muted: #7d8790;
+  --site-action: #f9fafb;
+  --site-action-hover: #e5e7eb;
+  --site-action-foreground: #111827;
+  --site-code-inline: #171d25;
+  --site-code-inline-text: #ff9d76;
+  --site-accent-text: #ff7a45;
+}
+
+@theme inline {
+  --color-ink: var(--site-ink);
+  --color-ink-soft: var(--site-ink-soft);
+  --color-ink-muted: var(--site-ink-muted);
+  --color-paper: var(--site-canvas);
+  --color-paper-deep: var(--site-surface-muted);
+  --color-cream: var(--site-canvas);
+  --color-surface: var(--site-surface);
+  --color-surface-muted: var(--site-surface-muted);
+  --color-surface-subtle: var(--site-surface-subtle);
+  --color-line: var(--site-line);
+  --color-line-strong: var(--site-line-strong);
+  --color-action: var(--site-action);
+  --color-action-hover: var(--site-action-hover);
+  --color-action-foreground: var(--site-action-foreground);
+  --color-code-inline: var(--site-code-inline);
+  --color-code-inline-text: var(--site-code-inline-text);
+  --color-copper-dark: var(--site-accent-text);
+}
+
 @theme {
-  --color-ink: #111827;
-  --color-ink-soft: #6b7280;
-  --color-paper: #ffffff;
-  --color-paper-deep: #f3f4f6;
-  --color-cream: #ffffff;
   --color-copper: #ff6a30;
-  --color-copper-dark: #e84f16;
   --color-moss: #15803d;
   --font-sans: 'Inter Variable', 'Noto Sans JP', ui-sans-serif, sans-serif;
   --font-serif: 'Inter Variable', 'Noto Sans JP', ui-sans-serif, sans-serif;
@@ -78,10 +130,15 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    color-scheme: light;
+  }
+
+  html[data-theme='dark'] {
+    color-scheme: dark;
   }
 
   body {
-    @apply m-0 bg-white font-sans text-ink antialiased;
+    @apply m-0 bg-paper font-sans text-ink antialiased;
   }
 
   a,

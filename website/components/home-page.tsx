@@ -149,12 +149,12 @@ function NumberedSection({
 }) {
   const section = (
     <section
-      className={`border-b border-gray-200 ${muted ? 'bg-gray-50/70' : 'bg-white'}`}
+      className={`border-b border-line ${muted ? 'bg-surface-muted/70' : 'bg-paper'}`}
     >
       <div
-        className={`shell relative pl-16 before:absolute before:top-0 before:bottom-0 before:left-3.5 before:border-l before:border-gray-200 max-sm:pl-0 max-sm:before:hidden ${className}`}
+        className={`shell relative pl-16 before:absolute before:top-0 before:bottom-0 before:left-3.5 before:border-l before:border-line max-sm:pl-0 max-sm:before:hidden ${className}`}
       >
-        <span className="absolute top-8 left-0 z-2 grid size-7 place-items-center rounded-full bg-black text-xs font-bold text-white max-sm:hidden">
+        <span className="absolute top-8 left-0 z-2 grid size-7 place-items-center rounded-full bg-action text-xs font-bold text-action-foreground max-sm:hidden">
           {number}
         </span>
         {children}
@@ -168,11 +168,11 @@ function NumberedSection({
 function InstallCommand({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`flex min-h-12 items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 font-mono text-xs text-gray-800 ${className}`}
+      className={`flex min-h-12 items-center gap-3 rounded-lg border border-line bg-surface px-4 font-mono text-xs text-ink ${className}`}
     >
       <span className="text-emerald-700">$</span>
       <code>npm create loutre@latest my-app</code>
-      <Copy className="ml-auto text-gray-400" size={14} aria-hidden="true" />
+      <Copy className="ml-auto text-ink-muted" size={14} aria-hidden="true" />
     </div>
   )
 }
@@ -279,18 +279,18 @@ export function HomePage({ locale }: { locale: Locale }) {
                 {copy.heroWords[3]}
               </span>
             </h1>
-            <p className="mt-6 max-w-xl text-[15px] leading-7 text-gray-600">
+            <p className="mt-6 max-w-xl text-[15px] leading-7 text-ink-soft">
               {copy.introduction}
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-ink px-5 text-sm font-semibold text-white transition hover:bg-gray-800"
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-action px-5 text-sm font-semibold text-action-foreground transition hover:bg-action-hover"
                 href={`${routePrefix}/docs/getting-started/`}
               >
                 {copy.getStarted} <ArrowRight size={15} aria-hidden="true" />
               </Link>
               <a
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-gray-300 bg-white px-5 text-sm font-semibold transition hover:bg-gray-50"
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-surface px-5 text-sm font-semibold transition hover:bg-surface-muted"
                 href="https://github.com/come25136/loutrejs"
               >
                 GitHub <ExternalLink size={14} aria-hidden="true" />
@@ -304,14 +304,14 @@ export function HomePage({ locale }: { locale: Locale }) {
               <span className="size-2.5 rounded-full bg-[#ff5f56]" />
               <span className="size-2.5 rounded-full bg-[#ffbd2e]" />
               <span className="size-2.5 rounded-full bg-[#27c93f]" />
-              <span className="ml-3 font-mono text-[11px] text-gray-500">
+              <span className="ml-3 font-mono text-[11px] text-ink-soft">
                 app.ts
               </span>
             </div>
             <pre className="max-h-[38rem] overflow-auto px-2 py-6 font-mono text-[12px] leading-[1.65] [&_.hljs-attr]:text-[#79c0ff] [&_.hljs-comment]:text-[#8b949e] [&_.hljs-keyword]:text-[#ff7b72] [&_.hljs-literal]:text-[#79c0ff] [&_.hljs-number]:text-[#79c0ff] [&_.hljs-params]:text-[#e6edf3] [&_.hljs-property]:text-[#79c0ff] [&_.hljs-string]:text-[#a5d6ff] [&_.hljs-title]:text-[#d2a8ff] [&_.hljs-type]:text-[#ffa657] [&_.hljs-variable]:text-[#ffa657]">
               {highlightedCodeLines.map((line, index) => (
                 <span className="grid grid-cols-[2.2rem_1fr]" key={index}>
-                  <span className="pr-3 text-right text-gray-600 select-none">
+                  <span className="pr-3 text-right text-ink-soft select-none">
                     {index + 1}
                   </span>
                   <code
@@ -333,7 +333,7 @@ export function HomePage({ locale }: { locale: Locale }) {
         <div className="mt-7 grid grid-cols-6 gap-3 max-lg:grid-cols-3 max-sm:grid-cols-2">
           {runtimes.map((runtime) => (
             <article
-              className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-gray-200 bg-white p-4 text-center shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+              className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-line bg-surface p-4 text-center shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
               key={runtime.name}
             >
               <span className="text-4xl">{runtime.icon}</span>
@@ -347,18 +347,18 @@ export function HomePage({ locale }: { locale: Locale }) {
         <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
           {copy.applicationModelTitle}
         </h2>
-        <p className="mt-2 text-center text-sm text-gray-500">
+        <p className="mt-2 text-center text-sm text-ink-soft">
           {copy.applicationModelDescription}
         </p>
-        <div className="mt-7 grid grid-cols-5 divide-x divide-gray-200 overflow-hidden rounded-xl border border-gray-200 max-lg:grid-cols-2 max-lg:divide-x-0 max-sm:grid-cols-1">
+        <div className="mt-7 grid grid-cols-5 divide-x divide-line overflow-hidden rounded-xl border border-line max-lg:grid-cols-2 max-lg:divide-x-0 max-sm:grid-cols-1">
           {applicationModel.map((item) => (
             <article
-              className="flex min-h-40 flex-col items-center justify-center p-5 text-center max-lg:border-b max-lg:border-gray-200"
+              className="flex min-h-40 flex-col items-center justify-center p-5 text-center max-lg:border-b max-lg:border-line"
               key={item.title}
             >
-              <span className="mb-4 text-gray-900">{item.icon}</span>
+              <span className="mb-4 text-ink">{item.icon}</span>
               <h3 className="text-sm font-semibold">{item.title}</h3>
-              <p className="mt-0.5 max-w-36 text-[11px] leading-5 text-gray-500">
+              <p className="mt-0.5 max-w-36 text-[11px] leading-5 text-ink-soft">
                 {item.body}
               </p>
             </article>
@@ -370,11 +370,11 @@ export function HomePage({ locale }: { locale: Locale }) {
         <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
           {copy.separationTitle}
         </h2>
-        <p className="mt-2 text-center text-sm text-gray-500">
+        <p className="mt-2 text-center text-sm text-ink-soft">
           {copy.separationDescription}
         </p>
         <div className="isolate mx-auto mt-7 grid max-w-4xl grid-cols-[1fr_7rem_0.85fr] items-center max-md:grid-cols-1">
-          <div className="relative z-10 rounded-xl border border-gray-200 bg-white p-5 font-mono text-[11px] leading-6 text-gray-700 after:absolute after:top-1/2 after:-right-1 after:size-2 after:-translate-y-1/2 after:rounded-full after:bg-copper max-md:after:hidden">
+          <div className="relative z-10 rounded-xl border border-line bg-surface p-5 font-mono text-[11px] leading-6 text-ink after:absolute after:top-1/2 after:-right-1 after:size-2 after:-translate-y-1/2 after:rounded-full after:bg-copper max-md:after:hidden">
             <span
               className="absolute -bottom-1 left-1/2 size-2 -translate-x-1/2 rounded-full bg-copper md:hidden"
               aria-hidden="true"
@@ -395,13 +395,13 @@ export function HomePage({ locale }: { locale: Locale }) {
             aria-hidden="true"
           >
             <svg
-              className="absolute inset-0 size-full overflow-visible"
+              className="absolute inset-0 size-full overflow-visible text-line-strong"
               viewBox="0 0 112 245"
               preserveAspectRatio="none"
             >
               <g
                 fill="none"
-                stroke="#cbd5e1"
+                stroke="currentColor"
                 strokeWidth="1.2"
                 strokeDasharray="4 5"
                 vectorEffect="non-scaling-stroke"
@@ -438,13 +438,13 @@ export function HomePage({ locale }: { locale: Locale }) {
             </svg>
           </div>
           <div className="relative z-10 max-md:hidden">
-            <p className="mb-2 text-center text-[10px] font-semibold text-gray-500">
+            <p className="mb-2 text-center text-[10px] font-semibold text-ink-soft">
               Runtimes
             </p>
             <div className="space-y-1.5">
               {runtimes.map((runtime) => (
                 <div
-                  className="relative flex min-h-8 items-center gap-3 rounded-md border border-gray-200 bg-white px-3 text-[11px]"
+                  className="relative flex min-h-8 items-center gap-3 rounded-md border border-line bg-surface px-3 text-[11px]"
                   key={runtime.name}
                 >
                   <span className="text-base">{runtime.icon}</span>
@@ -460,13 +460,13 @@ export function HomePage({ locale }: { locale: Locale }) {
           >
             <div className="relative h-24" aria-hidden="true">
               <svg
-                className="pointer-events-none absolute inset-0 size-full overflow-visible"
+                className="pointer-events-none absolute inset-0 size-full overflow-visible text-line-strong"
                 viewBox="0 0 600 96"
                 preserveAspectRatio="none"
               >
                 <g
                   fill="none"
-                  stroke="#cbd5e1"
+                  stroke="currentColor"
                   strokeWidth="1.2"
                   strokeDasharray="4 5"
                   strokeLinecap="round"
@@ -513,7 +513,7 @@ export function HomePage({ locale }: { locale: Locale }) {
                   <span className="grid size-9 place-items-center text-2xl">
                     {runtime.icon}
                   </span>
-                  <span className="max-w-full text-[8px] leading-[1.15] font-medium text-gray-700 sm:text-[9px]">
+                  <span className="max-w-full text-[8px] leading-[1.15] font-medium text-ink sm:text-[9px]">
                     {runtime.name}
                   </span>
                 </div>
@@ -527,19 +527,19 @@ export function HomePage({ locale }: { locale: Locale }) {
         <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
           Application Graph
         </h2>
-        <p className="mt-2 text-center text-sm text-gray-500">
+        <p className="mt-2 text-center text-sm text-ink-soft">
           {copy.graphDescription}
         </p>
-        <div className="mx-auto mt-7 grid max-w-4xl grid-cols-2 overflow-hidden rounded-xl border border-gray-200 max-md:grid-cols-1">
-          <div className="border-r border-gray-200 bg-[#fbfcfd] p-5 font-mono text-[11px] leading-7 max-md:border-r-0 max-md:border-b">
-            <p className="mb-3 flex items-center gap-2 text-gray-700">
+        <div className="mx-auto mt-7 grid max-w-4xl grid-cols-2 overflow-hidden rounded-xl border border-line max-md:grid-cols-1">
+          <div className="border-r border-line bg-surface p-5 font-mono text-[11px] leading-7 max-md:border-r-0 max-md:border-b">
+            <p className="mb-3 flex items-center gap-2 text-ink">
               <Terminal size={14} /> loutre graph modules --entry src/app.ts
             </p>
             <p className="text-emerald-700">AppModule [module:1]</p>
             <p>　description: HTTP Application entry module</p>
             <p>　imports: (none)</p>
           </div>
-          <div className="relative flex min-h-56 items-center overflow-hidden bg-gray-50 p-5">
+          <div className="relative flex min-h-56 items-center overflow-hidden bg-surface-muted p-5">
             <MermaidDiagram
               locale={locale}
               variant="embedded"
@@ -585,6 +585,48 @@ flowchart TD
     class UC,HC contract;
 
     linkStyle default stroke:#CBD5E1,stroke-width:1.5px;`}
+              darkChart={`%%{init: {
+  "theme": "base",
+  "flowchart": {
+    "curve": "basis",
+    "diagramPadding": 8,
+    "nodeSpacing": 52,
+    "rankSpacing": 40,
+    "useMaxWidth": true
+  },
+  "themeVariables": {
+    "background": "#0F1419",
+    "fontFamily": "monospace",
+    "fontSize": "10px",
+    "lineColor": "#475569",
+    "primaryTextColor": "#E5E7EB"
+  }
+}}%%
+
+flowchart TD
+    A["Application"]
+
+    U["UsersModule"]
+    H["HealthModule"]
+
+    UC["Contract (GET /users)"]
+    HC["Contract (GET /health)"]
+
+    A --- U
+    A --- H
+
+    U --- UC
+    H --- HC
+
+    classDef application fill:#10251C,stroke:#2F7D57,stroke-width:1px,color:#D1FAE5;
+    classDef module fill:#11161C,stroke:#475569,stroke-width:1px,color:#E5E7EB;
+    classDef contract fill:#121A26,stroke:#46658A,stroke-width:1px,color:#DBEAFE;
+
+    class A application;
+    class U,H module;
+    class UC,HC contract;
+
+    linkStyle default stroke:#475569,stroke-width:1.5px;`}
             />
           </div>
         </div>

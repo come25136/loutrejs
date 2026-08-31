@@ -17,43 +17,68 @@ const mermaidCopy = {
   },
 } satisfies Record<Locale, Record<string, string>>
 
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: 'strict',
-  theme: 'base',
-  themeVariables: {
-    background: '#ffffff',
-    primaryColor: '#f9fafb',
-    primaryTextColor: '#111827',
-    primaryBorderColor: '#d1d5db',
-    lineColor: '#6b7280',
-    secondaryColor: '#fff7ed',
-    tertiaryColor: '#ffffff',
-    fontFamily: "'Inter Variable', 'Noto Sans JP', sans-serif",
-    fontSize: '13px',
-  },
-  flowchart: {
-    curve: 'basis',
-    nodeSpacing: 18,
-    rankSpacing: 24,
-    padding: 8,
-    useMaxWidth: true,
-  },
-})
+type Theme = 'light' | 'dark'
+
+function initializeMermaid(theme: Theme) {
+  const dark = theme === 'dark'
+
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: 'base',
+    themeVariables: {
+      background: dark ? '#0f1419' : '#ffffff',
+      primaryColor: dark ? '#11161c' : '#f9fafb',
+      primaryTextColor: dark ? '#e5e7eb' : '#111827',
+      primaryBorderColor: dark ? '#39424e' : '#d1d5db',
+      lineColor: dark ? '#64748b' : '#6b7280',
+      secondaryColor: dark ? '#211710' : '#fff7ed',
+      tertiaryColor: dark ? '#0b0f14' : '#ffffff',
+      fontFamily: "'Inter Variable', 'Noto Sans JP', sans-serif",
+      fontSize: '13px',
+    },
+    flowchart: {
+      curve: 'basis',
+      nodeSpacing: 18,
+      rankSpacing: 24,
+      padding: 8,
+      useMaxWidth: true,
+    },
+  })
+}
 
 export function MermaidDiagram({
   chart,
+  darkChart,
   locale,
   variant = 'card',
 }: {
   chart: string
+  darkChart?: string
   locale: Locale
   variant?: 'card' | 'embedded'
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [renderFailed, setRenderFailed] = useState(false)
+  const [theme, setTheme] = useState<Theme>('light')
   const copy = mermaidCopy[locale]
   const embedded = variant === 'embedded'
+  const renderedChart = theme === 'dark' && darkChart ? darkChart : chart
+
+  useEffect(() => {
+    const root = document.documentElement
+    const syncTheme = () =>
+      setTheme(root.dataset.theme === 'dark' ? 'dark' : 'light')
+    const observer = new MutationObserver(syncTheme)
+
+    syncTheme()
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    })
+
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const container = containerRef.current
@@ -66,9 +91,10 @@ export function MermaidDiagram({
     const renderId = `mermaid-${renderSequence++}`
 
     setRenderFailed(false)
+    initializeMermaid(theme)
 
     void mermaid
-      .render(renderId, chart)
+      .render(renderId, renderedChart)
       .then(({ svg, bindFunctions }) => {
         if (cancelled) {
           return
@@ -90,12 +116,12 @@ export function MermaidDiagram({
       cancelled = true
       container.replaceChildren()
     }
-  }, [chart])
+  }, [renderedChart, theme])
 
   if (renderFailed) {
     return (
       <pre className="not-prose my-7 overflow-x-auto rounded-xl border border-white/10 bg-[#0f1419] p-6 text-sm text-[#e5e7eb] shadow-[0_16px_36px_rgba(17,24,39,0.12)]">
-        <code>{chart}</code>
+        <code>{renderedChart}</code>
       </pre>
     )
   }
@@ -105,15 +131,15 @@ export function MermaidDiagram({
       className={
         embedded
           ? 'not-prose m-0 w-full min-w-0 bg-transparent'
-          : 'not-prose my-7 overflow-x-auto rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-[0_16px_36px_rgba(17,24,39,0.08)] sm:px-5'
+          : 'not-prose my-7 overflow-x-auto rounded-xl border border-line bg-surface px-4 py-4 shadow-[0_16px_36px_rgba(17,24,39,0.08)] sm:px-5'
       }
     >
       <div
         ref={containerRef}
         className={
           embedded
-            ? 'grid min-h-48 w-full min-w-0 place-items-center text-sm text-gray-500 [&_svg]:block [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-full'
-            : 'grid min-h-48 min-w-[36rem] place-items-center text-sm text-gray-500 [&_svg]:h-auto [&_svg]:max-w-full'
+            ? 'grid min-h-48 w-full min-w-0 place-items-center text-sm text-ink-soft [&_svg]:block [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-full'
+            : 'grid min-h-48 min-w-[36rem] place-items-center text-sm text-ink-soft [&_svg]:h-auto [&_svg]:max-w-full'
         }
         role="img"
         aria-label={copy.label}

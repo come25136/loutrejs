@@ -52,13 +52,31 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#ffffff',
-  colorScheme: 'light',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0f14' },
+  ],
+  colorScheme: 'light dark',
 }
+
+const themeScript = `(() => {
+  const storedTheme = localStorage.getItem('loutre-theme')
+  const theme = storedTheme === 'light' || storedTheme === 'dark'
+    ? storedTheme
+    : matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light'
+
+  document.documentElement.dataset.theme = theme
+  document.documentElement.style.colorScheme = theme
+})()`
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" data-scroll-behavior="smooth">
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body>
         <SiteChrome>{children}</SiteChrome>
       </body>

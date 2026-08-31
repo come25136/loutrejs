@@ -3,7 +3,7 @@ import type { Locale } from '../lib/i18n'
 import { ScrollReveal } from './scroll-reveal'
 
 const buttonClass =
-  'inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-transparent bg-ink px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-gray-800 max-sm:w-full'
+  'inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-transparent bg-action px-5 text-sm font-semibold text-action-foreground transition hover:-translate-y-0.5 hover:bg-action-hover max-sm:w-full'
 
 const examples = [
   {
@@ -111,8 +111,8 @@ export function ExamplesPage({ locale }: { locale: Locale }) {
   const copy = examplesCopy[locale]
 
   return (
-    <main className="border-b border-gray-200 bg-white pb-30">
-      <section className="shell animate-reveal-up border-b border-gray-200 py-20 motion-reduce:animate-none">
+    <main className="border-b border-line bg-paper pb-30">
+      <section className="shell animate-reveal-up border-b border-line py-20 motion-reduce:animate-none">
         <p className="mb-5 font-mono text-xs font-medium tracking-[0.08em] text-copper-dark uppercase">
           Examples
         </p>
@@ -135,7 +135,7 @@ export function ExamplesPage({ locale }: { locale: Locale }) {
         >
           {examples.map((example) => (
             <a
-              className="group flex min-h-60 flex-col rounded-xl border border-gray-200 bg-white p-7 transition hover:-translate-y-0.5 hover:border-gray-400 hover:shadow-[0_14px_36px_rgba(17,24,39,0.08)] max-sm:min-h-64"
+              className="group flex min-h-60 flex-col rounded-xl border border-line bg-surface p-7 transition hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_14px_36px_rgba(17,24,39,0.08)] max-sm:min-h-64"
               href={`https://github.com/come25136/loutrejs/tree/main/examples/${example.slug}`}
               key={example.slug}
             >
@@ -158,7 +158,7 @@ export function ExamplesPage({ locale }: { locale: Locale }) {
       </ScrollReveal>
 
       <ScrollReveal>
-        <section className="shell mt-10 flex items-center justify-end gap-8 rounded-xl border border-gray-200 bg-gray-50 px-6 py-5 max-sm:flex-col max-sm:items-stretch">
+        <section className="shell mt-10 flex items-center justify-end gap-8 rounded-xl border border-line bg-surface-muted px-6 py-5 max-sm:flex-col max-sm:items-stretch">
           <a
             className={buttonClass}
             href="https://github.com/come25136/loutrejs/tree/main/examples"
