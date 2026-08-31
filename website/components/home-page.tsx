@@ -365,6 +365,10 @@ export function HomePage({ locale }: { locale: Locale }) {
         </p>
         <div className="isolate mx-auto mt-7 grid max-w-4xl grid-cols-[1fr_7rem_0.85fr] items-center max-md:grid-cols-1">
           <div className="relative z-10 rounded-xl border border-gray-200 bg-white p-5 font-mono text-[11px] leading-6 text-gray-700 after:absolute after:top-1/2 after:-right-1 after:size-2 after:-translate-y-1/2 after:rounded-full after:bg-copper max-md:after:hidden">
+            <span
+              className="absolute -bottom-1 left-1/2 size-2 -translate-x-1/2 rounded-full bg-copper md:hidden"
+              aria-hidden="true"
+            />
             <p>
               <span className="text-copper-dark">const</span> application ={' '}
               <span className="text-[#7c3aed]">defineApplication</span>(&#123;
@@ -377,7 +381,7 @@ export function HomePage({ locale }: { locale: Locale }) {
             </p>
           </div>
           <div
-            className="relative z-0 hidden self-stretch md:block"
+            className="relative z-0 h-20 md:h-auto md:self-stretch"
             aria-hidden="true"
           >
             <svg
@@ -386,6 +390,7 @@ export function HomePage({ locale }: { locale: Locale }) {
               preserveAspectRatio="none"
             >
               <g
+                className="max-md:hidden"
                 fill="none"
                 stroke="#cbd5e1"
                 strokeWidth="1.2"
@@ -400,7 +405,7 @@ export function HomePage({ locale }: { locale: Locale }) {
                   />
                 ))}
               </g>
-              <g className="motion-reduce:hidden">
+              <g className="max-md:hidden motion-reduce:hidden">
                 {runtimeConnectionPaths.map((path, index) => (
                   <circle r="2.6" fill="#ff6a30" key={path}>
                     <animateMotion
@@ -421,19 +426,52 @@ export function HomePage({ locale }: { locale: Locale }) {
                   </circle>
                 ))}
               </g>
+              <g className="md:hidden">
+                <path
+                  id="runtime-connection-mobile"
+                  d="M56 0V64"
+                  fill="none"
+                  stroke="#cbd5e1"
+                  strokeWidth="1.2"
+                  strokeDasharray="4 5"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <path
+                  d="M9.333 64H102.667M9.333 64V245M28 64V245M46.667 64V245M65.333 64V245M84 64V245M102.667 64V245"
+                  fill="none"
+                  stroke="#cbd5e1"
+                  strokeWidth="1.2"
+                  strokeDasharray="4 5"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <circle className="motion-reduce:hidden" r="2.6" fill="#ff6a30">
+                  <animateMotion dur="2.4s" repeatCount="indefinite">
+                    <mpath href="#runtime-connection-mobile" />
+                  </animateMotion>
+                  <animate
+                    attributeName="opacity"
+                    values="0;1;1;0"
+                    keyTimes="0;0.12;0.82;1"
+                    dur="2.4s"
+                    repeatCount="indefinite"
+                  />
+                </circle>
+              </g>
             </svg>
           </div>
           <div className="relative z-10">
-            <p className="mb-2 text-center text-[10px] font-semibold text-gray-500">
+            <p className="mb-2 text-center text-[10px] font-semibold text-gray-500 max-md:hidden">
               Runtimes
             </p>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 max-md:grid max-md:grid-cols-6 max-md:space-y-0">
               {runtimes.map((runtime) => (
                 <div
-                  className="relative flex min-h-8 items-center gap-3 rounded-md border border-gray-200 bg-white px-3 text-[11px]"
+                  className="relative flex min-h-8 items-center gap-3 rounded-md border border-gray-200 bg-white px-3 text-[11px] max-md:min-h-20 max-md:flex-col max-md:justify-start max-md:gap-1 max-md:border-0 max-md:bg-transparent max-md:px-0 max-md:pt-2 max-md:text-center max-md:text-[9px] max-md:leading-tight"
                   key={runtime.name}
                 >
-                  <span className="text-base">{runtime.icon}</span>
+                  <span className="text-base max-md:text-xl">
+                    {runtime.icon}
+                  </span>
                   {runtime.name}
                 </div>
               ))}
