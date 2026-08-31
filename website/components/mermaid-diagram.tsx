@@ -6,6 +6,17 @@ import type { Locale } from '../lib/i18n'
 
 let renderSequence = 0
 
+const mermaidCopy = {
+  en: {
+    label: 'Document diagram',
+    loading: 'Loading diagram…',
+  },
+  ja: {
+    label: 'ドキュメントの構成図',
+    loading: '図を読み込んでいます…',
+  },
+} satisfies Record<Locale, Record<string, string>>
+
 mermaid.initialize({
   startOnLoad: false,
   securityLevel: 'strict',
@@ -39,6 +50,7 @@ export function MermaidDiagram({
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [renderFailed, setRenderFailed] = useState(false)
+  const copy = mermaidCopy[locale]
 
   useEffect(() => {
     const container = containerRef.current
@@ -91,11 +103,9 @@ export function MermaidDiagram({
         ref={containerRef}
         className="grid min-h-48 min-w-[36rem] place-items-center text-sm text-gray-500 [&_svg]:h-auto [&_svg]:max-w-full"
         role="img"
-        aria-label={
-          locale === 'ja' ? 'ドキュメントの構成図' : 'Document diagram'
-        }
+        aria-label={copy.label}
       >
-        {locale === 'ja' ? '図を読み込んでいます…' : 'Loading diagram…'}
+        {copy.loading}
       </div>
     </figure>
   )

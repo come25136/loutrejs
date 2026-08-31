@@ -5,6 +5,38 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ExternalLink, Languages, Star } from 'lucide-react'
 import { useEffect, type ReactNode } from 'react'
+import {
+  alternateLocale,
+  localeFromPathname,
+  localePrefix,
+  switchLocalePath,
+  type Locale,
+} from '../lib/i18n'
+
+const chromeCopy = {
+  en: {
+    brandLabel: 'Loutre home page',
+    navigationLabel: 'Main navigation',
+    documentation: 'Documentation',
+    examples: 'Examples',
+    getStarted: 'Get started',
+    community: 'Community',
+    resources: 'Resources',
+    language: '日本語',
+    languageLabel: 'Switch to Japanese',
+  },
+  ja: {
+    brandLabel: 'Loutreトップページ',
+    navigationLabel: 'メインナビゲーション',
+    documentation: 'ドキュメント',
+    examples: 'サンプル',
+    getStarted: 'はじめる',
+    community: 'コミュニティ',
+    resources: 'リソース',
+    language: 'English',
+    languageLabel: '英語に切り替える',
+  },
+} satisfies Record<Locale, Record<string, string>>
 
 function Brand({ prefix, label }: { prefix: string; label: string }) {
   return (
@@ -26,48 +58,19 @@ function Brand({ prefix, label }: { prefix: string; label: string }) {
   )
 }
 
-function languageDestination(pathname: string, isJapanese: boolean) {
-  if (isJapanese) {
-    return pathname.replace(/^\/ja(?=\/|$)/, '') || '/'
-  }
-
-  return pathname === '/' ? '/ja/' : `/ja${pathname}`
-}
-
 export function SiteChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
-  const isJapanese = pathname === '/ja' || pathname.startsWith('/ja/')
-  const prefix = isJapanese ? '/ja' : ''
-  const copy = isJapanese
-    ? {
-        brandLabel: 'Loutreトップページ',
-        navigationLabel: 'メインナビゲーション',
-        documentation: 'ドキュメント',
-        examples: 'サンプル',
-        getStarted: 'はじめる',
-        community: 'コミュニティ',
-        resources: 'リソース',
-        language: 'English',
-        languageLabel: '英語に切り替える',
-      }
-    : {
-        brandLabel: 'Loutre home page',
-        navigationLabel: 'Main navigation',
-        documentation: 'Documentation',
-        examples: 'Examples',
-        getStarted: 'Get started',
-        community: 'Community',
-        resources: 'Resources',
-        language: '日本語',
-        languageLabel: 'Switch to Japanese',
-      }
+  const currentLocale = localeFromPathname(pathname)
+  const targetLocale = alternateLocale(currentLocale)
+  const prefix = localePrefix(currentLocale)
+  const copy = chromeCopy[currentLocale]
 
   useEffect(() => {
-    document.documentElement.lang = isJapanese ? 'ja' : 'en'
-  }, [isJapanese])
+    document.documentElement.lang = currentLocale
+  }, [currentLocale])
 
   return (
-    <div lang={isJapanese ? 'ja' : 'en'}>
+    <div lang={currentLocale}>
       <header className="animate-header-in sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur-xl motion-reduce:animate-none">
         <div className="shell flex min-h-16 items-center gap-9 max-lg:gap-4">
           <Brand prefix={prefix} label={copy.brandLabel} />
@@ -103,8 +106,8 @@ export function SiteChrome({ children }: { children: ReactNode }) {
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <Link
               className="inline-flex min-h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
-              href={languageDestination(pathname, isJapanese)}
-              hrefLang={isJapanese ? 'en' : 'ja'}
+              href={switchLocalePath(pathname, currentLocale, targetLocale)}
+              hrefLang={targetLocale}
               aria-label={copy.languageLabel}
             >
               <Languages size={14} aria-hidden="true" /> {copy.language}

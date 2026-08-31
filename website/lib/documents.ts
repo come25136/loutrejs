@@ -42,6 +42,11 @@ const documentMetadata = {
   ],
 } as const
 
+const documentDirectories: Record<Locale, string> = {
+  en: 'docs',
+  ja: path.join('docs', 'ja'),
+}
+
 export type DocumentSlug = (typeof documentMetadata.en)[number]['slug']
 
 export function getDocumentNavigation(locale: Locale) {
@@ -109,7 +114,7 @@ export function getDocument(slug: DocumentSlug, locale: Locale): Document {
     throw new Error(`Document is not published: ${slug}`)
   }
 
-  const localizedDirectory = locale === 'ja' ? path.join('docs', 'ja') : 'docs'
+  const localizedDirectory = documentDirectories[locale]
   const sourcePath = path.join(
     getRepositoryRoot(),
     localizedDirectory,

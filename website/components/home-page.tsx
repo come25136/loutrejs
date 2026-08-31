@@ -14,7 +14,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import type { Locale } from '../lib/i18n'
+import { localePrefix, type Locale } from '../lib/i18n'
 import { ScrollReveal } from './scroll-reveal'
 
 function RuntimeLogo({
@@ -167,41 +167,79 @@ function InstallCommand({ className = '' }: { className?: string }) {
   )
 }
 
+const homeCopy = {
+  en: {
+    heroWords: ['TypeScript', 'applications', 'for any', 'runtime'],
+    wordSeparator: ' ',
+    introduction: 'Build Application, Contract, DI, and Task as one Graph',
+    getStarted: 'Get started',
+    runAnywhere: 'Run TypeScript anywhere',
+    applicationModelTitle: 'One Application Model',
+    applicationModelDescription:
+      'Represent Application, Contract, DI, and Task in one Graph',
+    applicationModelBodies: [
+      'Define protocols and types',
+      'Separate contracts from implementations',
+      'Compose dependencies with modules',
+      'Define jobs and CLIs with type safety',
+      'Visualize every dependency',
+    ],
+    separationTitle: 'Separate Application from Runtime',
+    separationDescription: 'Switch runtimes without changing application code',
+    graphDescription:
+      'Visualize dependencies and structure with the Loutre Graph API',
+    startBuilding: 'Start building now',
+  },
+  ja: {
+    heroWords: ['ランタイムに', '縛られない', 'TypeScript', 'アプリケーション'],
+    wordSeparator: '',
+    introduction: 'Application、Contract、DI、Taskを一つのGraphとして構築',
+    getStarted: 'はじめる',
+    runAnywhere: 'TypeScriptが動く場所なら、どこでも',
+    applicationModelTitle: '一つのApplication Model',
+    applicationModelDescription:
+      'Application、Contract、DI、Taskを一つのGraphで表現します',
+    applicationModelBodies: [
+      'Protocolと型を定義',
+      'Contractと実装を分離',
+      'Moduleで依存性を構成',
+      'JobやCLIも型安全に定義',
+      '依存関係をすべて可視化',
+    ],
+    separationTitle: 'ApplicationとRuntimeを分離',
+    separationDescription: 'コードは変えずに、Runtimeだけを切り替えられます',
+    graphDescription: 'Loutre Graph APIで、依存関係と構成を可視化',
+    startBuilding: '今すぐ始める',
+  },
+} as const
+
 export function HomePage({ locale }: { locale: Locale }) {
-  const isJapanese = locale === 'ja'
-  const routePrefix = isJapanese ? '/ja' : ''
+  const copy = homeCopy[locale]
+  const routePrefix = localePrefix(locale)
   const applicationModel = [
     {
       title: 'Contract',
-      body: isJapanese ? 'Protocolと型を定義' : 'Define protocols and types',
+      body: copy.applicationModelBodies[0],
       icon: <Braces size={25} strokeWidth={1.7} />,
     },
     {
       title: 'Implementation',
-      body: isJapanese
-        ? 'Contractと実装を分離'
-        : 'Separate contracts from implementations',
+      body: copy.applicationModelBodies[1],
       icon: <Wrench size={25} strokeWidth={1.7} />,
     },
     {
       title: 'Module & DI',
-      body: isJapanese
-        ? 'Moduleで依存性を構成'
-        : 'Compose dependencies with modules',
+      body: copy.applicationModelBodies[2],
       icon: <Box size={25} strokeWidth={1.7} />,
     },
     {
       title: 'Task',
-      body: isJapanese
-        ? 'JobやCLIも型安全に定義'
-        : 'Define jobs and CLIs with type safety',
+      body: copy.applicationModelBodies[3],
       icon: <Clock3 size={25} strokeWidth={1.7} />,
     },
     {
       title: 'Application Graph',
-      body: isJapanese
-        ? '依存関係をすべて可視化'
-        : 'Visualize every dependency',
+      body: copy.applicationModelBodies[4],
       icon: <GitBranch size={25} strokeWidth={1.7} />,
     },
   ] as const
@@ -213,36 +251,33 @@ export function HomePage({ locale }: { locale: Locale }) {
           <div className="animate-reveal-up motion-reduce:animate-none">
             <h1 className="max-w-2xl text-[clamp(2.7rem,5.6vw,4.3rem)] leading-[1.05] font-bold tracking-[-0.06em] text-balance">
               <span className="animate-word-in inline-block motion-reduce:animate-none">
-                {isJapanese ? 'ランタイムに' : 'TypeScript'}
+                {copy.heroWords[0]}
               </span>
-              {!isJapanese && ' '}
+              {copy.wordSeparator}
               <wbr />
               <span className="animate-word-in inline-block [animation-delay:70ms] motion-reduce:animate-none">
-                {isJapanese ? '縛られない' : 'applications'}
+                {copy.heroWords[1]}
               </span>
-              {!isJapanese && ' '}
+              {copy.wordSeparator}
               <wbr />
               <span className="animate-word-in inline-block [animation-delay:140ms] motion-reduce:animate-none">
-                {isJapanese ? 'TypeScript' : 'for any'}
+                {copy.heroWords[2]}
               </span>
-              {!isJapanese && ' '}
+              {copy.wordSeparator}
               <wbr />
               <span className="animate-word-in inline-block [animation-delay:210ms] motion-reduce:animate-none">
-                {isJapanese ? 'アプリケーション' : 'runtime'}
+                {copy.heroWords[3]}
               </span>
             </h1>
             <p className="mt-6 max-w-xl text-[15px] leading-7 text-gray-600">
-              {isJapanese
-                ? 'Application、Contract、DI、Taskを一つのGraphとして構築'
-                : 'Build Application, Contract, DI, and Task as one Graph'}
+              {copy.introduction}
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link
                 className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-ink px-5 text-sm font-semibold text-white transition hover:bg-gray-800"
                 href={`${routePrefix}/docs/getting-started/`}
               >
-                {isJapanese ? 'はじめる' : 'Get started'}{' '}
-                <ArrowRight size={15} aria-hidden="true" />
+                {copy.getStarted} <ArrowRight size={15} aria-hidden="true" />
               </Link>
               <a
                 className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-gray-300 bg-white px-5 text-sm font-semibold transition hover:bg-gray-50"
@@ -283,9 +318,7 @@ export function HomePage({ locale }: { locale: Locale }) {
 
       <NumberedSection number={2} muted className="py-10">
         <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
-          {isJapanese
-            ? 'TypeScriptが動く場所なら、どこでも'
-            : 'Run TypeScript anywhere'}
+          {copy.runAnywhere}
         </h2>
         <div className="mt-7 grid grid-cols-6 gap-3 max-lg:grid-cols-3 max-sm:grid-cols-2">
           {runtimes.map((runtime) => (
@@ -302,12 +335,10 @@ export function HomePage({ locale }: { locale: Locale }) {
 
       <NumberedSection number={3} className="py-10">
         <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
-          {isJapanese ? '一つのApplication Model' : 'One Application Model'}
+          {copy.applicationModelTitle}
         </h2>
         <p className="mt-2 text-center text-sm text-gray-500">
-          {isJapanese
-            ? 'Application、Contract、DI、Taskを一つのGraphで表現します'
-            : 'Represent Application, Contract, DI, and Task in one Graph'}
+          {copy.applicationModelDescription}
         </p>
         <div className="mt-7 grid grid-cols-5 divide-x divide-gray-200 overflow-hidden rounded-xl border border-gray-200 max-lg:grid-cols-2 max-lg:divide-x-0 max-sm:grid-cols-1">
           {applicationModel.map((item) => (
@@ -327,14 +358,10 @@ export function HomePage({ locale }: { locale: Locale }) {
 
       <NumberedSection number={4} muted className="py-10">
         <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
-          {isJapanese
-            ? 'ApplicationとRuntimeを分離'
-            : 'Separate Application from Runtime'}
+          {copy.separationTitle}
         </h2>
         <p className="mt-2 text-center text-sm text-gray-500">
-          {isJapanese
-            ? 'コードは変えずに、Runtimeだけを切り替えられます'
-            : 'Switch runtimes without changing application code'}
+          {copy.separationDescription}
         </p>
         <div className="isolate mx-auto mt-7 grid max-w-4xl grid-cols-[1fr_7rem_0.85fr] items-center max-md:grid-cols-1">
           <div className="relative z-10 rounded-xl border border-gray-200 bg-white p-5 font-mono text-[11px] leading-6 text-gray-700 after:absolute after:top-1/2 after:-right-1 after:size-2 after:-translate-y-1/2 after:rounded-full after:bg-copper max-md:after:hidden">
@@ -420,9 +447,7 @@ export function HomePage({ locale }: { locale: Locale }) {
           Application Graph
         </h2>
         <p className="mt-2 text-center text-sm text-gray-500">
-          {isJapanese
-            ? 'Loutre Graph APIで、依存関係と構成を可視化'
-            : 'Visualize dependencies and structure with the Loutre Graph API'}
+          {copy.graphDescription}
         </p>
         <div className="mx-auto mt-7 grid max-w-4xl grid-cols-2 overflow-hidden rounded-xl border border-gray-200 max-md:grid-cols-1">
           <div className="border-r border-gray-200 bg-[#fbfcfd] p-5 font-mono text-[11px] leading-7 max-md:border-r-0 max-md:border-b">
@@ -469,7 +494,7 @@ export function HomePage({ locale }: { locale: Locale }) {
 
       <NumberedSection number={6} muted className="overflow-hidden py-10">
         <h2 className="text-center text-2xl font-semibold tracking-[-0.035em]">
-          {isJapanese ? '今すぐ始める' : 'Start building now'}
+          {copy.startBuilding}
         </h2>
         <div className="relative mx-auto mt-6 max-w-2xl">
           <InstallCommand />
