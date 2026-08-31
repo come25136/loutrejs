@@ -366,7 +366,7 @@ export function HomePage({ locale }: { locale: Locale }) {
         <div className="isolate mx-auto mt-7 grid max-w-4xl grid-cols-[1fr_7rem_0.85fr] items-center max-md:grid-cols-1">
           <div className="relative z-10 rounded-xl border border-gray-200 bg-white p-5 font-mono text-[11px] leading-6 text-gray-700 after:absolute after:top-1/2 after:-right-1 after:size-2 after:-translate-y-1/2 after:rounded-full after:bg-copper max-md:after:hidden">
             <span
-              className="absolute -bottom-1 left-1/2 size-2 -translate-x-1/2 rounded-full bg-copper md:hidden"
+              className="absolute -bottom-1 left-6 size-2 rounded-full bg-copper md:hidden"
               aria-hidden="true"
             />
             <p>
@@ -381,9 +381,10 @@ export function HomePage({ locale }: { locale: Locale }) {
             </p>
           </div>
           <div
-            className="relative z-0 h-20 md:h-auto md:self-stretch"
+            className="relative z-0 h-8 md:h-auto md:self-stretch"
             aria-hidden="true"
           >
+            <span className="absolute inset-y-0 left-6 border-l border-dashed border-slate-300 md:hidden" />
             <svg
               className="absolute inset-0 size-full overflow-visible"
               viewBox="0 0 112 245"
@@ -426,52 +427,23 @@ export function HomePage({ locale }: { locale: Locale }) {
                   </circle>
                 ))}
               </g>
-              <g className="md:hidden">
-                <path
-                  id="runtime-connection-mobile"
-                  d="M56 0V64"
-                  fill="none"
-                  stroke="#cbd5e1"
-                  strokeWidth="1.2"
-                  strokeDasharray="4 5"
-                  vectorEffect="non-scaling-stroke"
-                />
-                <path
-                  d="M9.333 64H102.667M9.333 64V245M28 64V245M46.667 64V245M65.333 64V245M84 64V245M102.667 64V245"
-                  fill="none"
-                  stroke="#cbd5e1"
-                  strokeWidth="1.2"
-                  strokeDasharray="4 5"
-                  vectorEffect="non-scaling-stroke"
-                />
-                <circle className="motion-reduce:hidden" r="2.6" fill="#ff6a30">
-                  <animateMotion dur="2.4s" repeatCount="indefinite">
-                    <mpath href="#runtime-connection-mobile" />
-                  </animateMotion>
-                  <animate
-                    attributeName="opacity"
-                    values="0;1;1;0"
-                    keyTimes="0;0.12;0.82;1"
-                    dur="2.4s"
-                    repeatCount="indefinite"
-                  />
-                </circle>
-              </g>
             </svg>
           </div>
-          <div className="relative z-10">
-            <p className="mb-2 text-center text-[10px] font-semibold text-gray-500 max-md:hidden">
+          <div className="relative z-10 max-md:pl-10">
+            <span
+              className="absolute top-0 bottom-4 left-6 border-l border-dashed border-slate-300 md:hidden"
+              aria-hidden="true"
+            />
+            <p className="mb-2 text-center text-[10px] font-semibold text-gray-500 max-md:text-left">
               Runtimes
             </p>
-            <div className="space-y-1.5 max-md:grid max-md:grid-cols-6 max-md:space-y-0">
+            <div className="space-y-1.5">
               {runtimes.map((runtime) => (
                 <div
-                  className="relative flex min-h-8 items-center gap-3 rounded-md border border-gray-200 bg-white px-3 text-[11px] max-md:min-h-20 max-md:flex-col max-md:justify-start max-md:gap-1 max-md:border-0 max-md:bg-transparent max-md:px-0 max-md:pt-2 max-md:text-center max-md:text-[9px] max-md:leading-tight"
+                  className="relative flex min-h-8 items-center gap-3 rounded-md border border-gray-200 bg-white px-3 text-[11px] max-md:min-h-12 max-md:before:absolute max-md:before:top-1/2 max-md:before:-left-4 max-md:before:w-4 max-md:before:border-t max-md:before:border-dashed max-md:before:border-slate-300"
                   key={runtime.name}
                 >
-                  <span className="text-base max-md:text-xl">
-                    {runtime.icon}
-                  </span>
+                  <span className="text-base">{runtime.icon}</span>
                   {runtime.name}
                 </div>
               ))}
