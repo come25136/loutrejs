@@ -75,6 +75,15 @@ const runtimeConnectionPaths = [
   'M 0 122.5 C 38 122.5 62 229 112 229',
 ] as const
 
+const mobileRuntimeConnectionPaths = [
+  'M 300 0 C 300 30 50 34 50 96',
+  'M 300 0 C 300 30 150 38 150 96',
+  'M 300 0 C 300 30 250 46 250 96',
+  'M 300 0 C 300 30 350 46 350 96',
+  'M 300 0 C 300 30 450 38 450 96',
+  'M 300 0 C 300 30 550 34 550 96',
+] as const
+
 const codeExample = `import {
   contract,
   defineApplication,
@@ -367,7 +376,7 @@ export function HomePage({ locale }: { locale: Locale }) {
         <div className="isolate mx-auto mt-7 grid max-w-4xl grid-cols-[1fr_7rem_0.85fr] items-center max-md:grid-cols-1">
           <div className="relative z-10 rounded-xl border border-gray-200 bg-white p-5 font-mono text-[11px] leading-6 text-gray-700 after:absolute after:top-1/2 after:-right-1 after:size-2 after:-translate-y-1/2 after:rounded-full after:bg-copper max-md:after:hidden">
             <span
-              className="absolute -bottom-1 left-6 size-2 rounded-full bg-copper md:hidden"
+              className="absolute -bottom-1 left-1/2 size-2 -translate-x-1/2 rounded-full bg-copper md:hidden"
               aria-hidden="true"
             />
             <p>
@@ -382,17 +391,15 @@ export function HomePage({ locale }: { locale: Locale }) {
             </p>
           </div>
           <div
-            className="relative z-0 h-8 md:h-auto md:self-stretch"
+            className="relative z-0 hidden self-stretch md:block"
             aria-hidden="true"
           >
-            <span className="absolute inset-y-0 left-6 border-l border-dashed border-slate-300 md:hidden" />
             <svg
               className="absolute inset-0 size-full overflow-visible"
               viewBox="0 0 112 245"
               preserveAspectRatio="none"
             >
               <g
-                className="max-md:hidden"
                 fill="none"
                 stroke="#cbd5e1"
                 strokeWidth="1.2"
@@ -407,7 +414,7 @@ export function HomePage({ locale }: { locale: Locale }) {
                   />
                 ))}
               </g>
-              <g className="max-md:hidden motion-reduce:hidden">
+              <g className="motion-reduce:hidden">
                 {runtimeConnectionPaths.map((path, index) => (
                   <circle r="2.6" fill="#ff6a30" key={path}>
                     <animateMotion
@@ -430,22 +437,85 @@ export function HomePage({ locale }: { locale: Locale }) {
               </g>
             </svg>
           </div>
-          <div className="relative z-10 max-md:pl-10">
-            <span
-              className="absolute top-0 bottom-4 left-6 border-l border-dashed border-slate-300 md:hidden"
-              aria-hidden="true"
-            />
-            <p className="mb-2 text-center text-[10px] font-semibold text-gray-500 max-md:text-left">
+          <div className="relative z-10 max-md:hidden">
+            <p className="mb-2 text-center text-[10px] font-semibold text-gray-500">
               Runtimes
             </p>
             <div className="space-y-1.5">
               {runtimes.map((runtime) => (
                 <div
-                  className="relative flex min-h-8 items-center gap-3 rounded-md border border-gray-200 bg-white px-3 text-[11px] max-md:min-h-12 max-md:before:absolute max-md:before:top-1/2 max-md:before:-left-4 max-md:before:w-4 max-md:before:border-t max-md:before:border-dashed max-md:before:border-slate-300"
+                  className="relative flex min-h-8 items-center gap-3 rounded-md border border-gray-200 bg-white px-3 text-[11px]"
                   key={runtime.name}
                 >
                   <span className="text-base">{runtime.icon}</span>
                   {runtime.name}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div
+            className="relative col-span-full md:hidden"
+            aria-label="Runtimes"
+          >
+            <div className="relative h-24" aria-hidden="true">
+              <svg
+                className="pointer-events-none absolute inset-0 size-full overflow-visible"
+                viewBox="0 0 600 96"
+                preserveAspectRatio="none"
+              >
+                <g
+                  fill="none"
+                  stroke="#cbd5e1"
+                  strokeWidth="1.2"
+                  strokeDasharray="4 5"
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                >
+                  {mobileRuntimeConnectionPaths.map((path, index) => (
+                    <path
+                      id={`runtime-connection-mobile-${index}`}
+                      d={path}
+                      key={path}
+                    />
+                  ))}
+                </g>
+                <g className="motion-reduce:hidden">
+                  {mobileRuntimeConnectionPaths.map((path, index) => (
+                    <circle r="2.6" fill="#ff6a30" key={path}>
+                      <animateMotion
+                        dur={`${2.4 + index * 0.08}s`}
+                        begin={`${index * 0.14}s`}
+                        repeatCount="indefinite"
+                      >
+                        <mpath href={`#runtime-connection-mobile-${index}`} />
+                      </animateMotion>
+                      <animate
+                        attributeName="opacity"
+                        values="0;1;1;0"
+                        keyTimes="0;0.12;0.82;1"
+                        dur={`${2.4 + index * 0.08}s`}
+                        begin={`${index * 0.14}s`}
+                        repeatCount="indefinite"
+                      />
+                    </circle>
+                  ))}
+                </g>
+              </svg>
+            </div>
+
+            <div className="grid grid-cols-6">
+              {runtimes.map((runtime) => (
+                <div
+                  className="flex min-w-0 flex-col items-center gap-2 text-center"
+                  key={runtime.name}
+                >
+                  <span className="grid size-9 place-items-center text-2xl">
+                    {runtime.icon}
+                  </span>
+                  <span className="max-w-full text-[8px] leading-[1.15] font-medium text-gray-700 sm:text-[9px]">
+                    {runtime.name}
+                  </span>
                 </div>
               ))}
             </div>
