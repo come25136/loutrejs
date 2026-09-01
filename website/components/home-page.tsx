@@ -91,21 +91,26 @@ const codeExample = `import {
   defineModule,
   implementation,
 } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const AppContract = contract([
   http({
-    hello: {
+    greet: {
       method: 'GET',
-      path: '/',
+      path: '/{name}',
+      request: {
+        params: {
+          name: z.string().min(2),
+        },
+      },
       responses: {
         ok: {
           status: 200,
           body: z.object({ message: z.string() }),
         },
       },
-      pipeline: [http.controller],
+      pipeline: [validate.params, http.controller],
     },
   }),
 ])
@@ -115,9 +120,9 @@ const AppController = implementation({
   contract: AppContract,
   protocol: http,
   factory: () => ({
-    async hello(ctx) {
+    async greet(ctx) {
       return ctx.response.ok({
-        body: { message: 'Hello from Loutre!' },
+        body: { message: "Hello, " + ctx.params.name + "!" },
       })
     },
   }),

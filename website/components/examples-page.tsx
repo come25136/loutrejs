@@ -30,8 +30,8 @@ const examples = [
     slug: 'hello-http',
     stackblitzUrl: stackblitzHelloHttpUrl,
     description: {
-      en: 'A minimal HTTP API built with a Contract and Controller',
-      ja: 'ContractとControllerを使った最小構成のHTTP API',
+      en: 'A minimal HTTP API with path parameters and validation',
+      ja: 'path parameterとvalidationを含む最小構成のHTTP API',
     },
   },
   {
