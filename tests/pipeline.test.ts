@@ -237,20 +237,21 @@ describe('continuation Pipeline', () => {
     ).rejects.toThrow('undeclared Context property extra')
   })
 
-  it('provides内の同名property重複を拒否する', async () => {
+  it('provides内の同名property重複をLayer定義時に拒否する', () => {
     const FIRST = contextKey('duplicate').of<string>()
     const SECOND = contextKey('duplicate').of<string>()
-    const broken = layer({
-      name: 'duplicate-provider',
-      provides: [FIRST, SECOND],
-      factory: () => async (_ctx, next) => {
-        await next({ duplicate: 'value' })
-      },
-    })
 
-    await expect(
-      executePipeline([broken, terminal], hooks({})),
-    ).rejects.toThrow('declared duplicate Context property')
+    expect(() =>
+      (layer as any)({
+        name: 'duplicate-provider',
+        provides: [FIRST, SECOND],
+        factory:
+          () =>
+          async (_ctx: object, next: (value: object) => Promise<void>) => {
+            await next({ duplicate: 'value' })
+          },
+      }),
+    ).toThrow('Layer provides contains duplicate Context property duplicate')
   })
 
   it('Prisma風callback wrapperでchildだけを囲み親後段へ戻る', async () => {

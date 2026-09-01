@@ -45,6 +45,30 @@ describe('Contract composition', () => {
     )
   })
 
+  it('同じHTTP protocolの複数groupをnamespaceへ統合できる', () => {
+    const Contract = contract([
+      http({
+        get: {
+          method: 'GET',
+          path: '/users/{id}',
+          responses: { ok: { status: 200, body: z.string() } },
+          pipeline: [http.controller],
+        },
+      }),
+      http({
+        create: {
+          method: 'POST',
+          path: '/users',
+          responses: { created: { status: 201, body: z.string() } },
+          pipeline: [http.controller],
+        },
+      }),
+    ])
+
+    expect(Object.keys(Contract.http)).toEqual(['get', 'create'])
+    expect(Object.keys(Contract.procedures)).toEqual(['get', 'create'])
+  })
+
   it('同じprocedureへ異なるprotocol groupを重ねられる', () => {
     const Contract = contract([
       protocolGroup('graphql', {
@@ -88,104 +112,7 @@ describe('Contract composition', () => {
     )
   })
 
-  it('分割したContractをprocedure単位でmergeできる', () => {
-    const ReadContract = contract([
-      http({
-        get: {
-          method: 'GET',
-          path: '/users/{id}',
-          responses: { ok: { status: 200, body: z.string() } },
-          pipeline: [http.controller],
-        },
-      }),
-    ])
-    const GraphqlContract = contract([
-      protocolGroup('graphql', {
-        get: protocol('graphql', 'graphql:Query.user'),
-      }),
-    ])
-    const EventsContract = contract([
-      protocolGroup('websocket', {
-        subscribe: protocol('websocket', 'websocket:user.events'),
-      }),
-      protocolGroup('sse', {
-        subscribe: protocol('sse', 'sse:user.events'),
-      }),
-    ])
-
-    const Contract = contract.merge([
-      ReadContract,
-      GraphqlContract,
-      EventsContract,
-    ])
-
-    expect(Object.keys(Contract.procedures)).toEqual(['get', 'subscribe'])
-    expect(Object.keys(Contract.procedures.get?.protocols ?? {})).toEqual([
-      'http',
-      'graphql',
-    ])
-    expect(Object.keys(Contract.procedures.subscribe?.protocols ?? {})).toEqual(
-      ['websocket', 'sse'],
-    )
-  })
-
-  it('空のmergeを拒否する', () => {
-    expect(() => (contract.merge as any)([])).toThrow(
-      /requires at least one Contract/,
-    )
-  })
-
-  it('merge時にHTTP methodとroute patternの重複を拒否する', () => {
-    const First = contract([
-      http({
-        get: {
-          method: 'GET',
-          path: '/users/{id}',
-          responses: { ok: { status: 200, body: z.string() } },
-          pipeline: [http.controller],
-        },
-      }),
-    ])
-    const Second = contract([
-      http({
-        find: {
-          method: 'get',
-          path: '/users/{userId}',
-          responses: { ok: { status: 200, body: z.string() } },
-          pipeline: [http.controller],
-        },
-      }),
-    ])
-
-    expect(() => (contract.merge as any)([First, Second])).toThrow(
-      /Duplicate protocol dispatch key "http:GET:\/users\/\{\}"/,
-    )
-  })
-
-  it('merge時に同じprocedureとprotocolの二重定義を拒否する', () => {
-    const First = contract([
-      http({
-        get: {
-          method: 'GET',
-          path: '/users',
-          responses: { ok: { status: 200, body: z.string() } },
-          pipeline: [http.controller],
-        },
-      }),
-    ])
-    const Second = contract([
-      http({
-        get: {
-          method: 'GET',
-          path: '/legacy-users',
-          responses: { ok: { status: 200, body: z.string() } },
-          pipeline: [http.controller],
-        },
-      }),
-    ])
-
-    expect(() => (contract.merge as any)([First, Second])).toThrow(
-      /Duplicate contract procedure protocol: get\.http/,
-    )
+  it('contract.mergeを公開しない', () => {
+    expect('merge' in contract).toBe(false)
   })
 })

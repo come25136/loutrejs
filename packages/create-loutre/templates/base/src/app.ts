@@ -6,7 +6,7 @@ import {
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
-const AppContract = contract([
+const HelloContract = contract([
   http({
     hello: {
       method: 'GET',
@@ -23,9 +23,16 @@ const AppContract = contract([
     },
   }),
 ])
+const AppContract = contract([
+  http({
+    app: {
+      routes: HelloContract.http,
+    },
+  }),
+])
 const AppController = implementation({
   name: 'AppController',
-  contract: AppContract,
+  contract: AppContract.http.app.hello,
   protocol: http,
   factory: () => ({
     async hello(ctx) {

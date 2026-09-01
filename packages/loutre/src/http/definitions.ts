@@ -1,9 +1,13 @@
 import type {
+  ContractBinding,
   ContractDefinition,
+  ContractOfBinding,
+  ResolvedContractNode,
   ContextProvidedBeforeTerminal,
   HasValidationBeforeTerminal,
   IsValidProtocolPipeline,
   PipelineItem,
+  ProcedureDefinition,
   ProtocolDescriptor,
   ProtocolFactory,
   ProtocolGroup,
@@ -15,11 +19,20 @@ import type {
   TerminalLayerDescriptor,
   ValidationLayerDescriptor,
 } from '../core/index.js'
-import { childPipelineOf, protocolGroup } from '../core/index.js'
+import { childPipelineOf } from '../core/index.js'
+import {
+  contractNodeBinding,
+  contractNodeMetadata,
+  protocolNamespaceBuilder,
+  protocolNamespaceType,
+} from '../core/contract-internal.js'
+import { httpNodeMetadata } from './internal.js'
 import type { Logger } from '../runtime/index.js'
 import {
+  assertValidHttpMethod,
   createHttpDispatchKey,
   type HttpDispatchKey,
+  type IsValidHttpMethod,
   type IsValidHttpPath,
   type PathParamNames,
   parseHttpPath,
@@ -81,8 +94,299 @@ export interface HttpProtocolDefinition {
   readonly interaction?: 'unary' | 'server-stream'
 }
 
+export interface HttpBranchDefinition {
+  readonly path?: string
+  readonly pipeline?: readonly PipelineItem[]
+  readonly responses?: Readonly<Record<string, HttpResponseDefinition>>
+  readonly routes: HttpRouteTree
+}
+
+export type HttpRouteTree = Readonly<
+  Record<
+    string,
+    HttpProtocolDefinition | HttpBranchDefinition | HttpResolvedNode
+  >
+>
+
+interface HttpResolvedNodeMetadata<
+  TSource extends HttpProtocolDefinition | HttpBranchDefinition =
+    | HttpProtocolDefinition
+    | HttpBranchDefinition,
+  THandlerName extends string | never = string | never,
+> {
+  readonly kind: 'leaf' | 'branch'
+  readonly source: TSource
+  readonly handlerName: THandlerName
+}
+
+export type HttpResolvedLeaf<
+  THandlerName extends string = string,
+  TSource extends HttpProtocolDefinition = HttpProtocolDefinition,
+  TEffective extends HttpProtocolDefinition = HttpProtocolDefinition,
+> = ResolvedContractNode<
+  ContractDefinition<{
+    readonly [K in THandlerName]: {
+      readonly kind: 'procedure'
+      readonly protocols: { readonly http: HttpProtocol<TEffective> }
+    }
+  }>,
+  'leaf'
+> & {
+  readonly [httpNodeMetadata]: HttpResolvedNodeMetadata<
+    TSource,
+    THandlerName
+  > & { readonly kind: 'leaf' }
+}
+
+type ResolvedContractOf<TNode> =
+  TNode extends ResolvedContractNode<infer TContract> ? TContract : never
+
+type HttpProtocolOfResolvedLeaf<TNode> =
+  ResolvedContractOf<TNode> extends ContractDefinition<infer TProcedures>
+    ? TProcedures[keyof TProcedures & string]['protocols'] extends {
+        readonly http: infer TProtocol extends ProtocolDescriptor<'http'>
+      }
+      ? TProtocol
+      : never
+    : never
+
+type FlatResolvedHttpProcedures<
+  TChildren extends Readonly<Record<string, unknown>>,
+  TPrefix extends string = '',
+> =
+  UnionToIntersection<
+    {
+      [K in keyof TChildren & string]: TChildren[K] extends HttpResolvedLeaf<
+        any,
+        any,
+        any
+      >
+        ? {
+            readonly [P in JoinProcedurePath<TPrefix, K>]: ProcedureDefinition<{
+              readonly http: HttpProtocolOfResolvedLeaf<TChildren[K]>
+            }>
+          }
+        : TChildren[K] extends HttpResolvedBranch<any, infer TGrandchildren>
+          ? FlatResolvedHttpProcedures<
+              TGrandchildren,
+              JoinProcedurePath<TPrefix, K>
+            >
+          : never
+    }[keyof TChildren & string]
+  > extends infer TProcedures extends Record<string, ProcedureDefinition>
+    ? TProcedures
+    : never
+
+export type HttpResolvedBranch<
+  TSource extends HttpBranchDefinition = HttpBranchDefinition,
+  TChildren extends Readonly<Record<string, HttpResolvedNode>> = Readonly<
+    Record<string, HttpResolvedNode>
+  >,
+> = ResolvedContractNode<
+  ContractDefinition<FlatResolvedHttpProcedures<TChildren>>,
+  'branch'
+> &
+  TChildren & {
+    readonly [httpNodeMetadata]: HttpResolvedNodeMetadata<TSource, never> & {
+      readonly kind: 'branch'
+    }
+  }
+
+export type HttpResolvedNode = ResolvedContractNode<
+  ContractDefinition,
+  'leaf' | 'branch'
+> & {
+  readonly [httpNodeMetadata]: HttpResolvedNodeMetadata
+}
+
+type SourceOfHttpNode<TNode> = TNode extends {
+  readonly [httpNodeMetadata]: HttpResolvedNodeMetadata<infer TSource, any>
+}
+  ? TSource
+  : TNode
+
+type HandlerNameOfHttpNode<TName extends string, TNode> = TNode extends {
+  readonly [httpNodeMetadata]: HttpResolvedNodeMetadata<any, infer THandlerName>
+}
+  ? [THandlerName] extends [never]
+    ? TName
+    : THandlerName & string
+  : TName
+
+type BranchPathOf<TBranch extends HttpBranchDefinition> = TBranch extends {
+  readonly path: infer TPath extends string
+}
+  ? TPath
+  : ''
+
+type BranchPipelineOf<TBranch extends HttpBranchDefinition> = TBranch extends {
+  readonly pipeline: infer TPipeline extends readonly PipelineItem[]
+}
+  ? TPipeline
+  : readonly []
+
+type BranchResponsesOf<TBranch extends HttpBranchDefinition> = TBranch extends {
+  readonly responses: infer TResponses extends Readonly<
+    Record<string, HttpResponseDefinition>
+  >
+}
+  ? TResponses
+  : {}
+
+type JoinHttpPath<
+  TParent extends string,
+  TChild extends string,
+> = TParent extends ''
+  ? TChild
+  : TChild extends '/'
+    ? TParent
+    : `${TParent}${TChild}`
+
+type MergeHttpResponses<
+  TParent extends Readonly<Record<string, HttpResponseDefinition>>,
+  TLocal extends Readonly<Record<string, HttpResponseDefinition>>,
+> =
+  Extract<keyof TParent, keyof TLocal> extends never ? TParent & TLocal : never
+
+type EffectiveHttpDefinition<
+  TDefinition extends HttpProtocolDefinition,
+  TParentPath extends string,
+  TParentPipeline extends readonly PipelineItem[],
+  TParentResponses extends Readonly<Record<string, HttpResponseDefinition>>,
+> = {
+  readonly method: TDefinition['method']
+  readonly path: JoinHttpPath<TParentPath, TDefinition['path']>
+  readonly responses: MergeHttpResponses<
+    TParentResponses,
+    TDefinition['responses']
+  >
+  readonly pipeline: readonly [...TParentPipeline, ...TDefinition['pipeline']]
+} & (TDefinition extends { readonly summary: infer TValue extends string }
+  ? { readonly summary: TValue }
+  : {}) &
+  (TDefinition extends { readonly description: infer TValue extends string }
+    ? { readonly description: TValue }
+    : {}) &
+  (TDefinition extends { readonly tags: infer TValue extends readonly string[] }
+    ? { readonly tags: TValue }
+    : {}) &
+  (TDefinition extends { readonly deprecated: infer TValue extends boolean }
+    ? { readonly deprecated: TValue }
+    : {}) &
+  (TDefinition extends {
+    readonly request: infer TValue extends HttpRequestDefinition
+  }
+    ? { readonly request: TValue }
+    : {}) &
+  (TDefinition extends {
+    readonly interaction: infer TValue extends 'unary' | 'server-stream'
+  }
+    ? { readonly interaction: TValue }
+    : {})
+
+type ResolvedHttpTree<
+  TTree extends Readonly<Record<string, unknown>>,
+  TParentPath extends string = '',
+  TParentPipeline extends readonly PipelineItem[] = readonly [],
+  TParentResponses extends Readonly<Record<string, HttpResponseDefinition>> =
+    {},
+> = {
+  readonly [K in keyof TTree]: ResolveHttpNode<
+    K & string,
+    TTree[K],
+    TParentPath,
+    TParentPipeline,
+    TParentResponses
+  >
+}
+
+type ResolveHttpNode<
+  TName extends string,
+  TNode,
+  TParentPath extends string,
+  TParentPipeline extends readonly PipelineItem[],
+  TParentResponses extends Readonly<Record<string, HttpResponseDefinition>>,
+> =
+  SourceOfHttpNode<TNode> extends infer TSource
+    ? TSource extends HttpProtocolDefinition
+      ? HttpResolvedLeaf<
+          HandlerNameOfHttpNode<TName, TNode>,
+          TSource,
+          EffectiveHttpDefinition<
+            TSource,
+            TParentPath,
+            TParentPipeline,
+            TParentResponses
+          >
+        >
+      : TSource extends HttpBranchDefinition
+        ? HttpResolvedBranch<
+            TSource,
+            ResolvedHttpTree<
+              TSource['routes'],
+              JoinHttpPath<TParentPath, BranchPathOf<TSource>>,
+              readonly [...TParentPipeline, ...BranchPipelineOf<TSource>],
+              MergeHttpResponses<TParentResponses, BranchResponsesOf<TSource>>
+            >
+          >
+        : never
+    : never
+
+type JoinProcedurePath<
+  TPrefix extends string,
+  TName extends string,
+> = TPrefix extends '' ? TName : `${TPrefix}.${TName}`
+
+type UnionToIntersection<T> = (
+  T extends unknown ? (value: T) => void : never
+) extends (value: infer TIntersection) => void
+  ? TIntersection
+  : never
+
+type FlatHttpProtocols<
+  TTree extends Readonly<Record<string, unknown>>,
+  TParentPath extends string = '',
+  TParentPipeline extends readonly PipelineItem[] = readonly [],
+  TParentResponses extends Readonly<Record<string, HttpResponseDefinition>> =
+    {},
+  TProcedurePrefix extends string = '',
+  TRootTree extends Readonly<Record<string, unknown>> = TTree,
+> = UnionToIntersection<
+  {
+    [K in keyof TTree & string]: SourceOfHttpNode<
+      TTree[K]
+    > extends infer TSource
+      ? TSource extends HttpProtocolDefinition
+        ? {
+            readonly [
+              P in JoinProcedurePath<TProcedurePrefix, K>
+            ]: HttpProtocol<
+              EffectiveHttpDefinition<
+                TSource,
+                TParentPath,
+                TParentPipeline,
+                TParentResponses
+              >,
+              ResolvedHttpTree<TRootTree>
+            >
+          }
+        : TSource extends HttpBranchDefinition
+          ? FlatHttpProtocols<
+              TSource['routes'],
+              JoinHttpPath<TParentPath, BranchPathOf<TSource>>,
+              readonly [...TParentPipeline, ...BranchPipelineOf<TSource>],
+              MergeHttpResponses<TParentResponses, BranchResponsesOf<TSource>>,
+              JoinProcedurePath<TProcedurePrefix, K>,
+              TRootTree
+            >
+          : never
+      : never
+  }[keyof TTree & string]
+>
+
 export interface HttpProtocol<
   TDefinition extends HttpProtocolDefinition = HttpProtocolDefinition,
+  TNamespace = unknown,
 > extends ProtocolDescriptor<
   'http',
   HttpControllerContextDefinition<TDefinition>,
@@ -90,6 +394,7 @@ export interface HttpProtocol<
   HttpDispatchKey<TDefinition['method'], TDefinition['path']>
 > {
   readonly definition: TDefinition
+  readonly [protocolNamespaceType]: TNamespace
   readonly interaction: TDefinition extends {
     readonly interaction: infer TInteraction
   }
@@ -265,6 +570,43 @@ type HttpPipelineConstraint<TDefinition extends HttpProtocolDefinition> =
       : { readonly pipeline: never }
     : { readonly pipeline: never }
 
+type HttpStatusDigit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
+type HttpStatusHundreds = '2' | '3' | '4' | '5'
+
+type IsValidHttpResponseStatus<TStatus extends number> = number extends TStatus
+  ? false
+  : `${TStatus}` extends `${HttpStatusHundreds}${HttpStatusDigit}${HttpStatusDigit}`
+    ? true
+    : false
+
+type IsBodylessHttpStatus<TStatus extends number> = TStatus extends
+  | 204
+  | 205
+  | 304
+  ? true
+  : false
+
+type IsResponseStatusCompatible<TResponse> =
+  TResponse extends HttpResponseDefinition
+    ? IsValidHttpResponseStatus<TResponse['status']> extends true
+      ? IsBodylessHttpStatus<TResponse['status']> extends true
+        ? [SchemaOutput<TResponse['body']>] extends [undefined]
+          ? true
+          : false
+        : true
+      : false
+    : false
+
+type AreResponseStatusesCompatible<
+  TResponses extends HttpProtocolDefinition['responses'],
+> = false extends {
+  [TVariant in keyof TResponses]: IsResponseStatusCompatible<
+    TResponses[TVariant]
+  >
+}[keyof TResponses]
+  ? false
+  : true
+
 type IsResponseHeadersSchemaCompatible<TResponse> =
   TResponse extends HttpResponseDefinition
     ? TResponse extends {
@@ -289,9 +631,13 @@ type AreResponseHeadersSchemasCompatible<
 type HttpResponseConstraint<TDefinition extends HttpProtocolDefinition> =
   string extends keyof TDefinition['responses']
     ? { readonly responses: never }
-    : AreResponseHeadersSchemasCompatible<TDefinition['responses']> extends true
-      ? AreErrorMappingsCompatible<TDefinition['responses']> extends true
-        ? unknown
+    : AreResponseStatusesCompatible<TDefinition['responses']> extends true
+      ? AreResponseHeadersSchemasCompatible<
+          TDefinition['responses']
+        > extends true
+        ? AreErrorMappingsCompatible<TDefinition['responses']> extends true
+          ? unknown
+          : { readonly responses: never }
         : { readonly responses: never }
       : { readonly responses: never }
 
@@ -335,24 +681,26 @@ type IsSingleStringLiteral<TValue extends string> = string extends TValue
 type HttpPathConstraint<TDefinition extends HttpProtocolDefinition> =
   IsSingleStringLiteral<TDefinition['method']> extends false
     ? { readonly method: never }
-    : IsSingleStringLiteral<TDefinition['path']> extends false
-      ? { readonly path: never }
-      : IsValidHttpPath<TDefinition['path']> extends true
-        ? TDefinition['request'] extends {
-            readonly params: infer TSchemas extends HttpParamsSchemas
-          }
-          ? IsExactParamsSchemaMap<TDefinition['path'], TSchemas> extends true
-            ? DoParamsSchemasAcceptStrings<TSchemas> extends true
-              ? unknown
+    : IsValidHttpMethod<TDefinition['method']> extends false
+      ? { readonly method: never }
+      : IsSingleStringLiteral<TDefinition['path']> extends false
+        ? { readonly path: never }
+        : IsValidHttpPath<TDefinition['path']> extends true
+          ? TDefinition['request'] extends {
+              readonly params: infer TSchemas extends HttpParamsSchemas
+            }
+            ? IsExactParamsSchemaMap<TDefinition['path'], TSchemas> extends true
+              ? DoParamsSchemasAcceptStrings<TSchemas> extends true
+                ? unknown
+                : { readonly request: never }
               : { readonly request: never }
-            : { readonly request: never }
-          : HasValidationBeforeTerminal<
-                TDefinition['pipeline'],
-                'params'
-              > extends true
-            ? { readonly pipeline: never }
-            : unknown
-        : { readonly path: never }
+            : HasValidationBeforeTerminal<
+                  TDefinition['pipeline'],
+                  'params'
+                > extends true
+              ? { readonly pipeline: never }
+              : unknown
+          : { readonly path: never }
 
 type ErrorMappingResult<TResponse> = TResponse extends {
   readonly error: infer TMapping extends HttpErrorMapping<any, any>
@@ -380,12 +728,179 @@ type AreErrorMappingsCompatible<
   ? false
   : true
 
+type IsConstraintSatisfied<TConstraint> = keyof TConstraint extends never
+  ? true
+  : false
+
+type IsValidHttpRouteName<TName extends string> = TName extends ''
+  ? false
+  : TName extends '__proto__'
+    ? false
+    : TName extends `${string}.${string}`
+      ? false
+      : TName extends `${number}`
+        ? false
+        : true
+
+type HasOnlyHttpNodeProperties<TNode, TAllowed extends PropertyKey> =
+  Exclude<keyof TNode, TAllowed> extends never ? true : false
+
+type IsExactHttpLeaf<TNode> = HasOnlyHttpNodeProperties<
+  TNode,
+  keyof HttpProtocolDefinition
+>
+
+type IsExactHttpBranch<TNode> = HasOnlyHttpNodeProperties<
+  TNode,
+  keyof HttpBranchDefinition
+>
+
+type IsBranchPipelineTerminalFree<TPipeline extends readonly PipelineItem[]> =
+  number extends TPipeline['length']
+    ? false
+    : TPipeline extends readonly [infer THead, ...infer TTail]
+      ? THead extends TerminalLayerDescriptor
+        ? false
+        : THead extends {
+              readonly kind: 'layer'
+              readonly pipeline: infer TChild extends readonly PipelineItem[]
+            }
+          ? IsBranchPipelineTerminalFree<TChild> extends true
+            ? IsBranchPipelineTerminalFree<
+                Extract<TTail, readonly PipelineItem[]>
+              >
+            : false
+          : IsBranchPipelineTerminalFree<
+              Extract<TTail, readonly PipelineItem[]>
+            >
+      : true
+
+type IsHttpBranchPathValid<TBranch extends HttpBranchDefinition> =
+  TBranch extends { readonly path: infer TPath extends string }
+    ? string extends TPath
+      ? false
+      : TPath extends '/'
+        ? true
+        : IsValidHttpPath<TPath>
+    : true
+
+type IsHttpBranchPipelineValid<TBranch extends HttpBranchDefinition> =
+  TBranch extends {
+    readonly pipeline: infer TPipeline extends readonly PipelineItem[]
+  }
+    ? IsBranchPipelineTerminalFree<TPipeline>
+    : true
+
+type IsHttpBranchResponsesValid<TBranch extends HttpBranchDefinition> =
+  TBranch extends {
+    readonly responses: infer TResponses extends Readonly<
+      Record<string, HttpResponseDefinition>
+    >
+  }
+    ? string extends keyof TResponses
+      ? false
+      : AreResponseHeadersSchemasCompatible<TResponses> extends true
+        ? AreErrorMappingsCompatible<TResponses>
+        : false
+    : true
+
+type HasHttpResponseCollision<
+  TParent extends Readonly<Record<string, HttpResponseDefinition>>,
+  TLocal extends Readonly<Record<string, HttpResponseDefinition>>,
+> = Extract<keyof TParent, keyof TLocal> extends never ? false : true
+
+type IsHttpResolvedLeafValid<
+  TDefinition extends HttpProtocolDefinition,
+  TParentPath extends string,
+  TParentPipeline extends readonly PipelineItem[],
+  TParentResponses extends Readonly<Record<string, HttpResponseDefinition>>,
+  TEffective extends HttpProtocolDefinition = EffectiveHttpDefinition<
+    TDefinition,
+    TParentPath,
+    TParentPipeline,
+    TParentResponses
+  >,
+> = IsConstraintSatisfied<
+  HttpPipelineConstraint<TEffective> &
+    HttpResponseConstraint<TEffective> &
+    HttpPathConstraint<TEffective>
+>
+
+type IsHttpTreeValid<
+  TTree extends Readonly<Record<string, unknown>>,
+  TParentPath extends string = '',
+  TParentPipeline extends readonly PipelineItem[] = readonly [],
+  TParentResponses extends Readonly<Record<string, HttpResponseDefinition>> =
+    {},
+> =
+  Extract<keyof TTree, number> extends never
+    ? false extends {
+        [K in keyof TTree & string]: IsValidHttpRouteName<K> extends true
+          ? SourceOfHttpNode<TTree[K]> extends infer TSource
+            ? TSource extends HttpProtocolDefinition
+              ? IsExactHttpLeaf<TSource> extends true
+                ? IsHttpResolvedLeafValid<
+                    TSource,
+                    TParentPath,
+                    TParentPipeline,
+                    TParentResponses
+                  >
+                : false
+              : TSource extends HttpBranchDefinition
+                ? IsExactHttpBranch<TSource> extends true
+                  ? IsHttpBranchPathValid<TSource> extends true
+                    ? IsHttpBranchPipelineValid<TSource> extends true
+                      ? IsHttpBranchResponsesValid<TSource> extends true
+                        ? HasHttpResponseCollision<
+                            TParentResponses,
+                            BranchResponsesOf<TSource>
+                          > extends false
+                          ? IsHttpTreeValid<
+                              TSource['routes'],
+                              JoinHttpPath<TParentPath, BranchPathOf<TSource>>,
+                              readonly [
+                                ...TParentPipeline,
+                                ...BranchPipelineOf<TSource>,
+                              ],
+                              MergeHttpResponses<
+                                TParentResponses,
+                                BranchResponsesOf<TSource>
+                              >
+                            >
+                          : false
+                        : false
+                      : false
+                    : false
+                  : false
+                : false
+            : false
+          : false
+      }[keyof TTree & string]
+      ? false
+      : true
+    : false
+
+type HttpTreeConstraint<TDefinitions extends HttpRouteTree> =
+  IsHttpTreeValid<TDefinitions> extends true
+    ? unknown
+    : { readonly __invalidHttpRouteTree__: never }
+
 function defineHttp<const TDefinition extends HttpProtocolDefinition>(
   definition: TDefinition &
     HttpPipelineConstraint<TDefinition> &
     HttpResponseConstraint<TDefinition> &
     HttpPathConstraint<TDefinition>,
 ): HttpProtocol<TDefinition> {
+  assertValidHttpMethod(definition.method)
+  for (const response of Object.values(definition.responses)) {
+    if (
+      !Number.isInteger(response.status) ||
+      response.status < 200 ||
+      response.status > 599
+    ) {
+      throw new Error(`Invalid HTTP response status: ${response.status}`)
+    }
+  }
   const segments = parseHttpPath(definition.path)
   const paramsSchemas = definition.request?.params
   if (paramsSchemas) {
@@ -426,44 +941,354 @@ function hasParamsValidation(pipeline: readonly PipelineItem[]): boolean {
   )
 }
 
-type HttpProtocolGroup<
-  TDefinitions extends Record<string, HttpProtocolDefinition>,
-> = ProtocolGroup<
-  'http',
-  {
-    [K in keyof TDefinitions]: HttpProtocol<TDefinitions[K]>
-  }
->
-
-type HttpDefinitionsConstraint<
-  TDefinitions extends Record<string, HttpProtocolDefinition>,
-> = {
-  [K in keyof TDefinitions]: TDefinitions[K] &
-    HttpPipelineConstraint<TDefinitions[K]> &
-    HttpResponseConstraint<TDefinitions[K]> &
-    HttpPathConstraint<TDefinitions[K]>
+interface HttpResolvedTemplateLeaf {
+  readonly kind: 'leaf'
+  readonly source: HttpProtocolDefinition
+  readonly handlerName: string
+  readonly protocol: HttpProtocol
 }
 
-function defineHttpGroup<
-  const TDefinitions extends Record<string, HttpProtocolDefinition>,
->(
-  definitions: TDefinitions & HttpDefinitionsConstraint<TDefinitions>,
+interface HttpResolvedTemplateBranch {
+  readonly kind: 'branch'
+  readonly source: HttpBranchDefinition
+  readonly children: Readonly<Record<string, HttpResolvedTemplate>>
+}
+
+type HttpResolvedTemplate =
+  | HttpResolvedTemplateLeaf
+  | HttpResolvedTemplateBranch
+
+interface HttpResolution {
+  readonly procedures: Record<string, HttpProtocol>
+  readonly tree: Readonly<Record<string, HttpResolvedTemplate>>
+}
+
+type HttpProtocolGroup<TDefinitions extends HttpRouteTree> = ProtocolGroup<
+  'http',
+  FlatHttpProtocols<TDefinitions> extends infer TProtocols extends Record<
+    string,
+    ProtocolDescriptor<'http'>
+  >
+    ? TProtocols
+    : never
+>
+
+function defineHttpGroup<const TDefinitions extends HttpRouteTree>(
+  definitions: TDefinitions & HttpTreeConstraint<TDefinitions>,
 ): HttpProtocolGroup<TDefinitions> {
-  return protocolGroup(
-    'http',
-    Object.fromEntries(
-      Object.entries(definitions as Record<string, HttpProtocolDefinition>).map(
-        ([name, definition]) => [name, defineHttp(definition as never)],
+  const resolution = resolveHttpTree(definitions, {
+    path: '',
+    pipeline: [],
+    responses: {},
+    procedurePrefix: '',
+  })
+  const group = {
+    kind: 'protocol-group' as const,
+    protocol: 'http' as const,
+    procedures: Object.freeze({ ...resolution.procedures }),
+  } as ProtocolGroup<'http', Record<string, HttpProtocol>> &
+    Record<PropertyKey, unknown>
+  Object.defineProperty(group, protocolNamespaceBuilder, {
+    enumerable: false,
+    value: (root: ContractDefinition) =>
+      buildHttpNamespace(resolution.tree, root, []),
+  })
+  return Object.freeze(group) as unknown as HttpProtocolGroup<TDefinitions>
+}
+
+interface HttpResolutionContext {
+  readonly path: string
+  readonly pipeline: readonly PipelineItem[]
+  readonly responses: Readonly<Record<string, HttpResponseDefinition>>
+  readonly procedurePrefix: string
+}
+
+const HTTP_LEAF_PROPERTIES = new Set<keyof HttpProtocolDefinition>([
+  'method',
+  'path',
+  'summary',
+  'description',
+  'tags',
+  'deprecated',
+  'request',
+  'responses',
+  'pipeline',
+  'interaction',
+])
+
+const HTTP_BRANCH_PROPERTIES = new Set<keyof HttpBranchDefinition>([
+  'path',
+  'pipeline',
+  'responses',
+  'routes',
+])
+
+function assertHttpRouteTreeObject(definitions: HttpRouteTree): void {
+  const prototype = Object.getPrototypeOf(definitions)
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error('HTTP route tree must be a plain object')
+  }
+}
+
+function assertHttpRouteName(name: string): void {
+  if (
+    name.length === 0 ||
+    name === '__proto__' ||
+    name.includes('.') ||
+    Number.isFinite(Number(name))
+  ) {
+    throw new Error(`Invalid HTTP Contract node name: ${JSON.stringify(name)}`)
+  }
+}
+
+function assertHttpNodeProperties(
+  source: HttpProtocolDefinition | HttpBranchDefinition,
+): void {
+  const allowed =
+    'method' in source ? HTTP_LEAF_PROPERTIES : HTTP_BRANCH_PROPERTIES
+  for (const property of Object.keys(source)) {
+    if (!allowed.has(property as never)) {
+      throw new Error(`Unknown HTTP Contract node property: ${property}`)
+    }
+  }
+}
+
+function resolveHttpTree(
+  definitions: HttpRouteTree,
+  context: HttpResolutionContext,
+): HttpResolution {
+  assertHttpRouteTreeObject(definitions)
+  const procedures: Record<string, HttpProtocol> = {}
+  const tree: Record<string, HttpResolvedTemplate> = {}
+
+  for (const [name, candidate] of Object.entries(definitions)) {
+    assertHttpRouteName(name)
+    const metadata =
+      typeof candidate === 'object' &&
+      candidate !== null &&
+      httpNodeMetadata in candidate
+        ? (candidate[httpNodeMetadata] as {
+            readonly kind: 'leaf' | 'branch'
+            readonly source: HttpProtocolDefinition | HttpBranchDefinition
+            readonly handlerName?: string
+          })
+        : undefined
+    const source = (metadata?.source ?? candidate) as
+      | HttpProtocolDefinition
+      | HttpBranchDefinition
+    assertHttpNodeProperties(source)
+    const procedureName =
+      context.procedurePrefix === ''
+        ? name
+        : `${context.procedurePrefix}.${name}`
+
+    if ('method' in source) {
+      const responses = mergeHttpResponses(context.responses, source.responses)
+      const definition: HttpProtocolDefinition = {
+        ...source,
+        path: joinHttpPath(context.path, source.path),
+        responses,
+        pipeline: [...context.pipeline, ...source.pipeline],
+      }
+      const protocol = defineHttp(definition as never)
+      procedures[procedureName] = protocol
+      tree[name] = {
+        kind: 'leaf',
+        source,
+        handlerName:
+          metadata?.kind === 'leaf' && metadata.handlerName
+            ? metadata.handlerName
+            : name,
+        protocol,
+      }
+      continue
+    }
+
+    assertBranchPipeline(source.pipeline ?? [])
+    const branchResponses = mergeHttpResponses(
+      context.responses,
+      source.responses ?? {},
+    )
+    const branch = resolveHttpTree(source.routes, {
+      path: joinHttpPath(context.path, source.path ?? ''),
+      pipeline: [...context.pipeline, ...(source.pipeline ?? [])],
+      responses: branchResponses,
+      procedurePrefix: procedureName,
+    })
+    Object.assign(procedures, branch.procedures)
+    tree[name] = {
+      kind: 'branch',
+      source,
+      children: branch.tree,
+    }
+  }
+
+  return { procedures, tree: Object.freeze(tree) }
+}
+
+function joinHttpPath(parent: string, child: string): string {
+  if (parent === '') return child
+  if (child === '' || child === '/') return parent
+  return `${parent}${child}`
+}
+
+function mergeHttpResponses(
+  parent: Readonly<Record<string, HttpResponseDefinition>>,
+  local: Readonly<Record<string, HttpResponseDefinition>>,
+): Readonly<Record<string, HttpResponseDefinition>> {
+  for (const name of Object.keys(local)) {
+    if (Object.hasOwn(parent, name)) {
+      throw new Error(`Duplicate inherited HTTP response variant: ${name}`)
+    }
+  }
+  return Object.freeze({ ...parent, ...local })
+}
+
+function assertBranchPipeline(pipeline: readonly PipelineItem[]): void {
+  for (const item of pipeline) {
+    if (item.kind === 'terminal') {
+      throw new Error('HTTP branch pipeline must not contain a terminal layer')
+    }
+    if (item.kind === 'layer') {
+      const child = childPipelineOf(item)
+      if (child) assertBranchPipeline(child)
+    }
+  }
+}
+
+function buildHttpNamespace(
+  tree: Readonly<Record<string, HttpResolvedTemplate>>,
+  root: ContractDefinition,
+  parentPath: readonly string[],
+): Readonly<Record<string, HttpResolvedNode>> {
+  const namespace: Record<string, HttpResolvedNode> = {}
+  for (const [name, template] of Object.entries(tree)) {
+    namespace[name] = buildHttpNode(template, root, [...parentPath, name])
+  }
+  return Object.freeze(namespace)
+}
+
+function buildHttpNode(
+  template: HttpResolvedTemplate,
+  root: ContractDefinition,
+  path: readonly string[],
+): HttpResolvedNode {
+  if (template.kind === 'leaf') {
+    const binding = {
+      kind: 'contract' as const,
+      procedures: Object.freeze({
+        [template.handlerName]: Object.freeze({
+          kind: 'procedure' as const,
+          protocols: Object.freeze({ http: template.protocol }),
+        }),
+      }),
+    } as ContractDefinition & Record<PropertyKey, unknown>
+    Object.defineProperty(binding, contractNodeMetadata, {
+      enumerable: false,
+      value: Object.freeze({
+        kind: 'leaf' as const,
+        root,
+        path: Object.freeze(['http', ...path]),
+        procedures: Object.freeze({
+          [template.handlerName]: path.join('.'),
+        }),
+      }),
+    })
+    Object.freeze(binding)
+
+    const node = {} as Record<PropertyKey, unknown>
+    Object.defineProperty(node, contractNodeBinding, {
+      enumerable: false,
+      value: binding,
+    })
+    Object.defineProperty(node, httpNodeMetadata, {
+      enumerable: false,
+      value: Object.freeze({
+        kind: 'leaf' as const,
+        root,
+        path: Object.freeze([...path]),
+        source: template.source,
+        handlerName: template.handlerName,
+      }),
+    })
+    return Object.freeze(node) as unknown as HttpResolvedLeaf
+  }
+
+  const children = buildHttpNamespace(template.children, root, path)
+  const procedures: Record<
+    string,
+    {
+      readonly kind: 'procedure'
+      readonly protocols: { readonly http: HttpProtocol }
+    }
+  > = {}
+  collectHttpNodeProcedures(template.children, '', procedures)
+  const binding = {
+    kind: 'contract' as const,
+    procedures: Object.freeze(procedures),
+  } as ContractDefinition & Record<PropertyKey, unknown>
+  Object.defineProperty(binding, contractNodeMetadata, {
+    enumerable: false,
+    value: Object.freeze({
+      kind: 'branch' as const,
+      root,
+      path: Object.freeze(['http', ...path]),
+      procedures: Object.freeze(
+        Object.fromEntries(
+          Object.keys(procedures).map((procedure) => [
+            procedure,
+            [...path, procedure].join('.'),
+          ]),
+        ),
       ),
-    ) as unknown as {
-      [K in keyof TDefinitions]: HttpProtocol<TDefinitions[K]>
-    },
-  )
+    }),
+  })
+  Object.freeze(binding)
+
+  const node = { ...children } as Record<PropertyKey, unknown>
+  Object.defineProperty(node, contractNodeBinding, {
+    enumerable: false,
+    value: binding,
+  })
+  Object.defineProperty(node, httpNodeMetadata, {
+    enumerable: false,
+    value: Object.freeze({
+      kind: 'branch' as const,
+      root,
+      path: Object.freeze([...path]),
+      source: template.source,
+    }),
+  })
+  return Object.freeze(node) as unknown as HttpResolvedBranch
+}
+
+function collectHttpNodeProcedures(
+  tree: Readonly<Record<string, HttpResolvedTemplate>>,
+  prefix: string,
+  procedures: Record<
+    string,
+    {
+      readonly kind: 'procedure'
+      readonly protocols: { readonly http: HttpProtocol }
+    }
+  >,
+): void {
+  for (const [name, template] of Object.entries(tree)) {
+    const path = prefix === '' ? name : `${prefix}.${name}`
+    if (template.kind === 'leaf') {
+      procedures[path] = Object.freeze({
+        kind: 'procedure',
+        protocols: Object.freeze({ http: template.protocol }),
+      })
+      continue
+    }
+    collectHttpNodeProcedures(template.children, path, procedures)
+  }
 }
 
 export interface HttpProtocolFactory extends ProtocolFactory<'http'> {
-  <const TDefinitions extends Record<string, HttpProtocolDefinition>>(
-    definitions: TDefinitions & HttpDefinitionsConstraint<TDefinitions>,
+  <const TDefinitions extends HttpRouteTree>(
+    definitions: TDefinitions & HttpTreeConstraint<TDefinitions>,
   ): HttpProtocolGroup<TDefinitions>
   readonly route: typeof defineHttp
   readonly controller: TerminalLayerDescriptor<'http'>
@@ -501,7 +1326,10 @@ export const validate = Object.freeze({
   body: validationLayer('body'),
 })
 
-type ProceduresForHttp<TContract extends ContractDefinition> = {
+type ProceduresForHttp<
+  TBinding extends ContractBinding,
+  TContract extends ContractDefinition = ContractOfBinding<TBinding>,
+> = {
   [
     K in keyof TContract['procedures']
   ]: 'http' extends keyof TContract['procedures'][K]['protocols'] ? K : never
@@ -509,14 +1337,13 @@ type ProceduresForHttp<TContract extends ContractDefinition> = {
   string
 
 type HttpProtocolAt<
-  TContract extends ContractDefinition,
-  TProcedure extends keyof TContract['procedures'],
+  TBinding extends ContractBinding,
+  TProcedure extends keyof ContractOfBinding<TBinding>['procedures'],
+  TContract extends ContractDefinition = ContractOfBinding<TBinding>,
 > = TContract['procedures'][TProcedure]['protocols']['http' &
   keyof TContract['procedures'][TProcedure]['protocols']] extends infer TProtocol
-  ? TProtocol extends { readonly definition: infer TDefinition }
-    ? TDefinition extends HttpProtocolDefinition
-      ? HttpProtocol<TDefinition>
-      : never
+  ? TProtocol extends HttpProtocol<any, any>
+    ? TProtocol
     : never
   : never
 
@@ -635,21 +1462,20 @@ export type HttpControllerContext<TProtocol extends HttpProtocol<any>> =
   HttpControllerContextDefinition<TProtocol['definition']>
 
 export type ControllerOf<
-  TContract extends ContractDefinition,
+  TBinding extends ContractBinding,
   TProtocol extends 'http',
-  TProcedures extends ProceduresForHttp<TContract> =
-    ProceduresForHttp<TContract>,
+  TProcedures extends ProceduresForHttp<TBinding> = ProceduresForHttp<TBinding>,
 > = TProtocol extends 'http'
   ? {
       [K in TProcedures]: (
-        context: HttpControllerContext<HttpProtocolAt<TContract, K>>,
+        context: HttpControllerContext<HttpProtocolAt<TBinding, K>>,
       ) =>
         | DeclaredHttpResults<
-            HttpProtocolAt<TContract, K>['definition']['responses']
+            HttpProtocolAt<TBinding, K>['definition']['responses']
           >
         | Promise<
             DeclaredHttpResults<
-              HttpProtocolAt<TContract, K>['definition']['responses']
+              HttpProtocolAt<TBinding, K>['definition']['responses']
             >
           >
     }

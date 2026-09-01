@@ -12,7 +12,18 @@ export type ContextProperties<TKeys extends readonly ContextKey[]> = {
   readonly [TKey in TKeys[number] as TKey['name']]: ContextKeyValue<TKey>
 }
 
-export function contextKey<const TName extends string>(name: TName) {
+type ContextKeyNameConstraint<TName extends string> = TName extends
+  | ''
+  | '__proto__'
+  ? never
+  : unknown
+
+export function contextKey<const TName extends string>(
+  name: TName & ContextKeyNameConstraint<TName>,
+) {
+  if (name.length === 0 || name === '__proto__') {
+    throw new Error(`Invalid Context Key name: ${JSON.stringify(name)}`)
+  }
   return {
     of<TValue>(): ContextKey<TName, TValue> {
       return Object.freeze({

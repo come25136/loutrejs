@@ -1,3 +1,10 @@
+import {
+  contractNodeBinding,
+  contractNodeKindType,
+  protocolNamespaceBuilder,
+  protocolNamespaceType,
+} from './contract-internal.js'
+
 export interface ProtocolDescriptor<
   TName extends string = string,
   TContext = unknown,
@@ -63,6 +70,23 @@ export interface ContractDefinition<
   readonly procedures: TProcedures
 }
 
+export interface ResolvedContractNode<
+  TContract extends ContractDefinition = ContractDefinition,
+  TKind extends 'leaf' | 'branch' = 'leaf' | 'branch',
+> {
+  readonly [contractNodeBinding]: TContract
+  readonly [contractNodeKindType]: TKind
+}
+
+export type ContractBinding = ContractDefinition | ResolvedContractNode
+
+export type ContractOfBinding<TBinding extends ContractBinding> =
+  TBinding extends ResolvedContractNode<infer TContract>
+    ? TContract
+    : TBinding extends ContractDefinition
+      ? TBinding
+      : never
+
 type ProcedureNamesOfGroup<TGroup> =
   TGroup extends ProtocolGroup<string, infer TProcedures>
     ? keyof TProcedures & string
@@ -88,11 +112,6 @@ type ProceduresFromGroups<TGroups extends readonly ProtocolGroup[]> = {
   >
 }
 
-type NonEmptyArrayConstraint<TValues extends readonly unknown[]> =
-  TValues extends readonly []
-    ? { readonly __requiresAtLeastOneEntry__: never }
-    : unknown
-
 type ProcedureProtocolKeysOfGroup<TGroup> =
   TGroup extends ProtocolGroup<infer TProtocol, infer TProcedures>
     ? `${keyof TProcedures & string}.${TProtocol}`
@@ -115,20 +134,96 @@ type DuplicateGroupProcedureProtocolKeys<
           >
     : never
 
-type GroupProcedureProtocolUniquenessConstraint<
-  TGroups extends readonly ProtocolGroup[],
-> = [DuplicateGroupProcedureProtocolKeys<TGroups>] extends [never]
-  ? unknown
-  : {
-      readonly __duplicateProcedureProtocol__: DuplicateGroupProcedureProtocolKeys<TGroups>
-    }
+type ProtocolNamespaceOfGroup<TGroup> = TGroup extends {
+  readonly protocol: infer TProtocol extends string
+  readonly procedures: infer TProcedures
+}
+  ? TProcedures extends object
+    ? TProcedures[keyof TProcedures] extends {
+        readonly [protocolNamespaceType]: infer TNamespace
+      }
+      ? [TNamespace] extends [never]
+        ? never
+        : { readonly [K in TProtocol]: TNamespace }
+      : never
+    : never
+  : never
 
-function defineContract<const TGroups extends readonly ProtocolGroup[]>(
-  groups: TGroups &
-    NonEmptyArrayConstraint<TGroups> &
-    GroupProcedureProtocolUniquenessConstraint<TGroups> &
-    DispatchKeyUniquenessConstraint<ProceduresFromGroups<TGroups>>,
-): ContractDefinition<ProceduresFromGroups<TGroups>> {
+type ProtocolNamespaceNodeKeysOfGroup<TGroup> =
+  ProtocolNamespaceOfGroup<TGroup> extends infer TNamespaces
+    ? TNamespaces extends Readonly<Record<string, unknown>>
+      ? {
+          [
+            TProtocol in keyof TNamespaces & string
+          ]: TNamespaces[TProtocol] extends object
+            ? `${TProtocol}.${keyof TNamespaces[TProtocol] & string}`
+            : never
+        }[keyof TNamespaces & string]
+      : never
+    : never
+
+type DuplicateGroupProtocolNamespaceNodeKeys<
+  TGroups extends readonly ProtocolGroup[],
+  TSeen extends string = never,
+> = number extends TGroups['length']
+  ? never
+  : TGroups extends readonly [
+        infer THead extends ProtocolGroup,
+        ...infer TTail extends readonly ProtocolGroup[],
+      ]
+    ?
+        | Extract<ProtocolNamespaceNodeKeysOfGroup<THead>, TSeen>
+        | DuplicateGroupProtocolNamespaceNodeKeys<
+            TTail,
+            TSeen | ProtocolNamespaceNodeKeysOfGroup<THead>
+          >
+    : never
+
+type ProtocolNamespacesOfGroups<TGroups extends readonly ProtocolGroup[]> = [
+  ProtocolNamespaceOfGroup<TGroups[number]>,
+] extends [never]
+  ? unknown
+  : UnionToIntersection<ProtocolNamespaceOfGroup<TGroups[number]>>
+
+type ContractFromGroups<TGroups extends readonly ProtocolGroup[]> =
+  ContractDefinition<ProceduresFromGroups<TGroups>> &
+    ProtocolNamespacesOfGroups<TGroups>
+
+type ContractGroupsOf<TGroups extends readonly unknown[]> =
+  TGroups extends readonly ProtocolGroup[] ? TGroups : never
+
+type ContractArgumentValidation<TGroups extends readonly unknown[]> =
+  TGroups extends readonly []
+    ? readonly [error: 'contract requires at least one protocol group']
+    : TGroups extends readonly ProtocolGroup[]
+      ? [DuplicateGroupProcedureProtocolKeys<TGroups>] extends [never]
+        ? [DuplicateGroupProtocolNamespaceNodeKeys<TGroups>] extends [never]
+          ? [
+              DuplicateDispatchKeys<
+                ProtocolDispatchEntries<ProceduresFromGroups<TGroups>>
+              >,
+            ] extends [never]
+            ? readonly []
+            : readonly [error: 'contract contains duplicate dispatch keys']
+          : readonly [
+              error: 'contract contains duplicate protocol namespace nodes',
+            ]
+        : readonly [error: 'contract contains duplicate procedure protocols']
+      : readonly [error: 'contract entries must be protocol groups']
+
+interface ContractProtocolNamespaceBuilder {
+  readonly protocol: string
+  readonly build: (root: ContractDefinition) => unknown
+}
+
+function defineContract<const TGroups extends readonly unknown[]>(
+  groups: TGroups,
+  ...validation: ContractArgumentValidation<TGroups>
+): ContractFromGroups<ContractGroupsOf<TGroups>>
+function defineContract(
+  groups: readonly ProtocolGroup[],
+  ..._validation: readonly unknown[]
+): ContractDefinition & Record<string, unknown> {
   if (groups.length === 0) {
     throw new Error('contract([]) requires at least one protocol group')
   }
@@ -155,27 +250,54 @@ function defineContract<const TGroups extends readonly ProtocolGroup[]>(
   }
 
   assertUniqueDispatchKeys(procedures)
-  return Object.freeze({
-    kind: 'contract',
+  const resolved = {
+    kind: 'contract' as const,
     procedures: Object.freeze(procedures),
-  }) as unknown as ContractDefinition<ProceduresFromGroups<TGroups>>
+  } as ContractDefinition & Record<PropertyKey, unknown>
+
+  const namespaceBuilders: ContractProtocolNamespaceBuilder[] = []
+  for (const group of groups) {
+    const build = (group as ProtocolGroup & Record<PropertyKey, unknown>)[
+      protocolNamespaceBuilder
+    ]
+    if (typeof build !== 'function') continue
+    namespaceBuilders.push({
+      protocol: group.protocol,
+      build: build as ContractProtocolNamespaceBuilder['build'],
+    })
+  }
+  applyProtocolNamespaces(resolved, namespaceBuilders)
+  return Object.freeze(resolved)
 }
 
-type ProcedureNamesOfContract<TContract> =
-  TContract extends ContractDefinition<infer TProcedures>
-    ? keyof TProcedures & string
-    : never
+function applyProtocolNamespaces(
+  resolved: ContractDefinition & Record<PropertyKey, unknown>,
+  builders: readonly ContractProtocolNamespaceBuilder[],
+): void {
+  for (const { protocol, build } of builders) {
+    const namespace = build(resolved)
+    const current = resolved[protocol]
+    if (current === undefined) {
+      resolved[protocol] = namespace
+      continue
+    }
+    if (!isRecord(current) || !isRecord(namespace)) {
+      throw new Error(`Duplicate contract protocol namespace: ${protocol}`)
+    }
+    for (const name of Object.keys(namespace)) {
+      if (Object.hasOwn(current, name)) {
+        throw new Error(
+          `Duplicate contract protocol namespace node: ${protocol}.${name}`,
+        )
+      }
+    }
+    resolved[protocol] = Object.freeze({ ...current, ...namespace })
+  }
+}
 
-type ProcedureNamesOfContracts<
-  TContracts extends readonly ContractDefinition[],
-> = ProcedureNamesOfContract<TContracts[number]>
-
-type ProtocolsOfContractProcedure<TContract, TProcedure extends string> =
-  TContract extends ContractDefinition<infer TProcedures>
-    ? TProcedure extends keyof TProcedures
-      ? TProcedures[TProcedure]['protocols']
-      : never
-    : never
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 type UnionToIntersection<T> = (
   T extends unknown ? (value: T) => void : never
@@ -183,93 +305,7 @@ type UnionToIntersection<T> = (
   ? TIntersection
   : never
 
-type MergedProcedures<TContracts extends readonly ContractDefinition[]> = {
-  [TProcedure in ProcedureNamesOfContracts<TContracts>]: ProcedureDefinition<
-    UnionToIntersection<
-      ProtocolsOfContractProcedure<TContracts[number], TProcedure>
-    > extends infer TProtocols extends Record<string, ProtocolDescriptor>
-      ? TProtocols
-      : never
-  >
-}
-
-type ProcedureProtocolKeysOfContract<TContract> =
-  TContract extends ContractDefinition<infer TProcedures>
-    ? {
-        [
-          TProcedure in keyof TProcedures & string
-        ]: `${TProcedure}.${keyof TProcedures[TProcedure]['protocols'] &
-          string}`
-      }[keyof TProcedures & string]
-    : never
-
-type DuplicateContractProcedureProtocolKeys<
-  TContracts extends readonly ContractDefinition[],
-  TSeen extends string = never,
-> = number extends TContracts['length']
-  ? never
-  : TContracts extends readonly [
-        infer THead extends ContractDefinition,
-        ...infer TTail extends readonly ContractDefinition[],
-      ]
-    ?
-        | Extract<ProcedureProtocolKeysOfContract<THead>, TSeen>
-        | DuplicateContractProcedureProtocolKeys<
-            TTail,
-            TSeen | ProcedureProtocolKeysOfContract<THead>
-          >
-    : never
-
-type ContractProcedureProtocolUniquenessConstraint<
-  TContracts extends readonly ContractDefinition[],
-> = [DuplicateContractProcedureProtocolKeys<TContracts>] extends [never]
-  ? unknown
-  : {
-      readonly __duplicateProcedureProtocol__: DuplicateContractProcedureProtocolKeys<TContracts>
-    }
-
-function mergeContracts<const TContracts extends readonly ContractDefinition[]>(
-  contracts: TContracts &
-    NonEmptyArrayConstraint<TContracts> &
-    ContractProcedureProtocolUniquenessConstraint<TContracts> &
-    DispatchKeyUniquenessConstraint<MergedProcedures<TContracts>>,
-): ContractDefinition<MergedProcedures<TContracts>> {
-  if (contracts.length === 0) {
-    throw new Error('contract.merge([]) requires at least one Contract')
-  }
-
-  const procedures: Record<string, ProcedureDefinition> = {}
-
-  for (const source of contracts) {
-    for (const [procedureName, procedureDefinition] of Object.entries(
-      source.procedures,
-    )) {
-      const current = procedures[procedureName]
-      const protocols = { ...current?.protocols }
-      for (const [protocolName, descriptor] of Object.entries(
-        procedureDefinition.protocols,
-      )) {
-        if (Object.hasOwn(protocols, protocolName)) {
-          throw new Error(
-            `Duplicate contract procedure protocol: ${procedureName}.${protocolName}`,
-          )
-        }
-        protocols[protocolName] = descriptor
-      }
-      procedures[procedureName] = { kind: 'procedure', protocols }
-    }
-  }
-
-  assertUniqueDispatchKeys(procedures)
-  return Object.freeze({
-    kind: 'contract',
-    procedures: Object.freeze(procedures),
-  }) as unknown as ContractDefinition<MergedProcedures<TContracts>>
-}
-
-export const contract = Object.assign(defineContract, {
-  merge: mergeContracts,
-})
+export const contract = defineContract
 
 type ProtocolDispatchEntries<
   TProcedures extends Record<string, ProcedureDefinition>,
@@ -314,18 +350,6 @@ type DuplicateDispatchKeys<
       ? TKey
       : never
   : never
-
-type DispatchKeyUniquenessConstraint<
-  TProcedures extends Record<string, ProcedureDefinition>,
-> = [DuplicateDispatchKeys<ProtocolDispatchEntries<TProcedures>>] extends [
-  never,
-]
-  ? unknown
-  : {
-      readonly __duplicateProtocolDispatchKey__: DuplicateDispatchKeys<
-        ProtocolDispatchEntries<TProcedures>
-      >
-    }
 
 function assertUniqueDispatchKeys(
   procedures: Record<string, ProcedureDefinition>,

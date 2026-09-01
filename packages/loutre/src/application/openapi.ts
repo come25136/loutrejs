@@ -3,6 +3,7 @@ import {
   type ModuleInstance,
   type StandardSchemaV1,
 } from '../core/index.js'
+import { resolveContractProcedureIdentity } from '../core/contract-internal.js'
 import { assertValidCompilation, compileApplication } from '../graph/index.js'
 import {
   httpRequestBodyContentType,
@@ -95,7 +96,6 @@ export function generateOpenApi(
   const registry = new SchemaRegistry()
   const paths: Record<string, OpenApiPathItem> = {}
   const operationIds = new Set<string>()
-
   for (const module of collectModules(application.modules)) {
     for (const implementation of module.definition.implementations ?? []) {
       if (implementation.protocol !== 'http') continue
@@ -106,7 +106,10 @@ export function generateOpenApi(
         const typed = protocol as HttpProtocol
         const target: HttpOperationTarget = {
           definition: typed.definition,
-          procedure,
+          procedure: resolveContractProcedureIdentity(
+            implementation.contract,
+            procedure,
+          ).procedure,
         }
         const operation = createOperation(
           target,

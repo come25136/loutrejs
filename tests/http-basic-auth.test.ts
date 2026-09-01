@@ -234,6 +234,7 @@ describe('basicAuth', () => {
     })
     const status: number = 403
     const Contract = contract([
+      // @ts-expect-error Graph fallbackを確認するためwidened statusを意図的に渡す
       http({
         get: {
           method: 'GET',

@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/examples-nested-contract-auth",
+    "tsBuildInfoFile": "../../dist/examples-nested-contract-auth.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

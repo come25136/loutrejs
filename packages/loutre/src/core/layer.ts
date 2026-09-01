@@ -284,6 +284,173 @@ type FoldPipelineItemTerminals<
       ? FoldPipelineTerminals<TPipeline, TProtocol, TState>
       : TState
 
+type ContextKeyNameOf<TKey> =
+  TKey extends ContextKey<infer TName, any> ? TName : never
+
+type ContextKeyNamesOf<TKeys extends readonly ContextKey[]> = ContextKeyNameOf<
+  TKeys[number]
+>
+
+type DuplicateContextKeyNames<
+  TKeys extends readonly ContextKey[],
+  TSeen extends string = never,
+> = number extends TKeys['length']
+  ? never
+  : TKeys extends readonly [
+        infer THead extends ContextKey,
+        ...infer TTail extends readonly ContextKey[],
+      ]
+    ? ContextKeyNameOf<THead> extends infer TName extends string
+      ? TName extends TSeen
+        ? TName | DuplicateContextKeyNames<TTail, TSeen>
+        : DuplicateContextKeyNames<TTail, TSeen | TName>
+      : never
+    : never
+
+type AreRequiredContextKeysAvailable<
+  TRequires extends readonly ContextKey[],
+  TAvailable extends ContextKey,
+> = [TRequires[number]] extends [never]
+  ? true
+  : false extends (
+        TRequires[number] extends infer TRequired extends ContextKey
+          ? TRequired extends TAvailable
+            ? true
+            : false
+          : never
+      )
+    ? false
+    : true
+
+type AreRequiredValidatedPartsAvailable<
+  TRequires extends readonly ValidatedInputPart[],
+  TValidated extends ValidatedInputPart,
+> = Exclude<TRequires[number], TValidated> extends never ? true : false
+
+type HasProvidedContextCollision<
+  TProvides extends readonly ContextKey[],
+  TAvailable extends ContextKey,
+> =
+  | DuplicateContextKeyNames<TProvides>
+  | Extract<
+      ContextKeyNamesOf<TProvides>,
+      ContextKeyNameOf<TAvailable>
+    > extends never
+  ? false
+  : true
+
+interface PipelineRequirementState<
+  TAvailable extends ContextKey,
+  TValidated extends ValidatedInputPart,
+  TValid extends boolean,
+> {
+  readonly available: TAvailable
+  readonly validated: TValidated
+  readonly valid: TValid
+}
+
+type InvalidPipelineRequirementState = PipelineRequirementState<
+  ContextKey,
+  ValidatedInputPart,
+  false
+>
+
+type FoldLayerRequirements<
+  TRequires extends readonly ContextKey[],
+  TProvides extends readonly ContextKey[],
+  TRequiresValidated extends readonly ValidatedInputPart[],
+  TState extends PipelineRequirementState<
+    ContextKey,
+    ValidatedInputPart,
+    boolean
+  >,
+> = TState['valid'] extends false
+  ? TState
+  : AreRequiredContextKeysAvailable<TRequires, TState['available']> extends true
+    ? AreRequiredValidatedPartsAvailable<
+        TRequiresValidated,
+        TState['validated']
+      > extends true
+      ? HasProvidedContextCollision<
+          TProvides,
+          TState['available']
+        > extends false
+        ? PipelineRequirementState<
+            TState['available'] | TProvides[number],
+            TState['validated'],
+            true
+          >
+        : InvalidPipelineRequirementState
+      : InvalidPipelineRequirementState
+    : InvalidPipelineRequirementState
+
+type FoldPipelineRequirements<
+  TPipeline extends readonly PipelineItem[],
+  TState extends PipelineRequirementState<
+    ContextKey,
+    ValidatedInputPart,
+    boolean
+  >,
+> = TState['valid'] extends false
+  ? TState
+  : number extends TPipeline['length']
+    ? TState
+    : TPipeline extends readonly [infer THead, ...infer TTail]
+      ? FoldPipelineRequirements<
+          Extract<TTail, readonly PipelineItem[]>,
+          FoldPipelineItemRequirements<THead, TState>
+        >
+      : TState
+
+type FoldPipelineItemRequirements<
+  TItem,
+  TState extends PipelineRequirementState<
+    ContextKey,
+    ValidatedInputPart,
+    boolean
+  >,
+> = TItem extends ValidationLayerDescriptor
+  ? PipelineRequirementState<
+      TState['available'],
+      TState['validated'] | TItem['part'],
+      TState['valid']
+    >
+  : TItem extends LayerOccurrenceDescriptor<
+        infer TRequires,
+        infer TProvides,
+        any,
+        any,
+        any,
+        any,
+        infer TRequiresValidated,
+        any,
+        infer TPipeline
+      >
+    ? FoldPipelineRequirements<
+        TPipeline,
+        FoldLayerRequirements<TRequires, TProvides, TRequiresValidated, TState>
+      >
+    : TItem extends LayerDescriptor<
+          infer TRequires,
+          infer TProvides,
+          any,
+          any,
+          any,
+          any,
+          infer TRequiresValidated,
+          any
+        >
+      ? FoldLayerRequirements<TRequires, TProvides, TRequiresValidated, TState>
+      : TState
+
+type IsPipelineRequirementsValid<TPipeline extends readonly PipelineItem[]> =
+  FoldPipelineRequirements<
+    TPipeline,
+    PipelineRequirementState<never, never, true>
+  >['valid'] extends true
+    ? true
+    : false
+
 export type IsValidProtocolPipeline<
   TPipeline extends readonly PipelineItem[],
   TProtocol extends string,
@@ -293,7 +460,7 @@ export type IsValidProtocolPipeline<
     TProtocol,
     PipelineTerminalState<false, true>
   > extends PipelineTerminalState<true, true>
-    ? true
+    ? IsPipelineRequirementsValid<TPipeline>
     : false
 
 export type ShortCircuitResultOf<TItem> =
@@ -449,6 +616,74 @@ export type HasValidationBeforeTerminal<
     ? true
     : false
 
+type DuplicateValidatedInputParts<
+  TParts extends readonly ValidatedInputPart[],
+  TSeen extends ValidatedInputPart = never,
+> = number extends TParts['length']
+  ? never
+  : TParts extends readonly [
+        infer THead extends ValidatedInputPart,
+        ...infer TTail extends readonly ValidatedInputPart[],
+      ]
+    ? THead extends TSeen
+      ? THead | DuplicateValidatedInputParts<TTail, TSeen>
+      : DuplicateValidatedInputParts<TTail, TSeen | THead>
+    : never
+
+type LayerDefinitionConstraint<
+  TRequires extends readonly ContextKey[],
+  TProvides extends readonly ContextKey[],
+  TRequiresValidated extends readonly ValidatedInputPart[],
+> = [
+  | DuplicateContextKeyNames<TRequires>
+  | DuplicateContextKeyNames<TProvides>
+  | Extract<ContextKeyNamesOf<TRequires>, ContextKeyNamesOf<TProvides>>
+  | DuplicateValidatedInputParts<TRequiresValidated>,
+] extends [never]
+  ? unknown
+  : { readonly __invalidLayerDefinition__: never }
+
+function assertUniqueContextKeyNames(
+  keys: readonly ContextKey[],
+  label: 'requires' | 'provides',
+): void {
+  const names = new Set<string>()
+  for (const key of keys) {
+    if (names.has(key.name)) {
+      throw new Error(
+        `Layer ${label} contains duplicate Context property ${key.name}`,
+      )
+    }
+    names.add(key.name)
+  }
+}
+
+function assertLayerDefinition(definition: {
+  readonly requires?: readonly ContextKey[]
+  readonly provides?: readonly ContextKey[]
+  readonly requiresValidated?: readonly ValidatedInputPart[]
+}): void {
+  const requires = definition.requires ?? []
+  const provides = definition.provides ?? []
+  assertUniqueContextKeyNames(requires, 'requires')
+  assertUniqueContextKeyNames(provides, 'provides')
+  const requiredNames = new Set(requires.map((key) => key.name))
+  for (const key of provides) {
+    if (requiredNames.has(key.name)) {
+      throw new Error(
+        `Layer cannot require and provide the same Context property ${key.name}`,
+      )
+    }
+  }
+  const validated = new Set<ValidatedInputPart>()
+  for (const part of definition.requiresValidated ?? []) {
+    if (validated.has(part)) {
+      throw new Error(`Layer requiresValidated contains duplicate part ${part}`)
+    }
+    validated.add(part)
+  }
+}
+
 export function layer<
   const TRequires extends readonly ContextKey[] = readonly [],
   const TProvides extends readonly ContextKey[] = readonly [],
@@ -468,7 +703,8 @@ export function layer<
     TName,
     TRole,
     TRequiresValidated
-  >,
+  > &
+    LayerDefinitionConstraint<TRequires, TProvides, TRequiresValidated>,
 ): LayerDescriptor<
   TRequires,
   TProvides,
@@ -479,6 +715,7 @@ export function layer<
   TRequiresValidated,
   TContext
 > {
+  assertLayerDefinition(definition)
   let descriptor: LayerDescriptor<
     TRequires,
     TProvides,

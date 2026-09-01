@@ -35,6 +35,15 @@ const examples = [
     },
   },
   {
+    name: 'Nested Contract Auth',
+    slug: 'nested-contract-auth',
+    stackblitzUrl: null,
+    description: {
+      en: 'Apply authentication at a parent Contract branch and inherit its Context',
+      ja: '上位Contract branchで認証し、Contextの型を子Controllerへ継承する',
+    },
+  },
+  {
     name: 'Basic Auth',
     slug: 'basic-auth',
     stackblitzUrl: null,

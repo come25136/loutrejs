@@ -1,12 +1,15 @@
 import {
   SchemaValidationError,
+  type ContractBinding,
   type ContractDefinition,
+  type ContractOfBinding,
   type ProcedureDefinition,
   type SchemaInput,
   type SchemaOutput,
   type StandardSchemaV1,
   validateSchema,
 } from '../core/index.js'
+import { contractOfBinding } from '../core/contract-internal.js'
 import type {
   HttpHeaders,
   HttpParamsSchemas,
@@ -133,10 +136,10 @@ type HttpClientMethod<TDefinition extends HttpProtocolDefinition> =
         request: HttpClientRequest<TDefinition>,
       ) => Promise<HttpClientResponse<TDefinition>>
 
-export type HttpClient<TContract extends ContractDefinition> = {
-  readonly [TProcedure in HttpProcedureNames<TContract>]: HttpClientMethod<
-    HttpDefinitionOf<TContract, TProcedure>
-  >
+export type HttpClient<TBinding extends ContractBinding> = {
+  readonly [
+    TProcedure in HttpProcedureNames<ContractOfBinding<TBinding>>
+  ]: HttpClientMethod<HttpDefinitionOf<ContractOfBinding<TBinding>, TProcedure>>
 }
 
 export class HttpClientResponseError extends Error {
@@ -153,10 +156,11 @@ export class HttpClientResponseError extends Error {
   }
 }
 
-export function createHttpClient<const TContract extends ContractDefinition>(
-  contract: TContract,
+export function createHttpClient<const TBinding extends ContractBinding>(
+  binding: TBinding,
   transport: HttpClientTransport,
-): HttpClient<TContract> {
+): HttpClient<TBinding> {
+  const contract = contractOfBinding(binding)
   const client: Record<
     string,
     (request?: Record<string, unknown>) => Promise<unknown>
@@ -187,7 +191,7 @@ export function createHttpClient<const TContract extends ContractDefinition>(
     }
   }
 
-  return Object.freeze(client) as HttpClient<TContract>
+  return Object.freeze(client) as HttpClient<TBinding>
 }
 
 function httpDefinitionOf(
@@ -408,7 +412,13 @@ function encodeBody(body: unknown, contentType: string | undefined): BodyInit {
 }
 
 async function decodeFetchBody(response: Response): Promise<unknown> {
-  if (response.status === 204 || response.status === 205) return undefined
+  if (
+    response.status === 204 ||
+    response.status === 205 ||
+    response.status === 304
+  ) {
+    return undefined
+  }
   const mediaType = normalizeMediaType(response.headers.get('content-type'))
   if (mediaType === 'text/event-stream') {
     if (!response.body) {
