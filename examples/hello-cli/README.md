@@ -1,18 +1,19 @@
-# Hello CLIサンプル
+# Hello CLI Example
 
-HostがCLI引数をparseし、Application Argumentsをbindしてpublic `Task`を1回だけ実行する最小例です。
-Loutre自身はCLI構文を解釈しません。
+A minimal CLI application where the Host parses command-line arguments, binds Application Arguments, and runs a public `Task` once. Loutre itself does not interpret CLI syntax.
+
+From this example directory, run:
 
 ```sh
-npm run start --workspace @loutrejs/example-hello-cli
-npm run start --workspace @loutrejs/example-hello-cli -- --name Loutre
+npm run start
+npm run start -- --name Loutre
 ```
 
-出力:
+Output:
 
 ```text
 Hello, World!
 Hello, Loutre!
 ```
 
-`src/main.ts`がNode.jsの`parseArgs()`でHostを構成し、`bootstrap({ application, arguments })`から`app.run(hello)`を呼びます。
+`src/main.ts` builds the Host with Node.js `parseArgs()`, then calls `app.run(hello)` after `bootstrap({ application, arguments })`.

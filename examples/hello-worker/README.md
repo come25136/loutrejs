@@ -1,16 +1,17 @@
-# Hello Workerサンプル
+# Hello Worker Example
 
-HTTPを持たず、`fixedDelay` Triggerだけで常駐するApplicationの最小例です。
-Loutre CLIがApplicationをhostするのではなく、`src/main.ts`がHost entryとして`bootstrap()`とTrigger Engineの起動を所有します。
+A minimal long-running Application with no HTTP server and only a `fixedDelay` Trigger. The Loutre CLI does not host the Application; `src/main.ts` is the Host entry point and owns both `bootstrap()` and Trigger Engine startup.
 
-```sh
-npm run dev --workspace @loutrejs/example-hello-worker
-```
-
-production相当の起動:
+From this example directory, start the worker in development mode:
 
 ```sh
-npm run start --workspace @loutrejs/example-hello-worker
+npm run dev
 ```
 
-起動直後と、その後5秒ごとに`Hello from worker!`を出力します。
+For a production-style start:
+
+```sh
+npm run start
+```
+
+The worker prints `Hello from worker!` immediately after startup and then every five seconds.

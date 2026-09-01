@@ -1,21 +1,20 @@
-# ユーザー定義Bearer認証サンプル
+# Custom Bearer Auth Example
 
-Loutre本体に認証方式を追加せず、公開されている`layer()`、`shortCircuit()`、
-`shortCircuits`メタデータだけで`GET /profile`を保護するサンプルです。
+Protect `GET /profile` without adding an authentication scheme to Loutre itself. This example builds Bearer authentication entirely from the public `layer()`, `shortCircuit()`, and `shortCircuits` metadata APIs.
 
-リポジトリルートで依存関係をインストールしたあと、次のコマンドで起動します。
+From this example directory, start the application with:
 
 ```sh
-npm run dev --workspace @loutrejs/example-bearer-auth
+npm run dev
 ```
 
-認証せずにアクセスするとHTTP 401を返します。
+A request without authentication returns HTTP 401:
 
 ```sh
 curl -i http://127.0.0.1:3002/profile
 ```
 
-サンプル用tokenを指定するとプロフィールを取得できます。
+Use the example token to retrieve the profile:
 
 ```sh
 curl -i -H 'Authorization: Bearer loutre-token' http://127.0.0.1:3002/profile
@@ -25,13 +24,12 @@ curl -i -H 'Authorization: Bearer loutre-token' http://127.0.0.1:3002/profile
 { "id": "user-1", "name": "Loutre User" }
 ```
 
-このtokenは動作確認専用です。実際のアプリケーションでは署名・issuer・audience・期限などを
-検証し、tokenや秘密鍵をソースコードへ保存しないでください。
+This token is for demonstration only. In a real application, validate properties such as the signature, issuer, audience, and expiration, and never store tokens or private keys in source code.
 
-型、Application Graph、動作を検証する場合は次のコマンドを実行します。
+To validate the types, Application Graph, and behavior, run:
 
 ```sh
-npm run typecheck --workspace @loutrejs/example-bearer-auth
-npm run check --workspace @loutrejs/example-bearer-auth
-npm test --workspace @loutrejs/example-bearer-auth
+npm run typecheck
+npm run check
+npm test
 ```

@@ -1,12 +1,15 @@
 # PostgreSQL Database Example
 
-`pg`の`Pool`と`PoolClient`をApplication側で管理し、`PoolClient`をtransaction Layerから
-Controllerへ渡す最小構成です。
+Manage `pg`'s `Pool` and `PoolClient` in the Application and pass the `PoolClient` from a transaction Layer to the Controller.
+
+From this example directory, start PostgreSQL and the application with:
 
 ```sh
-npm run db:start --workspace @loutrejs/example-database-postgres
-npm run dev --workspace @loutrejs/example-database-postgres
+npm run db:start
+npm run dev
 ```
+
+Create a user:
 
 ```sh
 curl --request POST http://127.0.0.1:3001/users \
@@ -14,6 +17,4 @@ curl --request POST http://127.0.0.1:3001/users \
   --data '{"name":"Loutre"}'
 ```
 
-`PostgresDatabase`は同期constructionでPoolを組み立て、`onModuleInit()`で接続確認、
-`onModuleDestroy()`で解放します。BEGIN、COMMIT、ROLLBACKはApplication側のtransaction
-callbackに閉じ込め、Loutreは`pg`を認識しません。
+`PostgresDatabase` creates the Pool synchronously, verifies the connection in `onModuleInit()`, and releases it in `onModuleDestroy()`. `BEGIN`, `COMMIT`, and `ROLLBACK` stay inside the Application-defined transaction callback, so Loutre does not need to know anything about `pg`.
