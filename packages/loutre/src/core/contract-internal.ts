@@ -8,7 +8,7 @@ export const protocolNamespaceType: unique symbol = Symbol(
   'loutre.protocol-namespace-type',
 )
 
-export const contractNodeBinding: unique symbol = Symbol(
+export const contractNodeBinding: unique symbol = Symbol.for(
   'loutre.contract-node-binding',
 )
 
@@ -16,7 +16,7 @@ export const contractNodeKindType: unique symbol = Symbol(
   'loutre.contract-node-kind-type',
 )
 
-export const contractNodeMetadata: unique symbol = Symbol(
+export const contractNodeMetadata: unique symbol = Symbol.for(
   'loutre.contract-node-metadata',
 )
 
