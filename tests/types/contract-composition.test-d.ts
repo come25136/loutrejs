@@ -34,7 +34,6 @@ const graphql = {
 } as const satisfies ProtocolDescriptor<'graphql'>
 
 const GraphqlGroup = protocolGroup('graphql', { create: graphql })
-const GraphqlContract = contract([GraphqlGroup])
 const DirectContract = contract([HttpGroup, GraphqlGroup])
 const protocolGroups = [HttpGroup, GraphqlGroup]
 const ArrayContract = contract(protocolGroups)
@@ -42,50 +41,6 @@ const directHttp = DirectContract.procedures.create.protocols.http
 const arrayGraphql = ArrayContract.procedures.create.protocols.graphql
 const directGraphql = DirectContract.procedures.create.protocols.graphql
 void [directHttp, directGraphql, arrayGraphql]
-const MergedContract = contract.merge([HttpContract, GraphqlContract])
-const contracts = [HttpContract, GraphqlContract]
-const ArrayMergedContract = contract.merge(contracts)
-
-const AdditionalHttpContract = contract([
-  http({
-    list: {
-      method: 'GET',
-      path: '/organizations',
-      responses: { ok: { status: 200, body: z.string() } },
-      pipeline: [http.controller],
-    },
-  }),
-])
-contract.merge([HttpContract, AdditionalHttpContract])
-
-const ConflictingHttpContract = contract([
-  http({
-    find: {
-      method: 'get',
-      path: '/users/{userId}',
-      responses: { ok: { status: 200, body: z.string() } },
-      pipeline: [http.controller],
-    },
-  }),
-])
-
-// @ts-expect-error merge後にHTTP method + route patternが重複するContractは拒否する
-contract.merge([HttpContract, ConflictingHttpContract])
-
-const DuplicateProcedureHttpContract = contract([
-  http({
-    get: {
-      method: 'GET',
-      path: '/legacy-users/{id}',
-      responses: { ok: { status: 200, body: z.string() } },
-      pipeline: [http.controller],
-    },
-  }),
-])
-
-// @ts-expect-error merge後に同じprocedure key + protocolが重複するContractは拒否する
-contract.merge([HttpContract, DuplicateProcedureHttpContract])
-
 const DuplicateProcedureHttpGroup = http({
   get: {
     method: 'GET',
@@ -97,12 +52,6 @@ const DuplicateProcedureHttpGroup = http({
 
 // @ts-expect-error 同じprocedure key + protocolを持つgroupは同一Contractへ重ねられない
 contract([HttpGroup, DuplicateProcedureHttpGroup])
-
-const mergedHttp = MergedContract.procedures.create.protocols.http
-const mergedGraphql = MergedContract.procedures.create.protocols.graphql
-const arrayMergedGraphql =
-  ArrayMergedContract.procedures.create.protocols.graphql
-void [mergedHttp, mergedGraphql, arrayMergedGraphql]
 
 const DuplicateHttpGroup = http({
   first: {
@@ -125,5 +74,5 @@ contract([DuplicateHttpGroup])
 // @ts-expect-error 空のprotocol group配列は拒否する
 contract([])
 
-// @ts-expect-error 空のContract配列は拒否する
-contract.merge([])
+// @ts-expect-error Contract compositionはroutesで行い、contract.mergeは公開しない
+contract.merge

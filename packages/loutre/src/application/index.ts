@@ -1,7 +1,6 @@
 import type {
   ArgsClass,
   ContractBinding,
-  ContractDefinition,
   ModuleProtocols,
   ModuleInstance,
   SchemaInput,
@@ -32,9 +31,7 @@ export interface ApplicationDefinitionOptions<
 
 export interface ApplicationDefinition<
   TModules extends readonly ModuleInstance[] = readonly ModuleInstance[],
-  TContract extends ContractBinding | undefined =
-    | ContractDefinition
-    | undefined,
+  TContract extends ContractBinding | undefined = ContractBinding | undefined,
   TArguments extends ArgsClass | undefined = ArgsClass | undefined,
   TTasks extends readonly TaskDescriptor<any, any>[] = readonly TaskDescriptor<
     any,

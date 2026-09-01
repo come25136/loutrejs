@@ -571,11 +571,18 @@ async function finalizeResponse(
     })
   }
   const body = await validateSchema(response.body, result.body)
-  return jsonResponse(
-    response.status,
-    body,
-    mergeResponseHeaders(response.staticHeaders, responseHeaders),
-  )
+  const headers = mergeResponseHeaders(response.staticHeaders, responseHeaders)
+  if (
+    response.status === 204 ||
+    response.status === 205 ||
+    response.status === 304
+  ) {
+    if (body !== undefined) {
+      throw new Error(`HTTP ${response.status} response body must be undefined`)
+    }
+    return new Response(undefined, { status: response.status, headers })
+  }
+  return jsonResponse(response.status, body, headers)
 }
 
 async function validateResponseHeaders(

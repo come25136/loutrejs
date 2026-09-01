@@ -282,6 +282,21 @@ describe('Nested Contract composition', () => {
     })
   })
 
+  it('subtree ApplicationではOpenAPI procedure identityもroot相対にする', () => {
+    const application = defineApplication({
+      contract: AppContract.http.api.me,
+      modules: [ProfileModule()],
+    })
+    const document = generateOpenApi(application, {
+      info: { title: 'Nested API', version: '1.0.0' },
+      operationId: ({ procedure }) => procedure,
+    })
+
+    expect(document.paths['/api/me/profile/{id}']?.get).toMatchObject({
+      operationId: 'profile',
+    })
+  })
+
   it('resolved subtreeをtest Applicationのcomposition rootとして扱える', () => {
     const result = compileApplication({
       contract: AppContract.http.api.me,
@@ -297,6 +312,36 @@ describe('Nested Contract composition', () => {
       contract: 'contract:1',
       procedure: 'profile',
     })
+  })
+
+  it('型境界を迂回しても危険なHTTP node shapeをruntimeで拒否する', () => {
+    expect(() =>
+      (http as any)({
+        'a.b': { ...ProfileContract.procedures.get?.protocols.http.definition },
+      }),
+    ).toThrow(/Invalid HTTP Contract node name/)
+    expect(() =>
+      (http as any)({
+        mixed: {
+          method: 'GET',
+          path: '/mixed',
+          responses: { ok: { status: 200, body: z.string() } },
+          pipeline: [http.controller],
+          routes: {},
+        },
+      }),
+    ).toThrow(/Unknown HTTP Contract node property: routes/)
+  })
+
+  it('resolved branch Implementation bindはruntimeでも拒否する', () => {
+    expect(() =>
+      (implementation as any)({
+        name: 'InvalidBranchController',
+        contract: AppContract.http.api.me,
+        protocol: http,
+        factory: () => ({}),
+      }),
+    ).toThrow(/resolved leaf Contract node/)
   })
 
   it('inherited response variantのruntime collisionも拒否する', () => {

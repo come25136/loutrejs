@@ -412,7 +412,13 @@ function encodeBody(body: unknown, contentType: string | undefined): BodyInit {
 }
 
 async function decodeFetchBody(response: Response): Promise<unknown> {
-  if (response.status === 204 || response.status === 205) return undefined
+  if (
+    response.status === 204 ||
+    response.status === 205 ||
+    response.status === 304
+  ) {
+    return undefined
+  }
   const mediaType = normalizeMediaType(response.headers.get('content-type'))
   if (mediaType === 'text/event-stream') {
     if (!response.body) {

@@ -30,7 +30,7 @@ describe('HTTP auth integration', () => {
   })
   it('validationとtoken生成の不正な順序を静的診断する', () => {
     const InvalidContract = contract([
-      http({
+      (http as any)({
         get: {
           method: 'GET',
           path: '/invalid-account',

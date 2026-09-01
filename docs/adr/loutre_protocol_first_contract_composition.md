@@ -4,6 +4,8 @@
 
 Accepted
 
+`Contract merge`のdecisionは`loutre_nested_contract_composition_architecture.md`によってSuperseded。protocol-first DSLとidentity ownershipのdecisionは引き続き有効。
+
 ## Context
 
 従来のContract DSLはprocedureを起点にprotocolを1件ずつぶら下げていた。
@@ -68,21 +70,26 @@ create    -> http + graphql
 subscribe -> websocket + sse
 ```
 
-## Contract merge
+## Contract composition
 
-分割単位をユーザーへ固定しないため`contract.merge()`を提供する。
+このADRで採用していた`contract.merge()`は、Nested Contract Composition ADRによって廃止する。
+
+feature単位のContractをApplicationへ統合する場合は、Contract object同士をprocedure名でmergeせず、protocol namespace上のresolved route treeを明示的にcompositionする。
 
 ```ts
-const UsersContract = contract.merge([
-  UsersHttpContract,
-  UsersGraphqlContract,
-  UsersEventsContract,
+const AppContract = contract([
+  http({
+    users: {
+      routes: UsersContract.http,
+    },
+    events: {
+      routes: EventsContract.http,
+    },
+  }),
 ])
 ```
 
-mergeはprocedure名を軸に異なるprotocolを統合する。同じ`procedure + protocol`を複数Contractが定義した場合は拒否し、異なるprocedure間でdispatch identityが衝突した場合も通常のContract定義と同じ重複検査を行う。
-
-Contractの名前付けはmergeの責務ではないためoptionsは持たない。
+この形ではmount位置そのものがApplication Contractのidentityになり、ancestorの`path`、`pipeline`、`responses`もdescendantへ解決できる。`contract.merge()`のようにmount位置を持たない構造mergeはcanonical modelに含めない。
 
 ## Identity ownership
 

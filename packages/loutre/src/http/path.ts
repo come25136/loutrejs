@@ -31,6 +31,37 @@ type AsciiDigit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 type ParamNameStart = AsciiLetter | '_'
 type ParamNameContinuation = ParamNameStart | AsciiDigit
 
+type HttpMethodTokenCharacter =
+  | AsciiLetter
+  | AsciiDigit
+  | '!'
+  | '#'
+  | '$'
+  | '%'
+  | '&'
+  | "'"
+  | '*'
+  | '+'
+  | '-'
+  | '.'
+  | '^'
+  | '_'
+  | '`'
+  | '|'
+  | '~'
+
+type IsHttpMethodTokenRest<TMethod extends string> = TMethod extends ''
+  ? true
+  : TMethod extends `${HttpMethodTokenCharacter}${infer TRest}`
+    ? IsHttpMethodTokenRest<TRest>
+    : false
+
+export type IsValidHttpMethod<TMethod extends string> = string extends TMethod
+  ? false
+  : TMethod extends `${HttpMethodTokenCharacter}${infer TRest}`
+    ? IsHttpMethodTokenRest<TRest>
+    : false
+
 type IsParamNameRest<TName extends string> = TName extends ''
   ? true
   : TName extends `${ParamNameContinuation}${infer TRest}`
@@ -130,6 +161,14 @@ export type HttpPathSegment =
   | { readonly kind: 'param'; readonly name: string }
 
 const PARAM_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+const HTTP_METHOD_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
+
+export function assertValidHttpMethod(method: string): void {
+  if (!HTTP_METHOD_PATTERN.test(method)) {
+    throw new Error(`Invalid HTTP method: ${JSON.stringify(method)}`)
+  }
+}
 
 export function parseHttpPath(path: string): readonly HttpPathSegment[] {
   if (path === '/') return Object.freeze([])

@@ -31,10 +31,9 @@ import {
   type TriggerDescriptor,
 } from '../core/index.js'
 import {
-  contractNodeMetadataOf,
   contractOfBinding,
-  contractProcedurePathOf,
   contractRootOf,
+  resolveContractProcedureIdentity,
 } from '../core/contract-internal.js'
 import { Container, Logger, type DependencyRecorder } from '../runtime/index.js'
 import type {
@@ -163,7 +162,7 @@ export function compileApplication(
     const identity =
       firstProcedure === undefined
         ? { contract: contractRootOf(implementation.contract) }
-        : resolveImplementationTargetIdentity(
+        : resolveContractProcedureIdentity(
             implementation.contract,
             firstProcedure,
             applicationContract,
@@ -175,7 +174,7 @@ export function compileApplication(
 
   for (const implementation of descriptors) {
     for (const procedureName of implementation.procedures) {
-      const identity = resolveImplementationTargetIdentity(
+      const identity = resolveContractProcedureIdentity(
         implementation.contract,
         procedureName,
         applicationContract,
@@ -429,49 +428,6 @@ export function compileApplication(
   }
 
   return { graph, diagnostics }
-}
-
-function resolveImplementationTargetIdentity(
-  contract: ContractDefinition,
-  procedure: string,
-  applicationContract: ContractDefinition | undefined,
-): { readonly contract: ContractDefinition; readonly procedure: string } {
-  if (applicationContract && contract === applicationContract) {
-    return { contract: applicationContract, procedure }
-  }
-
-  const canonicalProcedure = contractProcedurePathOf(contract, procedure)
-  if (applicationContract) {
-    const applicationNode = contractNodeMetadataOf(applicationContract)
-    const implementationNode = contractNodeMetadataOf(contract)
-    if (
-      applicationNode &&
-      implementationNode &&
-      applicationNode.root === implementationNode.root &&
-      isPathPrefix(applicationNode.path, implementationNode.path)
-    ) {
-      const prefix = applicationNode.path.slice(1).join('.')
-      const relativeProcedure = canonicalProcedure.startsWith(`${prefix}.`)
-        ? canonicalProcedure.slice(prefix.length + 1)
-        : canonicalProcedure
-      return { contract: applicationContract, procedure: relativeProcedure }
-    }
-  }
-
-  return {
-    contract: contractRootOf(contract),
-    procedure: canonicalProcedure,
-  }
-}
-
-function isPathPrefix(
-  prefix: readonly string[],
-  candidate: readonly string[],
-): boolean {
-  return (
-    prefix.length <= candidate.length &&
-    prefix.every((segment, index) => candidate[index] === segment)
-  )
 }
 
 function validateDispatchKeys(

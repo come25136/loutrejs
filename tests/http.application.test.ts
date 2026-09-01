@@ -157,6 +157,59 @@ describe('HTTP application boundary', () => {
     )
     expect(invalid.status).toBe(400)
   })
+  it('204 responseをundefined schemaでbodylessにfinalizeする', async () => {
+    const Contract = contract([
+      http({
+        remove: {
+          method: 'DELETE',
+          path: '/things/{id}',
+          responses: {
+            noContent: {
+              status: 204,
+              body: z.undefined(),
+            },
+          },
+          pipeline: [http.controller],
+        },
+      }),
+    ])
+    const Implementation = implementation({
+      name: 'NoContentController',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        remove(ctx) {
+          return ctx.response.noContent({ body: undefined })
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ implementations: [Implementation] }))
+    const application = createTestApplication({
+      modules: [Module()],
+      logger: silentLogger,
+    })
+
+    const response = await application.fetch(
+      new Request('http://fixture.test/things/t1', { method: 'DELETE' }),
+    )
+    expect(response.status).toBe(204)
+    expect(response.headers.get('content-type')).toBeNull()
+    expect(await response.text()).toBe('')
+  })
+
+  it('型境界を迂回しても不正なHTTP response statusを拒否する', () => {
+    expect(() =>
+      (http as any)({
+        invalid: {
+          method: 'GET',
+          path: '/invalid-status',
+          responses: { bad: { status: 42, body: z.string() } },
+          pipeline: [http.controller],
+        },
+      }),
+    ).toThrow(/Invalid HTTP response status: 42/)
+  })
+
   it('malformed JSONを内部情報を含まない400 responseへ変換する', async () => {
     const application = createInputDecodeFixture()
     const response = await application.fetch(

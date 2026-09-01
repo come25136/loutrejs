@@ -1,5 +1,7 @@
 import type {
+  ContractBinding,
   ContractDefinition,
+  ContractOfBinding,
   ResolvedContractNode,
   ContextProvidedBeforeTerminal,
   HasValidationBeforeTerminal,
@@ -27,8 +29,10 @@ import {
 import { httpNodeMetadata } from './internal.js'
 import type { Logger } from '../runtime/index.js'
 import {
+  assertValidHttpMethod,
   createHttpDispatchKey,
   type HttpDispatchKey,
+  type IsValidHttpMethod,
   type IsValidHttpPath,
   type PathParamNames,
   parseHttpPath,
@@ -125,7 +129,8 @@ export type HttpResolvedLeaf<
       readonly kind: 'procedure'
       readonly protocols: { readonly http: HttpProtocol<TEffective> }
     }
-  }>
+  }>,
+  'leaf'
 > & {
   readonly [httpNodeMetadata]: HttpResolvedNodeMetadata<
     TSource,
@@ -178,7 +183,8 @@ export type HttpResolvedBranch<
     Record<string, HttpResolvedNode>
   >,
 > = ResolvedContractNode<
-  ContractDefinition<FlatResolvedHttpProcedures<TChildren>>
+  ContractDefinition<FlatResolvedHttpProcedures<TChildren>>,
+  'branch'
 > &
   TChildren & {
     readonly [httpNodeMetadata]: HttpResolvedNodeMetadata<TSource, never> & {
@@ -186,7 +192,10 @@ export type HttpResolvedBranch<
     }
   }
 
-export type HttpResolvedNode = ResolvedContractNode & {
+export type HttpResolvedNode = ResolvedContractNode<
+  ContractDefinition,
+  'leaf' | 'branch'
+> & {
   readonly [httpNodeMetadata]: HttpResolvedNodeMetadata
 }
 
@@ -561,6 +570,43 @@ type HttpPipelineConstraint<TDefinition extends HttpProtocolDefinition> =
       : { readonly pipeline: never }
     : { readonly pipeline: never }
 
+type HttpStatusDigit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
+type HttpStatusHundreds = '2' | '3' | '4' | '5'
+
+type IsValidHttpResponseStatus<TStatus extends number> = number extends TStatus
+  ? false
+  : `${TStatus}` extends `${HttpStatusHundreds}${HttpStatusDigit}${HttpStatusDigit}`
+    ? true
+    : false
+
+type IsBodylessHttpStatus<TStatus extends number> = TStatus extends
+  | 204
+  | 205
+  | 304
+  ? true
+  : false
+
+type IsResponseStatusCompatible<TResponse> =
+  TResponse extends HttpResponseDefinition
+    ? IsValidHttpResponseStatus<TResponse['status']> extends true
+      ? IsBodylessHttpStatus<TResponse['status']> extends true
+        ? [SchemaOutput<TResponse['body']>] extends [undefined]
+          ? true
+          : false
+        : true
+      : false
+    : false
+
+type AreResponseStatusesCompatible<
+  TResponses extends HttpProtocolDefinition['responses'],
+> = false extends {
+  [TVariant in keyof TResponses]: IsResponseStatusCompatible<
+    TResponses[TVariant]
+  >
+}[keyof TResponses]
+  ? false
+  : true
+
 type IsResponseHeadersSchemaCompatible<TResponse> =
   TResponse extends HttpResponseDefinition
     ? TResponse extends {
@@ -585,9 +631,13 @@ type AreResponseHeadersSchemasCompatible<
 type HttpResponseConstraint<TDefinition extends HttpProtocolDefinition> =
   string extends keyof TDefinition['responses']
     ? { readonly responses: never }
-    : AreResponseHeadersSchemasCompatible<TDefinition['responses']> extends true
-      ? AreErrorMappingsCompatible<TDefinition['responses']> extends true
-        ? unknown
+    : AreResponseStatusesCompatible<TDefinition['responses']> extends true
+      ? AreResponseHeadersSchemasCompatible<
+          TDefinition['responses']
+        > extends true
+        ? AreErrorMappingsCompatible<TDefinition['responses']> extends true
+          ? unknown
+          : { readonly responses: never }
         : { readonly responses: never }
       : { readonly responses: never }
 
@@ -631,24 +681,26 @@ type IsSingleStringLiteral<TValue extends string> = string extends TValue
 type HttpPathConstraint<TDefinition extends HttpProtocolDefinition> =
   IsSingleStringLiteral<TDefinition['method']> extends false
     ? { readonly method: never }
-    : IsSingleStringLiteral<TDefinition['path']> extends false
-      ? { readonly path: never }
-      : IsValidHttpPath<TDefinition['path']> extends true
-        ? TDefinition['request'] extends {
-            readonly params: infer TSchemas extends HttpParamsSchemas
-          }
-          ? IsExactParamsSchemaMap<TDefinition['path'], TSchemas> extends true
-            ? DoParamsSchemasAcceptStrings<TSchemas> extends true
-              ? unknown
+    : IsValidHttpMethod<TDefinition['method']> extends false
+      ? { readonly method: never }
+      : IsSingleStringLiteral<TDefinition['path']> extends false
+        ? { readonly path: never }
+        : IsValidHttpPath<TDefinition['path']> extends true
+          ? TDefinition['request'] extends {
+              readonly params: infer TSchemas extends HttpParamsSchemas
+            }
+            ? IsExactParamsSchemaMap<TDefinition['path'], TSchemas> extends true
+              ? DoParamsSchemasAcceptStrings<TSchemas> extends true
+                ? unknown
+                : { readonly request: never }
               : { readonly request: never }
-            : { readonly request: never }
-          : HasValidationBeforeTerminal<
-                TDefinition['pipeline'],
-                'params'
-              > extends true
-            ? { readonly pipeline: never }
-            : unknown
-        : { readonly path: never }
+            : HasValidationBeforeTerminal<
+                  TDefinition['pipeline'],
+                  'params'
+                > extends true
+              ? { readonly pipeline: never }
+              : unknown
+          : { readonly path: never }
 
 type ErrorMappingResult<TResponse> = TResponse extends {
   readonly error: infer TMapping extends HttpErrorMapping<any, any>
@@ -679,6 +731,29 @@ type AreErrorMappingsCompatible<
 type IsConstraintSatisfied<TConstraint> = keyof TConstraint extends never
   ? true
   : false
+
+type IsValidHttpRouteName<TName extends string> = TName extends ''
+  ? false
+  : TName extends '__proto__'
+    ? false
+    : TName extends `${string}.${string}`
+      ? false
+      : TName extends `${number}`
+        ? false
+        : true
+
+type HasOnlyHttpNodeProperties<TNode, TAllowed extends PropertyKey> =
+  Exclude<keyof TNode, TAllowed> extends never ? true : false
+
+type IsExactHttpLeaf<TNode> = HasOnlyHttpNodeProperties<
+  TNode,
+  keyof HttpProtocolDefinition
+>
+
+type IsExactHttpBranch<TNode> = HasOnlyHttpNodeProperties<
+  TNode,
+  keyof HttpBranchDefinition
+>
 
 type IsBranchPipelineTerminalFree<TPipeline extends readonly PipelineItem[]> =
   number extends TPipeline['length']
@@ -757,41 +832,53 @@ type IsHttpTreeValid<
   TParentPipeline extends readonly PipelineItem[] = readonly [],
   TParentResponses extends Readonly<Record<string, HttpResponseDefinition>> =
     {},
-> = false extends {
-  [K in keyof TTree & string]: SourceOfHttpNode<TTree[K]> extends infer TSource
-    ? TSource extends HttpProtocolDefinition
-      ? IsHttpResolvedLeafValid<
-          TSource,
-          TParentPath,
-          TParentPipeline,
-          TParentResponses
-        >
-      : TSource extends HttpBranchDefinition
-        ? IsHttpBranchPathValid<TSource> extends true
-          ? IsHttpBranchPipelineValid<TSource> extends true
-            ? IsHttpBranchResponsesValid<TSource> extends true
-              ? HasHttpResponseCollision<
-                  TParentResponses,
-                  BranchResponsesOf<TSource>
-                > extends false
-                ? IsHttpTreeValid<
-                    TSource['routes'],
-                    JoinHttpPath<TParentPath, BranchPathOf<TSource>>,
-                    readonly [...TParentPipeline, ...BranchPipelineOf<TSource>],
-                    MergeHttpResponses<
-                      TParentResponses,
-                      BranchResponsesOf<TSource>
-                    >
+> =
+  Extract<keyof TTree, number> extends never
+    ? false extends {
+        [K in keyof TTree & string]: IsValidHttpRouteName<K> extends true
+          ? SourceOfHttpNode<TTree[K]> extends infer TSource
+            ? TSource extends HttpProtocolDefinition
+              ? IsExactHttpLeaf<TSource> extends true
+                ? IsHttpResolvedLeafValid<
+                    TSource,
+                    TParentPath,
+                    TParentPipeline,
+                    TParentResponses
                   >
                 : false
-              : false
+              : TSource extends HttpBranchDefinition
+                ? IsExactHttpBranch<TSource> extends true
+                  ? IsHttpBranchPathValid<TSource> extends true
+                    ? IsHttpBranchPipelineValid<TSource> extends true
+                      ? IsHttpBranchResponsesValid<TSource> extends true
+                        ? HasHttpResponseCollision<
+                            TParentResponses,
+                            BranchResponsesOf<TSource>
+                          > extends false
+                          ? IsHttpTreeValid<
+                              TSource['routes'],
+                              JoinHttpPath<TParentPath, BranchPathOf<TSource>>,
+                              readonly [
+                                ...TParentPipeline,
+                                ...BranchPipelineOf<TSource>,
+                              ],
+                              MergeHttpResponses<
+                                TParentResponses,
+                                BranchResponsesOf<TSource>
+                              >
+                            >
+                          : false
+                        : false
+                      : false
+                    : false
+                  : false
+                : false
             : false
           : false
-        : false
+      }[keyof TTree & string]
+      ? false
+      : true
     : false
-}[keyof TTree & string]
-  ? false
-  : true
 
 type HttpTreeConstraint<TDefinitions extends HttpRouteTree> =
   IsHttpTreeValid<TDefinitions> extends true
@@ -804,6 +891,16 @@ function defineHttp<const TDefinition extends HttpProtocolDefinition>(
     HttpResponseConstraint<TDefinition> &
     HttpPathConstraint<TDefinition>,
 ): HttpProtocol<TDefinition> {
+  assertValidHttpMethod(definition.method)
+  for (const response of Object.values(definition.responses)) {
+    if (
+      !Number.isInteger(response.status) ||
+      response.status < 200 ||
+      response.status > 599
+    ) {
+      throw new Error(`Invalid HTTP response status: ${response.status}`)
+    }
+  }
   const segments = parseHttpPath(definition.path)
   const paramsSchemas = definition.request?.params
   if (paramsSchemas) {
@@ -906,14 +1003,66 @@ interface HttpResolutionContext {
   readonly procedurePrefix: string
 }
 
+const HTTP_LEAF_PROPERTIES = new Set<keyof HttpProtocolDefinition>([
+  'method',
+  'path',
+  'summary',
+  'description',
+  'tags',
+  'deprecated',
+  'request',
+  'responses',
+  'pipeline',
+  'interaction',
+])
+
+const HTTP_BRANCH_PROPERTIES = new Set<keyof HttpBranchDefinition>([
+  'path',
+  'pipeline',
+  'responses',
+  'routes',
+])
+
+function assertHttpRouteTreeObject(definitions: HttpRouteTree): void {
+  const prototype = Object.getPrototypeOf(definitions)
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error('HTTP route tree must be a plain object')
+  }
+}
+
+function assertHttpRouteName(name: string): void {
+  if (
+    name.length === 0 ||
+    name === '__proto__' ||
+    name.includes('.') ||
+    Number.isFinite(Number(name))
+  ) {
+    throw new Error(`Invalid HTTP Contract node name: ${JSON.stringify(name)}`)
+  }
+}
+
+function assertHttpNodeProperties(
+  source: HttpProtocolDefinition | HttpBranchDefinition,
+): void {
+  const allowed =
+    'method' in source ? HTTP_LEAF_PROPERTIES : HTTP_BRANCH_PROPERTIES
+  for (const property of Object.keys(source)) {
+    if (!allowed.has(property as never)) {
+      throw new Error(`Unknown HTTP Contract node property: ${property}`)
+    }
+  }
+}
+
 function resolveHttpTree(
   definitions: HttpRouteTree,
   context: HttpResolutionContext,
 ): HttpResolution {
+  assertHttpRouteTreeObject(definitions)
   const procedures: Record<string, HttpProtocol> = {}
   const tree: Record<string, HttpResolvedTemplate> = {}
 
   for (const [name, candidate] of Object.entries(definitions)) {
+    assertHttpRouteName(name)
     const metadata =
       typeof candidate === 'object' &&
       candidate !== null &&
@@ -927,6 +1076,7 @@ function resolveHttpTree(
     const source = (metadata?.source ?? candidate) as
       | HttpProtocolDefinition
       | HttpBranchDefinition
+    assertHttpNodeProperties(source)
     const procedureName =
       context.procedurePrefix === ''
         ? name
@@ -1036,6 +1186,7 @@ function buildHttpNode(
     Object.defineProperty(binding, contractNodeMetadata, {
       enumerable: false,
       value: Object.freeze({
+        kind: 'leaf' as const,
         root,
         path: Object.freeze(['http', ...path]),
         procedures: Object.freeze({
@@ -1079,6 +1230,7 @@ function buildHttpNode(
   Object.defineProperty(binding, contractNodeMetadata, {
     enumerable: false,
     value: Object.freeze({
+      kind: 'branch' as const,
       root,
       path: Object.freeze(['http', ...path]),
       procedures: Object.freeze(
@@ -1174,7 +1326,10 @@ export const validate = Object.freeze({
   body: validationLayer('body'),
 })
 
-type ProceduresForHttp<TContract extends ContractDefinition> = {
+type ProceduresForHttp<
+  TBinding extends ContractBinding,
+  TContract extends ContractDefinition = ContractOfBinding<TBinding>,
+> = {
   [
     K in keyof TContract['procedures']
   ]: 'http' extends keyof TContract['procedures'][K]['protocols'] ? K : never
@@ -1182,8 +1337,9 @@ type ProceduresForHttp<TContract extends ContractDefinition> = {
   string
 
 type HttpProtocolAt<
-  TContract extends ContractDefinition,
-  TProcedure extends keyof TContract['procedures'],
+  TBinding extends ContractBinding,
+  TProcedure extends keyof ContractOfBinding<TBinding>['procedures'],
+  TContract extends ContractDefinition = ContractOfBinding<TBinding>,
 > = TContract['procedures'][TProcedure]['protocols']['http' &
   keyof TContract['procedures'][TProcedure]['protocols']] extends infer TProtocol
   ? TProtocol extends HttpProtocol<any, any>
@@ -1306,21 +1462,20 @@ export type HttpControllerContext<TProtocol extends HttpProtocol<any>> =
   HttpControllerContextDefinition<TProtocol['definition']>
 
 export type ControllerOf<
-  TContract extends ContractDefinition,
+  TBinding extends ContractBinding,
   TProtocol extends 'http',
-  TProcedures extends ProceduresForHttp<TContract> =
-    ProceduresForHttp<TContract>,
+  TProcedures extends ProceduresForHttp<TBinding> = ProceduresForHttp<TBinding>,
 > = TProtocol extends 'http'
   ? {
       [K in TProcedures]: (
-        context: HttpControllerContext<HttpProtocolAt<TContract, K>>,
+        context: HttpControllerContext<HttpProtocolAt<TBinding, K>>,
       ) =>
         | DeclaredHttpResults<
-            HttpProtocolAt<TContract, K>['definition']['responses']
+            HttpProtocolAt<TBinding, K>['definition']['responses']
           >
         | Promise<
             DeclaredHttpResults<
-              HttpProtocolAt<TContract, K>['definition']['responses']
+              HttpProtocolAt<TBinding, K>['definition']['responses']
             >
           >
     }

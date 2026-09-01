@@ -82,6 +82,8 @@ Applicationのroot Contractも専用の`root` primitiveでは表現しない。
 
 Implementationは、元のfragment Contractではなく、Application Contract tree上で解決されたContract nodeへbindできることをcanonical modelとする。
 
+既存の`contract.merge()`は削除する。feature Contractのcompositionは`routes`によるmountへ統一し、Contract object同士をprocedure名で構造mergeする別経路は持たない。
+
 ---
 
 ## 1. HTTP definitionを再帰的なtreeにする
@@ -854,6 +856,28 @@ export const ProfileController = implementation({
 ---
 
 ## Rejected alternatives
+
+### `contract.merge()`
+
+採用しない。
+
+feature Contractの再利用は`routes: FeatureContract.http`で表現する。`contract.merge()`はprocedure名を軸にContract objectを平坦化するため、Application上のmount位置、ancestor metadata、resolved node identityを表現できない。
+
+```ts
+const AppContract = contract([
+  http({
+    users: {
+      routes: UsersContract.http,
+    },
+    admin: {
+      path: '/admin',
+      routes: AdminContract.http,
+    },
+  }),
+])
+```
+
+Contract compositionの経路を`routes`へ一本化し、同じfeature Contractを異なる場所へmountした場合も別resolved nodeとして扱う。
 
 ### `http.scope()`
 

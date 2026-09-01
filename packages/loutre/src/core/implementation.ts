@@ -1,15 +1,22 @@
-import { contractOfBinding } from './contract-internal.js'
+import {
+  contractNodeMetadataOf,
+  contractOfBinding,
+} from './contract-internal.js'
 import type {
-  ContractBinding,
   ContractDefinition,
   ContractOfBinding,
+  ResolvedContractNode,
   ContractProcedures,
   ProtocolDescriptor,
   ProtocolFactory,
 } from './contract.js'
 
+type ImplementationBinding =
+  | ContractDefinition
+  | ResolvedContractNode<ContractDefinition, 'leaf'>
+
 type ProcedureNamesForProtocol<
-  TBinding extends ContractBinding,
+  TBinding extends ImplementationBinding,
   TProtocol extends string,
   TContract extends ContractDefinition = ContractOfBinding<TBinding>,
 > = {
@@ -22,7 +29,7 @@ type ProcedureNamesForProtocol<
   string
 
 type ImplementationRuntimeShape<
-  TBinding extends ContractBinding,
+  TBinding extends ImplementationBinding,
   TProtocol extends string,
   TProcedures extends string,
   TContract extends ContractDefinition = ContractOfBinding<TBinding>,
@@ -56,7 +63,7 @@ export interface ImplementationDescriptor<
 }
 
 type AvailableProtocolConstraint<
-  TBinding extends ContractBinding,
+  TBinding extends ImplementationBinding,
   TProtocol extends string,
   TCapabilities extends readonly string[],
 > = [ProcedureNamesForProtocol<TBinding, TProtocol>] extends [never]
@@ -64,7 +71,7 @@ type AvailableProtocolConstraint<
   : ProtocolFactory<TProtocol, TCapabilities>
 
 type FullImplementationDeclaration<
-  TBinding extends ContractBinding,
+  TBinding extends ImplementationBinding,
   TProtocol extends string,
   TCapabilities extends readonly string[],
 > = {
@@ -83,8 +90,27 @@ type FullImplementationDeclaration<
   >
 }
 
+type DuplicateProcedureNames<
+  TProcedures extends readonly string[],
+  TSeen extends string = never,
+> = number extends TProcedures['length']
+  ? never
+  : TProcedures extends readonly [
+        infer THead extends string,
+        ...infer TTail extends readonly string[],
+      ]
+    ? THead extends TSeen
+      ? THead | DuplicateProcedureNames<TTail, TSeen>
+      : DuplicateProcedureNames<TTail, TSeen | THead>
+    : never
+
+type UniqueProcedureSelectionConstraint<TProcedures extends readonly string[]> =
+  [DuplicateProcedureNames<TProcedures>] extends [never]
+    ? unknown
+    : { readonly __duplicateImplementationProcedure__: never }
+
 type PartialImplementationDeclaration<
-  TBinding extends ContractBinding,
+  TBinding extends ImplementationBinding,
   TProtocol extends string,
   TProcedures extends readonly ProcedureNamesForProtocol<TBinding, TProtocol>[],
   TCapabilities extends readonly string[],
@@ -96,7 +122,8 @@ type PartialImplementationDeclaration<
     TProtocol,
     TCapabilities
   >
-  readonly procedures: TProcedures
+  readonly procedures: TProcedures &
+    UniqueProcedureSelectionConstraint<TProcedures>
   readonly factory: () => ImplementationRuntimeShape<
     TBinding,
     TProtocol,
@@ -105,7 +132,7 @@ type PartialImplementationDeclaration<
 }
 
 export function implementation<
-  const TBinding extends ContractBinding,
+  const TBinding extends ImplementationBinding,
   const TProtocol extends string,
   const TCapabilities extends readonly string[],
 >(
@@ -126,7 +153,7 @@ export function implementation<
   TCapabilities
 >
 export function implementation<
-  const TBinding extends ContractBinding,
+  const TBinding extends ImplementationBinding,
   const TProtocol extends string,
   const TProcedures extends readonly ProcedureNamesForProtocol<
     TBinding,
@@ -149,13 +176,18 @@ export function implementation<
 >
 export function implementation(declaration: {
   readonly name: string
-  readonly contract: ContractBinding
+  readonly contract: ImplementationBinding
   readonly protocol: ProtocolFactory<string, readonly string[]>
   readonly procedures?: readonly string[]
   readonly factory: () => object
 }): ImplementationDescriptor {
   const protocol = declaration.protocol.protocol
   const contract = contractOfBinding(declaration.contract)
+  if (contractNodeMetadataOf(contract)?.kind === 'branch') {
+    throw new Error(
+      'LUTRE_IMPL_003: Implementation must bind to a resolved leaf Contract node.',
+    )
+  }
   const available = Object.entries(contract.procedures)
     .filter(([, procedure]) => protocol in procedure.protocols)
     .map(([name]) => name)
