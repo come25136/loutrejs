@@ -9,6 +9,7 @@ import {
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { bearerAuth } from './bearer-auth.js'
+
 const AppEnvSchema = z
   .object({
     PORT: z.coerce.number().int().min(1).max(65535).default(3002),
@@ -21,11 +22,14 @@ const User = z.object({
   id: z.string(),
   name: z.string(),
 })
+
 const UnauthorizedBody = z.object({
   error: z.string(),
 })
+
 const BEARER_CURRENT_USER =
   contextKey('bearerCurrentUser').of<z.output<typeof User>>()
+
 const bearerAuthentication = bearerAuth({
   name: 'bearerAuthentication',
   realm: 'Loutre Example',
@@ -42,6 +46,7 @@ const bearerAuthentication = bearerAuth({
     body: { error: 'Bearer token required' },
   },
 })
+
 const BearerProfileContract = contract([
   http({
     get: {
@@ -62,6 +67,7 @@ const BearerProfileContract = contract([
     },
   }),
 ])
+
 const BearerProfileController = implementation({
   name: 'BearerProfileController',
   contract: BearerProfileContract,
@@ -72,11 +78,13 @@ const BearerProfileController = implementation({
     },
   }),
 })
+
 const BearerProfileModule = defineModule(() => ({
   environment: [AppEnv],
   description: 'Example profile API protected by custom Bearer authentication',
   implementations: [BearerProfileController],
 }))
+
 export default defineApplication({
   modules: [BearerProfileModule()],
 })

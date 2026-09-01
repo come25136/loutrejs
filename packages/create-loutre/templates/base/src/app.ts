@@ -6,6 +6,7 @@ import {
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
+
 const HelloContract = contract([
   http({
     hello: {
@@ -23,6 +24,7 @@ const HelloContract = contract([
     },
   }),
 ])
+
 const AppContract = contract([
   http({
     app: {
@@ -30,6 +32,7 @@ const AppContract = contract([
     },
   }),
 ])
+
 const AppController = implementation({
   name: 'AppController',
   contract: AppContract.http.app.hello,
@@ -42,11 +45,13 @@ const AppController = implementation({
     },
   }),
 })
+
 const AppModule = defineModule(() => ({
   name: 'AppModule',
   description: 'HTTP Application entry module',
   implementations: [AppController],
 }))
+
 export default defineApplication({
   modules: [AppModule()],
 })

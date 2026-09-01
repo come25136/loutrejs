@@ -13,6 +13,7 @@ import {
 import { http, validate } from '@loutrejs/loutre/http'
 import { Pool, type PoolClient } from 'pg'
 import { z } from 'zod'
+
 const AppEnvSchema = z
   .object({
     PORT: z.coerce.number().int().min(1).max(65535).default(3001),
@@ -24,8 +25,11 @@ const AppEnvSchema = z
     port: env.PORT,
     databaseUrl: new URL(env.DATABASE_URL),
   }))
+
 export class AppEnv extends defineEnv(AppEnvSchema) {}
+
 const TRANSACTION = contextKey('transaction').of<PoolClient>()
+
 class PostgresDatabase implements OnModuleInit, OnModuleDestroy {
   readonly pool: Pool
   constructor(readonly env = inject(AppEnv)) {
@@ -56,6 +60,7 @@ class PostgresDatabase implements OnModuleInit, OnModuleDestroy {
     }
   }
 }
+
 const transaction = layer({
   name: 'database.transaction',
   provides: [TRANSACTION],
@@ -67,12 +72,15 @@ const transaction = layer({
       })
     },
 })
+
 const CreateUserBody = z.object({ name: z.string().min(1) })
+
 const UserResponse = z.object({
   id: z.string(),
   name: z.string(),
   createdBy: z.string(),
 })
+
 const UsersContract = contract([
   http({
     create: {
@@ -91,6 +99,7 @@ const UsersContract = contract([
     },
   }),
 ])
+
 class UserRepository {
   async create(client: PoolClient, name: string) {
     const result = await client.query<{
@@ -112,6 +121,7 @@ class UserRepository {
     }
   }
 }
+
 const UsersController = implementation({
   name: 'UsersController',
   contract: UsersContract,
@@ -124,10 +134,12 @@ const UsersController = implementation({
     },
   }),
 })
+
 const AppModule = defineModule(() => ({
   name: 'DatabasePostgresExample',
   environment: [AppEnv],
   providers: [PostgresDatabase, UserRepository],
   implementations: [UsersController],
 }))
+
 export default defineApplication({ modules: [AppModule()] })

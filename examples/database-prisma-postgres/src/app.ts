@@ -14,7 +14,9 @@ import { http, validate } from '@loutrejs/loutre/http'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { z } from 'zod'
 import { Prisma, PrismaClient } from './generated/prisma/client.js'
+
 type PrismaTransactionOptions = Parameters<PrismaClient['$transaction']>[1]
+
 const AppEnvSchema = z
   .object({
     PORT: z.coerce.number().int().min(1).max(65535).default(3003),
@@ -26,8 +28,11 @@ const AppEnvSchema = z
     port: env.PORT,
     databaseUrl: new URL(env.PRISMA_DATABASE_URL),
   }))
+
 export class AppEnv extends defineEnv(AppEnvSchema) {}
+
 const TRANSACTION = contextKey('transaction').of<Prisma.TransactionClient>()
+
 class PrismaDatabase implements OnModuleInit, OnModuleDestroy {
   readonly client: PrismaClient
   constructor(readonly env = inject(AppEnv)) {
@@ -50,6 +55,7 @@ class PrismaDatabase implements OnModuleInit, OnModuleDestroy {
     return this.client.$transaction(run, options)
   }
 }
+
 const transaction = layer({
   name: 'database.transaction',
   provides: [TRANSACTION],
@@ -68,12 +74,15 @@ const transaction = layer({
       )
     },
 })
+
 const CreateUserBody = z.object({ name: z.string().min(1) })
+
 const UserResponse = z.object({
   id: z.string(),
   name: z.string(),
   createdBy: z.string(),
 })
+
 const UsersContract = contract([
   http({
     create: {
@@ -92,6 +101,7 @@ const UsersContract = contract([
     },
   }),
 ])
+
 class UserRepository {
   create(client: Prisma.TransactionClient, name: string) {
     return client.user.create({
@@ -103,6 +113,7 @@ class UserRepository {
     })
   }
 }
+
 const UsersController = implementation({
   name: 'UsersController',
   contract: UsersContract,
@@ -115,10 +126,12 @@ const UsersController = implementation({
     },
   }),
 })
+
 const AppModule = defineModule(() => ({
   name: 'DatabasePrismaPostgresExample',
   environment: [AppEnv],
   providers: [PrismaDatabase, UserRepository],
   implementations: [UsersController],
 }))
+
 export default defineApplication({ modules: [AppModule()] })
