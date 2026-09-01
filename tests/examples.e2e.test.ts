@@ -15,6 +15,7 @@ const databaseDrizzleWorkspace = '@loutrejs/example-database-drizzle-postgres'
 const databasePrismaWorkspace = '@loutrejs/example-database-prisma-postgres'
 const helloCliWorkspace = '@loutrejs/example-hello-cli'
 const helloHttpWorkspace = '@loutrejs/example-hello-http'
+const nestedContractAuthWorkspace = '@loutrejs/example-nested-contract-auth'
 const helloWorkerWorkspace = '@loutrejs/example-hello-worker'
 
 describe.sequential('example projects', () => {
@@ -31,6 +32,39 @@ describe.sequential('example projects', () => {
 
       const invalid = await fetch(`http://127.0.0.1:${port}/x`)
       expect(invalid.status).toBe(400)
+    } finally {
+      await example.stop()
+    }
+  })
+
+  it('Nested Contract Auth projectで親branchの認証Contextを子Controllerへ継承する', async () => {
+    const checked = runWorkspaceCommand(nestedContractAuthWorkspace, 'check')
+    expect(checked.status, checked.stderr || checked.stdout).toBe(0)
+
+    const port = await reserveHttpPort()
+    const example = startWorkspace(nestedContractAuthWorkspace, 'start', {
+      PORT: String(port),
+    })
+    try {
+      await waitForPort(port)
+      const unauthorized = await fetch(
+        `http://127.0.0.1:${port}/api/me/profile`,
+      )
+      expect(unauthorized.status).toBe(401)
+
+      const authorized = await fetch(
+        `http://127.0.0.1:${port}/api/me/profile`,
+        {
+          headers: {
+            authorization: `Basic ${Buffer.from('loutre:otter').toString('base64')}`,
+          },
+        },
+      )
+      expect(authorized.status).toBe(200)
+      expect(await authorized.json()).toEqual({
+        id: 'user-1',
+        name: 'Loutre User',
+      })
     } finally {
       await example.stop()
     }

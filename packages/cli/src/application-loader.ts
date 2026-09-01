@@ -2,17 +2,28 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { builtinModules } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { ApplicationDefinition } from '@loutrejs/loutre'
 import {
   assertValidCompilation,
   compileApplication,
   type ApplicationGraphIR,
 } from '@loutrejs/loutre/graph'
-import { build as buildWithEsbuild } from 'esbuild'
+import { build as buildWithEsbuild, type Plugin } from 'esbuild'
 
 export interface EmitApplicationOptions {
   readonly nodeCompatibility?: boolean
+  readonly externalizeLoutre?: boolean
+}
+
+const externalLoutreRuntime: Plugin = {
+  name: 'external-loutre-runtime',
+  setup(build) {
+    build.onResolve({ filter: /^@loutrejs\// }, ({ path }) => ({
+      path: fileURLToPath(import.meta.resolve(path)),
+      external: true,
+    }))
+  },
 }
 
 export async function emitApplication(
@@ -44,6 +55,7 @@ export async function emitApplication(
       : {}),
     sourcemap: 'inline',
     metafile: true,
+    plugins: options.externalizeLoutre ? [externalLoutreRuntime] : [],
   })
   return Object.keys(result.metafile.inputs).map((path) =>
     resolve(workingDirectory, path),
@@ -89,7 +101,10 @@ export async function loadApplicationDefinition(
   const directory = await mkdtemp(join(tmpdir(), 'loutre-definition-'))
   const output = join(directory, 'application.mjs')
   try {
-    await emitApplication(entry, output, { nodeCompatibility: true })
+    await emitApplication(entry, output, {
+      nodeCompatibility: true,
+      externalizeLoutre: true,
+    })
     return await importApplicationDefinition(output)
   } finally {
     await rm(directory, { recursive: true, force: true })
@@ -102,7 +117,10 @@ export async function loadApplicationGraph(
   const directory = await mkdtemp(join(tmpdir(), 'loutre-graph-'))
   const output = join(directory, 'application.mjs')
   try {
-    await emitApplication(entry, output, { nodeCompatibility: true })
+    await emitApplication(entry, output, {
+      nodeCompatibility: true,
+      externalizeLoutre: true,
+    })
     return compileDefinition(await importApplicationDefinition(output))
   } catch (error) {
     const graph = (error as { readonly graph?: unknown })?.graph
