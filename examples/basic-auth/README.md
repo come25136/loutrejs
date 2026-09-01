@@ -1,24 +1,22 @@
-# Basic認証サンプル
+# Basic Auth Example
 
-HTTP Basic認証で`GET /profile`を保護するサンプルです。`basicAuth()` Layer、Context Key、
-認証失敗時のshort circuitと`WWW-Authenticate` challengeを含みます。
+Protect `GET /profile` with HTTP Basic authentication. This example uses the `basicAuth()` Layer, a Context Key, short-circuit handling for authentication failures, and a `WWW-Authenticate` challenge.
 
-リポジトリルートで依存関係をインストールしたあと、次のコマンドで起動します。
+From this example directory, start the application with:
 
 ```sh
-npm run dev --workspace @loutrejs/example-basic-auth
+npm run dev
 ```
 
-認証せずにアクセスするとHTTP 401を返します。
+A request without credentials returns HTTP 401:
 
 ```sh
 curl -i http://127.0.0.1:3001/profile
 ```
 
-ブラウザで`http://127.0.0.1:3001/profile`へ直接移動した場合は、Basic認証ダイアログが
-表示されます。
+Opening `http://127.0.0.1:3001/profile` directly in a browser displays the browser's Basic authentication dialog.
 
-サンプル用の資格情報`loutre:otter`を指定するとプロフィールを取得できます。
+Use the example credentials `loutre:otter` to retrieve the profile:
 
 ```sh
 curl -i -u loutre:otter http://127.0.0.1:3001/profile
@@ -28,13 +26,12 @@ curl -i -u loutre:otter http://127.0.0.1:3001/profile
 { "id": "user-1", "name": "Loutre User" }
 ```
 
-この資格情報は動作確認専用です。実際のアプリケーションでは、平文の固定パスワードを
-ソースコードへ保存せず、秘密情報ストアと安全なパスワード検証を使用してください。
+These credentials are for demonstration only. In a real application, do not store plaintext passwords in source code. Use a secret store and a secure password verification mechanism instead.
 
-Application Graph、型、動作を検証する場合は次のコマンドを実行します。
+To validate the Application Graph, types, and behavior, run:
 
 ```sh
-npm run check --workspace @loutrejs/example-basic-auth
-npm run typecheck --workspace @loutrejs/example-basic-auth
-npm test --workspace @loutrejs/example-basic-auth
+npm run check
+npm run typecheck
+npm test
 ```

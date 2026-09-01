@@ -1,12 +1,15 @@
 # Drizzle PostgreSQL Database Example
 
-Drizzle PostgreSQLのnative transaction clientとtransaction configを型を変えずにtyped
-Contextへ渡すサンプルです。
+Pass Drizzle PostgreSQL's native transaction client and transaction configuration through typed Context without changing their types.
+
+From this example directory, start PostgreSQL and the application with:
 
 ```sh
-npm run db:start --workspace @loutrejs/example-database-drizzle-postgres
-npm run dev --workspace @loutrejs/example-database-drizzle-postgres
+npm run db:start
+npm run dev
 ```
+
+Create a user:
 
 ```sh
 curl --request POST http://127.0.0.1:3002/users \
@@ -14,6 +17,4 @@ curl --request POST http://127.0.0.1:3002/users \
   --data '{"name":"Loutre"}'
 ```
 
-`DrizzleTransaction`と`DrizzleTransactionOptions`は`NodePgDatabase.transaction()`から
-推論しています。`transaction([http.controller])`のchild Pipeline内だけでtransaction
-clientを利用でき、Repositoryへ明示的に渡します。`any`やunsafe castは使用しません。
+`DrizzleTransaction` and `DrizzleTransactionOptions` are inferred from `NodePgDatabase.transaction()`. The transaction client is available only inside the child Pipeline created by `transaction([http.controller])` and is passed explicitly to the Repository. The example does not use `any` or unsafe casts.

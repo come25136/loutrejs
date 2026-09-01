@@ -1,11 +1,11 @@
-# Hello HTTP example
+# Hello HTTP Example
 
 A minimal HTTP API built with Loutre. `GET /{name}` accepts a path parameter and validates it with `validate.params` before the request reaches the Controller.
 
-Install dependencies from the repository root, then start the example:
+From this example directory, start the application with:
 
 ```sh
-npm run dev --workspace @loutrejs/example-hello-http
+npm run dev
 ```
 
 Send a request from another terminal:
@@ -27,6 +27,6 @@ curl -i http://127.0.0.1:3000/x
 To validate only the Application Graph and types, run:
 
 ```sh
-npm run check --workspace @loutrejs/example-hello-http
-npm run typecheck --workspace @loutrejs/example-hello-http
+npm run check
+npm run typecheck
 ```

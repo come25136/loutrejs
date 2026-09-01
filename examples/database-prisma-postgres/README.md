@@ -1,13 +1,16 @@
 # Prisma PostgreSQL Database Example
 
-Prisma 7のgenerated clientとinteractive `$transaction()`を、新しい再帰Pipelineから直接
-利用するサンプルです。
+Use Prisma 7's generated client and interactive `$transaction()` directly from a recursive Pipeline.
+
+From this example directory, generate the Prisma client, start PostgreSQL, and start the application with:
 
 ```sh
-npm run generate --workspace @loutrejs/example-database-prisma-postgres
-npm run db:start --workspace @loutrejs/example-database-prisma-postgres
-npm run dev --workspace @loutrejs/example-database-prisma-postgres
+npm run generate
+npm run db:start
+npm run dev
 ```
+
+Create a user:
 
 ```sh
 curl --request POST http://127.0.0.1:3003/users \
@@ -15,7 +18,4 @@ curl --request POST http://127.0.0.1:3003/users \
   --data '{"name":"Loutre"}'
 ```
 
-`Prisma.TransactionClient`を`TRANSACTION` Context Keyへ保持し、ControllerからRepositoryへ
-明示的に渡します。transaction optionもgenerated clientの`$transaction()`から推論し、Prisma
-固有の`isolationLevel`、`maxWait`、`timeout`をそのまま利用します。transaction clientをroot
-`PrismaClient`へcastせず、Prismaの型にないnested `$transaction()`も使用しません。
+`Prisma.TransactionClient` is stored under the `TRANSACTION` Context Key and passed explicitly from the Controller to the Repository. Transaction options are inferred from the generated client's `$transaction()` method, preserving Prisma-specific options such as `isolationLevel`, `maxWait`, and `timeout`. The transaction client is never cast to the root `PrismaClient`, and the example does not use nested `$transaction()` calls that are absent from Prisma's transaction client type.

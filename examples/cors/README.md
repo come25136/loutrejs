@@ -1,10 +1,10 @@
-# CORSサンプル
+# CORS Example
 
-LoutreのHTTP Pipelineへ`validate.cors()`を組み込み、ブラウザから別OriginのAPIを呼び出すサンプルです。
+Add `validate.cors()` to Loutre's HTTP Pipeline to serve an API that can be called from a different browser origin.
 
-CORSはrequest body/query/headerなどのvalidationより前に宣言します。子Pipelineで囲う必要はありません。
+Declare CORS before request body, query, header, and other validation Layers. There is no need to wrap it in a child Pipeline.
 
-`OPTIONS` procedureを別途定義する必要もありません。preflightは対象routeのCORS policyを使ってHTTP application境界で処理され、Controllerまでは到達しません。
+You also do not need to define a separate `OPTIONS` procedure. Preflight requests are handled at the HTTP application boundary using the target route's CORS policy, before they reach the Controller.
 
 ```ts
 http.route({
@@ -33,21 +33,21 @@ http.route({
 })
 ```
 
-制限なしで全Originを許可するだけなら`validate.cors()`で十分です。
+If every origin is allowed without additional restrictions, `validate.cors()` is enough.
 
-全routeへ同じCORS policyを適用したい場合は、framework側にglobal CORS設定を増やすのではなく、アプリ側で共通Pipeline helperを作って再利用できます。
+To apply the same CORS policy to every route, create and reuse a shared Pipeline helper in your application instead of adding global CORS configuration to the framework.
 
-## 起動
+## Run
 
-リポジトリルートで依存関係をインストールしたあと、次のコマンドで起動します。
+From this example directory, start the application with:
 
 ```sh
-npm run dev --workspace @loutrejs/example-cors
+npm run dev
 ```
 
 ## Preflight
 
-ブラウザが送るpreflight相当のリクエストは次の通りです。
+The following request is equivalent to a browser preflight request:
 
 ```sh
 curl -i -X OPTIONS http://127.0.0.1:3000/messages \
@@ -56,7 +56,7 @@ curl -i -X OPTIONS http://127.0.0.1:3000/messages \
   -H 'Access-Control-Request-Headers: content-type'
 ```
 
-レスポンスは`204 No Content`になり、主に次のheaderが付きます。
+The response is `204 No Content` and includes headers such as:
 
 ```text
 access-control-allow-origin: http://localhost:5173
@@ -74,7 +74,7 @@ curl -i -X POST http://127.0.0.1:3000/messages \
   --data '{"text":"Hello from browser"}'
 ```
 
-通常のresponseにもCORS headerが付与されます。
+The normal response also includes CORS headers:
 
 ```text
 HTTP/1.1 201 Created
@@ -83,7 +83,7 @@ access-control-expose-headers: x-request-id
 x-request-id: cors-example
 ```
 
-ブラウザ側は普通の`fetch`で呼び出せます。
+The browser can call the endpoint with a normal `fetch` request:
 
 ```ts
 const response = await fetch('http://127.0.0.1:3000/messages', {
@@ -97,9 +97,9 @@ const response = await fetch('http://127.0.0.1:3000/messages', {
 console.log(await response.json())
 ```
 
-Application Graphと型だけを検証する場合は、次のコマンドを実行します。
+To validate only the Application Graph and types, run:
 
 ```sh
-npm run check --workspace @loutrejs/example-cors
-npm run typecheck --workspace @loutrejs/example-cors
+npm run check
+npm run typecheck
 ```
