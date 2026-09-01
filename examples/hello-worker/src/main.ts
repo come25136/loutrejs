@@ -5,6 +5,7 @@ const app = bootstrap({ application })
 await app.triggers.start()
 
 let closing = false
+
 const close = async (signal: string) => {
   if (closing) return
   closing = true

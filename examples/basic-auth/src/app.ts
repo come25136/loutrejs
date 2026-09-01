@@ -8,6 +8,7 @@ import {
 } from '@loutrejs/loutre'
 import { basicAuth, http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
+
 const AppEnvSchema = z
   .object({
     PORT: z.coerce.number().int().min(1).max(65535).default(3001),
@@ -20,10 +21,13 @@ const User = z.object({
   id: z.string(),
   name: z.string(),
 })
+
 const UnauthorizedBody = z.object({
   error: z.string(),
 })
+
 const CURRENT_USER = contextKey('currentUser').of<z.output<typeof User>>()
+
 const basicAuthentication = basicAuth({
   name: 'basicAuthentication',
   realm: 'Loutre Example',
@@ -42,6 +46,7 @@ const basicAuthentication = basicAuth({
     body: { error: 'Basic authentication required' },
   },
 })
+
 const ProfileContract = contract([
   http({
     get: {
@@ -62,6 +67,7 @@ const ProfileContract = contract([
     },
   }),
 ])
+
 const ProfileController = implementation({
   name: 'ProfileController',
   contract: ProfileContract,
@@ -72,11 +78,13 @@ const ProfileController = implementation({
     },
   }),
 })
+
 const ProfileModule = defineModule(() => ({
   environment: [AppEnv],
   description: 'Example profile API protected by Basic authentication',
   implementations: [ProfileController],
 }))
+
 export default defineApplication({
   modules: [ProfileModule()],
 })

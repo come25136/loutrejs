@@ -12,14 +12,17 @@ import {
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
+
 interface User {
   readonly id: string
   readonly name: string
   readonly createdBy: string
 }
+
 class InMemoryClient {
   constructor(readonly users: Map<string, User>) {}
 }
+
 class InMemoryDatabase {
   readonly client = new InMemoryClient(new Map())
   async transaction<TResult>(
@@ -34,6 +37,7 @@ class InMemoryDatabase {
     return result
   }
 }
+
 const AppEnvSchema = z
   .object({
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
@@ -43,10 +47,13 @@ const AppEnvSchema = z
 export class AppEnv extends defineEnv(AppEnvSchema) {}
 
 const DATABASE = token<InMemoryDatabase>('database.primary')
+
 const CURRENT_USER = contextKey('currentUser').of<{
   readonly id: string
 }>()
+
 const TRANSACTION = contextKey('transaction').of<InMemoryClient>()
+
 const authentication = layer({
   name: 'authentication.demo',
   role: 'authentication',
@@ -55,6 +62,7 @@ const authentication = layer({
     await next({ currentUser: { id: 'demo-user' } })
   },
 })
+
 const authorization = layer({
   name: 'authorization.users.create',
   role: 'guard',
@@ -66,6 +74,7 @@ const authorization = layer({
     await next()
   },
 })
+
 const transaction = layer({
   name: 'database.transaction',
   provides: [TRANSACTION],
@@ -77,12 +86,15 @@ const transaction = layer({
       })
     },
 })
+
 const CreateUserBody = z.object({ name: z.string().min(1) })
+
 const UserResponse = z.object({
   id: z.string(),
   name: z.string(),
   createdBy: z.string(),
 })
+
 const UsersContract = contract([
   http({
     create: {
@@ -105,6 +117,7 @@ const UsersContract = contract([
     },
   }),
 ])
+
 class UserRepository {
   create(client: InMemoryClient, name: string, createdBy: string): User {
     const user = { id: crypto.randomUUID(), name, createdBy }
@@ -112,6 +125,7 @@ class UserRepository {
     return user
   }
 }
+
 const UsersController = implementation({
   name: 'UsersController',
   contract: UsersContract,
@@ -124,10 +138,12 @@ const UsersController = implementation({
     },
   }),
 })
+
 const AppModule = defineModule(() => ({
   environment: [AppEnv],
   name: 'DatabaseTransactionsExample',
   providers: [provide(DATABASE).useClass(InMemoryDatabase), UserRepository],
   implementations: [UsersController],
 }))
+
 export default defineApplication({ modules: [AppModule()] })

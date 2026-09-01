@@ -16,13 +16,17 @@ import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { z } from 'zod'
 import * as schema from './schema.js'
+
 type DrizzleDatabaseClient = NodePgDatabase<typeof schema>
+
 type DrizzleTransaction = Parameters<
   Parameters<DrizzleDatabaseClient['transaction']>[0]
 >[0]
+
 type DrizzleTransactionOptions = Parameters<
   DrizzleDatabaseClient['transaction']
 >[1]
+
 const AppEnvSchema = z
   .object({
     PORT: z.coerce.number().int().min(1).max(65535).default(3002),
@@ -34,8 +38,11 @@ const AppEnvSchema = z
     port: env.PORT,
     databaseUrl: new URL(env.DRIZZLE_DATABASE_URL),
   }))
+
 export class AppEnv extends defineEnv(AppEnvSchema) {}
+
 const TRANSACTION = contextKey('transaction').of<DrizzleTransaction>()
+
 class DrizzleDatabase implements OnModuleInit, OnModuleDestroy {
   readonly pool: Pool
   readonly client: DrizzleDatabaseClient
@@ -58,6 +65,7 @@ class DrizzleDatabase implements OnModuleInit, OnModuleDestroy {
     return this.client.transaction(run, options)
   }
 }
+
 const transaction = layer({
   name: 'database.transaction',
   provides: [TRANSACTION],
@@ -76,12 +84,15 @@ const transaction = layer({
       )
     },
 })
+
 const CreateUserBody = z.object({ name: z.string().min(1) })
+
 const UserResponse = z.object({
   id: z.string(),
   name: z.string(),
   createdBy: z.string(),
 })
+
 const UsersContract = contract([
   http({
     create: {
@@ -100,6 +111,7 @@ const UsersContract = contract([
     },
   }),
 ])
+
 class UserRepository {
   async create(client: DrizzleTransaction, name: string) {
     const [user] = await client
@@ -114,6 +126,7 @@ class UserRepository {
     return user
   }
 }
+
 const UsersController = implementation({
   name: 'UsersController',
   contract: UsersContract,
@@ -126,10 +139,12 @@ const UsersController = implementation({
     },
   }),
 })
+
 const AppModule = defineModule(() => ({
   name: 'DatabaseDrizzlePostgresExample',
   environment: [AppEnv],
   providers: [DrizzleDatabase, UserRepository],
   implementations: [UsersController],
 }))
+
 export default defineApplication({ modules: [AppModule()] })
