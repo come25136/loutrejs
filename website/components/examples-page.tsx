@@ -8,15 +8,6 @@ const buttonClass =
 
 const examples = [
   {
-    name: 'Hello HTTP',
-    slug: 'hello-http',
-    stackblitzUrl: stackblitzHelloHttpUrl,
-    description: {
-      en: 'A minimal HTTP API built with a Contract and Controller',
-      ja: 'ContractとControllerを使った最小構成のHTTP API',
-    },
-  },
-  {
     name: 'Hello CLI',
     slug: 'hello-cli',
     stackblitzUrl: null,
@@ -32,6 +23,15 @@ const examples = [
     description: {
       en: 'A Worker that repeatedly runs a Task with fixedDelay',
       ja: 'fixedDelayでTaskを繰り返し実行するWorker',
+    },
+  },
+  {
+    name: 'Hello HTTP',
+    slug: 'hello-http',
+    stackblitzUrl: stackblitzHelloHttpUrl,
+    description: {
+      en: 'A minimal HTTP API built with a Contract and Controller',
+      ja: 'ContractとControllerを使った最小構成のHTTP API',
     },
   },
   {
