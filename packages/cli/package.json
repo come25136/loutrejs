@@ -1,6 +1,6 @@
 {
   "name": "@loutrejs/cli",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -22,7 +22,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@loutrejs/loutre": "^0.4.1",
+    "@loutrejs/loutre": "^0.5.0",
     "esbuild": "^0.28.2"
   },
   "devDependencies": {
