@@ -15,7 +15,6 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { localePrefix, type Locale } from '../lib/i18n'
-import { stackblitzHelloHttpUrl } from '../lib/links'
 import { ScrollReveal } from './scroll-reveal'
 import { MermaidDiagram } from './mermaid-diagram'
 
@@ -299,7 +298,9 @@ export function HomePage({ locale }: { locale: Locale }) {
               </Link>
               <a
                 className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-surface px-5 text-sm font-semibold transition hover:bg-surface-muted"
-                href={stackblitzHelloHttpUrl}
+                href={
+                  'https://stackblitz.com/fork/github/come25136/loutrejs/tree/main/examples/hello-http?startScript=dev&title=Loutre%20Hello%20HTTP&initialpath=%2FLoutre'
+                }
                 target="_blank"
                 rel="noreferrer"
               >

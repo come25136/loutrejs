@@ -1,6 +1,5 @@
 import { ArrowUpRight } from 'lucide-react'
 import type { Locale } from '../lib/i18n'
-import { stackblitzHelloHttpUrl } from '../lib/links'
 import { ScrollReveal } from './scroll-reveal'
 
 const buttonClass =
@@ -28,7 +27,8 @@ const examples = [
   {
     name: 'Hello HTTP',
     slug: 'hello-http',
-    stackblitzUrl: stackblitzHelloHttpUrl,
+    stackblitzUrl:
+      'https://stackblitz.com/fork/github/come25136/loutrejs/tree/main/examples/hello-http?startScript=dev&title=Loutre%20Hello%20HTTP&initialpath=%2FLoutre',
     description: {
       en: 'A minimal HTTP API with path parameters and validation',
       ja: 'path parameterとvalidationを含む最小構成のHTTP API',
