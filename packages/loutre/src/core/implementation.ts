@@ -1,13 +1,17 @@
+import { contractOfBinding } from './contract-internal.js'
 import type {
+  ContractBinding,
   ContractDefinition,
+  ContractOfBinding,
   ContractProcedures,
   ProtocolDescriptor,
   ProtocolFactory,
 } from './contract.js'
 
 type ProcedureNamesForProtocol<
-  TContract extends ContractDefinition,
+  TBinding extends ContractBinding,
   TProtocol extends string,
+  TContract extends ContractDefinition = ContractOfBinding<TBinding>,
 > = {
   [
     K in keyof ContractProcedures<TContract>
@@ -18,9 +22,10 @@ type ProcedureNamesForProtocol<
   string
 
 type ImplementationRuntimeShape<
-  TContract extends ContractDefinition,
+  TBinding extends ContractBinding,
   TProtocol extends string,
   TProcedures extends string,
+  TContract extends ContractDefinition = ContractOfBinding<TBinding>,
 > = {
   [K in TProcedures]: ContractProcedures<TContract>[K]['protocols'][TProtocol &
     keyof ContractProcedures<TContract>[K]['protocols']] extends ProtocolDescriptor<
@@ -51,109 +56,107 @@ export interface ImplementationDescriptor<
 }
 
 type AvailableProtocolConstraint<
-  TContract extends ContractDefinition,
+  TBinding extends ContractBinding,
   TProtocol extends string,
   TCapabilities extends readonly string[],
-> = [ProcedureNamesForProtocol<TContract, TProtocol>] extends [never]
+> = [ProcedureNamesForProtocol<TBinding, TProtocol>] extends [never]
   ? never
   : ProtocolFactory<TProtocol, TCapabilities>
 
 type FullImplementationDeclaration<
-  TContract extends ContractDefinition,
+  TBinding extends ContractBinding,
   TProtocol extends string,
   TCapabilities extends readonly string[],
 > = {
   readonly name: string
-  readonly contract: TContract
+  readonly contract: TBinding
   readonly protocol: AvailableProtocolConstraint<
-    TContract,
+    TBinding,
     TProtocol,
     TCapabilities
   >
   readonly procedures?: never
   readonly factory: () => ImplementationRuntimeShape<
-    TContract,
+    TBinding,
     TProtocol,
-    ProcedureNamesForProtocol<TContract, TProtocol>
+    ProcedureNamesForProtocol<TBinding, TProtocol>
   >
 }
 
 type PartialImplementationDeclaration<
-  TContract extends ContractDefinition,
+  TBinding extends ContractBinding,
   TProtocol extends string,
-  TProcedures extends readonly ProcedureNamesForProtocol<
-    TContract,
-    TProtocol
-  >[],
+  TProcedures extends readonly ProcedureNamesForProtocol<TBinding, TProtocol>[],
   TCapabilities extends readonly string[],
 > = {
   readonly name: string
-  readonly contract: TContract
+  readonly contract: TBinding
   readonly protocol: AvailableProtocolConstraint<
-    TContract,
+    TBinding,
     TProtocol,
     TCapabilities
   >
   readonly procedures: TProcedures
   readonly factory: () => ImplementationRuntimeShape<
-    TContract,
+    TBinding,
     TProtocol,
     TProcedures[number]
   >
 }
 
 export function implementation<
-  const TContract extends ContractDefinition,
+  const TBinding extends ContractBinding,
   const TProtocol extends string,
   const TCapabilities extends readonly string[],
 >(
   declaration: FullImplementationDeclaration<
-    TContract,
+    TBinding,
     TProtocol,
     TCapabilities
   >,
 ): ImplementationDescriptor<
-  TContract,
+  ContractOfBinding<TBinding>,
   TProtocol,
-  readonly ProcedureNamesForProtocol<TContract, TProtocol>[],
+  readonly ProcedureNamesForProtocol<TBinding, TProtocol>[],
   ImplementationRuntimeShape<
-    TContract,
+    TBinding,
     TProtocol,
-    ProcedureNamesForProtocol<TContract, TProtocol>
+    ProcedureNamesForProtocol<TBinding, TProtocol>
   >,
   TCapabilities
 >
 export function implementation<
-  const TContract extends ContractDefinition,
+  const TBinding extends ContractBinding,
   const TProtocol extends string,
   const TProcedures extends readonly ProcedureNamesForProtocol<
-    TContract,
+    TBinding,
     TProtocol
   >[],
   const TCapabilities extends readonly string[],
 >(
   declaration: PartialImplementationDeclaration<
-    TContract,
+    TBinding,
     TProtocol,
     TProcedures,
     TCapabilities
   >,
 ): ImplementationDescriptor<
-  TContract,
+  ContractOfBinding<TBinding>,
   TProtocol,
   TProcedures,
-  ImplementationRuntimeShape<TContract, TProtocol, TProcedures[number]>,
+  ImplementationRuntimeShape<TBinding, TProtocol, TProcedures[number]>,
   TCapabilities
 >
 export function implementation(declaration: {
   readonly name: string
-  readonly contract: ContractDefinition
+  readonly contract: ContractBinding
   readonly protocol: ProtocolFactory<string, readonly string[]>
   readonly procedures?: readonly string[]
   readonly factory: () => object
 }): ImplementationDescriptor {
   const protocol = declaration.protocol.protocol
-  const available = Object.entries(declaration.contract.procedures)
+  const contract = contractOfBinding(declaration.contract)
+  const available = Object.entries(contract.procedures)
     .filter(([, procedure]) => protocol in procedure.protocols)
     .map(([name]) => name)
   if (available.length === 0) {
@@ -171,7 +174,7 @@ export function implementation(declaration: {
       )
     }
     selected.add(procedure)
-    const definition = declaration.contract.procedures[procedure]
+    const definition = contract.procedures[procedure]
     if (!definition || !(protocol in definition.protocols)) {
       throw new Error(
         `LUTRE_IMPL_003: ${procedure} is not declared for protocol ${protocol}.`,
@@ -182,7 +185,7 @@ export function implementation(declaration: {
   return Object.freeze({
     kind: 'implementation',
     name: declaration.name,
-    contract: declaration.contract,
+    contract,
     protocol,
     capabilities: declaration.protocol.capabilities ?? [],
     procedures: Object.freeze(procedures),

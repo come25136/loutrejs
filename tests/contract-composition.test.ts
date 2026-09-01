@@ -45,6 +45,30 @@ describe('Contract composition', () => {
     )
   })
 
+  it('同じHTTP protocolの複数groupをnamespaceへ統合できる', () => {
+    const Contract = contract([
+      http({
+        get: {
+          method: 'GET',
+          path: '/users/{id}',
+          responses: { ok: { status: 200, body: z.string() } },
+          pipeline: [http.controller],
+        },
+      }),
+      http({
+        create: {
+          method: 'POST',
+          path: '/users',
+          responses: { created: { status: 201, body: z.string() } },
+          pipeline: [http.controller],
+        },
+      }),
+    ])
+
+    expect(Object.keys(Contract.http)).toEqual(['get', 'create'])
+    expect(Object.keys(Contract.procedures)).toEqual(['get', 'create'])
+  })
+
   it('同じprocedureへ異なるprotocol groupを重ねられる', () => {
     const Contract = contract([
       protocolGroup('graphql', {

@@ -74,6 +74,14 @@ export const GreetingContract = contract([
   }),
 ])
 
+export const AppContract = contract([
+  http({
+    greetings: {
+      routes: GreetingContract.http,
+    },
+  }),
+])
+
 class GreetingService {
   greet(name: string) {
     return { message: `Hello, ${name}!` }
@@ -82,7 +90,7 @@ class GreetingService {
 
 const GreetingController = implementation({
   name: 'GreetingController',
-  contract: GreetingContract,
+  contract: AppContract.http.greetings.greet,
   protocol: http,
   factory: (greetings = inject(GreetingService)) => ({
     async greet(ctx) {
@@ -99,15 +107,16 @@ const GreetingModule = defineModule(() => ({
 }))
 
 export default defineApplication({
+  contract: AppContract,
   modules: [GreetingModule()],
 })
 ```
 
-In this code, `GreetingContract` defines the input, response, and Pipeline, and `GreetingController` implements the Contract using HTTP. The generation of `GreetingService` is consolidated into Modules, and Application selects only the Module to start. Only `GreetingContract` is exported to use the same definition from the subsequent HTTP Client.
+In this code, `GreetingContract` is a feature Contract. `AppContract` composes it into the Application HTTP tree, and `GreetingController` binds to the resolved node `AppContract.http.greetings.greet`. The Application receives `AppContract` as its composition root, so routing, inherited Pipeline state, Graph coverage, OpenAPI, and server implementation all use the same resolved Contract tree.
 
 Application Definition is not an HTTP server itself. Define the Application Graph, which does not depend on Runtime, first, and connect execution environment-specific functions such as HTTP listener from the Host.
 
-Procedures of the same protocol are grouped together. When handling multiple protocols, arrange groups like `contract([http({...}), graphqlGroup, websocketGroup, sseGroup])`. Contracts divided by feature can be integrated with `contract.merge(contracts)`.
+HTTP Contracts can be nested with `routes`. Tree keys are architectural namespaces and do not add URL segments by themselves; add `path` on a branch when a URL prefix is required. Parent `path`, `pipeline`, and `responses` are inherited by descendant routes.
 
 ## Test the behavior
 

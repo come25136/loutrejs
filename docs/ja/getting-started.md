@@ -74,6 +74,14 @@ export const GreetingContract = contract([
   }),
 ])
 
+export const AppContract = contract([
+  http({
+    greetings: {
+      routes: GreetingContract.http,
+    },
+  }),
+])
+
 class GreetingService {
   greet(name: string) {
     return { message: `こんにちは、${name}！` }
@@ -82,7 +90,7 @@ class GreetingService {
 
 const GreetingController = implementation({
   name: 'GreetingController',
-  contract: GreetingContract,
+  contract: AppContract.http.greetings.greet,
   protocol: http,
   factory: (greetings = inject(GreetingService)) => ({
     async greet(ctx) {
@@ -99,15 +107,16 @@ const GreetingModule = defineModule(() => ({
 }))
 
 export default defineApplication({
+  contract: AppContract,
   modules: [GreetingModule()],
 })
 ```
 
-このコードでは、`GreetingContract`が入力、応答、Pipelineを定め、`GreetingController`がContractをHTTPで実装します。`GreetingService`の生成はModuleへ集約し、Applicationは起動するModuleだけを選びます。`GreetingContract`だけは、後段のHTTP Clientから同じ定義を使うためにexportしています。
+このコードでは、`GreetingContract`をfeature Contractとして定義し、`AppContract`のHTTP treeへcompositionしています。`GreetingController`はfragmentではなく、Application上で解決済みの`AppContract.http.greetings.greet`へbindします。Applicationには`AppContract`をcomposition rootとして渡すため、routing、継承されたPipeline state、Graph coverage、OpenAPI、server implementationが同じresolved Contract treeを参照します。
 
 Application DefinitionはHTTP serverそのものではありません。Runtimeに依存しないApplication Graphを先に定義し、HTTP listenerなど実行環境固有の機能はHostから接続します。
 
-同じProtocolのprocedureは一つのgroupへまとめられます。複数のProtocolを扱う場合は、`contract([http({...}), graphqlGroup, websocketGroup, sseGroup])`のようにgroupを並べます。featureごとに分割したContractは、`contract.merge(contracts)`で統合できます。
+HTTP Contractは`routes`でネストできます。treeのkeyはarchitecture上のnamespaceであり、それだけではURL segmentになりません。URL prefixが必要な場合はbranchへ`path`を指定します。親branchの`path`、`pipeline`、`responses`はdescendant routeへ継承されます。
 
 ## 振る舞いをテストする
 

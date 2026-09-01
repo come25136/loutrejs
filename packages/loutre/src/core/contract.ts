@@ -1,3 +1,9 @@
+import {
+  contractNodeBinding,
+  protocolNamespaceBuilder,
+  protocolNamespaceType,
+} from './contract-internal.js'
+
 export interface ProtocolDescriptor<
   TName extends string = string,
   TContext = unknown,
@@ -63,6 +69,21 @@ export interface ContractDefinition<
   readonly procedures: TProcedures
 }
 
+export interface ResolvedContractNode<
+  TContract extends ContractDefinition = ContractDefinition,
+> {
+  readonly [contractNodeBinding]: TContract
+}
+
+export type ContractBinding = ContractDefinition | ResolvedContractNode
+
+export type ContractOfBinding<TBinding extends ContractBinding> =
+  TBinding extends ResolvedContractNode<infer TContract>
+    ? TContract
+    : TBinding extends ContractDefinition
+      ? TBinding
+      : never
+
 type ProcedureNamesOfGroup<TGroup> =
   TGroup extends ProtocolGroup<string, infer TProcedures>
     ? keyof TProcedures & string
@@ -115,20 +136,57 @@ type DuplicateGroupProcedureProtocolKeys<
           >
     : never
 
-type GroupProcedureProtocolUniquenessConstraint<
-  TGroups extends readonly ProtocolGroup[],
-> = [DuplicateGroupProcedureProtocolKeys<TGroups>] extends [never]
-  ? unknown
-  : {
-      readonly __duplicateProcedureProtocol__: DuplicateGroupProcedureProtocolKeys<TGroups>
-    }
+type ProtocolNamespaceOfGroup<TGroup> = TGroup extends {
+  readonly protocol: infer TProtocol extends string
+  readonly procedures: infer TProcedures
+}
+  ? TProcedures extends object
+    ? TProcedures[keyof TProcedures] extends {
+        readonly [protocolNamespaceType]: infer TNamespace
+      }
+      ? [TNamespace] extends [never]
+        ? never
+        : { readonly [K in TProtocol]: TNamespace }
+      : never
+    : never
+  : never
 
-function defineContract<const TGroups extends readonly ProtocolGroup[]>(
-  groups: TGroups &
-    NonEmptyArrayConstraint<TGroups> &
-    GroupProcedureProtocolUniquenessConstraint<TGroups> &
-    DispatchKeyUniquenessConstraint<ProceduresFromGroups<TGroups>>,
-): ContractDefinition<ProceduresFromGroups<TGroups>> {
+type ProtocolNamespacesOfGroups<TGroups extends readonly ProtocolGroup[]> = [
+  ProtocolNamespaceOfGroup<TGroups[number]>,
+] extends [never]
+  ? unknown
+  : UnionToIntersection<ProtocolNamespaceOfGroup<TGroups[number]>>
+
+type ContractFromGroups<TGroups extends readonly ProtocolGroup[]> =
+  ContractDefinition<ProceduresFromGroups<TGroups>> &
+    ProtocolNamespacesOfGroups<TGroups>
+
+type ContractGroupsOf<TGroups extends readonly unknown[]> =
+  TGroups extends readonly ProtocolGroup[] ? TGroups : never
+
+type ContractArgumentValidation<TGroups extends readonly unknown[]> =
+  TGroups extends readonly []
+    ? readonly [error: 'contract requires at least one protocol group']
+    : TGroups extends readonly ProtocolGroup[]
+      ? [DuplicateGroupProcedureProtocolKeys<TGroups>] extends [never]
+        ? [
+            DuplicateDispatchKeys<
+              ProtocolDispatchEntries<ProceduresFromGroups<TGroups>>
+            >,
+          ] extends [never]
+          ? readonly []
+          : readonly [error: 'contract contains duplicate dispatch keys']
+        : readonly [error: 'contract contains duplicate procedure protocols']
+      : readonly [error: 'contract entries must be protocol groups']
+
+function defineContract<const TGroups extends readonly unknown[]>(
+  groups: TGroups,
+  ...validation: ContractArgumentValidation<TGroups>
+): ContractFromGroups<ContractGroupsOf<TGroups>>
+function defineContract(
+  groups: readonly ProtocolGroup[],
+  ..._validation: readonly unknown[]
+): ContractDefinition & Record<string, unknown> {
   if (groups.length === 0) {
     throw new Error('contract([]) requires at least one protocol group')
   }
@@ -155,10 +213,42 @@ function defineContract<const TGroups extends readonly ProtocolGroup[]>(
   }
 
   assertUniqueDispatchKeys(procedures)
-  return Object.freeze({
-    kind: 'contract',
+  const resolved = {
+    kind: 'contract' as const,
     procedures: Object.freeze(procedures),
-  }) as unknown as ContractDefinition<ProceduresFromGroups<TGroups>>
+  } as ContractDefinition & Record<PropertyKey, unknown>
+
+  for (const group of groups) {
+    const buildNamespace = (
+      group as ProtocolGroup & Record<PropertyKey, unknown>
+    )[protocolNamespaceBuilder]
+    if (typeof buildNamespace !== 'function') continue
+    const namespace = Reflect.apply(buildNamespace, undefined, [resolved])
+    const current = resolved[group.protocol]
+    if (current === undefined) {
+      resolved[group.protocol] = namespace
+      continue
+    }
+    if (!isRecord(current) || !isRecord(namespace)) {
+      throw new Error(
+        `Duplicate contract protocol namespace: ${group.protocol}`,
+      )
+    }
+    for (const name of Object.keys(namespace)) {
+      if (Object.hasOwn(current, name)) {
+        throw new Error(
+          `Duplicate contract protocol namespace node: ${group.protocol}.${name}`,
+        )
+      }
+    }
+    resolved[group.protocol] = Object.freeze({ ...current, ...namespace })
+  }
+
+  return Object.freeze(resolved)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 type ProcedureNamesOfContract<TContract> =

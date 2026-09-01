@@ -16,7 +16,7 @@ const AppEnvSchema = z
 
 export class AppEnv extends defineEnv(AppEnvSchema) {}
 
-const AppContract = contract([
+const GreetingContract = contract([
   http({
     greet: {
       method: 'GET',
@@ -37,9 +37,17 @@ const AppContract = contract([
   }),
 ])
 
+const AppContract = contract([
+  http({
+    api: {
+      routes: GreetingContract.http,
+    },
+  }),
+])
+
 const AppController = implementation({
   name: 'AppController',
-  contract: AppContract,
+  contract: AppContract.http.api.greet,
   protocol: http,
   factory: () => ({
     async greet(ctx) {
@@ -56,5 +64,6 @@ const AppModule = defineModule(() => ({
 }))
 
 export default defineApplication({
+  contract: AppContract,
   modules: [AppModule()],
 })

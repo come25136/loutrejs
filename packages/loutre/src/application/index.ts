@@ -1,5 +1,7 @@
 import type {
   ArgsClass,
+  ContractBinding,
+  ContractDefinition,
   ModuleProtocols,
   ModuleInstance,
   SchemaInput,
@@ -15,11 +17,13 @@ import type { Logger } from '../runtime/index.js'
 
 export interface ApplicationDefinitionOptions<
   TModules extends readonly ModuleInstance[],
+  TContract extends ContractBinding | undefined,
   TArguments extends ArgsClass | undefined,
   TTasks extends readonly TaskDescriptor<any, any>[],
   TTriggers extends readonly TriggerDescriptor[],
 > {
   readonly modules: TModules
+  readonly contract?: TContract
   readonly arguments?: TArguments
   readonly tasks?: TTasks
   readonly triggers?: TTriggers
@@ -28,6 +32,9 @@ export interface ApplicationDefinitionOptions<
 
 export interface ApplicationDefinition<
   TModules extends readonly ModuleInstance[] = readonly ModuleInstance[],
+  TContract extends ContractBinding | undefined =
+    | ContractDefinition
+    | undefined,
   TArguments extends ArgsClass | undefined = ArgsClass | undefined,
   TTasks extends readonly TaskDescriptor<any, any>[] = readonly TaskDescriptor<
     any,
@@ -37,6 +44,7 @@ export interface ApplicationDefinition<
 > {
   readonly kind: 'application-definition'
   readonly modules: TModules
+  readonly contract: TContract
   readonly arguments: TArguments
   readonly tasks: TTasks
   readonly triggers: TTriggers
@@ -45,20 +53,23 @@ export interface ApplicationDefinition<
 
 export function defineApplication<
   const TModules extends readonly ModuleInstance[],
+  const TContract extends ContractBinding | undefined = undefined,
   const TArguments extends ArgsClass | undefined = undefined,
   const TTasks extends readonly TaskDescriptor<any, any>[] = readonly [],
   const TTriggers extends readonly TriggerDescriptor[] = readonly [],
 >(
   options: ApplicationDefinitionOptions<
     TModules,
+    TContract,
     TArguments,
     TTasks,
     TTriggers
   >,
-): ApplicationDefinition<TModules, TArguments, TTasks, TTriggers> {
+): ApplicationDefinition<TModules, TContract, TArguments, TTasks, TTriggers> {
   return Object.freeze({
     kind: 'application-definition',
     modules: options.modules,
+    contract: options.contract as TContract,
     arguments: options.arguments as TArguments,
     tasks: options.tasks ?? ([] as unknown as TTasks),
     triggers: options.triggers ?? ([] as unknown as TTriggers),

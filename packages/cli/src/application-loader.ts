@@ -70,6 +70,9 @@ function compileDefinition(
 ): ApplicationGraphIR {
   return assertValidCompilation(
     compileApplication({
+      ...(definition.contract === undefined
+        ? {}
+        : { contract: definition.contract }),
       modules: definition.modules,
       ...(definition.arguments === undefined
         ? {}

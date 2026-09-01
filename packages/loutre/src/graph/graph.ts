@@ -11,6 +11,7 @@ import {
   queueRuntimeToken,
   tokenName,
   type ArgsClass,
+  type ContractBinding,
   type ContractDefinition,
   type ContextKey,
   type DependencyConsumer,
@@ -29,6 +30,12 @@ import {
   type TokenLike,
   type TriggerDescriptor,
 } from '../core/index.js'
+import {
+  contractNodeMetadataOf,
+  contractOfBinding,
+  contractProcedurePathOf,
+  contractRootOf,
+} from '../core/contract-internal.js'
 import { Container, Logger, type DependencyRecorder } from '../runtime/index.js'
 import type {
   ApplicationGraphIR,
@@ -74,6 +81,7 @@ export class StaticValidationError extends Error {
 }
 
 export interface ApplicationCompilationInput {
+  readonly contract?: ContractBinding
   readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
   readonly arguments?: ArgsClass | undefined
   readonly tasks?: readonly TaskDescriptor<any, any>[]
@@ -120,6 +128,8 @@ export function compileApplication(
   validateCronTriggers(triggers, diagnostics)
   diagnostics.push(...validateQueueDrivers(input.modules, queueTriggers))
 
+  const applicationContract =
+    input.contract === undefined ? undefined : contractOfBinding(input.contract)
   const contractIds = new Map<ContractDefinition, ContractId>()
   const idContract = (contract: ContractDefinition): ContractId => {
     const current = contractIds.get(contract)
@@ -143,17 +153,33 @@ export function compileApplication(
     return id
   }
 
+  if (applicationContract) idContract(applicationContract)
+
   const descriptors = modules.flatMap(
     (module) => module.definition.implementations ?? [],
   )
   for (const implementation of new Set(descriptors)) {
-    idContract(implementation.contract)
+    const firstProcedure = implementation.procedures[0]
+    const identity =
+      firstProcedure === undefined
+        ? { contract: contractRootOf(implementation.contract) }
+        : resolveImplementationTargetIdentity(
+            implementation.contract,
+            firstProcedure,
+            applicationContract,
+          )
+    idContract(identity.contract)
     idImplementation(implementation)
   }
   const targets: ImplementationTarget[] = []
 
   for (const implementation of descriptors) {
     for (const procedureName of implementation.procedures) {
+      const identity = resolveImplementationTargetIdentity(
+        implementation.contract,
+        procedureName,
+        applicationContract,
+      )
       const procedure = implementation.contract.procedures[procedureName]
       const protocol = procedure?.protocols[implementation.protocol] as
         | {
@@ -173,15 +199,15 @@ export function compileApplication(
         diagnostics.push({
           code: 'LUTRE_IMPL_003',
           message: `${procedureName} is not declared for protocol ${implementation.protocol}`,
-          path: `${idContract(implementation.contract)}.${procedureName}.${implementation.protocol}`,
+          path: `${idContract(identity.contract)}.${identity.procedure}.${implementation.protocol}`,
         })
         continue
       }
       targets.push({
         implementation,
-        contractId: idContract(implementation.contract),
+        contractId: idContract(identity.contract),
         implementationId: idImplementation(implementation),
-        procedure: procedureName,
+        procedure: identity.procedure,
         protocol: implementation.protocol,
         dispatchKey: protocol.dispatchKey,
         pipeline: protocol.pipeline ?? protocol.definition?.pipeline ?? [],
@@ -195,7 +221,13 @@ export function compileApplication(
   }
 
   validateDispatchKeys(targets, diagnostics)
-  validateCoverage(descriptors, contractIds, diagnostics)
+  validateCoverage(
+    descriptors,
+    targets,
+    contractIds,
+    diagnostics,
+    applicationContract,
+  )
   validateDuplicateProviders(modules, diagnostics)
 
   const tokensById = collectCustomTokens(providers, targets, diagnostics)
@@ -213,13 +245,20 @@ export function compileApplication(
     })
   }
   const implementations: ImplementationIR[] = [...new Set(descriptors)].map(
-    (implementation) => ({
-      id: idImplementation(implementation),
-      name: implementation.name,
-      contract: idContract(implementation.contract),
-      protocol: implementation.protocol,
-      procedures: implementation.procedures,
-    }),
+    (implementation) => {
+      const implementationTargets = targets.filter(
+        (target) => target.implementation === implementation,
+      )
+      return {
+        id: idImplementation(implementation),
+        name: implementation.name,
+        contract:
+          implementationTargets[0]?.contractId ??
+          idContract(contractRootOf(implementation.contract)),
+        protocol: implementation.protocol,
+        procedures: implementationTargets.map((target) => target.procedure),
+      }
+    },
   )
 
   const dependencyGraph = buildDependencyGraph(
@@ -392,6 +431,49 @@ export function compileApplication(
   return { graph, diagnostics }
 }
 
+function resolveImplementationTargetIdentity(
+  contract: ContractDefinition,
+  procedure: string,
+  applicationContract: ContractDefinition | undefined,
+): { readonly contract: ContractDefinition; readonly procedure: string } {
+  if (applicationContract && contract === applicationContract) {
+    return { contract: applicationContract, procedure }
+  }
+
+  const canonicalProcedure = contractProcedurePathOf(contract, procedure)
+  if (applicationContract) {
+    const applicationNode = contractNodeMetadataOf(applicationContract)
+    const implementationNode = contractNodeMetadataOf(contract)
+    if (
+      applicationNode &&
+      implementationNode &&
+      applicationNode.root === implementationNode.root &&
+      isPathPrefix(applicationNode.path, implementationNode.path)
+    ) {
+      const prefix = applicationNode.path.slice(1).join('.')
+      const relativeProcedure = canonicalProcedure.startsWith(`${prefix}.`)
+        ? canonicalProcedure.slice(prefix.length + 1)
+        : canonicalProcedure
+      return { contract: applicationContract, procedure: relativeProcedure }
+    }
+  }
+
+  return {
+    contract: contractRootOf(contract),
+    procedure: canonicalProcedure,
+  }
+}
+
+function isPathPrefix(
+  prefix: readonly string[],
+  candidate: readonly string[],
+): boolean {
+  return (
+    prefix.length <= candidate.length &&
+    prefix.every((segment, index) => candidate[index] === segment)
+  )
+}
+
 function validateDispatchKeys(
   targets: readonly ImplementationTarget[],
   diagnostics: Diagnostic[],
@@ -403,7 +485,7 @@ function validateDispatchKeys(
     const existing = targetsByKey.get(target.dispatchKey)
     if (existing) {
       if (
-        existing.implementation.contract === target.implementation.contract &&
+        existing.contractId === target.contractId &&
         existing.procedure === target.procedure &&
         existing.protocol === target.protocol
       ) {
@@ -1155,30 +1237,34 @@ function collectModules(
 
 function validateCoverage(
   implementations: readonly ImplementationDescriptor[],
+  targets: readonly ImplementationTarget[],
   contractIds: Map<ContractDefinition, ContractId>,
   diagnostics: Diagnostic[],
+  applicationContract?: ContractDefinition,
 ) {
-  const contracts = new Set(
-    implementations.map((implementation) => implementation.contract),
-  )
+  const contracts = applicationContract
+    ? [applicationContract]
+    : [
+        ...new Set(
+          implementations.map((implementation) =>
+            contractRootOf(implementation.contract),
+          ),
+        ),
+      ]
+
   for (const contract of contracts) {
-    const protocols = new Set(
-      Object.values(contract.procedures).flatMap((procedure) =>
-        Object.keys(procedure.protocols),
-      ),
-    )
-    for (const protocol of protocols) {
-      for (const [procedureName, procedure] of Object.entries(
-        contract.procedures,
-      )) {
-        if (!(protocol in procedure.protocols)) continue
-        const covering = implementations.filter(
-          (implementation) =>
-            implementation.contract === contract &&
-            implementation.protocol === protocol &&
-            implementation.procedures.includes(procedureName),
+    const contractId = contractIds.get(contract) ?? 'contract:unknown'
+    for (const [procedureName, procedure] of Object.entries(
+      contract.procedures,
+    )) {
+      for (const protocol of Object.keys(procedure.protocols)) {
+        const covering = targets.filter(
+          (target) =>
+            target.contractId === contractId &&
+            target.protocol === protocol &&
+            target.procedure === procedureName,
         )
-        const path = `${contractIds.get(contract) ?? 'contract:unknown'}.${procedureName}.${protocol}`
+        const path = `${contractId}.${procedureName}.${protocol}`
         if (covering.length === 0) {
           diagnostics.push({
             code: 'LUTRE_IMPL_001',

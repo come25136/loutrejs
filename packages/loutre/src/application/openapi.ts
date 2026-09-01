@@ -3,6 +3,7 @@ import {
   type ModuleInstance,
   type StandardSchemaV1,
 } from '../core/index.js'
+import { contractProcedurePathOf } from '../core/contract-internal.js'
 import { assertValidCompilation, compileApplication } from '../graph/index.js'
 import {
   httpRequestBodyContentType,
@@ -84,6 +85,9 @@ export function generateOpenApi(
 ): OpenApiDocument {
   assertValidCompilation(
     compileApplication({
+      ...(application.contract === undefined
+        ? {}
+        : { contract: application.contract }),
       modules: application.modules,
       ...(application.arguments === undefined
         ? {}
@@ -106,7 +110,10 @@ export function generateOpenApi(
         const typed = protocol as HttpProtocol
         const target: HttpOperationTarget = {
           definition: typed.definition,
-          procedure,
+          procedure: contractProcedurePathOf(
+            implementation.contract,
+            procedure,
+          ),
         }
         const operation = createOperation(
           target,
