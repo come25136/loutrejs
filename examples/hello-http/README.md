@@ -1,25 +1,30 @@
-# Hello HTTPサンプル
+# Hello HTTP example
 
-Loutreで最小のHTTP APIを作るサンプルです。path parameterの検証、型付きController、
-Providerの依存注入を含みます。
+A minimal HTTP API built with Loutre. `GET /{name}` accepts a path parameter and validates it with `validate.params` before the request reaches the Controller.
 
-リポジトリルートで依存関係をインストールしたあと、次のコマンドで起動します。
+Install dependencies from the repository root, then start the example:
 
 ```sh
 npm run dev --workspace @loutrejs/example-hello-http
 ```
 
-別のターミナルからリクエストします。
+Send a request from another terminal:
 
 ```sh
-curl http://127.0.0.1:3000/greetings/Loutre
+curl http://127.0.0.1:3000/Loutre
 ```
 
 ```json
 { "message": "Hello, Loutre!" }
 ```
 
-Application Graphと型だけを検証する場合は、次のコマンドを実行します。
+`name` must contain at least two characters. A one-character value returns a validation error:
+
+```sh
+curl -i http://127.0.0.1:3000/x
+```
+
+To validate only the Application Graph and types, run:
 
 ```sh
 npm run check --workspace @loutrejs/example-hello-http

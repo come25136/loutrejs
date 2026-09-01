@@ -90,21 +90,26 @@ const codeExample = `import {
   defineModule,
   implementation,
 } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const AppContract = contract([
   http({
-    hello: {
+    greet: {
       method: 'GET',
-      path: '/',
+      path: '/{name}',
+      request: {
+        params: {
+          name: z.string().min(2),
+        },
+      },
       responses: {
         ok: {
           status: 200,
           body: z.object({ message: z.string() }),
         },
       },
-      pipeline: [http.controller],
+      pipeline: [validate.params, http.controller],
     },
   }),
 ])
@@ -114,9 +119,9 @@ const AppController = implementation({
   contract: AppContract,
   protocol: http,
   factory: () => ({
-    async hello(ctx) {
+    async greet(ctx) {
       return ctx.response.ok({
-        body: { message: 'Hello from Loutre!' },
+        body: { message: "Hello, " + ctx.params.name + "!" },
       })
     },
   }),
@@ -183,6 +188,7 @@ const homeCopy = {
     wordSeparator: ' ',
     introduction: 'Build Application, Contract, DI, and Task as one Graph',
     getStarted: 'Get started',
+    tryInStackBlitz: 'Try in StackBlitz',
     runAnywhere: 'Run TypeScript anywhere',
     applicationModelTitle: 'One Application Model',
     applicationModelDescription:
@@ -205,6 +211,7 @@ const homeCopy = {
     wordSeparator: '',
     introduction: 'Application、Contract、DI、Taskを一つのGraphとして構築',
     getStarted: 'はじめる',
+    tryInStackBlitz: 'StackBlitzで試す',
     runAnywhere: 'TypeScriptが動く場所なら、どこでも',
     applicationModelTitle: '一つのApplication Model',
     applicationModelDescription:
@@ -291,9 +298,14 @@ export function HomePage({ locale }: { locale: Locale }) {
               </Link>
               <a
                 className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-surface px-5 text-sm font-semibold transition hover:bg-surface-muted"
-                href="https://github.com/come25136/loutrejs"
+                href={
+                  'https://stackblitz.com/fork/github/come25136/loutrejs/tree/main/examples/hello-http?startScript=dev&title=Loutre%20Hello%20HTTP&initialpath=%2FLoutre'
+                }
+                target="_blank"
+                rel="noreferrer"
               >
-                GitHub <ExternalLink size={14} aria-hidden="true" />
+                {copy.tryInStackBlitz}{' '}
+                <ExternalLink size={14} aria-hidden="true" />
               </a>
             </div>
             <InstallCommand className="mt-8 max-w-xl" />

@@ -9,6 +9,7 @@ const examples = [
   {
     name: 'Hello CLI',
     slug: 'hello-cli',
+    stackblitzUrl: null,
     description: {
       en: 'A CLI application that accepts arguments and runs a Task',
       ja: '引数を受け取り、Taskを実行するCLI application',
@@ -17,6 +18,7 @@ const examples = [
   {
     name: 'Hello Worker',
     slug: 'hello-worker',
+    stackblitzUrl: null,
     description: {
       en: 'A Worker that repeatedly runs a Task with fixedDelay',
       ja: 'fixedDelayでTaskを繰り返し実行するWorker',
@@ -25,14 +27,17 @@ const examples = [
   {
     name: 'Hello HTTP',
     slug: 'hello-http',
+    stackblitzUrl:
+      'https://stackblitz.com/fork/github/come25136/loutrejs/tree/main/examples/hello-http?startScript=dev&title=Loutre%20Hello%20HTTP&initialpath=%2FLoutre',
     description: {
-      en: 'A minimal HTTP API built with a Controller and Provider',
-      ja: 'ControllerとProviderを使った最小構成のHTTP API',
+      en: 'A minimal HTTP API with path parameters and validation',
+      ja: 'path parameterとvalidationを含む最小構成のHTTP API',
     },
   },
   {
     name: 'Basic Auth',
     slug: 'basic-auth',
+    stackblitzUrl: null,
     description: {
       en: 'Protect an API with HTTP Basic authentication',
       ja: 'HTTP Basic認証でAPIを保護する',
@@ -41,6 +46,7 @@ const examples = [
   {
     name: 'Bearer Auth',
     slug: 'bearer-auth',
+    stackblitzUrl: null,
     description: {
       en: 'Validate bearer tokens to protect an API',
       ja: 'Bearer tokenを検証してAPIを保護する',
@@ -49,6 +55,7 @@ const examples = [
   {
     name: 'CORS',
     slug: 'cors',
+    stackblitzUrl: null,
     description: {
       en: 'Handle CORS and preflight requests in a Pipeline',
       ja: 'PipelineでCORSとpreflight requestを処理する',
@@ -57,6 +64,7 @@ const examples = [
   {
     name: 'Database Transactions',
     slug: 'database-transactions',
+    stackblitzUrl: null,
     description: {
       en: 'The fundamentals of using transactions',
       ja: 'Transactionの基本的な使い方',
@@ -65,6 +73,7 @@ const examples = [
   {
     name: 'PostgreSQL',
     slug: 'database-postgres',
+    stackblitzUrl: null,
     description: {
       en: 'PostgreSQL transactions with pg',
       ja: 'pgを使ったPostgreSQL transaction',
@@ -73,6 +82,7 @@ const examples = [
   {
     name: 'Drizzle + PostgreSQL',
     slug: 'database-drizzle-postgres',
+    stackblitzUrl: null,
     description: {
       en: 'Transactions with Drizzle and PostgreSQL',
       ja: 'DrizzleとPostgreSQLを使ったtransaction',
@@ -81,6 +91,7 @@ const examples = [
   {
     name: 'Prisma + PostgreSQL',
     slug: 'database-prisma-postgres',
+    stackblitzUrl: null,
     description: {
       en: 'Use Prisma interactive transactions from a Pipeline',
       ja: 'Prisma interactive transactionをPipelineから使う',
@@ -95,6 +106,7 @@ const examplesCopy = {
     categories: 'HTTP, CLI, Worker, Auth, and Database',
     introduction: 'Explore focused examples for each use case',
     listLabel: 'Loutre examples',
+    tryInStackBlitz: 'Try in StackBlitz',
     viewCode: 'View code',
   },
   ja: {
@@ -103,6 +115,7 @@ const examplesCopy = {
     categories: 'HTTP、CLI、Worker、Auth、Database',
     introduction: '用途別のサンプルから使い方を確認できます',
     listLabel: 'Loutreのサンプル一覧',
+    tryInStackBlitz: 'StackBlitzで試す',
     viewCode: 'コードを見る',
   },
 } satisfies Record<Locale, Record<string, string>>
@@ -134,9 +147,8 @@ export function ExamplesPage({ locale }: { locale: Locale }) {
           aria-label={copy.listLabel}
         >
           {examples.map((example) => (
-            <a
+            <article
               className="group flex min-h-60 flex-col rounded-xl border border-line bg-surface p-7 transition hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_14px_36px_rgba(17,24,39,0.08)] max-sm:min-h-64"
-              href={`https://github.com/come25136/loutrejs/tree/main/examples/${example.slug}`}
               key={example.slug}
             >
               <h2 className="mb-3.5 text-2xl font-bold tracking-[-0.04em]">
@@ -145,14 +157,30 @@ export function ExamplesPage({ locale }: { locale: Locale }) {
               <p className="m-0 max-w-lg text-sm leading-7 text-ink-soft">
                 {example.description[locale]}
               </p>
-              <span className="mt-auto flex items-center gap-1.5 pt-6 text-xs font-bold">
-                {copy.viewCode}
-                <ArrowUpRight
-                  className="size-3.5 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-                  aria-hidden="true"
-                />
-              </span>
-            </a>
+              <div className="mt-auto flex flex-wrap items-center gap-3 pt-6">
+                {example.stackblitzUrl !== null && (
+                  <a
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-action px-3.5 text-xs font-bold text-action-foreground transition hover:bg-action-hover"
+                    href={example.stackblitzUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {copy.tryInStackBlitz}
+                    <ArrowUpRight className="size-3.5" aria-hidden="true" />
+                  </a>
+                )}
+                <a
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line px-3.5 text-xs font-bold transition hover:border-line-strong hover:bg-surface-muted"
+                  href={`https://github.com/come25136/loutrejs/tree/main/examples/${example.slug}`}
+                >
+                  {copy.viewCode}
+                  <ArrowUpRight
+                    className="size-3.5 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                    aria-hidden="true"
+                  />
+                </a>
+              </div>
+            </article>
           ))}
         </section>
       </ScrollReveal>
