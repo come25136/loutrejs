@@ -1,6 +1,6 @@
 {
   "name": "@loutrejs/node",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "license": "MIT",
   "type": "module",
   "files": [
@@ -22,7 +22,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@loutrejs/loutre": "^0.4.1"
+    "@loutrejs/loutre": "^0.5.0"
   },
   "repository": {
     "type": "git",

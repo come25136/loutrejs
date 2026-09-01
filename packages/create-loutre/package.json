@@ -1,6 +1,6 @@
 {
   "name": "create-loutre",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Loutre project initializer",
   "license": "MIT",
   "type": "module",
@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",
-    "@loutrejs/loutre": "^0.4.1",
+    "@loutrejs/loutre": "^0.5.0",
     "commander": "^15.0.0"
   },
   "repository": {

@@ -1,5 +1,12 @@
 # @loutrejs/bullmq
 
+## 0.5.0
+
+### Patch Changes
+
+- Updated dependencies [6375229]
+  - @loutrejs/loutre@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes
