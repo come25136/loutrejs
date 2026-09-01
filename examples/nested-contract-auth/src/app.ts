@@ -60,17 +60,17 @@ const AppContract = contract([
   http({
     api: {
       path: '/api',
+      pipeline: [authentication],
+      responses: {
+        unauthorized: {
+          status: 401,
+          body: z.object({ error: z.string() }),
+          headers: z.object({ 'www-authenticate': z.string() }),
+        },
+      },
       routes: {
         me: {
           path: '/me',
-          pipeline: [authentication],
-          responses: {
-            unauthorized: {
-              status: 401,
-              body: z.object({ error: z.string() }),
-              headers: z.object({ 'www-authenticate': z.string() }),
-            },
-          },
           routes: ProfileContract.http,
         },
       },
