@@ -76,11 +76,11 @@ branchが持つ子routeのproperty名には`routes`を使用する。
 
 `children`は採用しない。
 
-Applicationのroot Contractも専用の`root` primitiveでは表現しない。
+Applicationのroot Contractも専用の`root` primitiveや`defineApplication({ contract })`では表現しない。
 
-通常の`contract()`で構築されたContractを`defineApplication({ contract })`へ渡した時点で、そのContractがApplicationにおけるcomposition rootとなる。
+Implementationは、元のfragment Contractではなく、Application Contract tree上で解決されたContract nodeへbindできることをcanonical modelとする。resolved nodeはroot Contractとmount pathを内部metadataとして保持するため、Application GraphはModule内のImplementation bindingからcomposition rootを導出する。
 
-Implementationは、元のfragment Contractではなく、Application Contract tree上で解決されたContract nodeへbindできることをcanonical modelとする。
+したがってApplication DefinitionへContractを重複指定しない。
 
 既存の`contract.merge()`は削除する。feature Contractのcompositionは`routes`によるmountへ統一し、Contract object同士をprocedure名で構造mergeする別経路は持たない。
 
@@ -528,11 +528,11 @@ subtree全体へのImplementation bindを許可するか、既存の複数proced
 
 ---
 
-## 8. Application Contractは専用primitiveにしない
+## 8. Application ContractはImplementation bindingから導出する
 
 `RootContract`という別のpublic型や`contract.root()`は追加しない。
 
-通常のContractをApplication Definitionへ指定する。
+また、`defineApplication()`へContractを重複指定するAPIも持たない。ApplicationはModuleと実行rootを定義し、Contract topologyはImplementation bindingから導出する。
 
 ```ts
 export const AppContract = contract([
@@ -541,26 +541,24 @@ export const AppContract = contract([
   }),
 ])
 
+const ProfileController = implementation({
+  contract: AppContract.http.me.profile,
+  protocol: http,
+  // ...
+})
+
 export default defineApplication({
-  contract: AppContract,
   modules: [ApiModule(), ProfileModule()],
 })
 ```
 
-この時点で`AppContract`がそのApplicationのcomposition rootとなる。
+resolved Contract nodeは、そのnodeを生成したroot Contractとmount pathを内部metadataとして保持する。GraphはApplication内のImplementationを収集し、そのmetadataからroot Contractを復元する。
 
-rootであることはContract自身の種類ではなく、Applicationにおける役割である。
+これにより、ContractをApplication DefinitionとImplementationの2箇所へ記述する必要がない。さらに、Implementationが参照しているtopologyとApplicationが宣言するrootの不一致という状態自体を作れなくなる。
 
-これにより、同じContract subtreeをtest Applicationのrootとして利用することもできる。
+複数の独立したroot Contractに属するImplementationが同じApplicationへ含まれる場合は、それぞれのrootをGraphへ登録する。Application-levelの単一Contract overrideは設けない。
 
-```ts
-defineApplication({
-  contract: AppContract.http.me,
-  modules: [ProfileModule()],
-})
-```
-
-正確なsubtree Application APIは実装時に決定するが、専用のRoot Contract型へ依存しないことを原則とする。
+subtreeだけを検証したい内部test/toolingは低レベル`compileApplication({ contract })`を利用できるが、これはApplication Definitionのpublic composition APIにはしない。
 
 ---
 
@@ -903,7 +901,7 @@ HTTP tree自身がbranchを表現できれば、scope専用primitiveは不要で
 
 rootはContractの種類ではなくApplication composition上の役割である。
 
-`defineApplication({ contract })`へ渡されたContractがrootとなればよい。
+resolved Implementation bindingがroot Contractのidentityを保持しているため、専用primitiveもApplication-levelのroot指定も不要である。
 
 ### `http.group()`
 
@@ -1122,16 +1120,13 @@ implementation({
 })
 ```
 
-Application Contractは専用の`root`型ではない。
+Application Contractは専用の`root`型ではない。ApplicationはContractを再指定せず、resolved nodeへbindされたImplementationからcomposition rootを導出する。
 
 ```ts
 defineApplication({
-  contract: AppContract,
   modules: [...],
 })
 ```
-
-とApplicationへ渡されたContractが、そのApplicationにおけるcomposition rootとなる。
 
 このモデルにより、Loutreは次の流れを1つのContract topologyで表現する。
 

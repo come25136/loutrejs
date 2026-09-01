@@ -48,6 +48,5 @@ const AppModule = defineModule(() => ({
   implementations: [AppController],
 }))
 export default defineApplication({
-  contract: AppContract,
   modules: [AppModule()],
 })

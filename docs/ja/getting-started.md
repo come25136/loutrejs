@@ -107,12 +107,11 @@ const GreetingModule = defineModule(() => ({
 }))
 
 export default defineApplication({
-  contract: AppContract,
   modules: [GreetingModule()],
 })
 ```
 
-このコードでは、`GreetingContract`をfeature Contractとして定義し、`AppContract`のHTTP treeへcompositionしています。`GreetingController`はfragmentではなく、Application上で解決済みの`AppContract.http.greetings.greet`へbindします。Applicationには`AppContract`をcomposition rootとして渡すため、routing、継承されたPipeline state、Graph coverage、OpenAPI、server implementationが同じresolved Contract treeを参照します。
+このコードでは、`GreetingContract`をfeature Contractとして定義し、`AppContract`のHTTP treeへcompositionしています。`GreetingController`はfragmentではなく、Application上で解決済みの`AppContract.http.greetings.greet`へbindします。Loutreはそのresolved Implementation bindingからApplication Contract rootを導出するため、routing、継承されたPipeline state、Graph coverage、OpenAPI、server implementationが同じresolved Contract treeを参照します。
 
 Application DefinitionはHTTP serverそのものではありません。Runtimeに依存しないApplication Graphを先に定義し、HTTP listenerなど実行環境固有の機能はHostから接続します。
 

@@ -112,7 +112,6 @@ describe('Nested Contract composition', () => {
 
   it('ancestor metadataを解決したleafへImplementationをbindして実行する', async () => {
     const definition = defineApplication({
-      contract: AppContract,
       modules: [ProfileModule()],
       logger: silentLogger,
     })
@@ -147,7 +146,6 @@ describe('Nested Contract composition', () => {
     )
 
     const result = compileApplication({
-      contract: AppContract,
       modules: [ProfileModule()],
     })
     expect(result.diagnostics).toEqual([])
@@ -245,7 +243,6 @@ describe('Nested Contract composition', () => {
 
   it('OpenAPIとTyped Clientもresolved Contract treeをsource of truthにする', async () => {
     const definition = defineApplication({
-      contract: AppContract,
       modules: [ProfileModule()],
       logger: silentLogger,
     })
@@ -282,18 +279,15 @@ describe('Nested Contract composition', () => {
     })
   })
 
-  it('subtree ApplicationではOpenAPI procedure identityもroot相対にする', () => {
-    const application = defineApplication({
-      contract: AppContract.http.api.me,
-      modules: [ProfileModule()],
-    })
+  it('Application ContractをImplementationのresolved nodeから推論する', () => {
+    const application = defineApplication({ modules: [ProfileModule()] })
     const document = generateOpenApi(application, {
       info: { title: 'Nested API', version: '1.0.0' },
       operationId: ({ procedure }) => procedure,
     })
 
     expect(document.paths['/api/me/profile/{id}']?.get).toMatchObject({
-      operationId: 'profile',
+      operationId: 'api.me.profile',
     })
   })
 

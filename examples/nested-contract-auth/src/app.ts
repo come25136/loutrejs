@@ -97,6 +97,5 @@ const AppModule = defineModule(() => ({
 }))
 
 export default defineApplication({
-  contract: AppContract,
   modules: [AppModule()],
 })

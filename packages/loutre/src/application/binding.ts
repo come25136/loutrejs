@@ -194,9 +194,6 @@ function createRuntimeState<const TDefinition extends ApplicationDefinition>(
   const tasks = registeredTasks(definition)
   const graph = assertValidCompilation(
     compileApplication({
-      ...(definition.contract === undefined
-        ? {}
-        : { contract: definition.contract }),
       modules: definition.modules,
       ...(definition.arguments === undefined
         ? {}

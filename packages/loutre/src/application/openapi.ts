@@ -3,10 +3,7 @@ import {
   type ModuleInstance,
   type StandardSchemaV1,
 } from '../core/index.js'
-import {
-  contractOfBinding,
-  resolveContractProcedureIdentity,
-} from '../core/contract-internal.js'
+import { resolveContractProcedureIdentity } from '../core/contract-internal.js'
 import { assertValidCompilation, compileApplication } from '../graph/index.js'
 import {
   httpRequestBodyContentType,
@@ -88,9 +85,6 @@ export function generateOpenApi(
 ): OpenApiDocument {
   assertValidCompilation(
     compileApplication({
-      ...(application.contract === undefined
-        ? {}
-        : { contract: application.contract }),
       modules: application.modules,
       ...(application.arguments === undefined
         ? {}
@@ -102,11 +96,6 @@ export function generateOpenApi(
   const registry = new SchemaRegistry()
   const paths: Record<string, OpenApiPathItem> = {}
   const operationIds = new Set<string>()
-  const applicationContract =
-    application.contract === undefined
-      ? undefined
-      : contractOfBinding(application.contract)
-
   for (const module of collectModules(application.modules)) {
     for (const implementation of module.definition.implementations ?? []) {
       if (implementation.protocol !== 'http') continue
@@ -120,7 +109,6 @@ export function generateOpenApi(
           procedure: resolveContractProcedureIdentity(
             implementation.contract,
             procedure,
-            applicationContract,
           ).procedure,
         }
         const operation = createOperation(

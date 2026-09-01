@@ -168,6 +168,8 @@ implementation({
 })
 
 const Module = defineModule(() => ({ implementations: [LeafController] }))
+defineApplication({ modules: [Module()] })
+// @ts-expect-error Application ContractはImplementationのresolved nodeから推論する
 defineApplication({ contract: NestedContract, modules: [Module()] })
 
 const DUPLICATE_NAME_A = contextKey('adversarial.duplicate').of<string>()

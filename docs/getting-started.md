@@ -107,12 +107,11 @@ const GreetingModule = defineModule(() => ({
 }))
 
 export default defineApplication({
-  contract: AppContract,
   modules: [GreetingModule()],
 })
 ```
 
-In this code, `GreetingContract` is a feature Contract. `AppContract` composes it into the Application HTTP tree, and `GreetingController` binds to the resolved node `AppContract.http.greetings.greet`. The Application receives `AppContract` as its composition root, so routing, inherited Pipeline state, Graph coverage, OpenAPI, and server implementation all use the same resolved Contract tree.
+In this code, `GreetingContract` is a feature Contract. `AppContract` composes it into the Application HTTP tree, and `GreetingController` binds to the resolved node `AppContract.http.greetings.greet`. Loutre derives the Application Contract root from that resolved Implementation binding, so routing, inherited Pipeline state, Graph coverage, OpenAPI, and server implementation all use the same resolved Contract tree.
 
 Application Definition is not an HTTP server itself. Define the Application Graph, which does not depend on Runtime, first, and connect execution environment-specific functions such as HTTP listener from the Host.
 
