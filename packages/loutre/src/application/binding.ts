@@ -243,6 +243,9 @@ function createInvocationApplication<TDefinition extends ApplicationDefinition>(
         }
       : {}),
     close: (signal?: string) => state.runtime.shutdown(signal),
+    [Symbol.asyncDispose]() {
+      return this.close()
+    },
   }
   return application as InvocationApplication<TDefinition>
 }
