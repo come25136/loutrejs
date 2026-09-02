@@ -1,5 +1,6 @@
 export * from './application.js'
 export * from './basic-auth.js'
+export * from './bearer-auth.js'
 export * from './client.js'
 export type { CorsLayerDescriptor, CorsOptions, CorsOrigin } from './cors.js'
 export * from './definitions.js'

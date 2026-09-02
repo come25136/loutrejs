@@ -6,7 +6,7 @@ const hosted = bootstrap({ application })
 
 afterAll(() => hosted.close())
 
-describe('ユーザー定義Bearer認証サンプル', () => {
+describe('Bearer認証サンプル', () => {
   it('Authorization headerがなければ401を返す', async () => {
     const response = await hosted.fetch(
       new Request('http://example.test/profile'),

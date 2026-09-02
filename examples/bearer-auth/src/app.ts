@@ -1,14 +1,14 @@
-import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
   contract,
+  defineApplication,
   defineEnv,
   defineModule,
   implementation,
+  inject,
 } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import { bearerAuth, http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
-import { bearerAuth } from './bearer-auth.js'
 
 const AppEnvSchema = z
   .object({
@@ -23,24 +23,32 @@ const User = z.object({
   name: z.string(),
 })
 
+type User = z.output<typeof User>
+
 const UnauthorizedBody = z.object({
   error: z.string(),
 })
 
-const BEARER_CURRENT_USER =
-  contextKey('bearerCurrentUser').of<z.output<typeof User>>()
+const CURRENT_USER = contextKey('currentUser').of<User>()
 
-const bearerAuthentication = bearerAuth({
-  name: 'bearerAuthentication',
-  realm: 'Loutre Example',
-  principal: BEARER_CURRENT_USER,
-  authenticate: (token) => {
+class UserRepository {
+  authenticate(token: string): User | undefined {
     if (token !== 'loutre-token') return undefined
     return {
       id: 'user-1',
       name: 'Loutre User',
     }
-  },
+  }
+}
+
+const bearerAuthentication = bearerAuth({
+  name: 'bearerAuthentication',
+  realm: 'Loutre Example',
+  provides: [CURRENT_USER],
+  factory:
+    (users = inject(UserRepository)) =>
+    (token) =>
+      users.authenticate(token),
   unauthorized: {
     variant: 'unauthorized',
     body: { error: 'Bearer token required' },
@@ -73,15 +81,16 @@ const BearerProfileController = implementation({
   contract: BearerProfileContract,
   protocol: http,
   factory: () => ({
-    get(context) {
-      return context.response.ok({ body: context.bearerCurrentUser })
+    get(ctx) {
+      return ctx.response.ok({ body: ctx.currentUser })
     },
   }),
 })
 
 const BearerProfileModule = defineModule(() => ({
   environment: [AppEnv],
-  description: 'Example profile API protected by custom Bearer authentication',
+  providers: [UserRepository],
+  description: 'Example profile API protected by Bearer authentication',
   implementations: [BearerProfileController],
 }))
 

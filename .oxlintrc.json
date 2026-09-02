@@ -37,9 +37,9 @@
     {
       "files": [
         "packages/loutre/src/http/basic-auth.ts",
+        "packages/loutre/src/http/bearer-auth.ts",
         "packages/loutre/src/http/cors.ts",
         "packages/cli/src/startup-banner.ts",
-        "examples/bearer-auth/src/bearer-auth.ts",
         "tests/startup-banner.test.ts",
         "tests/structured-logging.test.ts"
       ],
