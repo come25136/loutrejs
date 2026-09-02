@@ -19,19 +19,19 @@ export interface BasicAuthUnauthorized<TVariant extends string, TBody> {
 }
 
 export interface BasicAuthOptions<
-  TPrincipal extends ContextKey,
+  TProvided extends ContextKey,
   TVariant extends string,
   TUnauthorizedBody,
 > {
   readonly realm: string
-  readonly principal: TPrincipal
-  readonly authenticate: (
+  readonly provides: readonly [TProvided]
+  readonly factory: () => (
     credentials: BasicAuthCredentials,
   ) =>
-    | ContextKeyValue<TPrincipal>
+    | ContextKeyValue<TProvided>
     | null
     | undefined
-    | Promise<ContextKeyValue<TPrincipal> | null | undefined>
+    | Promise<ContextKeyValue<TProvided> | null | undefined>
   readonly unauthorized: BasicAuthUnauthorized<TVariant, TUnauthorizedBody>
   readonly name?: string
 }
@@ -49,12 +49,12 @@ type BasicAuthResponseHeaders = {
 }
 
 export interface BasicAuthLayerDescriptor<
-  TPrincipal extends ContextKey,
+  TProvided extends ContextKey,
   TVariant extends string,
   TUnauthorizedBody,
 > extends LayerDescriptor<
   readonly [],
-  readonly [TPrincipal],
+  readonly [TProvided],
   string extends TVariant
     ? unknown
     : LogicalHttpResult<TVariant, TUnauthorizedBody, BasicAuthResponseHeaders>,
@@ -72,16 +72,17 @@ export interface BasicAuthContext {
 }
 
 export function basicAuth<
-  TPrincipal extends ContextKey,
+  TProvided extends ContextKey,
   const TVariant extends string,
   TUnauthorizedBody,
 >(
-  options: BasicAuthOptions<TPrincipal, TVariant, TUnauthorizedBody>,
-): BasicAuthLayerDescriptor<TPrincipal, TVariant, TUnauthorizedBody> {
+  options: BasicAuthOptions<TProvided, TVariant, TUnauthorizedBody>,
+): BasicAuthLayerDescriptor<TProvided, TVariant, TUnauthorizedBody> {
   const challenge = formatBasicChallenge(options.realm)
+  const provided = options.provides[0]
   const descriptor = layer<
     readonly [],
-    readonly [TPrincipal],
+    readonly [TProvided],
     BasicAuthContext,
     string extends TVariant
       ? unknown
@@ -96,7 +97,7 @@ export function basicAuth<
   >({
     name: options.name ?? 'basicAuth',
     role: 'authentication',
-    provides: [options.principal],
+    provides: options.provides,
     shortCircuits: [
       {
         protocol: 'http',
@@ -104,20 +105,23 @@ export function basicAuth<
         response: { status: 401 },
       },
     ],
-    factory: () => async (ctx, next) => {
-      const credentials = decodeBasicCredentials(ctx.headers.authorization)
-      if (!credentials) {
-        return unauthorizedResult(options.unauthorized, challenge)
-      }
+    factory: () => {
+      const authenticate = options.factory()
+      return async (ctx, next) => {
+        const credentials = decodeBasicCredentials(ctx.headers.authorization)
+        if (!credentials) {
+          return unauthorizedResult(options.unauthorized, challenge)
+        }
 
-      const principal = await options.authenticate(credentials)
-      if (principal == null) {
-        return unauthorizedResult(options.unauthorized, challenge)
-      }
+        const value = await authenticate(credentials)
+        if (value == null) {
+          return unauthorizedResult(options.unauthorized, challenge)
+        }
 
-      await next({
-        [options.principal.name]: principal,
-      } as ContextProperties<readonly [TPrincipal]>)
+        await next({
+          [provided.name]: value,
+        } as ContextProperties<readonly [TProvided]>)
+      }
     },
   })
   return Object.freeze(descriptor)

@@ -29,11 +29,13 @@ const CURRENT_USER = contextKey('currentUser').of<User>()
 const authentication = basicAuth({
   name: 'authentication',
   realm: 'Loutre Nested Contract Example',
-  principal: CURRENT_USER,
-  authenticate: ({ username, password }) => {
-    if (username !== 'loutre' || password !== 'otter') return undefined
-    return { id: 'user-1', name: 'Loutre User' }
-  },
+  provides: [CURRENT_USER],
+  factory:
+    () =>
+    ({ username, password }) => {
+      if (username !== 'loutre' || password !== 'otter') return undefined
+      return { id: 'user-1', name: 'Loutre User' }
+    },
   unauthorized: {
     variant: 'unauthorized',
     body: { error: 'Authentication required' },

@@ -1,12 +1,17 @@
-import { defineApplication } from '@loutrejs/loutre'
 import {
   contextKey,
   contract,
+  defineApplication,
   defineEnv,
   defineModule,
   implementation,
+  inject,
 } from '@loutrejs/loutre'
-import { basicAuth, http } from '@loutrejs/loutre/http'
+import {
+  basicAuth,
+  http,
+  type BasicAuthCredentials,
+} from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const AppEnvSchema = z
@@ -22,25 +27,34 @@ const User = z.object({
   name: z.string(),
 })
 
+type User = z.output<typeof User>
+
 const UnauthorizedBody = z.object({
   error: z.string(),
 })
 
-const CURRENT_USER = contextKey('currentUser').of<z.output<typeof User>>()
+const CURRENT_USER = contextKey('currentUser').of<User>()
+
+class UserRepository {
+  authenticate(credentials: BasicAuthCredentials): User | undefined {
+    if (credentials.username !== 'loutre' || credentials.password !== 'otter') {
+      return undefined
+    }
+    return {
+      id: 'user-1',
+      name: 'Loutre User',
+    }
+  }
+}
 
 const basicAuthentication = basicAuth({
   name: 'basicAuthentication',
   realm: 'Loutre Example',
-  principal: CURRENT_USER,
-  authenticate: (credentials) => {
-    if (credentials.username === 'loutre' && credentials.password === 'otter') {
-      return {
-        id: 'user-1',
-        name: 'Loutre User',
-      }
-    }
-    return undefined
-  },
+  provides: [CURRENT_USER],
+  factory:
+    (users = inject(UserRepository)) =>
+    (credentials) =>
+      users.authenticate(credentials),
   unauthorized: {
     variant: 'unauthorized',
     body: { error: 'Basic authentication required' },
@@ -81,6 +95,7 @@ const ProfileController = implementation({
 
 const ProfileModule = defineModule(() => ({
   environment: [AppEnv],
+  providers: [UserRepository],
   description: 'Example profile API protected by Basic authentication',
   implementations: [ProfileController],
 }))
