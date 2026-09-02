@@ -59,6 +59,29 @@ describe('Application Lifecycle', () => {
     ])
   })
 
+  it('ProviderのDisposable protocolはLifecycleとして自動実行しない', async () => {
+    const events: string[] = []
+
+    class Provider {
+      onModuleDestroy() {
+        events.push('destroy')
+      }
+
+      [Symbol.asyncDispose]() {
+        events.push('dispose')
+        return Promise.resolve()
+      }
+    }
+
+    const Module = defineModule(() => ({ providers: [Provider] }))
+    const runtime = createApplicationRuntime([Module()])
+    await runtime.initialize()
+
+    await runtime.shutdown()
+
+    expect(events).toEqual(['destroy'])
+  })
+
   it('shutdownはhook失敗後もcleanupを続け、最後にAggregateErrorを投げる', async () => {
     const events: string[] = []
     const firstError = new Error('first cleanup')

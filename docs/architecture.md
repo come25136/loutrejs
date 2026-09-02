@@ -648,7 +648,7 @@ CREATED → INITIALIZING → RUNNING → STOPPING → STOPPED
                             └ Protocol / Task / Trigger execution
 ```
 
-`init()` and `close()` are idempotent.
+`init()` and `close()` are idempotent. Application Context also implements `AsyncDisposable`, so `await using` closes it through the same cleanup path. Provider lifecycle remains `OnModuleInit` / `OnModuleDestroy`; Loutre does not automatically invoke a Provider's `Symbol.asyncDispose` or `Symbol.dispose`.
 
 If initialization fails, started resources are cleaned up in reverse order.
 

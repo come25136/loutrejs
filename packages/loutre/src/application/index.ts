@@ -1,3 +1,5 @@
+/// <reference lib="esnext.disposable" preserve="true" />
+
 import type {
   ArgsClass,
   ModuleProtocols,
@@ -80,7 +82,7 @@ export type BootstrapArguments<TDefinition extends ApplicationDefinition> =
       : { readonly arguments: SchemaInput<TSchema> }
     : { readonly arguments?: never }
 
-export interface BaseApplication {
+export interface BaseApplication extends AsyncDisposable {
   readonly graph: ApplicationGraphIR
   get<TToken extends TokenLike>(token: TToken): TokenValue<TToken>
   init(): Promise<this>

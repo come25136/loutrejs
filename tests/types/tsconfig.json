@@ -5,7 +5,15 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    "lib": [
+      "ES2024",
+      "DOM",
+      "WebWorker.ImportScripts",
+      "ScriptHost",
+      "DOM.Iterable",
+      "DOM.AsyncIterable"
+    ]
   },
   "include": ["./**/*.ts"]
 }
