@@ -1,3 +1,5 @@
+/// <reference lib="esnext.disposable" preserve="true" />
+
 import type {
   ArgsClass,
   ModuleProtocols,

@@ -648,7 +648,7 @@ CREATED → INITIALIZING → RUNNING → STOPPING → STOPPED
                             └ Protocol / Task / Trigger execution
 ```
 
-`init()`と`close()`はidempotentです。
+`init()`と`close()`はidempotentです。Application Contextは`AsyncDisposable`も実装しているため、`await using`でも同じcleanup pathを通してcloseできます。Provider lifecycleは`OnModuleInit` / `OnModuleDestroy`のままで、Providerの`Symbol.asyncDispose` / `Symbol.dispose`をLoutreが自動実行することはありません。
 
 初期化の途中で失敗した場合、開始済みのresourceは逆順にcleanupされます。
 
