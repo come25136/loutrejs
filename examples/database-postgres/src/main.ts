@@ -1,5 +1,6 @@
 import { nodeRuntime } from '@loutrejs/node'
-import application, { AppEnv } from './app.js'
+import application from './app.js'
+import { AppEnv } from './config/env.js'
 
 const app = await nodeRuntime.create({ application })
 

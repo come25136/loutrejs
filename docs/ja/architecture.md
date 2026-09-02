@@ -188,6 +188,40 @@ Module
 
 そのため、単にTypeScriptからimportできるかどうかと、ApplicationのModule境界を越えて利用できるかどうかは別々に扱われます。
 
+## Project structure
+
+Loutreは特定のfilesystem layoutを強制しませんが、公式starterとexampleではfeatureとintegrationの境界を基準にした構造を推奨します。
+
+```text
+src/
+├ app.ts
+├ main.ts
+├ config/
+│  └ env.ts
+├ users/
+│  ├ contract.ts
+│  ├ controller.ts
+│  └ repository.ts
+├ database/
+│  └ postgres.ts
+└ layers/
+   └ transaction.ts
+```
+
+基本ルールは次の通りです。
+
+- `app.ts`にはroot ModuleのwiringとApplication Definitionを置きます。business logicは置きません。
+- `main.ts`にはApplicationとRuntime Adapterの接続だけを置きます。
+- EnvironmentやArgumentsのようなRuntime inputは`config/`へまとめます。
+- domainやintegrationのcodeは`controllers/`、`providers/`のようなtype別のglobal directoryではなく、`users/`、`auth/`、`database/`のようなfeatureまたはboundary単位でまとめます。
+- primary roleが依存先のfeatureやinfrastructureではなくexecution compositionにあるcross-cuttingなPipeline behaviorは`layers/`へ置きます。authentication、authorization、transaction、tenantのようなContextを提供したりguardしたりする処理が代表例です。
+- database connectionのようなresource Providerはintegration directoryへ、transaction Contextのようなexecution Layerは`layers/`へ置きます。LayerがそのProviderをinjectする関係でも同じです。
+- schemaやdomain modelとRepositoryがそれぞれ独立した概念を表す場合は分けます。1つのContractだけを説明するrequest/response schemaはContractと同居して構いません。
+- Loutre primitiveが存在するという理由だけで1ファイルずつ作る必要はありません。1つの振る舞いを表す小さな定義は同居できます。たとえばTriggerからしか使わないprivate Taskを別ファイルにする必要はありません。
+- testは検証対象の近くに置きます。Application boundaryのtestは`app.ts`の近く、feature固有のtestはfeature内に置けます。
+
+つまりfilesystemもApplication Graphと同じ境界を反映します。featureとintegrationはdomain codeとresource codeを所有し、cross-cuttingなexecution behaviorは`layers/`として明示します。Loutre primitiveはその境界内の役割を表すもので、primitiveごとにdirectoryを作る必要はありません。
+
 ## Providers and Dependency Injection
 
 ProviderはApplicationが所有するresourceです。

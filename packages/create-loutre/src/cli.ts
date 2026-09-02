@@ -10,6 +10,7 @@ import {
 } from '@loutrejs/loutre/presentation'
 import application, { createProject } from './app.js'
 import {
+  createIsTarget,
   installCommand,
   type PackageManager,
   packageManagerLabels,
@@ -312,9 +313,10 @@ function nextCommand(
   packageManager: PackageManager,
   target: ProjectTarget,
 ): string {
+  const isTarget = createIsTarget(target)
   return runScriptCommand(
     packageManager,
-    target === 'aws-lambda' ? 'build' : 'dev',
+    isTarget('aws-lambda') ? 'build' : 'dev',
   )
 }
 

@@ -74,8 +74,20 @@ describe('create-loutre', () => {
       })
       expect(manifest.scripts.verify).not.toContain('npm run')
       expect(
-        await readFile(join(result.targetDirectory, 'src/app.ts'), 'utf8'),
+        await readFile(
+          join(result.targetDirectory, 'src/hello/contract.ts'),
+          'utf8',
+        ),
       ).toContain("path: '/'")
+      expect(
+        await readFile(
+          join(result.targetDirectory, 'src/hello/controller.ts'),
+          'utf8',
+        ),
+      ).toContain("name: 'AppController'")
+      expect(
+        await readFile(join(result.targetDirectory, 'src/app.ts'), 'utf8'),
+      ).toContain("name: 'AppModule'")
       expect(
         await readFile(join(result.targetDirectory, 'src/main.ts'), 'utf8'),
       ).toContain('nodeRuntime.create')
@@ -141,6 +153,13 @@ describe('create-loutre', () => {
         expect(Object.values(manifest.scripts).join('\n')).toContain(script)
         expect(manifest.dependencies['@loutrejs/node']).toBeUndefined()
 
+        if (target === 'deno') {
+          const generatedApplication = await readFile(
+            join(result.targetDirectory, 'src/app.ts'),
+            'utf8',
+          )
+          expect(generatedApplication).toContain("from './hello/controller.ts'")
+        }
         if (target === 'cloudflare-workers') {
           const wrangler = await readFile(
             join(result.targetDirectory, 'wrangler.jsonc'),
