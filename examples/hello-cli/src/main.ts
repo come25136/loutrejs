@@ -12,15 +12,11 @@ const { values } = parseArgs({
   },
 })
 
-const app = bootstrap({
+await using app = bootstrap({
   application,
   arguments: {
     name: values.name,
   },
 })
 
-try {
-  console.log(await app.run(hello))
-} finally {
-  await app.close('cli-complete')
-}
+console.log(await app.run(hello))
