@@ -20,13 +20,19 @@ Move to the creation destination.
 cd my-app
 ```
 
-The main files generated have the following responsibilities:
+The generated project follows Loutre's recommended feature-oriented structure:
 
 ```text
-src/app.ts Contract, Implementation, Module, Application configuration
-src/main.ts Connection between Application and selected Runtime
-src/app.test.ts Verification of behavior provided externally by Application
+src/
+├ app.ts          Root Module wiring and Application Definition
+├ app.test.ts     Application-boundary behavior test
+├ hello/
+│  ├ contract.ts  HTTP Contract for the hello feature
+│  └ controller.ts
+└ main.ts         Connection between Application and selected Runtime
 ```
+
+As the application grows, add feature or integration directories such as `users/`, `auth/`, and `database/` instead of collecting Controllers and Providers into global type directories. Cross-cutting Pipeline behavior such as authentication or transactions can live under `layers/`. See [Architecture](./architecture.md#project-structure) for the full convention.
 
 If you have decided on the target and package manager in advance, you can create them non-interactively.
 
@@ -40,16 +46,12 @@ Specify `--no-install` to install the dependencies later, or specify `--yes` to 
 
 ## Define HTTP Application
 
-Replace `src/app.ts` with an Application that receives the name and returns a greeting.
+Add a `greetings` feature that receives a name and returns a greeting. Keep the HTTP Contract, Provider, and Implementation inside the feature directory, and leave `app.ts` responsible for wiring them into the Application.
+
+`src/greetings/contract.ts` defines the external HTTP boundary.
 
 ```ts
-import {
-  contract,
-  defineApplication,
-  defineModule,
-  implementation,
-  inject,
-} from '@loutrejs/loutre'
+import { contract } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -73,24 +75,29 @@ export const GreetingContract = contract([
     },
   }),
 ])
+```
 
-export const AppContract = contract([
-  http({
-    greetings: {
-      routes: GreetingContract.http,
-    },
-  }),
-])
+`src/greetings/service.ts` contains the application logic used by the feature.
 
-class GreetingService {
+```ts
+export class GreetingService {
   greet(name: string) {
     return { message: `Hello, ${name}!` }
   }
 }
+```
 
-const GreetingController = implementation({
+`src/greetings/controller.ts` implements the Contract and delegates the actual work to the Provider.
+
+```ts
+import { implementation, inject } from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
+import { GreetingContract } from './contract.js'
+import { GreetingService } from './service.js'
+
+export const GreetingController = implementation({
   name: 'GreetingController',
-  contract: AppContract.http.greetings.greet,
+  contract: GreetingContract,
   protocol: http,
   factory: (greetings = inject(GreetingService)) => ({
     async greet(ctx) {
@@ -100,22 +107,30 @@ const GreetingController = implementation({
     },
   }),
 })
+```
 
-const GreetingModule = defineModule(() => ({
+Finally, `src/app.ts` wires the feature into the root Module and Application Definition.
+
+```ts
+import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { GreetingController } from './greetings/controller.js'
+import { GreetingService } from './greetings/service.js'
+
+const AppModule = defineModule(() => ({
   providers: [GreetingService],
   implementations: [GreetingController],
 }))
 
 export default defineApplication({
-  modules: [GreetingModule()],
+  modules: [AppModule()],
 })
 ```
 
-In this code, `GreetingContract` is a feature Contract. `AppContract` composes it into the Application HTTP tree, and `GreetingController` binds to the resolved node `AppContract.http.greetings.greet`. Loutre derives the Application Contract root from that resolved Implementation binding, so routing, inherited Pipeline state, Graph coverage, OpenAPI, and server implementation all use the same resolved Contract tree.
+`GreetingContract`, `GreetingService`, and `GreetingController` belong to the same feature, so they stay together under `greetings/`. `app.ts` only composes the root Application Graph; it does not absorb feature logic just because those definitions are registered there.
 
 Application Definition is not an HTTP server itself. Define the Application Graph, which does not depend on Runtime, first, and connect execution environment-specific functions such as HTTP listener from the Host.
 
-HTTP Contracts can be nested with `routes`. Tree keys are architectural namespaces and do not add URL segments by themselves; add `path` on a branch when a URL prefix is required. Parent `path`, `pipeline`, and `responses` are inherited by descendant routes.
+HTTP Contracts can also be nested with `routes`. Tree keys are architectural namespaces and do not add URL segments by themselves; add `path` on a branch when a URL prefix is required. Parent `path`, `pipeline`, and `responses` are inherited by descendant routes.
 
 ## Test the behavior
 
@@ -182,7 +197,7 @@ curl http://localhost:3000/greetings/Loutre
 { "message": "Hello, Loutre!" }
 ```
 
-Even if you change only Runtime, Contract, Implementation, and Module of `src/app.ts` will not change. For Bun, Deno, Cloudflare Workers, and AWS Lambda, the generated `src/main.ts` connects their respective Runtime adapters.
+Even if you change only Runtime, the feature code under `src/greetings/` and the Application Definition in `src/app.ts` will not change. For Bun, Deno, Cloudflare Workers, and AWS Lambda, the generated `src/main.ts` connects their respective Runtime adapters.
 
 ## Validate and record changes
 
@@ -195,7 +210,7 @@ npm run verify
 If the validation passes, we leave a commit not just a list of changed files, but what the changes made possible.
 
 ```sh
-git add src/app.ts src/app.test.ts
+git add src/app.ts src/app.test.ts src/greetings
 git commit -m "feat: Enable to return greetings by name"
 ```
 
@@ -207,7 +222,7 @@ HTTP Contract can be used not only as a server but also as a source of truth for
 
 ```ts
 import { createHttpClient, fetchHttpTransport } from '@loutrejs/loutre/http'
-import { GreetingContract } from './app.js'
+import { GreetingContract } from './greetings/contract.js'
 
 const client = createHttpClient(
   GreetingContract,

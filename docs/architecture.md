@@ -188,6 +188,40 @@ This relationship is also recorded in the Application Graph and verified at comp
 
 Therefore, whether it can be simply imported from TypeScript and whether it can be used across Application module boundaries are treated separately.
 
+## Project structure
+
+Loutre does not require a specific filesystem layout, but the official starter and examples follow a recommended structure based on feature and integration boundaries.
+
+```text
+src/
+├ app.ts
+├ main.ts
+├ config/
+│  └ env.ts
+├ users/
+│  ├ contract.ts
+│  ├ controller.ts
+│  └ repository.ts
+├ database/
+│  └ postgres.ts
+└ layers/
+   └ transaction.ts
+```
+
+Use these rules as the default:
+
+- Keep `app.ts` for root Module wiring and the Application Definition. Business logic should live outside it.
+- Keep `main.ts` for connecting the Application to a Runtime Adapter.
+- Put Runtime inputs such as Environment and Arguments under `config/`.
+- Organize domain and integration code by feature or boundary, such as `users/`, `auth/`, or `database/`, rather than global type directories such as `controllers/` or `providers/`.
+- Put cross-cutting Pipeline behavior under `layers/` when its primary role is execution composition rather than the feature or infrastructure it depends on. Authentication, authorization, transactions, tenancy, and similar Context-producing or guarding behavior are typical examples.
+- Keep resource Providers such as a database connection in their integration directory and execution Layers such as a transaction Context in `layers/`, even when the Layer injects that Provider.
+- Keep a schema or domain model separate from a Repository when both represent meaningful concepts on their own. Request and response schemas that only describe one Contract can stay with that Contract.
+- Do not create a file only because a Loutre primitive exists. Small declarations that represent one behavior can stay together; for example, a private Task used only by its Trigger does not need a separate file.
+- Keep tests close to the behavior they verify. Application-boundary tests can stay next to `app.ts`; feature-specific tests can live with the feature.
+
+The filesystem is therefore a reflection of the same boundaries expressed by the Application Graph: features and integrations own domain and resource code, while `layers/` makes cross-cutting execution behavior explicit. Loutre primitives still describe roles inside those boundaries; they do not require one directory per primitive.
+
 ## Providers and Dependency Injection
 
 Provider is a resource owned by Application.

@@ -2,7 +2,7 @@ import { bootstrap } from '@loutrejs/loutre/host'
 import { afterAll, describe, expect, it } from 'vitest'
 import application from './app.js'
 
-const hosted = bootstrap({ application })
+const hosted = bootstrap({ application, environment: {} })
 
 afterAll(() => hosted.close())
 

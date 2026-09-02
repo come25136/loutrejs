@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { cp, readFile, rename, writeFile } from 'node:fs/promises'
+import { cp, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -69,6 +69,9 @@ export async function writeStarter(
     verifyCommand: runScriptCommand(options.packageManager, 'verify'),
     deploymentSection: deploymentSection(options),
   })
+  if (options.target === 'deno') {
+    await rewriteLocalImportExtensionsForDeno(join(targetDirectory, 'src'))
+  }
   if (options.target === 'cloudflare-workers') {
     await renderTextTemplate(join(targetDirectory, 'wrangler.jsonc'), {
       packageName: workerNameFor(options.packageName),
@@ -261,6 +264,31 @@ async function replaceText(
 ): Promise<void> {
   const content = await readFile(path, 'utf8')
   await writeFile(path, content.replaceAll(search, replacement), 'utf8')
+}
+
+async function rewriteLocalImportExtensionsForDeno(
+  directory: string,
+): Promise<void> {
+  const entries = await readdir(directory, { withFileTypes: true })
+  await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) {
+        await rewriteLocalImportExtensionsForDeno(path)
+        return
+      }
+      if (!entry.isFile() || !entry.name.endsWith('.ts')) return
+      const content = await readFile(path, 'utf8')
+      await writeFile(
+        path,
+        content.replaceAll(
+          /(from\s+['"]\.{1,2}\/[^'"]+)\.js(['"])/gu,
+          '$1.ts$2',
+        ),
+        'utf8',
+      )
+    }),
+  )
 }
 
 function workerNameFor(packageName: string): string {

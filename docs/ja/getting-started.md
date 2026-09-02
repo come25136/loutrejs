@@ -20,13 +20,19 @@ deno x -A npm:create-loutre@latest my-app
 cd my-app
 ```
 
-生成される主なファイルには、次の役割があります。
+生成されるprojectは、Loutreが推奨するfeature単位の構造になっています。
 
 ```text
-src/app.ts       Contract、Implementation、Module、Applicationの構成
-src/main.ts      Applicationと選択したRuntimeの接続
-src/app.test.ts  Applicationが外部へ提供する振る舞いの検証
+src/
+├ app.ts          root ModuleのwiringとApplication Definition
+├ app.test.ts     Application boundaryの振る舞いを検証
+├ hello/
+│  ├ contract.ts  hello featureのHTTP Contract
+│  └ controller.ts
+└ main.ts         Applicationと選択したRuntimeの接続
 ```
+
+Applicationが大きくなったら、ControllerやProviderをtype別のglobal directoryへ集めるのではなく、`users/`、`auth/`、`database/`のようなfeatureまたはintegration directoryを追加します。authenticationやtransactionのようなcross-cuttingなPipeline behaviorは`layers/`へ置けます。詳しいruleは[Architecture](./architecture.md#project-structure)を参照してください。
 
 Targetとパッケージマネージャーを先に決めている場合は、非対話で作成できます。
 
@@ -40,16 +46,12 @@ npm create loutre@latest my-app -- --target cloudflare-workers --package-manager
 
 ## HTTP Applicationを定義する
 
-`src/app.ts`を、名前を受け取って挨拶を返すApplicationへ置き換えます。
+名前を受け取って挨拶を返す`greetings` featureを追加します。HTTP Contract、Provider、Implementationはfeature directoryの中に置き、`app.ts`はそれらをApplicationへ組み込むwiringに集中させます。
+
+`src/greetings/contract.ts`で外部向けのHTTP boundaryを定義します。
 
 ```ts
-import {
-  contract,
-  defineApplication,
-  defineModule,
-  implementation,
-  inject,
-} from '@loutrejs/loutre'
+import { contract } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -73,24 +75,29 @@ export const GreetingContract = contract([
     },
   }),
 ])
+```
 
-export const AppContract = contract([
-  http({
-    greetings: {
-      routes: GreetingContract.http,
-    },
-  }),
-])
+`src/greetings/service.ts`にはfeatureが使うapplication logicを置きます。
 
-class GreetingService {
+```ts
+export class GreetingService {
   greet(name: string) {
     return { message: `こんにちは、${name}！` }
   }
 }
+```
 
-const GreetingController = implementation({
+`src/greetings/controller.ts`でContractを実装し、実際の処理をProviderへ委譲します。
+
+```ts
+import { implementation, inject } from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
+import { GreetingContract } from './contract.js'
+import { GreetingService } from './service.js'
+
+export const GreetingController = implementation({
   name: 'GreetingController',
-  contract: AppContract.http.greetings.greet,
+  contract: GreetingContract,
   protocol: http,
   factory: (greetings = inject(GreetingService)) => ({
     async greet(ctx) {
@@ -100,22 +107,30 @@ const GreetingController = implementation({
     },
   }),
 })
+```
 
-const GreetingModule = defineModule(() => ({
+最後に`src/app.ts`でfeatureをroot ModuleとApplication Definitionへ組み込みます。
+
+```ts
+import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { GreetingController } from './greetings/controller.js'
+import { GreetingService } from './greetings/service.js'
+
+const AppModule = defineModule(() => ({
   providers: [GreetingService],
   implementations: [GreetingController],
 }))
 
 export default defineApplication({
-  modules: [GreetingModule()],
+  modules: [AppModule()],
 })
 ```
 
-このコードでは、`GreetingContract`をfeature Contractとして定義し、`AppContract`のHTTP treeへcompositionしています。`GreetingController`はfragmentではなく、Application上で解決済みの`AppContract.http.greetings.greet`へbindします。Loutreはそのresolved Implementation bindingからApplication Contract rootを導出するため、routing、継承されたPipeline state、Graph coverage、OpenAPI、server implementationが同じresolved Contract treeを参照します。
+`GreetingContract`、`GreetingService`、`GreetingController`は同じfeatureに属するため、`greetings/`の中へまとめます。`app.ts`はroot Application Graphのcompositionだけを担当し、登録対象だからという理由でfeature logicまで抱え込みません。
 
 Application DefinitionはHTTP serverそのものではありません。Runtimeに依存しないApplication Graphを先に定義し、HTTP listenerなど実行環境固有の機能はHostから接続します。
 
-HTTP Contractは`routes`でネストできます。treeのkeyはarchitecture上のnamespaceであり、それだけではURL segmentになりません。URL prefixが必要な場合はbranchへ`path`を指定します。親branchの`path`、`pipeline`、`responses`はdescendant routeへ継承されます。
+HTTP Contractは`routes`でネストすることもできます。treeのkeyはarchitecture上のnamespaceであり、それだけではURL segmentになりません。URL prefixが必要な場合はbranchへ`path`を指定します。親branchの`path`、`pipeline`、`responses`はdescendant routeへ継承されます。
 
 ## 振る舞いをテストする
 
@@ -182,7 +197,7 @@ curl http://localhost:3000/greetings/Loutre
 { "message": "こんにちは、Loutre！" }
 ```
 
-Runtimeだけを変更しても、`src/app.ts`のContract、Implementation、Moduleは変わりません。Bun、Deno、Cloudflare Workers、AWS Lambdaでは、生成された`src/main.ts`がそれぞれのRuntime adapterを接続します。
+Runtimeだけを変更しても、`src/greetings/`配下のfeature codeと`src/app.ts`のApplication Definitionは変わりません。Bun、Deno、Cloudflare Workers、AWS Lambdaでは、生成された`src/main.ts`がそれぞれのRuntime adapterを接続します。
 
 ## 変更を検証して記録する
 
@@ -195,7 +210,7 @@ npm run verify
 検証が通ったら、変更したファイルの一覧ではなく、変更によって可能になったことをコミットへ残します。
 
 ```sh
-git add src/app.ts src/app.test.ts
+git add src/app.ts src/app.test.ts src/greetings
 git commit -m "feat: 名前ごとの挨拶を返せるようにする"
 ```
 
@@ -207,7 +222,7 @@ HTTP Contractはserverだけでなく、clientのsource of truthとしても利�
 
 ```ts
 import { createHttpClient, fetchHttpTransport } from '@loutrejs/loutre/http'
-import { GreetingContract } from './app.js'
+import { GreetingContract } from './greetings/contract.js'
 
 const client = createHttpClient(
   GreetingContract,
