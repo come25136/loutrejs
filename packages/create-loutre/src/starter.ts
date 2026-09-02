@@ -3,6 +3,7 @@ import { cp, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  createIsTarget,
   type PackageManager,
   type ProjectTarget,
   runScriptCommand,
@@ -43,6 +44,7 @@ export async function writeStarter(
   targetDirectory: string,
   options: StarterOptions,
 ): Promise<void> {
+  const isTarget = createIsTarget(options.target)
   await cp(baseTemplateDirectory, targetDirectory, { recursive: true })
   await cp(join(targetsTemplateDirectory, options.target), targetDirectory, {
     recursive: true,
@@ -69,10 +71,10 @@ export async function writeStarter(
     verifyCommand: runScriptCommand(options.packageManager, 'verify'),
     deploymentSection: deploymentSection(options),
   })
-  if (options.target === 'deno') {
+  if (isTarget('deno')) {
     await rewriteLocalImportExtensionsForDeno(join(targetDirectory, 'src'))
   }
-  if (options.target === 'cloudflare-workers') {
+  if (isTarget('cloudflare-workers')) {
     await renderTextTemplate(join(targetDirectory, 'wrangler.jsonc'), {
       packageName: workerNameFor(options.packageName),
       compatibilityDate: new Date().toISOString().slice(0, 10),
@@ -189,7 +191,8 @@ function renderPackageJson(options: StarterOptions): string {
 }
 
 function developmentSection(options: StarterOptions): string {
-  if (options.target === 'aws-lambda') {
+  const isTarget = createIsTarget(options.target)
+  if (isTarget('aws-lambda')) {
     return [
       '## Development',
       '',
@@ -207,14 +210,15 @@ function developmentSection(options: StarterOptions): string {
     runScriptCommand(options.packageManager, 'dev'),
     '```',
     '',
-    options.target === 'cloudflare-workers'
+    isTarget('cloudflare-workers')
       ? 'Wrangler starts a local Cloudflare Workers environment.'
       : 'Open <http://127.0.0.1:3000> to receive a JSON response.',
   ].join('\n')
 }
 
 function deploymentSection(options: StarterOptions): string {
-  if (options.target === 'cloudflare-workers') {
+  const isTarget = createIsTarget(options.target)
+  if (isTarget('cloudflare-workers')) {
     return [
       '## Deploy',
       '',
@@ -223,7 +227,7 @@ function deploymentSection(options: StarterOptions): string {
       '```',
     ].join('\n')
   }
-  if (options.target === 'aws-lambda') {
+  if (isTarget('aws-lambda')) {
     return [
       '## Build',
       '',
@@ -238,7 +242,7 @@ function deploymentSection(options: StarterOptions): string {
     '## Production',
     '',
     '```sh',
-    ...(options.target === 'deno'
+    ...(isTarget('deno')
       ? []
       : [runScriptCommand(options.packageManager, 'build')]),
     runScriptCommand(options.packageManager, 'start'),

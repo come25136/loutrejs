@@ -1,12 +1,20 @@
+import type { RuntimeEngine } from '@loutrejs/loutre/runtime'
+
 export const projectTargets = [
   'node',
   'bun',
   'deno',
   'cloudflare-workers',
   'aws-lambda',
-] as const
+] as const satisfies readonly Exclude<RuntimeEngine, 'electron' | 'unknown'>[]
 
-export type ProjectTarget = (typeof projectTargets)[number]
+export type ProjectTarget = Exclude<RuntimeEngine, 'electron' | 'unknown'>
+
+export function createIsTarget(
+  target: ProjectTarget,
+): (candidate: ProjectTarget) => boolean {
+  return (candidate) => target === candidate
+}
 
 export const packageManagers = ['npm', 'pnpm', 'yarn', 'bun', 'deno'] as const
 
