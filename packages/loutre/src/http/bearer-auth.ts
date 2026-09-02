@@ -8,17 +8,12 @@ import {
 } from '../core/index.js'
 import type { LogicalHttpResult } from './definitions.js'
 
-export interface BasicAuthCredentials {
-  readonly username: string
-  readonly password: string
-}
-
-export interface BasicAuthUnauthorized<TVariant extends string, TBody> {
+export interface BearerAuthUnauthorized<TVariant extends string, TBody> {
   readonly variant: TVariant
   readonly body: TBody
 }
 
-export interface BasicAuthOptions<
+export interface BearerAuthOptions<
   TProvided extends ContextKey,
   TVariant extends string,
   TUnauthorizedBody,
@@ -26,17 +21,17 @@ export interface BasicAuthOptions<
   readonly realm: string
   readonly provides: readonly [TProvided]
   readonly factory: () => (
-    credentials: BasicAuthCredentials,
+    token: string,
   ) =>
     | ContextKeyValue<TProvided>
     | null
     | undefined
     | Promise<ContextKeyValue<TProvided> | null | undefined>
-  readonly unauthorized: BasicAuthUnauthorized<TVariant, TUnauthorizedBody>
+  readonly unauthorized: BearerAuthUnauthorized<TVariant, TUnauthorizedBody>
   readonly name?: string
 }
 
-type BasicAuthShortCircuits<TVariant extends string> = readonly [
+type BearerAuthShortCircuits<TVariant extends string> = readonly [
   {
     readonly protocol: 'http'
     readonly variant: TVariant
@@ -44,11 +39,11 @@ type BasicAuthShortCircuits<TVariant extends string> = readonly [
   },
 ]
 
-type BasicAuthResponseHeaders = {
+type BearerAuthResponseHeaders = {
   readonly 'www-authenticate': string
 }
 
-export interface BasicAuthLayerDescriptor<
+export interface BearerAuthLayerDescriptor<
   TProvided extends ContextKey,
   TVariant extends string,
   TUnauthorizedBody,
@@ -57,45 +52,45 @@ export interface BasicAuthLayerDescriptor<
   readonly [TProvided],
   string extends TVariant
     ? unknown
-    : LogicalHttpResult<TVariant, TUnauthorizedBody, BasicAuthResponseHeaders>,
-  BasicAuthShortCircuits<TVariant>,
+    : LogicalHttpResult<TVariant, TUnauthorizedBody, BearerAuthResponseHeaders>,
+  BearerAuthShortCircuits<TVariant>,
   string,
   'authentication',
   readonly [],
-  BasicAuthContext
+  BearerAuthContext
 > {
   readonly role: 'authentication'
 }
 
-export interface BasicAuthContext {
+export interface BearerAuthContext {
   readonly headers: Readonly<Record<string, string | undefined>>
 }
 
-export function basicAuth<
+export function bearerAuth<
   TProvided extends ContextKey,
   const TVariant extends string,
   TUnauthorizedBody,
 >(
-  options: BasicAuthOptions<TProvided, TVariant, TUnauthorizedBody>,
-): BasicAuthLayerDescriptor<TProvided, TVariant, TUnauthorizedBody> {
-  const challenge = formatBasicChallenge(options.realm)
+  options: BearerAuthOptions<TProvided, TVariant, TUnauthorizedBody>,
+): BearerAuthLayerDescriptor<TProvided, TVariant, TUnauthorizedBody> {
+  const challenge = formatBearerChallenge(options.realm)
   const provided = options.provides[0]
   const descriptor = layer<
     readonly [],
     readonly [TProvided],
-    BasicAuthContext,
+    BearerAuthContext,
     string extends TVariant
       ? unknown
       : LogicalHttpResult<
           TVariant,
           TUnauthorizedBody,
-          BasicAuthResponseHeaders
+          BearerAuthResponseHeaders
         >,
-    BasicAuthShortCircuits<TVariant>,
+    BearerAuthShortCircuits<TVariant>,
     string,
     'authentication'
   >({
-    name: options.name ?? 'basicAuth',
+    name: options.name ?? 'bearerAuth',
     role: 'authentication',
     provides: options.provides,
     shortCircuits: [
@@ -108,12 +103,12 @@ export function basicAuth<
     factory: () => {
       const authenticate = options.factory()
       return async (ctx, next) => {
-        const credentials = decodeBasicCredentials(ctx.headers.authorization)
-        if (!credentials) {
+        const token = readBearerToken(ctx.headers.authorization)
+        if (!token) {
           return unauthorizedResult(options.unauthorized, challenge)
         }
 
-        const value = await authenticate(credentials)
+        const value = await authenticate(token)
         if (value == null) {
           return unauthorizedResult(options.unauthorized, challenge)
         }
@@ -128,11 +123,11 @@ export function basicAuth<
 }
 
 function unauthorizedResult<TVariant extends string, TBody>(
-  unauthorized: BasicAuthUnauthorized<TVariant, TBody>,
+  unauthorized: BearerAuthUnauthorized<TVariant, TBody>,
   challenge: string,
 ) {
   return shortCircuit<
-    LogicalHttpResult<TVariant, TBody, BasicAuthResponseHeaders>
+    LogicalHttpResult<TVariant, TBody, BearerAuthResponseHeaders>
   >({
     kind: 'http-result',
     variant: unauthorized.variant,
@@ -143,35 +138,18 @@ function unauthorizedResult<TVariant extends string, TBody>(
   })
 }
 
-function formatBasicChallenge(realm: string): string {
+function readBearerToken(
+  authorization: string | null | undefined,
+): string | undefined {
+  return /^Bearer +([^\s]+)$/i.exec(authorization ?? '')?.[1]
+}
+
+function formatBearerChallenge(realm: string): string {
   if (realm.length === 0 || /[\u0000-\u001f\u007f]/.test(realm)) {
     throw new TypeError(
-      'Basic authentication realm cannot be empty or contain control characters',
+      'Bearer authentication realm cannot be empty or contain control characters',
     )
   }
   const escaped = realm.replace(/[\\"]/g, '\\$&')
-  return `Basic realm="${escaped}", charset="UTF-8"`
-}
-
-function decodeBasicCredentials(
-  authorization: string | null | undefined,
-): BasicAuthCredentials | undefined {
-  const match = /^Basic +([A-Za-z0-9+/]+={0,2})$/i.exec(authorization ?? '')
-  if (!match?.[1]) return undefined
-
-  try {
-    const binary = atob(match[1])
-    const bytes = Uint8Array.from(binary, (character) =>
-      character.charCodeAt(0),
-    )
-    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-    const separator = decoded.indexOf(':')
-    if (separator < 0) return undefined
-    return {
-      username: decoded.slice(0, separator),
-      password: decoded.slice(separator + 1),
-    }
-  } catch {
-    return undefined
-  }
+  return `Bearer realm="${escaped}"`
 }

@@ -1,6 +1,6 @@
-# Custom Bearer Auth Example
+# Bearer Auth Example
 
-Protect `GET /profile` without adding an authentication scheme to Loutre itself. This example builds Bearer authentication entirely from the public `layer()`, `shortCircuit()`, and `shortCircuits` metadata APIs.
+Protect `GET /profile` with Loutre's built-in `bearerAuth()` Layer. The authentication factory injects a `UserRepository`, validates the bearer token, provides the authenticated user through a Context Key, and short-circuits authentication failures with a `WWW-Authenticate` challenge.
 
 From this example directory, start the application with:
 
