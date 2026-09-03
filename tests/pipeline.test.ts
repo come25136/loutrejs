@@ -6,7 +6,6 @@ import {
   shortCircuit,
   token,
   type LayerDescriptor,
-  type LayerRuntime,
   type PipelineItem,
   type TerminalLayerDescriptor,
 } from '@loutrejs/loutre'
@@ -27,10 +26,11 @@ function hooks(
   context: Record<string, unknown>,
   terminalResult: unknown = 'done',
 ) {
-  const runtimes = new Map<
-    LayerDescriptor,
-    LayerRuntime<object, readonly [], unknown>
-  >()
+  type ExecutableLayerRuntime = (
+    context: object,
+    next: (...arguments_: readonly unknown[]) => Promise<void>,
+  ) => Promise<unknown>
+  const runtimes = new Map<LayerDescriptor, ExecutableLayerRuntime>()
   return {
     context,
     validate: () => undefined,
@@ -38,11 +38,7 @@ function hooks(
     layer: (descriptor: LayerDescriptor) => {
       const cached = runtimes.get(descriptor)
       if (cached) return cached
-      const runtime = descriptor.factory() as LayerRuntime<
-        object,
-        readonly [],
-        unknown
-      >
+      const runtime = descriptor.factory() as unknown as ExecutableLayerRuntime
       runtimes.set(descriptor, runtime)
       return runtime
     },
@@ -156,11 +152,11 @@ describe('continuation Pipeline', () => {
   })
 
   it('next(provided)のContextを後段へ追加する', async () => {
-    const VALUE = contextKey('value').of<string>()
+    const VALUE = contextKey<{ value: string }>('value')
     const context: Record<string, unknown> = {}
     const provider = layer({
       name: 'provider',
-      provides: [VALUE],
+      provide: VALUE,
       factory: () => async (_ctx, next) => {
         await next({ value: 'ready' })
       },
@@ -179,7 +175,7 @@ describe('continuation Pipeline', () => {
   })
 
   it('childがprovideしたContextを親Pipeline後段へ維持する', async () => {
-    const VALUE = contextKey('childValue').of<string>()
+    const VALUE = contextKey<{ childValue: string }>('childValue')
     const context: Record<string, unknown> = {}
     const wrapper = layer({
       name: 'wrapper',
@@ -189,7 +185,7 @@ describe('continuation Pipeline', () => {
     })
     const provider = layer({
       name: 'child-provider',
-      provides: [VALUE],
+      provide: VALUE,
       factory: () => async (_ctx, next) => {
         await next({ childValue: 'ready' })
       },
@@ -210,10 +206,10 @@ describe('continuation Pipeline', () => {
   })
 
   it('既存Context propertyの上書きを拒否する', async () => {
-    const SESSION = contextKey('session').of<string>()
+    const SESSION = contextKey<{ session: string }>('session')
     const provider = layer({
       name: 'provider',
-      provides: [SESSION],
+      provide: SESSION,
       factory: () => async (_ctx, next) => {
         await next({ session: 'new' })
       },
@@ -235,23 +231,6 @@ describe('continuation Pipeline', () => {
     await expect(
       executePipeline([broken, terminal], hooks({})),
     ).rejects.toThrow('undeclared Context property extra')
-  })
-
-  it('provides内の同名property重複をLayer定義時に拒否する', () => {
-    const FIRST = contextKey('duplicate').of<string>()
-    const SECOND = contextKey('duplicate').of<string>()
-
-    expect(() =>
-      (layer as any)({
-        name: 'duplicate-provider',
-        provides: [FIRST, SECOND],
-        factory:
-          () =>
-          async (_ctx: object, next: (value: object) => Promise<void>) => {
-            await next({ duplicate: 'value' })
-          },
-      }),
-    ).toThrow('Layer provides contains duplicate Context property duplicate')
   })
 
   it('Prisma風callback wrapperでchildだけを囲み親後段へ戻る', async () => {

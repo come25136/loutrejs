@@ -3,7 +3,7 @@ import {
   shortCircuit,
   type ContextKey,
   type ContextKeyValue,
-  type ContextProperties,
+  type ContextShape,
   type LayerDescriptor,
 } from '../core/index.js'
 import type { LogicalHttpResult } from './definitions.js'
@@ -19,12 +19,12 @@ export interface BasicAuthUnauthorized<TVariant extends string, TBody> {
 }
 
 export interface BasicAuthOptions<
-  TProvided extends ContextKey,
+  TProvided extends ContextKey<any, any>,
   TVariant extends string,
   TUnauthorizedBody,
 > {
   readonly realm: string
-  readonly provides: readonly [TProvided]
+  readonly provide: TProvided
   readonly factory: () => (
     credentials: BasicAuthCredentials,
   ) =>
@@ -49,12 +49,12 @@ type BasicAuthResponseHeaders = {
 }
 
 export interface BasicAuthLayerDescriptor<
-  TProvided extends ContextKey,
+  TProvided extends ContextKey<any, any>,
   TVariant extends string,
   TUnauthorizedBody,
 > extends LayerDescriptor<
   readonly [],
-  readonly [TProvided],
+  TProvided,
   string extends TVariant
     ? unknown
     : LogicalHttpResult<TVariant, TUnauthorizedBody, BasicAuthResponseHeaders>,
@@ -72,17 +72,17 @@ export interface BasicAuthContext {
 }
 
 export function basicAuth<
-  TProvided extends ContextKey,
+  TProvided extends ContextKey<any, any>,
   const TVariant extends string,
   TUnauthorizedBody,
 >(
   options: BasicAuthOptions<TProvided, TVariant, TUnauthorizedBody>,
 ): BasicAuthLayerDescriptor<TProvided, TVariant, TUnauthorizedBody> {
   const challenge = formatBasicChallenge(options.realm)
-  const provided = options.provides[0]
+  const provided = options.provide
   const descriptor = layer<
     readonly [],
-    readonly [TProvided],
+    TProvided,
     BasicAuthContext,
     string extends TVariant
       ? unknown
@@ -97,7 +97,7 @@ export function basicAuth<
   >({
     name: options.name ?? 'basicAuth',
     role: 'authentication',
-    provides: options.provides,
+    provide: options.provide,
     shortCircuits: [
       {
         protocol: 'http',
@@ -120,7 +120,7 @@ export function basicAuth<
 
         await next({
           [provided.name]: value,
-        } as ContextProperties<readonly [TProvided]>)
+        } as ContextShape<TProvided>)
       }
     },
   })

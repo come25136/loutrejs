@@ -21,9 +21,11 @@ export interface Session {
 export interface CurrentTenant {
   readonly id: string
 }
-export const AUTH = contextKey('auth').of<AuthState>()
-export const SESSION = contextKey('session').of<Session>()
-export const CURRENT_TENANT = contextKey('currentTenant').of<CurrentTenant>()
+export const AUTH = contextKey<{ auth: AuthState }>('auth')
+export const SESSION = contextKey<{ session: Session }>('session')
+export const CURRENT_TENANT = contextKey<{ currentTenant: CurrentTenant }>(
+  'currentTenant',
+)
 interface HeadersContext {
   readonly headers: {
     readonly authorization: string
@@ -33,7 +35,7 @@ export const bearerAuthentication = layer({
   name: 'bearerAuthentication',
   role: 'authentication',
   requiresValidated: ['headers'],
-  provides: [AUTH],
+  provide: AUTH,
   factory: () => async (ctx: HeadersContext, next) => {
     const value = ctx.headers.authorization
     await next({
@@ -47,7 +49,7 @@ export const authenticated = layer({
   name: 'authenticated',
   role: 'guard',
   requires: [AUTH],
-  provides: [SESSION],
+  provide: SESSION,
   factory: () => async (ctx, next) => {
     if (!ctx.auth.principal) throw new Error('Authentication required')
     await next({ session: { principal: ctx.auth.principal } })
@@ -57,7 +59,7 @@ export const tenantAccess = layer({
   name: 'tenantAccess',
   role: 'guard',
   requires: [SESSION],
-  provides: [CURRENT_TENANT],
+  provide: CURRENT_TENANT,
   factory: () => async (ctx, next) => {
     await next({
       currentTenant: { id: `tenant-${ctx.session.principal.id}` },

@@ -1,16 +1,36 @@
-export interface ContextKey<TName extends string = string, TValue = unknown> {
+export interface ContextKey<
+  TName extends string = string,
+  TShape extends object = object,
+> {
   readonly kind: 'context-key'
   readonly name: TName
   readonly key: symbol
-  readonly '~value'?: TValue
+  readonly '~shape'?: TShape
 }
 
 export type ContextKeyValue<TKey> =
-  TKey extends ContextKey<string, infer TValue> ? TValue : never
+  TKey extends ContextKey<infer TName, infer TShape>
+    ? TName extends keyof TShape
+      ? TShape[TName]
+      : never
+    : never
 
-export type ContextProperties<TKeys extends readonly ContextKey[]> = {
-  readonly [TKey in TKeys[number] as TKey['name']]: ContextKeyValue<TKey>
-}
+export type ContextShape<TKey> =
+  TKey extends ContextKey<infer TName, infer TShape>
+    ? Pick<TShape, Extract<TName, keyof TShape>>
+    : {}
+
+type UnionToIntersection<T> = (
+  T extends unknown ? (value: T) => void : never
+) extends (value: infer TIntersection) => void
+  ? TIntersection
+  : never
+
+export type ContextProperties<TKeys extends readonly ContextKey[]> = [
+  TKeys[number],
+] extends [never]
+  ? {}
+  : UnionToIntersection<ContextShape<TKeys[number]>>
 
 type ContextKeyNameConstraint<TName extends string> = TName extends
   | ''
@@ -18,21 +38,21 @@ type ContextKeyNameConstraint<TName extends string> = TName extends
   ? never
   : unknown
 
-export function contextKey<const TName extends string>(
-  name: TName & ContextKeyNameConstraint<TName>,
-) {
+export function contextKey<
+  TShape extends object,
+  const TName extends Extract<keyof TShape, string> = Extract<
+    keyof TShape,
+    string
+  >,
+>(name: TName & ContextKeyNameConstraint<TName>): ContextKey<TName, TShape> {
   if (name.length === 0 || name === '__proto__') {
     throw new Error(`Invalid Context Key name: ${JSON.stringify(name)}`)
   }
-  return {
-    of<TValue>(): ContextKey<TName, TValue> {
-      return Object.freeze({
-        kind: 'context-key' as const,
-        name,
-        key: Symbol(name),
-      })
-    },
-  }
+  return Object.freeze({
+    kind: 'context-key' as const,
+    name,
+    key: Symbol(name),
+  })
 }
 
 export function contextKeyName(key: ContextKey): string {

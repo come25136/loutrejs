@@ -2,12 +2,14 @@ import { contract, contextKey, implementation, layer } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
-const SESSION = contextKey('implementation.session').of<{
-  readonly userId: string
-}>()
+const SESSION = contextKey<{
+  'implementation.session': {
+    readonly userId: string
+  }
+}>('implementation.session')
 const session = layer({
   name: 'implementation-session',
-  provides: [SESSION],
+  provide: SESSION,
   factory: () => async (_ctx, next) => {
     await next({ 'implementation.session': { userId: 'user-1' } })
   },

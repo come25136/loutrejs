@@ -456,10 +456,12 @@ Context is passed to the next process by combining Layer, Validation, and Termin
 Layers are defined with static metadata and synchronous factories.
 
 ```ts
+const CURRENT_USER = contextKey<{ currentUser: User }>('currentUser')
+
 const auth = layer({
   name: 'auth',
   requires: [SESSION],
-  provides: [CURRENT_USER],
+  provide: CURRENT_USER,
 
   factory:
     (users = inject(UserService)) =>
@@ -470,7 +472,7 @@ const auth = layer({
 })
 ```
 
-`requires` represents the Context Key required by the layer, and `provides` represents the Context Key added to subsequent processing.
+`requires` represents the Context Keys required by the layer, and `provide` represents the single Context Key added to subsequent processing. A Layer can provide at most one Context Key.
 
 Runtime detects Context operations such as:
 

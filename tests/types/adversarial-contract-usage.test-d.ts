@@ -51,26 +51,28 @@ http({
   },
 })
 
-const SESSION = contextKey('adversarial.session').of<string>()
-const USER = contextKey('adversarial.user').of<string>()
+const SESSION = contextKey<{ 'adversarial.session': string }>(
+  'adversarial.session',
+)
+const USER = contextKey<{ 'adversarial.user': string }>('adversarial.user')
 
 const provideSession = layer({
   name: 'provideSession',
-  provides: [SESSION],
+  provide: SESSION,
   factory: () => async (_ctx, next) => next({ 'adversarial.session': 's1' }),
 })
 
 const requireSession = layer({
   name: 'requireSession',
   requires: [SESSION],
-  provides: [USER],
+  provide: USER,
   factory: () => async (ctx, next) =>
     next({ 'adversarial.user': ctx['adversarial.session'] }),
 })
 
 const provideSessionAgain = layer({
   name: 'provideSessionAgain',
-  provides: [SESSION],
+  provide: SESSION,
   factory: () => async (_ctx, next) => next({ 'adversarial.session': 's2' }),
 })
 
@@ -172,30 +174,11 @@ defineApplication({ modules: [Module()] })
 // @ts-expect-error Application ContractはImplementationのresolved nodeから推論する
 defineApplication({ contract: NestedContract, modules: [Module()] })
 
-const DUPLICATE_NAME_A = contextKey('adversarial.duplicate').of<string>()
-const DUPLICATE_NAME_B = contextKey('adversarial.duplicate').of<number>()
-
-// @ts-expect-error one Layer cannot provide the same Context Key twice
-layer({
-  name: 'duplicateProvideDeclaration',
-  provides: [SESSION, SESSION],
-  factory: () => async (_ctx, next) =>
-    next({ 'adversarial.session': 'duplicate' }),
-})
-
-// @ts-expect-error Context is materialized by property name, so duplicate names are invalid even for distinct keys
-layer({
-  name: 'duplicateProvideName',
-  provides: [DUPLICATE_NAME_A, DUPLICATE_NAME_B],
-  factory: () => async (_ctx, next) =>
-    next({ 'adversarial.duplicate': 'ambiguous' as never }),
-})
-
 // @ts-expect-error a Layer cannot require and then implicitly overwrite the same Context property
 layer({
   name: 'requireAndProvideSameContext',
   requires: [SESSION],
-  provides: [SESSION],
+  provide: SESSION,
   factory: () => async (_ctx, next) =>
     next({ 'adversarial.session': 'replacement' }),
 })
@@ -259,13 +242,13 @@ const resolvedUser: string = resolvedLeafContext['adversarial.user']
 void [resolvedParam, resolvedUser]
 
 // @ts-expect-error Context is materialized as an object property; __proto__ is unsafe
-contextKey('__proto__').of<string>()
+contextKey<{ __proto__: string }>('__proto__')
 // @ts-expect-error empty Context property names are not meaningful
-contextKey('').of<string>()
+contextKey<{ '': string }>('')
 
 const nestedWrapper = layer({
   name: 'nestedWrapper',
-  provides: [SESSION],
+  provide: SESSION,
   factory: () => async (_ctx, next) =>
     next({ 'adversarial.session': 'nested' }),
 })

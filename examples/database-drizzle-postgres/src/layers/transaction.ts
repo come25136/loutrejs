@@ -4,11 +4,13 @@ import {
   type DrizzleTransaction,
 } from '../database/drizzle.js'
 
-export const TRANSACTION = contextKey('transaction').of<DrizzleTransaction>()
+export const TRANSACTION = contextKey<{ transaction: DrizzleTransaction }>(
+  'transaction',
+)
 
 export const transaction = layer({
   name: 'database.transaction',
-  provides: [TRANSACTION],
+  provide: TRANSACTION,
   factory:
     (database = inject(DrizzleDatabase)) =>
     async (_ctx, next) => {

@@ -14,14 +14,18 @@ import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 
 describe('Nested Contract composition', () => {
-  const REQUEST_SCOPE = contextKey('nested.requestScope').of<string>()
-  const CURRENT_USER = contextKey('nested.currentUser').of<{
-    readonly id: string
-  }>()
+  const REQUEST_SCOPE = contextKey<{ 'nested.requestScope': string }>(
+    'nested.requestScope',
+  )
+  const CURRENT_USER = contextKey<{
+    'nested.currentUser': {
+      readonly id: string
+    }
+  }>('nested.currentUser')
 
   const requestScope = layer({
     name: 'nested.requestScope',
-    provides: [REQUEST_SCOPE],
+    provide: REQUEST_SCOPE,
     factory: () => async (_ctx, next) => {
       await next({ 'nested.requestScope': 'request-1' })
     },
@@ -30,7 +34,7 @@ describe('Nested Contract composition', () => {
   const authentication = layer({
     name: 'nested.authentication',
     requires: [REQUEST_SCOPE],
-    provides: [CURRENT_USER],
+    provide: CURRENT_USER,
     factory: () => async (ctx, next) => {
       await next({
         'nested.currentUser': { id: `user:${ctx['nested.requestScope']}` },

@@ -11,11 +11,11 @@ interface Session {
 interface OtherSession {
   readonly accountId: string
 }
-const SESSION = contextKey('session').of<Session>()
-const OTHER_SESSION = contextKey('otherSession').of<OtherSession>()
+const SESSION = contextKey<{ session: Session }>('session')
+const OTHER_SESSION = contextKey<{ otherSession: OtherSession }>('otherSession')
 const sessionLayer = layer({
   name: 'message-port-session',
-  provides: [SESSION],
+  provide: SESSION,
   factory: () => async (_ctx, next) => {
     await next({ session: { userId: 'user-1' } })
   },

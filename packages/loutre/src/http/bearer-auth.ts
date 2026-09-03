@@ -3,7 +3,7 @@ import {
   shortCircuit,
   type ContextKey,
   type ContextKeyValue,
-  type ContextProperties,
+  type ContextShape,
   type LayerDescriptor,
 } from '../core/index.js'
 import type { LogicalHttpResult } from './definitions.js'
@@ -14,12 +14,12 @@ export interface BearerAuthUnauthorized<TVariant extends string, TBody> {
 }
 
 export interface BearerAuthOptions<
-  TProvided extends ContextKey,
+  TProvided extends ContextKey<any, any>,
   TVariant extends string,
   TUnauthorizedBody,
 > {
   readonly realm: string
-  readonly provides: readonly [TProvided]
+  readonly provide: TProvided
   readonly factory: () => (
     token: string,
   ) =>
@@ -44,12 +44,12 @@ type BearerAuthResponseHeaders = {
 }
 
 export interface BearerAuthLayerDescriptor<
-  TProvided extends ContextKey,
+  TProvided extends ContextKey<any, any>,
   TVariant extends string,
   TUnauthorizedBody,
 > extends LayerDescriptor<
   readonly [],
-  readonly [TProvided],
+  TProvided,
   string extends TVariant
     ? unknown
     : LogicalHttpResult<TVariant, TUnauthorizedBody, BearerAuthResponseHeaders>,
@@ -67,17 +67,17 @@ export interface BearerAuthContext {
 }
 
 export function bearerAuth<
-  TProvided extends ContextKey,
+  TProvided extends ContextKey<any, any>,
   const TVariant extends string,
   TUnauthorizedBody,
 >(
   options: BearerAuthOptions<TProvided, TVariant, TUnauthorizedBody>,
 ): BearerAuthLayerDescriptor<TProvided, TVariant, TUnauthorizedBody> {
   const challenge = formatBearerChallenge(options.realm)
-  const provided = options.provides[0]
+  const provided = options.provide
   const descriptor = layer<
     readonly [],
-    readonly [TProvided],
+    TProvided,
     BearerAuthContext,
     string extends TVariant
       ? unknown
@@ -92,7 +92,7 @@ export function bearerAuth<
   >({
     name: options.name ?? 'bearerAuth',
     role: 'authentication',
-    provides: options.provides,
+    provide: options.provide,
     shortCircuits: [
       {
         protocol: 'http',
@@ -115,7 +115,7 @@ export function bearerAuth<
 
         await next({
           [provided.name]: value,
-        } as ContextProperties<readonly [TProvided]>)
+        } as ContextShape<TProvided>)
       }
     },
   })

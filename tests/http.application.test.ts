@@ -12,11 +12,11 @@ import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 describe('HTTP application boundary', () => {
   it('全HTTP入力を検証し、Layer stateをctxからapplication-scoped Controllerへ渡す', async () => {
-    const EXECUTION_ID = contextKey('executionId').of<string>()
+    const EXECUTION_ID = contextKey<{ executionId: string }>('executionId')
     let executions = 0
     const execution = layer({
       name: 'execution-id',
-      provides: [EXECUTION_ID],
+      provide: EXECUTION_ID,
       factory: () => async (_ctx, next) => {
         executions += 1
         await next({ executionId: `exec-${executions}` })

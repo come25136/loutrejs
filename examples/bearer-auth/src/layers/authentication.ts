@@ -3,12 +3,12 @@ import { bearerAuth } from '@loutrejs/loutre/http'
 import type { User } from '../auth/user.js'
 import { UserRepository } from '../auth/repository.js'
 
-export const CURRENT_USER = contextKey('currentUser').of<User>()
+export const CURRENT_USER = contextKey<{ currentUser: User }>('currentUser')
 
 export const bearerAuthentication = bearerAuth({
   name: 'bearerAuthentication',
   realm: 'Loutre Example',
-  provides: [CURRENT_USER],
+  provide: CURRENT_USER,
   factory:
     (users = inject(UserRepository)) =>
     (token) =>

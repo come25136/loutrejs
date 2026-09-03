@@ -1128,7 +1128,9 @@ function collectContextKeys(
     const path = `${target.contractId}.${target.procedure}.${target.protocol}`
     visitPipelineItems(target.pipeline, (item) => {
       if (item.kind !== 'layer') return
-      for (const key of [...item.requires, ...item.provides]) {
+      for (const key of item.provide
+        ? [...item.requires, item.provide]
+        : item.requires) {
         const existing = keys.get(key.name)
         if (existing && existing !== key) {
           diagnostics.push({
@@ -1306,15 +1308,15 @@ function validatePipeline(
         })
       }
     }
-    for (const provided of item.provides) {
-      if (available.has(provided)) {
+    if (item.provide) {
+      if (available.has(item.provide)) {
         diagnostics.push({
           code: 'LUTRE_CONTEXT_003',
-          message: `${item.name} cannot implicitly overwrite existing Context Key ${contextKeyName(provided)}`,
+          message: `${item.name} cannot implicitly overwrite existing Context Key ${contextKeyName(item.provide)}`,
           path,
         })
       }
-      available.add(provided)
+      available.add(item.provide)
     }
     for (const shortCircuit of item.shortCircuits) {
       if (shortCircuit.protocol !== target.protocol) continue
@@ -1349,7 +1351,9 @@ function toLayerIR(item: PipelineItem, index: number): LayerIR {
     name: item.name,
     role: item.role,
     requires: item.kind === 'layer' ? item.requires.map(contextKeyName) : [],
-    provides: item.kind === 'layer' ? item.provides.map(contextKeyName) : [],
+    ...(item.kind !== 'layer' || !item.provide
+      ? {}
+      : { provide: contextKeyName(item.provide) }),
     requiresValidated: item.kind === 'layer' ? item.requiresValidated : [],
     ...(child === undefined ? {} : { pipeline: child.map(toLayerIR) }),
     ...(item.kind !== 'layer' || item.shortCircuits.length === 0

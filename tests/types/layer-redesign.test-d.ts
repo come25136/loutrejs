@@ -1,8 +1,8 @@
 import { contextKey, inject, layer, token } from '@loutrejs/loutre'
 
-const A = contextKey('a').of<string>()
-const B = contextKey('b').of<number>()
-const C = contextKey('c').of<boolean>()
+const A = contextKey<{ a: string }>('a')
+const B = contextKey<{ b: number }>('b')
+const C = contextKey<{ c: boolean }>('c')
 
 interface Lookup {
   find(value: string): number
@@ -18,7 +18,7 @@ layer({ name: 'missing-factory' })
 layer({
   name: 'typed-layer',
   requires: [A],
-  provides: [B],
+  provide: B,
   factory:
     (lookup = inject(LOOKUP)) =>
     async (ctx, next) => {
@@ -27,7 +27,7 @@ layer({
       // @ts-expect-error requiresにないContextはLayerから参照できない
       ctx.c
       await next({ b })
-      // @ts-expect-error providesがあるLayerではnext引数が必須
+      // @ts-expect-error provideがあるLayerではnext引数が必須
       await next()
     },
 })
@@ -41,22 +41,19 @@ layer({
 })
 
 layer({
-  name: 'no-provides',
+  name: 'no-provide',
   factory: () => async (_ctx, next) => {
     await next()
-    // @ts-expect-error providesがないLayerへContextは渡せない
+    // @ts-expect-error provideがないLayerへContextは渡せない
     await next({})
   },
 })
 
 layer({
-  name: 'multiple-provides',
+  name: 'multiple-provides-is-invalid',
+  // @ts-expect-error Layerは単一のprovideだけを宣言する
   provides: [B, C],
   factory: () => async (_ctx, next) => {
-    await next({ b: 1, c: true })
-    // @ts-expect-error 複数providesのpropertyはすべて必須
-    await next({ b: 1 })
-    // @ts-expect-error provide値はContext Keyの型と一致する必要がある
-    await next({ b: 'wrong', c: true })
+    await next()
   },
 })

@@ -10,12 +10,14 @@ interface CurrentUser {
   readonly id: string
 }
 
-const SESSION = contextKey('nested.session').of<Session>()
-const CURRENT_USER = contextKey('nested.currentUser').of<CurrentUser>()
+const SESSION = contextKey<{ 'nested.session': Session }>('nested.session')
+const CURRENT_USER = contextKey<{ 'nested.currentUser': CurrentUser }>(
+  'nested.currentUser',
+)
 
 const session = layer({
   name: 'nested.session',
-  provides: [SESSION],
+  provide: SESSION,
   factory: () => async (_ctx, next) => {
     await next({ 'nested.session': { id: 'session-1' } })
   },
@@ -24,7 +26,7 @@ const session = layer({
 const authentication = layer({
   name: 'nested.authentication',
   requires: [SESSION],
-  provides: [CURRENT_USER],
+  provide: CURRENT_USER,
   factory: () => async (ctx, next) => {
     const sessionId: string = ctx['nested.session'].id
     await next({ 'nested.currentUser': { id: sessionId } })

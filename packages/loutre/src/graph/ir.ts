@@ -79,7 +79,7 @@ export interface LayerIR {
     | 'framework'
     | 'terminal'
   readonly requires: readonly string[]
-  readonly provides: readonly string[]
+  readonly provide?: string
   readonly returns?: readonly string[]
   readonly requiresValidated: readonly string[]
   readonly dependencies?: readonly string[]

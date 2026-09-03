@@ -16,11 +16,11 @@ interface Session {
 interface OtherSession {
   readonly accountId: string
 }
-const SESSION = contextKey('session').of<Session>()
-const OTHER_SESSION = contextKey('otherSession').of<OtherSession>()
+const SESSION = contextKey<{ session: Session }>('session')
+const OTHER_SESSION = contextKey<{ otherSession: OtherSession }>('otherSession')
 const sessionLayer = layer({
   name: 'session',
-  provides: [SESSION],
+  provide: SESSION,
   factory: () => async (_ctx, next) => {
     await next({ session: { userId: 'user-1' } })
   },
@@ -186,7 +186,7 @@ http.route({
 })
 layer({
   name: 'invalid-provide',
-  provides: [SESSION],
+  provide: SESSION,
   factory: () => async (_ctx, next) => {
     // @ts-expect-error Layerが宣言していないContext propertyはprovideできない
     await next({ otherSession: { accountId: 'account-2' } })
@@ -210,7 +210,7 @@ interface HeadersContext {
 }
 layer({
   name: 'typed-headers',
-  provides: [OTHER_SESSION],
+  provide: OTHER_SESSION,
   factory: () => async (ctx: HeadersContext, next) => {
     const authorization: string = ctx.headers.authorization
     await next({ otherSession: { accountId: authorization } })

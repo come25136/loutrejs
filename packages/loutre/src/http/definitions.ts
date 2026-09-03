@@ -1433,17 +1433,19 @@ export type LogicalHttpResult<
   readonly body: TBody
 } & HttpResultHeaders<THeaders>
 
-type ResponseHelpers<TDefinition extends HttpProtocolDefinition> = {
-  [TVariant in keyof TDefinition['responses'] & string]: (
-    result: HttpResponseResult<
-      ResponseBodyOutput<TDefinition['responses'][TVariant]>,
-      ResponseHeadersOutput<TDefinition['responses'][TVariant]>
-    >,
-  ) => LogicalHttpResult<
-    TVariant,
-    ResponseBodyOutput<TDefinition['responses'][TVariant]>,
-    ResponseHeadersOutput<TDefinition['responses'][TVariant]>
-  >
+type ResponseHelpers<TResponses extends HttpProtocolDefinition['responses']> = {
+  [TVariant in keyof TResponses]: TVariant extends string
+    ? (
+        result: HttpResponseResult<
+          ResponseBodyOutput<TResponses[TVariant]>,
+          ResponseHeadersOutput<TResponses[TVariant]>
+        >,
+      ) => LogicalHttpResult<
+        TVariant,
+        ResponseBodyOutput<TResponses[TVariant]>,
+        ResponseHeadersOutput<TResponses[TVariant]>
+      >
+    : never
 }
 
 type HttpControllerContextDefinition<
@@ -1453,7 +1455,7 @@ type HttpControllerContextDefinition<
   readonly query: PartOutput<TDefinition, 'query'>
   readonly headers: PartOutput<TDefinition, 'headers'>
   readonly body: PartOutput<TDefinition, 'body'>
-  readonly response: ResponseHelpers<TDefinition>
+  readonly response: ResponseHelpers<TDefinition['responses']>
   readonly logger: Logger
   readonly signal: AbortSignal
 } & ContextProvidedBeforeTerminal<TDefinition['pipeline']>

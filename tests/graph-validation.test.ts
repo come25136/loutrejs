@@ -208,10 +208,12 @@ describe('Application Graph IRとsemantic validation', () => {
     expect(runtimeCalls).toBe(0)
   })
   it('recursive PipelineのContextとvalidation stateを順序どおり検証する', () => {
-    const SESSION = contextKey('recursive.session').of<string>()
+    const SESSION = contextKey<{ 'recursive.session': string }>(
+      'recursive.session',
+    )
     const provider = layer({
       name: 'recursive-provider',
-      provides: [SESSION],
+      provide: SESSION,
       factory: () => async (_ctx, next) => {
         await next({ 'recursive.session': 'ready' })
       },
@@ -345,9 +347,11 @@ describe('Application Graph IRとsemantic validation', () => {
     const SESSION = token<{
       id: string
     }>('session')
-    const SESSION_CONTEXT = contextKey('session').of<{
-      id: string
-    }>()
+    const SESSION_CONTEXT = contextKey<{
+      session: {
+        id: string
+      }
+    }>('session')
     const Contract = contract([
       protocolGroup('http', {
         run: protocol([http.controller]),
@@ -372,7 +376,7 @@ describe('Application Graph IRとsemantic validation', () => {
     const sessionLayer = layer({
       name: 'session',
       role: 'guard',
-      provides: [SESSION_CONTEXT],
+      provide: SESSION_CONTEXT,
       factory: () => async (_ctx, next) => {
         await next({ session: { id: 'one' } })
       },
@@ -502,9 +506,11 @@ describe('Application Graph IRとsemantic validation', () => {
     )
   })
   it('未提供のContext Key requirementを拒否する', () => {
-    const SESSION = contextKey('session').of<{
-      id: string
-    }>()
+    const SESSION = contextKey<{
+      session: {
+        id: string
+      }
+    }>('session')
     const guarded = layer({
       name: 'guarded',
       requires: [SESSION],
@@ -525,11 +531,11 @@ describe('Application Graph IRとsemantic validation', () => {
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_004' }))
   })
   it('同名の異なるContext Key宣言を拒否する', () => {
-    const FIRST = contextKey('session').of<string>()
-    const SECOND = contextKey('session').of<string>()
+    const FIRST = contextKey<{ session: string }>('session')
+    const SECOND = contextKey<{ session: string }>('session')
     const firstLayer = layer({
       name: 'first',
-      provides: [FIRST],
+      provide: FIRST,
       factory: () => async (_ctx, next) => {
         await next({ session: 'first' })
       },

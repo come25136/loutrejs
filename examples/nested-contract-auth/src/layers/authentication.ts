@@ -2,12 +2,12 @@ import { contextKey } from '@loutrejs/loutre'
 import { basicAuth } from '@loutrejs/loutre/http'
 import type { User } from '../auth/user.js'
 
-export const CURRENT_USER = contextKey('currentUser').of<User>()
+export const CURRENT_USER = contextKey<{ currentUser: User }>('currentUser')
 
 export const authentication = basicAuth({
   name: 'authentication',
   realm: 'Loutre Nested Contract Example',
-  provides: [CURRENT_USER],
+  provide: CURRENT_USER,
   factory:
     () =>
     ({ username, password }) => {

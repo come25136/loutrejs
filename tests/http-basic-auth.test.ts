@@ -22,15 +22,17 @@ import { Container } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
 describe('basicAuth', () => {
-  const PRINCIPAL = contextKey('principal').of<{
-    readonly id: string
-  }>()
+  const PRINCIPAL = contextKey<{
+    principal: {
+      readonly id: string
+    }
+  }>('principal')
 
   it('credentialsを認証してprincipalをContextへ追加する', async () => {
     const authenticate = vi.fn(() => ({ id: 'user-1' }))
     const authentication = basicAuth({
       realm: 'Loutre Test',
-      provides: [PRINCIPAL],
+      provide: PRINCIPAL,
       factory: () => authenticate,
       unauthorized: {
         variant: 'unauthorized',
@@ -48,7 +50,7 @@ describe('basicAuth', () => {
       password: 'otter',
     })
     expect(authentication.role).toBe('authentication')
-    expect(authentication.provides).toEqual([PRINCIPAL])
+    expect(authentication.provide).toBe(PRINCIPAL)
     expect(authentication.requiresValidated).toEqual([])
   })
 
@@ -67,7 +69,7 @@ describe('basicAuth', () => {
 
     const authentication = basicAuth({
       realm: 'Loutre Test',
-      provides: [PRINCIPAL],
+      provide: PRINCIPAL,
       factory: (users = inject(USER_SERVICE)) => {
         injectedService = users
         return (credentials) => users.authenticate(credentials)
@@ -108,7 +110,7 @@ describe('basicAuth', () => {
     const authenticate = vi.fn(() => ({ id: 'user-1' }))
     const authentication = basicAuth({
       realm: 'Loutre Test',
-      provides: [PRINCIPAL],
+      provide: PRINCIPAL,
       factory: () => authenticate,
       unauthorized: {
         variant: 'unauthorized',
@@ -134,7 +136,7 @@ describe('basicAuth', () => {
     const authenticate = vi.fn(() => ({ id: 'user-1' }))
     const authentication = basicAuth({
       realm: 'Loutre Test',
-      provides: [PRINCIPAL],
+      provide: PRINCIPAL,
       factory: () => authenticate,
       unauthorized: {
         variant: 'unauthorized',
@@ -163,7 +165,7 @@ describe('basicAuth', () => {
     const authenticate = vi.fn(() => ({ id: 'user-1' }))
     const authentication = basicAuth({
       realm: 'Loutre Test',
-      provides: [PRINCIPAL],
+      provide: PRINCIPAL,
       factory: () => authenticate,
       unauthorized: {
         variant: 'unauthorized',
@@ -192,7 +194,7 @@ describe('basicAuth', () => {
   it('factoryが認証結果を返さなければ401へshort circuitする', async () => {
     const authentication = basicAuth({
       realm: 'Loutre Test',
-      provides: [PRINCIPAL],
+      provide: PRINCIPAL,
       factory: () => () => undefined,
       unauthorized: {
         variant: 'unauthorized',
@@ -210,7 +212,7 @@ describe('basicAuth', () => {
   it('realmをquoted-stringとしてescapeする', async () => {
     const authentication = basicAuth({
       realm: 'Loutre "Admin" \\ Area',
-      provides: [PRINCIPAL],
+      provide: PRINCIPAL,
       factory: () => () => undefined,
       unauthorized: {
         variant: 'unauthorized',
@@ -234,7 +236,7 @@ describe('basicAuth', () => {
     const create = (realm: string) =>
       basicAuth({
         realm,
-        provides: [PRINCIPAL],
+        provide: PRINCIPAL,
         factory: () => () => undefined,
         unauthorized: {
           variant: 'unauthorized',
@@ -252,7 +254,7 @@ describe('basicAuth', () => {
   ])('unauthorized responseの不整合を$codeで診断する', ({ status, code }) => {
     const authentication = basicAuth({
       realm: 'Loutre Test',
-      provides: [PRINCIPAL],
+      provide: PRINCIPAL,
       factory: () => () => undefined,
       unauthorized: {
         variant: 'unauthorized',
@@ -354,18 +356,19 @@ describe('basicAuth', () => {
 })
 
 async function runBasicAuth<
-  TProvided extends import('@loutrejs/loutre').ContextKey,
+  TProvided extends import('@loutrejs/loutre').ContextKey<any, any>,
   TVariant extends string,
   TBody,
 >(
   authentication: BasicAuthLayerDescriptor<TProvided, TVariant, TBody>,
   context: BasicAuthContext,
 ) {
-  let provided:
-    | import('@loutrejs/loutre').ContextProperties<readonly [TProvided]>
-    | undefined
-  const result = await authentication.factory()(context, async (value) => {
+  let provided: import('@loutrejs/loutre').ContextShape<TProvided> | undefined
+  const next = (async (
+    value: import('@loutrejs/loutre').ContextShape<TProvided>,
+  ) => {
     provided = value
-  })
+  }) as unknown as import('@loutrejs/loutre').LayerNext<TProvided>
+  const result = await authentication.factory()(context, next)
   return { result, provided }
 }

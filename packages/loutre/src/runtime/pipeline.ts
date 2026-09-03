@@ -5,7 +5,6 @@ import {
   layerDefinitionOf,
   type ContextKey,
   type LayerDescriptor,
-  type LayerRuntime,
   type PipelineItem,
   type TerminalLayerDescriptor,
   type ValidationLayerDescriptor,
@@ -21,10 +20,13 @@ export interface PipelineHooks<TContext extends object, TResult> {
     layer: TerminalLayerDescriptor,
     context: TContext,
   ) => TResult | Promise<TResult>
-  readonly layer: (
-    descriptor: LayerDescriptor,
-  ) => LayerRuntime<object, readonly [], unknown>
+  readonly layer: (descriptor: LayerDescriptor) => ExecutableLayerRuntime
 }
+
+type ExecutableLayerRuntime = (
+  context: object,
+  next: (...arguments_: readonly unknown[]) => Promise<void>,
+) => Promise<unknown>
 
 type PipelineFlow<TResult> =
   | { readonly kind: 'continue' }
@@ -97,7 +99,7 @@ async function executeSegment<TContext extends object, TResult>(
 
 async function executeLayer<TResult>(
   layer: LayerDescriptor,
-  runtime: LayerRuntime<object, readonly [], unknown>,
+  runtime: ExecutableLayerRuntime,
   continuation: () => Promise<PipelineFlow<TResult>>,
   context: Record<string, unknown>,
   availableKeys: Set<ContextKey>,
@@ -196,10 +198,9 @@ function applyProvidedContext(
       `Layer ${layer.name} can pass only one Context object to next()`,
     )
   }
-  if (layer.provides.length === 0) {
+  if (!layer.provide) {
     if (arguments_.length > 0) {
-      const provided = arguments_[0]
-      const property = firstProperty(provided)
+      const property = firstProperty(arguments_[0])
       throw new LayerContractError(
         property === undefined
           ? `Layer ${layer.name} does not declare any provided Context`
@@ -221,35 +222,26 @@ function applyProvidedContext(
   }
 
   const additions = provided as Record<string, unknown>
-  const declaredNames = new Set(layer.provides.map((key) => key.name))
   for (const property of Object.keys(additions)) {
-    if (!declaredNames.has(property)) {
+    if (property !== layer.provide.name) {
       throw new LayerContractError(
         `Layer ${layer.name} provided undeclared Context property ${property}`,
       )
     }
   }
-  const providedNames = new Set<string>()
-  for (const key of layer.provides) {
-    if (providedNames.has(key.name)) {
-      throw new LayerContractError(
-        `Layer ${layer.name} declared duplicate Context property ${key.name}`,
-      )
-    }
-    providedNames.add(key.name)
-    if (!Object.hasOwn(additions, key.name)) {
-      throw new LayerContractError(
-        `Layer ${layer.name} did not provide declared Context Key ${contextKeyName(key)}`,
-      )
-    }
-    if (Object.hasOwn(context, key.name)) {
-      throw new LayerContractError(
-        `Layer ${layer.name} cannot overwrite existing Context property ${key.name}`,
-      )
-    }
+  if (!Object.hasOwn(additions, layer.provide.name)) {
+    throw new LayerContractError(
+      `Layer ${layer.name} did not provide declared Context Key ${contextKeyName(layer.provide)}`,
+    )
   }
+  if (Object.hasOwn(context, layer.provide.name)) {
+    throw new LayerContractError(
+      `Layer ${layer.name} cannot overwrite existing Context property ${layer.provide.name}`,
+    )
+  }
+
   Object.assign(context, additions)
-  for (const key of layer.provides) availableKeys.add(key)
+  availableKeys.add(layer.provide)
 }
 
 function firstProperty(value: unknown): string | undefined {

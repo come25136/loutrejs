@@ -11,13 +11,15 @@ import {
 } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
-const PRINCIPAL = contextKey('principal').of<{
-  readonly id: string
-}>()
+const PRINCIPAL = contextKey<{
+  principal: {
+    readonly id: string
+  }
+}>('principal')
 
 const authentication = basicAuth({
   realm: 'Loutre Test',
-  provides: [PRINCIPAL],
+  provide: PRINCIPAL,
   factory: () => () => undefined,
   unauthorized: {
     variant: 'unauthorized',
@@ -67,7 +69,7 @@ http.route({
   pipeline: [
     basicAuth({
       realm: 'Loutre Test',
-      provides: [PRINCIPAL],
+      provide: PRINCIPAL,
       factory: () => () => undefined,
       unauthorized: {
         variant: 'unauthorized',

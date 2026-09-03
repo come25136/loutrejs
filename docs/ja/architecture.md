@@ -456,10 +456,12 @@ Layer、Validation、Terminalを組み合わせながら、Contextを次の処�
 Layerはstatic metadataと同期factoryで定義します。
 
 ```ts
+const CURRENT_USER = contextKey<{ currentUser: User }>('currentUser')
+
 const auth = layer({
   name: 'auth',
   requires: [SESSION],
-  provides: [CURRENT_USER],
+  provide: CURRENT_USER,
 
   factory:
     (users = inject(UserService)) =>
@@ -470,7 +472,7 @@ const auth = layer({
 })
 ```
 
-`requires`はLayerが必要とするContext Key、`provides`は後続の処理へ追加するContext Keyを表します。
+`requires`はLayerが必要とするContext Key、`provide`は後続の処理へ追加する単一のContext Keyを表します。1つのLayerがprovideできるContext Keyは最大1つです。
 
 Runtimeは次のようなContext操作を検出します。
 

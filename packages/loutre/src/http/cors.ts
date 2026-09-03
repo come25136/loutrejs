@@ -23,7 +23,7 @@ export interface CorsOptions {
 
 export interface CorsLayerDescriptor extends LayerDescriptor<
   readonly [],
-  readonly [],
+  undefined,
   never,
   readonly [],
   string,
@@ -58,7 +58,7 @@ export function cors(options: CorsOptions = {}): CorsLayerDescriptor {
   const policy = normalizeCorsOptions(options)
   const descriptor = layer<
     readonly [],
-    readonly [],
+    undefined,
     object,
     never,
     readonly [],
