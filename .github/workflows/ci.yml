@@ -79,16 +79,8 @@ jobs:
 
       - name: Install Node.js 22 type baseline
         run: |
-          rm -rf node_modules/@types/node node_modules/undici-types
-          mkdir -p node_modules/@types/node node_modules/undici-types
-          npm pack --silent @types/node@22.20.1 --pack-destination "$RUNNER_TEMP" >/dev/null
-          npm pack --silent undici-types@6.21.0 --pack-destination "$RUNNER_TEMP" >/dev/null
-          tar -xzf "$RUNNER_TEMP/types-node-22.20.1.tgz" \
-            --strip-components=1 \
-            -C node_modules/@types/node
-          tar -xzf "$RUNNER_TEMP/undici-types-6.21.0.tgz" \
-            --strip-components=1 \
-            -C node_modules/undici-types
+          npm pkg set 'devDependencies.@types/node=22.20.1'
+          npm install --ignore-scripts --no-audit --no-fund
 
       - name: Type check
         run: npm run check
