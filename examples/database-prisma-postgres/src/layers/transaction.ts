@@ -1,8 +1,8 @@
-import { contextKey, inject, layer } from '@loutrejs/loutre'
+import { contextField, inject, layer } from '@loutrejs/loutre'
 import { Prisma } from '../generated/prisma/client.js'
 import { PrismaDatabase, type PrismaTransaction } from '../database/prisma.js'
 
-export const TRANSACTION = contextKey<{ transaction: PrismaTransaction }>(
+export const TRANSACTION = contextField<{ transaction: PrismaTransaction }>(
   'transaction',
 )
 

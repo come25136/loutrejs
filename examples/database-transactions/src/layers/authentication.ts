@@ -1,6 +1,6 @@
-import { contextKey, layer } from '@loutrejs/loutre'
+import { contextField, layer } from '@loutrejs/loutre'
 
-export const CURRENT_USER = contextKey<{
+export const CURRENT_USER = contextField<{
   currentUser: {
     readonly id: string
   }

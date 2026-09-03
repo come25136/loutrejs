@@ -1,4 +1,4 @@
-import { contextKey, contract, layer } from '@loutrejs/loutre'
+import { contextField, contract, layer } from '@loutrejs/loutre'
 import {
   HandlerOf,
   MessageContextOf,
@@ -11,8 +11,10 @@ interface Session {
 interface OtherSession {
   readonly accountId: string
 }
-const SESSION = contextKey<{ session: Session }>('session')
-const OTHER_SESSION = contextKey<{ otherSession: OtherSession }>('otherSession')
+const SESSION = contextField<{ session: Session }>('session')
+const OTHER_SESSION = contextField<{ otherSession: OtherSession }>(
+  'otherSession',
+)
 const sessionLayer = layer({
   name: 'message-port-session',
   provide: SESSION,

@@ -1,10 +1,10 @@
-import { contextKey, inject, layer } from '@loutrejs/loutre'
+import { contextField, inject, layer } from '@loutrejs/loutre'
 import {
   DrizzleDatabase,
   type DrizzleTransaction,
 } from '../database/drizzle.js'
 
-export const TRANSACTION = contextKey<{ transaction: DrizzleTransaction }>(
+export const TRANSACTION = contextField<{ transaction: DrizzleTransaction }>(
   'transaction',
 )
 

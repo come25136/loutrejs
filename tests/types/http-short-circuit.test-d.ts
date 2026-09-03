@@ -1,5 +1,5 @@
 import {
-  contextKey,
+  contextField,
   layer,
   type PipelineItem,
   shortCircuit,
@@ -11,7 +11,7 @@ import {
 } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
-const PRINCIPAL = contextKey<{
+const PRINCIPAL = contextField<{
   principal: {
     readonly id: string
   }

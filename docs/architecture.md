@@ -456,7 +456,7 @@ Context is passed to the next process by combining Layer, Validation, and Termin
 Layers are defined with static metadata and synchronous factories.
 
 ```ts
-const CURRENT_USER = contextKey<{ currentUser: User }>('currentUser')
+const CURRENT_USER = contextField<{ currentUser: User }>('currentUser')
 
 const auth = layer({
   name: 'auth',
@@ -472,13 +472,13 @@ const auth = layer({
 })
 ```
 
-`requires` represents the Context Keys required by the layer, and `provide` represents the single Context Key added to subsequent processing. A Layer can provide at most one Context Key.
+`requires` represents the Context Fields required by the layer, and `provide` represents the single Context Field added to subsequent processing. A Layer can provide at most one Context Field.
 
 Runtime detects Context operations such as:
 
 - Access to undeclared property
-- Missing required Context Key
-- Duplicate Context Key
+- Missing required Context Field
+- Duplicate Context Field
 - Implicit overwriting of existing Context
 
 The layer calls `next()` only once or terminates the Pipeline with `shortCircuit()`.
@@ -536,7 +536,7 @@ The Application Graph includes relationships such as:
 
 - Module and public boundaries
 - Provider and token
-- Context Key
+- Context Field
 - Contract
 - Pipeline
 - Implementation

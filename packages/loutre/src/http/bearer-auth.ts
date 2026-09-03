@@ -1,8 +1,8 @@
 import {
   layer,
   shortCircuit,
-  type ContextKey,
-  type ContextKeyValue,
+  type ContextField,
+  type ContextFieldValue,
   type ContextShape,
   type LayerDescriptor,
 } from '../core/index.js'
@@ -14,7 +14,7 @@ export interface BearerAuthUnauthorized<TVariant extends string, TBody> {
 }
 
 export interface BearerAuthOptions<
-  TProvided extends ContextKey<any, any>,
+  TProvided extends ContextField<any, any>,
   TVariant extends string,
   TUnauthorizedBody,
 > {
@@ -23,10 +23,10 @@ export interface BearerAuthOptions<
   readonly factory: () => (
     token: string,
   ) =>
-    | ContextKeyValue<TProvided>
+    | ContextFieldValue<TProvided>
     | null
     | undefined
-    | Promise<ContextKeyValue<TProvided> | null | undefined>
+    | Promise<ContextFieldValue<TProvided> | null | undefined>
   readonly unauthorized: BearerAuthUnauthorized<TVariant, TUnauthorizedBody>
   readonly name?: string
 }
@@ -44,7 +44,7 @@ type BearerAuthResponseHeaders = {
 }
 
 export interface BearerAuthLayerDescriptor<
-  TProvided extends ContextKey<any, any>,
+  TProvided extends ContextField<any, any>,
   TVariant extends string,
   TUnauthorizedBody,
 > extends LayerDescriptor<
@@ -67,7 +67,7 @@ export interface BearerAuthContext {
 }
 
 export function bearerAuth<
-  TProvided extends ContextKey<any, any>,
+  TProvided extends ContextField<any, any>,
   const TVariant extends string,
   TUnauthorizedBody,
 >(

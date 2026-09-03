@@ -1,6 +1,6 @@
 import {
   contract,
-  contextKey,
+  contextField,
   defineApplication,
   defineModule,
   implementation,
@@ -14,10 +14,10 @@ import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 
 describe('Nested Contract composition', () => {
-  const REQUEST_SCOPE = contextKey<{ 'nested.requestScope': string }>(
+  const REQUEST_SCOPE = contextField<{ 'nested.requestScope': string }>(
     'nested.requestScope',
   )
-  const CURRENT_USER = contextKey<{
+  const CURRENT_USER = contextField<{
     'nested.currentUser': {
       readonly id: string
     }

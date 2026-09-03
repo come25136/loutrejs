@@ -1,9 +1,9 @@
-import { contextKey, inject } from '@loutrejs/loutre'
+import { contextField, inject } from '@loutrejs/loutre'
 import { bearerAuth } from '@loutrejs/loutre/http'
 import type { User } from '../auth/user.js'
 import { UserRepository } from '../auth/repository.js'
 
-export const CURRENT_USER = contextKey<{ currentUser: User }>('currentUser')
+export const CURRENT_USER = contextField<{ currentUser: User }>('currentUser')
 
 export const bearerAuthentication = bearerAuth({
   name: 'bearerAuthentication',

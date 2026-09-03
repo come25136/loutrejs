@@ -456,7 +456,7 @@ Layer、Validation、Terminalを組み合わせながら、Contextを次の処�
 Layerはstatic metadataと同期factoryで定義します。
 
 ```ts
-const CURRENT_USER = contextKey<{ currentUser: User }>('currentUser')
+const CURRENT_USER = contextField<{ currentUser: User }>('currentUser')
 
 const auth = layer({
   name: 'auth',
@@ -472,13 +472,13 @@ const auth = layer({
 })
 ```
 
-`requires`はLayerが必要とするContext Key、`provide`は後続の処理へ追加する単一のContext Keyを表します。1つのLayerがprovideできるContext Keyは最大1つです。
+`requires`はLayerが必要とするContext Field、`provide`は後続の処理へ追加する単一のContext Fieldを表します。1つのLayerがprovideできるContext Fieldは最大1つです。
 
 Runtimeは次のようなContext操作を検出します。
 
 - 宣言されていないpropertyへのアクセス
-- requiredなContext Keyの不足
-- Context Keyの重複
+- requiredなContext Fieldの不足
+- Context Fieldの重複
 - 既存Contextの暗黙的な上書き
 
 Layerは`next()`を一度だけ呼ぶか、`shortCircuit()`でPipelineを終了します。
@@ -536,7 +536,7 @@ Application Graphには、たとえば次のような関係が含まれます。
 
 - Moduleと公開境界
 - Providerとtoken
-- Context Key
+- Context Field
 - Contract
 - Pipeline
 - Implementation

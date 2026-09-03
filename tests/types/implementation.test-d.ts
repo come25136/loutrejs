@@ -1,8 +1,8 @@
-import { contract, contextKey, implementation, layer } from '@loutrejs/loutre'
+import { contract, contextField, implementation, layer } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
-const SESSION = contextKey<{
+const SESSION = contextField<{
   'implementation.session': {
     readonly userId: string
   }

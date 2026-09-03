@@ -1,7 +1,7 @@
 import { createTestApplication } from './helpers/application.js'
 import {
   contract,
-  contextKey,
+  contextField,
   defineModule,
   implementation,
   layer,
@@ -12,7 +12,7 @@ import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 describe('HTTP application boundary', () => {
   it('全HTTP入力を検証し、Layer stateをctxからapplication-scoped Controllerへ渡す', async () => {
-    const EXECUTION_ID = contextKey<{ executionId: string }>('executionId')
+    const EXECUTION_ID = contextField<{ executionId: string }>('executionId')
     let executions = 0
     const execution = layer({
       name: 'execution-id',

@@ -1,5 +1,5 @@
 import {
-  contextKey,
+  contextField,
   contract,
   defineModule,
   implementation,
@@ -22,7 +22,7 @@ import { Container } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
 describe('basicAuth', () => {
-  const PRINCIPAL = contextKey<{
+  const PRINCIPAL = contextField<{
     principal: {
       readonly id: string
     }
@@ -356,7 +356,7 @@ describe('basicAuth', () => {
 })
 
 async function runBasicAuth<
-  TProvided extends import('@loutrejs/loutre').ContextKey<any, any>,
+  TProvided extends import('@loutrejs/loutre').ContextField<any, any>,
   TVariant extends string,
   TBody,
 >(

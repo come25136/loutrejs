@@ -1,8 +1,8 @@
-import { contextKey, inject, layer, token } from '@loutrejs/loutre'
+import { contextField, inject, layer, token } from '@loutrejs/loutre'
 
-const A = contextKey<{ a: string }>('a')
-const B = contextKey<{ b: number }>('b')
-const C = contextKey<{ c: boolean }>('c')
+const A = contextField<{ a: string }>('a')
+const B = contextField<{ b: number }>('b')
+const C = contextField<{ c: boolean }>('c')
 
 interface Lookup {
   find(value: string): number

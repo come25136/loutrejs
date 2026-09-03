@@ -1,5 +1,5 @@
 import {
-  contextKey,
+  contextField,
   contract,
   defineApplication,
   defineModule,
@@ -51,10 +51,10 @@ http({
   },
 })
 
-const SESSION = contextKey<{ 'adversarial.session': string }>(
+const SESSION = contextField<{ 'adversarial.session': string }>(
   'adversarial.session',
 )
-const USER = contextKey<{ 'adversarial.user': string }>('adversarial.user')
+const USER = contextField<{ 'adversarial.user': string }>('adversarial.user')
 
 const provideSession = layer({
   name: 'provideSession',
@@ -90,7 +90,7 @@ http({
   },
 })
 
-// @ts-expect-error a Context Key must not be implicitly provided twice
+// @ts-expect-error a Context Field must not be implicitly provided twice
 http({
   duplicateProvide: {
     ...OK,
@@ -242,9 +242,9 @@ const resolvedUser: string = resolvedLeafContext['adversarial.user']
 void [resolvedParam, resolvedUser]
 
 // @ts-expect-error Context is materialized as an object property; __proto__ is unsafe
-contextKey<{ __proto__: string }>('__proto__')
+contextField<{ __proto__: string }>('__proto__')
 // @ts-expect-error empty Context property names are not meaningful
-contextKey<{ '': string }>('')
+contextField<{ '': string }>('')
 
 const nestedWrapper = layer({
   name: 'nestedWrapper',

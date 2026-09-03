@@ -1,8 +1,8 @@
-import { contextKey, inject, layer } from '@loutrejs/loutre'
+import { contextField, inject, layer } from '@loutrejs/loutre'
 import type { PoolClient } from 'pg'
 import { PostgresDatabase } from '../database/postgres.js'
 
-export const TRANSACTION = contextKey<{ transaction: PoolClient }>(
+export const TRANSACTION = contextField<{ transaction: PoolClient }>(
   'transaction',
 )
 

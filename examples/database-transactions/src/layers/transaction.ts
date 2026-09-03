@@ -1,7 +1,7 @@
-import { contextKey, inject, layer } from '@loutrejs/loutre'
+import { contextField, inject, layer } from '@loutrejs/loutre'
 import { DATABASE, type InMemoryClient } from '../database/in-memory.js'
 
-export const TRANSACTION = contextKey<{ transaction: InMemoryClient }>(
+export const TRANSACTION = contextField<{ transaction: InMemoryClient }>(
   'transaction',
 )
 

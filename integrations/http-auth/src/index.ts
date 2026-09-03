@@ -1,7 +1,7 @@
 import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
-  contextKey,
+  contextField,
   defineModule,
   implementation,
   layer,
@@ -21,9 +21,9 @@ export interface Session {
 export interface CurrentTenant {
   readonly id: string
 }
-export const AUTH = contextKey<{ auth: AuthState }>('auth')
-export const SESSION = contextKey<{ session: Session }>('session')
-export const CURRENT_TENANT = contextKey<{ currentTenant: CurrentTenant }>(
+export const AUTH = contextField<{ auth: AuthState }>('auth')
+export const SESSION = contextField<{ session: Session }>('session')
+export const CURRENT_TENANT = contextField<{ currentTenant: CurrentTenant }>(
   'currentTenant',
 )
 interface HeadersContext {

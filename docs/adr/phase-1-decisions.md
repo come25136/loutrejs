@@ -8,11 +8,11 @@ runtime境界に関する補足だけを記録する。
 - HTTP decodeは同名query keyの複数値を`string[]`、単一値を`string`、headerを小文字keyの
   recordとして表現する。request schema failureはJSON 400、unknown failureはJSON 500へ変換する。
 - DI用typed tokenには`token<Value>('stable.id')`、Execution Contextには
-  `contextKey<{ name: Value }>('name')`を使う。両者は別のGraph依存として扱う。
+  `contextField<{ name: Value }>('name')`を使う。両者は別のGraph依存として扱う。
 - Layerは`layer({ ...metadata, factory })`で定義する。metadata fieldはfactoryを実行せず解析でき、
   `factory`はInjection Context内で同期実行してrequest間で共有するruntime functionを1つ生成する。
 - Layer runtimeは`(ctx, next)`だけを受け取る。`ctx`には`requires`で宣言したContextを公開し、
-  `provide`がある場合は`next(provided)`で値を追加する。1つのLayerがprovideできるContext Keyは最大1つ。未宣言property、不足property、
+  `provide`がある場合は`next(provided)`で値を追加する。1つのLayerがprovideできるContext Fieldは最大1つ。未宣言property、不足property、
   既存Contextの上書きはRuntimeが拒否する。
 - Layerはcallable objectである。`layerA`をPipelineへ直接置くと`next()`は親後段を実行し、
   `layerA([...])`と置くと`next()`は指定したchild Pipelineだけを実行する。呼び出しはfactoryを

@@ -1,8 +1,8 @@
 import {
   layer,
   shortCircuit,
-  type ContextKey,
-  type ContextKeyValue,
+  type ContextField,
+  type ContextFieldValue,
   type ContextShape,
   type LayerDescriptor,
 } from '../core/index.js'
@@ -19,7 +19,7 @@ export interface BasicAuthUnauthorized<TVariant extends string, TBody> {
 }
 
 export interface BasicAuthOptions<
-  TProvided extends ContextKey<any, any>,
+  TProvided extends ContextField<any, any>,
   TVariant extends string,
   TUnauthorizedBody,
 > {
@@ -28,10 +28,10 @@ export interface BasicAuthOptions<
   readonly factory: () => (
     credentials: BasicAuthCredentials,
   ) =>
-    | ContextKeyValue<TProvided>
+    | ContextFieldValue<TProvided>
     | null
     | undefined
-    | Promise<ContextKeyValue<TProvided> | null | undefined>
+    | Promise<ContextFieldValue<TProvided> | null | undefined>
   readonly unauthorized: BasicAuthUnauthorized<TVariant, TUnauthorizedBody>
   readonly name?: string
 }
@@ -49,7 +49,7 @@ type BasicAuthResponseHeaders = {
 }
 
 export interface BasicAuthLayerDescriptor<
-  TProvided extends ContextKey<any, any>,
+  TProvided extends ContextField<any, any>,
   TVariant extends string,
   TUnauthorizedBody,
 > extends LayerDescriptor<
@@ -72,7 +72,7 @@ export interface BasicAuthContext {
 }
 
 export function basicAuth<
-  TProvided extends ContextKey<any, any>,
+  TProvided extends ContextField<any, any>,
   const TVariant extends string,
   TUnauthorizedBody,
 >(

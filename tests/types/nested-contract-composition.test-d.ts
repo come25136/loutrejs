@@ -1,4 +1,4 @@
-import { contract, contextKey, implementation, layer } from '@loutrejs/loutre'
+import { contract, contextField, implementation, layer } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -10,8 +10,8 @@ interface CurrentUser {
   readonly id: string
 }
 
-const SESSION = contextKey<{ 'nested.session': Session }>('nested.session')
-const CURRENT_USER = contextKey<{ 'nested.currentUser': CurrentUser }>(
+const SESSION = contextField<{ 'nested.session': Session }>('nested.session')
+const CURRENT_USER = contextField<{ 'nested.currentUser': CurrentUser }>(
   'nested.currentUser',
 )
 

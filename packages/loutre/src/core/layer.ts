@@ -1,8 +1,8 @@
 import type {
-  ContextKey,
+  ContextField,
   ContextProperties,
   ContextShape,
-} from './context-key.js'
+} from './context-field.js'
 
 export type LayerRole =
   | 'generic'
@@ -49,14 +49,14 @@ export interface ShortCircuitDeclaration {
   readonly response?: Readonly<Record<string, unknown>>
 }
 
-export type LayerNext<TProvide extends ContextKey | undefined> =
-  TProvide extends ContextKey<any, any>
+export type LayerNext<TProvide extends ContextField | undefined> =
+  TProvide extends ContextField<any, any>
     ? (provided: ContextShape<TProvide>) => Promise<void>
     : () => Promise<void>
 
 export type LayerRuntime<
   TContext extends object,
-  TProvide extends ContextKey | undefined,
+  TProvide extends ContextField | undefined,
   TShortCircuitResult,
 > = (
   context: TContext,
@@ -65,13 +65,13 @@ export type LayerRuntime<
 
 export type LayerFactory<
   TContext extends object,
-  TProvide extends ContextKey | undefined,
+  TProvide extends ContextField | undefined,
   TShortCircuitResult,
 > = () => LayerRuntime<TContext, TProvide, TShortCircuitResult>
 
 export interface LayerDefinition<
-  TRequires extends readonly ContextKey[] = readonly [],
-  TProvide extends ContextKey | undefined = undefined,
+  TRequires extends readonly ContextField[] = readonly [],
+  TProvide extends ContextField | undefined = undefined,
   TContext extends object = {},
   TShortCircuitResult = never,
   TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
@@ -93,8 +93,8 @@ export interface LayerDefinition<
 }
 
 export interface LayerOccurrenceDescriptor<
-  TRequires extends readonly ContextKey[] = readonly ContextKey[],
-  TProvide extends ContextKey | undefined = ContextKey | undefined,
+  TRequires extends readonly ContextField[] = readonly ContextField[],
+  TProvide extends ContextField | undefined = ContextField | undefined,
   TShortCircuitResult = unknown,
   TShortCircuits extends readonly ShortCircuitDeclaration[] =
     readonly ShortCircuitDeclaration[],
@@ -131,8 +131,8 @@ export interface LayerOccurrenceDescriptor<
 }
 
 export interface LayerDescriptor<
-  TRequires extends readonly ContextKey[] = readonly ContextKey[],
-  TProvide extends ContextKey | undefined = ContextKey | undefined,
+  TRequires extends readonly ContextField[] = readonly ContextField[],
+  TProvide extends ContextField | undefined = ContextField | undefined,
   TShortCircuitResult = unknown,
   TShortCircuits extends readonly ShortCircuitDeclaration[] =
     readonly ShortCircuitDeclaration[],
@@ -286,36 +286,35 @@ type FoldPipelineItemTerminals<
       ? FoldPipelineTerminals<TPipeline, TProtocol, TState>
       : TState
 
-type ContextKeyNameOf<TKey> =
-  TKey extends ContextKey<infer TName, any> ? TName : never
+type ContextFieldNameOf<TKey> =
+  TKey extends ContextField<infer TName, any> ? TName : never
 
-type ContextKeyNamesOf<TKeys extends readonly ContextKey[]> = ContextKeyNameOf<
-  TKeys[number]
->
+type ContextFieldNamesOf<TKeys extends readonly ContextField[]> =
+  ContextFieldNameOf<TKeys[number]>
 
-type DuplicateContextKeyNames<
-  TKeys extends readonly ContextKey[],
+type DuplicateContextFieldNames<
+  TKeys extends readonly ContextField[],
   TSeen extends string = never,
 > = number extends TKeys['length']
   ? never
   : TKeys extends readonly [
-        infer THead extends ContextKey<any, any>,
-        ...infer TTail extends readonly ContextKey[],
+        infer THead extends ContextField<any, any>,
+        ...infer TTail extends readonly ContextField[],
       ]
-    ? ContextKeyNameOf<THead> extends infer TName extends string
+    ? ContextFieldNameOf<THead> extends infer TName extends string
       ? TName extends TSeen
-        ? TName | DuplicateContextKeyNames<TTail, TSeen>
-        : DuplicateContextKeyNames<TTail, TSeen | TName>
+        ? TName | DuplicateContextFieldNames<TTail, TSeen>
+        : DuplicateContextFieldNames<TTail, TSeen | TName>
       : never
     : never
 
-type AreRequiredContextKeysAvailable<
-  TRequires extends readonly ContextKey[],
-  TAvailable extends ContextKey<any, any>,
+type AreRequiredContextFieldsAvailable<
+  TRequires extends readonly ContextField[],
+  TAvailable extends ContextField<any, any>,
 > = [TRequires[number]] extends [never]
   ? true
   : false extends (
-        TRequires[number] extends infer TRequired extends ContextKey<any, any>
+        TRequires[number] extends infer TRequired extends ContextField<any, any>
           ? TRequired extends TAvailable
             ? true
             : false
@@ -330,20 +329,20 @@ type AreRequiredValidatedPartsAvailable<
 > = Exclude<TRequires[number], TValidated> extends never ? true : false
 
 type HasProvidedContextCollision<
-  TProvide extends ContextKey | undefined,
-  TAvailable extends ContextKey<any, any>,
+  TProvide extends ContextField | undefined,
+  TAvailable extends ContextField<any, any>,
 > =
-  TProvide extends ContextKey<any, any>
+  TProvide extends ContextField<any, any>
     ? Extract<
-        ContextKeyNameOf<TProvide>,
-        ContextKeyNameOf<TAvailable>
+        ContextFieldNameOf<TProvide>,
+        ContextFieldNameOf<TAvailable>
       > extends never
       ? false
       : true
     : false
 
 interface PipelineRequirementState<
-  TAvailable extends ContextKey<any, any>,
+  TAvailable extends ContextField<any, any>,
   TValidated extends ValidatedInputPart,
   TValid extends boolean,
 > {
@@ -353,30 +352,33 @@ interface PipelineRequirementState<
 }
 
 type InvalidPipelineRequirementState = PipelineRequirementState<
-  ContextKey,
+  ContextField,
   ValidatedInputPart,
   false
 >
 
 type FoldLayerRequirements<
-  TRequires extends readonly ContextKey[],
-  TProvide extends ContextKey | undefined,
+  TRequires extends readonly ContextField[],
+  TProvide extends ContextField | undefined,
   TRequiresValidated extends readonly ValidatedInputPart[],
   TState extends PipelineRequirementState<
-    ContextKey,
+    ContextField,
     ValidatedInputPart,
     boolean
   >,
 > = TState['valid'] extends false
   ? TState
-  : AreRequiredContextKeysAvailable<TRequires, TState['available']> extends true
+  : AreRequiredContextFieldsAvailable<
+        TRequires,
+        TState['available']
+      > extends true
     ? AreRequiredValidatedPartsAvailable<
         TRequiresValidated,
         TState['validated']
       > extends true
       ? HasProvidedContextCollision<TProvide, TState['available']> extends false
         ? PipelineRequirementState<
-            TState['available'] | Extract<TProvide, ContextKey>,
+            TState['available'] | Extract<TProvide, ContextField>,
             TState['validated'],
             true
           >
@@ -387,7 +389,7 @@ type FoldLayerRequirements<
 type FoldPipelineRequirements<
   TPipeline extends readonly PipelineItem[],
   TState extends PipelineRequirementState<
-    ContextKey,
+    ContextField,
     ValidatedInputPart,
     boolean
   >,
@@ -405,7 +407,7 @@ type FoldPipelineRequirements<
 type FoldPipelineItemRequirements<
   TItem,
   TState extends PipelineRequirementState<
-    ContextKey,
+    ContextField,
     ValidatedInputPart,
     boolean
   >,
@@ -631,20 +633,20 @@ type DuplicateValidatedInputParts<
     : never
 
 type LayerDefinitionConstraint<
-  TRequires extends readonly ContextKey[],
-  TProvide extends ContextKey | undefined,
+  TRequires extends readonly ContextField[],
+  TProvide extends ContextField | undefined,
   TRequiresValidated extends readonly ValidatedInputPart[],
 > = [
-  | DuplicateContextKeyNames<TRequires>
-  | (TProvide extends ContextKey<any, any>
-      ? Extract<ContextKeyNamesOf<TRequires>, ContextKeyNameOf<TProvide>>
+  | DuplicateContextFieldNames<TRequires>
+  | (TProvide extends ContextField<any, any>
+      ? Extract<ContextFieldNamesOf<TRequires>, ContextFieldNameOf<TProvide>>
       : never)
   | DuplicateValidatedInputParts<TRequiresValidated>,
 ] extends [never]
   ? unknown
   : { readonly __invalidLayerDefinition__: never }
 
-function assertUniqueContextKeyNames(keys: readonly ContextKey[]): void {
+function assertUniqueContextFieldNames(keys: readonly ContextField[]): void {
   const names = new Set<string>()
   for (const key of keys) {
     if (names.has(key.name)) {
@@ -657,12 +659,12 @@ function assertUniqueContextKeyNames(keys: readonly ContextKey[]): void {
 }
 
 function assertLayerDefinition(definition: {
-  readonly requires?: readonly ContextKey[]
-  readonly provide?: ContextKey | undefined
+  readonly requires?: readonly ContextField[]
+  readonly provide?: ContextField | undefined
   readonly requiresValidated?: readonly ValidatedInputPart[]
 }): void {
   const requires = definition.requires ?? []
-  assertUniqueContextKeyNames(requires)
+  assertUniqueContextFieldNames(requires)
   const requiredNames = new Set(requires.map((key) => key.name))
   if (definition.provide && requiredNames.has(definition.provide.name)) {
     throw new Error(
@@ -679,8 +681,8 @@ function assertLayerDefinition(definition: {
 }
 
 export function layer<
-  const TRequires extends readonly ContextKey[] = readonly [],
-  const TProvide extends ContextKey | undefined = undefined,
+  const TRequires extends readonly ContextField[] = readonly [],
+  const TProvide extends ContextField | undefined = undefined,
   TContext extends object = {},
   TShortCircuitResult = never,
   const TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],

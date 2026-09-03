@@ -1,5 +1,5 @@
 import {
-  contextKey,
+  contextField,
   inject,
   layer,
   provide,
@@ -152,7 +152,7 @@ describe('continuation Pipeline', () => {
   })
 
   it('next(provided)のContextを後段へ追加する', async () => {
-    const VALUE = contextKey<{ value: string }>('value')
+    const VALUE = contextField<{ value: string }>('value')
     const context: Record<string, unknown> = {}
     const provider = layer({
       name: 'provider',
@@ -175,7 +175,7 @@ describe('continuation Pipeline', () => {
   })
 
   it('childがprovideしたContextを親Pipeline後段へ維持する', async () => {
-    const VALUE = contextKey<{ childValue: string }>('childValue')
+    const VALUE = contextField<{ childValue: string }>('childValue')
     const context: Record<string, unknown> = {}
     const wrapper = layer({
       name: 'wrapper',
@@ -206,7 +206,7 @@ describe('continuation Pipeline', () => {
   })
 
   it('既存Context propertyの上書きを拒否する', async () => {
-    const SESSION = contextKey<{ session: string }>('session')
+    const SESSION = contextField<{ session: string }>('session')
     const provider = layer({
       name: 'provider',
       provide: SESSION,

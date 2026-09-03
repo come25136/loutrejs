@@ -1,5 +1,5 @@
 import {
-  contextKey,
+  contextField,
   contract,
   defineModule,
   implementation,
@@ -20,7 +20,7 @@ import { Container } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
 describe('bearerAuth', () => {
-  const CURRENT_USER = contextKey<{
+  const CURRENT_USER = contextField<{
     currentUser: {
       readonly id: string
     }
@@ -244,7 +244,7 @@ describe('bearerAuth', () => {
 })
 
 async function runBearerAuth<
-  TProvided extends import('@loutrejs/loutre').ContextKey<any, any>,
+  TProvided extends import('@loutrejs/loutre').ContextField<any, any>,
   TVariant extends string,
   TBody,
 >(

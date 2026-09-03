@@ -18,4 +18,4 @@ curl --request POST http://127.0.0.1:3003/users \
   --data '{"name":"Loutre"}'
 ```
 
-`Prisma.TransactionClient` is stored under the `TRANSACTION` Context Key and passed explicitly from the Controller to the Repository. Transaction options are inferred from the generated client's `$transaction()` method, preserving Prisma-specific options such as `isolationLevel`, `maxWait`, and `timeout`. The transaction client is never cast to the root `PrismaClient`, and the example does not use nested `$transaction()` calls that are absent from Prisma's transaction client type.
+`Prisma.TransactionClient` is stored under the `TRANSACTION` Context Field and passed explicitly from the Controller to the Repository. Transaction options are inferred from the generated client's `$transaction()` method, preserving Prisma-specific options such as `isolationLevel`, `maxWait`, and `timeout`. The transaction client is never cast to the root `PrismaClient`, and the example does not use nested `$transaction()` calls that are absent from Prisma's transaction client type.

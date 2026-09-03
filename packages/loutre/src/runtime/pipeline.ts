@@ -1,9 +1,9 @@
 import {
   childPipelineOf,
-  contextKeyName,
+  contextFieldName,
   isShortCircuit,
   layerDefinitionOf,
-  type ContextKey,
+  type ContextField,
   type LayerDescriptor,
   type PipelineItem,
   type TerminalLayerDescriptor,
@@ -49,7 +49,7 @@ export async function executePipeline<TContext extends object, TResult>(
     0,
     hooks,
     context,
-    new Set<ContextKey>(),
+    new Set<ContextField>(),
   )
   if (flow.kind === 'continue') {
     throw new Error('Pipeline did not produce a result')
@@ -62,14 +62,14 @@ async function executeSegment<TContext extends object, TResult>(
   index: number,
   hooks: PipelineHooks<TContext, TResult>,
   context: TContext & Record<string, unknown>,
-  availableKeys: Set<ContextKey>,
+  availableFields: Set<ContextField>,
 ): Promise<PipelineFlow<TResult>> {
   const item = pipeline[index]
   if (!item) return { kind: 'continue' }
 
   if (item.kind === 'validation') {
     await hooks.validate(item, context)
-    return executeSegment(pipeline, index + 1, hooks, context, availableKeys)
+    return executeSegment(pipeline, index + 1, hooks, context, availableFields)
   }
   if (item.kind === 'terminal') {
     return {
@@ -79,22 +79,23 @@ async function executeSegment<TContext extends object, TResult>(
   }
 
   const definition = layerDefinitionOf(item)
-  assertRequiredContext(definition.name, definition.requires, availableKeys)
+  assertRequiredContext(definition.name, definition.requires, availableFields)
   const child = childPipelineOf(item)
   const continuation =
     child === undefined
-      ? () => executeSegment(pipeline, index + 1, hooks, context, availableKeys)
-      : () => executeSegment(child, 0, hooks, context, availableKeys)
+      ? () =>
+          executeSegment(pipeline, index + 1, hooks, context, availableFields)
+      : () => executeSegment(child, 0, hooks, context, availableFields)
   const flow = await executeLayer(
     definition,
     hooks.layer(definition),
     continuation,
     context,
-    availableKeys,
+    availableFields,
   )
 
   if (flow.kind === 'complete' || child === undefined) return flow
-  return executeSegment(pipeline, index + 1, hooks, context, availableKeys)
+  return executeSegment(pipeline, index + 1, hooks, context, availableFields)
 }
 
 async function executeLayer<TResult>(
@@ -102,7 +103,7 @@ async function executeLayer<TResult>(
   runtime: ExecutableLayerRuntime,
   continuation: () => Promise<PipelineFlow<TResult>>,
   context: Record<string, unknown>,
-  availableKeys: Set<ContextKey>,
+  availableFields: Set<ContextField>,
 ): Promise<PipelineFlow<TResult>> {
   let calls = 0
   let continuationFlow: PipelineFlow<TResult> = { kind: 'continue' }
@@ -120,7 +121,7 @@ async function executeLayer<TResult>(
       return Promise.reject(contractError)
     }
 
-    applyProvidedContext(layer, context, availableKeys, arguments_)
+    applyProvidedContext(layer, context, availableFields, arguments_)
     completion = (async () => {
       try {
         continuationFlow = await continuation()
@@ -175,13 +176,13 @@ async function executeLayer<TResult>(
 
 function assertRequiredContext(
   layerName: string,
-  requiredKeys: readonly ContextKey[],
-  availableKeys: ReadonlySet<ContextKey>,
+  requiredFields: readonly ContextField[],
+  availableFields: ReadonlySet<ContextField>,
 ): void {
-  for (const required of requiredKeys) {
-    if (!availableKeys.has(required)) {
+  for (const required of requiredFields) {
+    if (!availableFields.has(required)) {
       throw new LayerContractError(
-        `Context Key ${contextKeyName(required)} required by ${layerName} is unavailable`,
+        `Context Field ${contextFieldName(required)} required by ${layerName} is unavailable`,
       )
     }
   }
@@ -190,7 +191,7 @@ function assertRequiredContext(
 function applyProvidedContext(
   layer: LayerDescriptor,
   context: Record<string, unknown>,
-  availableKeys: Set<ContextKey>,
+  availableFields: Set<ContextField>,
   arguments_: readonly unknown[],
 ): void {
   if (arguments_.length > 1) {
@@ -231,7 +232,7 @@ function applyProvidedContext(
   }
   if (!Object.hasOwn(additions, layer.provide.name)) {
     throw new LayerContractError(
-      `Layer ${layer.name} did not provide declared Context Key ${contextKeyName(layer.provide)}`,
+      `Layer ${layer.name} did not provide declared Context Field ${contextFieldName(layer.provide)}`,
     )
   }
   if (Object.hasOwn(context, layer.provide.name)) {
@@ -241,7 +242,7 @@ function applyProvidedContext(
   }
 
   Object.assign(context, additions)
-  availableKeys.add(layer.provide)
+  availableFields.add(layer.provide)
 }
 
 function firstProperty(value: unknown): string | undefined {

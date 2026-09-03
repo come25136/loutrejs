@@ -64,7 +64,7 @@ export interface TokenIR {
   readonly id: string
 }
 
-export interface ContextKeyIR {
+export interface ContextFieldIR {
   readonly name: string
 }
 
@@ -208,7 +208,7 @@ export interface ApplicationGraphIR {
   readonly arguments?: ApplicationArgumentsIR
   readonly providers: readonly ProviderIR[]
   readonly tokens: readonly TokenIR[]
-  readonly contextKeys: readonly ContextKeyIR[]
+  readonly contextFields: readonly ContextFieldIR[]
   readonly contracts: readonly ContractIR[]
   readonly pipelines: readonly PipelineIR[]
   readonly implementations: readonly ImplementationIR[]

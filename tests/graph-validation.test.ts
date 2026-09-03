@@ -1,7 +1,7 @@
 import {
   contract,
   protocolGroup,
-  contextKey,
+  contextField,
   defineModule,
   implementation,
   inject,
@@ -208,7 +208,7 @@ describe('Application Graph IRとsemantic validation', () => {
     expect(runtimeCalls).toBe(0)
   })
   it('recursive PipelineのContextとvalidation stateを順序どおり検証する', () => {
-    const SESSION = contextKey<{ 'recursive.session': string }>(
+    const SESSION = contextField<{ 'recursive.session': string }>(
       'recursive.session',
     )
     const provider = layer({
@@ -347,7 +347,7 @@ describe('Application Graph IRとsemantic validation', () => {
     const SESSION = token<{
       id: string
     }>('session')
-    const SESSION_CONTEXT = contextKey<{
+    const SESSION_CONTEXT = contextField<{
       session: {
         id: string
       }
@@ -505,8 +505,8 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     )
   })
-  it('未提供のContext Key requirementを拒否する', () => {
-    const SESSION = contextKey<{
+  it('未提供のContext Field requirementを拒否する', () => {
+    const SESSION = contextField<{
       session: {
         id: string
       }
@@ -530,9 +530,9 @@ describe('Application Graph IRとsemantic validation', () => {
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_004' }))
   })
-  it('同名の異なるContext Key宣言を拒否する', () => {
-    const FIRST = contextKey<{ session: string }>('session')
-    const SECOND = contextKey<{ session: string }>('session')
+  it('同名の異なるContext Field宣言を拒否する', () => {
+    const FIRST = contextField<{ session: string }>('session')
+    const SECOND = contextField<{ session: string }>('session')
     const firstLayer = layer({
       name: 'first',
       provide: FIRST,

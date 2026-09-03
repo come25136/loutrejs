@@ -1,8 +1,8 @@
-import { contextKey } from '@loutrejs/loutre'
+import { contextField } from '@loutrejs/loutre'
 import { basicAuth } from '@loutrejs/loutre/http'
 import type { User } from '../auth/user.js'
 
-export const CURRENT_USER = contextKey<{ currentUser: User }>('currentUser')
+export const CURRENT_USER = contextField<{ currentUser: User }>('currentUser')
 
 export const authentication = basicAuth({
   name: 'authentication',
