@@ -10,10 +10,8 @@ interface CurrentUser {
   readonly id: string
 }
 
-const SESSION = contextField<{ 'nested.session': Session }>('nested.session')
-const CURRENT_USER = contextField<{ 'nested.currentUser': CurrentUser }>(
-  'nested.currentUser',
-)
+const SESSION = contextField<{ 'nested.session': Session }>()
+const CURRENT_USER = contextField<{ 'nested.currentUser': CurrentUser }>()
 
 const session = layer({
   name: 'nested.session',

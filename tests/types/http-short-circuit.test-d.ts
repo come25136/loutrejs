@@ -15,7 +15,7 @@ const PRINCIPAL = contextField<{
   principal: {
     readonly id: string
   }
-}>('principal')
+}>()
 
 const authentication = basicAuth({
   realm: 'Loutre Test',

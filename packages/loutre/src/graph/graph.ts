@@ -2,7 +2,6 @@ import {
   argumentsProvider,
   asModuleInstance,
   childPipelineOf,
-  contextFieldName,
   defineModule,
   isArgsClass,
   isEnvClass,
@@ -43,6 +42,7 @@ import type {
   DependencyNodeIR,
   Diagnostic,
   ContractId,
+  ContextFieldId,
   ContractIR,
   ImplementationId,
   ImplementationIR,
@@ -230,17 +230,19 @@ export function compileApplication(
   validateDuplicateProviders(modules, diagnostics)
 
   const tokensById = collectCustomTokens(providers, targets, diagnostics)
-  const contextFieldsByName = collectContextFields(targets, diagnostics)
+  const contextFieldIds = collectContextFields(targets)
 
   const pipelines: PipelineIR[] = []
   for (const target of targets) {
-    validatePipeline(target, diagnostics)
+    validatePipeline(target, diagnostics, contextFieldIds)
 
     pipelines.push({
       contract: target.contractId,
       procedure: target.procedure,
       protocol: target.protocol,
-      layers: target.pipeline.map(toLayerIR),
+      layers: target.pipeline.map((item, index) =>
+        toLayerIR(item, index, contextFieldIds),
+      ),
     })
   }
   const implementations: ImplementationIR[] = [...new Set(descriptors)].map(
@@ -323,7 +325,7 @@ export function compileApplication(
     tokens: [...new Set([...tokensById.keys(), ...probedTokenIds])].map(
       (id) => ({ id }),
     ),
-    contextFields: [...contextFieldsByName.keys()].map((name) => ({ name })),
+    contextFields: [...contextFieldIds.values()].map((id) => ({ id })),
     contracts: [...contractIds.entries()].map(([contract, id]) =>
       toContractIR(contract, id),
     ),
@@ -1121,30 +1123,31 @@ function collectCustomTokens(
 
 function collectContextFields(
   targets: readonly ImplementationTarget[],
-  diagnostics: Diagnostic[],
-): ReadonlyMap<string, ContextField> {
-  const fields = new Map<string, ContextField>()
+): ReadonlyMap<ContextField, ContextFieldId> {
+  const fields = new Map<ContextField, ContextFieldId>()
   for (const target of targets) {
-    const path = `${target.contractId}.${target.procedure}.${target.protocol}`
     visitPipelineItems(target.pipeline, (item) => {
       if (item.kind !== 'layer') return
-      for (const key of item.provide
+      for (const field of item.provide
         ? [...item.requires, item.provide]
         : item.requires) {
-        const existing = fields.get(key.name)
-        if (existing && existing !== key) {
-          diagnostics.push({
-            code: 'LUTRE_CONTEXT_002',
-            message: `Context Field ${key.name} is duplicated across different declarations`,
-            path,
-          })
-          continue
-        }
-        fields.set(key.name, key)
+        if (fields.has(field)) continue
+        fields.set(field, `context-field:${fields.size + 1}`)
       }
     })
   }
   return fields
+}
+
+function contextFieldId(
+  field: ContextField,
+  ids: ReadonlyMap<ContextField, ContextFieldId>,
+): ContextFieldId {
+  const id = ids.get(field)
+  if (id === undefined) {
+    throw new Error('Context Field is missing from the Application Graph')
+  }
+  return id
 }
 
 function toContractIR(
@@ -1244,7 +1247,8 @@ function validateCoverage(
 function validatePipeline(
   target: ImplementationTarget,
   diagnostics: Diagnostic[],
-) {
+  contextFieldIds: ReadonlyMap<ContextField, ContextFieldId>,
+): void {
   const path = `${target.contractId}.${target.procedure}.${target.protocol}`
   const flattened: {
     readonly item: PipelineItem
@@ -1303,7 +1307,7 @@ function validatePipeline(
       if (!available.has(required)) {
         diagnostics.push({
           code: 'LUTRE_PIPELINE_004',
-          message: `Context Field ${contextFieldName(required)} required by ${item.name} is unavailable`,
+          message: `Context Field ${contextFieldId(required, contextFieldIds)} required by ${item.name} is unavailable`,
           path,
         })
       }
@@ -1312,7 +1316,7 @@ function validatePipeline(
       if (available.has(item.provide)) {
         diagnostics.push({
           code: 'LUTRE_CONTEXT_003',
-          message: `${item.name} cannot implicitly overwrite existing Context Field ${contextFieldName(item.provide)}`,
+          message: `${item.name} cannot implicitly overwrite existing Context Field ${contextFieldId(item.provide, contextFieldIds)}`,
           path,
         })
       }
@@ -1344,18 +1348,33 @@ function validatePipeline(
   }
 }
 
-function toLayerIR(item: PipelineItem, index: number): LayerIR {
+function toLayerIR(
+  item: PipelineItem,
+  index: number,
+  contextFieldIds: ReadonlyMap<ContextField, ContextFieldId>,
+): LayerIR {
   const child = item.kind === 'layer' ? childPipelineOf(item) : undefined
   return {
     index,
     name: item.name,
     role: item.role,
-    requires: item.kind === 'layer' ? item.requires.map(contextFieldName) : [],
+    requires:
+      item.kind === 'layer'
+        ? item.requires.map((field: ContextField) =>
+            contextFieldId(field, contextFieldIds),
+          )
+        : [],
     ...(item.kind !== 'layer' || !item.provide
       ? {}
-      : { provide: contextFieldName(item.provide) }),
+      : { provide: contextFieldId(item.provide, contextFieldIds) }),
     requiresValidated: item.kind === 'layer' ? item.requiresValidated : [],
-    ...(child === undefined ? {} : { pipeline: child.map(toLayerIR) }),
+    ...(child === undefined
+      ? {}
+      : {
+          pipeline: child.map((childItem, childIndex) =>
+            toLayerIR(childItem, childIndex, contextFieldIds),
+          ),
+        }),
     ...(item.kind !== 'layer' || item.shortCircuits.length === 0
       ? {}
       : {

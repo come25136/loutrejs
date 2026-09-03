@@ -1,24 +1,17 @@
-export interface ContextField<
-  TName extends string = string,
-  TShape extends object = object,
-> {
+declare const contextFieldShape: unique symbol
+
+export interface ContextField<TShape extends object = object> {
   readonly kind: 'context-field'
-  readonly name: TName
-  readonly id: symbol
-  readonly '~shape'?: TShape
+  readonly [contextFieldShape]: TShape
 }
 
 export type ContextFieldValue<TField> =
-  TField extends ContextField<infer TName, infer TShape>
-    ? TName extends keyof TShape
-      ? TShape[TName]
-      : never
+  TField extends ContextField<infer TShape>
+    ? TShape[Extract<keyof TShape, string>]
     : never
 
 export type ContextShape<TField> =
-  TField extends ContextField<infer TName, infer TShape>
-    ? Pick<TShape, Extract<TName, keyof TShape>>
-    : {}
+  TField extends ContextField<infer TShape> ? TShape : {}
 
 type UnionToIntersection<T> = (
   T extends unknown ? (value: T) => void : never
@@ -32,31 +25,34 @@ export type ContextProperties<TFields extends readonly ContextField[]> = [
   ? {}
   : UnionToIntersection<ContextShape<TFields[number]>>
 
-type ContextFieldNameConstraint<TName extends string> = TName extends
-  | ''
-  | '__proto__'
-  ? never
-  : unknown
-
-export function contextField<
+type SingleContextFieldName<
   TShape extends object,
-  const TName extends Extract<keyof TShape, string> = Extract<
-    keyof TShape,
-    string
-  >,
->(
-  name: TName & ContextFieldNameConstraint<TName>,
-): ContextField<TName, TShape> {
-  if (name.length === 0 || name === '__proto__') {
-    throw new Error(`Invalid Context Field name: ${JSON.stringify(name)}`)
-  }
+  TName extends keyof TShape = keyof TShape,
+> = TName extends keyof TShape
+  ? Exclude<keyof TShape, TName> extends never
+    ? TName extends string
+      ? string extends TName
+        ? never
+        : TName extends '' | '__proto__'
+          ? never
+          : {} extends Pick<TShape, TName>
+            ? never
+            : TName
+      : never
+    : never
+  : never
+
+type IsContextFieldShape<TShape extends object> = [
+  SingleContextFieldName<TShape>,
+] extends [never]
+  ? false
+  : true
+
+export function contextField<TShape extends object>(
+  ...invalid: IsContextFieldShape<TShape> extends true ? [] : [never]
+): ContextField<TShape> {
+  void invalid
   return Object.freeze({
     kind: 'context-field' as const,
-    name,
-    id: Symbol(name),
-  })
-}
-
-export function contextFieldName(field: ContextField): string {
-  return field.name
+  }) as ContextField<TShape>
 }

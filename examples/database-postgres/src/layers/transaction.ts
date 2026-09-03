@@ -2,9 +2,7 @@ import { contextField, inject, layer } from '@loutrejs/loutre'
 import type { PoolClient } from 'pg'
 import { PostgresDatabase } from '../database/postgres.js'
 
-export const TRANSACTION = contextField<{ transaction: PoolClient }>(
-  'transaction',
-)
+export const TRANSACTION = contextField<{ transaction: PoolClient }>()
 
 export const transaction = layer({
   name: 'database.transaction',

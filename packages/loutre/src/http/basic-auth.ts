@@ -2,7 +2,6 @@ import {
   layer,
   shortCircuit,
   type ContextField,
-  type ContextFieldValue,
   type ContextShape,
   type LayerDescriptor,
 } from '../core/index.js'
@@ -19,7 +18,7 @@ export interface BasicAuthUnauthorized<TVariant extends string, TBody> {
 }
 
 export interface BasicAuthOptions<
-  TProvided extends ContextField<any, any>,
+  TProvided extends ContextField<any>,
   TVariant extends string,
   TUnauthorizedBody,
 > {
@@ -28,10 +27,10 @@ export interface BasicAuthOptions<
   readonly factory: () => (
     credentials: BasicAuthCredentials,
   ) =>
-    | ContextFieldValue<TProvided>
+    | ContextShape<TProvided>
     | null
     | undefined
-    | Promise<ContextFieldValue<TProvided> | null | undefined>
+    | Promise<ContextShape<TProvided> | null | undefined>
   readonly unauthorized: BasicAuthUnauthorized<TVariant, TUnauthorizedBody>
   readonly name?: string
 }
@@ -49,7 +48,7 @@ type BasicAuthResponseHeaders = {
 }
 
 export interface BasicAuthLayerDescriptor<
-  TProvided extends ContextField<any, any>,
+  TProvided extends ContextField<any>,
   TVariant extends string,
   TUnauthorizedBody,
 > extends LayerDescriptor<
@@ -72,14 +71,13 @@ export interface BasicAuthContext {
 }
 
 export function basicAuth<
-  TProvided extends ContextField<any, any>,
+  TProvided extends ContextField<any>,
   const TVariant extends string,
   TUnauthorizedBody,
 >(
   options: BasicAuthOptions<TProvided, TVariant, TUnauthorizedBody>,
 ): BasicAuthLayerDescriptor<TProvided, TVariant, TUnauthorizedBody> {
   const challenge = formatBasicChallenge(options.realm)
-  const provided = options.provide
   const descriptor = layer<
     readonly [],
     TProvided,
@@ -117,10 +115,7 @@ export function basicAuth<
         if (value == null) {
           return unauthorizedResult(options.unauthorized, challenge)
         }
-
-        await next({
-          [provided.name]: value,
-        } as ContextShape<TProvided>)
+        await next(value)
       }
     },
   })

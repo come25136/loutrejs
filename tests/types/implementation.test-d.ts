@@ -6,7 +6,7 @@ const SESSION = contextField<{
   'implementation.session': {
     readonly userId: string
   }
-}>('implementation.session')
+}>()
 const session = layer({
   name: 'implementation-session',
   provide: SESSION,

@@ -11,10 +11,8 @@ interface Session {
 interface OtherSession {
   readonly accountId: string
 }
-const SESSION = contextField<{ session: Session }>('session')
-const OTHER_SESSION = contextField<{ otherSession: OtherSession }>(
-  'otherSession',
-)
+const SESSION = contextField<{ session: Session }>()
+const OTHER_SESSION = contextField<{ otherSession: OtherSession }>()
 const sessionLayer = layer({
   name: 'message-port-session',
   provide: SESSION,

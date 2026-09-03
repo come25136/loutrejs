@@ -4,7 +4,7 @@ export const CURRENT_USER = contextField<{
   currentUser: {
     readonly id: string
   }
-}>('currentUser')
+}>()
 
 export const authentication = layer({
   name: 'authentication.demo',

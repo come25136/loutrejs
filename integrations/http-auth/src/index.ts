@@ -21,11 +21,9 @@ export interface Session {
 export interface CurrentTenant {
   readonly id: string
 }
-export const AUTH = contextField<{ auth: AuthState }>('auth')
-export const SESSION = contextField<{ session: Session }>('session')
-export const CURRENT_TENANT = contextField<{ currentTenant: CurrentTenant }>(
-  'currentTenant',
-)
+export const AUTH = contextField<{ auth: AuthState }>()
+export const SESSION = contextField<{ session: Session }>()
+export const CURRENT_TENANT = contextField<{ currentTenant: CurrentTenant }>()
 interface HeadersContext {
   readonly headers: {
     readonly authorization: string

@@ -14,14 +14,12 @@ import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 
 describe('Nested Contract composition', () => {
-  const REQUEST_SCOPE = contextField<{ 'nested.requestScope': string }>(
-    'nested.requestScope',
-  )
+  const REQUEST_SCOPE = contextField<{ 'nested.requestScope': string }>()
   const CURRENT_USER = contextField<{
     'nested.currentUser': {
       readonly id: string
     }
-  }>('nested.currentUser')
+  }>()
 
   const requestScope = layer({
     name: 'nested.requestScope',

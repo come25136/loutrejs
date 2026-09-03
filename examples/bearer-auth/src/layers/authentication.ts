@@ -3,7 +3,7 @@ import { bearerAuth } from '@loutrejs/loutre/http'
 import type { User } from '../auth/user.js'
 import { UserRepository } from '../auth/repository.js'
 
-export const CURRENT_USER = contextField<{ currentUser: User }>('currentUser')
+export const CURRENT_USER = contextField<{ currentUser: User }>()
 
 export const bearerAuthentication = bearerAuth({
   name: 'bearerAuthentication',
@@ -11,8 +11,10 @@ export const bearerAuthentication = bearerAuth({
   provide: CURRENT_USER,
   factory:
     (users = inject(UserRepository)) =>
-    (token) =>
-      users.authenticate(token),
+    (token) => {
+      const currentUser = users.authenticate(token)
+      return currentUser === undefined ? undefined : { currentUser }
+    },
   unauthorized: {
     variant: 'unauthorized',
     body: { error: 'Bearer token required' },

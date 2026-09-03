@@ -456,7 +456,7 @@ Layer、Validation、Terminalを組み合わせながら、Contextを次の処�
 Layerはstatic metadataと同期factoryで定義します。
 
 ```ts
-const CURRENT_USER = contextField<{ currentUser: User }>('currentUser')
+const CURRENT_USER = contextField<{ currentUser: User }>()
 
 const auth = layer({
   name: 'auth',
@@ -472,14 +472,14 @@ const auth = layer({
 })
 ```
 
-`requires`はLayerが必要とするContext Field、`provide`は後続の処理へ追加する単一のContext Fieldを表します。1つのLayerがprovideできるContext Fieldは最大1つです。
+`requires`はLayerが必要とするContext Field、`provide`は後続の処理へ追加する単一のContext Fieldを表します。1つのLayerがprovideできるContext Fieldは最大1つです。Context Fieldのidentityはruntime property名とは独立しており、property名は`next()`へ渡す単一objectによってmaterializeされます。
 
 Runtimeは次のようなContext操作を検出します。
 
 - 宣言されていないpropertyへのアクセス
 - requiredなContext Fieldの不足
-- Context Fieldの重複
-- 既存Contextの暗黙的な上書き
+- 同じContext Fieldを異なるproperty名でmaterializeすること
+- 既存Context propertyの暗黙的な上書き
 
 Layerは`next()`を一度だけ呼ぶか、`shortCircuit()`でPipelineを終了します。
 

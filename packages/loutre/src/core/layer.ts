@@ -50,7 +50,7 @@ export interface ShortCircuitDeclaration {
 }
 
 export type LayerNext<TProvide extends ContextField | undefined> =
-  TProvide extends ContextField<any, any>
+  TProvide extends ContextField<any>
     ? (provided: ContextShape<TProvide>) => Promise<void>
     : () => Promise<void>
 
@@ -286,35 +286,37 @@ type FoldPipelineItemTerminals<
       ? FoldPipelineTerminals<TPipeline, TProtocol, TState>
       : TState
 
-type ContextFieldNameOf<TKey> =
-  TKey extends ContextField<infer TName, any> ? TName : never
+type ContextFieldPropertyNameOf<TField> =
+  TField extends ContextField<any>
+    ? Extract<keyof ContextShape<TField>, string>
+    : never
 
-type ContextFieldNamesOf<TKeys extends readonly ContextField[]> =
-  ContextFieldNameOf<TKeys[number]>
+type ContextFieldPropertyNamesOf<TKeys extends readonly ContextField[]> =
+  ContextFieldPropertyNameOf<TKeys[number]>
 
-type DuplicateContextFieldNames<
+type DuplicateContextPropertyNames<
   TKeys extends readonly ContextField[],
   TSeen extends string = never,
 > = number extends TKeys['length']
   ? never
   : TKeys extends readonly [
-        infer THead extends ContextField<any, any>,
+        infer THead extends ContextField<any>,
         ...infer TTail extends readonly ContextField[],
       ]
-    ? ContextFieldNameOf<THead> extends infer TName extends string
+    ? ContextFieldPropertyNameOf<THead> extends infer TName extends string
       ? TName extends TSeen
-        ? TName | DuplicateContextFieldNames<TTail, TSeen>
-        : DuplicateContextFieldNames<TTail, TSeen | TName>
+        ? TName | DuplicateContextPropertyNames<TTail, TSeen>
+        : DuplicateContextPropertyNames<TTail, TSeen | TName>
       : never
     : never
 
 type AreRequiredContextFieldsAvailable<
   TRequires extends readonly ContextField[],
-  TAvailable extends ContextField<any, any>,
+  TAvailable extends ContextField<any>,
 > = [TRequires[number]] extends [never]
   ? true
   : false extends (
-        TRequires[number] extends infer TRequired extends ContextField<any, any>
+        TRequires[number] extends infer TRequired extends ContextField<any>
           ? TRequired extends TAvailable
             ? true
             : false
@@ -330,19 +332,19 @@ type AreRequiredValidatedPartsAvailable<
 
 type HasProvidedContextCollision<
   TProvide extends ContextField | undefined,
-  TAvailable extends ContextField<any, any>,
+  TAvailable extends ContextField<any>,
 > =
-  TProvide extends ContextField<any, any>
+  TProvide extends ContextField<any>
     ? Extract<
-        ContextFieldNameOf<TProvide>,
-        ContextFieldNameOf<TAvailable>
+        ContextFieldPropertyNameOf<TProvide>,
+        ContextFieldPropertyNameOf<TAvailable>
       > extends never
       ? false
       : true
     : false
 
 interface PipelineRequirementState<
-  TAvailable extends ContextField<any, any>,
+  TAvailable extends ContextField<any>,
   TValidated extends ValidatedInputPart,
   TValid extends boolean,
 > {
@@ -637,24 +639,25 @@ type LayerDefinitionConstraint<
   TProvide extends ContextField | undefined,
   TRequiresValidated extends readonly ValidatedInputPart[],
 > = [
-  | DuplicateContextFieldNames<TRequires>
-  | (TProvide extends ContextField<any, any>
-      ? Extract<ContextFieldNamesOf<TRequires>, ContextFieldNameOf<TProvide>>
+  | DuplicateContextPropertyNames<TRequires>
+  | (TProvide extends ContextField<any>
+      ? Extract<
+          ContextFieldPropertyNamesOf<TRequires>,
+          ContextFieldPropertyNameOf<TProvide>
+        >
       : never)
   | DuplicateValidatedInputParts<TRequiresValidated>,
 ] extends [never]
   ? unknown
   : { readonly __invalidLayerDefinition__: never }
 
-function assertUniqueContextFieldNames(keys: readonly ContextField[]): void {
-  const names = new Set<string>()
-  for (const key of keys) {
-    if (names.has(key.name)) {
-      throw new Error(
-        `Layer requires contains duplicate Context property ${key.name}`,
-      )
+function assertUniqueContextFields(fields: readonly ContextField[]): void {
+  const unique = new Set<ContextField>()
+  for (const field of fields) {
+    if (unique.has(field)) {
+      throw new Error('Layer requires contains duplicate Context Field')
     }
-    names.add(key.name)
+    unique.add(field)
   }
 }
 
@@ -664,12 +667,9 @@ function assertLayerDefinition(definition: {
   readonly requiresValidated?: readonly ValidatedInputPart[]
 }): void {
   const requires = definition.requires ?? []
-  assertUniqueContextFieldNames(requires)
-  const requiredNames = new Set(requires.map((key) => key.name))
-  if (definition.provide && requiredNames.has(definition.provide.name)) {
-    throw new Error(
-      `Layer cannot require and provide the same Context property ${definition.provide.name}`,
-    )
+  assertUniqueContextFields(requires)
+  if (definition.provide && requires.includes(definition.provide)) {
+    throw new Error('Layer cannot require and provide the same Context Field')
   }
   const validated = new Set<ValidatedInputPart>()
   for (const part of definition.requiresValidated ?? []) {

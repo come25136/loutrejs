@@ -24,10 +24,10 @@ describe('bearerAuth', () => {
     currentUser: {
       readonly id: string
     }
-  }>('currentUser')
+  }>()
 
   it('tokenを認証してContextへ追加する', async () => {
-    const authenticate = vi.fn(() => ({ id: 'user-1' }))
+    const authenticate = vi.fn(() => ({ currentUser: { id: 'user-1' } }))
     const authentication = bearerAuth({
       realm: 'Loutre Test',
       provide: CURRENT_USER,
@@ -64,7 +64,10 @@ describe('bearerAuth', () => {
       provide: CURRENT_USER,
       factory: (service = inject(TOKEN_SERVICE)) => {
         injectedService = service
-        return (value) => service.authenticate(value)
+        return (value) => {
+          const currentUser = service.authenticate(value)
+          return currentUser === undefined ? undefined : { currentUser }
+        }
       },
       unauthorized: {
         variant: 'unauthorized',
@@ -104,7 +107,7 @@ describe('bearerAuth', () => {
     'Bearer',
     'Bearer token with-spaces',
   ])('不正なAuthorization header %sを認証失敗にする', async (authorization) => {
-    const authenticate = vi.fn(() => ({ id: 'user-1' }))
+    const authenticate = vi.fn(() => ({ currentUser: { id: 'user-1' } }))
     const authentication = bearerAuth({
       realm: 'Loutre Test',
       provide: CURRENT_USER,
@@ -244,7 +247,7 @@ describe('bearerAuth', () => {
 })
 
 async function runBearerAuth<
-  TProvided extends import('@loutrejs/loutre').ContextField<any, any>,
+  TProvided extends import('@loutrejs/loutre').ContextField<any>,
   TVariant extends string,
   TBody,
 >(

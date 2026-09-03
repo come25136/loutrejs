@@ -152,7 +152,7 @@ describe('continuation Pipeline', () => {
   })
 
   it('next(provided)のContextを後段へ追加する', async () => {
-    const VALUE = contextField<{ value: string }>('value')
+    const VALUE = contextField<{ value: string }>()
     const context: Record<string, unknown> = {}
     const provider = layer({
       name: 'provider',
@@ -175,7 +175,7 @@ describe('continuation Pipeline', () => {
   })
 
   it('childがprovideしたContextを親Pipeline後段へ維持する', async () => {
-    const VALUE = contextField<{ childValue: string }>('childValue')
+    const VALUE = contextField<{ childValue: string }>()
     const context: Record<string, unknown> = {}
     const wrapper = layer({
       name: 'wrapper',
@@ -206,7 +206,7 @@ describe('continuation Pipeline', () => {
   })
 
   it('既存Context propertyの上書きを拒否する', async () => {
-    const SESSION = contextField<{ session: string }>('session')
+    const SESSION = contextField<{ session: string }>()
     const provider = layer({
       name: 'provider',
       provide: SESSION,
@@ -218,6 +218,29 @@ describe('continuation Pipeline', () => {
     await expect(
       executePipeline([provider, terminal], hooks({ session: 'existing' })),
     ).rejects.toThrow('cannot overwrite')
+  })
+
+  it('異なるContext Fieldが同じpropertyを上書きするのを拒否する', async () => {
+    const FIRST = contextField<{ session: string }>()
+    const SECOND = contextField<{ session: string }>()
+    const first = layer({
+      name: 'first',
+      provide: FIRST,
+      factory: () => async (_ctx, next) => {
+        await next({ session: 'first' })
+      },
+    })
+    const second = layer({
+      name: 'second',
+      provide: SECOND,
+      factory: () => async (_ctx, next) => {
+        await next({ session: 'second' })
+      },
+    })
+
+    await expect(
+      executePipeline([first, second, terminal], hooks({})),
+    ).rejects.toThrow('cannot overwrite existing Context property session')
   })
 
   it('未宣言Context propertyを拒否する', async () => {

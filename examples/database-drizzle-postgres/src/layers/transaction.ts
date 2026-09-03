@@ -4,9 +4,7 @@ import {
   type DrizzleTransaction,
 } from '../database/drizzle.js'
 
-export const TRANSACTION = contextField<{ transaction: DrizzleTransaction }>(
-  'transaction',
-)
+export const TRANSACTION = contextField<{ transaction: DrizzleTransaction }>()
 
 export const transaction = layer({
   name: 'database.transaction',

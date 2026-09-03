@@ -1,9 +1,7 @@
 import { contextField, inject, layer } from '@loutrejs/loutre'
 import { DATABASE, type InMemoryClient } from '../database/in-memory.js'
 
-export const TRANSACTION = contextField<{ transaction: InMemoryClient }>(
-  'transaction',
-)
+export const TRANSACTION = contextField<{ transaction: InMemoryClient }>()
 
 export const transaction = layer({
   name: 'database.transaction',

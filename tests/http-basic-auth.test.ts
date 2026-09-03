@@ -26,10 +26,10 @@ describe('basicAuth', () => {
     principal: {
       readonly id: string
     }
-  }>('principal')
+  }>()
 
   it('credentialsを認証してprincipalをContextへ追加する', async () => {
-    const authenticate = vi.fn(() => ({ id: 'user-1' }))
+    const authenticate = vi.fn(() => ({ principal: { id: 'user-1' } }))
     const authentication = basicAuth({
       realm: 'Loutre Test',
       provide: PRINCIPAL,
@@ -72,7 +72,10 @@ describe('basicAuth', () => {
       provide: PRINCIPAL,
       factory: (users = inject(USER_SERVICE)) => {
         injectedService = users
-        return (credentials) => users.authenticate(credentials)
+        return (credentials) => {
+          const principal = users.authenticate(credentials)
+          return principal === undefined ? undefined : { principal }
+        }
       },
       unauthorized: {
         variant: 'unauthorized',
@@ -107,7 +110,7 @@ describe('basicAuth', () => {
   })
 
   it('最初のコロンだけをusernameとpasswordの境界にする', async () => {
-    const authenticate = vi.fn(() => ({ id: 'user-1' }))
+    const authenticate = vi.fn(() => ({ principal: { id: 'user-1' } }))
     const authentication = basicAuth({
       realm: 'Loutre Test',
       provide: PRINCIPAL,
@@ -133,7 +136,7 @@ describe('basicAuth', () => {
     const encoded = btoa(
       Array.from(bytes, (byte) => String.fromCharCode(byte)).join(''),
     )
-    const authenticate = vi.fn(() => ({ id: 'user-1' }))
+    const authenticate = vi.fn(() => ({ principal: { id: 'user-1' } }))
     const authentication = basicAuth({
       realm: 'Loutre Test',
       provide: PRINCIPAL,
@@ -162,7 +165,7 @@ describe('basicAuth', () => {
     'Basic !!!',
     `Basic ${btoa('no-separator')}`,
   ])('不正なheader %sを認証失敗にする', async (authorization) => {
-    const authenticate = vi.fn(() => ({ id: 'user-1' }))
+    const authenticate = vi.fn(() => ({ principal: { id: 'user-1' } }))
     const authentication = basicAuth({
       realm: 'Loutre Test',
       provide: PRINCIPAL,
@@ -356,7 +359,7 @@ describe('basicAuth', () => {
 })
 
 async function runBasicAuth<
-  TProvided extends import('@loutrejs/loutre').ContextField<any, any>,
+  TProvided extends import('@loutrejs/loutre').ContextField<any>,
   TVariant extends string,
   TBody,
 >(

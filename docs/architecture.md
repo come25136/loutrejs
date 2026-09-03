@@ -456,7 +456,7 @@ Context is passed to the next process by combining Layer, Validation, and Termin
 Layers are defined with static metadata and synchronous factories.
 
 ```ts
-const CURRENT_USER = contextField<{ currentUser: User }>('currentUser')
+const CURRENT_USER = contextField<{ currentUser: User }>()
 
 const auth = layer({
   name: 'auth',
@@ -472,14 +472,14 @@ const auth = layer({
 })
 ```
 
-`requires` represents the Context Fields required by the layer, and `provide` represents the single Context Field added to subsequent processing. A Layer can provide at most one Context Field.
+`requires` represents the Context Fields required by the layer, and `provide` represents the single Context Field added to subsequent processing. A Layer can provide at most one Context Field. Context Field identity is independent of its runtime property name; the property name is materialized by the single object passed to `next()`.
 
 Runtime detects Context operations such as:
 
 - Access to undeclared property
 - Missing required Context Field
-- Duplicate Context Field
-- Implicit overwriting of existing Context
+- Inconsistent materialization of the same Context Field
+- Implicit overwriting of an existing Context property
 
 The layer calls `next()` only once or terminates the Pipeline with `shortCircuit()`.
 

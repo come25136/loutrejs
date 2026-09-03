@@ -2,7 +2,6 @@ import {
   layer,
   shortCircuit,
   type ContextField,
-  type ContextFieldValue,
   type ContextShape,
   type LayerDescriptor,
 } from '../core/index.js'
@@ -14,7 +13,7 @@ export interface BearerAuthUnauthorized<TVariant extends string, TBody> {
 }
 
 export interface BearerAuthOptions<
-  TProvided extends ContextField<any, any>,
+  TProvided extends ContextField<any>,
   TVariant extends string,
   TUnauthorizedBody,
 > {
@@ -23,10 +22,10 @@ export interface BearerAuthOptions<
   readonly factory: () => (
     token: string,
   ) =>
-    | ContextFieldValue<TProvided>
+    | ContextShape<TProvided>
     | null
     | undefined
-    | Promise<ContextFieldValue<TProvided> | null | undefined>
+    | Promise<ContextShape<TProvided> | null | undefined>
   readonly unauthorized: BearerAuthUnauthorized<TVariant, TUnauthorizedBody>
   readonly name?: string
 }
@@ -44,7 +43,7 @@ type BearerAuthResponseHeaders = {
 }
 
 export interface BearerAuthLayerDescriptor<
-  TProvided extends ContextField<any, any>,
+  TProvided extends ContextField<any>,
   TVariant extends string,
   TUnauthorizedBody,
 > extends LayerDescriptor<
@@ -67,14 +66,13 @@ export interface BearerAuthContext {
 }
 
 export function bearerAuth<
-  TProvided extends ContextField<any, any>,
+  TProvided extends ContextField<any>,
   const TVariant extends string,
   TUnauthorizedBody,
 >(
   options: BearerAuthOptions<TProvided, TVariant, TUnauthorizedBody>,
 ): BearerAuthLayerDescriptor<TProvided, TVariant, TUnauthorizedBody> {
   const challenge = formatBearerChallenge(options.realm)
-  const provided = options.provide
   const descriptor = layer<
     readonly [],
     TProvided,
@@ -112,10 +110,7 @@ export function bearerAuth<
         if (value == null) {
           return unauthorizedResult(options.unauthorized, challenge)
         }
-
-        await next({
-          [provided.name]: value,
-        } as ContextShape<TProvided>)
+        await next(value)
       }
     },
   })

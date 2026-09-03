@@ -2,7 +2,7 @@ import { contextField } from '@loutrejs/loutre'
 import { basicAuth } from '@loutrejs/loutre/http'
 import type { User } from '../auth/user.js'
 
-export const CURRENT_USER = contextField<{ currentUser: User }>('currentUser')
+export const CURRENT_USER = contextField<{ currentUser: User }>()
 
 export const authentication = basicAuth({
   name: 'authentication',
@@ -12,7 +12,7 @@ export const authentication = basicAuth({
     () =>
     ({ username, password }) => {
       if (username !== 'loutre' || password !== 'otter') return undefined
-      return { id: 'user-1', name: 'Loutre User' }
+      return { currentUser: { id: 'user-1', name: 'Loutre User' } }
     },
   unauthorized: {
     variant: 'unauthorized',

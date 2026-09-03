@@ -208,9 +208,7 @@ describe('Application Graph IRとsemantic validation', () => {
     expect(runtimeCalls).toBe(0)
   })
   it('recursive PipelineのContextとvalidation stateを順序どおり検証する', () => {
-    const SESSION = contextField<{ 'recursive.session': string }>(
-      'recursive.session',
-    )
+    const SESSION = contextField<{ 'recursive.session': string }>()
     const provider = layer({
       name: 'recursive-provider',
       provide: SESSION,
@@ -351,7 +349,7 @@ describe('Application Graph IRとsemantic validation', () => {
       session: {
         id: string
       }
-    }>('session')
+    }>()
     const Contract = contract([
       protocolGroup('http', {
         run: protocol([http.controller]),
@@ -505,12 +503,43 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     )
   })
+  it('Context FieldをGraph上ではopaque IDで関連付ける', () => {
+    const SESSION = contextField<{ session: string }>()
+    const provideSession = layer({
+      name: 'provideSession',
+      provide: SESSION,
+      factory: () => async (_ctx, next) => {
+        await next({ session: 'session-1' })
+      },
+    })
+    const requireSession = layer({
+      name: 'requireSession',
+      requires: [SESSION],
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
+    })
+    const Contract = contract([
+      protocolGroup('http', {
+        run: protocol([provideSession, requireSession, http.controller]),
+      }),
+    ])
+    const Module = defineModule(() => ({
+      implementations: [graphImplementation(Contract)],
+    }))
+
+    const { graph } = compileApplication({ modules: [Module()] })
+    expect(graph.contextFields).toEqual([{ id: 'context-field:1' }])
+    expect(graph.pipelines[0]?.layers[0]?.provide).toBe('context-field:1')
+    expect(graph.pipelines[0]?.layers[1]?.requires).toEqual(['context-field:1'])
+  })
+
   it('未提供のContext Field requirementを拒否する', () => {
     const SESSION = contextField<{
       session: {
         id: string
       }
-    }>('session')
+    }>()
     const guarded = layer({
       name: 'guarded',
       requires: [SESSION],
@@ -530,9 +559,9 @@ describe('Application Graph IRとsemantic validation', () => {
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_004' }))
   })
-  it('同名の異なるContext Field宣言を拒否する', () => {
-    const FIRST = contextField<{ session: string }>('session')
-    const SECOND = contextField<{ session: string }>('session')
+  it('異なるContext Field identityは同じshapeでも互換にしない', () => {
+    const FIRST = contextField<{ session: string }>()
+    const SECOND = contextField<{ session: string }>()
     const firstLayer = layer({
       name: 'first',
       provide: FIRST,
@@ -557,6 +586,6 @@ describe('Application Graph IRとsemantic validation', () => {
     }))
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
-    ).toContainEqual(expect.objectContaining({ code: 'LUTRE_CONTEXT_002' }))
+    ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_004' }))
   })
 })

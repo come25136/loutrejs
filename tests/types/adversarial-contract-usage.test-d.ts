@@ -51,10 +51,8 @@ http({
   },
 })
 
-const SESSION = contextField<{ 'adversarial.session': string }>(
-  'adversarial.session',
-)
-const USER = contextField<{ 'adversarial.user': string }>('adversarial.user')
+const SESSION = contextField<{ 'adversarial.session': string }>()
+const USER = contextField<{ 'adversarial.user': string }>()
 
 const provideSession = layer({
   name: 'provideSession',
@@ -76,6 +74,13 @@ const provideSessionAgain = layer({
   factory: () => async (_ctx, next) => next({ 'adversarial.session': 's2' }),
 })
 
+const DISTINCT_SESSION = contextField<{ 'adversarial.session': number }>()
+const provideDistinctSession = layer({
+  name: 'provideDistinctSession',
+  provide: DISTINCT_SESSION,
+  factory: () => async (_ctx, next) => next({ 'adversarial.session': 2 }),
+})
+
 const requireValidatedParams = layer({
   name: 'requireValidatedParams',
   requiresValidated: ['params'],
@@ -95,6 +100,14 @@ http({
   duplicateProvide: {
     ...OK,
     pipeline: [provideSession, provideSessionAgain, http.controller],
+  },
+})
+
+// @ts-expect-error distinct Context Fields cannot materialize the same Context property
+http({
+  duplicateProperty: {
+    ...OK,
+    pipeline: [provideSession, provideDistinctSession, http.controller],
   },
 })
 
@@ -242,9 +255,17 @@ const resolvedUser: string = resolvedLeafContext['adversarial.user']
 void [resolvedParam, resolvedUser]
 
 // @ts-expect-error Context is materialized as an object property; __proto__ is unsafe
-contextField<{ __proto__: string }>('__proto__')
+contextField<{ __proto__: string }>()
 // @ts-expect-error empty Context property names are not meaningful
-contextField<{ '': string }>('')
+contextField<{ '': string }>()
+// @ts-expect-error a Context Field must declare exactly one property
+contextField<{}>()
+// @ts-expect-error a Context Field must declare exactly one property
+contextField<{ first: string; second: number }>()
+// @ts-expect-error a Context Field property must be required
+contextField<{ optional?: string }>()
+// @ts-expect-error a Context Field cannot use a broad string index
+contextField<Record<string, string>>()
 
 const nestedWrapper = layer({
   name: 'nestedWrapper',

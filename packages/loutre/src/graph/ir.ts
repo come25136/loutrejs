@@ -64,8 +64,10 @@ export interface TokenIR {
   readonly id: string
 }
 
+export type ContextFieldId = `context-field:${number}`
+
 export interface ContextFieldIR {
-  readonly name: string
+  readonly id: ContextFieldId
 }
 
 export interface LayerIR {
@@ -78,8 +80,8 @@ export interface LayerIR {
     | 'validation'
     | 'framework'
     | 'terminal'
-  readonly requires: readonly string[]
-  readonly provide?: string
+  readonly requires: readonly ContextFieldId[]
+  readonly provide?: ContextFieldId
   readonly returns?: readonly string[]
   readonly requiresValidated: readonly string[]
   readonly dependencies?: readonly string[]

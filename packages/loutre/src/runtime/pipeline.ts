@@ -1,6 +1,5 @@
 import {
   childPipelineOf,
-  contextFieldName,
   isShortCircuit,
   layerDefinitionOf,
   type ContextField,
@@ -27,6 +26,8 @@ type ExecutableLayerRuntime = (
   context: object,
   next: (...arguments_: readonly unknown[]) => Promise<void>,
 ) => Promise<unknown>
+
+const contextFieldProperties = new WeakMap<ContextField, string>()
 
 type PipelineFlow<TResult> =
   | { readonly kind: 'continue' }
@@ -182,7 +183,7 @@ function assertRequiredContext(
   for (const required of requiredFields) {
     if (!availableFields.has(required)) {
       throw new LayerContractError(
-        `Context Field ${contextFieldName(required)} required by ${layerName} is unavailable`,
+        `Context Field required by ${layerName} is unavailable`,
       )
     }
   }
@@ -223,21 +224,24 @@ function applyProvidedContext(
   }
 
   const additions = provided as Record<string, unknown>
-  for (const property of Object.keys(additions)) {
-    if (property !== layer.provide.name) {
-      throw new LayerContractError(
-        `Layer ${layer.name} provided undeclared Context property ${property}`,
-      )
-    }
-  }
-  if (!Object.hasOwn(additions, layer.provide.name)) {
+  const properties = Object.keys(additions)
+  if (properties.length !== 1) {
     throw new LayerContractError(
-      `Layer ${layer.name} did not provide declared Context Field ${contextFieldName(layer.provide)}`,
+      `Layer ${layer.name} must provide exactly one Context property`,
     )
   }
-  if (Object.hasOwn(context, layer.provide.name)) {
+  const property = properties[0]!
+  const previousProperty = contextFieldProperties.get(layer.provide)
+  if (previousProperty !== undefined && previousProperty !== property) {
     throw new LayerContractError(
-      `Layer ${layer.name} cannot overwrite existing Context property ${layer.provide.name}`,
+      `Layer ${layer.name} provided Context Field as ${property}, but it was previously provided as ${previousProperty}`,
+    )
+  }
+  contextFieldProperties.set(layer.provide, property)
+
+  if (Object.hasOwn(context, property)) {
+    throw new LayerContractError(
+      `Layer ${layer.name} cannot overwrite existing Context property ${property}`,
     )
   }
 
