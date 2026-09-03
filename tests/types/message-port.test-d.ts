@@ -1,25 +1,21 @@
-import { contextField, contract, layer } from '@loutrejs/loutre'
+import { contract, defineLayer } from '@loutrejs/loutre'
 import {
   HandlerOf,
   MessageContextOf,
   messagePort,
 } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
+
 interface Session {
   readonly userId: string
 }
-interface OtherSession {
-  readonly accountId: string
-}
-const SESSION = contextField<{ session: Session }>()
-const OTHER_SESSION = contextField<{ otherSession: OtherSession }>()
-const sessionLayer = layer({
-  name: 'message-port-session',
-  provide: SESSION,
-  factory: () => async (_ctx, next) => {
-    await next({ session: { userId: 'user-1' } })
-  },
+
+const sessionLayer = defineLayer({ name: 'message-port-session' }).factory<{
+  session: Session
+}>(() => async (_ctx, next) => {
+  await next({ session: { userId: 'user-1' } })
 })
+
 const Contract = contract([
   messagePort({
     run: {
@@ -30,9 +26,10 @@ const Contract = contract([
     },
   }),
 ])
+
 type Handler = HandlerOf<typeof Contract, 'messagePort'>
 declare const context: MessageContextOf<Handler, 'run'>
-const session: Session = context.session
+const session: Session = context.state.session
 void session
-// @ts-expect-error Pipelineがprovideしていないtokenは取得できない
-context.otherSession
+// @ts-expect-error Pipelineがprovideしていないstateは取得できない
+context.state.otherSession

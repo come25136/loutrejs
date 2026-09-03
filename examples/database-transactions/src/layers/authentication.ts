@@ -1,16 +1,11 @@
-import { contextField, layer } from '@loutrejs/loutre'
+import { defineLayer } from '@loutrejs/loutre'
 
-export const CURRENT_USER = contextField<{
+export const authentication = defineLayer({
+  name: 'authentication.demo',
+}).factory<{
   currentUser: {
     readonly id: string
   }
-}>()
-
-export const authentication = layer({
-  name: 'authentication.demo',
-  role: 'authentication',
-  provide: CURRENT_USER,
-  factory: () => async (_ctx, next) => {
-    await next({ currentUser: { id: 'demo-user' } })
-  },
+}>(() => async (_ctx, next) => {
+  await next({ currentUser: { id: 'demo-user' } })
 })

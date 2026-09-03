@@ -1,21 +1,22 @@
 import {
   contract,
-  protocolGroup,
-  contextField,
+  defineImplementation,
+  defineLayer,
   defineModule,
-  implementation,
   inject,
-  layer,
-  type PipelineItem,
+  protocolGroup,
   provide,
   token,
   type ContractDefinition,
+  type PipelineItem,
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import { http } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
+
 const Body = z.object({ ok: z.boolean() })
+
 function protocol(pipeline: readonly PipelineItem[], path = '/fixture') {
   return http.route({
     method: 'GET',
@@ -24,14 +25,13 @@ function protocol(pipeline: readonly PipelineItem[], path = '/fixture') {
     pipeline,
   } as never)
 }
+
 function passthrough(name: string) {
-  return layer({
-    name,
-    factory: () => async (_ctx, next) => {
-      await next()
-    },
+  return defineLayer({ name }).factory(() => async (_ctx, next) => {
+    await next()
   })
 }
+
 function graphImplementation(
   contractDefinition: ContractDefinition,
   options: {
@@ -47,40 +47,29 @@ function graphImplementation(
   const runtime = Object.fromEntries(
     procedures.map((name) => [name, () => ({ kind: 'http-result' })]),
   )
-  return implementation({
+
+  return defineImplementation({
     name: options.name ?? 'Controller',
     contract: contractDefinition,
     protocol: http,
     ...(options.procedures === undefined ? {} : { procedures }),
-    factory: () => runtime,
-  } as never)
+  } as never).factory(() => runtime as never)
 }
+
 describe('Application Graph IRとsemantic validation', () => {
   it('callable Layerのrecursive LayerIRとfactory DI edgeを生成する', () => {
     interface Database {
       transaction(next: () => Promise<void>): Promise<void>
     }
     const DATABASE = token<Database>('database.graph')
-    const transactionLayer = layer({
-      name: 'transaction',
-      factory:
-        (database = inject(DATABASE)) =>
+    const transactionLayer = defineLayer({ name: 'transaction' }).factory(
+      (database = inject(DATABASE)) =>
         async (_ctx, next) => {
           await database.transaction(next)
         },
-    })
-    const inside = layer({
-      name: 'inside',
-      factory: () => async (_ctx, next) => {
-        await next()
-      },
-    })
-    const authorization = layer({
-      name: 'authorization',
-      factory: () => async (_ctx, next) => {
-        await next()
-      },
-    })
+    )
+    const inside = passthrough('inside')
+    const authorization = passthrough('authorization')
     const nested = transactionLayer([inside])
     const outer = transactionLayer([authorization, nested, http.controller])
     const Contract = contract([
@@ -99,14 +88,13 @@ describe('Application Graph IRとsemantic validation', () => {
       implementations: [graphImplementation(Contract)],
     }))
     const { graph, diagnostics } = compileApplication({ modules: [Module()] })
+
     expect(diagnostics).toEqual([])
     const root = graph.pipelines[0]?.layers[0]
-    expect(root).toMatchObject({
-      index: 0,
-      name: 'transaction',
-    })
+    expect(root).toMatchObject({ index: 0, kind: 'layer', name: 'transaction' })
     expect(root?.pipeline?.[1]).toMatchObject({
       index: 1,
+      kind: 'layer',
       name: 'transaction',
     })
     expect(root?.pipeline?.[1]?.pipeline?.[0]?.index).toBe(0)
@@ -127,6 +115,7 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     )
   })
+
   it('recursive terminal ruleとprotocol一致を検証する', () => {
     const childOwner = passthrough('terminal-owner')([http.controller])
     const Contract = contract([
@@ -140,6 +129,7 @@ describe('Application Graph IRとsemantic validation', () => {
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_002' }))
+
     const mismatch = passthrough('mismatch')([messagePort.handler])
     const MismatchContract = contract([
       protocolGroup('http', {
@@ -153,16 +143,15 @@ describe('Application Graph IRとsemantic validation', () => {
       compileApplication({ modules: [MismatchModule()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_003' }))
   })
+
   it('Layer factoryの未解決DIを診断する', () => {
     const MISSING = token<object>('layer.missing')
-    const injected = layer({
-      name: 'injected',
-      factory:
-        (_missing = inject(MISSING)) =>
+    const injected = defineLayer({ name: 'injected' }).factory(
+      (_missing = inject(MISSING)) =>
         async (_ctx, next) => {
           await next()
         },
-    })
+    )
     const Contract = contract([
       protocolGroup('http', {
         run: protocol([injected, http.controller]),
@@ -175,26 +164,23 @@ describe('Application Graph IRとsemantic validation', () => {
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_DI_UNRESOLVED' }))
   })
+
   it('Graph Probeでfactoryだけを同期実行しruntimeとchildを実行しない', () => {
     let factoryCalls = 0
     let runtimeCalls = 0
-    const probeSafe = layer({
-      name: 'probe-safe',
-      factory: () => {
-        factoryCalls += 1
-        return async (_ctx, next) => {
-          runtimeCalls += 1
-          await next()
-        }
-      },
+    const probeSafe = defineLayer({ name: 'probe-safe' }).factory(() => {
+      factoryCalls += 1
+      return async (_ctx, next) => {
+        runtimeCalls += 1
+        await next()
+      }
     })
-    const child = layer({
-      name: 'child',
-      factory: () => async (_ctx, next) => {
+    const child = defineLayer({ name: 'child' }).factory(
+      () => async (_ctx, next) => {
         runtimeCalls += 1
         await next()
       },
-    })
+    )
     const Contract = contract([
       protocolGroup('http', {
         run: protocol([probeSafe([child, http.controller])]),
@@ -203,35 +189,32 @@ describe('Application Graph IRとsemantic validation', () => {
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
+
     expect(compileApplication({ modules: [Module()] }).diagnostics).toEqual([])
     expect(factoryCalls).toBe(1)
     expect(runtimeCalls).toBe(0)
   })
-  it('recursive PipelineのContextとvalidation stateを順序どおり検証する', () => {
-    const SESSION = contextField<{ 'recursive.session': string }>()
-    const provider = layer({
-      name: 'recursive-provider',
-      provide: SESSION,
-      factory: () => async (_ctx, next) => {
-        await next({ 'recursive.session': 'ready' })
-      },
+
+  it('recursive PipelineのLayer requirementとvalidation stateを順序どおり検証する', () => {
+    const provider = defineLayer({ name: 'recursive-provider' }).factory<{
+      session: string
+    }>(() => async (_ctx, next) => {
+      await next({ session: 'ready' })
     })
     const childOwner = passthrough('recursive-state')([
       provider,
       {
         kind: 'validation',
         name: 'validate.body',
-        role: 'validation',
         part: 'body',
       },
     ])
-    const consumer = layer({
+    const consumer = defineLayer({
       name: 'recursive-consumer',
-      requires: [SESSION],
+      requires: [provider],
       requiresValidated: ['body'],
-      factory: () => async (_ctx, next) => {
-        await next()
-      },
+    }).factory(() => async (_ctx, next) => {
+      await next()
     })
     const Contract = contract([
       protocolGroup('http', {
@@ -241,8 +224,10 @@ describe('Application Graph IRとsemantic validation', () => {
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
+
     expect(compileApplication({ modules: [Module()] }).diagnostics).toEqual([])
   })
+
   it('recursive Pipeline全体のterminal exactly oneを検証する', () => {
     const first = passthrough('first-terminal')([http.controller])
     const second = passthrough('second-terminal')([http.controller])
@@ -254,23 +239,24 @@ describe('Application Graph IRとsemantic validation', () => {
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
+
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_001' }))
   })
+
   it('childのshortCircuit declarationをresponseと照合する', () => {
-    const child = layer({
+    const child = defineLayer({
       name: 'recursive-short-circuit',
       shortCircuits: [
         {
           protocol: 'http',
-          variant: 'missing',
-          response: { status: 409 },
+          response: 'missing',
+          metadata: { status: 409 },
         },
       ],
-      factory: () => async (_ctx, next) => {
-        await next()
-      },
+    }).factory(() => async (_ctx, next) => {
+      await next()
     })
     const childOwner = passthrough('short-circuit-owner')([child])
     const Contract = contract([
@@ -281,12 +267,14 @@ describe('Application Graph IRとsemantic validation', () => {
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
+
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_SHORT_CIRCUIT_001' }),
     )
   })
+
   it('rejects a terminal that is not last', () => {
     const Contract = contract([
       protocolGroup('http', {
@@ -297,10 +285,12 @@ describe('Application Graph IRとsemantic validation', () => {
       implementations: [graphImplementation(Contract)],
     }))
     const result = compileApplication({ modules: [Module()] })
+
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_PIPELINE_002' }),
     )
   })
+
   it('Protocolと異なるterminalを拒否する', () => {
     const Contract = contract([
       protocolGroup('http', {
@@ -310,13 +300,15 @@ describe('Application Graph IRとsemantic validation', () => {
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
+
     expect(
       compileApplication({ modules: [Module()] }).diagnostics.map(
         ({ code }) => code,
       ),
     ).toContain('LUTRE_PIPELINE_003')
   })
-  it('detects missing and duplicate implementation coverage', () => {
+
+  it('detects missing and duplicate defineImplementation coverage', () => {
     const Contract = contract([
       protocolGroup('http', {
         get: protocol([http.controller]),
@@ -338,46 +330,41 @@ describe('Application Graph IRとsemantic validation', () => {
     const codes = compileApplication({ modules: [Module()] }).diagnostics.map(
       (diagnostic) => diagnostic.code,
     )
+
     expect(codes).toContain('LUTRE_IMPL_001')
     expect(codes).toContain('LUTRE_IMPL_002')
   })
+
   it('Implementation factoryにはapplication providerだけを許可する', () => {
-    const SESSION = token<{
-      id: string
-    }>('session')
-    const SESSION_CONTEXT = contextField<{
-      session: {
-        id: string
-      }
-    }>()
+    const SESSION = token<{ id: string }>('session')
     const Contract = contract([
       protocolGroup('http', {
         run: protocol([http.controller]),
       }),
     ])
     const createImplementation = (contractDefinition: ContractDefinition) =>
-      implementation({
+      defineImplementation({
         name: 'Controller',
         contract: contractDefinition,
         protocol: http,
-        factory: (_session = inject(SESSION)) => ({ run() {} }),
-      } as never)
+      } as never).factory(
+        (_session = inject(SESSION)) => ({ run() {} }) as never,
+      )
     const Controller = createImplementation(Contract)
     const InvalidModule = defineModule(() => ({
       implementations: [Controller],
     }))
+
     expect(
       compileApplication({ modules: [InvalidModule()] }).diagnostics.map(
         ({ code }) => code,
       ),
     ).toContain('LUTRE_DI_UNRESOLVED')
-    const sessionLayer = layer({
-      name: 'session',
-      role: 'guard',
-      provide: SESSION_CONTEXT,
-      factory: () => async (_ctx, next) => {
-        await next({ session: { id: 'one' } })
-      },
+
+    const sessionLayer = defineLayer({ name: 'session' }).factory<{
+      session: { id: string }
+    }>(() => async (_ctx, next) => {
+      await next({ session: { id: 'one' } })
     })
     const LayerOnlyContract = contract([
       protocolGroup('http', {
@@ -387,11 +374,13 @@ describe('Application Graph IRとsemantic validation', () => {
     const LayerOnlyModule = defineModule(() => ({
       implementations: [createImplementation(LayerOnlyContract)],
     }))
+
     expect(
       compileApplication({ modules: [LayerOnlyModule()] }).diagnostics.map(
         ({ code }) => code,
       ),
     ).toContain('LUTRE_DI_UNRESOLVED')
+
     const ValidModule = defineModule(() => ({
       providers: [provide(SESSION).useValue({ id: 'application' })],
       implementations: [Controller],
@@ -400,6 +389,7 @@ describe('Application Graph IRとsemantic validation', () => {
       compileApplication({ modules: [ValidModule()] }).diagnostics,
     ).toEqual([])
   })
+
   it('emits the five initial graph dimensions without runtime-specific core APIs', () => {
     const Contract = contract([
       protocolGroup('http', {
@@ -412,6 +402,7 @@ describe('Application Graph IRとsemantic validation', () => {
       implementations: [graphImplementation(Contract)],
     }))
     const { graph } = compileApplication({ modules: [Module()] })
+
     expect(graph.modules).toHaveLength(1)
     expect(graph.modules[0]?.name).toBe('GraphFixtureModule')
     expect(graph.providers).toEqual([])
@@ -441,12 +432,13 @@ describe('Application Graph IRとsemantic validation', () => {
         procedures: ['run'],
       }),
     ])
-    expect(graph.pipelines[0]?.layers[0]?.role).toBe('terminal')
+    expect(graph.pipelines[0]?.layers[0]?.kind).toBe('terminal')
     expect(graph.capabilities.map(({ name }) => name)).toContain('http.server')
     expect(graph.capabilities.map(({ name }) => name)).toContain(
       'crypto.random',
     )
   })
+
   it('異なるtoken declarationの重複IDを拒否する', () => {
     const FIRST = token<string>('duplicate-token')
     const SECOND = token<string>('duplicate-token')
@@ -457,6 +449,7 @@ describe('Application Graph IRとsemantic validation', () => {
       ],
     }))
     const result = compileApplication({ modules: [Module()] })
+
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_TOKEN_001' }),
     )
@@ -464,6 +457,7 @@ describe('Application Graph IRとsemantic validation', () => {
       expect.objectContaining({ code: 'LUTRE_DI_003' }),
     )
   })
+
   it('同じModule内のduplicate Providerを静的に拒否する', () => {
     const VALUE = token<string>('duplicate-provider.direct')
     const Module = defineModule(() => ({
@@ -472,6 +466,7 @@ describe('Application Graph IRとsemantic validation', () => {
         provide(VALUE).useValue('second'),
       ],
     }))
+
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(
@@ -481,6 +476,7 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     )
   })
+
   it('importされたModule間のduplicate Providerを静的に拒否する', () => {
     const VALUE = token<string>('duplicate-provider.imported')
     const FirstModule = defineModule(() => ({
@@ -494,6 +490,7 @@ describe('Application Graph IRとsemantic validation', () => {
     const RootModule = defineModule(() => ({
       imports: [FirstModule(), SecondModule()],
     }))
+
     expect(
       compileApplication({ modules: [RootModule()] }).diagnostics,
     ).toContainEqual(
@@ -503,21 +500,18 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     )
   })
-  it('Context FieldをGraph上ではopaque IDで関連付ける', () => {
-    const SESSION = contextField<{ session: string }>()
-    const provideSession = layer({
-      name: 'provideSession',
-      provide: SESSION,
-      factory: () => async (_ctx, next) => {
-        await next({ session: 'session-1' })
-      },
+
+  it('Layer requirementをGraph上でLayer名により関連付ける', () => {
+    const provideSession = defineLayer({ name: 'provideSession' }).factory<{
+      session: string
+    }>(() => async (_ctx, next) => {
+      await next({ session: 'session-1' })
     })
-    const requireSession = layer({
+    const requireSession = defineLayer({
       name: 'requireSession',
-      requires: [SESSION],
-      factory: () => async (_ctx, next) => {
-        await next()
-      },
+      requires: [provideSession],
+    }).factory(() => async (_ctx, next) => {
+      await next()
     })
     const Contract = contract([
       protocolGroup('http', {
@@ -529,23 +523,29 @@ describe('Application Graph IRとsemantic validation', () => {
     }))
 
     const { graph } = compileApplication({ modules: [Module()] })
-    expect(graph.contextFields).toEqual([{ id: 'context-field:1' }])
-    expect(graph.pipelines[0]?.layers[0]?.provide).toBe('context-field:1')
-    expect(graph.pipelines[0]?.layers[1]?.requires).toEqual(['context-field:1'])
+    expect(graph.pipelines[0]?.layers[0]).toMatchObject({
+      kind: 'layer',
+      name: 'provideSession',
+      requires: [],
+    })
+    expect(graph.pipelines[0]?.layers[1]).toMatchObject({
+      kind: 'layer',
+      name: 'requireSession',
+      requires: ['provideSession'],
+    })
   })
 
-  it('未提供のContext Field requirementを拒否する', () => {
-    const SESSION = contextField<{
-      session: {
-        id: string
-      }
-    }>()
-    const guarded = layer({
+  it('未実行のLayer requirementを拒否する', () => {
+    const session = defineLayer({ name: 'session' }).factory<{
+      session: { id: string }
+    }>(() => async (_ctx, next) => {
+      await next({ session: { id: 'one' } })
+    })
+    const guarded = defineLayer({
       name: 'guarded',
-      requires: [SESSION],
-      factory: () => async (_ctx, next) => {
-        await next()
-      },
+      requires: [session],
+    }).factory(() => async (_ctx, next) => {
+      await next()
     })
     const Contract = contract([
       protocolGroup('http', {
@@ -555,35 +555,38 @@ describe('Application Graph IRとsemantic validation', () => {
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
+
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_004' }))
   })
-  it('異なるContext Field identityは同じshapeでも互換にしない', () => {
-    const FIRST = contextField<{ session: string }>()
-    const SECOND = contextField<{ session: string }>()
-    const firstLayer = layer({
-      name: 'first',
-      provide: FIRST,
-      factory: () => async (_ctx, next) => {
-        await next({ session: 'first' })
-      },
+
+  it('異なるLayer identityは同じState shapeでも互換にしない', () => {
+    const first = defineLayer({ name: 'first' }).factory<{
+      session: string
+    }>(() => async (_ctx, next) => {
+      await next({ session: 'first' })
     })
-    const secondLayer = layer({
-      name: 'second',
-      requires: [SECOND],
-      factory: () => async (_ctx, next) => {
-        await next()
-      },
+    const second = defineLayer({ name: 'second' }).factory<{
+      session: string
+    }>(() => async (_ctx, next) => {
+      await next({ session: 'second' })
+    })
+    const consumer = defineLayer({
+      name: 'consumer',
+      requires: [second],
+    }).factory(() => async (_ctx, next) => {
+      await next()
     })
     const Contract = contract([
       protocolGroup('http', {
-        run: protocol([firstLayer, secondLayer, http.controller]),
+        run: protocol([first, consumer, http.controller]),
       }),
     ])
     const Module = defineModule(() => ({
       implementations: [graphImplementation(Contract)],
     }))
+
     expect(
       compileApplication({ modules: [Module()] }).diagnostics,
     ).toContainEqual(expect.objectContaining({ code: 'LUTRE_PIPELINE_004' }))

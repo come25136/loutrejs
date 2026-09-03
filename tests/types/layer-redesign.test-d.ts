@@ -1,59 +1,71 @@
-import { contextField, inject, layer, token } from '@loutrejs/loutre'
-
-const A = contextField<{ a: string }>()
-const B = contextField<{ b: number }>()
-const C = contextField<{ c: boolean }>()
+import { defineLayer, inject, token } from '@loutrejs/loutre'
 
 interface Lookup {
   find(value: string): number
 }
 const LOOKUP = token<Lookup>('lookup')
 
-// @ts-expect-error Layer factoryはdefinitionのfactory propertyへ指定する
-layer({ name: 'legacy-layer' }, () => async () => undefined)
+const source = defineLayer({ name: 'source' }).factory<{
+  source: { value: string }
+}>(() => async (_ctx, next) => {
+  const result: Promise<void> = next({ source: { value: 'ready' } })
+  await result
+  // @ts-expect-error contributionを宣言したLayerではnext引数が必須
+  await next()
+})
 
-// @ts-expect-error Layer definitionにはfactory propertyが必須
-layer({ name: 'missing-factory' })
-
-layer({
+const typed = defineLayer({
   name: 'typed-layer',
-  requires: [A],
-  provide: B,
-  factory:
-    (lookup = inject(LOOKUP)) =>
-    async (ctx, next) => {
-      const a: string = ctx.a
-      const b = lookup.find(a)
-      // @ts-expect-error requiresにないContextはLayerから参照できない
-      ctx.c
-      await next({ b })
-      // @ts-expect-error provideがあるLayerではnext引数が必須
-      await next()
-    },
+  requires: [source],
+}).factory<{
+  derived: { count: number }
+}>((lookup = inject(LOOKUP)) => async (ctx, next) => {
+  const value: string = ctx.state.source.value
+  const count = lookup.find(value)
+  // @ts-expect-error requiresしていないstateは参照できない
+  ctx.state.missing
+  await next({ derived: { count } })
+  // @ts-expect-error contributionを宣言したLayerではnext引数が必須
+  await next()
 })
+void typed
 
-layer({
-  name: 'async-factory',
+defineLayer({ name: 'async-factory' }).factory(
   // @ts-expect-error Layer factoryは同期関数でなければならない
-  factory: async () => async (_ctx: object, next: () => Promise<void>) => {
+  async () => async (_ctx, next) => {
     await next()
   },
+)
+
+defineLayer({ name: 'no-contribution' }).factory(() => async (_ctx, next) => {
+  const result: Promise<void> = next()
+  await result
+  // @ts-expect-error contributionがないLayerへstateは渡せない
+  await next({ extra: true })
 })
 
-layer({
-  name: 'no-provide',
-  factory: () => async (_ctx, next) => {
-    await next()
-    // @ts-expect-error provideがないLayerへContextは渡せない
-    await next({})
-  },
+const authentication = defineLayer({ name: 'authentication' }).factory<{
+  currentUser: { id: string; name: string }
+}>(() => async (_ctx, next) => {
+  await next({ currentUser: { id: '1', name: 'Loutre' } })
 })
 
-layer({
-  name: 'multiple-provides-is-invalid',
-  // @ts-expect-error Layerは単一のprovideだけを宣言する
-  provides: [B, C],
-  factory: () => async (_ctx, next) => {
-    await next()
-  },
+const authorization = defineLayer({
+  name: 'authorization',
+  requires: [authentication],
+}).factory<{
+  currentUser: { roles: readonly string[] }
+}>(() => async (ctx, next) => {
+  const id: string = ctx.state.currentUser.id
+  void id
+  await next({ currentUser: { roles: ['admin'] } })
 })
+
+type AuthorizationState = import('@loutrejs/loutre').StateAfter<
+  typeof authorization
+>
+declare const state: AuthorizationState
+const id: string = state.currentUser.id
+const name: string = state.currentUser.name
+const roles: readonly string[] = state.currentUser.roles
+void [id, name, roles]

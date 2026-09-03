@@ -3,7 +3,7 @@ import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
   defineModule,
-  implementation,
+  defineImplementation,
   type StandardSchemaV1,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
@@ -47,23 +47,22 @@ describe('streaming validate.body', () => {
         },
       }),
     ])
-    const Implementation = implementation({
+    const Implementation = defineImplementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-      factory: () => ({
-        async upload(ctx) {
-          const reader = ctx.body.getReader()
-          let bytes = 0
-          while (true) {
-            const chunk = await reader.read()
-            if (chunk.done) break
-            bytes += chunk.value.byteLength
-          }
-          return ctx.response.accepted({ body: { bytes } })
-        },
-      }),
-    })
+    }).factory(() => ({
+      async upload(ctx) {
+        const reader = ctx.input.body.getReader()
+        let bytes = 0
+        while (true) {
+          const chunk = await reader.read()
+          if (chunk.done) break
+          bytes += chunk.value.byteLength
+        }
+        return ctx.response.accepted({ body: { bytes } })
+      },
+    }))
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))

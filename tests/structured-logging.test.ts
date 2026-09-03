@@ -6,7 +6,7 @@ import {
   contract,
   defineError,
   defineModule,
-  implementation,
+  defineImplementation,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
@@ -82,15 +82,16 @@ describe('構造化ログ', () => {
         },
       }),
     ])
-    const Implementation = implementation({
+    const Implementation = defineImplementation({
       name: 'HealthImplementation',
       contract: Contract,
       protocol: http,
-      factory: () => ({
-        health: (context) => context.response.ok({ body: 'ok' }),
-      }),
-    })
-    const Module = defineModule(() => ({ implementations: [Implementation] }))
+    }).factory(() => ({
+      health: (context) => context.response.ok({ body: 'ok' }),
+    }))
+    const Module = defineModule(() => ({
+      implementations: [Implementation],
+    }))
     const application = createTestApplication({ modules: [Module()], logger })
     const response = await application.fetch(
       new Request('https://fixture.test/missing?secret=value'),
@@ -126,16 +127,15 @@ describe('構造化ログ', () => {
         },
       }),
     ])
-    const Implementation = implementation({
+    const Implementation = defineImplementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-      factory: () => ({
-        fail(): never {
-          throw new Error('fixture failure')
-        },
-      }),
-    })
+    }).factory(() => ({
+      fail(): never {
+        throw new Error('fixture failure')
+      },
+    }))
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -199,16 +199,15 @@ describe('構造化ログ', () => {
         },
       }),
     ])
-    const Implementation = implementation({
+    const Implementation = defineImplementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-      factory: () => ({
-        fail(): never {
-          throw ExpectedError({ reason: 'expected' })
-        },
-      }),
-    })
+    }).factory(() => ({
+      fail(): never {
+        throw ExpectedError({ reason: 'expected' })
+      },
+    }))
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -241,16 +240,15 @@ describe('構造化ログ', () => {
         },
       }),
     ])
-    const Implementation = implementation({
+    const Implementation = defineImplementation({
       name: 'Implementation',
       contract: Contract,
       protocol: messagePort,
-      factory: () => ({
-        ping(ctx) {
-          return ctx.message.ok('pong')
-        },
-      }),
-    })
+    }).factory(() => ({
+      ping(ctx) {
+        return ctx.message.ok('pong')
+      },
+    }))
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -262,7 +260,7 @@ describe('構造化ログ', () => {
     const result = await application.invoke('ping')
     expect(result).toEqual({
       kind: 'message-port-result',
-      variant: 'ok',
+      response: 'ok',
       value: 'pong',
     })
     expect(records).toContainEqual(

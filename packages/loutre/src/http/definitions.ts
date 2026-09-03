@@ -3,7 +3,7 @@ import type {
   ContractDefinition,
   ContractOfBinding,
   ResolvedContractNode,
-  ContextProvidedBeforeTerminal,
+  StateProvidedBeforeTerminal,
   HasValidationBeforeTerminal,
   IsValidProtocolPipeline,
   PipelineItem,
@@ -405,7 +405,6 @@ export interface HttpProtocol<
 const controller: TerminalLayerDescriptor<'http'> = Object.freeze({
   kind: 'terminal',
   name: 'http.controller',
-  role: 'terminal',
   protocol: 'http',
 })
 
@@ -473,7 +472,7 @@ type IsResultHeadersCompatible<
 > = string extends keyof TResponses
   ? true
   : TResult extends {
-        readonly variant: infer TVariant extends keyof TResponses
+        readonly response: infer TVariant extends keyof TResponses
       }
     ? TResult extends { readonly headers: infer TResultHeaders }
       ? NonNullable<TResponses[TVariant]> extends infer TResponse extends
@@ -541,7 +540,7 @@ type IsHttpShortCircuitDeclarationCompatible<
   TResponses extends HttpProtocolDefinition['responses'],
 > = TDeclaration extends {
   readonly protocol: 'http'
-  readonly variant: infer TVariant extends string
+  readonly response: infer TVariant extends string
 }
   ? string extends TVariant
     ? true
@@ -1090,7 +1089,9 @@ function resolveHttpTree(
         responses,
         pipeline: [...context.pipeline, ...source.pipeline],
       }
-      const protocol = defineHttp(definition as never)
+      const protocol = defineHttp(
+        definition as never,
+      ) as unknown as HttpProtocol
       procedures[procedureName] = protocol
       tree[name] = {
         kind: 'leaf',
@@ -1138,7 +1139,7 @@ function mergeHttpResponses(
 ): Readonly<Record<string, HttpResponseDefinition>> {
   for (const name of Object.keys(local)) {
     if (Object.hasOwn(parent, name)) {
-      throw new Error(`Duplicate inherited HTTP response variant: ${name}`)
+      throw new Error(`Duplicate inherited HTTP response: ${name}`)
     }
   }
   return Object.freeze({ ...parent, ...local })
@@ -1311,7 +1312,6 @@ function validationLayer<const TPart extends ValidationLayerDescriptor['part']>(
   return Object.freeze({
     kind: 'validation',
     name: `validate.${part}`,
-    role: 'validation',
     part,
   }) as ValidationLayerDescriptor & {
     readonly part: TPart
@@ -1429,7 +1429,7 @@ export type LogicalHttpResult<
   THeaders = unknown,
 > = {
   readonly kind: 'http-result'
-  readonly variant: TVariant
+  readonly response: TVariant
   readonly body: TBody
 } & HttpResultHeaders<THeaders>
 
@@ -1451,14 +1451,17 @@ type ResponseHelpers<TResponses extends HttpProtocolDefinition['responses']> = {
 type HttpControllerContextDefinition<
   TDefinition extends HttpProtocolDefinition,
 > = {
-  readonly params: PartOutput<TDefinition, 'params'>
-  readonly query: PartOutput<TDefinition, 'query'>
-  readonly headers: PartOutput<TDefinition, 'headers'>
-  readonly body: PartOutput<TDefinition, 'body'>
+  readonly input: {
+    readonly params: PartOutput<TDefinition, 'params'>
+    readonly query: PartOutput<TDefinition, 'query'>
+    readonly headers: PartOutput<TDefinition, 'headers'>
+    readonly body: PartOutput<TDefinition, 'body'>
+  }
+  readonly state: Readonly<StateProvidedBeforeTerminal<TDefinition['pipeline']>>
   readonly response: ResponseHelpers<TDefinition['responses']>
   readonly logger: Logger
   readonly signal: AbortSignal
-} & ContextProvidedBeforeTerminal<TDefinition['pipeline']>
+}
 
 export type HttpControllerContext<TProtocol extends HttpProtocol<any>> =
   HttpControllerContextDefinition<TProtocol['definition']>

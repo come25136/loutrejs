@@ -1,10 +1,9 @@
 import {
-  contextField,
   contract,
   defineApplication,
   defineModule,
-  implementation,
-  layer,
+  defineImplementation,
+  defineLayer,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
@@ -51,40 +50,35 @@ http({
   },
 })
 
-const SESSION = contextField<{ 'adversarial.session': string }>()
-const USER = contextField<{ 'adversarial.user': string }>()
-
-const provideSession = layer({
-  name: 'provideSession',
-  provide: SESSION,
-  factory: () => async (_ctx, next) => next({ 'adversarial.session': 's1' }),
+const provideSession = defineLayer({ name: 'provideSession' }).factory<{
+  'adversarial.session': string
+}>(() => async (_ctx, next) => {
+  await next({ 'adversarial.session': 's1' })
 })
 
-const requireSession = layer({
+const requireSession = defineLayer({
   name: 'requireSession',
-  requires: [SESSION],
-  provide: USER,
-  factory: () => async (ctx, next) =>
-    next({ 'adversarial.user': ctx['adversarial.session'] }),
+  requires: [provideSession],
+}).factory<{
+  'adversarial.user': string
+}>(() => async (ctx, next) => {
+  await next({ 'adversarial.user': ctx.state['adversarial.session'] })
 })
 
-const provideSessionAgain = layer({
-  name: 'provideSessionAgain',
-  provide: SESSION,
-  factory: () => async (_ctx, next) => next({ 'adversarial.session': 's2' }),
+const extendUser = defineLayer({
+  name: 'extendUser',
+  requires: [requireSession],
+}).factory<{
+  userMetadata: { source: string }
+}>(() => async (_ctx, next) => {
+  await next({ userMetadata: { source: 'auth' } })
 })
 
-const DISTINCT_SESSION = contextField<{ 'adversarial.session': number }>()
-const provideDistinctSession = layer({
-  name: 'provideDistinctSession',
-  provide: DISTINCT_SESSION,
-  factory: () => async (_ctx, next) => next({ 'adversarial.session': 2 }),
-})
-
-const requireValidatedParams = layer({
+const requireValidatedParams = defineLayer({
   name: 'requireValidatedParams',
   requiresValidated: ['params'],
-  factory: () => async (_ctx, next) => next(),
+}).factory(() => async (_ctx, next) => {
+  await next()
 })
 
 // @ts-expect-error requires must be satisfied by an earlier layer
@@ -92,22 +86,6 @@ http({
   invalidOrder: {
     ...OK,
     pipeline: [requireSession, provideSession, http.controller],
-  },
-})
-
-// @ts-expect-error a Context Field must not be implicitly provided twice
-http({
-  duplicateProvide: {
-    ...OK,
-    pipeline: [provideSession, provideSessionAgain, http.controller],
-  },
-})
-
-// @ts-expect-error distinct Context Fields cannot materialize the same Context property
-http({
-  duplicateProperty: {
-    ...OK,
-    pipeline: [provideSession, provideDistinctSession, http.controller],
   },
 })
 
@@ -149,65 +127,47 @@ const NestedContract = contract([
   }),
 ])
 
-// Resolved subtree implementation binding is not a canonical primitive: bind a leaf node instead.
-implementation({
+// Resolved subtree defineImplementation binding is not a canonical primitive: bind a leaf node instead.
+defineImplementation({
   name: 'BranchController',
   // @ts-expect-error resolved branch must not be accepted as an Implementation binding
   contract: NestedContract.http.api,
   protocol: http,
-  factory: (() => ({})) as never,
-})
+}).factory((() => ({})) as never)
 
-const LeafController = implementation({
+const LeafController = defineImplementation({
   name: 'LeafController',
   contract: NestedContract.http.api.valid,
   protocol: http,
-  factory: () => ({
-    valid(ctx) {
-      return ctx.response.ok({ body: ctx.params.id })
-    },
-  }),
-})
+}).factory(() => ({
+  valid(ctx) {
+    return ctx.response.ok({ body: ctx.input.params.id })
+  },
+}))
 
-implementation({
+defineImplementation({
   name: 'DuplicateProcedureSelection',
   contract: ValidContract,
   protocol: http,
   // @ts-expect-error duplicate partial procedure selections should fail statically
   procedures: ['valid', 'valid'],
-  factory: () => ({
-    valid(ctx) {
-      return ctx.response.ok({ body: ctx.params.id })
-    },
-  }),
-})
+}).factory(() => ({
+  valid(ctx) {
+    return ctx.response.ok({ body: ctx.input.params.id })
+  },
+}))
 
 const Module = defineModule(() => ({ implementations: [LeafController] }))
 defineApplication({ modules: [Module()] })
 // @ts-expect-error Application ContractはImplementationのresolved nodeから推論する
 defineApplication({ contract: NestedContract, modules: [Module()] })
 
-// @ts-expect-error a Layer cannot require and then implicitly overwrite the same Context property
-layer({
-  name: 'requireAndProvideSameContext',
-  requires: [SESSION],
-  provide: SESSION,
-  factory: () => async (_ctx, next) =>
-    next({ 'adversarial.session': 'replacement' }),
-})
-
-// @ts-expect-error duplicate requires are redundant and should be rejected at definition time
-layer({
-  name: 'duplicateRequireDeclaration',
-  requires: [SESSION, SESSION],
-  factory: () => async (_ctx, next) => next(),
-})
-
 // @ts-expect-error duplicate requiresValidated entries should be rejected at definition time
-layer({
+defineLayer({
   name: 'duplicateValidatedRequirement',
   requiresValidated: ['params', 'params'],
-  factory: () => async (_ctx, next) => next(),
+}).factory(() => async (_ctx, next) => {
+  await next()
 })
 
 const SharedNamespaceGroupA = http({
@@ -250,29 +210,9 @@ type ResolvedLeafController = ControllerOf<
   'http'
 >
 declare const resolvedLeafContext: ContextOf<ResolvedLeafController, 'valid'>
-const resolvedParam: string = resolvedLeafContext.params.id
-const resolvedUser: string = resolvedLeafContext['adversarial.user']
+const resolvedParam: string = resolvedLeafContext.input.params.id
+const resolvedUser: string = resolvedLeafContext.state['adversarial.user']
 void [resolvedParam, resolvedUser]
-
-// @ts-expect-error Context is materialized as an object property; __proto__ is unsafe
-contextField<{ __proto__: string }>()
-// @ts-expect-error empty Context property names are not meaningful
-contextField<{ '': string }>()
-// @ts-expect-error a Context Field must declare exactly one property
-contextField<{}>()
-// @ts-expect-error a Context Field must declare exactly one property
-contextField<{ first: string; second: number }>()
-// @ts-expect-error a Context Field property must be required
-contextField<{ optional?: string }>()
-// @ts-expect-error a Context Field cannot use a broad string index
-contextField<Record<string, string>>()
-
-const nestedWrapper = layer({
-  name: 'nestedWrapper',
-  provide: SESSION,
-  factory: () => async (_ctx, next) =>
-    next({ 'adversarial.session': 'nested' }),
-})
 
 // child pipeline sees Context provided by its wrapping Layer and returns to the parent terminal.
 http({
@@ -280,20 +220,7 @@ http({
     method: 'GET',
     path: '/nested-occurrence',
     responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [nestedWrapper([requireSession]), http.controller],
-  },
-})
-
-// @ts-expect-error inherited providers cannot be overwritten by a descendant pipeline
-http({
-  parent: {
-    pipeline: [provideSession],
-    routes: {
-      child: {
-        ...OK,
-        pipeline: [provideSessionAgain, http.controller],
-      },
-    },
+    pipeline: [provideSession([requireSession]), http.controller],
   },
 })
 

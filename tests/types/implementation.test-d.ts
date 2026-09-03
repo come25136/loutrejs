@@ -1,18 +1,11 @@
-import { contract, contextField, implementation, layer } from '@loutrejs/loutre'
+import { contract, defineImplementation, defineLayer } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
-const SESSION = contextField<{
-  'implementation.session': {
-    readonly userId: string
-  }
-}>()
-const session = layer({
-  name: 'implementation-session',
-  provide: SESSION,
-  factory: () => async (_ctx, next) => {
-    await next({ 'implementation.session': { userId: 'user-1' } })
-  },
+const session = defineLayer({ name: 'implementation-session' }).factory<{
+  'implementation.session': { readonly userId: string }
+}>(() => async (_ctx, next) => {
+  await next({ 'implementation.session': { userId: 'user-1' } })
 })
 const Contract = contract([
   http({
@@ -46,79 +39,72 @@ const Contract = contract([
     },
   }),
 ])
-implementation({
+defineImplementation({
   name: 'AllProcedures',
   contract: Contract,
   protocol: http,
-  factory: () => ({
-    raw(ctx) {
-      const id: string = ctx.params.id
-      return ctx.response.ok({ body: id })
-    },
-    transformed(ctx) {
-      const id: number = ctx.params.id
-      const page: number = ctx.query.page
-      const authorization: string = ctx.headers.authorization
-      const name: string = ctx.body.name
-      const userId: string = ctx['implementation.session'].userId
-      return ctx.response.ok({
-        body: `${id}:${page}:${authorization}:${name}:${userId}`,
-      })
-    },
-  }),
-})
-implementation({
+}).factory(() => ({
+  raw(ctx) {
+    const id: string = ctx.input.params.id
+    return ctx.response.ok({ body: id })
+  },
+  transformed(ctx) {
+    const id: number = ctx.input.params.id
+    const page: number = ctx.input.query.page
+    const authorization: string = ctx.input.headers.authorization
+    const name: string = ctx.input.body.name
+    const userId: string = ctx.state['implementation.session'].userId
+    return ctx.response.ok({
+      body: `${id}:${page}:${authorization}:${name}:${userId}`,
+    })
+  },
+}))
+defineImplementation({
   name: 'MissingProcedure',
   contract: Contract,
   protocol: http,
   // @ts-expect-error procedures省略時は指定protocolの全procedureが必要
-  factory: () => ({
-    raw(ctx) {
-      return ctx.response.ok({ body: ctx.params.id })
-    },
-  }),
-})
-const Partial = implementation({
+}).factory(() => ({
+  raw(ctx) {
+    return ctx.response.ok({ body: ctx.input.params.id })
+  },
+}))
+const Partial = defineImplementation({
   name: 'Partial',
   contract: Contract,
   protocol: http,
   procedures: ['raw'],
-  factory: () => ({
-    raw(ctx) {
-      return ctx.response.ok({ body: ctx.params.id })
-    },
-  }),
-})
+}).factory(() => ({
+  raw(ctx) {
+    return ctx.response.ok({ body: ctx.input.params.id })
+  },
+}))
 const selectedProcedure: 'raw' = Partial.procedures[0]
 void selectedProcedure
-implementation({
+defineImplementation({
   name: 'InvalidResult',
   contract: Contract,
   protocol: http,
   procedures: ['raw'],
   // @ts-expect-error procedure resultはProtocolDescriptorのresultに一致する必要がある
-  factory: () => ({ raw: () => 1 }),
-})
-implementation({
+}).factory(() => ({ raw: () => 1 }))
+defineImplementation({
   name: 'InvalidProcedure',
   contract: Contract,
   protocol: http,
   // @ts-expect-error 指定protocolに存在しないprocedureは選択できない
   procedures: ['missing'],
-  factory: (() => ({})) as never,
-})
-implementation({
+}).factory((() => ({})) as never)
+defineImplementation({
   name: 'WrongProtocol',
   contract: Contract,
   // @ts-expect-error Contractに存在しないprotocolは選択できない
   protocol: messagePort,
-  factory: (() => ({})) as never,
-})
-implementation({
+}).factory((() => ({})) as never)
+defineImplementation({
   name: 'AsyncFactory',
   contract: Contract,
   protocol: http,
   procedures: ['raw'],
   // @ts-expect-error Implementation factoryは同期関数に限定する
-  factory: async () => ({ raw: () => ({}) }),
-})
+}).factory(async () => ({ raw: () => ({}) }))

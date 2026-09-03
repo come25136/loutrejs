@@ -1,17 +1,16 @@
 import {
-  contextField,
   contract,
+  defineImplementation,
+  defineLayer,
   defineModule,
-  implementation,
   inject,
   isShortCircuit,
-  layer,
   provide,
   token,
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import {
-  basicAuth,
+  defineBasicAuth,
   http,
   type BasicAuthContext,
   type BasicAuthCredentials,
@@ -21,27 +20,31 @@ import {
 import { Container } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
-describe('basicAuth', () => {
-  const PRINCIPAL = contextField<{
-    principal: {
-      readonly id: string
-    }
-  }>()
+const unauthorized = () => ({
+  response: 'unauthorized' as const,
+  body: { error: '認証が必要です' },
+})
 
-  it('credentialsを認証してprincipalをContextへ追加する', async () => {
+function createAuthentication(
+  authenticate: (
+    credentials: BasicAuthCredentials,
+  ) => { principal: { readonly id: string } } | undefined,
+) {
+  return defineBasicAuth({ realm: 'Loutre Test' }).factory(() => ({
+    authenticate,
+    unauthorized,
+  }))
+}
+
+describe('defineBasicAuth', () => {
+  it('credentialsを認証してstate contributionを後段へ渡す', async () => {
     const authenticate = vi.fn(() => ({ principal: { id: 'user-1' } }))
-    const authentication = basicAuth({
-      realm: 'Loutre Test',
-      provide: PRINCIPAL,
-      factory: () => authenticate,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
-      },
-    })
+    const authentication = createAuthentication(authenticate)
 
     const execution = await runBasicAuth(authentication, {
-      headers: { authorization: `Basic ${btoa('loutre:otter')}` },
+      input: {
+        headers: { authorization: `Basic ${btoa('loutre:otter')}` },
+      },
     })
 
     expect(execution.provided).toEqual({ principal: { id: 'user-1' } })
@@ -49,9 +52,8 @@ describe('basicAuth', () => {
       username: 'loutre',
       password: 'otter',
     })
-    expect(authentication.role).toBe('authentication')
-    expect(authentication.provide).toBe(PRINCIPAL)
-    expect(authentication.requiresValidated).toEqual([])
+    expect(authentication.kind).toBe('layer')
+    expect(authentication.requires).toEqual([])
   })
 
   it('factoryでDI依存を解決できる', async () => {
@@ -61,47 +63,39 @@ describe('basicAuth', () => {
       ): { readonly id: string } | undefined
     }
 
-    const USER_SERVICE = token<UserService>('basicAuth.userService')
+    const USER_SERVICE = token<UserService>('defineBasicAuth.userService')
     const userService: UserService = {
       authenticate: vi.fn(() => ({ id: 'user-1' })),
     }
     let injectedService: UserService | undefined
 
-    const authentication = basicAuth({
+    const authentication = defineBasicAuth({
       realm: 'Loutre Test',
-      provide: PRINCIPAL,
-      factory: (users = inject(USER_SERVICE)) => {
+    }).factory((users = inject(USER_SERVICE)) => ({
+      authenticate(credentials) {
         injectedService = users
-        return (credentials) => {
-          const principal = users.authenticate(credentials)
-          return principal === undefined ? undefined : { principal }
-        }
+        const principal = users.authenticate(credentials)
+        return principal === undefined ? undefined : { principal }
       },
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
-      },
-    })
+      unauthorized,
+    }))
 
     const container = new Container([
       provide(USER_SERVICE).useValue(userService),
     ])
     container.preparePipeline([authentication])
-    const runtime = container.layerRuntime(
-      authentication as never,
-    ) as ReturnType<typeof authentication.factory>
-    let provided:
-      | import('@loutrejs/loutre').ContextProperties<
-          readonly [typeof PRINCIPAL]
-        >
-      | undefined
+    const runtime = container.layerRuntime(authentication as never)
+    let provided: { principal: { readonly id: string } } | undefined
 
     await runtime(
       {
-        headers: { authorization: `Basic ${btoa('loutre:otter')}` },
+        input: {
+          headers: { authorization: `Basic ${btoa('loutre:otter')}` },
+        },
+        state: {},
       },
       async (value) => {
-        provided = value
+        provided = value as { principal: { readonly id: string } }
       },
     )
 
@@ -111,18 +105,10 @@ describe('basicAuth', () => {
 
   it('最初のコロンだけをusernameとpasswordの境界にする', async () => {
     const authenticate = vi.fn(() => ({ principal: { id: 'user-1' } }))
-    const authentication = basicAuth({
-      realm: 'Loutre Test',
-      provide: PRINCIPAL,
-      factory: () => authenticate,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
+    await runBasicAuth(createAuthentication(authenticate), {
+      input: {
+        headers: { authorization: `basic ${btoa('user:pass:word')}` },
       },
-    })
-
-    await runBasicAuth(authentication, {
-      headers: { authorization: `basic ${btoa('user:pass:word')}` },
     })
 
     expect(authenticate).toHaveBeenCalledWith({
@@ -137,18 +123,9 @@ describe('basicAuth', () => {
       Array.from(bytes, (byte) => String.fromCharCode(byte)).join(''),
     )
     const authenticate = vi.fn(() => ({ principal: { id: 'user-1' } }))
-    const authentication = basicAuth({
-      realm: 'Loutre Test',
-      provide: PRINCIPAL,
-      factory: () => authenticate,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
-      },
-    })
 
-    await runBasicAuth(authentication, {
-      headers: { authorization: `Basic ${encoded}` },
+    await runBasicAuth(createAuthentication(authenticate), {
+      input: { headers: { authorization: `Basic ${encoded}` } },
     })
 
     expect(authenticate).toHaveBeenCalledWith({
@@ -166,25 +143,17 @@ describe('basicAuth', () => {
     `Basic ${btoa('no-separator')}`,
   ])('不正なheader %sを認証失敗にする', async (authorization) => {
     const authenticate = vi.fn(() => ({ principal: { id: 'user-1' } }))
-    const authentication = basicAuth({
-      realm: 'Loutre Test',
-      provide: PRINCIPAL,
-      factory: () => authenticate,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
+    const { result } = await runBasicAuth(createAuthentication(authenticate), {
+      input: {
+        headers: authorization == null ? {} : { authorization },
       },
-    })
-
-    const { result } = await runBasicAuth(authentication, {
-      headers: authorization == null ? {} : { authorization },
     })
 
     expect(isShortCircuit(result)).toBe(true)
     expect(result).toMatchObject({
       result: {
         kind: 'http-result',
-        variant: 'unauthorized',
+        response: 'unauthorized',
         body: { error: '認証が必要です' },
         headers: {
           'www-authenticate': 'Basic realm="Loutre Test", charset="UTF-8"',
@@ -194,36 +163,30 @@ describe('basicAuth', () => {
     expect(authenticate).not.toHaveBeenCalled()
   })
 
-  it('factoryが認証結果を返さなければ401へshort circuitする', async () => {
-    const authentication = basicAuth({
-      realm: 'Loutre Test',
-      provide: PRINCIPAL,
-      factory: () => () => undefined,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
+  it('authenticateが認証結果を返さなければ401へshort circuitする', async () => {
+    const { result } = await runBasicAuth(
+      createAuthentication(() => undefined),
+      {
+        input: {
+          headers: { authorization: `Basic ${btoa('loutre:wrong')}` },
+        },
       },
-    })
-
-    const { result } = await runBasicAuth(authentication, {
-      headers: { authorization: `Basic ${btoa('loutre:wrong')}` },
-    })
+    )
 
     expect(isShortCircuit(result)).toBe(true)
   })
 
   it('realmをquoted-stringとしてescapeする', async () => {
-    const authentication = basicAuth({
+    const authentication = defineBasicAuth({
       realm: 'Loutre "Admin" \\ Area',
-      provide: PRINCIPAL,
-      factory: () => () => undefined,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
-      },
-    })
+    }).factory(() => ({
+      authenticate: () => undefined,
+      unauthorized,
+    }))
 
-    const { result } = await runBasicAuth(authentication, { headers: {} })
+    const { result } = await runBasicAuth(authentication, {
+      input: { headers: {} },
+    })
 
     expect(result).toMatchObject({
       result: {
@@ -237,15 +200,10 @@ describe('basicAuth', () => {
 
   it('空または制御文字を含むrealmを拒否する', () => {
     const create = (realm: string) =>
-      basicAuth({
-        realm,
-        provide: PRINCIPAL,
-        factory: () => () => undefined,
-        unauthorized: {
-          variant: 'unauthorized',
-          body: { error: '認証が必要です' },
-        },
-      })
+      defineBasicAuth({ realm }).factory(() => ({
+        authenticate: () => undefined,
+        unauthorized,
+      }))
 
     expect(() => create('')).toThrow(TypeError)
     expect(() => create('Loutre\nAdmin')).toThrow(TypeError)
@@ -255,15 +213,7 @@ describe('basicAuth', () => {
     { status: undefined, code: 'LUTRE_SHORT_CIRCUIT_001' },
     { status: 403, code: 'LUTRE_SHORT_CIRCUIT_002' },
   ])('unauthorized responseの不整合を$codeで診断する', ({ status, code }) => {
-    const authentication = basicAuth({
-      realm: 'Loutre Test',
-      provide: PRINCIPAL,
-      factory: () => () => undefined,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
-      },
-    })
+    const authentication = createAuthentication(() => undefined)
     const responses: HttpProtocolDefinition['responses'] =
       status === undefined
         ? {
@@ -285,16 +235,15 @@ describe('basicAuth', () => {
         } as never,
       }),
     ])
-    const Implementation = implementation({
+    const Implementation = defineImplementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-      factory: () => ({
-        get(): never {
-          throw new Error('実行対象ではありません')
-        },
-      }),
-    })
+    }).factory(() => ({
+      get(): never {
+        throw new Error('実行対象ではありません')
+      },
+    }))
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -305,19 +254,17 @@ describe('basicAuth', () => {
   })
 
   it('ユーザー定義Layerのresponse制約を診断する', () => {
-    const authentication = layer({
+    const authentication = defineLayer({
       name: 'customAuthentication',
-      role: 'authentication',
       shortCircuits: [
         {
           protocol: 'http',
-          variant: 'unauthorized',
-          response: { status: 401 },
+          response: 'unauthorized',
+          metadata: { status: 401 },
         },
       ],
-      factory: () => async (_ctx, next) => {
-        await next()
-      },
+    }).factory(() => async (_ctx, next) => {
+      await next()
     })
     const status: number = 403
     const Contract = contract([
@@ -336,16 +283,15 @@ describe('basicAuth', () => {
         },
       }),
     ])
-    const Implementation = implementation({
+    const Implementation = defineImplementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-      factory: () => ({
-        get(): never {
-          throw new Error('実行対象ではありません')
-        },
-      }),
-    })
+    }).factory(() => ({
+      get(): never {
+        throw new Error('実行対象ではありません')
+      },
+    }))
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -359,19 +305,19 @@ describe('basicAuth', () => {
 })
 
 async function runBasicAuth<
-  TProvided extends import('@loutrejs/loutre').ContextField<any>,
-  TVariant extends string,
+  TContribution extends object,
+  TResponse extends string,
   TBody,
 >(
-  authentication: BasicAuthLayerDescriptor<TProvided, TVariant, TBody>,
+  authentication: BasicAuthLayerDescriptor<TContribution, TResponse, TBody>,
   context: BasicAuthContext,
 ) {
-  let provided: import('@loutrejs/loutre').ContextShape<TProvided> | undefined
-  const next = (async (
-    value: import('@loutrejs/loutre').ContextShape<TProvided>,
-  ) => {
-    provided = value
-  }) as unknown as import('@loutrejs/loutre').LayerNext<TProvided>
-  const result = await authentication.factory()(context, next)
+  let provided: TContribution | undefined
+  const result = await authentication.factory()(
+    { ...context, state: {} },
+    (async (value: TContribution) => {
+      provided = value
+    }) as import('@loutrejs/loutre').LayerNext<TContribution>,
+  )
   return { result, provided }
 }

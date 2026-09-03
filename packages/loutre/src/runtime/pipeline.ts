@@ -2,7 +2,7 @@ import {
   childPipelineOf,
   isShortCircuit,
   layerDefinitionOf,
-  type ContextField,
+  type LayerDependency,
   type LayerDescriptor,
   type PipelineItem,
   type TerminalLayerDescriptor,
@@ -27,7 +27,9 @@ type ExecutableLayerRuntime = (
   next: (...arguments_: readonly unknown[]) => Promise<void>,
 ) => Promise<unknown>
 
-const contextFieldProperties = new WeakMap<ContextField, string>()
+type RuntimeContext = Record<string, unknown> & {
+  state: Record<string, unknown>
+}
 
 type PipelineFlow<TResult> =
   | { readonly kind: 'continue' }
@@ -44,13 +46,13 @@ export async function executePipeline<TContext extends object, TResult>(
   pipeline: readonly PipelineItem[],
   hooks: PipelineHooks<TContext, TResult>,
 ): Promise<TResult> {
-  const context = hooks.context as TContext & Record<string, unknown>
+  const context = ensureRuntimeContext(hooks.context)
   const flow = await executeSegment(
     pipeline,
     0,
     hooks,
     context,
-    new Set<ContextField>(),
+    new Set<LayerDependency>(),
   )
   if (flow.kind === 'continue') {
     throw new Error('Pipeline did not produce a result')
@@ -62,49 +64,49 @@ async function executeSegment<TContext extends object, TResult>(
   pipeline: readonly PipelineItem[],
   index: number,
   hooks: PipelineHooks<TContext, TResult>,
-  context: TContext & Record<string, unknown>,
-  availableFields: Set<ContextField>,
+  context: RuntimeContext,
+  availableLayers: Set<LayerDependency>,
 ): Promise<PipelineFlow<TResult>> {
   const item = pipeline[index]
   if (!item) return { kind: 'continue' }
 
   if (item.kind === 'validation') {
-    await hooks.validate(item, context)
-    return executeSegment(pipeline, index + 1, hooks, context, availableFields)
+    await hooks.validate(item, context as unknown as TContext)
+    return executeSegment(pipeline, index + 1, hooks, context, availableLayers)
   }
   if (item.kind === 'terminal') {
     return {
       kind: 'complete',
-      result: await hooks.terminal(item, context),
+      result: await hooks.terminal(item, context as unknown as TContext),
     }
   }
 
   const definition = layerDefinitionOf(item)
-  assertRequiredContext(definition.name, definition.requires, availableFields)
+  assertRequiredLayers(definition.name, definition.requires, availableLayers)
   const child = childPipelineOf(item)
   const continuation =
     child === undefined
       ? () =>
-          executeSegment(pipeline, index + 1, hooks, context, availableFields)
-      : () => executeSegment(child, 0, hooks, context, availableFields)
+          executeSegment(pipeline, index + 1, hooks, context, availableLayers)
+      : () => executeSegment(child, 0, hooks, context, availableLayers)
   const flow = await executeLayer(
     definition,
     hooks.layer(definition),
     continuation,
     context,
-    availableFields,
+    availableLayers,
   )
 
   if (flow.kind === 'complete' || child === undefined) return flow
-  return executeSegment(pipeline, index + 1, hooks, context, availableFields)
+  return executeSegment(pipeline, index + 1, hooks, context, availableLayers)
 }
 
 async function executeLayer<TResult>(
   layer: LayerDescriptor,
   runtime: ExecutableLayerRuntime,
   continuation: () => Promise<PipelineFlow<TResult>>,
-  context: Record<string, unknown>,
-  availableFields: Set<ContextField>,
+  context: RuntimeContext,
+  availableLayers: Set<LayerDependency>,
 ): Promise<PipelineFlow<TResult>> {
   let calls = 0
   let continuationFlow: PipelineFlow<TResult> = { kind: 'continue' }
@@ -122,7 +124,9 @@ async function executeLayer<TResult>(
       return Promise.reject(contractError)
     }
 
-    applyProvidedContext(layer, context, availableFields, arguments_)
+    applyStateContribution(layer, context.state, arguments_)
+    availableLayers.add(layer)
+
     completion = (async () => {
       try {
         continuationFlow = await continuation()
@@ -175,83 +179,89 @@ async function executeLayer<TResult>(
   return continuationFlow
 }
 
-function assertRequiredContext(
+function ensureRuntimeContext<TContext extends object>(
+  context: TContext,
+): RuntimeContext {
+  const candidate = context as Record<string, unknown>
+  if (!Object.hasOwn(candidate, 'state')) {
+    candidate.state = {}
+  }
+  if (!isPlainObject(candidate.state)) {
+    throw new LayerContractError(
+      'Pipeline Context state must be a plain object',
+    )
+  }
+  return candidate as RuntimeContext
+}
+
+function assertRequiredLayers(
   layerName: string,
-  requiredFields: readonly ContextField[],
-  availableFields: ReadonlySet<ContextField>,
+  requiredLayers: readonly LayerDependency[],
+  availableLayers: ReadonlySet<LayerDependency>,
 ): void {
-  for (const required of requiredFields) {
-    if (!availableFields.has(required)) {
+  for (const required of requiredLayers) {
+    if (!availableLayers.has(required)) {
       throw new LayerContractError(
-        `Context Field required by ${layerName} is unavailable`,
+        `Layer ${required.name} required by ${layerName} is unavailable`,
       )
     }
   }
 }
 
-function applyProvidedContext(
+function applyStateContribution(
   layer: LayerDescriptor,
-  context: Record<string, unknown>,
-  availableFields: Set<ContextField>,
+  state: Record<string, unknown>,
   arguments_: readonly unknown[],
 ): void {
   if (arguments_.length > 1) {
     throw new LayerContractError(
-      `Layer ${layer.name} can pass only one Context object to next()`,
+      `Layer ${layer.name} can pass only one State contribution to next()`,
     )
   }
-  if (!layer.provide) {
-    if (arguments_.length > 0) {
-      const property = firstProperty(arguments_[0])
+  if (arguments_.length === 0) return
+
+  const contribution = arguments_[0]
+  if (!isPlainObject(contribution)) {
+    throw new LayerContractError(
+      `Layer ${layer.name} must pass a plain State contribution to next()`,
+    )
+  }
+
+  for (const [namespace, payload] of Object.entries(contribution)) {
+    if (namespace === '__proto__') {
       throw new LayerContractError(
-        property === undefined
-          ? `Layer ${layer.name} does not declare any provided Context`
-          : `Layer ${layer.name} provided undeclared Context property ${property}`,
+        `Layer ${layer.name} cannot contribute reserved State namespace ${namespace}`,
       )
     }
-    return
-  }
 
-  const provided = arguments_[0]
-  if (
-    typeof provided !== 'object' ||
-    provided === null ||
-    Array.isArray(provided)
-  ) {
-    throw new LayerContractError(
-      `Layer ${layer.name} must pass its declared Context to next(object)`,
-    )
-  }
+    if (!Object.hasOwn(state, namespace)) {
+      state[namespace] = payload
+      continue
+    }
 
-  const additions = provided as Record<string, unknown>
-  const properties = Object.keys(additions)
-  if (properties.length !== 1) {
-    throw new LayerContractError(
-      `Layer ${layer.name} must provide exactly one Context property`,
-    )
-  }
-  const property = properties[0]!
-  const previousProperty = contextFieldProperties.get(layer.provide)
-  if (previousProperty !== undefined && previousProperty !== property) {
-    throw new LayerContractError(
-      `Layer ${layer.name} provided Context Field as ${property}, but it was previously provided as ${previousProperty}`,
-    )
-  }
-  contextFieldProperties.set(layer.provide, property)
+    const current = state[namespace]
+    if (!isPlainObject(current) || !isPlainObject(payload)) {
+      throw new LayerContractError(
+        `Layer ${layer.name} cannot overwrite existing State namespace ${namespace}`,
+      )
+    }
 
-  if (Object.hasOwn(context, property)) {
-    throw new LayerContractError(
-      `Layer ${layer.name} cannot overwrite existing Context property ${property}`,
-    )
-  }
+    for (const key of Object.keys(payload)) {
+      if (Object.hasOwn(current, key)) {
+        throw new LayerContractError(
+          `Layer ${layer.name} cannot overwrite existing State property ${namespace}.${key}`,
+        )
+      }
+    }
 
-  Object.assign(context, additions)
-  availableFields.add(layer.provide)
+    state[namespace] = { ...current, ...payload }
+  }
 }
 
-function firstProperty(value: unknown): string | undefined {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return undefined
+    return false
   }
-  return Object.keys(value)[0]
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
 }

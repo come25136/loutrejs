@@ -1,6 +1,6 @@
 # Basic Auth Example
 
-Protect `GET /profile` with HTTP Basic authentication. This example uses the `basicAuth()` Layer, injects a `UserRepository` into its factory, provides the authenticated user through a Context Field, short-circuits authentication failures, and returns a `WWW-Authenticate` challenge.
+Protect `GET /profile` with HTTP Basic authentication. This example uses the `defineBasicAuth()` Layer, injects a `UserRepository` into its factory, contributes the authenticated user to `ctx.state`, short-circuits authentication failures, and returns a `WWW-Authenticate` challenge.
 
 From this example directory, start the application with:
 

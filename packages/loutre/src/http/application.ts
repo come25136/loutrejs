@@ -194,7 +194,8 @@ export function createHttpExecution(options: {
             routeMatch.route.protocol.definition,
           )
           const raw: MutableHttpContext = {
-            ...decoded,
+            input: decoded,
+            state: {},
             logger: requestLogger,
             signal: request.signal,
           }
@@ -218,15 +219,15 @@ export function createHttpExecution(options: {
                   : declared
               if (schema) {
                 try {
-                  context[layer.part] =
+                  context.input[layer.part] =
                     layer.part === 'params'
                       ? await validateHttpParamsSchemas(
                           schema as HttpParamsSchemas,
-                          context.params as Record<string, string>,
+                          context.input.params as Record<string, string>,
                         )
                       : await validateSchema(
                           schema as StandardSchemaV1,
-                          context[layer.part],
+                          context.input[layer.part],
                         )
                 } catch (error) {
                   throw new HttpInputValidationError(error)
@@ -382,18 +383,18 @@ function createInternalErrorResponse(error: unknown, logger: Logger): Response {
 }
 
 interface MutableHttpContext extends Record<string, unknown> {
-  params: unknown
-  query: unknown
-  headers: unknown
-  body: unknown
+  input: DecodedHttpContext
+  state: Record<string, unknown>
   logger: Logger
   signal: AbortSignal
 }
 
-type DecodedHttpContext = Pick<
-  MutableHttpContext,
-  'params' | 'query' | 'headers' | 'body'
->
+interface DecodedHttpContext {
+  params: unknown
+  query: unknown
+  headers: unknown
+  body: unknown
+}
 
 async function decodeRequest(
   request: Request,
@@ -474,14 +475,14 @@ async function invokeController(
   }
 
   const response = Object.fromEntries(
-    Object.keys(route.protocol.definition.responses).map((variant) => [
-      variant,
+    Object.keys(route.protocol.definition.responses).map((responseName) => [
+      responseName,
       (result: {
         readonly body: unknown
         readonly headers?: HttpHeaders
       }): LogicalHttpResult => ({
         kind: 'http-result',
-        variant,
+        response: responseName,
         body: result.body,
         ...(result.headers === undefined ? {} : { headers: result.headers }),
       }),
@@ -504,9 +505,9 @@ async function finalizeResponse(
   if (result?.kind !== 'http-result') {
     throw new Error('Controller returned a non-HTTP logical result')
   }
-  const response = definition.responses[result.variant]
+  const response = definition.responses[result.response]
   if (!response) {
-    throw new Error(`Undeclared HTTP response variant: ${result.variant}`)
+    throw new Error(`Undeclared HTTP response: ${result.response}`)
   }
   const responseHeaders = await validateResponseHeaders(
     response.headers,
@@ -699,7 +700,7 @@ async function mapDeclaredError(
   definition: HttpProtocolDefinition,
   error: unknown,
 ): Promise<LogicalHttpResult | undefined> {
-  for (const [variant, response] of Object.entries(definition.responses)) {
+  for (const [responseName, response] of Object.entries(definition.responses)) {
     const errorMapping = response.error
     if (errorMapping?.definition.is(error)) {
       const result = await errorMapping.map(error)
@@ -712,7 +713,7 @@ async function mapDeclaredError(
       }
       return {
         kind: 'http-result',
-        variant,
+        response: responseName,
         body: result.body,
         ...('headers' in result
           ? { headers: result.headers as HttpHeaders }

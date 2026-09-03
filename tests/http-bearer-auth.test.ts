@@ -1,8 +1,7 @@
 import {
-  contextField,
   contract,
+  defineImplementation,
   defineModule,
-  implementation,
   inject,
   isShortCircuit,
   provide,
@@ -10,7 +9,7 @@ import {
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import {
-  bearerAuth,
+  defineBearerAuth,
   http,
   type BearerAuthContext,
   type BearerAuthLayerDescriptor,
@@ -19,33 +18,35 @@ import {
 import { Container } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
-describe('bearerAuth', () => {
-  const CURRENT_USER = contextField<{
-    currentUser: {
-      readonly id: string
-    }
-  }>()
+const unauthorized = () => ({
+  response: 'unauthorized' as const,
+  body: { error: '認証が必要です' },
+})
 
-  it('tokenを認証してContextへ追加する', async () => {
+function createAuthentication(
+  authenticate: (
+    token: string,
+  ) => { currentUser: { readonly id: string } } | undefined,
+) {
+  return defineBearerAuth({ realm: 'Loutre Test' }).factory(() => ({
+    authenticate,
+    unauthorized,
+  }))
+}
+
+describe('defineBearerAuth', () => {
+  it('tokenを認証してstate contributionを後段へ渡す', async () => {
     const authenticate = vi.fn(() => ({ currentUser: { id: 'user-1' } }))
-    const authentication = bearerAuth({
-      realm: 'Loutre Test',
-      provide: CURRENT_USER,
-      factory: () => authenticate,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
-      },
-    })
+    const authentication = createAuthentication(authenticate)
 
     const execution = await runBearerAuth(authentication, {
-      headers: { authorization: 'Bearer loutre-token' },
+      input: { headers: { authorization: 'Bearer loutre-token' } },
     })
 
     expect(execution.provided).toEqual({ currentUser: { id: 'user-1' } })
     expect(authenticate).toHaveBeenCalledWith('loutre-token')
-    expect(authentication.role).toBe('authentication')
-    expect(authentication.provide).toBe(CURRENT_USER)
+    expect(authentication.kind).toBe('layer')
+    expect(authentication.requires).toEqual([])
   })
 
   it('factoryでDI依存を解決できる', async () => {
@@ -53,45 +54,37 @@ describe('bearerAuth', () => {
       authenticate(token: string): { readonly id: string } | undefined
     }
 
-    const TOKEN_SERVICE = token<TokenService>('bearerAuth.tokenService')
+    const TOKEN_SERVICE = token<TokenService>('defineBearerAuth.tokenService')
     const tokenService: TokenService = {
       authenticate: vi.fn(() => ({ id: 'user-1' })),
     }
     let injectedService: TokenService | undefined
 
-    const authentication = bearerAuth({
+    const authentication = defineBearerAuth({
       realm: 'Loutre Test',
-      provide: CURRENT_USER,
-      factory: (service = inject(TOKEN_SERVICE)) => {
+    }).factory((service = inject(TOKEN_SERVICE)) => ({
+      authenticate(value) {
         injectedService = service
-        return (value) => {
-          const currentUser = service.authenticate(value)
-          return currentUser === undefined ? undefined : { currentUser }
-        }
+        const currentUser = service.authenticate(value)
+        return currentUser === undefined ? undefined : { currentUser }
       },
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
-      },
-    })
+      unauthorized,
+    }))
 
     const container = new Container([
       provide(TOKEN_SERVICE).useValue(tokenService),
     ])
     container.preparePipeline([authentication])
-    const runtime = container.layerRuntime(
-      authentication as never,
-    ) as ReturnType<typeof authentication.factory>
-    let provided:
-      | import('@loutrejs/loutre').ContextProperties<
-          readonly [typeof CURRENT_USER]
-        >
-      | undefined
+    const runtime = container.layerRuntime(authentication as never)
+    let provided: { currentUser: { readonly id: string } } | undefined
 
     await runtime(
-      { headers: { authorization: 'Bearer loutre-token' } },
+      {
+        input: { headers: { authorization: 'Bearer loutre-token' } },
+        state: {},
+      },
       async (value) => {
-        provided = value
+        provided = value as { currentUser: { readonly id: string } }
       },
     )
 
@@ -108,25 +101,17 @@ describe('bearerAuth', () => {
     'Bearer token with-spaces',
   ])('不正なAuthorization header %sを認証失敗にする', async (authorization) => {
     const authenticate = vi.fn(() => ({ currentUser: { id: 'user-1' } }))
-    const authentication = bearerAuth({
-      realm: 'Loutre Test',
-      provide: CURRENT_USER,
-      factory: () => authenticate,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
+    const { result } = await runBearerAuth(createAuthentication(authenticate), {
+      input: {
+        headers: authorization == null ? {} : { authorization },
       },
-    })
-
-    const { result } = await runBearerAuth(authentication, {
-      headers: authorization == null ? {} : { authorization },
     })
 
     expect(isShortCircuit(result)).toBe(true)
     expect(result).toMatchObject({
       result: {
         kind: 'http-result',
-        variant: 'unauthorized',
+        response: 'unauthorized',
         body: { error: '認証が必要です' },
         headers: {
           'www-authenticate': 'Bearer realm="Loutre Test"',
@@ -136,36 +121,28 @@ describe('bearerAuth', () => {
     expect(authenticate).not.toHaveBeenCalled()
   })
 
-  it('factoryが認証結果を返さなければ401へshort circuitする', async () => {
-    const authentication = bearerAuth({
-      realm: 'Loutre Test',
-      provide: CURRENT_USER,
-      factory: () => () => undefined,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
+  it('authenticateが認証結果を返さなければ401へshort circuitする', async () => {
+    const { result } = await runBearerAuth(
+      createAuthentication(() => undefined),
+      {
+        input: { headers: { authorization: 'Bearer wrong-token' } },
       },
-    })
-
-    const { result } = await runBearerAuth(authentication, {
-      headers: { authorization: 'Bearer wrong-token' },
-    })
+    )
 
     expect(isShortCircuit(result)).toBe(true)
   })
 
   it('realmをquoted-stringとしてescapeする', async () => {
-    const authentication = bearerAuth({
+    const authentication = defineBearerAuth({
       realm: 'Loutre "API" \\ Area',
-      provide: CURRENT_USER,
-      factory: () => () => undefined,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
-      },
-    })
+    }).factory(() => ({
+      authenticate: () => undefined,
+      unauthorized,
+    }))
 
-    const { result } = await runBearerAuth(authentication, { headers: {} })
+    const { result } = await runBearerAuth(authentication, {
+      input: { headers: {} },
+    })
 
     expect(result).toMatchObject({
       result: {
@@ -178,15 +155,10 @@ describe('bearerAuth', () => {
 
   it('空または制御文字を含むrealmを拒否する', () => {
     const create = (realm: string) =>
-      bearerAuth({
-        realm,
-        provide: CURRENT_USER,
-        factory: () => () => undefined,
-        unauthorized: {
-          variant: 'unauthorized',
-          body: { error: '認証が必要です' },
-        },
-      })
+      defineBearerAuth({ realm }).factory(() => ({
+        authenticate: () => undefined,
+        unauthorized,
+      }))
 
     expect(() => create('')).toThrow(TypeError)
     expect(() => create('Loutre\nAPI')).toThrow(TypeError)
@@ -196,15 +168,7 @@ describe('bearerAuth', () => {
     { status: undefined, code: 'LUTRE_SHORT_CIRCUIT_001' },
     { status: 403, code: 'LUTRE_SHORT_CIRCUIT_002' },
   ])('unauthorized responseの不整合を$codeで診断する', ({ status, code }) => {
-    const authentication = bearerAuth({
-      realm: 'Loutre Test',
-      provide: CURRENT_USER,
-      factory: () => () => undefined,
-      unauthorized: {
-        variant: 'unauthorized',
-        body: { error: '認証が必要です' },
-      },
-    })
+    const authentication = createAuthentication(() => undefined)
     const responses: HttpProtocolDefinition['responses'] =
       status === undefined
         ? {
@@ -226,16 +190,15 @@ describe('bearerAuth', () => {
         } as never,
       }),
     ])
-    const Implementation = implementation({
+    const Implementation = defineImplementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-      factory: () => ({
-        get(): never {
-          throw new Error('実行対象ではありません')
-        },
-      }),
-    })
+    }).factory(() => ({
+      get(): never {
+        throw new Error('実行対象ではありません')
+      },
+    }))
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -247,19 +210,19 @@ describe('bearerAuth', () => {
 })
 
 async function runBearerAuth<
-  TProvided extends import('@loutrejs/loutre').ContextField<any>,
-  TVariant extends string,
+  TContribution extends object,
+  TResponse extends string,
   TBody,
 >(
-  authentication: BearerAuthLayerDescriptor<TProvided, TVariant, TBody>,
+  authentication: BearerAuthLayerDescriptor<TContribution, TResponse, TBody>,
   context: BearerAuthContext,
 ) {
-  let provided: import('@loutrejs/loutre').ContextShape<TProvided> | undefined
-  const next = (async (
-    value: import('@loutrejs/loutre').ContextShape<TProvided>,
-  ) => {
-    provided = value
-  }) as unknown as import('@loutrejs/loutre').LayerNext<TProvided>
-  const result = await authentication.factory()(context, next)
+  let provided: TContribution | undefined
+  const result = await authentication.factory()(
+    { ...context, state: {} },
+    (async (value: TContribution) => {
+      provided = value
+    }) as import('@loutrejs/loutre').LayerNext<TContribution>,
+  )
   return { result, provided }
 }

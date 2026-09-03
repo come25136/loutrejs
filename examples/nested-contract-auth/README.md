@@ -10,10 +10,10 @@ The Controller binds to the resolved leaf:
 contract: AppContract.http.api.me.profile
 ```
 
-Because that resolved leaf includes the ancestor pipeline, `ctx.currentUser` is inferred from the Context Field provided by the parent authentication Layer. The example keeps an explicit assignment in the Controller so TypeScript verifies that relationship:
+Because that resolved leaf includes the ancestor pipeline, `ctx.state.currentUser` is inferred from the state contributed by the parent authentication Layer. The example keeps an explicit assignment in the Controller so TypeScript verifies that relationship:
 
 ```ts
-const currentUser: User = ctx.currentUser
+const currentUser: User = ctx.state.currentUser
 ```
 
 From this example directory, start the application with:

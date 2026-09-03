@@ -1,20 +1,9 @@
-import type {
-  ContextField,
-  ContextProperties,
-  ContextShape,
-} from './context-field.js'
-
-export type LayerRole =
-  | 'generic'
-  | 'authentication'
-  | 'guard'
-  | 'validation'
-  | 'framework'
-  | 'terminal'
-
 export type ValidatedInputPart = 'params' | 'query' | 'headers' | 'body'
 
 const shortCircuitMarker = Symbol('loutre.short-circuit')
+
+declare const layerContributionType: unique symbol
+declare const shortCircuitResultType: unique symbol
 
 export interface ShortCircuit<TResult = unknown> {
   readonly kind: 'short-circuit'
@@ -41,68 +30,132 @@ export function isShortCircuit(value: unknown): value is ShortCircuit {
   )
 }
 
-declare const shortCircuitResultType: unique symbol
-
 export interface ShortCircuitDeclaration {
   readonly protocol: string
-  readonly variant: string
-  readonly response?: Readonly<Record<string, unknown>>
+  readonly response: string
+  readonly metadata?: Readonly<Record<string, unknown>>
 }
 
-export type LayerNext<TProvide extends ContextField | undefined> =
-  TProvide extends ContextField<any>
-    ? (provided: ContextShape<TProvide>) => Promise<void>
-    : () => Promise<void>
+export interface LayerContext<TState extends object = {}> {
+  readonly state: Readonly<TState>
+}
+
+export interface LayerDependency {
+  readonly kind: 'layer'
+  readonly name: string
+  readonly requires: readonly LayerDependency[]
+  readonly requiresValidated: readonly ValidatedInputPart[]
+  readonly [layerContributionType]: object
+}
+
+export type LayerContributionOf<TLayer extends LayerDependency> =
+  TLayer[typeof layerContributionType]
+
+export type StateAfter<TLayer extends LayerDependency> = StateFromLayers<
+  TLayer['requires']
+> &
+  LayerContributionOf<TLayer>
+
+export type StateFromLayers<TLayers extends readonly LayerDependency[]> =
+  number extends TLayers['length']
+    ? {}
+    : TLayers extends readonly [
+          infer THead extends LayerDependency,
+          ...infer TTail extends readonly LayerDependency[],
+        ]
+      ? StateAfter<THead> & StateFromLayers<TTail>
+      : {}
+
+export type LayerNext<TContribution extends object> =
+  keyof TContribution extends never
+    ? () => Promise<void>
+    : (contribution: TContribution) => Promise<void>
 
 export type LayerRuntime<
   TContext extends object,
-  TProvide extends ContextField | undefined,
+  TRequires extends readonly LayerDependency[],
+  TContribution extends object,
   TShortCircuitResult,
 > = (
-  context: TContext,
-  next: LayerNext<TProvide>,
+  context: TContext & LayerContext<StateFromLayers<TRequires>>,
+  next: LayerNext<TContribution>,
 ) => Promise<void | ShortCircuit<TShortCircuitResult>>
 
 export type LayerFactory<
   TContext extends object,
-  TProvide extends ContextField | undefined,
+  TRequires extends readonly LayerDependency[],
+  TContribution extends object,
   TShortCircuitResult,
-> = () => LayerRuntime<TContext, TProvide, TShortCircuitResult>
+> = () => LayerRuntime<TContext, TRequires, TContribution, TShortCircuitResult>
 
-export interface LayerDefinition<
-  TRequires extends readonly ContextField[] = readonly [],
-  TProvide extends ContextField | undefined = undefined,
-  TContext extends object = {},
-  TShortCircuitResult = never,
+const runtimeShortCircuits = new WeakMap<
+  object,
+  readonly ShortCircuitDeclaration[]
+>()
+
+export function registerLayerShortCircuits(
+  layer: object,
+  declarations: readonly ShortCircuitDeclaration[],
+): void {
+  runtimeShortCircuits.set(layer, Object.freeze([...declarations]))
+}
+
+export function shortCircuitsOfLayer(
+  layer: LayerDescriptor,
+): readonly ShortCircuitDeclaration[] {
+  const runtime = runtimeShortCircuits.get(layer)
+  return runtime === undefined
+    ? layer.shortCircuits
+    : [...layer.shortCircuits, ...runtime]
+}
+
+export interface LayerDeclaration<
+  TRequires extends readonly LayerDependency[] = readonly [],
   TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
   TName extends string = string,
-  TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = 'generic',
   TRequiresValidated extends readonly ValidatedInputPart[] = readonly [],
 > {
   readonly name: TName
-  readonly role?: TRole
   readonly requires?: TRequires
-  readonly provide?: TProvide
   readonly requiresValidated?: TRequiresValidated
   readonly shortCircuits?: TShortCircuits
-  readonly factory: LayerFactory<
-    TContext & ContextProperties<TRequires>,
-    TProvide,
-    TShortCircuitResult
+}
+
+export interface LayerBuilder<
+  TRequires extends readonly LayerDependency[],
+  TShortCircuits extends readonly ShortCircuitDeclaration[],
+  TName extends string,
+  TRequiresValidated extends readonly ValidatedInputPart[],
+> {
+  factory<
+    TContribution extends object = {},
+    TContext extends object = {},
+    TShortCircuitResult = never,
+  >(
+    factory: LayerFactory<
+      TContext,
+      TRequires,
+      TContribution,
+      TShortCircuitResult
+    >,
+  ): LayerDescriptor<
+    TContribution,
+    TRequires,
+    TShortCircuitResult,
+    TShortCircuits,
+    TName,
+    TRequiresValidated,
+    TContext
   >
 }
 
 export interface LayerOccurrenceDescriptor<
-  TRequires extends readonly ContextField[] = readonly ContextField[],
-  TProvide extends ContextField | undefined = ContextField | undefined,
+  TContribution extends object = object,
+  TRequires extends readonly LayerDependency[] = readonly LayerDependency[],
   TShortCircuitResult = unknown,
   TShortCircuits extends readonly ShortCircuitDeclaration[] =
     readonly ShortCircuitDeclaration[],
   TName extends string = string,
-  TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = Exclude<
-    LayerRole,
-    'terminal' | 'validation'
-  >,
   TRequiresValidated extends readonly ValidatedInputPart[] =
     readonly ValidatedInputPart[],
   TContext extends object = object,
@@ -110,37 +163,31 @@ export interface LayerOccurrenceDescriptor<
 > {
   readonly kind: 'layer'
   readonly name: TName
-  readonly role: TRole
   readonly requires: TRequires
-  readonly provide: TProvide
   readonly requiresValidated: TRequiresValidated
   readonly shortCircuits: TShortCircuits
   readonly definition: LayerDescriptor<
+    TContribution,
     TRequires,
-    TProvide,
     TShortCircuitResult,
     TShortCircuits,
     TName,
-    TRole,
     TRequiresValidated,
     TContext
   >
   readonly pipeline: TPipeline
   readonly factory?: never
+  readonly [layerContributionType]: TContribution
   readonly [shortCircuitResultType]?: TShortCircuitResult
 }
 
 export interface LayerDescriptor<
-  TRequires extends readonly ContextField[] = readonly ContextField[],
-  TProvide extends ContextField | undefined = ContextField | undefined,
+  TContribution extends object = object,
+  TRequires extends readonly LayerDependency[] = readonly LayerDependency[],
   TShortCircuitResult = unknown,
   TShortCircuits extends readonly ShortCircuitDeclaration[] =
     readonly ShortCircuitDeclaration[],
   TName extends string = string,
-  TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = Exclude<
-    LayerRole,
-    'terminal' | 'validation'
-  >,
   TRequiresValidated extends readonly ValidatedInputPart[] =
     readonly ValidatedInputPart[],
   TContext extends object = object,
@@ -148,59 +195,46 @@ export interface LayerDescriptor<
   <const TPipeline extends readonly PipelineItem[]>(
     pipeline: TPipeline,
   ): LayerOccurrenceDescriptor<
+    TContribution,
     TRequires,
-    TProvide,
     TShortCircuitResult,
     TShortCircuits,
     TName,
-    TRole,
     TRequiresValidated,
     TContext,
     TPipeline
   >
   readonly kind: 'layer'
   readonly name: TName
-  readonly role: TRole
   readonly requires: TRequires
-  readonly provide: TProvide
   readonly requiresValidated: TRequiresValidated
   readonly shortCircuits: TShortCircuits
   readonly factory: LayerFactory<
-    TContext & ContextProperties<TRequires>,
-    TProvide,
+    TContext,
+    TRequires,
+    TContribution,
     TShortCircuitResult
   >
   readonly definition?: never
   readonly pipeline?: never
+  readonly [layerContributionType]: TContribution
   readonly [shortCircuitResultType]?: TShortCircuitResult
 }
 
 export interface ValidationLayerDescriptor {
   readonly kind: 'validation'
   readonly name: `validate.${'params' | 'query' | 'headers' | 'body'}`
-  readonly role: 'validation'
   readonly part: 'params' | 'query' | 'headers' | 'body'
 }
 
 export interface TerminalLayerDescriptor<TProtocol extends string = string> {
   readonly kind: 'terminal'
   readonly name: `${TProtocol}.${string}`
-  readonly role: 'terminal'
   readonly protocol: TProtocol
 }
 
-type AnyLayerDescriptor = LayerDescriptor<
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any
->
+type AnyLayerDescriptor = LayerDescriptor<any, any, any, any, any, any, any>
 type AnyLayerOccurrence = LayerOccurrenceDescriptor<
-  any,
   any,
   any,
   any,
@@ -280,43 +314,18 @@ type FoldPipelineItemTerminals<
           any,
           any,
           any,
-          any,
           infer TPipeline
         >
       ? FoldPipelineTerminals<TPipeline, TProtocol, TState>
       : TState
 
-type ContextFieldPropertyNameOf<TField> =
-  TField extends ContextField<any>
-    ? Extract<keyof ContextShape<TField>, string>
-    : never
-
-type ContextFieldPropertyNamesOf<TKeys extends readonly ContextField[]> =
-  ContextFieldPropertyNameOf<TKeys[number]>
-
-type DuplicateContextPropertyNames<
-  TKeys extends readonly ContextField[],
-  TSeen extends string = never,
-> = number extends TKeys['length']
-  ? never
-  : TKeys extends readonly [
-        infer THead extends ContextField<any>,
-        ...infer TTail extends readonly ContextField[],
-      ]
-    ? ContextFieldPropertyNameOf<THead> extends infer TName extends string
-      ? TName extends TSeen
-        ? TName | DuplicateContextPropertyNames<TTail, TSeen>
-        : DuplicateContextPropertyNames<TTail, TSeen | TName>
-      : never
-    : never
-
-type AreRequiredContextFieldsAvailable<
-  TRequires extends readonly ContextField[],
-  TAvailable extends ContextField<any>,
+type AreRequiredLayersAvailable<
+  TRequires extends readonly LayerDependency[],
+  TAvailable extends LayerDependency,
 > = [TRequires[number]] extends [never]
   ? true
   : false extends (
-        TRequires[number] extends infer TRequired extends ContextField<any>
+        TRequires[number] extends infer TRequired extends LayerDependency
           ? TRequired extends TAvailable
             ? true
             : false
@@ -330,21 +339,8 @@ type AreRequiredValidatedPartsAvailable<
   TValidated extends ValidatedInputPart,
 > = Exclude<TRequires[number], TValidated> extends never ? true : false
 
-type HasProvidedContextCollision<
-  TProvide extends ContextField | undefined,
-  TAvailable extends ContextField<any>,
-> =
-  TProvide extends ContextField<any>
-    ? Extract<
-        ContextFieldPropertyNameOf<TProvide>,
-        ContextFieldPropertyNameOf<TAvailable>
-      > extends never
-      ? false
-      : true
-    : false
-
 interface PipelineRequirementState<
-  TAvailable extends ContextField<any>,
+  TAvailable extends LayerDependency,
   TValidated extends ValidatedInputPart,
   TValid extends boolean,
 > {
@@ -354,44 +350,40 @@ interface PipelineRequirementState<
 }
 
 type InvalidPipelineRequirementState = PipelineRequirementState<
-  ContextField,
+  LayerDependency,
   ValidatedInputPart,
   false
 >
 
 type FoldLayerRequirements<
-  TRequires extends readonly ContextField[],
-  TProvide extends ContextField | undefined,
-  TRequiresValidated extends readonly ValidatedInputPart[],
+  TLayer extends LayerDependency,
   TState extends PipelineRequirementState<
-    ContextField,
+    LayerDependency,
     ValidatedInputPart,
     boolean
   >,
 > = TState['valid'] extends false
   ? TState
-  : AreRequiredContextFieldsAvailable<
-        TRequires,
+  : AreRequiredLayersAvailable<
+        TLayer['requires'],
         TState['available']
       > extends true
     ? AreRequiredValidatedPartsAvailable<
-        TRequiresValidated,
+        TLayer['requiresValidated'],
         TState['validated']
       > extends true
-      ? HasProvidedContextCollision<TProvide, TState['available']> extends false
-        ? PipelineRequirementState<
-            TState['available'] | Extract<TProvide, ContextField>,
-            TState['validated'],
-            true
-          >
-        : InvalidPipelineRequirementState
+      ? PipelineRequirementState<
+          TState['available'] | TLayer,
+          TState['validated'],
+          true
+        >
       : InvalidPipelineRequirementState
     : InvalidPipelineRequirementState
 
 type FoldPipelineRequirements<
   TPipeline extends readonly PipelineItem[],
   TState extends PipelineRequirementState<
-    ContextField,
+    LayerDependency,
     ValidatedInputPart,
     boolean
   >,
@@ -409,7 +401,7 @@ type FoldPipelineRequirements<
 type FoldPipelineItemRequirements<
   TItem,
   TState extends PipelineRequirementState<
-    ContextField,
+    LayerDependency,
     ValidatedInputPart,
     boolean
   >,
@@ -420,31 +412,21 @@ type FoldPipelineItemRequirements<
       TState['valid']
     >
   : TItem extends LayerOccurrenceDescriptor<
-        infer TRequires,
-        infer TProvide,
         any,
         any,
         any,
         any,
-        infer TRequiresValidated,
+        any,
+        any,
         any,
         infer TPipeline
       >
     ? FoldPipelineRequirements<
         TPipeline,
-        FoldLayerRequirements<TRequires, TProvide, TRequiresValidated, TState>
+        FoldLayerRequirements<TItem['definition'], TState>
       >
-    : TItem extends LayerDescriptor<
-          infer TRequires,
-          infer TProvide,
-          any,
-          any,
-          any,
-          any,
-          infer TRequiresValidated,
-          any
-        >
-      ? FoldLayerRequirements<TRequires, TProvide, TRequiresValidated, TState>
+    : TItem extends LayerDependency
+      ? FoldLayerRequirements<TItem, TState>
       : TState
 
 type IsPipelineRequirementsValid<TPipeline extends readonly PipelineItem[]> =
@@ -476,7 +458,6 @@ export type ShortCircuitResultOf<TItem> =
     any,
     any,
     any,
-    any,
     infer TPipeline
   >
     ? ShortCircuitResultOfPipeline<TPipeline> | ShortCircuitResultOfLayer<TItem>
@@ -490,7 +471,6 @@ type ShortCircuitResultOfLayer<TItem> = TItem extends {
 
 export type ShortCircuitDeclarationsOf<TItem> =
   TItem extends LayerOccurrenceDescriptor<
-    any,
     any,
     any,
     any,
@@ -528,11 +508,11 @@ type NormalizeDeclarations<TDeclarations> =
     : readonly []
 
 interface PipelineTypeState<
-  TContext extends object,
+  TState extends object,
   TValidated extends ValidatedInputPart,
   TDone extends boolean,
 > {
-  readonly context: TContext
+  readonly state: TState
   readonly validated: TValidated
   readonly done: TDone
 }
@@ -555,16 +535,15 @@ type FoldPipelineItem<
   TItem,
   TState extends PipelineTypeState<object, ValidatedInputPart, boolean>,
 > = TItem extends TerminalLayerDescriptor
-  ? PipelineTypeState<TState['context'], TState['validated'], true>
+  ? PipelineTypeState<TState['state'], TState['validated'], true>
   : TItem extends ValidationLayerDescriptor
     ? PipelineTypeState<
-        TState['context'],
+        TState['state'],
         TState['validated'] | TItem['part'],
         false
       >
     : TItem extends LayerOccurrenceDescriptor<
           any,
-          infer TProvide,
           any,
           any,
           any,
@@ -576,37 +555,25 @@ type FoldPipelineItem<
       ? FoldPipeline<
           TPipeline,
           PipelineTypeState<
-            TState['context'] & ContextShape<TProvide>,
+            TState['state'] & LayerContributionOf<TItem['definition']>,
             TState['validated'],
             false
           >
         >
-      : TItem extends LayerDescriptor<
-            any,
-            infer TProvide,
-            any,
-            any,
-            any,
-            any,
-            any,
-            any
-          >
+      : TItem extends LayerDependency
         ? PipelineTypeState<
-            TState['context'] & ContextShape<TProvide>,
+            TState['state'] & LayerContributionOf<TItem>,
             TState['validated'],
             false
           >
         : TState
 
-export type ContextProvidedBeforeTerminal<
+export type StateProvidedBeforeTerminal<
   TPipeline extends readonly PipelineItem[],
-  TContext extends object = {},
+  TState extends object = {},
 > = number extends TPipeline['length']
-  ? TContext
-  : FoldPipeline<
-      TPipeline,
-      PipelineTypeState<TContext, never, false>
-    >['context']
+  ? TState
+  : FoldPipeline<TPipeline, PipelineTypeState<TState, never, false>>['state']
 
 export type HasValidationBeforeTerminal<
   TPipeline extends readonly PipelineItem[],
@@ -634,45 +601,26 @@ type DuplicateValidatedInputParts<
       : DuplicateValidatedInputParts<TTail, TSeen | THead>
     : never
 
-type LayerDefinitionConstraint<
-  TRequires extends readonly ContextField[],
-  TProvide extends ContextField | undefined,
+type LayerDeclarationConstraint<
   TRequiresValidated extends readonly ValidatedInputPart[],
-> = [
-  | DuplicateContextPropertyNames<TRequires>
-  | (TProvide extends ContextField<any>
-      ? Extract<
-          ContextFieldPropertyNamesOf<TRequires>,
-          ContextFieldPropertyNameOf<TProvide>
-        >
-      : never)
-  | DuplicateValidatedInputParts<TRequiresValidated>,
-] extends [never]
+> = [DuplicateValidatedInputParts<TRequiresValidated>] extends [never]
   ? unknown
   : { readonly __invalidLayerDefinition__: never }
 
-function assertUniqueContextFields(fields: readonly ContextField[]): void {
-  const unique = new Set<ContextField>()
-  for (const field of fields) {
-    if (unique.has(field)) {
-      throw new Error('Layer requires contains duplicate Context Field')
-    }
-    unique.add(field)
-  }
-}
-
-function assertLayerDefinition(definition: {
-  readonly requires?: readonly ContextField[]
-  readonly provide?: ContextField | undefined
+function assertLayerDeclaration(declaration: {
+  readonly requires?: readonly LayerDependency[]
   readonly requiresValidated?: readonly ValidatedInputPart[]
 }): void {
-  const requires = definition.requires ?? []
-  assertUniqueContextFields(requires)
-  if (definition.provide && requires.includes(definition.provide)) {
-    throw new Error('Layer cannot require and provide the same Context Field')
+  const required = new Set<LayerDependency>()
+  for (const dependency of declaration.requires ?? []) {
+    if (required.has(dependency)) {
+      throw new Error('Layer requires contains duplicate Layer')
+    }
+    required.add(dependency)
   }
+
   const validated = new Set<ValidatedInputPart>()
-  for (const part of definition.requiresValidated ?? []) {
+  for (const part of declaration.requiresValidated ?? []) {
     if (validated.has(part)) {
       throw new Error(`Layer requiresValidated contains duplicate part ${part}`)
     }
@@ -680,86 +628,84 @@ function assertLayerDefinition(definition: {
   }
 }
 
-export function layer<
-  const TRequires extends readonly ContextField[] = readonly [],
-  const TProvide extends ContextField | undefined = undefined,
-  TContext extends object = {},
-  TShortCircuitResult = never,
+export function defineLayer<
+  const TRequires extends readonly LayerDependency[] = readonly [],
   const TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
   const TName extends string = string,
-  const TRole extends Exclude<LayerRole, 'terminal' | 'validation'> = 'generic',
   const TRequiresValidated extends readonly ValidatedInputPart[] = readonly [],
 >(
-  definition: LayerDefinition<
+  declaration: LayerDeclaration<
     TRequires,
-    TProvide,
-    TContext,
-    TShortCircuitResult,
     TShortCircuits,
     TName,
-    TRole,
     TRequiresValidated
   > &
-    LayerDefinitionConstraint<TRequires, TProvide, TRequiresValidated>,
-): LayerDescriptor<
-  TRequires,
-  TProvide,
-  TShortCircuitResult,
-  TShortCircuits,
-  TName,
-  TRole,
-  TRequiresValidated,
-  TContext
-> {
-  assertLayerDefinition(definition)
-  let descriptor: LayerDescriptor<
-    TRequires,
-    TProvide,
-    TShortCircuitResult,
-    TShortCircuits,
-    TName,
-    TRole,
-    TRequiresValidated,
-    TContext
-  >
-  const callable = <const TPipeline extends readonly PipelineItem[]>(
-    pipeline: TPipeline,
-  ) =>
-    Object.freeze({
-      kind: 'layer' as const,
-      name: descriptor.name,
-      role: descriptor.role,
-      requires: descriptor.requires,
-      provide: descriptor.provide,
-      requiresValidated: descriptor.requiresValidated,
-      shortCircuits: descriptor.shortCircuits,
-      definition: descriptor,
-      pipeline,
-    })
-  Object.defineProperty(callable, 'name', {
-    value: definition.name,
-    enumerable: true,
-    configurable: true,
+    LayerDeclarationConstraint<TRequiresValidated>,
+): LayerBuilder<TRequires, TShortCircuits, TName, TRequiresValidated> {
+  assertLayerDeclaration(declaration)
+
+  return Object.freeze({
+    factory<
+      TContribution extends object = {},
+      TContext extends object = {},
+      TShortCircuitResult = never,
+    >(
+      factory: LayerFactory<
+        TContext,
+        TRequires,
+        TContribution,
+        TShortCircuitResult
+      >,
+    ) {
+      let descriptor: LayerDescriptor<
+        TContribution,
+        TRequires,
+        TShortCircuitResult,
+        TShortCircuits,
+        TName,
+        TRequiresValidated,
+        TContext
+      >
+
+      const callable = <const TPipeline extends readonly PipelineItem[]>(
+        pipeline: TPipeline,
+      ) =>
+        Object.freeze({
+          kind: 'layer' as const,
+          name: descriptor.name,
+          requires: descriptor.requires,
+          requiresValidated: descriptor.requiresValidated,
+          shortCircuits: descriptor.shortCircuits,
+          definition: descriptor,
+          pipeline,
+        })
+
+      Object.defineProperty(callable, 'name', {
+        value: declaration.name,
+        enumerable: true,
+        configurable: true,
+      })
+
+      descriptor = Object.assign(callable, {
+        kind: 'layer' as const,
+        requires: declaration.requires ?? ([] as unknown as TRequires),
+        requiresValidated:
+          declaration.requiresValidated ??
+          ([] as unknown as TRequiresValidated),
+        shortCircuits:
+          declaration.shortCircuits ?? ([] as unknown as TShortCircuits),
+        factory,
+      }) as unknown as LayerDescriptor<
+        TContribution,
+        TRequires,
+        TShortCircuitResult,
+        TShortCircuits,
+        TName,
+        TRequiresValidated,
+        TContext
+      >
+
+      return Object.freeze(descriptor)
+    },
   })
-  descriptor = Object.assign(callable, {
-    kind: 'layer' as const,
-    role: definition.role ?? ('generic' as TRole),
-    requires: definition.requires ?? ([] as unknown as TRequires),
-    provide: definition.provide as TProvide,
-    requiresValidated:
-      definition.requiresValidated ?? ([] as unknown as TRequiresValidated),
-    shortCircuits:
-      definition.shortCircuits ?? ([] as unknown as TShortCircuits),
-    factory: definition.factory,
-  }) as unknown as LayerDescriptor<
-    TRequires,
-    TProvide,
-    TShortCircuitResult,
-    TShortCircuits,
-    TName,
-    TRole,
-    TRequiresValidated,
-    TContext
-  >
-  return Object.freeze(descriptor)
 }

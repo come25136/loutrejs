@@ -1,21 +1,17 @@
-import { contextField } from '@loutrejs/loutre'
-import { basicAuth } from '@loutrejs/loutre/http'
-import type { User } from '../auth/user.js'
+import { defineBasicAuth } from '@loutrejs/loutre/http'
 
-export const CURRENT_USER = contextField<{ currentUser: User }>()
-
-export const authentication = basicAuth({
+export const authentication = defineBasicAuth({
   name: 'authentication',
   realm: 'Loutre Nested Contract Example',
-  provide: CURRENT_USER,
-  factory:
-    () =>
-    ({ username, password }) => {
-      if (username !== 'loutre' || password !== 'otter') return undefined
-      return { currentUser: { id: 'user-1', name: 'Loutre User' } }
-    },
-  unauthorized: {
-    variant: 'unauthorized',
-    body: { error: 'Authentication required' },
+}).factory(() => ({
+  authenticate({ username, password }) {
+    if (username !== 'loutre' || password !== 'otter') return undefined
+    return { currentUser: { id: 'user-1', name: 'Loutre User' } }
   },
-})
+  unauthorized() {
+    return {
+      response: 'unauthorized',
+      body: { error: 'Authentication required' },
+    }
+  },
+}))

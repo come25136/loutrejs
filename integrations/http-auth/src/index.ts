@@ -1,69 +1,66 @@
-import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
-  contextField,
+  defineApplication,
+  defineImplementation,
+  defineLayer,
   defineModule,
-  implementation,
-  layer,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
+
 export interface AuthState {
   readonly principal: {
     readonly id: string
   } | null
 }
+
 export interface Session {
   readonly principal: {
     readonly id: string
   }
 }
+
 export interface CurrentTenant {
   readonly id: string
 }
-export const AUTH = contextField<{ auth: AuthState }>()
-export const SESSION = contextField<{ session: Session }>()
-export const CURRENT_TENANT = contextField<{ currentTenant: CurrentTenant }>()
+
 interface HeadersContext {
-  readonly headers: {
-    readonly authorization: string
+  readonly input: {
+    readonly headers: {
+      readonly authorization: string
+    }
   }
 }
-export const bearerAuthentication = layer({
+
+export const bearerAuthentication = defineLayer({
   name: 'bearerAuthentication',
-  role: 'authentication',
   requiresValidated: ['headers'],
-  provide: AUTH,
-  factory: () => async (ctx: HeadersContext, next) => {
-    const value = ctx.headers.authorization
-    await next({
-      auth: {
-        principal: value === 'Bearer example-token' ? { id: 'user-1' } : null,
-      },
-    })
-  },
+}).factory<{ auth: AuthState }, HeadersContext>(() => async (ctx, next) => {
+  const value = ctx.input.headers.authorization
+  await next({
+    auth: {
+      principal: value === 'Bearer example-token' ? { id: 'user-1' } : null,
+    },
+  })
 })
-export const authenticated = layer({
+
+export const authenticated = defineLayer({
   name: 'authenticated',
-  role: 'guard',
-  requires: [AUTH],
-  provide: SESSION,
-  factory: () => async (ctx, next) => {
-    if (!ctx.auth.principal) throw new Error('Authentication required')
-    await next({ session: { principal: ctx.auth.principal } })
-  },
+  requires: [bearerAuthentication],
+}).factory<{ session: Session }>(() => async (ctx, next) => {
+  if (!ctx.state.auth.principal) throw new Error('Authentication required')
+  await next({ session: { principal: ctx.state.auth.principal } })
 })
-export const tenantAccess = layer({
+
+export const tenantAccess = defineLayer({
   name: 'tenantAccess',
-  role: 'guard',
-  requires: [SESSION],
-  provide: CURRENT_TENANT,
-  factory: () => async (ctx, next) => {
-    await next({
-      currentTenant: { id: `tenant-${ctx.session.principal.id}` },
-    })
-  },
+  requires: [authenticated],
+}).factory<{ currentTenant: CurrentTenant }>(() => async (ctx, next) => {
+  await next({
+    currentTenant: { id: `tenant-${ctx.state.session.principal.id}` },
+  })
 })
+
 export const AccountContract = contract([
   http({
     get: {
@@ -91,26 +88,28 @@ export const AccountContract = contract([
     },
   }),
 ])
-export const AccountController = implementation({
+
+export const AccountController = defineImplementation({
   name: 'AccountController',
   contract: AccountContract,
   protocol: http,
-  factory: () => ({
-    get(ctx) {
-      return ctx.response.found({
-        body: {
-          userId: ctx.session.principal.id,
-          tenantId: ctx.currentTenant.id,
-        },
-      })
-    },
-  }),
-})
+}).factory(() => ({
+  get(ctx) {
+    return ctx.response.found({
+      body: {
+        userId: ctx.state.session.principal.id,
+        tenantId: ctx.state.currentTenant.id,
+      },
+    })
+  },
+}))
+
 export const AccountModule = defineModule(() => ({
   description:
     'Bearer authentication and optional Execution Context integration',
   implementations: [AccountController],
 }))
+
 export function createAccountApplication() {
   return defineApplication({ modules: [AccountModule()] })
 }

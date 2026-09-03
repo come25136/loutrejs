@@ -453,33 +453,32 @@ Pipeline
 
 Layer、Validation、Terminalを組み合わせながら、Contextを次の処理へ渡していきます。
 
-Layerはstatic metadataと同期factoryで定義します。
+Layerは先にstaticなGraph metadataを宣言し、同期factoryを与えて完成させます。definitionはGraph上の情報を持ち、factoryはexecution時に使うruntime functionを生成します。
 
 ```ts
-const CURRENT_USER = contextField<{ currentUser: User }>()
-
-const auth = layer({
+const auth = defineLayer({
   name: 'auth',
-  requires: [SESSION],
-  provide: CURRENT_USER,
-
-  factory:
-    (users = inject(UserService)) =>
-    async (ctx, next) => {
-      const currentUser = await users.resolve(ctx.session)
-      await next({ currentUser })
-    },
+  requires: [session],
+}).factory<{
+  currentUser: User
+}>((users = inject(UserService)) => async (ctx, next) => {
+  const currentUser = await users.resolve(ctx.state.session)
+  await next({ currentUser })
 })
 ```
 
-`requires`はLayerが必要とするContext Field、`provide`は後続の処理へ追加する単一のContext Fieldを表します。1つのLayerがprovideできるContext Fieldは最大1つです。Context Fieldのidentityはruntime property名とは独立しており、property名は`next()`へ渡す単一objectによってmaterializeされます。
+`requires`には依存するLayerそのものを指定します。required Layerは現在のLayerより前に完了している必要があり、そのtransitiveなstateは`ctx.state`から参照できます。
 
-Runtimeは次のようなContext操作を検出します。
+`factory<Contribution>()`へ渡すgenericは、そのLayerが後段へ追加するstate contributionを表します。contributionは`ctx.state`へmergeされます。同じtop-level namespaceを複数Layerで拡張することもでき、両方がplain objectで異なるpayload propertyを追加する場合に限ってmergeされます。既存namespaceや既存payload propertyの暗黙的な上書きはRuntime Errorです。
 
-- 宣言されていないpropertyへのアクセス
-- requiredなContext Fieldの不足
-- 同じContext Fieldを異なるproperty名でmaterializeすること
-- 既存Context propertyの暗黙的な上書き
+Runtimeは次のようなLayer / state contract違反を検出します。
+
+- required Layerの不足
+- 不正またはobjectではないstate contribution
+- 既存state namespace / payload propertyの暗黙的な上書き
+- `next()`のskip / re-entry
+
+`next()`の戻り値は常に`Promise<void>`です。
 
 Layerは`next()`を一度だけ呼ぶか、`shortCircuit()`でPipelineを終了します。
 
@@ -536,7 +535,7 @@ Application Graphには、たとえば次のような関係が含まれます。
 
 - Moduleと公開境界
 - Providerとtoken
-- Context Field
+- Layer dependencyとexecution state
 - Contract
 - Pipeline
 - Implementation

@@ -627,7 +627,7 @@ function renderLayerText(
   indent = '  ',
 ): void {
   for (const current of layers) {
-    write(`${indent}${current.index + 1} ${current.name} ${current.role}`)
+    write(`${indent}${current.index + 1} ${current.name} ${current.kind}`)
     if (current.pipeline)
       renderLayerText(current.pipeline, write, `${indent}  `)
   }

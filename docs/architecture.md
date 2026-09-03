@@ -453,33 +453,32 @@ Pipeline
 
 Context is passed to the next process by combining Layer, Validation, and Terminal.
 
-Layers are defined with static metadata and synchronous factories.
+Layers are declared first and completed with a synchronous factory. The declaration owns static graph metadata, while the factory creates the runtime function used during execution.
 
 ```ts
-const CURRENT_USER = contextField<{ currentUser: User }>()
-
-const auth = layer({
+const auth = defineLayer({
   name: 'auth',
-  requires: [SESSION],
-  provide: CURRENT_USER,
-
-  factory:
-    (users = inject(UserService)) =>
-    async (ctx, next) => {
-      const currentUser = await users.resolve(ctx.session)
-      await next({ currentUser })
-    },
+  requires: [session],
+}).factory<{
+  currentUser: User
+}>((users = inject(UserService)) => async (ctx, next) => {
+  const currentUser = await users.resolve(ctx.state.session)
+  await next({ currentUser })
 })
 ```
 
-`requires` represents the Context Fields required by the layer, and `provide` represents the single Context Field added to subsequent processing. A Layer can provide at most one Context Field. Context Field identity is independent of its runtime property name; the property name is materialized by the single object passed to `next()`.
+`requires` contains exact Layer dependencies. A required Layer must have completed before the current Layer runs, and its transitive state is available through `ctx.state`.
 
-Runtime detects Context operations such as:
+The generic passed to `factory<Contribution>()` describes the state contribution added by that Layer. Contributions are merged into `ctx.state`. Multiple Layers may extend the same top-level namespace when both values are plain objects and they add different payload properties; overwriting an existing namespace or payload property is rejected at Runtime.
 
-- Access to undeclared property
-- Missing required Context Field
-- Inconsistent materialization of the same Context Field
-- Implicit overwriting of an existing Context property
+Runtime detects state and Layer contract violations such as:
+
+- Missing required Layer
+- Invalid or non-object state contribution
+- Implicit overwriting of an existing state namespace or payload property
+- `next()` skip or re-entry
+
+`next()` always returns `Promise<void>`.
 
 The layer calls `next()` only once or terminates the Pipeline with `shortCircuit()`.
 
@@ -536,7 +535,7 @@ The Application Graph includes relationships such as:
 
 - Module and public boundaries
 - Provider and token
-- Context Field
+- Layer dependencies and execution state
 - Contract
 - Pipeline
 - Implementation

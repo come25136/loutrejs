@@ -6,8 +6,8 @@ import {
 } from './helpers/example-process.js'
 import { reserveHttpPort } from './helpers/http-server.js'
 
-const basicAuthWorkspace = '@loutrejs/example-basic-auth'
-const bearerAuthWorkspace = '@loutrejs/example-bearer-auth'
+const defineBasicAuthWorkspace = '@loutrejs/example-basic-auth'
+const defineBearerAuthWorkspace = '@loutrejs/example-bearer-auth'
 const corsWorkspace = '@loutrejs/example-cors'
 const databaseTransactionsWorkspace = '@loutrejs/example-database-transactions'
 const databasePostgresWorkspace = '@loutrejs/example-database-postgres'
@@ -72,7 +72,7 @@ describe.sequential('example projects', () => {
 
   it('Basic Auth projectをstartして認証境界を処理する', async () => {
     const port = await reserveHttpPort()
-    const example = startWorkspace(basicAuthWorkspace, 'start', {
+    const example = startWorkspace(defineBasicAuthWorkspace, 'start', {
       PORT: String(port),
     })
     try {
@@ -98,7 +98,7 @@ describe.sequential('example projects', () => {
 
   it('Bearer Auth projectをstartして認証境界を処理する', async () => {
     const port = await reserveHttpPort()
-    const example = startWorkspace(bearerAuthWorkspace, 'start', {
+    const example = startWorkspace(defineBearerAuthWorkspace, 'start', {
       PORT: String(port),
     })
     try {

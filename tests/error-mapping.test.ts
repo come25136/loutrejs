@@ -3,7 +3,7 @@ import {
   contract,
   defineError,
   defineModule,
-  implementation,
+  defineImplementation,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
@@ -34,16 +34,15 @@ describe('Domain ErrorとProtocol mapping', () => {
         },
       }),
     ])
-    const Implementation = implementation({
+    const Implementation = defineImplementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-      factory: () => ({
-        get(): never {
-          throw UserNotFound({ userId: 'missing-user' })
-        },
-      }),
-    })
+    }).factory(() => ({
+      get(): never {
+        throw UserNotFound({ userId: 'missing-user' })
+      },
+    }))
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))

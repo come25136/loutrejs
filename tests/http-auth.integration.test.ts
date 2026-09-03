@@ -1,5 +1,5 @@
 import { createTestApplication } from './helpers/application.js'
-import { contract, defineModule, implementation } from '@loutrejs/loutre'
+import { contract, defineModule, defineImplementation } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import { http, validate } from '@loutrejs/loutre/http'
 import {
@@ -56,12 +56,11 @@ describe('HTTP auth integration', () => {
         },
       }),
     ])
-    const InvalidImplementation = implementation({
+    const InvalidImplementation = defineImplementation({
       name: 'AccountController',
       contract: InvalidContract,
       protocol: http,
-      factory: AccountController.factory as never,
-    })
+    }).factory(AccountController.factory as never)
     const InvalidModule = defineModule(() => ({
       implementations: [InvalidImplementation],
     }))
