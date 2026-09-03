@@ -78,7 +78,13 @@ jobs:
           node-version: 22.x
 
       - name: Install Node.js 22 type baseline
-        run: npm install --no-save --package-lock=false @types/node@22.20.1
+        run: |
+          rm -rf node_modules/@types/node
+          mkdir -p node_modules/@types/node
+          npm pack --silent @types/node@22.20.1 --pack-destination "$RUNNER_TEMP" >/dev/null
+          tar -xzf "$RUNNER_TEMP/types-node-22.20.1.tgz" \
+            --strip-components=1 \
+            -C node_modules/@types/node
 
       - name: Type check
         run: npm run check
