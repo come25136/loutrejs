@@ -79,25 +79,26 @@ function createRoutingApplication() {
     name: 'Implementation',
     contract: Contract,
     protocol: http,
+
     factory: () => ({
       raw(ctx) {
         return ctx.response.ok({
-          body: { route: 'raw', value: ctx.params.id },
+          body: { route: 'raw', value: ctx.input.params.id },
         })
       },
       declaredOnly(ctx) {
         return ctx.response.ok({
-          body: { route: 'declared', value: ctx.params.id },
+          body: { route: 'declared', value: ctx.input.params.id },
         })
       },
       multiple(ctx) {
         return ctx.response.ok({
-          body: { route: 'multiple', value: ctx.params },
+          body: { route: 'multiple', value: ctx.input.params },
         })
       },
       dynamic(ctx) {
         return ctx.response.ok({
-          body: { route: 'dynamic', value: ctx.params.id },
+          body: { route: 'dynamic', value: ctx.input.params.id },
         })
       },
       static(ctx) {
@@ -105,22 +106,22 @@ function createRoutingApplication() {
       },
       lessSpecific(ctx) {
         return ctx.response.ok({
-          body: { route: 'less', value: ctx.params.x },
+          body: { route: 'less', value: ctx.input.params.x },
         })
       },
       moreSpecific(ctx) {
         return ctx.response.ok({
-          body: { route: 'more', value: ctx.params.y },
+          body: { route: 'more', value: ctx.input.params.y },
         })
       },
       getMethod(ctx) {
         return ctx.response.ok({
-          body: { route: 'get', value: ctx.params.id },
+          body: { route: 'get', value: ctx.input.params.id },
         })
       },
       postMethod(ctx) {
         return ctx.response.ok({
-          body: { route: 'post', value: ctx.params.id },
+          body: { route: 'post', value: ctx.input.params.id },
         })
       },
     }),
@@ -192,12 +193,13 @@ describe('HTTP pathとroute identity', () => {
       name: 'ReverseImplementation',
       contract: ReverseContract,
       protocol: http,
+
       factory: () => ({
         static(ctx) {
           return ctx.response.ok({ body: 'static' })
         },
         dynamic(ctx) {
-          return ctx.response.ok({ body: `dynamic:${ctx.params.id}` })
+          return ctx.response.ok({ body: `dynamic:${ctx.input.params.id}` })
         },
       }),
     })
@@ -350,9 +352,10 @@ describe('protocol dispatchKeyの重複検査', () => {
       name: 'FirstController',
       contract: FirstContract,
       protocol: http,
+
       factory: () => ({
         get() {
-          return { kind: 'http-result', variant: 'ok', body: 'first' } as const
+          return { kind: 'http-result', response: 'ok', body: 'first' } as const
         },
       }),
     })
@@ -360,9 +363,14 @@ describe('protocol dispatchKeyの重複検査', () => {
       name: 'SecondController',
       contract: SecondContract,
       protocol: http,
+
       factory: () => ({
         get() {
-          return { kind: 'http-result', variant: 'ok', body: 'second' } as const
+          return {
+            kind: 'http-result',
+            response: 'ok',
+            body: 'second',
+          } as const
         },
       }),
     })

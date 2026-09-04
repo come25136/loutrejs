@@ -1,11 +1,9 @@
 import {
   childPipelineOf,
-  contextKeyName,
   isShortCircuit,
   layerDefinitionOf,
-  type ContextKey,
+  type LayerDependency,
   type LayerDescriptor,
-  type LayerRuntime,
   type PipelineItem,
   type TerminalLayerDescriptor,
   type ValidationLayerDescriptor,
@@ -21,9 +19,16 @@ export interface PipelineHooks<TContext extends object, TResult> {
     layer: TerminalLayerDescriptor,
     context: TContext,
   ) => TResult | Promise<TResult>
-  readonly layer: (
-    descriptor: LayerDescriptor,
-  ) => LayerRuntime<object, readonly [], unknown>
+  readonly layer: (descriptor: LayerDescriptor) => ExecutableLayerRuntime
+}
+
+type ExecutableLayerRuntime = (
+  context: object,
+  next: (...arguments_: readonly unknown[]) => Promise<void>,
+) => Promise<unknown>
+
+type RuntimeContext = Record<string, unknown> & {
+  state: Record<string, unknown>
 }
 
 type PipelineFlow<TResult> =
@@ -41,13 +46,13 @@ export async function executePipeline<TContext extends object, TResult>(
   pipeline: readonly PipelineItem[],
   hooks: PipelineHooks<TContext, TResult>,
 ): Promise<TResult> {
-  const context = hooks.context as TContext & Record<string, unknown>
+  const context = ensureRuntimeContext(hooks.context)
   const flow = await executeSegment(
     pipeline,
     0,
     hooks,
     context,
-    new Set<ContextKey>(),
+    new Set<LayerDependency>(),
   )
   if (flow.kind === 'continue') {
     throw new Error('Pipeline did not produce a result')
@@ -59,48 +64,49 @@ async function executeSegment<TContext extends object, TResult>(
   pipeline: readonly PipelineItem[],
   index: number,
   hooks: PipelineHooks<TContext, TResult>,
-  context: TContext & Record<string, unknown>,
-  availableKeys: Set<ContextKey>,
+  context: RuntimeContext,
+  availableLayers: Set<LayerDependency>,
 ): Promise<PipelineFlow<TResult>> {
   const item = pipeline[index]
   if (!item) return { kind: 'continue' }
 
   if (item.kind === 'validation') {
-    await hooks.validate(item, context)
-    return executeSegment(pipeline, index + 1, hooks, context, availableKeys)
+    await hooks.validate(item, context as unknown as TContext)
+    return executeSegment(pipeline, index + 1, hooks, context, availableLayers)
   }
   if (item.kind === 'terminal') {
     return {
       kind: 'complete',
-      result: await hooks.terminal(item, context),
+      result: await hooks.terminal(item, context as unknown as TContext),
     }
   }
 
   const definition = layerDefinitionOf(item)
-  assertRequiredContext(definition.name, definition.requires, availableKeys)
+  assertRequiredLayers(definition.name, definition.requires, availableLayers)
   const child = childPipelineOf(item)
   const continuation =
     child === undefined
-      ? () => executeSegment(pipeline, index + 1, hooks, context, availableKeys)
-      : () => executeSegment(child, 0, hooks, context, availableKeys)
+      ? () =>
+          executeSegment(pipeline, index + 1, hooks, context, availableLayers)
+      : () => executeSegment(child, 0, hooks, context, availableLayers)
   const flow = await executeLayer(
     definition,
     hooks.layer(definition),
     continuation,
     context,
-    availableKeys,
+    availableLayers,
   )
 
   if (flow.kind === 'complete' || child === undefined) return flow
-  return executeSegment(pipeline, index + 1, hooks, context, availableKeys)
+  return executeSegment(pipeline, index + 1, hooks, context, availableLayers)
 }
 
 async function executeLayer<TResult>(
   layer: LayerDescriptor,
-  runtime: LayerRuntime<object, readonly [], unknown>,
+  runtime: ExecutableLayerRuntime,
   continuation: () => Promise<PipelineFlow<TResult>>,
-  context: Record<string, unknown>,
-  availableKeys: Set<ContextKey>,
+  context: RuntimeContext,
+  availableLayers: Set<LayerDependency>,
 ): Promise<PipelineFlow<TResult>> {
   let calls = 0
   let continuationFlow: PipelineFlow<TResult> = { kind: 'continue' }
@@ -118,7 +124,9 @@ async function executeLayer<TResult>(
       return Promise.reject(contractError)
     }
 
-    applyProvidedContext(layer, context, availableKeys, arguments_)
+    applyStateContribution(layer, context.state, arguments_)
+    availableLayers.add(layer)
+
     completion = (async () => {
       try {
         continuationFlow = await continuation()
@@ -171,90 +179,89 @@ async function executeLayer<TResult>(
   return continuationFlow
 }
 
-function assertRequiredContext(
+function ensureRuntimeContext<TContext extends object>(
+  context: TContext,
+): RuntimeContext {
+  const candidate = context as Record<string, unknown>
+  if (!Object.hasOwn(candidate, 'state')) {
+    candidate.state = {}
+  }
+  if (!isPlainObject(candidate.state)) {
+    throw new LayerContractError(
+      'Pipeline Context state must be a plain object',
+    )
+  }
+  return candidate as RuntimeContext
+}
+
+function assertRequiredLayers(
   layerName: string,
-  requiredKeys: readonly ContextKey[],
-  availableKeys: ReadonlySet<ContextKey>,
+  requiredLayers: readonly LayerDependency[],
+  availableLayers: ReadonlySet<LayerDependency>,
 ): void {
-  for (const required of requiredKeys) {
-    if (!availableKeys.has(required)) {
+  for (const required of requiredLayers) {
+    if (!availableLayers.has(required)) {
       throw new LayerContractError(
-        `Context Key ${contextKeyName(required)} required by ${layerName} is unavailable`,
+        `Layer ${required.name} required by ${layerName} is unavailable`,
       )
     }
   }
 }
 
-function applyProvidedContext(
+function applyStateContribution(
   layer: LayerDescriptor,
-  context: Record<string, unknown>,
-  availableKeys: Set<ContextKey>,
+  state: Record<string, unknown>,
   arguments_: readonly unknown[],
 ): void {
   if (arguments_.length > 1) {
     throw new LayerContractError(
-      `Layer ${layer.name} can pass only one Context object to next()`,
+      `Layer ${layer.name} can pass only one State contribution to next()`,
     )
   }
-  if (layer.provides.length === 0) {
-    if (arguments_.length > 0) {
-      const provided = arguments_[0]
-      const property = firstProperty(provided)
-      throw new LayerContractError(
-        property === undefined
-          ? `Layer ${layer.name} does not declare any provided Context`
-          : `Layer ${layer.name} provided undeclared Context property ${property}`,
-      )
-    }
-    return
-  }
+  if (arguments_.length === 0) return
 
-  const provided = arguments_[0]
-  if (
-    typeof provided !== 'object' ||
-    provided === null ||
-    Array.isArray(provided)
-  ) {
+  const contribution = arguments_[0]
+  if (!isPlainObject(contribution)) {
     throw new LayerContractError(
-      `Layer ${layer.name} must pass its declared Context to next(object)`,
+      `Layer ${layer.name} must pass a plain State contribution to next()`,
     )
   }
 
-  const additions = provided as Record<string, unknown>
-  const declaredNames = new Set(layer.provides.map((key) => key.name))
-  for (const property of Object.keys(additions)) {
-    if (!declaredNames.has(property)) {
+  for (const [namespace, payload] of Object.entries(contribution)) {
+    if (namespace === '__proto__') {
       throw new LayerContractError(
-        `Layer ${layer.name} provided undeclared Context property ${property}`,
+        `Layer ${layer.name} cannot contribute reserved State namespace ${namespace}`,
       )
     }
+
+    if (!Object.hasOwn(state, namespace)) {
+      state[namespace] = payload
+      continue
+    }
+
+    const current = state[namespace]
+    if (!isPlainObject(current) || !isPlainObject(payload)) {
+      throw new LayerContractError(
+        `Layer ${layer.name} cannot overwrite existing State namespace ${namespace}`,
+      )
+    }
+
+    for (const key of Object.keys(payload)) {
+      if (Object.hasOwn(current, key)) {
+        throw new LayerContractError(
+          `Layer ${layer.name} cannot overwrite existing State property ${namespace}.${key}`,
+        )
+      }
+    }
+
+    state[namespace] = { ...current, ...payload }
   }
-  const providedNames = new Set<string>()
-  for (const key of layer.provides) {
-    if (providedNames.has(key.name)) {
-      throw new LayerContractError(
-        `Layer ${layer.name} declared duplicate Context property ${key.name}`,
-      )
-    }
-    providedNames.add(key.name)
-    if (!Object.hasOwn(additions, key.name)) {
-      throw new LayerContractError(
-        `Layer ${layer.name} did not provide declared Context Key ${contextKeyName(key)}`,
-      )
-    }
-    if (Object.hasOwn(context, key.name)) {
-      throw new LayerContractError(
-        `Layer ${layer.name} cannot overwrite existing Context property ${key.name}`,
-      )
-    }
-  }
-  Object.assign(context, additions)
-  for (const key of layer.provides) availableKeys.add(key)
 }
 
-function firstProperty(value: unknown): string | undefined {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return undefined
+    return false
   }
-  return Object.keys(value)[0]
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
 }

@@ -1645,27 +1645,54 @@ Layer = pipelineの一部分を包むruntime effect
 ## Auth
 
 ```ts
-const authLayer = layer(
-  {
-    name: 'auth',
-    role: 'authentication',
-    requires: [SESSION],
-    provides: [CURRENT_USER],
-    factory: (users = inject(UserService)) =>
-      async (ctx, next) => {
-        const user = await users.find(ctx.session.userId)
+const authLayer = layer({
+  name: 'auth',
+  requires: [sessionLayer],
+  state: type<{
+    currentUser: User
+  }>(),
+  factory:
+    (users = inject(UserService)) =>
+    async (ctx, next) => {
+      const user = await users.find(ctx.state.session.userId)
 
-        if (!user) {
-          return shortCircuit(...)
-        }
-
-        await next({
-          currentUser: user,
+      if (!user) {
+        return shortCircuit({
+          kind: 'http-result',
+          response: 'unauthorized',
+          body: { error: 'Authentication required' },
         })
-      },
-  },
-)
+      }
+
+      await next({ currentUser: user })
+    },
+})
 ```
+
+## Userland wrapper
+
+```ts
+interface AuthDefinition<TContribution extends object> {
+  readonly state: Type<TContribution>
+  readonly authenticate: () => TContribution | undefined
+}
+
+function auth<TContribution extends object>(
+  definition: AuthDefinition<TContribution>,
+) {
+  return layer({
+    name: 'auth',
+    state: definition.state,
+    factory: () => async (_ctx, next) => {
+      const contribution = definition.authenticate()
+      if (contribution === undefined) return shortCircuit(...)
+      await next(contribution)
+    },
+  })
+}
+```
+
+wrapper authorが専用`LayerDescriptor`型、`TypeOf`、`context` / `result` metadata、`as` castを用意しなくても型推論が成立することを重視する。
 
 ## Timing
 
@@ -1700,30 +1727,27 @@ const transactionLayer = layer({
 ## Contract
 
 ```ts
-const UsersContract = contract({
-  create: procedure({
-    protocols: {
-      http: http({
-        method: 'POST',
-        path: '/users',
-        request: {
-          body: CreateUserBody,
+const UsersContract = contract([
+  http({
+    create: {
+      method: 'POST',
+      path: '/users',
+      request: {
+        body: CreateUserBody,
+      },
+      responses: {
+        created: {
+          status: 201,
+          body: UserResponse,
         },
-        responses: {
-          created: {
-            status: 201,
-            body: UserResponse,
-          },
-        },
-        pipeline: [
-          requestTiming,
-
-          transactionLayer([validate.body, authLayer, http.controller]),
-        ],
-      }),
+      },
+      pipeline: [
+        requestTiming,
+        transactionLayer([validate.body, authLayer, http.controller]),
+      ],
     },
   }),
-})
+])
 ```
 
 このコードを見た利用者が、Database専用Framework APIや別種のLayer概念を理解しなくても動作を説明できる状態を目指す。

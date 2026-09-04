@@ -1,136 +1,107 @@
 import {
   layer,
+  registerLayerShortCircuits,
   shortCircuit,
-  type ContextKey,
-  type ContextKeyValue,
-  type ContextProperties,
-  type LayerDescriptor,
 } from '../core/index.js'
+import type { Type } from '../core/index.js'
 import type { LogicalHttpResult } from './definitions.js'
 
-export interface BearerAuthUnauthorized<TVariant extends string, TBody> {
-  readonly variant: TVariant
+export interface BearerAuthUnauthorized<TResponse extends string, TBody> {
+  readonly response: TResponse
   readonly body: TBody
 }
 
-export interface BearerAuthOptions<
-  TProvided extends ContextKey,
-  TVariant extends string,
+export interface BearerAuthDefinition<
+  TContribution extends object,
+  TResponse extends string,
   TUnauthorizedBody,
 > {
   readonly realm: string
-  readonly provides: readonly [TProvided]
-  readonly factory: () => (
-    token: string,
-  ) =>
-    | ContextKeyValue<TProvided>
-    | null
-    | undefined
-    | Promise<ContextKeyValue<TProvided> | null | undefined>
-  readonly unauthorized: BearerAuthUnauthorized<TVariant, TUnauthorizedBody>
   readonly name?: string
+  readonly state: Type<TContribution>
+  readonly factory: () => BearerAuthRuntime<
+    TContribution,
+    TResponse,
+    TUnauthorizedBody
+  >
 }
-
-type BearerAuthShortCircuits<TVariant extends string> = readonly [
-  {
-    readonly protocol: 'http'
-    readonly variant: TVariant
-    readonly response: { readonly status: 401 }
-  },
-]
 
 type BearerAuthResponseHeaders = {
   readonly 'www-authenticate': string
 }
 
-export interface BearerAuthLayerDescriptor<
-  TProvided extends ContextKey,
-  TVariant extends string,
+export interface BearerAuthRuntime<
+  TContribution extends object,
+  TResponse extends string,
   TUnauthorizedBody,
-> extends LayerDescriptor<
-  readonly [],
-  readonly [TProvided],
-  string extends TVariant
-    ? unknown
-    : LogicalHttpResult<TVariant, TUnauthorizedBody, BearerAuthResponseHeaders>,
-  BearerAuthShortCircuits<TVariant>,
-  string,
-  'authentication',
-  readonly [],
-  BearerAuthContext
 > {
-  readonly role: 'authentication'
+  readonly authenticate: (
+    token: string,
+  ) =>
+    | TContribution
+    | null
+    | undefined
+    | Promise<TContribution | null | undefined>
+  readonly unauthorized: () => BearerAuthUnauthorized<
+    TResponse,
+    TUnauthorizedBody
+  >
 }
 
 export interface BearerAuthContext {
-  readonly headers: Readonly<Record<string, string | undefined>>
+  readonly input: {
+    readonly headers: Readonly<Record<string, string | undefined>>
+  }
 }
 
 export function bearerAuth<
-  TProvided extends ContextKey,
-  const TVariant extends string,
+  const TContribution extends object,
+  const TResponse extends string,
   TUnauthorizedBody,
 >(
-  options: BearerAuthOptions<TProvided, TVariant, TUnauthorizedBody>,
-): BearerAuthLayerDescriptor<TProvided, TVariant, TUnauthorizedBody> {
-  const challenge = formatBearerChallenge(options.realm)
-  const provided = options.provides[0]
-  const descriptor = layer<
-    readonly [],
-    readonly [TProvided],
-    BearerAuthContext,
-    string extends TVariant
-      ? unknown
-      : LogicalHttpResult<
-          TVariant,
-          TUnauthorizedBody,
-          BearerAuthResponseHeaders
-        >,
-    BearerAuthShortCircuits<TVariant>,
-    string,
-    'authentication'
-  >({
-    name: options.name ?? 'bearerAuth',
-    role: 'authentication',
-    provides: options.provides,
-    shortCircuits: [
-      {
-        protocol: 'http',
-        variant: options.unauthorized.variant,
-        response: { status: 401 },
-      },
-    ],
+  definition: BearerAuthDefinition<TContribution, TResponse, TUnauthorizedBody>,
+) {
+  const challenge = formatBearerChallenge(definition.realm)
+  const descriptor = layer({
+    name: definition.name ?? 'bearerAuth',
+    state: definition.state,
     factory: () => {
-      const authenticate = options.factory()
-      return async (ctx, next) => {
-        const token = readBearerToken(ctx.headers.authorization)
+      const runtime = definition.factory()
+      registerLayerShortCircuits(descriptor, [
+        {
+          protocol: 'http',
+          response: runtime.unauthorized().response,
+          metadata: { status: 401 },
+        },
+      ])
+
+      return async (ctx: BearerAuthContext, next) => {
+        const token = readBearerToken(ctx.input.headers.authorization)
         if (!token) {
-          return unauthorizedResult(options.unauthorized, challenge)
+          return unauthorizedResult(runtime.unauthorized(), challenge)
         }
 
-        const value = await authenticate(token)
+        const value = await runtime.authenticate(token)
         if (value == null) {
-          return unauthorizedResult(options.unauthorized, challenge)
+          return unauthorizedResult(runtime.unauthorized(), challenge)
         }
-
-        await next({
-          [provided.name]: value,
-        } as ContextProperties<readonly [TProvided]>)
+        await next(value)
       }
     },
   })
-  return Object.freeze(descriptor)
+
+  return descriptor
 }
 
-function unauthorizedResult<TVariant extends string, TBody>(
-  unauthorized: BearerAuthUnauthorized<TVariant, TBody>,
+function unauthorizedResult<TResponse extends string, TBody>(
+  unauthorized: BearerAuthUnauthorized<TResponse, TBody>,
   challenge: string,
 ) {
   return shortCircuit<
-    LogicalHttpResult<TVariant, TBody, BearerAuthResponseHeaders>
+    LogicalHttpResult<TResponse, TBody, BearerAuthResponseHeaders>
   >({
     kind: 'http-result',
-    variant: unauthorized.variant,
+    response: unauthorized.response,
     body: unauthorized.body,
     headers: {
       'www-authenticate': challenge,

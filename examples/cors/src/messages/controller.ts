@@ -11,7 +11,7 @@ export const MessageController = implementation({
       return ctx.response.created({
         body: {
           id: crypto.randomUUID(),
-          text: ctx.body.text,
+          text: ctx.input.body.text,
         },
       })
     },

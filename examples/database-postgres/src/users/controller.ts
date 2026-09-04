@@ -10,7 +10,7 @@ export const UsersController = implementation({
   factory: (users = inject(UserRepository)) => ({
     async create(ctx) {
       return ctx.response.created({
-        body: await users.create(ctx.transaction, ctx.body.name),
+        body: await users.create(ctx.state.transaction, ctx.input.body.name),
       })
     },
   }),

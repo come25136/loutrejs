@@ -453,31 +453,38 @@ Pipeline
 
 Layer、Validation、Terminalを組み合わせながら、Contextを次の処理へ渡していきます。
 
-Layerはstatic metadataと同期factoryで定義します。
+Layerはsingle-callのobjectとして宣言します。staticなGraph metadataはfactoryを実行せず参照でき、`state: type<Contribution>()`がfactoryをcontextual typingするために必要なstate型だけを運びます。
 
 ```ts
 const auth = layer({
   name: 'auth',
-  requires: [SESSION],
-  provides: [CURRENT_USER],
-
+  requires: [session],
+  state: type<{
+    currentUser: User
+  }>(),
   factory:
     (users = inject(UserService)) =>
     async (ctx, next) => {
-      const currentUser = await users.resolve(ctx.session)
+      const currentUser = await users.resolve(ctx.state.session)
       await next({ currentUser })
     },
 })
 ```
 
-`requires`はLayerが必要とするContext Key、`provides`は後続の処理へ追加するContext Keyを表します。
+`requires`には依存するLayerそのものを指定します。required Layerは現在のLayerより前に完了している必要があり、そのtransitiveなstateは`ctx.state`から参照できます。
 
-Runtimeは次のようなContext操作を検出します。
+`type<T>()`はruntime semanticsを持たず、型情報だけをvalue-levelで運ぶcarrierです。`state`で宣言したcontributionは`ctx.state`へmergeされます。同じtop-level namespaceを複数Layerで拡張することもでき、両方がplain objectで異なるpayload propertyを追加する場合に限ってmergeされます。既存namespaceや既存payload propertyの暗黙的な上書きはRuntime Errorです。
 
-- 宣言されていないpropertyへのアクセス
-- requiredなContext Keyの不足
-- Context Keyの重複
-- 既存Contextの暗黙的な上書き
+LayerはFramework内部専用のprimitiveではありません。利用者は`layer()`を使って、認証、rate limit、transactionのような再利用可能なLayer factoryを独自に構築できます。wrapper側で専用の`LayerDescriptor`型やcastを用意する必要はなく、Contributionは`state`から、protocol固有のContextはruntime functionの引数型から、short-circuit resultは`shortCircuit()`のreturn valueから推論されます。型情報を運ぶためだけの`context` / `result` metadataはありません。
+
+Runtimeは次のようなLayer / state contract違反を検出します。
+
+- required Layerの不足
+- 不正またはobjectではないstate contribution
+- 既存state namespace / payload propertyの暗黙的な上書き
+- `next()`のskip / re-entry
+
+`next()`の戻り値は常に`Promise<void>`です。
 
 Layerは`next()`を一度だけ呼ぶか、`shortCircuit()`でPipelineを終了します。
 
@@ -534,7 +541,7 @@ Application Graphには、たとえば次のような関係が含まれます。
 
 - Moduleと公開境界
 - Providerとtoken
-- Context Key
+- Layer dependencyとexecution state
 - Contract
 - Pipeline
 - Implementation

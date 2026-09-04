@@ -37,11 +37,12 @@ describe('Implementation descriptorとfactory runtime', () => {
       contract: Contract,
       protocol: http,
       procedures: selected,
+
       factory: () => {
         calls += 1
         return {
           get(ctx) {
-            return ctx.response.ok({ body: ctx.params.id })
+            return ctx.response.ok({ body: ctx.input.params.id })
           },
         }
       },
@@ -68,6 +69,7 @@ describe('Implementation descriptorとfactory runtime', () => {
       name: 'CachedImplementation',
       contract: Contract,
       protocol: http,
+
       factory: (service = inject(Service)) => {
         constructions += 1
         return {
@@ -76,7 +78,7 @@ describe('Implementation descriptorとfactory runtime', () => {
           },
           get(ctx) {
             return ctx.response.ok({
-              body: `${service.value}:${ctx.params.id}`,
+              body: `${service.value}:${ctx.input.params.id}`,
             })
           },
           list(ctx) {
@@ -119,7 +121,8 @@ describe('Implementation descriptorとfactory runtime', () => {
       name: 'InvalidImplementation',
       contract: Contract,
       protocol: http,
-      factory,
+
+      factory: factory as never,
     } as never)
     const Module = defineModule(() => ({ implementations: [Invalid] }))
     const runtime = new ApplicationRuntime([Module()])
@@ -132,7 +135,6 @@ describe('Implementation descriptorとfactory runtime', () => {
       contract: Contract,
       protocol: http,
       procedures,
-      factory: () => ({ get() {} }),
     })
     expect(() => implementation(declaration(['missing']) as never)).toThrow(
       'LUTRE_IMPL_003',
@@ -155,14 +157,19 @@ describe('Implementation descriptorとfactory runtime', () => {
       name: 'GraphImplementation',
       contract: Contract,
       protocol: http,
+
       factory: (_service = inject(Service)) => {
         probes += 1
         return {
           get() {
-            return { kind: 'http-result', variant: 'ok', body: 'get' } as const
+            return { kind: 'http-result', response: 'ok', body: 'get' } as const
           },
           list() {
-            return { kind: 'http-result', variant: 'ok', body: 'list' } as const
+            return {
+              kind: 'http-result',
+              response: 'ok',
+              body: 'list',
+            } as const
           },
         }
       },
@@ -174,13 +181,13 @@ describe('Implementation descriptorとfactory runtime', () => {
     const { graph, diagnostics } = compileApplication({ modules: [Module()] })
     expect(diagnostics).toEqual([])
     expect(probes).toBe(1)
-    const implementationNode = graph.nodes.find(
+    const defineImplementationNode = graph.nodes.find(
       ({ label }) => label === 'GraphImplementation',
     )
     const serviceNode = graph.nodes.find(({ label }) => label === 'Service')
-    expect(implementationNode?.kind).toBe('implementation')
+    expect(defineImplementationNode?.kind).toBe('implementation')
     expect(graph.edges).toContainEqual({
-      from: implementationNode?.id,
+      from: defineImplementationNode?.id,
       to: serviceNode?.id,
       kind: 'inject',
       source: 'probed',
@@ -193,6 +200,7 @@ describe('Implementation descriptorとfactory runtime', () => {
       contract: Contract,
       protocol: http,
       procedures: ['get'],
+
       factory: () => ({ get: () => ({ kind: 'http-result' }) as never }),
     })
     const List = implementation({
@@ -200,6 +208,7 @@ describe('Implementation descriptorとfactory runtime', () => {
       contract: Contract,
       protocol: http,
       procedures: ['list'],
+
       factory: () => ({ list: () => ({ kind: 'http-result' }) as never }),
     })
     const Module = defineModule(() => ({ implementations: [Get, List] }))

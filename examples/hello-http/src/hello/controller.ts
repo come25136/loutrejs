@@ -9,7 +9,7 @@ export const AppController = implementation({
   factory: () => ({
     async greet(ctx) {
       return ctx.response.ok({
-        body: { message: `Hello, ${ctx.params.name}!` },
+        body: { message: `Hello, ${ctx.input.params.name}!` },
       })
     },
   }),

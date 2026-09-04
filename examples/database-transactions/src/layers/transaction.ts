@@ -1,11 +1,9 @@
-import { contextKey, inject, layer } from '@loutrejs/loutre'
+import { type, layer, inject } from '@loutrejs/loutre'
 import { DATABASE, type InMemoryClient } from '../database/in-memory.js'
-
-export const TRANSACTION = contextKey('transaction').of<InMemoryClient>()
 
 export const transaction = layer({
   name: 'database.transaction',
-  provides: [TRANSACTION],
+  state: type<{ transaction: InMemoryClient }>(),
   factory:
     (database = inject(DATABASE)) =>
     async (_ctx, next) => {

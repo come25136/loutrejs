@@ -2,18 +2,18 @@ import {
   argumentsProvider,
   asModuleInstance,
   childPipelineOf,
-  contextKeyName,
   defineModule,
   isArgsClass,
   isEnvClass,
   layerDefinitionOf,
   normalizeProvider,
   queueRuntimeToken,
+  shortCircuitsOfLayer,
   tokenName,
   type ArgsClass,
   type ContractBinding,
   type ContractDefinition,
-  type ContextKey,
+  type LayerDependency,
   type DependencyConsumer,
   type ImplementationConsumer,
   type ImplementationDescriptor,
@@ -230,7 +230,17 @@ export function compileApplication(
   validateDuplicateProviders(modules, diagnostics)
 
   const tokensById = collectCustomTokens(providers, targets, diagnostics)
-  const contextKeysByName = collectContextKeys(targets, diagnostics)
+
+  const dependencyGraph = buildDependencyGraph(
+    modules,
+    descriptors,
+    targets,
+    tasks,
+    diagnostics,
+  )
+  const probedTokenIds = dependencyGraph.nodes
+    .filter((node) => node.kind === 'token')
+    .map((node) => node.label)
 
   const pipelines: PipelineIR[] = []
   for (const target of targets) {
@@ -240,7 +250,7 @@ export function compileApplication(
       contract: target.contractId,
       procedure: target.procedure,
       protocol: target.protocol,
-      layers: target.pipeline.map(toLayerIR),
+      layers: target.pipeline.map((item, index) => toLayerIR(item, index)),
     })
   }
   const implementations: ImplementationIR[] = [...new Set(descriptors)].map(
@@ -260,16 +270,6 @@ export function compileApplication(
     },
   )
 
-  const dependencyGraph = buildDependencyGraph(
-    modules,
-    descriptors,
-    targets,
-    tasks,
-    diagnostics,
-  )
-  const probedTokenIds = dependencyGraph.nodes
-    .filter((node) => node.kind === 'token')
-    .map((node) => node.label)
   const publicTaskSet = new Set(publicTasks)
   const graph: ApplicationGraphIR = {
     modules: visibleModules.map((module) => {
@@ -323,7 +323,6 @@ export function compileApplication(
     tokens: [...new Set([...tokensById.keys(), ...probedTokenIds])].map(
       (id) => ({ id }),
     ),
-    contextKeys: [...contextKeysByName.keys()].map((name) => ({ name })),
     contracts: [...contractIds.entries()].map(([contract, id]) =>
       toContractIR(contract, id),
     ),
@@ -1119,32 +1118,6 @@ function collectCustomTokens(
   return tokens
 }
 
-function collectContextKeys(
-  targets: readonly ImplementationTarget[],
-  diagnostics: Diagnostic[],
-): ReadonlyMap<string, ContextKey> {
-  const keys = new Map<string, ContextKey>()
-  for (const target of targets) {
-    const path = `${target.contractId}.${target.procedure}.${target.protocol}`
-    visitPipelineItems(target.pipeline, (item) => {
-      if (item.kind !== 'layer') return
-      for (const key of [...item.requires, ...item.provides]) {
-        const existing = keys.get(key.name)
-        if (existing && existing !== key) {
-          diagnostics.push({
-            code: 'LUTRE_CONTEXT_002',
-            message: `Context Key ${key.name} is duplicated across different declarations`,
-            path,
-          })
-          continue
-        }
-        keys.set(key.name, key)
-      }
-    })
-  }
-  return keys
-}
-
 function toContractIR(
   contract: ContractDefinition,
   id: ContractId,
@@ -1242,7 +1215,7 @@ function validateCoverage(
 function validatePipeline(
   target: ImplementationTarget,
   diagnostics: Diagnostic[],
-) {
+): void {
   const path = `${target.contractId}.${target.procedure}.${target.protocol}`
   const flattened: {
     readonly item: PipelineItem
@@ -1280,7 +1253,7 @@ function validatePipeline(
     }
   }
 
-  const available = new Set<ContextKey>()
+  const available = new Set<LayerDependency>()
   const validated = new Set<string>()
   for (const { item } of flattened) {
     if (item.kind === 'validation') {
@@ -1288,53 +1261,47 @@ function validatePipeline(
       continue
     }
     if (item.kind !== 'layer') continue
-    for (const required of item.requiresValidated) {
+
+    const definition = layerDefinitionOf(item)
+    for (const required of definition.requiresValidated) {
       if (!validated.has(required)) {
         diagnostics.push({
           code: 'LUTRE_VALIDATION_001',
-          message: `${item.name} requires validated ${required} but appears before validate.${required}`,
+          message: `${definition.name} requires validated ${required} but appears before validate.${required}`,
           path,
         })
       }
     }
-    for (const required of item.requires) {
+    for (const required of definition.requires) {
       if (!available.has(required)) {
         diagnostics.push({
           code: 'LUTRE_PIPELINE_004',
-          message: `Context Key ${contextKeyName(required)} required by ${item.name} is unavailable`,
+          message: `Layer ${required.name} required by ${definition.name} is unavailable`,
           path,
         })
       }
     }
-    for (const provided of item.provides) {
-      if (available.has(provided)) {
-        diagnostics.push({
-          code: 'LUTRE_CONTEXT_003',
-          message: `${item.name} cannot implicitly overwrite existing Context Key ${contextKeyName(provided)}`,
-          path,
-        })
-      }
-      available.add(provided)
-    }
-    for (const shortCircuit of item.shortCircuits) {
+    available.add(definition)
+
+    for (const shortCircuit of shortCircuitsOfLayer(definition)) {
       if (shortCircuit.protocol !== target.protocol) continue
-      const response = target.responses?.[shortCircuit.variant]
+      const response = target.responses?.[shortCircuit.response]
       if (!response) {
         diagnostics.push({
           code: 'LUTRE_SHORT_CIRCUIT_001',
-          message: `Short-circuit variant ${shortCircuit.variant} from ${item.name} is not declared in the response`,
+          message: `Short-circuit response ${shortCircuit.response} from ${definition.name} is not declared in the response`,
           path,
         })
         continue
       }
-      const expectedStatus = shortCircuit.response?.status
+      const expectedStatus = shortCircuit.metadata?.status
       if (
         typeof expectedStatus === 'number' &&
         response.status !== expectedStatus
       ) {
         diagnostics.push({
           code: 'LUTRE_SHORT_CIRCUIT_002',
-          message: `Short-circuit variant ${shortCircuit.variant} from ${item.name} must use HTTP ${expectedStatus}`,
+          message: `Short-circuit response ${shortCircuit.response} from ${definition.name} must use HTTP ${expectedStatus}`,
           path,
         })
       }
@@ -1344,24 +1311,33 @@ function validatePipeline(
 
 function toLayerIR(item: PipelineItem, index: number): LayerIR {
   const child = item.kind === 'layer' ? childPipelineOf(item) : undefined
+  const definition = item.kind === 'layer' ? layerDefinitionOf(item) : undefined
   return {
     index,
+    kind: item.kind,
     name: item.name,
-    role: item.role,
-    requires: item.kind === 'layer' ? item.requires.map(contextKeyName) : [],
-    provides: item.kind === 'layer' ? item.provides.map(contextKeyName) : [],
-    requiresValidated: item.kind === 'layer' ? item.requiresValidated : [],
-    ...(child === undefined ? {} : { pipeline: child.map(toLayerIR) }),
-    ...(item.kind !== 'layer' || item.shortCircuits.length === 0
+    requires:
+      definition?.requires.map((required: LayerDependency) => required.name) ??
+      [],
+    requiresValidated: definition?.requiresValidated ?? [],
+    ...(child === undefined
       ? {}
       : {
-          shortCircuits: item.shortCircuits.map(
+          pipeline: child.map((childItem, childIndex) =>
+            toLayerIR(childItem, childIndex),
+          ),
+        }),
+    ...(definition === undefined ||
+    shortCircuitsOfLayer(definition).length === 0
+      ? {}
+      : {
+          shortCircuits: shortCircuitsOfLayer(definition).map(
             (shortCircuit: ShortCircuitDeclaration) => ({
               protocol: shortCircuit.protocol,
-              variant: shortCircuit.variant,
-              ...(shortCircuit.response === undefined
+              response: shortCircuit.response,
+              ...(shortCircuit.metadata === undefined
                 ? {}
-                : { response: shortCircuit.response }),
+                : { metadata: shortCircuit.metadata }),
             }),
           ),
         }),

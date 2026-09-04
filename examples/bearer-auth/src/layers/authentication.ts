@@ -1,20 +1,24 @@
-import { contextKey, inject } from '@loutrejs/loutre'
+import { inject, type } from '@loutrejs/loutre'
 import { bearerAuth } from '@loutrejs/loutre/http'
-import type { User } from '../auth/user.js'
 import { UserRepository } from '../auth/repository.js'
-
-export const CURRENT_USER = contextKey('currentUser').of<User>()
+import type { User } from '../auth/user.js'
 
 export const bearerAuthentication = bearerAuth({
   name: 'bearerAuthentication',
   realm: 'Loutre Example',
-  provides: [CURRENT_USER],
-  factory:
-    (users = inject(UserRepository)) =>
-    (token) =>
-      users.authenticate(token),
-  unauthorized: {
-    variant: 'unauthorized',
-    body: { error: 'Bearer token required' },
-  },
+  state: type<{
+    currentUser: User
+  }>(),
+  factory: (users = inject(UserRepository)) => ({
+    authenticate(token) {
+      const currentUser = users.authenticate(token)
+      return currentUser === undefined ? undefined : { currentUser }
+    },
+    unauthorized() {
+      return {
+        response: 'unauthorized',
+        body: { error: 'Bearer token required' },
+      }
+    },
+  }),
 })

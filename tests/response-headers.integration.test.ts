@@ -58,6 +58,7 @@ function cookieApplication() {
     name: 'CookieController',
     contract: Contract,
     protocol: http,
+
     factory: () => ({
       get: (ctx) =>
         ctx.response.ok({

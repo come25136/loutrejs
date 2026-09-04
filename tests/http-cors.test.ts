@@ -178,6 +178,7 @@ function createFixture(corsLayer: ReturnType<typeof validate.cors>) {
     name: 'CorsImplementation',
     contract: Contract,
     protocol: http,
+
     factory: () => ({
       create(ctx) {
         controllerExecutions += 1
@@ -185,7 +186,9 @@ function createFixture(corsLayer: ReturnType<typeof validate.cors>) {
       },
     }),
   })
-  const Module = defineModule(() => ({ implementations: [Implementation] }))
+  const Module = defineModule(() => ({
+    implementations: [Implementation],
+  }))
   return {
     application: createTestApplication({
       modules: [Module()],
@@ -220,13 +223,16 @@ function createValidationFixture(corsLayer: ReturnType<typeof validate.cors>) {
     name: 'CorsValidationImplementation',
     contract: Contract,
     protocol: http,
+
     factory: () => ({
       create(ctx) {
         return ctx.response.created({ body: { ok: true } })
       },
     }),
   })
-  const Module = defineModule(() => ({ implementations: [Implementation] }))
+  const Module = defineModule(() => ({
+    implementations: [Implementation],
+  }))
   return createTestApplication({
     modules: [Module()],
     logger: silentLogger,

@@ -1,4 +1,4 @@
-import { contract, contextKey, implementation, layer } from '@loutrejs/loutre'
+import { type, contract, implementation, layer } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -10,12 +10,11 @@ interface CurrentUser {
   readonly id: string
 }
 
-const SESSION = contextKey('nested.session').of<Session>()
-const CURRENT_USER = contextKey('nested.currentUser').of<CurrentUser>()
-
 const session = layer({
   name: 'nested.session',
-  provides: [SESSION],
+  state: type<{
+    'nested.session': Session
+  }>(),
   factory: () => async (_ctx, next) => {
     await next({ 'nested.session': { id: 'session-1' } })
   },
@@ -23,10 +22,12 @@ const session = layer({
 
 const authentication = layer({
   name: 'nested.authentication',
-  requires: [SESSION],
-  provides: [CURRENT_USER],
+  requires: [session],
+  state: type<{
+    'nested.currentUser': CurrentUser
+  }>(),
   factory: () => async (ctx, next) => {
-    const sessionId: string = ctx['nested.session'].id
+    const sessionId: string = ctx.state['nested.session'].id
     await next({ 'nested.currentUser': { id: sessionId } })
   },
 })
@@ -88,15 +89,18 @@ implementation({
   protocol: http,
   factory: () => ({
     get(ctx) {
-      const id: string = ctx.params.id
-      const sessionValue: Session = ctx['nested.session']
-      const currentUser: CurrentUser = ctx['nested.currentUser']
+      const id: string = ctx.input.params.id
+      const sessionValue: Session = ctx.state['nested.session']
+      const currentUser: CurrentUser = ctx.state['nested.currentUser']
       void [id, sessionValue, currentUser]
 
       ctx.response.unavailable({ body: { error: 'unavailable' } })
       ctx.response.unauthorized({ body: { error: 'unauthorized' } })
       return ctx.response.ok({
-        body: { id: ctx.params.id, userId: ctx['nested.currentUser'].id },
+        body: {
+          id: ctx.input.params.id,
+          userId: ctx.state['nested.currentUser'].id,
+        },
       })
     },
   }),
@@ -128,8 +132,10 @@ implementation({
   factory: () => ({
     get(ctx) {
       // @ts-expect-error 別mountのancestor Contextは伝播しない
-      ctx['nested.currentUser']
-      return ctx.response.ok({ body: { id: ctx.params.id, userId: 'public' } })
+      ctx.state['nested.currentUser']
+      return ctx.response.ok({
+        body: { id: ctx.input.params.id, userId: 'public' },
+      })
     },
   }),
 })
@@ -263,8 +269,8 @@ implementation({
   protocol: http,
   factory: () => ({
     route12(ctx) {
-      const sessionValue: Session = ctx['nested.session']
-      const currentUser: CurrentUser = ctx['nested.currentUser']
+      const sessionValue: Session = ctx.state['nested.session']
+      const currentUser: CurrentUser = ctx.state['nested.currentUser']
       void [sessionValue, currentUser]
       return ctx.response.ok({ body: 'ok' })
     },

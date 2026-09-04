@@ -249,13 +249,11 @@ function createResponses(
 ): Record<string, OpenApiObject> {
   const grouped = new Map<
     number,
-    { readonly variant: string; readonly response: HttpResponseDefinition }[]
+    { readonly name: string; readonly response: HttpResponseDefinition }[]
   >()
-  for (const [variant, response] of Object.entries(
-    target.definition.responses,
-  )) {
+  for (const [name, response] of Object.entries(target.definition.responses)) {
     const current = grouped.get(response.status) ?? []
-    current.push({ variant, response })
+    current.push({ name, response })
     grouped.set(response.status, current)
   }
 
@@ -272,7 +270,7 @@ function createResponses(
 function createResponse(
   target: HttpOperationTarget,
   entries: readonly {
-    readonly variant: string
+    readonly name: string
     readonly response: HttpResponseDefinition
   }[],
   registry: SchemaRegistry,
@@ -286,11 +284,11 @@ function createResponse(
       `${describeTarget(target)} declares streaming and non-streaming responses with the same status.`,
     )
   }
-  const schemas = entries.map(({ variant, response }) =>
+  const schemas = entries.map(({ name, response }) =>
     registry.reference(
       response.body,
       'output',
-      componentName(target, `Response_${variant}_Output`),
+      componentName(target, `Response_${name}_Output`),
     ),
   )
   const payloadSchema = schemas.length === 1 ? schemas[0]! : { oneOf: schemas }
@@ -298,7 +296,7 @@ function createResponse(
   const headers = mergeResponseHeaders(entries, registry, target)
   const descriptions = [
     ...new Set(
-      entries.map(({ variant, response }) => response.description ?? variant),
+      entries.map(({ name, response }) => response.description ?? name),
     ),
   ]
 
@@ -331,29 +329,29 @@ function createResponse(
 
 function mergeResponseHeaders(
   entries: readonly {
-    readonly variant: string
+    readonly name: string
     readonly response: HttpResponseDefinition
   }[],
   registry: SchemaRegistry,
   target: HttpOperationTarget,
 ): Record<string, OpenApiObject> | undefined {
   const result = new Map<string, JsonSchema[]>()
-  for (const { variant, response } of entries) {
+  for (const { name, response } of entries) {
     if (!response.headers) continue
     const materialized = registry.materialize(
       response.headers,
       'output',
-      componentName(target, `Response_${variant}_Headers_Output`),
+      componentName(target, `Response_${name}_Headers_Output`),
     )
     const properties = objectProperties(
       materialized.schema,
       'LUTRE_OPENAPI_HEADER_SCHEMA_001',
       `${describeTarget(target)} response headers`,
     )
-    for (const [name, schema] of Object.entries(properties)) {
-      const current = result.get(name) ?? []
+    for (const [headerName, schema] of Object.entries(properties)) {
+      const current = result.get(headerName) ?? []
       current.push(schema)
-      result.set(name, current)
+      result.set(headerName, current)
     }
   }
   if (result.size === 0) return undefined

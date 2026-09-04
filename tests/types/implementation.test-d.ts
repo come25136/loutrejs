@@ -1,13 +1,12 @@
-import { contract, contextKey, implementation, layer } from '@loutrejs/loutre'
+import { type, contract, implementation, layer } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
-const SESSION = contextKey('implementation.session').of<{
-  readonly userId: string
-}>()
 const session = layer({
   name: 'implementation-session',
-  provides: [SESSION],
+  state: type<{
+    'implementation.session': { readonly userId: string }
+  }>(),
   factory: () => async (_ctx, next) => {
     await next({ 'implementation.session': { userId: 'user-1' } })
   },
@@ -50,15 +49,15 @@ implementation({
   protocol: http,
   factory: () => ({
     raw(ctx) {
-      const id: string = ctx.params.id
+      const id: string = ctx.input.params.id
       return ctx.response.ok({ body: id })
     },
     transformed(ctx) {
-      const id: number = ctx.params.id
-      const page: number = ctx.query.page
-      const authorization: string = ctx.headers.authorization
-      const name: string = ctx.body.name
-      const userId: string = ctx['implementation.session'].userId
+      const id: number = ctx.input.params.id
+      const page: number = ctx.input.query.page
+      const authorization: string = ctx.input.headers.authorization
+      const name: string = ctx.input.body.name
+      const userId: string = ctx.state['implementation.session'].userId
       return ctx.response.ok({
         body: `${id}:${page}:${authorization}:${name}:${userId}`,
       })
@@ -69,10 +68,10 @@ implementation({
   name: 'MissingProcedure',
   contract: Contract,
   protocol: http,
-  // @ts-expect-error procedures省略時は指定protocolの全procedureが必要
+  // @ts-expect-error procedures省略時は指定protocolの全procedureが必要,
   factory: () => ({
     raw(ctx) {
-      return ctx.response.ok({ body: ctx.params.id })
+      return ctx.response.ok({ body: ctx.input.params.id })
     },
   }),
 })
@@ -83,7 +82,7 @@ const Partial = implementation({
   procedures: ['raw'],
   factory: () => ({
     raw(ctx) {
-      return ctx.response.ok({ body: ctx.params.id })
+      return ctx.response.ok({ body: ctx.input.params.id })
     },
   }),
 })
@@ -94,7 +93,7 @@ implementation({
   contract: Contract,
   protocol: http,
   procedures: ['raw'],
-  // @ts-expect-error procedure resultはProtocolDescriptorのresultに一致する必要がある
+  // @ts-expect-error procedure resultはProtocolDescriptorのresultに一致する必要がある,
   factory: () => ({ raw: () => 1 }),
 })
 implementation({
@@ -117,6 +116,6 @@ implementation({
   contract: Contract,
   protocol: http,
   procedures: ['raw'],
-  // @ts-expect-error Implementation factoryは同期関数に限定する
+  // @ts-expect-error Implementation factoryは同期関数に限定する,
   factory: async () => ({ raw: () => ({}) }),
 })

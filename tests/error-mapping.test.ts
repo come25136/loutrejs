@@ -38,6 +38,7 @@ describe('Domain ErrorとProtocol mapping', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         get(): never {
           throw UserNotFound({ userId: 'missing-user' })

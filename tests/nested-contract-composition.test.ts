@@ -1,6 +1,6 @@
 import {
+  type,
   contract,
-  contextKey,
   defineApplication,
   defineModule,
   implementation,
@@ -14,14 +14,10 @@ import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 
 describe('Nested Contract composition', () => {
-  const REQUEST_SCOPE = contextKey('nested.requestScope').of<string>()
-  const CURRENT_USER = contextKey('nested.currentUser').of<{
-    readonly id: string
-  }>()
-
   const requestScope = layer({
     name: 'nested.requestScope',
-    provides: [REQUEST_SCOPE],
+
+    state: type<{ 'nested.requestScope': string }>(),
     factory: () => async (_ctx, next) => {
       await next({ 'nested.requestScope': 'request-1' })
     },
@@ -29,11 +25,16 @@ describe('Nested Contract composition', () => {
 
   const authentication = layer({
     name: 'nested.authentication',
-    requires: [REQUEST_SCOPE],
-    provides: [CURRENT_USER],
+    requires: [requestScope],
+
+    state: type<{
+      'nested.currentUser': { readonly id: string }
+    }>(),
     factory: () => async (ctx, next) => {
       await next({
-        'nested.currentUser': { id: `user:${ctx['nested.requestScope']}` },
+        'nested.currentUser': {
+          id: `user:${ctx.state['nested.requestScope']}`,
+        },
       })
     },
   })
@@ -93,13 +94,14 @@ describe('Nested Contract composition', () => {
     name: 'NestedProfileController',
     contract: AppContract.http.api.me.profile,
     protocol: http,
+
     factory: () => ({
       get(ctx) {
         return ctx.response.ok({
           body: {
-            id: ctx.params.id,
-            userId: ctx['nested.currentUser'].id,
-            scope: ctx['nested.requestScope'],
+            id: ctx.input.params.id,
+            userId: ctx.state['nested.currentUser'].id,
+            scope: ctx.state['nested.requestScope'],
           },
         })
       },
@@ -194,7 +196,7 @@ describe('Nested Contract composition', () => {
     ).toBe('http:GET:/admin/profile/{}')
   })
 
-  it('Application Contractを基準にmissing/duplicate implementationを検証する', () => {
+  it('Application Contractを基準にmissing/duplicate defineImplementationを検証する', () => {
     const CoverageContract = contract([
       http({
         api: {
@@ -214,10 +216,11 @@ describe('Nested Contract composition', () => {
       name: 'ProfileOnly',
       contract: CoverageContract.http.api.profile,
       protocol: http,
+
       factory: () => ({
         get(ctx) {
           return ctx.response.ok({
-            body: { id: ctx.params.id, userId: 'user', scope: 'scope' },
+            body: { id: ctx.input.params.id, userId: 'user', scope: 'scope' },
           })
         },
       }),
@@ -226,6 +229,7 @@ describe('Nested Contract composition', () => {
       name: 'DuplicateProfile',
       contract: CoverageContract.http.api.profile,
       protocol: http,
+
       factory: ProfileOnly.factory,
     })
     const Module = defineModule(() => ({
@@ -350,6 +354,6 @@ describe('Nested Contract composition', () => {
           },
         }),
       ]),
-    ).toThrow(/Duplicate inherited HTTP response variant: ok/)
+    ).toThrow(/Duplicate inherited HTTP response: ok/)
   })
 })

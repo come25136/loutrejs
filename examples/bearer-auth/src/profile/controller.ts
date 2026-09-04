@@ -8,7 +8,7 @@ export const BearerProfileController = implementation({
   protocol: http,
   factory: () => ({
     get(ctx) {
-      return ctx.response.ok({ body: ctx.currentUser })
+      return ctx.response.ok({ body: ctx.state.currentUser })
     },
   }),
 })

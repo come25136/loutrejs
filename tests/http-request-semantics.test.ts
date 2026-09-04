@@ -38,14 +38,15 @@ describe('HTTP request semantics', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         inspect(ctx) {
           return ctx.response.ok({
             body: {
-              tags: Array.isArray(ctx.query.tag)
-                ? ctx.query.tag
-                : [ctx.query.tag],
-              header: ctx.headers['x-repeat'],
+              tags: Array.isArray(ctx.input.query.tag)
+                ? ctx.input.query.tag
+                : [ctx.input.query.tag],
+              header: ctx.input.headers['x-repeat'],
             },
           })
         },
@@ -90,12 +91,13 @@ describe('HTTP request semantics', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         upload(ctx) {
-          const file = ctx.body.get('file')
+          const file = ctx.input.body.get('file')
           return ctx.response.accepted({
             body: {
-              name: String(ctx.body.get('name')),
+              name: String(ctx.input.body.get('name')),
               size: file instanceof File ? file.size : 0,
             },
           })
@@ -135,6 +137,7 @@ describe('HTTP request semantics', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         upload(): never {
           throw new Error('呼び出されません')
@@ -175,6 +178,7 @@ describe('HTTP request semantics', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         subscribe(ctx) {
           expect(ctx.signal).toBeInstanceOf(AbortSignal)

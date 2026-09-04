@@ -23,7 +23,9 @@ describe('Module re-export', () => {
       providers: [Service],
     }))()
 
-    const { diagnostics } = compileApplication({ modules: [applicationModule] })
+    const { diagnostics } = compileApplication({
+      modules: [applicationModule],
+    })
 
     expect(diagnostics).toEqual([])
   })

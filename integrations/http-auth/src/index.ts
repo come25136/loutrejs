@@ -1,41 +1,44 @@
-import { defineApplication } from '@loutrejs/loutre'
 import {
+  type,
   contract,
-  contextKey,
-  defineModule,
+  defineApplication,
   implementation,
   layer,
+  defineModule,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
+
 export interface AuthState {
   readonly principal: {
     readonly id: string
   } | null
 }
+
 export interface Session {
   readonly principal: {
     readonly id: string
   }
 }
+
 export interface CurrentTenant {
   readonly id: string
 }
-export const AUTH = contextKey('auth').of<AuthState>()
-export const SESSION = contextKey('session').of<Session>()
-export const CURRENT_TENANT = contextKey('currentTenant').of<CurrentTenant>()
+
 interface HeadersContext {
-  readonly headers: {
-    readonly authorization: string
+  readonly input: {
+    readonly headers: {
+      readonly authorization: string
+    }
   }
 }
+
 export const bearerAuthentication = layer({
   name: 'bearerAuthentication',
-  role: 'authentication',
   requiresValidated: ['headers'],
-  provides: [AUTH],
+  state: type<{ auth: AuthState }>(),
   factory: () => async (ctx: HeadersContext, next) => {
-    const value = ctx.headers.authorization
+    const value = ctx.input.headers.authorization
     await next({
       auth: {
         principal: value === 'Bearer example-token' ? { id: 'user-1' } : null,
@@ -43,27 +46,28 @@ export const bearerAuthentication = layer({
     })
   },
 })
+
 export const authenticated = layer({
   name: 'authenticated',
-  role: 'guard',
-  requires: [AUTH],
-  provides: [SESSION],
+  requires: [bearerAuthentication],
+  state: type<{ session: Session }>(),
   factory: () => async (ctx, next) => {
-    if (!ctx.auth.principal) throw new Error('Authentication required')
-    await next({ session: { principal: ctx.auth.principal } })
+    if (!ctx.state.auth.principal) throw new Error('Authentication required')
+    await next({ session: { principal: ctx.state.auth.principal } })
   },
 })
+
 export const tenantAccess = layer({
   name: 'tenantAccess',
-  role: 'guard',
-  requires: [SESSION],
-  provides: [CURRENT_TENANT],
+  requires: [authenticated],
+  state: type<{ currentTenant: CurrentTenant }>(),
   factory: () => async (ctx, next) => {
     await next({
-      currentTenant: { id: `tenant-${ctx.session.principal.id}` },
+      currentTenant: { id: `tenant-${ctx.state.session.principal.id}` },
     })
   },
 })
+
 export const AccountContract = contract([
   http({
     get: {
@@ -91,6 +95,7 @@ export const AccountContract = contract([
     },
   }),
 ])
+
 export const AccountController = implementation({
   name: 'AccountController',
   contract: AccountContract,
@@ -99,18 +104,20 @@ export const AccountController = implementation({
     get(ctx) {
       return ctx.response.found({
         body: {
-          userId: ctx.session.principal.id,
-          tenantId: ctx.currentTenant.id,
+          userId: ctx.state.session.principal.id,
+          tenantId: ctx.state.currentTenant.id,
         },
       })
     },
   }),
 })
+
 export const AccountModule = defineModule(() => ({
   description:
     'Bearer authentication and optional Execution Context integration',
   implementations: [AccountController],
 }))
+
 export function createAccountApplication() {
   return defineApplication({ modules: [AccountModule()] })
 }

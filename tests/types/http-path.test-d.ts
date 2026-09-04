@@ -48,16 +48,16 @@ declare const multiple: ContextOf<RawController, 'multiple'>
 declare const transformed: ContextOf<RawController, 'transformed'>
 declare const declaredOnly: ContextOf<RawController, 'declaredOnly'>
 declare const root: ContextOf<RawController, 'root'>
-const singleId: string = single.params.id
-const userId: string = multiple.params.userId
-const postId: string = multiple.params.postId
-const transformedId: number = transformed.params.id
-const declaredOnlyId: string = declaredOnly.params.id
+const singleId: string = single.input.params.id
+const userId: string = multiple.input.params.userId
+const postId: string = multiple.input.params.postId
+const transformedId: number = transformed.input.params.id
+const declaredOnlyId: string = declaredOnly.input.params.id
 void [singleId, userId, postId, transformedId, declaredOnlyId]
 // @ts-expect-error pathに存在しないparamは参照できない
-single.params.userId
+single.input.params.userId
 // @ts-expect-error root pathにはparamが存在しない
-root.params.id
+root.input.params.id
 type CoercedNumberInput = SchemaInput<ReturnType<typeof z.coerce.number>>
 const rawInput: CoercedNumberInput = '1'
 void rawInput

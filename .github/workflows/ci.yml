@@ -78,7 +78,9 @@ jobs:
           node-version: 22.x
 
       - name: Install Node.js 22 type baseline
-        run: npm install --no-save --package-lock=false @types/node@22.20.1
+        run: |
+          npm pkg set 'devDependencies.@types/node=22.20.1'
+          npm install --ignore-scripts --no-audit --no-fund
 
       - name: Type check
         run: npm run check

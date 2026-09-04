@@ -110,6 +110,7 @@ describe('OpenAPI generation', () => {
       name: 'ApiImplementation',
       contract: ApiContract,
       protocol: http,
+
       factory: () => ({
         copy(ctx) {
           return ctx.response.ok({ body: { ok: true } })

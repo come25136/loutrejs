@@ -15,7 +15,6 @@ import {
   type ImplementationDescriptor,
   type LayerConsumer,
   type LayerDescriptor,
-  type LayerRuntime,
   type ModuleInstance,
   type ModuleTemplate,
   type ProviderDescriptor,
@@ -87,6 +86,11 @@ export function collectRuntimeModuleGraph(
   return { modules, providers }
 }
 
+type ExecutableLayerRuntime = (
+  context: object,
+  next: (...arguments_: readonly unknown[]) => Promise<void>,
+) => Promise<unknown>
+
 export class Container {
   readonly #providers = new Map<TokenLike, ProviderDescriptor>()
   readonly #applicationCache = new Map<TokenLike, unknown>()
@@ -100,10 +104,7 @@ export class Container {
     TaskRuntime<any, any>
   >()
   readonly #taskConsumers = new Map<TaskDescriptor<any, any>, TaskConsumer>()
-  readonly #layerCache = new Map<
-    LayerDescriptor,
-    LayerRuntime<object, readonly [], unknown>
-  >()
+  readonly #layerCache = new Map<LayerDescriptor, ExecutableLayerRuntime>()
   readonly #logger: Logger
   readonly #recorder: DependencyRecorder | undefined
   readonly #environment = new Map<EnvClass, object>()
@@ -341,9 +342,7 @@ export class Container {
     }
   }
 
-  layerRuntime(
-    layer: LayerDescriptor,
-  ): LayerRuntime<object, readonly [], unknown> {
+  layerRuntime(layer: LayerDescriptor): ExecutableLayerRuntime {
     const cached = this.#layerCache.get(layer)
     if (!cached) {
       throw new DependencyResolutionError(
@@ -508,7 +507,7 @@ export class Container {
     layer: LayerDescriptor,
     consumer: LayerConsumer,
     cache: boolean,
-  ): LayerRuntime<object, readonly [], unknown> {
+  ): ExecutableLayerRuntime {
     const cached = this.#layerCache.get(layer)
     if (cache && cached) return cached
     const runtime = runInInjectionContext(
@@ -536,7 +535,7 @@ export class Container {
         `LUTRE_LAYER_FACTORY_RESULT: Layer ${layer.name} factory must return a runtime function.`,
       )
     }
-    const normalized = runtime as LayerRuntime<object, readonly [], unknown>
+    const normalized = runtime as ExecutableLayerRuntime
     if (cache) this.#layerCache.set(layer, normalized)
     return normalized
   }

@@ -1,14 +1,12 @@
-import { contextKey, inject, layer } from '@loutrejs/loutre'
+import { type, layer, inject } from '@loutrejs/loutre'
 import {
   DrizzleDatabase,
   type DrizzleTransaction,
 } from '../database/drizzle.js'
 
-export const TRANSACTION = contextKey('transaction').of<DrizzleTransaction>()
-
 export const transaction = layer({
   name: 'database.transaction',
-  provides: [TRANSACTION],
+  state: type<{ transaction: DrizzleTransaction }>(),
   factory:
     (database = inject(DrizzleDatabase)) =>
     async (_ctx, next) => {

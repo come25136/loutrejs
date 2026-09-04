@@ -1,12 +1,10 @@
-import { contextKey, inject, layer } from '@loutrejs/loutre'
+import { type, layer, inject } from '@loutrejs/loutre'
 import { Prisma } from '../generated/prisma/client.js'
 import { PrismaDatabase, type PrismaTransaction } from '../database/prisma.js'
 
-export const TRANSACTION = contextKey('transaction').of<PrismaTransaction>()
-
 export const transaction = layer({
   name: 'database.transaction',
-  provides: [TRANSACTION],
+  state: type<{ transaction: PrismaTransaction }>(),
   factory:
     (database = inject(PrismaDatabase)) =>
     async (_ctx, next) => {

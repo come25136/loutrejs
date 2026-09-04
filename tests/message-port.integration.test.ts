@@ -21,23 +21,23 @@ describe('MessagePort streaming integration', () => {
     expect(messages).toEqual([
       {
         id: 'stream-1',
-        variant: 'events',
+        response: 'events',
         value: { sequence: 1, message: 'event-1' },
         done: false,
       },
       {
         id: 'stream-1',
-        variant: 'events',
+        response: 'events',
         value: { sequence: 2, message: 'event-2' },
         done: false,
       },
       {
         id: 'stream-1',
-        variant: 'events',
+        response: 'events',
         value: { sequence: 3, message: 'event-3' },
         done: false,
       },
-      { id: 'stream-1', variant: 'events', done: true },
+      { id: 'stream-1', response: 'events', done: true },
     ])
 
     channel.port1.close()

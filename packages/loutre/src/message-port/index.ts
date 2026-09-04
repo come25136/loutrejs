@@ -1,5 +1,5 @@
 import {
-  type ContextProvidedBeforeTerminal,
+  type StateProvidedBeforeTerminal,
   type IsValidProtocolPipeline,
   validateSchema,
   type ContractDefinition,
@@ -47,7 +47,6 @@ export interface MessagePortProtocol<
 const handler: TerminalLayerDescriptor<'messagePort'> = Object.freeze({
   kind: 'terminal',
   name: 'messagePort.handler',
-  role: 'terminal',
   protocol: 'messagePort',
 })
 
@@ -123,7 +122,7 @@ export interface LogicalMessagePortResult<
   TValue = unknown,
 > {
   readonly kind: 'message-port-result'
-  readonly variant: TVariant
+  readonly response: TVariant
   readonly value: TValue
 }
 
@@ -162,9 +161,10 @@ type MessagePortHandlerContextDefinition<
   TDefinition extends MessagePortProtocolDefinition,
 > = {
   readonly input: unknown
+  readonly state: Readonly<StateProvidedBeforeTerminal<TDefinition['pipeline']>>
   readonly message: MessageHelpers<MessagePortProtocol<TDefinition>>
   readonly logger: Logger
-} & ContextProvidedBeforeTerminal<TDefinition['pipeline']>
+}
 
 export type MessagePortHandlerContext<TProtocol extends MessagePortProtocol> =
   MessagePortHandlerContextDefinition<TProtocol['definition']>
@@ -238,14 +238,16 @@ export function createMessagePortExecution(options: {
             source: `${route.implementation.name}.${route.procedure}`,
           })
           const message = Object.fromEntries(
-            Object.keys(route.protocol.definition.responses).map((variant) => [
-              variant,
-              (value: unknown) => ({
-                kind: 'message-port-result',
-                variant,
-                value,
-              }),
-            ]),
+            Object.keys(route.protocol.definition.responses).map(
+              (responseName) => [
+                responseName,
+                (value: unknown) => ({
+                  kind: 'message-port-result',
+                  response: responseName,
+                  value,
+                }),
+              ],
+            ),
           )
           const context = {
             input,
@@ -309,8 +311,8 @@ async function finalize(
   definition: MessagePortProtocolDefinition,
   result: LogicalMessagePortResult,
 ): Promise<LogicalMessagePortResult> {
-  const response = definition.responses[result.variant]
-  if (!response) throw new Error(`Undeclared variant: ${result.variant}`)
+  const response = definition.responses[result.response]
+  if (!response) throw new Error(`Undeclared response: ${result.response}`)
   if (response.stream === 'server') {
     if (!isAsyncIterable(result.value)) {
       throw new Error('Server-stream result requires an AsyncIterable')
@@ -364,20 +366,20 @@ export function attachMessagePort(
         for await (const value of result.value) {
           port.postMessage({
             id: request.id,
-            variant: result.variant,
+            response: result.response,
             value,
             done: false,
           })
         }
         port.postMessage({
           id: request.id,
-          variant: result.variant,
+          response: result.response,
           done: true,
         })
       } else {
         port.postMessage({
           id: request.id,
-          variant: result.variant,
+          response: result.response,
           value: result.value,
           done: true,
         })

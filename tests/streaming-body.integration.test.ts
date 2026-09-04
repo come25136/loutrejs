@@ -51,9 +51,10 @@ describe('streaming validate.body', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         async upload(ctx) {
-          const reader = ctx.body.getReader()
+          const reader = ctx.input.body.getReader()
           let bytes = 0
           while (true) {
             const chunk = await reader.read()

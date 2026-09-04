@@ -64,22 +64,11 @@ export interface TokenIR {
   readonly id: string
 }
 
-export interface ContextKeyIR {
-  readonly name: string
-}
-
 export interface LayerIR {
   readonly index: number
+  readonly kind: 'layer' | 'validation' | 'terminal'
   readonly name: string
-  readonly role:
-    | 'generic'
-    | 'authentication'
-    | 'guard'
-    | 'validation'
-    | 'framework'
-    | 'terminal'
   readonly requires: readonly string[]
-  readonly provides: readonly string[]
   readonly returns?: readonly string[]
   readonly requiresValidated: readonly string[]
   readonly dependencies?: readonly string[]
@@ -87,8 +76,8 @@ export interface LayerIR {
   readonly pipeline?: readonly LayerIR[]
   readonly shortCircuits?: readonly {
     readonly protocol: string
-    readonly variant: string
-    readonly response?: Readonly<Record<string, unknown>>
+    readonly response: string
+    readonly metadata?: Readonly<Record<string, unknown>>
   }[]
 }
 
@@ -208,7 +197,6 @@ export interface ApplicationGraphIR {
   readonly arguments?: ApplicationArgumentsIR
   readonly providers: readonly ProviderIR[]
   readonly tokens: readonly TokenIR[]
-  readonly contextKeys: readonly ContextKeyIR[]
   readonly contracts: readonly ContractIR[]
   readonly pipelines: readonly PipelineIR[]
   readonly implementations: readonly ImplementationIR[]

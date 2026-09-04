@@ -1,12 +1,11 @@
 import {
-  contextKey,
-  inject,
+  type,
   layer,
+  inject,
   provide,
   shortCircuit,
   token,
   type LayerDescriptor,
-  type LayerRuntime,
   type PipelineItem,
   type TerminalLayerDescriptor,
 } from '@loutrejs/loutre'
@@ -19,7 +18,6 @@ import {
 const terminal: TerminalLayerDescriptor<'test'> = {
   kind: 'terminal',
   name: 'test.terminal',
-  role: 'terminal',
   protocol: 'test',
 }
 
@@ -27,10 +25,11 @@ function hooks(
   context: Record<string, unknown>,
   terminalResult: unknown = 'done',
 ) {
-  const runtimes = new Map<
-    LayerDescriptor,
-    LayerRuntime<object, readonly [], unknown>
-  >()
+  type ExecutableLayerRuntime = (
+    context: object,
+    next: (...arguments_: readonly unknown[]) => Promise<void>,
+  ) => Promise<unknown>
+  const runtimes = new Map<LayerDescriptor, ExecutableLayerRuntime>()
   return {
     context,
     validate: () => undefined,
@@ -38,11 +37,7 @@ function hooks(
     layer: (descriptor: LayerDescriptor) => {
       const cached = runtimes.get(descriptor)
       if (cached) return cached
-      const runtime = descriptor.factory() as LayerRuntime<
-        object,
-        readonly [],
-        unknown
-      >
+      const runtime = descriptor.factory() as unknown as ExecutableLayerRuntime
       runtimes.set(descriptor, runtime)
       return runtime
     },
@@ -155,32 +150,74 @@ describe('continuation Pipeline', () => {
     ).rejects.toThrow('LUTRE_LAYER_SHORT_CIRCUIT_AFTER_NEXT')
   })
 
-  it('next(provided)のContextを後段へ追加する', async () => {
-    const VALUE = contextKey('value').of<string>()
+  it('next(contribution)のStateを後段へ追加する', async () => {
     const context: Record<string, unknown> = {}
     const provider = layer({
       name: 'provider',
-      provides: [VALUE],
+      state: type<{
+        value: string
+      }>(),
       factory: () => async (_ctx, next) => {
         await next({ value: 'ready' })
       },
     })
     const consumer = layer({
       name: 'consumer',
-      requires: [VALUE],
+      requires: [provider],
+
       factory: () => async (ctx, next) => {
-        expect(ctx.value).toBe('ready')
+        expect(ctx.state.value).toBe('ready')
         await next()
       },
     })
 
     await executePipeline([provider, consumer, terminal], hooks(context))
-    expect(context.value).toBe('ready')
+    expect(context.state).toEqual({ value: 'ready' })
   })
 
-  it('childがprovideしたContextを親Pipeline後段へ維持する', async () => {
-    const VALUE = contextKey('childValue').of<string>()
-    const context: Record<string, unknown> = {}
+  it('同じState namespaceのpayloadをLayer間で拡張する', async () => {
+    const identity = layer({
+      name: 'identity',
+      state: type<{
+        currentUser: { id: string; name: string }
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ currentUser: { id: 'user-1', name: 'Loutre' } })
+      },
+    })
+    const authorization = layer({
+      name: 'authorization',
+      requires: [identity],
+
+      state: type<{
+        currentUser: { roles: string[] }
+      }>(),
+      factory: () => async (ctx, next) => {
+        expect(ctx.state.currentUser.id).toBe('user-1')
+        await next({ currentUser: { roles: ['admin'] } })
+      },
+    })
+    const consumer = layer({
+      name: 'consumer',
+      requires: [authorization],
+
+      factory: () => async (ctx, next) => {
+        expect(ctx.state.currentUser).toEqual({
+          id: 'user-1',
+          name: 'Loutre',
+          roles: ['admin'],
+        })
+        await next()
+      },
+    })
+
+    await executePipeline(
+      [identity, authorization, consumer, terminal],
+      hooks({}),
+    )
+  })
+
+  it('childが追加したStateを親Pipeline後段へ維持する', async () => {
     const wrapper = layer({
       name: 'wrapper',
       factory: () => async (_ctx, next) => {
@@ -189,69 +226,102 @@ describe('continuation Pipeline', () => {
     })
     const provider = layer({
       name: 'child-provider',
-      provides: [VALUE],
+      state: type<{
+        childValue: string
+      }>(),
       factory: () => async (_ctx, next) => {
         await next({ childValue: 'ready' })
       },
     })
     const consumer = layer({
       name: 'parent-consumer',
-      requires: [VALUE],
+      requires: [provider],
+
       factory: () => async (ctx, next) => {
-        expect(ctx.childValue).toBe('ready')
+        expect(ctx.state.childValue).toBe('ready')
         await next()
       },
     })
 
-    await executePipeline(
-      [wrapper([provider]), consumer, terminal],
-      hooks(context),
-    )
+    await executePipeline([wrapper([provider]), consumer, terminal], hooks({}))
   })
 
-  it('既存Context propertyの上書きを拒否する', async () => {
-    const SESSION = contextKey('session').of<string>()
+  it('既存State namespaceのscalar上書きを拒否する', async () => {
     const provider = layer({
       name: 'provider',
-      provides: [SESSION],
+      state: type<{
+        session: string
+      }>(),
       factory: () => async (_ctx, next) => {
         await next({ session: 'new' })
       },
     })
 
     await expect(
-      executePipeline([provider, terminal], hooks({ session: 'existing' })),
-    ).rejects.toThrow('cannot overwrite')
+      executePipeline(
+        [provider, terminal],
+        hooks({ state: { session: 'existing' } }),
+      ),
+    ).rejects.toThrow('cannot overwrite existing State namespace session')
   })
 
-  it('未宣言Context propertyを拒否する', async () => {
-    const broken = layer({
-      name: 'undeclared',
+  it('同じState namespaceの既存payload property上書きを拒否する', async () => {
+    const first = layer({
+      name: 'first',
+      state: type<{
+        session: { id: string }
+      }>(),
       factory: () => async (_ctx, next) => {
-        await (next as (provided: object) => Promise<void>)({ extra: true })
+        await next({ session: { id: 'first' } })
+      },
+    })
+    const second = layer({
+      name: 'second',
+      state: type<{
+        session: { id: string }
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ session: { id: 'second' } })
+      },
+    })
+
+    await expect(
+      executePipeline([first, second, terminal], hooks({})),
+    ).rejects.toThrow('cannot overwrite existing State property session.id')
+  })
+
+  it('plain object以外のState contributionを拒否する', async () => {
+    const broken = layer({
+      name: 'invalid-state',
+      factory: () => async (_ctx, next) => {
+        await (next as (provided: unknown) => Promise<void>)(['invalid'])
       },
     })
 
     await expect(
       executePipeline([broken, terminal], hooks({})),
-    ).rejects.toThrow('undeclared Context property extra')
+    ).rejects.toThrow('must pass a plain State contribution')
   })
 
-  it('provides内の同名property重複をLayer定義時に拒否する', () => {
-    const FIRST = contextKey('duplicate').of<string>()
-    const SECOND = contextKey('duplicate').of<string>()
+  it('requiresしたLayerが未実行なら拒否する', async () => {
+    const dependency = layer({
+      name: 'dependency',
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
+    })
+    const consumer = layer({
+      name: 'consumer',
+      requires: [dependency],
 
-    expect(() =>
-      (layer as any)({
-        name: 'duplicate-provider',
-        provides: [FIRST, SECOND],
-        factory:
-          () =>
-          async (_ctx: object, next: (value: object) => Promise<void>) => {
-            await next({ duplicate: 'value' })
-          },
-      }),
-    ).toThrow('Layer provides contains duplicate Context property duplicate')
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
+    })
+
+    await expect(
+      executePipeline([consumer, terminal], hooks({})),
+    ).rejects.toThrow('Layer dependency required by consumer is unavailable')
   })
 
   it('Prisma風callback wrapperでchildだけを囲み親後段へ戻る', async () => {

@@ -22,17 +22,14 @@ export interface CorsOptions {
 }
 
 export interface CorsLayerDescriptor extends LayerDescriptor<
-  readonly [],
+  {},
   readonly [],
   never,
   readonly [],
   string,
-  'framework',
   readonly [],
-  object
-> {
-  readonly role: 'framework'
-}
+  {}
+> {}
 
 type NormalizedCorsOrigin =
   | { readonly kind: 'wildcard' }
@@ -56,17 +53,9 @@ const httpToken = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 
 export function cors(options: CorsOptions = {}): CorsLayerDescriptor {
   const policy = normalizeCorsOptions(options)
-  const descriptor = layer<
-    readonly [],
-    readonly [],
-    object,
-    never,
-    readonly [],
-    string,
-    'framework'
-  >({
+  const descriptor = layer({
     name: options.name ?? 'cors',
-    role: 'framework',
+
     factory: () => async (_ctx, next) => {
       await next()
     },

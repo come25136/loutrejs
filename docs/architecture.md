@@ -453,31 +453,38 @@ Pipeline
 
 Context is passed to the next process by combining Layer, Validation, and Terminal.
 
-Layers are defined with static metadata and synchronous factories.
+Layers are declared as a single object. Static graph metadata stays visible without running the synchronous factory, while `state: type<Contribution>()` carries only the state type needed to contextually type the factory.
 
 ```ts
 const auth = layer({
   name: 'auth',
-  requires: [SESSION],
-  provides: [CURRENT_USER],
-
+  requires: [session],
+  state: type<{
+    currentUser: User
+  }>(),
   factory:
     (users = inject(UserService)) =>
     async (ctx, next) => {
-      const currentUser = await users.resolve(ctx.session)
+      const currentUser = await users.resolve(ctx.state.session)
       await next({ currentUser })
     },
 })
 ```
 
-`requires` represents the Context Key required by the layer, and `provides` represents the Context Key added to subsequent processing.
+`requires` contains exact Layer dependencies. A required Layer must have completed before the current Layer runs, and its transitive state is available through `ctx.state`.
 
-Runtime detects Context operations such as:
+`type<T>()` has no runtime semantics; it is a value-level carrier for type information. The contribution declared by `state` is merged into `ctx.state`. Multiple Layers may extend the same top-level namespace when both values are plain objects and they add different payload properties; overwriting an existing namespace or payload property is rejected at Runtime.
 
-- Access to undeclared property
-- Missing required Context Key
-- Duplicate Context Key
-- Implicit overwriting of existing Context
+Layer is not a framework-internal primitive only. Users can build reusable Layer factories such as authentication, rate limiting, or transaction wrappers directly on top of `layer()`. Wrapper authors do not need a dedicated `LayerDescriptor` type or casts: contribution types are inferred from `state`, protocol-specific Context types from the runtime function parameter, and short-circuit result types from the value returned by `shortCircuit()`. There is no `context` or `result` metadata used only to transport types.
+
+Runtime detects state and Layer contract violations such as:
+
+- Missing required Layer
+- Invalid or non-object state contribution
+- Implicit overwriting of an existing state namespace or payload property
+- `next()` skip or re-entry
+
+`next()` always returns `Promise<void>`.
 
 The layer calls `next()` only once or terminates the Pipeline with `shortCircuit()`.
 
@@ -534,7 +541,7 @@ The Application Graph includes relationships such as:
 
 - Module and public boundaries
 - Provider and token
-- Context Key
+- Layer dependencies and execution state
 - Contract
 - Pipeline
 - Implementation

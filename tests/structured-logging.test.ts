@@ -86,11 +86,14 @@ describe('構造化ログ', () => {
       name: 'HealthImplementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         health: (context) => context.response.ok({ body: 'ok' }),
       }),
     })
-    const Module = defineModule(() => ({ implementations: [Implementation] }))
+    const Module = defineModule(() => ({
+      implementations: [Implementation],
+    }))
     const application = createTestApplication({ modules: [Module()], logger })
     const response = await application.fetch(
       new Request('https://fixture.test/missing?secret=value'),
@@ -130,6 +133,7 @@ describe('構造化ログ', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         fail(): never {
           throw new Error('fixture failure')
@@ -203,6 +207,7 @@ describe('構造化ログ', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         fail(): never {
           throw ExpectedError({ reason: 'expected' })
@@ -245,6 +250,7 @@ describe('構造化ログ', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: messagePort,
+
       factory: () => ({
         ping(ctx) {
           return ctx.message.ok('pong')
@@ -262,7 +268,7 @@ describe('構造化ログ', () => {
     const result = await application.invoke('ping')
     expect(result).toEqual({
       kind: 'message-port-result',
-      variant: 'ok',
+      response: 'ok',
       value: 'pong',
     })
     expect(records).toContainEqual(

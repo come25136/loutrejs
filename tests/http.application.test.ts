@@ -1,7 +1,7 @@
 import { createTestApplication } from './helpers/application.js'
 import {
+  type,
   contract,
-  contextKey,
   defineModule,
   implementation,
   layer,
@@ -12,11 +12,11 @@ import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 describe('HTTP application boundary', () => {
   it('全HTTP入力を検証し、Layer stateをctxからapplication-scoped Controllerへ渡す', async () => {
-    const EXECUTION_ID = contextKey('executionId').of<string>()
     let executions = 0
     const execution = layer({
       name: 'execution-id',
-      provides: [EXECUTION_ID],
+
+      state: type<{ executionId: string }>(),
       factory: () => async (_ctx, next) => {
         executions += 1
         await next({ executionId: `exec-${executions}` })
@@ -72,16 +72,17 @@ describe('HTTP application boundary', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => {
         controllerInstances += 1
         return {
           update(ctx) {
             return ctx.response.updated({
               body: {
-                id: ctx.params.id,
-                page: ctx.query.page,
-                name: ctx.body.name,
-                executionId: ctx.executionId,
+                id: ctx.input.params.id,
+                page: ctx.input.query.page,
+                name: ctx.input.body.name,
+                executionId: ctx.state.executionId,
               },
               headers: {
                 'x-dynamic': 'request',
@@ -177,13 +178,16 @@ describe('HTTP application boundary', () => {
       name: 'NoContentController',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         remove(ctx) {
           return ctx.response.noContent({ body: undefined })
         },
       }),
     })
-    const Module = defineModule(() => ({ implementations: [Implementation] }))
+    const Module = defineModule(() => ({
+      implementations: [Implementation],
+    }))
     const application = createTestApplication({
       modules: [Module()],
       logger: silentLogger,
@@ -265,6 +269,7 @@ describe('HTTP application boundary', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         run(ctx) {
           return ctx.response.ok({
@@ -306,6 +311,7 @@ describe('HTTP application boundary', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         run(ctx) {
           return ctx.response.ok({
@@ -350,6 +356,7 @@ describe('HTTP application boundary', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         run(ctx) {
           return ctx.response.ok({
@@ -378,10 +385,11 @@ describe('HTTP application boundary', () => {
     let controllerCalled = false
     const cached = layer({
       name: 'cached-result',
+
       factory: () => async () =>
         shortCircuit({
           kind: 'http-result' as const,
-          variant: 'ok',
+          response: 'ok' as const,
           body: { value: 'cached' },
         }),
     })
@@ -404,6 +412,7 @@ describe('HTTP application boundary', () => {
       name: 'Implementation',
       contract: Contract,
       protocol: http,
+
       factory: () => ({
         run() {
           controllerCalled = true
@@ -453,9 +462,10 @@ function createInputDecodeFixture() {
     name: 'Implementation',
     contract: Contract,
     protocol: http,
+
     factory: () => ({
       decode(ctx) {
-        return ctx.response.ok({ body: { value: ctx.params.value } })
+        return ctx.response.ok({ body: { value: ctx.input.params.value } })
       },
     }),
   })

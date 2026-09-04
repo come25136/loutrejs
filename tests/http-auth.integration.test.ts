@@ -60,6 +60,7 @@ describe('HTTP auth integration', () => {
       name: 'AccountController',
       contract: InvalidContract,
       protocol: http,
+
       factory: AccountController.factory as never,
     })
     const InvalidModule = defineModule(() => ({
