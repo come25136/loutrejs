@@ -1,9 +1,12 @@
-import { type, layer, type PipelineItem, shortCircuit } from '@loutrejs/loutre'
 import {
-  type BasicAuthLayerDescriptor,
-  basicAuth,
-  http,
-} from '@loutrejs/loutre/http'
+  type,
+  layer,
+  type PipelineItem,
+  registerLayerShortCircuits,
+  shortCircuit,
+  type Type,
+} from '@loutrejs/loutre'
+import { basicAuth, http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const authentication = basicAuth({
@@ -18,18 +21,123 @@ const authentication = basicAuth({
   }),
 })
 
-// @ts-expect-error BasicAuthLayerDescriptorはcontribution/response/bodyを指定する
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type ErasedAuthentication = BasicAuthLayerDescriptor<{}>
-
-const genericAuthentication: BasicAuthLayerDescriptor<
-  {},
-  'unauthorized',
-  { readonly error: string }
-> = authentication
-void genericAuthentication
 const staticShortCircuits: readonly [] = authentication.shortCircuits
 void staticShortCircuits
+
+interface UserlandAuthContext {
+  readonly input: {
+    readonly headers: Readonly<Record<string, string | undefined>>
+  }
+}
+
+interface UserlandAuthDefinition<
+  TContribution extends object,
+  TResponse extends string,
+  TBody,
+> {
+  readonly state: Type<TContribution>
+  readonly factory: () => {
+    readonly authenticate: (
+      authorization: string,
+    ) => TContribution | undefined | Promise<TContribution | undefined>
+    readonly unauthorized: () => {
+      readonly response: TResponse
+      readonly body: TBody
+    }
+  }
+}
+
+function userlandAuth<
+  const TContribution extends object,
+  const TResponse extends string,
+  TBody,
+>(definition: UserlandAuthDefinition<TContribution, TResponse, TBody>) {
+  const descriptor = layer({
+    name: 'userlandAuth',
+    state: definition.state,
+    factory: () => {
+      const runtime = definition.factory()
+      registerLayerShortCircuits(descriptor, [
+        {
+          protocol: 'http',
+          response: runtime.unauthorized().response,
+          metadata: { status: 401 },
+        },
+      ])
+
+      return async (context: UserlandAuthContext, next) => {
+        const authorization = context.input.headers.authorization
+        const contribution = authorization
+          ? await runtime.authenticate(authorization)
+          : undefined
+        if (contribution === undefined) {
+          const unauthorized = runtime.unauthorized()
+          return shortCircuit({
+            kind: 'http-result',
+            response: unauthorized.response,
+            body: unauthorized.body,
+            headers: {
+              'www-authenticate': 'Bearer realm="Userland"',
+            },
+          })
+        }
+        await next(contribution)
+      }
+    },
+  })
+
+  return descriptor
+}
+
+const userlandAuthentication = userlandAuth({
+  state: type<{
+    currentUser: { readonly id: string }
+  }>(),
+  factory: () => ({
+    authenticate: () => ({ currentUser: { id: 'user-1' } }),
+    unauthorized: () => ({
+      response: 'unauthorized',
+      body: { error: '認証が必要です' },
+    }),
+  }),
+})
+
+layer({
+  name: 'userlandAuthorization',
+  requires: [userlandAuthentication],
+  factory: () => async (context, next) => {
+    const id: string = context.state.currentUser.id
+    void id
+    await next()
+  },
+})
+
+http.route({
+  method: 'GET',
+  path: '/userland-auth',
+  responses: {
+    unauthorized: {
+      status: 401,
+      body: z.object({ error: z.string() }),
+      headers: z.object({ 'www-authenticate': z.string() }),
+    },
+  },
+  pipeline: [userlandAuthentication, http.controller],
+})
+
+http.route({
+  method: 'GET',
+  path: '/invalid-userland-auth',
+  responses: {
+    unauthorized: {
+      status: 401,
+      body: z.object({ message: z.string() }),
+      headers: z.object({ 'www-authenticate': z.string() }),
+    },
+  },
+  // @ts-expect-error userland Layerのshort-circuit bodyもresponse schemaと一致する必要がある
+  pipeline: [userlandAuthentication, http.controller],
+})
 
 http.route({
   method: 'GET',
@@ -41,7 +149,7 @@ http.route({
       headers: z.object({ 'www-authenticate': z.string() }),
     },
   },
-  pipeline: [genericAuthentication, http.controller],
+  pipeline: [authentication, http.controller],
 })
 
 http.route({
@@ -111,12 +219,6 @@ interface CustomAuthContext {
   }
 }
 
-type CustomUnauthorized = {
-  readonly kind: 'http-result'
-  readonly response: 'unauthorized'
-  readonly body: { readonly error: string }
-}
-
 const customAuthentication = layer({
   name: 'customAuthentication',
   shortCircuits: [
@@ -126,9 +228,7 @@ const customAuthentication = layer({
       metadata: { status: 401 },
     },
   ],
-  context: type<CustomAuthContext>(),
-  result: type<CustomUnauthorized>(),
-  factory: () => async (context) =>
+  factory: () => async (context: CustomAuthContext) =>
     shortCircuit({
       kind: 'http-result' as const,
       response: 'unauthorized' as const,

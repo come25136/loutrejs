@@ -218,8 +218,7 @@ interface HeadersContext {
 layer({
   name: 'typed-headers',
   state: type<{ otherSession: OtherSession }>(),
-  context: type<HeadersContext>(),
-  factory: () => async (ctx, next) => {
+  factory: () => async (ctx: HeadersContext, next) => {
     const authorization: string = ctx.input.headers.authorization
     await next({ otherSession: { accountId: authorization } })
   },

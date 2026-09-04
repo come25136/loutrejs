@@ -386,11 +386,6 @@ describe('HTTP application boundary', () => {
     const cached = layer({
       name: 'cached-result',
 
-      result: type<{
-        readonly kind: 'http-result'
-        readonly response: 'ok'
-        readonly body: { readonly value: string }
-      }>(),
       factory: () => async () =>
         shortCircuit({
           kind: 'http-result' as const,

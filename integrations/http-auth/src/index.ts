@@ -37,8 +37,7 @@ export const bearerAuthentication = layer({
   name: 'bearerAuthentication',
   requiresValidated: ['headers'],
   state: type<{ auth: AuthState }>(),
-  context: type<HeadersContext>(),
-  factory: () => async (ctx, next) => {
+  factory: () => async (ctx: HeadersContext, next) => {
     const value = ctx.input.headers.authorization
     await next({
       auth: {

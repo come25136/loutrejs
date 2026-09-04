@@ -2,9 +2,8 @@ import {
   layer,
   registerLayerShortCircuits,
   shortCircuit,
-  type as typeCarrier,
 } from '../core/index.js'
-import type { LayerDescriptor, Type, TypeOf } from '../core/index.js'
+import type { Type } from '../core/index.js'
 import type { LogicalHttpResult } from './definitions.js'
 
 export interface BasicAuthCredentials {
@@ -18,15 +17,15 @@ export interface BasicAuthUnauthorized<TResponse extends string, TBody> {
 }
 
 export interface BasicAuthDefinition<
-  TState extends Type<object>,
+  TContribution extends object,
   TResponse extends string,
   TUnauthorizedBody,
 > {
   readonly realm: string
   readonly name?: string
-  readonly state: TState
+  readonly state: Type<TContribution>
   readonly factory: () => BasicAuthRuntime<
-    TypeOf<TState>,
+    TContribution,
     TResponse,
     TUnauthorizedBody
   >
@@ -54,22 +53,6 @@ export interface BasicAuthRuntime<
   >
 }
 
-export type BasicAuthLayerDescriptor<
-  TContribution extends object,
-  TResponse extends string,
-  TUnauthorizedBody,
-> = LayerDescriptor<
-  TContribution,
-  readonly [],
-  string extends TResponse
-    ? unknown
-    : LogicalHttpResult<TResponse, TUnauthorizedBody, BasicAuthResponseHeaders>,
-  readonly [],
-  string,
-  readonly [],
-  BasicAuthContext
->
-
 export interface BasicAuthContext {
   readonly input: {
     readonly headers: Readonly<Record<string, string | undefined>>
@@ -77,27 +60,16 @@ export interface BasicAuthContext {
 }
 
 export function basicAuth<
-  const TState extends Type<object>,
+  const TContribution extends object,
   const TResponse extends string,
   TUnauthorizedBody,
 >(
-  definition: BasicAuthDefinition<TState, TResponse, TUnauthorizedBody>,
-): BasicAuthLayerDescriptor<TypeOf<TState>, TResponse, TUnauthorizedBody> {
+  definition: BasicAuthDefinition<TContribution, TResponse, TUnauthorizedBody>,
+) {
   const challenge = formatBasicChallenge(definition.realm)
   const descriptor = layer({
     name: definition.name ?? 'basicAuth',
     state: definition.state,
-    context: typeCarrier<BasicAuthContext>(),
-    result:
-      typeCarrier<
-        string extends TResponse
-          ? unknown
-          : LogicalHttpResult<
-              TResponse,
-              TUnauthorizedBody,
-              BasicAuthResponseHeaders
-            >
-      >(),
     factory: () => {
       const runtime = definition.factory()
       registerLayerShortCircuits(descriptor, [
@@ -108,7 +80,7 @@ export function basicAuth<
         },
       ])
 
-      return async (ctx, next) => {
+      return async (ctx: BasicAuthContext, next) => {
         const credentials = decodeBasicCredentials(
           ctx.input.headers.authorization,
         )

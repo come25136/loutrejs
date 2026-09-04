@@ -8,6 +8,7 @@ import {
   isShortCircuit,
   provide,
   token,
+  type LayerDescriptor,
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import {
@@ -15,7 +16,6 @@ import {
   http,
   type BasicAuthContext,
   type BasicAuthCredentials,
-  type BasicAuthLayerDescriptor,
   type HttpProtocolDefinition,
 } from '@loutrejs/loutre/http'
 import { Container } from '@loutrejs/loutre/runtime'
@@ -328,7 +328,19 @@ async function runBasicAuth<
   TResponse extends string,
   TBody,
 >(
-  authentication: BasicAuthLayerDescriptor<TContribution, TResponse, TBody>,
+  authentication: LayerDescriptor<
+    TContribution,
+    readonly [],
+    import('@loutrejs/loutre/http').LogicalHttpResult<
+      TResponse,
+      TBody,
+      { readonly 'www-authenticate': string }
+    >,
+    readonly [],
+    string,
+    readonly [],
+    BasicAuthContext
+  >,
   context: BasicAuthContext,
 ) {
   let provided: TContribution | undefined

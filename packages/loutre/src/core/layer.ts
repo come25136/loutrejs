@@ -1,4 +1,4 @@
-import type { Type, TypeOf } from './type.js'
+import type { Type } from './type.js'
 
 export type ValidatedInputPart = 'params' | 'query' | 'headers' | 'body'
 
@@ -119,7 +119,7 @@ export function shortCircuitsOfLayer(
 }
 
 export interface LayerDeclaration<
-  TState extends Type<object> = Type<{}>,
+  TContribution extends object = {},
   TRequires extends readonly LayerDependency[] = readonly [],
   TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
   TName extends string = string,
@@ -128,13 +128,11 @@ export interface LayerDeclaration<
   TResult = never,
 > {
   readonly name: TName
-  readonly state?: TState
+  readonly state?: Type<TContribution>
   readonly requires?: TRequires
   readonly requiresValidated?: TRequiresValidated
   readonly shortCircuits?: TShortCircuits
-  readonly context?: Type<TContext>
-  readonly result?: Type<TResult>
-  readonly factory: LayerFactory<TContext, TRequires, TypeOf<TState>, TResult>
+  readonly factory: LayerFactory<TContext, TRequires, TContribution, TResult>
 }
 
 export interface LayerOccurrenceDescriptor<
@@ -641,7 +639,7 @@ function setFunctionName<
 }
 
 export function layer<
-  const TState extends Type<object> = Type<{}>,
+  const TContribution extends object = {},
   const TRequires extends readonly LayerDependency[] = readonly [],
   const TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
   const TName extends string = string,
@@ -650,7 +648,7 @@ export function layer<
   TResult = never,
 >(
   declaration: LayerDeclaration<
-    TState,
+    TContribution,
     TRequires,
     TShortCircuits,
     TName,
@@ -660,7 +658,7 @@ export function layer<
   > &
     LayerDeclarationConstraint<TRequiresValidated>,
 ): LayerDescriptor<
-  TypeOf<TState>,
+  TContribution,
   TRequires,
   TResult,
   TShortCircuits,
@@ -671,7 +669,7 @@ export function layer<
   assertLayerDeclaration(declaration)
 
   let descriptor: LayerDescriptor<
-    TypeOf<TState>,
+    TContribution,
     TRequires,
     TResult,
     TShortCircuits,

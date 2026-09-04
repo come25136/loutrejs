@@ -7,13 +7,13 @@ import {
   isShortCircuit,
   provide,
   token,
+  type LayerDescriptor,
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import {
   bearerAuth,
   http,
   type BearerAuthContext,
-  type BearerAuthLayerDescriptor,
   type HttpProtocolDefinition,
 } from '@loutrejs/loutre/http'
 import { Container } from '@loutrejs/loutre/runtime'
@@ -229,7 +229,19 @@ async function runBearerAuth<
   TResponse extends string,
   TBody,
 >(
-  authentication: BearerAuthLayerDescriptor<TContribution, TResponse, TBody>,
+  authentication: LayerDescriptor<
+    TContribution,
+    readonly [],
+    import('@loutrejs/loutre/http').LogicalHttpResult<
+      TResponse,
+      TBody,
+      { readonly 'www-authenticate': string }
+    >,
+    readonly [],
+    string,
+    readonly [],
+    BearerAuthContext
+  >,
   context: BearerAuthContext,
 ) {
   let provided: TContribution | undefined
