@@ -65,6 +65,64 @@ describe('HTTP request semantics', () => {
       header: 'first, second',
     })
   })
+  it('validate.bodyが無い場合はmultipart bodyを未消費のstreamとして渡す', async () => {
+    const Contract = contract([
+      http({
+        upload: {
+          method: 'POST',
+          path: '/raw-multipart',
+          request: {
+            headers: z.object({ 'content-type': z.string() }),
+            body: {
+              contentType: 'multipart/form-data',
+              schema: z.instanceof(FormData),
+            },
+          },
+          responses: {
+            accepted: {
+              status: 202,
+              body: z.object({ name: z.string(), size: z.number() }),
+            },
+          },
+          pipeline: [validate.headers, http.controller],
+        },
+      }),
+    ])
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+
+      factory: () => ({
+        async upload(ctx) {
+          expect(ctx.input.body).toBeInstanceOf(ReadableStream)
+          const body = await new Response(ctx.input.body as ReadableStream, {
+            headers: { 'content-type': ctx.input.headers['content-type'] },
+          }).formData()
+          const file = body.get('file')
+          return ctx.response.accepted({
+            body: {
+              name: String(body.get('name')),
+              size: file instanceof File ? file.size : 0,
+            },
+          })
+        },
+      }),
+    })
+    const application = applicationFor(Implementation)
+    const body = new FormData()
+    body.set('name', 'loutre')
+    body.set('file', new File(['otter'], 'otter.txt'))
+    const response = await application.fetch(
+      new Request('https://fixture.test/raw-multipart', {
+        method: 'POST',
+        body,
+      }),
+    )
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({ name: 'loutre', size: 5 })
+  })
+
   it('multipart/form-dataをFormDataとして1回だけdecodeする', async () => {
     const Contract = contract([
       http({

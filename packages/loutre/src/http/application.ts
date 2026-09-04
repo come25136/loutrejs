@@ -1,6 +1,9 @@
 import {
+  childPipelineOf,
   validateSchema,
   type ImplementationDescriptor,
+  type PipelineItem,
+  type ValidatedInputPart,
   type ModuleInstance,
   type StandardSchemaV1,
 } from '../core/index.js'
@@ -39,6 +42,7 @@ interface HttpRoute {
   readonly segments: readonly HttpPathSegment[]
   readonly dispatchKey: string
   readonly protocol: HttpProtocol
+  readonly validatesBody: boolean
   readonly implementation: ImplementationDescriptor
   readonly procedure: string
 }
@@ -192,6 +196,7 @@ export function createHttpExecution(options: {
             url,
             routeMatch.params,
             routeMatch.route.protocol.definition,
+            routeMatch.route.validatesBody,
           )
           const raw: MutableHttpContext = {
             input: decoded,
@@ -401,6 +406,7 @@ async function decodeRequest(
   url: URL,
   params: Record<string, string>,
   definition: HttpProtocolDefinition,
+  validatesBody: boolean,
 ): Promise<DecodedHttpContext> {
   const query: Record<string, string | string[]> = {}
   for (const [key, value] of url.searchParams) {
@@ -417,39 +423,55 @@ async function decodeRequest(
   let body: unknown = undefined
   const bodyDefinition = definition.request?.body
   if (bodyDefinition) {
-    const actualMediaType = normalizeMediaType(
-      request.headers.get('content-type'),
-    )
-    const declaredMediaType = normalizeMediaType(bodyDefinition.contentType)!
-    if (request.body !== null && actualMediaType !== declaredMediaType) {
-      throw new HttpUnsupportedMediaTypeError(
-        declaredMediaType,
-        actualMediaType,
-      )
-    }
-    if (
-      declaredMediaType === 'application/json' ||
-      declaredMediaType.endsWith('+json')
-    ) {
-      try {
-        body = await request.json()
-      } catch (error) {
-        throw new HttpInputDecodeError(error)
-      }
-    } else if (declaredMediaType === 'multipart/form-data') {
-      try {
-        body = await request.formData()
-      } catch (error) {
-        throw new HttpInputDecodeError(error)
-      }
-    } else if (declaredMediaType.startsWith('text/')) {
-      body = await request.text()
-    } else {
+    if (!validatesBody) {
       body = request.body
+    } else {
+      const actualMediaType = normalizeMediaType(
+        request.headers.get('content-type'),
+      )
+      const declaredMediaType = normalizeMediaType(bodyDefinition.contentType)!
+      if (request.body !== null && actualMediaType !== declaredMediaType) {
+        throw new HttpUnsupportedMediaTypeError(
+          declaredMediaType,
+          actualMediaType,
+        )
+      }
+      if (
+        declaredMediaType === 'application/json' ||
+        declaredMediaType.endsWith('+json')
+      ) {
+        try {
+          body = await request.json()
+        } catch (error) {
+          throw new HttpInputDecodeError(error)
+        }
+      } else if (declaredMediaType === 'multipart/form-data') {
+        try {
+          body = await request.formData()
+        } catch (error) {
+          throw new HttpInputDecodeError(error)
+        }
+      } else if (declaredMediaType.startsWith('text/')) {
+        body = await request.text()
+      } else {
+        body = request.body
+      }
     }
   }
 
   return { params, query, headers, body }
+}
+
+function hasInputValidation(
+  pipeline: readonly PipelineItem[],
+  part: ValidatedInputPart,
+): boolean {
+  return pipeline.some(
+    (item) =>
+      (item.kind === 'validation' && item.part === part) ||
+      (item.kind === 'layer' &&
+        hasInputValidation(childPipelineOf(item) ?? [], part)),
+  )
 }
 
 function normalizeMediaType(
@@ -634,6 +656,7 @@ function collectRoutes(modules: readonly ModuleInstance[]): HttpRoute[] {
           segments: parseHttpPath(typed.definition.path),
           dispatchKey: typed.dispatchKey,
           protocol: typed,
+          validatesBody: hasInputValidation(typed.definition.pipeline, 'body'),
           implementation,
           procedure,
         })
