@@ -80,6 +80,18 @@ const Contract = contract([
       responses: { ok: { status: 200, body: z.string() } },
       pipeline: [wrapperLayer([validate.body]), http.controller],
     },
+    rawBody: {
+      method: 'POST',
+      path: '/raw-body',
+      request: {
+        body: {
+          contentType: 'application/octet-stream',
+          schema: z.instanceof(Uint8Array),
+        },
+      },
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [http.controller],
+    },
   }),
 ])
 type HttpController = ControllerOf<typeof Contract, 'http'>
@@ -177,6 +189,13 @@ type NestedValidatedContext = ContextOf<HttpController, 'nestedValidated'>
 declare const nestedValidatedContext: NestedValidatedContext
 const nestedValidatedName: string = nestedValidatedContext.input.body.name
 void nestedValidatedName
+type RawBodyContext = ContextOf<HttpController, 'rawBody'>
+declare const rawBodyContext: RawBodyContext
+const rawBody: ReadableStream<Uint8Array> | null = rawBodyContext.input.body
+void rawBody
+// @ts-expect-error validate.bodyなしではschema outputへ変換されない
+const decodedRawBody: Uint8Array = rawBodyContext.input.body
+void decodedRawBody
 http.route({
   method: 'GET',
   path: '/after-terminal',

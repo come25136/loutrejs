@@ -96,7 +96,7 @@ describe('HTTP request semantics', () => {
       factory: () => ({
         async upload(ctx) {
           expect(ctx.input.body).toBeInstanceOf(ReadableStream)
-          const body = await new Response(ctx.input.body as ReadableStream, {
+          const body = await new Response(ctx.input.body, {
             headers: { 'content-type': ctx.input.headers['content-type'] },
           }).formData()
           const file = body.get('file')
@@ -121,6 +121,96 @@ describe('HTTP request semantics', () => {
     )
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({ name: 'loutre', size: 5 })
+  })
+
+  it('validate.bodyが無い場合はJSON bodyを未消費のstreamとして渡す', async () => {
+    const Contract = contract([
+      http({
+        inspect: {
+          method: 'POST',
+          path: '/raw-json',
+          request: {
+            body: {
+              contentType: 'application/json',
+              schema: z.object({ name: z.string() }),
+            },
+          },
+          responses: {
+            ok: {
+              status: 200,
+              body: z.object({ name: z.string() }),
+            },
+          },
+          pipeline: [http.controller],
+        },
+      }),
+    ])
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+
+      factory: () => ({
+        async inspect(ctx) {
+          const rawBody: ReadableStream<Uint8Array> | null = ctx.input.body
+          expect(rawBody).toBeInstanceOf(ReadableStream)
+          const body = (await new Response(rawBody).json()) as { name: string }
+          return ctx.response.ok({ body })
+        },
+      }),
+    })
+    const application = applicationFor(Implementation)
+    const response = await application.fetch(
+      new Request('https://fixture.test/raw-json', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'loutre' }),
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ name: 'loutre' })
+  })
+
+  it('validate.bodyが無い場合はtext bodyを未消費のstreamとして渡す', async () => {
+    const Contract = contract([
+      http({
+        inspect: {
+          method: 'POST',
+          path: '/raw-text',
+          request: {
+            body: {
+              contentType: 'text/plain',
+              schema: z.string(),
+            },
+          },
+          responses: { ok: { status: 200, body: z.string() } },
+          pipeline: [http.controller],
+        },
+      }),
+    ])
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+
+      factory: () => ({
+        async inspect(ctx) {
+          const rawBody: ReadableStream<Uint8Array> | null = ctx.input.body
+          expect(rawBody).toBeInstanceOf(ReadableStream)
+          return ctx.response.ok({ body: await new Response(rawBody).text() })
+        },
+      }),
+    })
+    const application = applicationFor(Implementation)
+    const response = await application.fetch(
+      new Request('https://fixture.test/raw-text', {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain' },
+        body: 'loutre',
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toBe('loutre')
   })
 
   it('multipart/form-dataをFormDataとして1回だけdecodeする', async () => {

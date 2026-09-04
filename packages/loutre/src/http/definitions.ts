@@ -1362,7 +1362,13 @@ type PartOutput<
       : never
     : RawPathParams<TDefinition['path']>
   : HasValidationBeforeTerminal<TDefinition['pipeline'], TPart> extends false
-    ? unknown
+    ? TPart extends 'body'
+      ? TDefinition['request'] extends {
+          readonly body: HttpRequestBodyDefinition
+        }
+        ? ReadableStream<Uint8Array> | null
+        : unknown
+      : unknown
     : TDefinition['request'] extends HttpRequestDefinition
       ? TPart extends keyof TDefinition['request']
         ? TPart extends 'body'
