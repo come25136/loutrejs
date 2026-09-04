@@ -138,6 +138,74 @@ describe('Nested Contract composition', () => {
     await application.close()
   })
 
+  it('branchとleafのvalidate.bodyが重複してもbody decodeは1回だけ行う', async () => {
+    let validations = 0
+    const Body = z.preprocess(
+      (value) => {
+        validations += 1
+        return value
+      },
+      z.object({ name: z.string() }),
+    )
+    const UploadContract = contract([
+      http({
+        create: {
+          method: 'POST',
+          path: '/upload',
+          request: {
+            body: {
+              contentType: 'application/json',
+              schema: Body,
+            },
+          },
+          responses: {
+            ok: { status: 200, body: z.object({ name: z.string() }) },
+          },
+          pipeline: [validate.body, http.controller],
+        },
+      }),
+    ])
+    const MountedContract = contract([
+      http({
+        api: {
+          path: '/api',
+          pipeline: [validate.body],
+          routes: { upload: UploadContract.http.create },
+        },
+      }),
+    ])
+    const UploadController = implementation({
+      name: 'NestedUploadController',
+      contract: MountedContract.http.api.upload,
+      protocol: http,
+      factory: () => ({
+        create(ctx) {
+          return ctx.response.ok({ body: ctx.input.body })
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ implementations: [UploadController] }))
+    const application = bootstrap({
+      application: defineApplication({
+        modules: [Module()],
+        logger: silentLogger,
+      }),
+    })
+    const request = new Request('http://fixture.test/api/upload', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'loutre' }),
+    })
+
+    const response = await application.fetch(request)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ name: 'loutre' })
+    expect(validations).toBe(2)
+    expect(request.bodyUsed).toBe(true)
+    await application.close()
+  })
+
   it('resolved nodeはopaqueで、root identityとcanonical procedureをGraphへ保持する', () => {
     expect(Object.keys(AppContract.http.api)).toEqual(['me'])
     expect(Object.keys(AppContract.http.api.me.profile)).toEqual([])

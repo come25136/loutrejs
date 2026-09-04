@@ -199,6 +199,7 @@ export function createHttpExecution(options: {
             logger: requestLogger,
             signal: request.signal,
           }
+          let bodyDecoded = false
           const logical = await executePipeline<
             MutableHttpContext,
             LogicalHttpResult
@@ -219,11 +220,12 @@ export function createHttpExecution(options: {
                   : declared
               if (schema) {
                 try {
-                  if (layer.part === 'body') {
+                  if (layer.part === 'body' && !bodyDecoded) {
                     context.input.body = await decodeRequestBody(
                       request,
                       declared as HttpRequestBodyDefinition,
                     )
+                    bodyDecoded = true
                   }
                   context.input[layer.part] =
                     layer.part === 'params'
@@ -460,7 +462,11 @@ async function decodeRequestBody(
     }
   }
   if (declaredMediaType.startsWith('text/')) {
-    return request.text()
+    try {
+      return await request.text()
+    } catch (error) {
+      throw new HttpInputDecodeError(error)
+    }
   }
   return request.body
 }

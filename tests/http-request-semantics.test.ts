@@ -364,6 +364,53 @@ describe('HTTP request semantics', () => {
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: 'Invalid request' })
   })
+
+  it('text bodyのread失敗をdecode errorとして400へ変換する', async () => {
+    const Contract = contract([
+      http({
+        inspect: {
+          method: 'POST',
+          path: '/broken-text',
+          request: {
+            body: {
+              contentType: 'text/plain',
+              schema: z.string(),
+            },
+          },
+          responses: { ok: { status: 200, body: z.string() } },
+          pipeline: [validate.body, http.controller],
+        },
+      }),
+    ])
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        inspect(ctx) {
+          return ctx.response.ok({ body: ctx.input.body })
+        },
+      }),
+    })
+    const application = applicationFor(Implementation)
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new Error('broken text body'))
+      },
+    })
+    const request = new Request('https://fixture.test/broken-text', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' })
+
+    const response = await application.fetch(request)
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Invalid request' })
+  })
+
   it('Request AbortSignalをControllerとserver-stream iteratorへ伝播する', async () => {
     let iteratorReturned = false
     const Contract = contract([

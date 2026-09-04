@@ -23,8 +23,7 @@ runtime境界に関する補足だけを記録する。
   Pipelineはliteral objectおよびtupleのまま渡し、型情報の消去を拒否する。
 - `requiresValidated`はLayerが必要とするvalidation済みinputを静的に宣言する。
 - CLIの`dev` / `start`は明示的なentry pathを必須とし、filesystem conventionでModuleを探索しない。
-- HTTP bodyはJSON、`text/*`、`multipart/form-data`をWeb標準表現へdecodeし、それ以外のmedia typeは
-  `ReadableStream`のownershipを`validate.body`へ渡す。
+- HTTP bodyのdecodeはPipelineが`validate.body`へ到達した時点で行う。それまでは`Request.body`をconsumeしない。`validate.body`を置かない場合は未消費の`ReadableStream`を利用者へ渡し、multipart parserなどの選択をApplication側へ委ねる。同じeffective Pipelineに`validate.body`が複数回現れてもdecodeはrequestごとに1回だけ行い、schema validationは各validation itemで実行する。JSON、`text/*`、`multipart/form-data`はWeb標準表現へdecodeし、それ以外のmedia typeは`ReadableStream`をそのままvalidationへ渡す。
 - HTTP Controller Contextの`signal`は元の`Request.signal`である。server-stream finalizationは
   abort時に`iterator.return()`を呼ぶ。
 - linked Applicationはplatform-neutralなES2024 ESMとしてbundleし、Runtime固有adapterが境界を持つ。
