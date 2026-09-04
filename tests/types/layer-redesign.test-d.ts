@@ -1,4 +1,20 @@
-import { type, layer, inject, token } from '@loutrejs/loutre'
+import {
+  type,
+  layer,
+  inject,
+  token,
+  type LayerDependency,
+} from '@loutrejs/loutre'
+
+const fakeLayer = {
+  kind: 'layer' as const,
+  name: 'fake',
+  requires: [],
+  requiresValidated: [],
+}
+// @ts-expect-error plain objectはLoutreが生成したLayer dependencyとして扱えない
+const invalidDependency: LayerDependency = fakeLayer
+void invalidDependency
 
 interface Lookup {
   find(value: string): number

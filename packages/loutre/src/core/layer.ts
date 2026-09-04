@@ -4,8 +4,7 @@ export type ValidatedInputPart = 'params' | 'query' | 'headers' | 'body'
 
 const shortCircuitMarker = Symbol('loutre.short-circuit')
 
-declare const layerContributionType: unique symbol
-declare const shortCircuitResultType: unique symbol
+const layerDependencyBrand = Symbol.for('loutre.layer-dependency')
 
 export interface ShortCircuit<TResult = unknown> {
   readonly kind: 'short-circuit'
@@ -47,11 +46,19 @@ export interface LayerDependency {
   readonly name: string
   readonly requires: readonly LayerDependency[]
   readonly requiresValidated: readonly ValidatedInputPart[]
-  readonly [layerContributionType]: object
+  readonly [layerDependencyBrand]: true
 }
 
 export type LayerContributionOf<TLayer extends LayerDependency> =
-  TLayer[typeof layerContributionType]
+  TLayer extends {
+    readonly factory: LayerFactory<any, any, infer TContribution, any>
+  }
+    ? TContribution
+    : TLayer extends {
+          readonly definition: infer TDefinition extends LayerDependency
+        }
+      ? LayerContributionOf<TDefinition>
+      : never
 
 export type StateAfter<TLayer extends LayerDependency> = StateFromLayers<
   TLayer['requires']
@@ -158,8 +165,7 @@ export interface LayerOccurrenceDescriptor<
   >
   readonly pipeline: TPipeline
   readonly factory?: never
-  readonly [layerContributionType]: TContribution
-  readonly [shortCircuitResultType]?: TShortCircuitResult
+  readonly [layerDependencyBrand]: true
 }
 
 export interface LayerDescriptor<
@@ -198,8 +204,7 @@ export interface LayerDescriptor<
   >
   readonly definition?: never
   readonly pipeline?: never
-  readonly [layerContributionType]: TContribution
-  readonly [shortCircuitResultType]?: TShortCircuitResult
+  readonly [layerDependencyBrand]: true
 }
 
 export interface ValidationLayerDescriptor {
@@ -232,10 +237,20 @@ export type PipelineItem =
   | ValidationLayerDescriptor
   | TerminalLayerDescriptor
 
+function isLayerDependency(
+  item: PipelineItem,
+): item is AnyLayerDescriptor | AnyLayerOccurrence {
+  return (
+    item.kind === 'layer' &&
+    layerDependencyBrand in item &&
+    item[layerDependencyBrand] === true
+  )
+}
+
 export function isLayerOccurrence(
   item: PipelineItem,
 ): item is AnyLayerOccurrence {
-  return item.kind === 'layer' && item.definition !== undefined
+  return isLayerDependency(item) && item.definition !== undefined
 }
 
 export function layerDefinitionOf(
@@ -445,10 +460,14 @@ export type ShortCircuitResultOf<TItem> =
     : ShortCircuitResultOfLayer<TItem>
 
 type ShortCircuitResultOfLayer<TItem> = TItem extends {
-  readonly [shortCircuitResultType]?: infer TResult
+  readonly factory: LayerFactory<any, any, any, infer TResult>
 }
   ? TResult
-  : never
+  : TItem extends {
+        readonly definition: infer TDefinition extends LayerDependency
+      }
+    ? ShortCircuitResultOfLayer<TDefinition>
+    : never
 
 export type ShortCircuitDeclarationsOf<TItem> =
   TItem extends LayerOccurrenceDescriptor<
@@ -609,6 +628,18 @@ function assertLayerDeclaration(declaration: {
   }
 }
 
+function setFunctionName<
+  TFunction extends (...args: any[]) => unknown,
+  const TName extends string,
+>(fn: TFunction, name: TName): TFunction & { readonly name: TName } {
+  Object.defineProperty(fn, 'name', {
+    value: name,
+    enumerable: true,
+    configurable: true,
+  })
+  return fn as TFunction & { readonly name: TName }
+}
+
 export function layer<
   const TState extends Type<object> = Type<{}>,
   const TRequires extends readonly LayerDependency[] = readonly [],
@@ -649,40 +680,30 @@ export function layer<
     TContext
   >
 
-  const callable = <const TPipeline extends readonly PipelineItem[]>(
-    pipeline: TPipeline,
-  ) =>
-    Object.freeze({
-      kind: 'layer' as const,
-      name: descriptor.name,
-      requires: descriptor.requires,
-      requiresValidated: descriptor.requiresValidated,
-      shortCircuits: descriptor.shortCircuits,
-      definition: descriptor,
-      pipeline,
-    })
-
-  Object.defineProperty(callable, 'name', {
-    value: declaration.name,
-    enumerable: true,
-    configurable: true,
-  })
+  const callable = setFunctionName(
+    <const TPipeline extends readonly PipelineItem[]>(pipeline: TPipeline) =>
+      Object.freeze({
+        kind: 'layer' as const,
+        name: descriptor.name,
+        requires: descriptor.requires,
+        requiresValidated: descriptor.requiresValidated,
+        shortCircuits: descriptor.shortCircuits,
+        definition: descriptor,
+        pipeline,
+        [layerDependencyBrand]: true as const,
+      }),
+    declaration.name,
+  )
 
   descriptor = Object.assign(callable, {
     kind: 'layer' as const,
-    requires: declaration.requires ?? [],
-    requiresValidated: declaration.requiresValidated ?? [],
-    shortCircuits: declaration.shortCircuits ?? [],
+    requires: (declaration.requires ?? []) as TRequires,
+    requiresValidated: (declaration.requiresValidated ??
+      []) as TRequiresValidated,
+    shortCircuits: (declaration.shortCircuits ?? []) as TShortCircuits,
     factory: declaration.factory,
-  }) as unknown as LayerDescriptor<
-    TypeOf<TState>,
-    TRequires,
-    TResult,
-    TShortCircuits,
-    TName,
-    TRequiresValidated,
-    TContext
-  >
+    [layerDependencyBrand]: true as const,
+  })
 
   return Object.freeze(descriptor)
 }
