@@ -670,11 +670,9 @@ export function layer<
 
   descriptor = Object.assign(callable, {
     kind: 'layer' as const,
-    requires: declaration.requires ?? ([] as unknown as TRequires),
-    requiresValidated:
-      declaration.requiresValidated ?? ([] as unknown as TRequiresValidated),
-    shortCircuits:
-      declaration.shortCircuits ?? ([] as unknown as TShortCircuits),
+    requires: declaration.requires ?? [],
+    requiresValidated: declaration.requiresValidated ?? [],
+    shortCircuits: declaration.shortCircuits ?? [],
     factory: declaration.factory,
   }) as unknown as LayerDescriptor<
     TypeOf<TState>,
