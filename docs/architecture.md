@@ -475,6 +475,8 @@ const auth = layer({
 
 `type<T>()` has no runtime semantics; it is a value-level carrier for type information. The contribution declared by `state` is merged into `ctx.state`. Multiple Layers may extend the same top-level namespace when both values are plain objects and they add different payload properties; overwriting an existing namespace or payload property is rejected at Runtime.
 
+Layer is not a framework-internal primitive only. Users can build reusable Layer factories such as authentication, rate limiting, or transaction wrappers directly on top of `layer()`. Wrapper authors do not need a dedicated `LayerDescriptor` type or casts: contribution types are inferred from `state`, protocol-specific Context types from the runtime function parameter, and short-circuit result types from the value returned by `shortCircuit()`. There is no `context` or `result` metadata used only to transport types.
+
 Runtime detects state and Layer contract violations such as:
 
 - Missing required Layer

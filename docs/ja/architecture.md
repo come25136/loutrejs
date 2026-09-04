@@ -475,6 +475,8 @@ const auth = layer({
 
 `type<T>()`はruntime semanticsを持たず、型情報だけをvalue-levelで運ぶcarrierです。`state`で宣言したcontributionは`ctx.state`へmergeされます。同じtop-level namespaceを複数Layerで拡張することもでき、両方がplain objectで異なるpayload propertyを追加する場合に限ってmergeされます。既存namespaceや既存payload propertyの暗黙的な上書きはRuntime Errorです。
 
+LayerはFramework内部専用のprimitiveではありません。利用者は`layer()`を使って、認証、rate limit、transactionのような再利用可能なLayer factoryを独自に構築できます。wrapper側で専用の`LayerDescriptor`型やcastを用意する必要はなく、Contributionは`state`から、protocol固有のContextはruntime functionの引数型から、short-circuit resultは`shortCircuit()`のreturn valueから推論されます。型情報を運ぶためだけの`context` / `result` metadataはありません。
+
 Runtimeは次のようなLayer / state contract違反を検出します。
 
 - required Layerの不足
