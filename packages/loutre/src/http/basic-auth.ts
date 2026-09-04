@@ -32,14 +32,6 @@ export interface BasicAuthDefinition<
   >
 }
 
-type BasicAuthShortCircuits<TResponse extends string> = readonly [
-  {
-    readonly protocol: 'http'
-    readonly response: TResponse
-    readonly metadata: { readonly status: 401 }
-  },
-]
-
 type BasicAuthResponseHeaders = {
   readonly 'www-authenticate': string
 }
@@ -62,21 +54,21 @@ export interface BasicAuthRuntime<
   >
 }
 
-export interface BasicAuthLayerDescriptor<
+export type BasicAuthLayerDescriptor<
   TContribution extends object,
   TResponse extends string,
   TUnauthorizedBody,
-> extends LayerDescriptor<
+> = LayerDescriptor<
   TContribution,
   readonly [],
   string extends TResponse
     ? unknown
     : LogicalHttpResult<TResponse, TUnauthorizedBody, BasicAuthResponseHeaders>,
-  BasicAuthShortCircuits<TResponse>,
+  readonly [],
   string,
   readonly [],
   BasicAuthContext
-> {}
+>
 
 export interface BasicAuthContext {
   readonly input: {
@@ -92,13 +84,7 @@ export function basicAuth<
   definition: BasicAuthDefinition<TState, TResponse, TUnauthorizedBody>,
 ): BasicAuthLayerDescriptor<TypeOf<TState>, TResponse, TUnauthorizedBody> {
   const challenge = formatBasicChallenge(definition.realm)
-  let descriptor: BasicAuthLayerDescriptor<
-    TypeOf<TState>,
-    TResponse,
-    TUnauthorizedBody
-  >
-
-  descriptor = layer({
+  const descriptor = layer({
     name: definition.name ?? 'basicAuth',
     state: definition.state,
     context: typeCarrier<BasicAuthContext>(),
@@ -137,11 +123,7 @@ export function basicAuth<
         await next(value)
       }
     },
-  }) as unknown as BasicAuthLayerDescriptor<
-    TypeOf<TState>,
-    TResponse,
-    TUnauthorizedBody
-  >
+  })
 
   return descriptor
 }

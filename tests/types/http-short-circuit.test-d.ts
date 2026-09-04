@@ -28,6 +28,8 @@ const genericAuthentication: BasicAuthLayerDescriptor<
   { readonly error: string }
 > = authentication
 void genericAuthentication
+const staticShortCircuits: readonly [] = authentication.shortCircuits
+void staticShortCircuits
 
 http.route({
   method: 'GET',

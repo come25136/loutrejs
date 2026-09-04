@@ -27,14 +27,6 @@ export interface BearerAuthDefinition<
   >
 }
 
-type BearerAuthShortCircuits<TResponse extends string> = readonly [
-  {
-    readonly protocol: 'http'
-    readonly response: TResponse
-    readonly metadata: { readonly status: 401 }
-  },
-]
-
 type BearerAuthResponseHeaders = {
   readonly 'www-authenticate': string
 }
@@ -57,11 +49,11 @@ export interface BearerAuthRuntime<
   >
 }
 
-export interface BearerAuthLayerDescriptor<
+export type BearerAuthLayerDescriptor<
   TContribution extends object,
   TResponse extends string,
   TUnauthorizedBody,
-> extends LayerDescriptor<
+> = LayerDescriptor<
   TContribution,
   readonly [],
   string extends TResponse
@@ -71,11 +63,11 @@ export interface BearerAuthLayerDescriptor<
         TUnauthorizedBody,
         BearerAuthResponseHeaders
       >,
-  BearerAuthShortCircuits<TResponse>,
+  readonly [],
   string,
   readonly [],
   BearerAuthContext
-> {}
+>
 
 export interface BearerAuthContext {
   readonly input: {
@@ -91,13 +83,7 @@ export function bearerAuth<
   definition: BearerAuthDefinition<TState, TResponse, TUnauthorizedBody>,
 ): BearerAuthLayerDescriptor<TypeOf<TState>, TResponse, TUnauthorizedBody> {
   const challenge = formatBearerChallenge(definition.realm)
-  let descriptor: BearerAuthLayerDescriptor<
-    TypeOf<TState>,
-    TResponse,
-    TUnauthorizedBody
-  >
-
-  descriptor = layer({
+  const descriptor = layer({
     name: definition.name ?? 'bearerAuth',
     state: definition.state,
     context: typeCarrier<BearerAuthContext>(),
@@ -134,11 +120,7 @@ export function bearerAuth<
         await next(value)
       }
     },
-  }) as unknown as BearerAuthLayerDescriptor<
-    TypeOf<TState>,
-    TResponse,
-    TUnauthorizedBody
-  >
+  })
 
   return descriptor
 }
