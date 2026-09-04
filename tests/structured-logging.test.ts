@@ -6,7 +6,7 @@ import {
   contract,
   defineError,
   defineModule,
-  defineImplementation,
+  implementation,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
@@ -82,13 +82,15 @@ describe('構造化ログ', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'HealthImplementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      health: (context) => context.response.ok({ body: 'ok' }),
-    }))
+
+      factory: () => ({
+        health: (context) => context.response.ok({ body: 'ok' }),
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -127,15 +129,17 @@ describe('構造化ログ', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      fail(): never {
-        throw new Error('fixture failure')
-      },
-    }))
+
+      factory: () => ({
+        fail(): never {
+          throw new Error('fixture failure')
+        },
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -199,15 +203,17 @@ describe('構造化ログ', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      fail(): never {
-        throw ExpectedError({ reason: 'expected' })
-      },
-    }))
+
+      factory: () => ({
+        fail(): never {
+          throw ExpectedError({ reason: 'expected' })
+        },
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -240,15 +246,17 @@ describe('構造化ログ', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: messagePort,
-    }).factory(() => ({
-      ping(ctx) {
-        return ctx.message.ok('pong')
-      },
-    }))
+
+      factory: () => ({
+        ping(ctx) {
+          return ctx.message.ok('pong')
+        },
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))

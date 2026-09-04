@@ -1,11 +1,13 @@
-import { defineLayer } from '@loutrejs/loutre'
+import { type, layer } from '@loutrejs/loutre'
 
-export const authentication = defineLayer({
+export const authentication = layer({
   name: 'authentication.demo',
-}).factory<{
-  currentUser: {
-    readonly id: string
-  }
-}>(() => async (_ctx, next) => {
-  await next({ currentUser: { id: 'demo-user' } })
+  state: type<{
+    currentUser: {
+      readonly id: string
+    }
+  }>(),
+  factory: () => async (_ctx, next) => {
+    await next({ currentUser: { id: 'demo-user' } })
+  },
 })

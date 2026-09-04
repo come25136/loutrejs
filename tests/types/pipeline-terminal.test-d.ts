@@ -1,12 +1,13 @@
-import { defineLayer } from '@loutrejs/loutre'
+import { layer } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
-const generic = defineLayer({ name: 'generic' }).factory(
-  () => async (_ctx, next) => {
+const generic = layer({
+  name: 'generic',
+  factory: () => async (_ctx, next) => {
     await next()
   },
-)
+})
 http.route({
   method: 'GET',
   path: '/nested-terminal',

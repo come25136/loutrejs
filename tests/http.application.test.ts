@@ -1,9 +1,10 @@
 import { createTestApplication } from './helpers/application.js'
 import {
+  type,
   contract,
   defineModule,
-  defineImplementation,
-  defineLayer,
+  implementation,
+  layer,
   shortCircuit,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
@@ -12,11 +13,14 @@ import { silentLogger } from './helpers/silent-logger.js'
 describe('HTTP application boundary', () => {
   it('全HTTP入力を検証し、Layer stateをctxからapplication-scoped Controllerへ渡す', async () => {
     let executions = 0
-    const execution = defineLayer({
+    const execution = layer({
       name: 'execution-id',
-    }).factory<{ executionId: string }>(() => async (_ctx, next) => {
-      executions += 1
-      await next({ executionId: `exec-${executions}` })
+
+      state: type<{ executionId: string }>(),
+      factory: () => async (_ctx, next) => {
+        executions += 1
+        await next({ executionId: `exec-${executions}` })
+      },
     })
     const Contract = contract([
       http({
@@ -64,29 +68,31 @@ describe('HTTP application boundary', () => {
       }),
     ])
     let controllerInstances = 0
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => {
-      controllerInstances += 1
-      return {
-        update(ctx) {
-          return ctx.response.updated({
-            body: {
-              id: ctx.input.params.id,
-              page: ctx.input.query.page,
-              name: ctx.input.body.name,
-              executionId: ctx.state.executionId,
-            },
-            headers: {
-              'x-dynamic': 'request',
-              'x-overridden': 'dynamic',
-              'content-type': 'text/plain',
-            },
-          })
-        },
-      }
+
+      factory: () => {
+        controllerInstances += 1
+        return {
+          update(ctx) {
+            return ctx.response.updated({
+              body: {
+                id: ctx.input.params.id,
+                page: ctx.input.query.page,
+                name: ctx.input.body.name,
+                executionId: ctx.state.executionId,
+              },
+              headers: {
+                'x-dynamic': 'request',
+                'x-overridden': 'dynamic',
+                'content-type': 'text/plain',
+              },
+            })
+          },
+        }
+      },
     })
     const Module = defineModule(() => ({
       implementations: [Implementation],
@@ -168,15 +174,17 @@ describe('HTTP application boundary', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'NoContentController',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      remove(ctx) {
-        return ctx.response.noContent({ body: undefined })
-      },
-    }))
+
+      factory: () => ({
+        remove(ctx) {
+          return ctx.response.noContent({ body: undefined })
+        },
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -257,17 +265,19 @@ describe('HTTP application boundary', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      run(ctx) {
-        return ctx.response.ok({
-          body: { value: 42 as unknown as string },
-        })
-      },
-    }))
+
+      factory: () => ({
+        run(ctx) {
+          return ctx.response.ok({
+            body: { value: 42 as unknown as string },
+          })
+        },
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -297,18 +307,20 @@ describe('HTTP application boundary', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      run(ctx) {
-        return ctx.response.ok({
-          body: { value: 'invalid' },
-          headers: { etag: 'invalid' },
-        })
-      },
-    }))
+
+      factory: () => ({
+        run(ctx) {
+          return ctx.response.ok({
+            body: { value: 'invalid' },
+            headers: { etag: 'invalid' },
+          })
+        },
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -340,18 +352,20 @@ describe('HTTP application boundary', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      run(ctx) {
-        return ctx.response.ok({
-          body: { value: 'invalid' },
-          headers: { etag: 'undeclared' },
-        } as never)
-      },
-    }))
+
+      factory: () => ({
+        run(ctx) {
+          return ctx.response.ok({
+            body: { value: 'invalid' },
+            headers: { etag: 'undeclared' },
+          } as never)
+        },
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -369,24 +383,21 @@ describe('HTTP application boundary', () => {
   })
   it('short circuit resultもProtocol Finalizationを通す', async () => {
     let controllerCalled = false
-    const cached = defineLayer({
+    const cached = layer({
       name: 'cached-result',
-    }).factory<
-      {},
-      {},
-      {
+
+      result: type<{
         readonly kind: 'http-result'
         readonly response: 'ok'
         readonly body: { readonly value: string }
-      }
-    >(
-      () => async () =>
+      }>(),
+      factory: () => async () =>
         shortCircuit({
           kind: 'http-result' as const,
           response: 'ok' as const,
           body: { value: 'cached' },
         }),
-    )
+    })
     const Contract = contract([
       http({
         run: {
@@ -402,16 +413,18 @@ describe('HTTP application boundary', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      run() {
-        controllerCalled = true
-        throw new Error('呼び出されません')
-      },
-    }))
+
+      factory: () => ({
+        run() {
+          controllerCalled = true
+          throw new Error('呼び出されません')
+        },
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -450,15 +463,17 @@ function createInputDecodeFixture() {
       },
     }),
   ])
-  const Implementation = defineImplementation({
+  const Implementation = implementation({
     name: 'Implementation',
     contract: Contract,
     protocol: http,
-  }).factory(() => ({
-    decode(ctx) {
-      return ctx.response.ok({ body: { value: ctx.input.params.value } })
-    },
-  }))
+
+    factory: () => ({
+      decode(ctx) {
+        return ctx.response.ok({ body: { value: ctx.input.params.value } })
+      },
+    }),
+  })
   const Module = defineModule(() => ({
     implementations: [Implementation],
   }))

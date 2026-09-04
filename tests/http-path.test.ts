@@ -1,5 +1,5 @@
 import { createTestApplication } from './helpers/application.js'
-import { contract, defineModule, defineImplementation } from '@loutrejs/loutre'
+import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import {
   assertValidCompilation,
   compileApplication,
@@ -75,55 +75,57 @@ function createRoutingApplication() {
       },
     }),
   ])
-  const Implementation = defineImplementation({
+  const Implementation = implementation({
     name: 'Implementation',
     contract: Contract,
     protocol: http,
-  }).factory(() => ({
-    raw(ctx) {
-      return ctx.response.ok({
-        body: { route: 'raw', value: ctx.input.params.id },
-      })
-    },
-    declaredOnly(ctx) {
-      return ctx.response.ok({
-        body: { route: 'declared', value: ctx.input.params.id },
-      })
-    },
-    multiple(ctx) {
-      return ctx.response.ok({
-        body: { route: 'multiple', value: ctx.input.params },
-      })
-    },
-    dynamic(ctx) {
-      return ctx.response.ok({
-        body: { route: 'dynamic', value: ctx.input.params.id },
-      })
-    },
-    static(ctx) {
-      return ctx.response.ok({ body: { route: 'static', value: null } })
-    },
-    lessSpecific(ctx) {
-      return ctx.response.ok({
-        body: { route: 'less', value: ctx.input.params.x },
-      })
-    },
-    moreSpecific(ctx) {
-      return ctx.response.ok({
-        body: { route: 'more', value: ctx.input.params.y },
-      })
-    },
-    getMethod(ctx) {
-      return ctx.response.ok({
-        body: { route: 'get', value: ctx.input.params.id },
-      })
-    },
-    postMethod(ctx) {
-      return ctx.response.ok({
-        body: { route: 'post', value: ctx.input.params.id },
-      })
-    },
-  }))
+
+    factory: () => ({
+      raw(ctx) {
+        return ctx.response.ok({
+          body: { route: 'raw', value: ctx.input.params.id },
+        })
+      },
+      declaredOnly(ctx) {
+        return ctx.response.ok({
+          body: { route: 'declared', value: ctx.input.params.id },
+        })
+      },
+      multiple(ctx) {
+        return ctx.response.ok({
+          body: { route: 'multiple', value: ctx.input.params },
+        })
+      },
+      dynamic(ctx) {
+        return ctx.response.ok({
+          body: { route: 'dynamic', value: ctx.input.params.id },
+        })
+      },
+      static(ctx) {
+        return ctx.response.ok({ body: { route: 'static', value: null } })
+      },
+      lessSpecific(ctx) {
+        return ctx.response.ok({
+          body: { route: 'less', value: ctx.input.params.x },
+        })
+      },
+      moreSpecific(ctx) {
+        return ctx.response.ok({
+          body: { route: 'more', value: ctx.input.params.y },
+        })
+      },
+      getMethod(ctx) {
+        return ctx.response.ok({
+          body: { route: 'get', value: ctx.input.params.id },
+        })
+      },
+      postMethod(ctx) {
+        return ctx.response.ok({
+          body: { route: 'post', value: ctx.input.params.id },
+        })
+      },
+    }),
+  })
   const Module = defineModule(() => ({
     implementations: [Implementation],
   }))
@@ -187,18 +189,20 @@ describe('HTTP pathとroute identity', () => {
         },
       }),
     ])
-    const ReverseImplementation = defineImplementation({
+    const ReverseImplementation = implementation({
       name: 'ReverseImplementation',
       contract: ReverseContract,
       protocol: http,
-    }).factory(() => ({
-      static(ctx) {
-        return ctx.response.ok({ body: 'static' })
-      },
-      dynamic(ctx) {
-        return ctx.response.ok({ body: `dynamic:${ctx.input.params.id}` })
-      },
-    }))
+
+      factory: () => ({
+        static(ctx) {
+          return ctx.response.ok({ body: 'static' })
+        },
+        dynamic(ctx) {
+          return ctx.response.ok({ body: `dynamic:${ctx.input.params.id}` })
+        },
+      }),
+    })
     const ReverseModule = defineModule(() => ({
       implementations: [ReverseImplementation],
     }))
@@ -344,28 +348,32 @@ describe('protocol dispatchKeyの重複検査', () => {
         },
       }),
     ])
-    const FirstController = defineImplementation({
+    const FirstController = implementation({
       name: 'FirstController',
       contract: FirstContract,
       protocol: http,
-    }).factory(() => ({
-      get() {
-        return { kind: 'http-result', response: 'ok', body: 'first' } as const
-      },
-    }))
-    const SecondController = defineImplementation({
+
+      factory: () => ({
+        get() {
+          return { kind: 'http-result', response: 'ok', body: 'first' } as const
+        },
+      }),
+    })
+    const SecondController = implementation({
       name: 'SecondController',
       contract: SecondContract,
       protocol: http,
-    }).factory(() => ({
-      get() {
-        return {
-          kind: 'http-result',
-          response: 'ok',
-          body: 'second',
-        } as const
-      },
-    }))
+
+      factory: () => ({
+        get() {
+          return {
+            kind: 'http-result',
+            response: 'ok',
+            body: 'second',
+          } as const
+        },
+      }),
+    })
     const FirstModule = defineModule(() => ({
       implementations: [FirstController],
     }))

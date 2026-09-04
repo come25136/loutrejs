@@ -1,5 +1,5 @@
 import { defineApplication } from '@loutrejs/loutre'
-import { contract, defineModule, defineImplementation } from '@loutrejs/loutre'
+import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { nodeRuntime } from '@loutrejs/node'
@@ -54,19 +54,21 @@ function cookieApplication() {
       },
     }),
   ])
-  const Controller = defineImplementation({
+  const Controller = implementation({
     name: 'CookieController',
     contract: Contract,
     protocol: http,
-  }).factory(() => ({
-    get: (ctx) =>
-      ctx.response.ok({
-        body: 'ok',
-        headers: {
-          'set-cookie': ['first=one; Path=/', 'second=two; Path=/'],
-        },
-      }),
-  }))
+
+    factory: () => ({
+      get: (ctx) =>
+        ctx.response.ok({
+          body: 'ok',
+          headers: {
+            'set-cookie': ['first=one; Path=/', 'second=two; Path=/'],
+          },
+        }),
+    }),
+  })
   const Module = defineModule(() => ({
     implementations: [Controller],
   }))

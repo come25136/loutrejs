@@ -1,7 +1,8 @@
 import {
   contract,
-  defineImplementation,
-  defineLayer,
+  type,
+  implementation,
+  layer,
   defineModule,
   inject,
   isShortCircuit,
@@ -10,7 +11,7 @@ import {
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import {
-  defineBasicAuth,
+  basicAuth,
   http,
   type BasicAuthContext,
   type BasicAuthCredentials,
@@ -30,13 +31,17 @@ function createAuthentication(
     credentials: BasicAuthCredentials,
   ) => { principal: { readonly id: string } } | undefined,
 ) {
-  return defineBasicAuth({ realm: 'Loutre Test' }).factory(() => ({
-    authenticate,
-    unauthorized,
-  }))
+  return basicAuth({
+    realm: 'Loutre Test',
+    state: type<{ principal: { readonly id: string } }>(),
+    factory: () => ({
+      authenticate,
+      unauthorized,
+    }),
+  })
 }
 
-describe('defineBasicAuth', () => {
+describe('basicAuth', () => {
   it('credentialsを認証してstate contributionを後段へ渡す', async () => {
     const authenticate = vi.fn(() => ({ principal: { id: 'user-1' } }))
     const authentication = createAuthentication(authenticate)
@@ -63,22 +68,24 @@ describe('defineBasicAuth', () => {
       ): { readonly id: string } | undefined
     }
 
-    const USER_SERVICE = token<UserService>('defineBasicAuth.userService')
+    const USER_SERVICE = token<UserService>('basicAuth.userService')
     const userService: UserService = {
       authenticate: vi.fn(() => ({ id: 'user-1' })),
     }
     let injectedService: UserService | undefined
 
-    const authentication = defineBasicAuth({
+    const authentication = basicAuth({
       realm: 'Loutre Test',
-    }).factory((users = inject(USER_SERVICE)) => ({
-      authenticate(credentials) {
-        injectedService = users
-        const principal = users.authenticate(credentials)
-        return principal === undefined ? undefined : { principal }
-      },
-      unauthorized,
-    }))
+      state: type<{ principal: { readonly id: string } }>(),
+      factory: (users = inject(USER_SERVICE)) => ({
+        authenticate(credentials) {
+          injectedService = users
+          const principal = users.authenticate(credentials)
+          return principal === undefined ? undefined : { principal }
+        },
+        unauthorized,
+      }),
+    })
 
     const container = new Container([
       provide(USER_SERVICE).useValue(userService),
@@ -177,12 +184,14 @@ describe('defineBasicAuth', () => {
   })
 
   it('realmをquoted-stringとしてescapeする', async () => {
-    const authentication = defineBasicAuth({
+    const authentication = basicAuth({
       realm: 'Loutre "Admin" \\ Area',
-    }).factory(() => ({
-      authenticate: () => undefined,
-      unauthorized,
-    }))
+      state: type<{}>(),
+      factory: () => ({
+        authenticate: () => undefined,
+        unauthorized,
+      }),
+    })
 
     const { result } = await runBasicAuth(authentication, {
       input: { headers: {} },
@@ -200,10 +209,14 @@ describe('defineBasicAuth', () => {
 
   it('空または制御文字を含むrealmを拒否する', () => {
     const create = (realm: string) =>
-      defineBasicAuth({ realm }).factory(() => ({
-        authenticate: () => undefined,
-        unauthorized,
-      }))
+      basicAuth({
+        realm,
+        state: type<{}>(),
+        factory: () => ({
+          authenticate: () => undefined,
+          unauthorized,
+        }),
+      })
 
     expect(() => create('')).toThrow(TypeError)
     expect(() => create('Loutre\nAdmin')).toThrow(TypeError)
@@ -235,15 +248,17 @@ describe('defineBasicAuth', () => {
         } as never,
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      get(): never {
-        throw new Error('実行対象ではありません')
-      },
-    }))
+
+      factory: () => ({
+        get(): never {
+          throw new Error('実行対象ではありません')
+        },
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
@@ -254,7 +269,7 @@ describe('defineBasicAuth', () => {
   })
 
   it('ユーザー定義Layerのresponse制約を診断する', () => {
-    const authentication = defineLayer({
+    const authentication = layer({
       name: 'customAuthentication',
       shortCircuits: [
         {
@@ -263,8 +278,10 @@ describe('defineBasicAuth', () => {
           metadata: { status: 401 },
         },
       ],
-    }).factory(() => async (_ctx, next) => {
-      await next()
+
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
     })
     const status: number = 403
     const Contract = contract([
@@ -283,15 +300,17 @@ describe('defineBasicAuth', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      get(): never {
-        throw new Error('実行対象ではありません')
-      },
-    }))
+
+      factory: () => ({
+        get(): never {
+          throw new Error('実行対象ではありません')
+        },
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))

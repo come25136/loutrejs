@@ -2,7 +2,7 @@ import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
   defineModule,
-  defineImplementation,
+  implementation,
   inject,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
@@ -57,22 +57,23 @@ export class UsersService {
     return { id: 'created-user', name }
   }
 }
-export const UsersController = defineImplementation({
+export const UsersController = implementation({
   name: 'UsersController',
   contract: UsersContract,
   protocol: http,
-}).factory((users = inject(UsersService)) => ({
-  async get(ctx) {
-    return ctx.response.found({
-      body: { id: ctx.input.params.id, name: 'test' },
-    })
-  },
-  async create(ctx) {
-    return ctx.response.created({
-      body: users.create(ctx.input.body.name),
-    })
-  },
-}))
+  factory: (users = inject(UsersService)) => ({
+    async get(ctx) {
+      return ctx.response.found({
+        body: { id: ctx.input.params.id, name: 'test' },
+      })
+    },
+    async create(ctx) {
+      return ctx.response.created({
+        body: users.create(ctx.input.body.name),
+      })
+    },
+  }),
+})
 export const UsersModule = defineModule(() => ({
   name: 'UsersModule',
   description: 'HTTP CRUD integration',

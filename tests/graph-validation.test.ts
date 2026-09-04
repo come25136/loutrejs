@@ -1,7 +1,8 @@
 import {
+  type,
   contract,
-  defineImplementation,
-  defineLayer,
+  implementation,
+  layer,
   defineModule,
   inject,
   protocolGroup,
@@ -27,8 +28,11 @@ function protocol(pipeline: readonly PipelineItem[], path = '/fixture') {
 }
 
 function passthrough(name: string) {
-  return defineLayer({ name }).factory(() => async (_ctx, next) => {
-    await next()
+  return layer({
+    name,
+    factory: () => async (_ctx, next) => {
+      await next()
+    },
   })
 }
 
@@ -48,12 +52,14 @@ function graphImplementation(
     procedures.map((name) => [name, () => ({ kind: 'http-result' })]),
   )
 
-  return defineImplementation({
+  return implementation({
     name: options.name ?? 'Controller',
     contract: contractDefinition,
     protocol: http,
     ...(options.procedures === undefined ? {} : { procedures }),
-  } as never).factory(() => runtime as never)
+
+    factory: () => runtime as never,
+  } as never)
 }
 
 describe('Application Graph IRとsemantic validation', () => {
@@ -62,12 +68,14 @@ describe('Application Graph IRとsemantic validation', () => {
       transaction(next: () => Promise<void>): Promise<void>
     }
     const DATABASE = token<Database>('database.graph')
-    const transactionLayer = defineLayer({ name: 'transaction' }).factory(
-      (database = inject(DATABASE)) =>
+    const transactionLayer = layer({
+      name: 'transaction',
+      factory:
+        (database = inject(DATABASE)) =>
         async (_ctx, next) => {
           await database.transaction(next)
         },
-    )
+    })
     const inside = passthrough('inside')
     const authorization = passthrough('authorization')
     const nested = transactionLayer([inside])
@@ -146,12 +154,14 @@ describe('Application Graph IRとsemantic validation', () => {
 
   it('Layer factoryの未解決DIを診断する', () => {
     const MISSING = token<object>('layer.missing')
-    const injected = defineLayer({ name: 'injected' }).factory(
-      (_missing = inject(MISSING)) =>
+    const injected = layer({
+      name: 'injected',
+      factory:
+        (_missing = inject(MISSING)) =>
         async (_ctx, next) => {
           await next()
         },
-    )
+    })
     const Contract = contract([
       protocolGroup('http', {
         run: protocol([injected, http.controller]),
@@ -168,19 +178,23 @@ describe('Application Graph IRとsemantic validation', () => {
   it('Graph Probeでfactoryだけを同期実行しruntimeとchildを実行しない', () => {
     let factoryCalls = 0
     let runtimeCalls = 0
-    const probeSafe = defineLayer({ name: 'probe-safe' }).factory(() => {
-      factoryCalls += 1
-      return async (_ctx, next) => {
-        runtimeCalls += 1
-        await next()
-      }
+    const probeSafe = layer({
+      name: 'probe-safe',
+      factory: () => {
+        factoryCalls += 1
+        return async (_ctx, next) => {
+          runtimeCalls += 1
+          await next()
+        }
+      },
     })
-    const child = defineLayer({ name: 'child' }).factory(
-      () => async (_ctx, next) => {
+    const child = layer({
+      name: 'child',
+      factory: () => async (_ctx, next) => {
         runtimeCalls += 1
         await next()
       },
-    )
+    })
     const Contract = contract([
       protocolGroup('http', {
         run: protocol([probeSafe([child, http.controller])]),
@@ -196,10 +210,14 @@ describe('Application Graph IRとsemantic validation', () => {
   })
 
   it('recursive PipelineのLayer requirementとvalidation stateを順序どおり検証する', () => {
-    const provider = defineLayer({ name: 'recursive-provider' }).factory<{
-      session: string
-    }>(() => async (_ctx, next) => {
-      await next({ session: 'ready' })
+    const provider = layer({
+      name: 'recursive-provider',
+      state: type<{
+        session: string
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ session: 'ready' })
+      },
     })
     const childOwner = passthrough('recursive-state')([
       provider,
@@ -209,12 +227,14 @@ describe('Application Graph IRとsemantic validation', () => {
         part: 'body',
       },
     ])
-    const consumer = defineLayer({
+    const consumer = layer({
       name: 'recursive-consumer',
       requires: [provider],
       requiresValidated: ['body'],
-    }).factory(() => async (_ctx, next) => {
-      await next()
+
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
     })
     const Contract = contract([
       protocolGroup('http', {
@@ -246,7 +266,7 @@ describe('Application Graph IRとsemantic validation', () => {
   })
 
   it('childのshortCircuit declarationをresponseと照合する', () => {
-    const child = defineLayer({
+    const child = layer({
       name: 'recursive-short-circuit',
       shortCircuits: [
         {
@@ -255,8 +275,10 @@ describe('Application Graph IRとsemantic validation', () => {
           metadata: { status: 409 },
         },
       ],
-    }).factory(() => async (_ctx, next) => {
-      await next()
+
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
     })
     const childOwner = passthrough('short-circuit-owner')([child])
     const Contract = contract([
@@ -308,7 +330,7 @@ describe('Application Graph IRとsemantic validation', () => {
     ).toContain('LUTRE_PIPELINE_003')
   })
 
-  it('detects missing and duplicate defineImplementation coverage', () => {
+  it('detects missing and duplicate implementation coverage', () => {
     const Contract = contract([
       protocolGroup('http', {
         get: protocol([http.controller]),
@@ -343,13 +365,13 @@ describe('Application Graph IRとsemantic validation', () => {
       }),
     ])
     const createImplementation = (contractDefinition: ContractDefinition) =>
-      defineImplementation({
+      implementation({
         name: 'Controller',
         contract: contractDefinition,
         protocol: http,
-      } as never).factory(
-        (_session = inject(SESSION)) => ({ run() {} }) as never,
-      )
+
+        factory: (_session = inject(SESSION)) => ({ run() {} }) as never,
+      } as never)
     const Controller = createImplementation(Contract)
     const InvalidModule = defineModule(() => ({
       implementations: [Controller],
@@ -361,10 +383,14 @@ describe('Application Graph IRとsemantic validation', () => {
       ),
     ).toContain('LUTRE_DI_UNRESOLVED')
 
-    const sessionLayer = defineLayer({ name: 'session' }).factory<{
-      session: { id: string }
-    }>(() => async (_ctx, next) => {
-      await next({ session: { id: 'one' } })
+    const sessionLayer = layer({
+      name: 'session',
+      state: type<{
+        session: { id: string }
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ session: { id: 'one' } })
+      },
     })
     const LayerOnlyContract = contract([
       protocolGroup('http', {
@@ -502,16 +528,22 @@ describe('Application Graph IRとsemantic validation', () => {
   })
 
   it('Layer requirementをGraph上でLayer名により関連付ける', () => {
-    const provideSession = defineLayer({ name: 'provideSession' }).factory<{
-      session: string
-    }>(() => async (_ctx, next) => {
-      await next({ session: 'session-1' })
+    const provideSession = layer({
+      name: 'provideSession',
+      state: type<{
+        session: string
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ session: 'session-1' })
+      },
     })
-    const requireSession = defineLayer({
+    const requireSession = layer({
       name: 'requireSession',
       requires: [provideSession],
-    }).factory(() => async (_ctx, next) => {
-      await next()
+
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
     })
     const Contract = contract([
       protocolGroup('http', {
@@ -536,16 +568,22 @@ describe('Application Graph IRとsemantic validation', () => {
   })
 
   it('未実行のLayer requirementを拒否する', () => {
-    const session = defineLayer({ name: 'session' }).factory<{
-      session: { id: string }
-    }>(() => async (_ctx, next) => {
-      await next({ session: { id: 'one' } })
+    const session = layer({
+      name: 'session',
+      state: type<{
+        session: { id: string }
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ session: { id: 'one' } })
+      },
     })
-    const guarded = defineLayer({
+    const guarded = layer({
       name: 'guarded',
       requires: [session],
-    }).factory(() => async (_ctx, next) => {
-      await next()
+
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
     })
     const Contract = contract([
       protocolGroup('http', {
@@ -562,21 +600,31 @@ describe('Application Graph IRとsemantic validation', () => {
   })
 
   it('異なるLayer identityは同じState shapeでも互換にしない', () => {
-    const first = defineLayer({ name: 'first' }).factory<{
-      session: string
-    }>(() => async (_ctx, next) => {
-      await next({ session: 'first' })
+    const first = layer({
+      name: 'first',
+      state: type<{
+        session: string
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ session: 'first' })
+      },
     })
-    const second = defineLayer({ name: 'second' }).factory<{
-      session: string
-    }>(() => async (_ctx, next) => {
-      await next({ session: 'second' })
+    const second = layer({
+      name: 'second',
+      state: type<{
+        session: string
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ session: 'second' })
+      },
     })
-    const consumer = defineLayer({
+    const consumer = layer({
       name: 'consumer',
       requires: [second],
-    }).factory(() => async (_ctx, next) => {
-      await next()
+
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
     })
     const Contract = contract([
       protocolGroup('http', {

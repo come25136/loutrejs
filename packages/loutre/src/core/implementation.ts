@@ -5,10 +5,10 @@ import {
 import type {
   ContractDefinition,
   ContractOfBinding,
+  ResolvedContractNode,
   ContractProcedures,
   ProtocolDescriptor,
   ProtocolFactory,
-  ResolvedContractNode,
 } from './contract.js'
 
 type ImplementationBinding =
@@ -83,6 +83,11 @@ type FullImplementationDeclaration<
     TCapabilities
   >
   readonly procedures?: never
+  readonly factory: () => ImplementationRuntimeShape<
+    TBinding,
+    TProtocol,
+    ProcedureNamesForProtocol<TBinding, TProtocol>
+  >
 }
 
 type DuplicateProcedureNames<
@@ -119,54 +124,14 @@ type PartialImplementationDeclaration<
   >
   readonly procedures: TProcedures &
     UniqueProcedureSelectionConstraint<TProcedures>
-}
-
-export interface FullImplementationBuilder<
-  TBinding extends ImplementationBinding,
-  TProtocol extends string,
-  TCapabilities extends readonly string[],
-> {
-  factory(
-    factory: () => ImplementationRuntimeShape<
-      TBinding,
-      TProtocol,
-      ProcedureNamesForProtocol<TBinding, TProtocol>
-    >,
-  ): ImplementationDescriptor<
-    ContractOfBinding<TBinding>,
+  readonly factory: () => ImplementationRuntimeShape<
+    TBinding,
     TProtocol,
-    readonly ProcedureNamesForProtocol<TBinding, TProtocol>[],
-    ImplementationRuntimeShape<
-      TBinding,
-      TProtocol,
-      ProcedureNamesForProtocol<TBinding, TProtocol>
-    >,
-    TCapabilities
+    TProcedures[number]
   >
 }
 
-export interface PartialImplementationBuilder<
-  TBinding extends ImplementationBinding,
-  TProtocol extends string,
-  TProcedures extends readonly ProcedureNamesForProtocol<TBinding, TProtocol>[],
-  TCapabilities extends readonly string[],
-> {
-  factory(
-    factory: () => ImplementationRuntimeShape<
-      TBinding,
-      TProtocol,
-      TProcedures[number]
-    >,
-  ): ImplementationDescriptor<
-    ContractOfBinding<TBinding>,
-    TProtocol,
-    TProcedures,
-    ImplementationRuntimeShape<TBinding, TProtocol, TProcedures[number]>,
-    TCapabilities
-  >
-}
-
-export function defineImplementation<
+export function implementation<
   const TBinding extends ImplementationBinding,
   const TProtocol extends string,
   const TCapabilities extends readonly string[],
@@ -176,8 +141,18 @@ export function defineImplementation<
     TProtocol,
     TCapabilities
   >,
-): FullImplementationBuilder<TBinding, TProtocol, TCapabilities>
-export function defineImplementation<
+): ImplementationDescriptor<
+  ContractOfBinding<TBinding>,
+  TProtocol,
+  readonly ProcedureNamesForProtocol<TBinding, TProtocol>[],
+  ImplementationRuntimeShape<
+    TBinding,
+    TProtocol,
+    ProcedureNamesForProtocol<TBinding, TProtocol>
+  >,
+  TCapabilities
+>
+export function implementation<
   const TBinding extends ImplementationBinding,
   const TProtocol extends string,
   const TProcedures extends readonly ProcedureNamesForProtocol<
@@ -192,34 +167,35 @@ export function defineImplementation<
     TProcedures,
     TCapabilities
   >,
-): PartialImplementationBuilder<TBinding, TProtocol, TProcedures, TCapabilities>
-export function defineImplementation(declaration: {
+): ImplementationDescriptor<
+  ContractOfBinding<TBinding>,
+  TProtocol,
+  TProcedures,
+  ImplementationRuntimeShape<TBinding, TProtocol, TProcedures[number]>,
+  TCapabilities
+>
+export function implementation(declaration: {
   readonly name: string
   readonly contract: ImplementationBinding
   readonly protocol: ProtocolFactory<string, readonly string[]>
   readonly procedures?: readonly string[]
-}): {
-  factory(factory: () => object): ImplementationDescriptor
-} {
+  readonly factory: () => object
+}): ImplementationDescriptor {
   const protocol = declaration.protocol.protocol
   const contract = contractOfBinding(declaration.contract)
-
   if (contractNodeMetadataOf(contract)?.kind === 'branch') {
     throw new Error(
       'LUTRE_IMPL_003: Implementation must bind to a resolved leaf Contract node.',
     )
   }
-
   const available = Object.entries(contract.procedures)
     .filter(([, procedure]) => protocol in procedure.protocols)
     .map(([name]) => name)
-
   if (available.length === 0) {
     throw new Error(
       `LUTRE_IMPL_003: Contract does not declare any procedure for protocol ${protocol}.`,
     )
   }
-
   const procedures = [...(declaration.procedures ?? available)]
   const selected = new Set<string>()
 
@@ -239,16 +215,12 @@ export function defineImplementation(declaration: {
   }
 
   return Object.freeze({
-    factory(factory: () => object): ImplementationDescriptor {
-      return Object.freeze({
-        kind: 'implementation',
-        name: declaration.name,
-        contract,
-        protocol,
-        capabilities: declaration.protocol.capabilities ?? [],
-        procedures: Object.freeze(procedures),
-        factory,
-      })
-    },
+    kind: 'implementation',
+    name: declaration.name,
+    contract,
+    protocol,
+    capabilities: declaration.protocol.capabilities ?? [],
+    procedures: Object.freeze(procedures),
+    factory: declaration.factory,
   })
 }

@@ -2,7 +2,7 @@ import { createTestApplication } from './helpers/application.js'
 import {
   contract,
   defineModule,
-  defineImplementation,
+  implementation,
   type ImplementationDescriptor,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
@@ -34,22 +34,24 @@ describe('HTTP request semantics', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      inspect(ctx) {
-        return ctx.response.ok({
-          body: {
-            tags: Array.isArray(ctx.input.query.tag)
-              ? ctx.input.query.tag
-              : [ctx.input.query.tag],
-            header: ctx.input.headers['x-repeat'],
-          },
-        })
-      },
-    }))
+
+      factory: () => ({
+        inspect(ctx) {
+          return ctx.response.ok({
+            body: {
+              tags: Array.isArray(ctx.input.query.tag)
+                ? ctx.input.query.tag
+                : [ctx.input.query.tag],
+              header: ctx.input.headers['x-repeat'],
+            },
+          })
+        },
+      }),
+    })
     const application = applicationFor(Implementation)
     const headers = new Headers()
     headers.append('X-Repeat', 'first')
@@ -85,21 +87,23 @@ describe('HTTP request semantics', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      upload(ctx) {
-        const file = ctx.input.body.get('file')
-        return ctx.response.accepted({
-          body: {
-            name: String(ctx.input.body.get('name')),
-            size: file instanceof File ? file.size : 0,
-          },
-        })
-      },
-    }))
+
+      factory: () => ({
+        upload(ctx) {
+          const file = ctx.input.body.get('file')
+          return ctx.response.accepted({
+            body: {
+              name: String(ctx.input.body.get('name')),
+              size: file instanceof File ? file.size : 0,
+            },
+          })
+        },
+      }),
+    })
     const application = applicationFor(Implementation)
     const body = new FormData()
     body.set('name', 'loutre')
@@ -129,15 +133,17 @@ describe('HTTP request semantics', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      upload(): never {
-        throw new Error('呼び出されません')
-      },
-    }))
+
+      factory: () => ({
+        upload(): never {
+          throw new Error('呼び出されません')
+        },
+      }),
+    })
     const application = applicationFor(Implementation)
     const response = await application.fetch(
       new Request('https://fixture.test/invalid-multipart', {
@@ -168,31 +174,33 @@ describe('HTTP request semantics', () => {
         },
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      subscribe(ctx) {
-        expect(ctx.signal).toBeInstanceOf(AbortSignal)
-        const stream = async function* () {
-          try {
-            yield 1
-            await new Promise<void>((resolve) => {
-              if (ctx.signal.aborted) resolve()
-              else {
-                ctx.signal.addEventListener('abort', () => resolve(), {
-                  once: true,
-                })
-              }
-            })
-          } finally {
-            iteratorReturned = true
+
+      factory: () => ({
+        subscribe(ctx) {
+          expect(ctx.signal).toBeInstanceOf(AbortSignal)
+          const stream = async function* () {
+            try {
+              yield 1
+              await new Promise<void>((resolve) => {
+                if (ctx.signal.aborted) resolve()
+                else {
+                  ctx.signal.addEventListener('abort', () => resolve(), {
+                    once: true,
+                  })
+                }
+              })
+            } finally {
+              iteratorReturned = true
+            }
           }
-        }
-        return ctx.response.ok({ body: stream() })
-      },
-    }))
+          return ctx.response.ok({ body: stream() })
+        },
+      }),
+    })
     const application = applicationFor(Implementation)
     const abortController = new AbortController()
     const response = await application.fetch(

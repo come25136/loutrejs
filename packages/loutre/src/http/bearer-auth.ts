@@ -1,9 +1,10 @@
 import {
-  defineLayer,
+  layer,
   registerLayerShortCircuits,
   shortCircuit,
-  type LayerDescriptor,
+  type as typeCarrier,
 } from '../core/index.js'
+import type { LayerDescriptor, Type, TypeOf } from '../core/index.js'
 import type { LogicalHttpResult } from './definitions.js'
 
 export interface BearerAuthUnauthorized<TResponse extends string, TBody> {
@@ -11,9 +12,19 @@ export interface BearerAuthUnauthorized<TResponse extends string, TBody> {
   readonly body: TBody
 }
 
-export interface BearerAuthDefinition {
+export interface BearerAuthDefinition<
+  TState extends Type<object>,
+  TResponse extends string,
+  TUnauthorizedBody,
+> {
   readonly realm: string
   readonly name?: string
+  readonly state: TState
+  readonly factory: () => BearerAuthRuntime<
+    TypeOf<TState>,
+    TResponse,
+    TUnauthorizedBody
+  >
 }
 
 type BearerAuthShortCircuits<TResponse extends string> = readonly [
@@ -46,20 +57,6 @@ export interface BearerAuthRuntime<
   >
 }
 
-export interface BearerAuthBuilder {
-  factory<
-    TContribution extends object,
-    const TResponse extends string,
-    TUnauthorizedBody,
-  >(
-    factory: () => BearerAuthRuntime<
-      TContribution,
-      TResponse,
-      TUnauthorizedBody
-    >,
-  ): BearerAuthLayerDescriptor<TContribution, TResponse, TUnauthorizedBody>
-}
-
 export interface BearerAuthLayerDescriptor<
   TContribution extends object,
   TResponse extends string,
@@ -86,34 +83,26 @@ export interface BearerAuthContext {
   }
 }
 
-export function defineBearerAuth(
-  definition: BearerAuthDefinition,
-): BearerAuthBuilder {
+export function bearerAuth<
+  const TState extends Type<object>,
+  const TResponse extends string,
+  TUnauthorizedBody,
+>(
+  definition: BearerAuthDefinition<TState, TResponse, TUnauthorizedBody>,
+): BearerAuthLayerDescriptor<TypeOf<TState>, TResponse, TUnauthorizedBody> {
   const challenge = formatBearerChallenge(definition.realm)
+  let descriptor: BearerAuthLayerDescriptor<
+    TypeOf<TState>,
+    TResponse,
+    TUnauthorizedBody
+  >
 
-  return Object.freeze({
-    factory<
-      TContribution extends object,
-      const TResponse extends string,
-      TUnauthorizedBody,
-    >(
-      factory: () => BearerAuthRuntime<
-        TContribution,
-        TResponse,
-        TUnauthorizedBody
-      >,
-    ): BearerAuthLayerDescriptor<TContribution, TResponse, TUnauthorizedBody> {
-      let descriptor: BearerAuthLayerDescriptor<
-        TContribution,
-        TResponse,
-        TUnauthorizedBody
-      >
-
-      descriptor = defineLayer({
-        name: definition.name ?? 'bearerAuth',
-      }).factory<
-        TContribution,
-        BearerAuthContext,
+  descriptor = layer({
+    name: definition.name ?? 'bearerAuth',
+    state: definition.state,
+    context: typeCarrier<BearerAuthContext>(),
+    result:
+      typeCarrier<
         string extends TResponse
           ? unknown
           : LogicalHttpResult<
@@ -121,37 +110,37 @@ export function defineBearerAuth(
               TUnauthorizedBody,
               BearerAuthResponseHeaders
             >
-      >(() => {
-        const runtime = factory()
-        registerLayerShortCircuits(descriptor, [
-          {
-            protocol: 'http',
-            response: runtime.unauthorized().response,
-            metadata: { status: 401 },
-          },
-        ])
+      >(),
+    factory: () => {
+      const runtime = definition.factory()
+      registerLayerShortCircuits(descriptor, [
+        {
+          protocol: 'http',
+          response: runtime.unauthorized().response,
+          metadata: { status: 401 },
+        },
+      ])
 
-        return async (ctx, next) => {
-          const token = readBearerToken(ctx.input.headers.authorization)
-          if (!token) {
-            return unauthorizedResult(runtime.unauthorized(), challenge)
-          }
-
-          const value = await runtime.authenticate(token)
-          if (value == null) {
-            return unauthorizedResult(runtime.unauthorized(), challenge)
-          }
-          await next(value)
+      return async (ctx, next) => {
+        const token = readBearerToken(ctx.input.headers.authorization)
+        if (!token) {
+          return unauthorizedResult(runtime.unauthorized(), challenge)
         }
-      }) as unknown as BearerAuthLayerDescriptor<
-        TContribution,
-        TResponse,
-        TUnauthorizedBody
-      >
 
-      return descriptor
+        const value = await runtime.authenticate(token)
+        if (value == null) {
+          return unauthorizedResult(runtime.unauthorized(), challenge)
+        }
+        await next(value)
+      }
     },
-  })
+  }) as unknown as BearerAuthLayerDescriptor<
+    TypeOf<TState>,
+    TResponse,
+    TUnauthorizedBody
+  >
+
+  return descriptor
 }
 
 function unauthorizedResult<TResponse extends string, TBody>(

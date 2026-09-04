@@ -1,11 +1,15 @@
-import { contract, defineImplementation, defineLayer } from '@loutrejs/loutre'
+import { type, contract, implementation, layer } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
-const session = defineLayer({ name: 'implementation-session' }).factory<{
-  'implementation.session': { readonly userId: string }
-}>(() => async (_ctx, next) => {
-  await next({ 'implementation.session': { userId: 'user-1' } })
+const session = layer({
+  name: 'implementation-session',
+  state: type<{
+    'implementation.session': { readonly userId: string }
+  }>(),
+  factory: () => async (_ctx, next) => {
+    await next({ 'implementation.session': { userId: 'user-1' } })
+  },
 })
 const Contract = contract([
   http({
@@ -39,72 +43,79 @@ const Contract = contract([
     },
   }),
 ])
-defineImplementation({
+implementation({
   name: 'AllProcedures',
   contract: Contract,
   protocol: http,
-}).factory(() => ({
-  raw(ctx) {
-    const id: string = ctx.input.params.id
-    return ctx.response.ok({ body: id })
-  },
-  transformed(ctx) {
-    const id: number = ctx.input.params.id
-    const page: number = ctx.input.query.page
-    const authorization: string = ctx.input.headers.authorization
-    const name: string = ctx.input.body.name
-    const userId: string = ctx.state['implementation.session'].userId
-    return ctx.response.ok({
-      body: `${id}:${page}:${authorization}:${name}:${userId}`,
-    })
-  },
-}))
-defineImplementation({
+  factory: () => ({
+    raw(ctx) {
+      const id: string = ctx.input.params.id
+      return ctx.response.ok({ body: id })
+    },
+    transformed(ctx) {
+      const id: number = ctx.input.params.id
+      const page: number = ctx.input.query.page
+      const authorization: string = ctx.input.headers.authorization
+      const name: string = ctx.input.body.name
+      const userId: string = ctx.state['implementation.session'].userId
+      return ctx.response.ok({
+        body: `${id}:${page}:${authorization}:${name}:${userId}`,
+      })
+    },
+  }),
+})
+implementation({
   name: 'MissingProcedure',
   contract: Contract,
   protocol: http,
-  // @ts-expect-error procedures省略時は指定protocolの全procedureが必要
-}).factory(() => ({
-  raw(ctx) {
-    return ctx.response.ok({ body: ctx.input.params.id })
-  },
-}))
-const Partial = defineImplementation({
+  // @ts-expect-error procedures省略時は指定protocolの全procedureが必要,
+  factory: () => ({
+    raw(ctx) {
+      return ctx.response.ok({ body: ctx.input.params.id })
+    },
+  }),
+})
+const Partial = implementation({
   name: 'Partial',
   contract: Contract,
   protocol: http,
   procedures: ['raw'],
-}).factory(() => ({
-  raw(ctx) {
-    return ctx.response.ok({ body: ctx.input.params.id })
-  },
-}))
+  factory: () => ({
+    raw(ctx) {
+      return ctx.response.ok({ body: ctx.input.params.id })
+    },
+  }),
+})
 const selectedProcedure: 'raw' = Partial.procedures[0]
 void selectedProcedure
-defineImplementation({
+implementation({
   name: 'InvalidResult',
   contract: Contract,
   protocol: http,
   procedures: ['raw'],
-  // @ts-expect-error procedure resultはProtocolDescriptorのresultに一致する必要がある
-}).factory(() => ({ raw: () => 1 }))
-defineImplementation({
+  // @ts-expect-error procedure resultはProtocolDescriptorのresultに一致する必要がある,
+  factory: () => ({ raw: () => 1 }),
+})
+implementation({
   name: 'InvalidProcedure',
   contract: Contract,
   protocol: http,
   // @ts-expect-error 指定protocolに存在しないprocedureは選択できない
   procedures: ['missing'],
-}).factory((() => ({})) as never)
-defineImplementation({
+  factory: (() => ({})) as never,
+})
+implementation({
   name: 'WrongProtocol',
   contract: Contract,
   // @ts-expect-error Contractに存在しないprotocolは選択できない
   protocol: messagePort,
-}).factory((() => ({})) as never)
-defineImplementation({
+  factory: (() => ({})) as never,
+})
+implementation({
   name: 'AsyncFactory',
   contract: Contract,
   protocol: http,
   procedures: ['raw'],
-  // @ts-expect-error Implementation factoryは同期関数に限定する
-}).factory(async () => ({ raw: () => ({}) }))
+  // @ts-expect-error Implementation factoryは同期関数に限定する,
+  factory: async () => ({ raw: () => ({}) }),
+})

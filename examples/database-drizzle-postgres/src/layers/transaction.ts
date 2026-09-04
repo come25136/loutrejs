@@ -1,13 +1,14 @@
-import { defineLayer, inject } from '@loutrejs/loutre'
+import { type, layer, inject } from '@loutrejs/loutre'
 import {
   DrizzleDatabase,
   type DrizzleTransaction,
 } from '../database/drizzle.js'
 
-export const transaction = defineLayer({
+export const transaction = layer({
   name: 'database.transaction',
-}).factory<{ transaction: DrizzleTransaction }>(
-  (database = inject(DrizzleDatabase)) =>
+  state: type<{ transaction: DrizzleTransaction }>(),
+  factory:
+    (database = inject(DrizzleDatabase)) =>
     async (_ctx, next) => {
       await database.transaction(
         async (client) => {
@@ -20,4 +21,4 @@ export const transaction = defineLayer({
         },
       )
     },
-)
+})

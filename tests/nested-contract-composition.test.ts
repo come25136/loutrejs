@@ -1,9 +1,10 @@
 import {
+  type,
   contract,
   defineApplication,
   defineModule,
-  defineImplementation,
-  defineLayer,
+  implementation,
+  layer,
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import { generateOpenApi } from '@loutrejs/loutre/openapi'
@@ -13,23 +14,29 @@ import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 
 describe('Nested Contract composition', () => {
-  const requestScope = defineLayer({
+  const requestScope = layer({
     name: 'nested.requestScope',
-  }).factory<{ 'nested.requestScope': string }>(() => async (_ctx, next) => {
-    await next({ 'nested.requestScope': 'request-1' })
+
+    state: type<{ 'nested.requestScope': string }>(),
+    factory: () => async (_ctx, next) => {
+      await next({ 'nested.requestScope': 'request-1' })
+    },
   })
 
-  const authentication = defineLayer({
+  const authentication = layer({
     name: 'nested.authentication',
     requires: [requestScope],
-  }).factory<{
-    'nested.currentUser': { readonly id: string }
-  }>(() => async (ctx, next) => {
-    await next({
-      'nested.currentUser': {
-        id: `user:${ctx.state['nested.requestScope']}`,
-      },
-    })
+
+    state: type<{
+      'nested.currentUser': { readonly id: string }
+    }>(),
+    factory: () => async (ctx, next) => {
+      await next({
+        'nested.currentUser': {
+          id: `user:${ctx.state['nested.requestScope']}`,
+        },
+      })
+    },
   })
 
   const ProfileContract = contract([
@@ -83,21 +90,23 @@ describe('Nested Contract composition', () => {
     }),
   ])
 
-  const ProfileController = defineImplementation({
+  const ProfileController = implementation({
     name: 'NestedProfileController',
     contract: AppContract.http.api.me.profile,
     protocol: http,
-  }).factory(() => ({
-    get(ctx) {
-      return ctx.response.ok({
-        body: {
-          id: ctx.input.params.id,
-          userId: ctx.state['nested.currentUser'].id,
-          scope: ctx.state['nested.requestScope'],
-        },
-      })
-    },
-  }))
+
+    factory: () => ({
+      get(ctx) {
+        return ctx.response.ok({
+          body: {
+            id: ctx.input.params.id,
+            userId: ctx.state['nested.currentUser'].id,
+            scope: ctx.state['nested.requestScope'],
+          },
+        })
+      },
+    }),
+  })
 
   const ProfileModule = defineModule(() => ({
     implementations: [ProfileController],
@@ -203,22 +212,26 @@ describe('Nested Contract composition', () => {
         },
       }),
     ])
-    const ProfileOnly = defineImplementation({
+    const ProfileOnly = implementation({
       name: 'ProfileOnly',
       contract: CoverageContract.http.api.profile,
       protocol: http,
-    }).factory(() => ({
-      get(ctx) {
-        return ctx.response.ok({
-          body: { id: ctx.input.params.id, userId: 'user', scope: 'scope' },
-        })
-      },
-    }))
-    const DuplicateProfile = defineImplementation({
+
+      factory: () => ({
+        get(ctx) {
+          return ctx.response.ok({
+            body: { id: ctx.input.params.id, userId: 'user', scope: 'scope' },
+          })
+        },
+      }),
+    })
+    const DuplicateProfile = implementation({
       name: 'DuplicateProfile',
       contract: CoverageContract.http.api.profile,
       protocol: http,
-    }).factory(ProfileOnly.factory)
+
+      factory: ProfileOnly.factory,
+    })
     const Module = defineModule(() => ({
       implementations: [ProfileOnly, DuplicateProfile],
     }))
@@ -320,7 +333,7 @@ describe('Nested Contract composition', () => {
 
   it('resolved branch Implementation bindはruntimeでも拒否する', () => {
     expect(() =>
-      (defineImplementation as any)({
+      (implementation as any)({
         name: 'InvalidBranchController',
         contract: AppContract.http.api.me,
         protocol: http,

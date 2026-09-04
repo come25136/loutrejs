@@ -2,7 +2,7 @@ import { defineApplication } from '@loutrejs/loutre'
 import {
   contract,
   defineModule,
-  defineImplementation,
+  implementation,
   inject,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
@@ -52,24 +52,26 @@ export const EventsContract = contract([
     },
   }),
 ])
-export const EventsController = defineImplementation({
+export const EventsController = implementation({
   name: 'EventsController',
   contract: EventsContract,
   protocol: http,
-}).factory((streams = inject(EventStreamService)) => ({
-  subscribe(ctx) {
-    return ctx.response.events({ body: streams.events() })
-  },
-}))
-export const EventsMessageHandler = defineImplementation({
+  factory: (streams = inject(EventStreamService)) => ({
+    subscribe(ctx) {
+      return ctx.response.events({ body: streams.events() })
+    },
+  }),
+})
+export const EventsMessageHandler = implementation({
   name: 'EventsMessageHandler',
   contract: EventsContract,
   protocol: messagePort,
-}).factory((streams = inject(EventStreamService)) => ({
-  subscribe(ctx) {
-    return ctx.message.events(streams.events())
-  },
-}))
+  factory: (streams = inject(EventStreamService)) => ({
+    subscribe(ctx) {
+      return ctx.message.events(streams.events())
+    },
+  }),
+})
 export const EventsModule = defineModule(() => ({
   name: 'EventsModule',
   description: 'HTTP server-stream integration',

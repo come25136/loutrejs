@@ -8,7 +8,7 @@ runtime境界に関する補足だけを記録する。
 - HTTP decodeは同名query keyの複数値を`string[]`、単一値を`string`、headerを小文字keyの
   recordとして表現する。request schema failureはJSON 400、unknown failureはJSON 500へ変換する。
 - DI用typed tokenには`token<Value>('stable.id')`を使う。execution-local dataはLayerが`ctx.state`へcontributeする。
-- Layerは`defineLayer({ ...metadata }).factory<Contribution>(factory)`で定義する。metadataはfactoryを実行せず解析でき、`factory`はInjection Context内で同期実行してrequest間で共有するruntime functionを1つ生成する。
+- Layerは`layer({ ...metadata, state: type<Contribution>(), factory })`のsingle-call objectで定義する。`type<T>()`はruntime semanticsを持たないtype carrierで、Contributionだけを明示しながら`requires`などの値推論とfactoryのcontextual typingを維持する。TypeScriptのPartial Type Argument Inferenceに依存するbuilder分離は採用しない。`factory`はInjection Context内で同期実行してrequest間で共有するruntime functionを1つ生成する。
 - `requires`にはContext keyではなく依存するLayer identityを指定する。Layer runtimeの`ctx.state`にはrequired Layerとそのtransitive dependencyが追加したstateだけを公開する。
 - state contributionは`next(contribution)`で後段へ渡す。`next()`は常に`Promise<void>`を返す。同じtop-level namespaceはplain object同士で異なるpayload propertyを追加する場合のみ拡張でき、既存namespace / payload propertyの暗黙上書きはRuntimeが拒否する。
 - Layerはcallable objectである。`layerA`をPipelineへ直接置くと`next()`は親後段を実行し、

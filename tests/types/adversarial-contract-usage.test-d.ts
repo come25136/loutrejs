@@ -1,9 +1,10 @@
 import {
+  type,
   contract,
   defineApplication,
   defineModule,
-  defineImplementation,
-  defineLayer,
+  implementation,
+  layer,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
@@ -50,35 +51,44 @@ http({
   },
 })
 
-const provideSession = defineLayer({ name: 'provideSession' }).factory<{
-  'adversarial.session': string
-}>(() => async (_ctx, next) => {
-  await next({ 'adversarial.session': 's1' })
+const provideSession = layer({
+  name: 'provideSession',
+  state: type<{
+    'adversarial.session': string
+  }>(),
+  factory: () => async (_ctx, next) => {
+    await next({ 'adversarial.session': 's1' })
+  },
 })
 
-const requireSession = defineLayer({
+const requireSession = layer({
   name: 'requireSession',
   requires: [provideSession],
-}).factory<{
-  'adversarial.user': string
-}>(() => async (ctx, next) => {
-  await next({ 'adversarial.user': ctx.state['adversarial.session'] })
+  state: type<{
+    'adversarial.user': string
+  }>(),
+  factory: () => async (ctx, next) => {
+    await next({ 'adversarial.user': ctx.state['adversarial.session'] })
+  },
 })
 
-const extendUser = defineLayer({
+const extendUser = layer({
   name: 'extendUser',
   requires: [requireSession],
-}).factory<{
-  userMetadata: { source: string }
-}>(() => async (_ctx, next) => {
-  await next({ userMetadata: { source: 'auth' } })
+  state: type<{
+    userMetadata: { source: string }
+  }>(),
+  factory: () => async (_ctx, next) => {
+    await next({ userMetadata: { source: 'auth' } })
+  },
 })
 
-const requireValidatedParams = defineLayer({
+const requireValidatedParams = layer({
   name: 'requireValidatedParams',
   requiresValidated: ['params'],
-}).factory(() => async (_ctx, next) => {
-  await next()
+  factory: () => async (_ctx, next) => {
+    await next()
+  },
 })
 
 // @ts-expect-error requires must be satisfied by an earlier layer
@@ -127,35 +137,38 @@ const NestedContract = contract([
   }),
 ])
 
-// Resolved subtree defineImplementation binding is not a canonical primitive: bind a leaf node instead.
-defineImplementation({
+// Resolved subtree implementation binding is not a canonical primitive: bind a leaf node instead.
+implementation({
   name: 'BranchController',
   // @ts-expect-error resolved branch must not be accepted as an Implementation binding
   contract: NestedContract.http.api,
   protocol: http,
-}).factory((() => ({})) as never)
+  factory: (() => ({})) as never,
+})
 
-const LeafController = defineImplementation({
+const LeafController = implementation({
   name: 'LeafController',
   contract: NestedContract.http.api.valid,
   protocol: http,
-}).factory(() => ({
-  valid(ctx) {
-    return ctx.response.ok({ body: ctx.input.params.id })
-  },
-}))
+  factory: () => ({
+    valid(ctx) {
+      return ctx.response.ok({ body: ctx.input.params.id })
+    },
+  }),
+})
 
-defineImplementation({
+implementation({
   name: 'DuplicateProcedureSelection',
   contract: ValidContract,
   protocol: http,
   // @ts-expect-error duplicate partial procedure selections should fail statically
   procedures: ['valid', 'valid'],
-}).factory(() => ({
-  valid(ctx) {
-    return ctx.response.ok({ body: ctx.input.params.id })
-  },
-}))
+  factory: () => ({
+    valid(ctx) {
+      return ctx.response.ok({ body: ctx.input.params.id })
+    },
+  }),
+})
 
 const Module = defineModule(() => ({ implementations: [LeafController] }))
 defineApplication({ modules: [Module()] })
@@ -163,11 +176,12 @@ defineApplication({ modules: [Module()] })
 defineApplication({ contract: NestedContract, modules: [Module()] })
 
 // @ts-expect-error duplicate requiresValidated entries should be rejected at definition time
-defineLayer({
+layer({
   name: 'duplicateValidatedRequirement',
   requiresValidated: ['params', 'params'],
-}).factory(() => async (_ctx, next) => {
-  await next()
+  factory: () => async (_ctx, next) => {
+    await next()
+  },
 })
 
 const SharedNamespaceGroupA = http({

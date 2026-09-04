@@ -1,4 +1,4 @@
-import { contract, defineLayer } from '@loutrejs/loutre'
+import { type, contract, layer } from '@loutrejs/loutre'
 import {
   HandlerOf,
   MessageContextOf,
@@ -10,10 +10,14 @@ interface Session {
   readonly userId: string
 }
 
-const sessionLayer = defineLayer({ name: 'message-port-session' }).factory<{
-  session: Session
-}>(() => async (_ctx, next) => {
-  await next({ session: { userId: 'user-1' } })
+const sessionLayer = layer({
+  name: 'message-port-session',
+  state: type<{
+    session: Session
+  }>(),
+  factory: () => async (_ctx, next) => {
+    await next({ session: { userId: 'user-1' } })
+  },
 })
 
 const Contract = contract([

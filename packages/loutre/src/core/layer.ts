@@ -1,3 +1,5 @@
+import type { Type, TypeOf } from './type.js'
+
 export type ValidatedInputPart = 'params' | 'query' | 'headers' | 'body'
 
 const shortCircuitMarker = Symbol('loutre.short-circuit')
@@ -94,59 +96,38 @@ const runtimeShortCircuits = new WeakMap<
 >()
 
 export function registerLayerShortCircuits(
-  layer: object,
+  descriptor: object,
   declarations: readonly ShortCircuitDeclaration[],
 ): void {
-  runtimeShortCircuits.set(layer, Object.freeze([...declarations]))
+  runtimeShortCircuits.set(descriptor, Object.freeze([...declarations]))
 }
 
 export function shortCircuitsOfLayer(
-  layer: LayerDescriptor,
+  descriptor: LayerDescriptor,
 ): readonly ShortCircuitDeclaration[] {
-  const runtime = runtimeShortCircuits.get(layer)
+  const runtime = runtimeShortCircuits.get(descriptor)
   return runtime === undefined
-    ? layer.shortCircuits
-    : [...layer.shortCircuits, ...runtime]
+    ? descriptor.shortCircuits
+    : [...descriptor.shortCircuits, ...runtime]
 }
 
 export interface LayerDeclaration<
+  TState extends Type<object> = Type<{}>,
   TRequires extends readonly LayerDependency[] = readonly [],
   TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
   TName extends string = string,
   TRequiresValidated extends readonly ValidatedInputPart[] = readonly [],
+  TContext extends object = {},
+  TResult = never,
 > {
   readonly name: TName
+  readonly state?: TState
   readonly requires?: TRequires
   readonly requiresValidated?: TRequiresValidated
   readonly shortCircuits?: TShortCircuits
-}
-
-export interface LayerBuilder<
-  TRequires extends readonly LayerDependency[],
-  TShortCircuits extends readonly ShortCircuitDeclaration[],
-  TName extends string,
-  TRequiresValidated extends readonly ValidatedInputPart[],
-> {
-  factory<
-    TContribution extends object = {},
-    TContext extends object = {},
-    TShortCircuitResult = never,
-  >(
-    factory: LayerFactory<
-      TContext,
-      TRequires,
-      TContribution,
-      TShortCircuitResult
-    >,
-  ): LayerDescriptor<
-    TContribution,
-    TRequires,
-    TShortCircuitResult,
-    TShortCircuits,
-    TName,
-    TRequiresValidated,
-    TContext
-  >
+  readonly context?: Type<TContext>
+  readonly result?: Type<TResult>
+  readonly factory: LayerFactory<TContext, TRequires, TypeOf<TState>, TResult>
 }
 
 export interface LayerOccurrenceDescriptor<
@@ -628,84 +609,82 @@ function assertLayerDeclaration(declaration: {
   }
 }
 
-export function defineLayer<
+export function layer<
+  const TState extends Type<object> = Type<{}>,
   const TRequires extends readonly LayerDependency[] = readonly [],
   const TShortCircuits extends readonly ShortCircuitDeclaration[] = readonly [],
   const TName extends string = string,
   const TRequiresValidated extends readonly ValidatedInputPart[] = readonly [],
+  TContext extends object = {},
+  TResult = never,
 >(
   declaration: LayerDeclaration<
+    TState,
     TRequires,
     TShortCircuits,
     TName,
-    TRequiresValidated
+    TRequiresValidated,
+    TContext,
+    TResult
   > &
     LayerDeclarationConstraint<TRequiresValidated>,
-): LayerBuilder<TRequires, TShortCircuits, TName, TRequiresValidated> {
+): LayerDescriptor<
+  TypeOf<TState>,
+  TRequires,
+  TResult,
+  TShortCircuits,
+  TName,
+  TRequiresValidated,
+  TContext
+> {
   assertLayerDeclaration(declaration)
 
-  return Object.freeze({
-    factory<
-      TContribution extends object = {},
-      TContext extends object = {},
-      TShortCircuitResult = never,
-    >(
-      factory: LayerFactory<
-        TContext,
-        TRequires,
-        TContribution,
-        TShortCircuitResult
-      >,
-    ) {
-      let descriptor: LayerDescriptor<
-        TContribution,
-        TRequires,
-        TShortCircuitResult,
-        TShortCircuits,
-        TName,
-        TRequiresValidated,
-        TContext
-      >
+  let descriptor: LayerDescriptor<
+    TypeOf<TState>,
+    TRequires,
+    TResult,
+    TShortCircuits,
+    TName,
+    TRequiresValidated,
+    TContext
+  >
 
-      const callable = <const TPipeline extends readonly PipelineItem[]>(
-        pipeline: TPipeline,
-      ) =>
-        Object.freeze({
-          kind: 'layer' as const,
-          name: descriptor.name,
-          requires: descriptor.requires,
-          requiresValidated: descriptor.requiresValidated,
-          shortCircuits: descriptor.shortCircuits,
-          definition: descriptor,
-          pipeline,
-        })
+  const callable = <const TPipeline extends readonly PipelineItem[]>(
+    pipeline: TPipeline,
+  ) =>
+    Object.freeze({
+      kind: 'layer' as const,
+      name: descriptor.name,
+      requires: descriptor.requires,
+      requiresValidated: descriptor.requiresValidated,
+      shortCircuits: descriptor.shortCircuits,
+      definition: descriptor,
+      pipeline,
+    })
 
-      Object.defineProperty(callable, 'name', {
-        value: declaration.name,
-        enumerable: true,
-        configurable: true,
-      })
-
-      descriptor = Object.assign(callable, {
-        kind: 'layer' as const,
-        requires: declaration.requires ?? ([] as unknown as TRequires),
-        requiresValidated:
-          declaration.requiresValidated ??
-          ([] as unknown as TRequiresValidated),
-        shortCircuits:
-          declaration.shortCircuits ?? ([] as unknown as TShortCircuits),
-        factory,
-      }) as unknown as LayerDescriptor<
-        TContribution,
-        TRequires,
-        TShortCircuitResult,
-        TShortCircuits,
-        TName,
-        TRequiresValidated,
-        TContext
-      >
-
-      return Object.freeze(descriptor)
-    },
+  Object.defineProperty(callable, 'name', {
+    value: declaration.name,
+    enumerable: true,
+    configurable: true,
   })
+
+  descriptor = Object.assign(callable, {
+    kind: 'layer' as const,
+    requires: declaration.requires ?? ([] as unknown as TRequires),
+    requiresValidated:
+      declaration.requiresValidated ?? ([] as unknown as TRequiresValidated),
+    shortCircuits:
+      declaration.shortCircuits ?? ([] as unknown as TShortCircuits),
+    factory: declaration.factory,
+  }) as unknown as LayerDescriptor<
+    TypeOf<TState>,
+    TRequires,
+    TResult,
+    TShortCircuits,
+    TName,
+    TRequiresValidated,
+    TContext
+  >
+
+  return Object.freeze(descriptor)
 }

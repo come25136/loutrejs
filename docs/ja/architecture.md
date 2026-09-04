@@ -453,23 +453,27 @@ Pipeline
 
 Layer、Validation、Terminalを組み合わせながら、Contextを次の処理へ渡していきます。
 
-Layerは先にstaticなGraph metadataを宣言し、同期factoryを与えて完成させます。definitionはGraph上の情報を持ち、factoryはexecution時に使うruntime functionを生成します。
+Layerはsingle-callのobjectとして宣言します。staticなGraph metadataはfactoryを実行せず参照でき、`state: type<Contribution>()`がfactoryをcontextual typingするために必要なstate型だけを運びます。
 
 ```ts
-const auth = defineLayer({
+const auth = layer({
   name: 'auth',
   requires: [session],
-}).factory<{
-  currentUser: User
-}>((users = inject(UserService)) => async (ctx, next) => {
-  const currentUser = await users.resolve(ctx.state.session)
-  await next({ currentUser })
+  state: type<{
+    currentUser: User
+  }>(),
+  factory:
+    (users = inject(UserService)) =>
+    async (ctx, next) => {
+      const currentUser = await users.resolve(ctx.state.session)
+      await next({ currentUser })
+    },
 })
 ```
 
 `requires`には依存するLayerそのものを指定します。required Layerは現在のLayerより前に完了している必要があり、そのtransitiveなstateは`ctx.state`から参照できます。
 
-`factory<Contribution>()`へ渡すgenericは、そのLayerが後段へ追加するstate contributionを表します。contributionは`ctx.state`へmergeされます。同じtop-level namespaceを複数Layerで拡張することもでき、両方がplain objectで異なるpayload propertyを追加する場合に限ってmergeされます。既存namespaceや既存payload propertyの暗黙的な上書きはRuntime Errorです。
+`type<T>()`はruntime semanticsを持たず、型情報だけをvalue-levelで運ぶcarrierです。`state`で宣言したcontributionは`ctx.state`へmergeされます。同じtop-level namespaceを複数Layerで拡張することもでき、両方がplain objectで異なるpayload propertyを追加する場合に限ってmergeされます。既存namespaceや既存payload propertyの暗黙的な上書きはRuntime Errorです。
 
 Runtimeは次のようなLayer / state contract違反を検出します。
 

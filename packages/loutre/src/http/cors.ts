@@ -1,6 +1,6 @@
 import {
   childPipelineOf,
-  defineLayer,
+  layer,
   layerDefinitionOf,
   type LayerDescriptor,
   type PipelineItem,
@@ -53,10 +53,12 @@ const httpToken = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 
 export function cors(options: CorsOptions = {}): CorsLayerDescriptor {
   const policy = normalizeCorsOptions(options)
-  const descriptor = defineLayer({
+  const descriptor = layer({
     name: options.name ?? 'cors',
-  }).factory(() => async (_ctx, next) => {
-    await next()
+
+    factory: () => async (_ctx, next) => {
+      await next()
+    },
   }) as CorsLayerDescriptor
   policies.set(descriptor, policy)
   return descriptor

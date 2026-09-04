@@ -1,6 +1,6 @@
 import { generateOpenApi } from '@loutrejs/loutre/openapi'
 import { defineApplication } from '@loutrejs/loutre'
-import { contract, defineModule, defineImplementation } from '@loutrejs/loutre'
+import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { createUsersApplication } from '../integrations/http-crud/src/index.js'
 import { z } from 'zod'
@@ -106,15 +106,17 @@ describe('OpenAPI generation', () => {
         },
       }),
     ])
-    const ApiImplementation = defineImplementation({
+    const ApiImplementation = implementation({
       name: 'ApiImplementation',
       contract: ApiContract,
       protocol: http,
-    }).factory(() => ({
-      copy(ctx) {
-        return ctx.response.ok({ body: { ok: true } })
-      },
-    }))
+
+      factory: () => ({
+        copy(ctx) {
+          return ctx.response.ok({ body: { ok: true } })
+        },
+      }),
+    })
     const ApiModule = defineModule(() => ({
       implementations: [ApiImplementation],
     }))

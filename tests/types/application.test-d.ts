@@ -8,7 +8,7 @@ import {
   defineArgs,
   defineModule,
   fixedDelay,
-  defineImplementation,
+  implementation,
   queue,
   task,
 } from '@loutrejs/loutre'
@@ -27,13 +27,14 @@ const HealthContract = contract([
     },
   }),
 ])
-const HealthHttp = defineImplementation({
+const HealthHttp = implementation({
   name: 'HealthHttp',
   contract: HealthContract,
   protocol: http,
-}).factory(() => ({
-  get: (context) => context.response.ok({ body: 'ok' }),
-}))
+  factory: () => ({
+    get: (context) => context.response.ok({ body: 'ok' }),
+  }),
+})
 const HttpModule = defineModule(() => ({
   environment: [AppEnv],
   providers: [HealthService],

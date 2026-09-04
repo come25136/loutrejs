@@ -1,5 +1,5 @@
 import { createTestApplication } from './helpers/application.js'
-import { contract, defineModule, defineImplementation } from '@loutrejs/loutre'
+import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
@@ -174,16 +174,18 @@ function createFixture(corsLayer: ReturnType<typeof validate.cors>) {
       },
     }),
   ])
-  const Implementation = defineImplementation({
+  const Implementation = implementation({
     name: 'CorsImplementation',
     contract: Contract,
     protocol: http,
-  }).factory(() => ({
-    create(ctx) {
-      controllerExecutions += 1
-      return ctx.response.created({ body: { ok: true } })
-    },
-  }))
+
+    factory: () => ({
+      create(ctx) {
+        controllerExecutions += 1
+        return ctx.response.created({ body: { ok: true } })
+      },
+    }),
+  })
   const Module = defineModule(() => ({
     implementations: [Implementation],
   }))
@@ -217,15 +219,17 @@ function createValidationFixture(corsLayer: ReturnType<typeof validate.cors>) {
       },
     }),
   ])
-  const Implementation = defineImplementation({
+  const Implementation = implementation({
     name: 'CorsValidationImplementation',
     contract: Contract,
     protocol: http,
-  }).factory(() => ({
-    create(ctx) {
-      return ctx.response.created({ body: { ok: true } })
-    },
-  }))
+
+    factory: () => ({
+      create(ctx) {
+        return ctx.response.created({ body: { ok: true } })
+      },
+    }),
+  })
   const Module = defineModule(() => ({
     implementations: [Implementation],
   }))

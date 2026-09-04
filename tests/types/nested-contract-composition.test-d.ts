@@ -1,4 +1,4 @@
-import { contract, defineImplementation, defineLayer } from '@loutrejs/loutre'
+import { type, contract, implementation, layer } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -10,20 +10,26 @@ interface CurrentUser {
   readonly id: string
 }
 
-const session = defineLayer({ name: 'nested.session' }).factory<{
-  'nested.session': Session
-}>(() => async (_ctx, next) => {
-  await next({ 'nested.session': { id: 'session-1' } })
+const session = layer({
+  name: 'nested.session',
+  state: type<{
+    'nested.session': Session
+  }>(),
+  factory: () => async (_ctx, next) => {
+    await next({ 'nested.session': { id: 'session-1' } })
+  },
 })
 
-const authentication = defineLayer({
+const authentication = layer({
   name: 'nested.authentication',
   requires: [session],
-}).factory<{
-  'nested.currentUser': CurrentUser
-}>(() => async (ctx, next) => {
-  const sessionId: string = ctx.state['nested.session'].id
-  await next({ 'nested.currentUser': { id: sessionId } })
+  state: type<{
+    'nested.currentUser': CurrentUser
+  }>(),
+  factory: () => async (ctx, next) => {
+    const sessionId: string = ctx.state['nested.session'].id
+    await next({ 'nested.currentUser': { id: sessionId } })
+  },
 })
 
 const ProfileContract = contract([
@@ -77,27 +83,28 @@ const AppContract = contract([
   }),
 ])
 
-defineImplementation({
+implementation({
   name: 'NestedProfileController',
   contract: AppContract.http.api.me.profile,
   protocol: http,
-}).factory(() => ({
-  get(ctx) {
-    const id: string = ctx.input.params.id
-    const sessionValue: Session = ctx.state['nested.session']
-    const currentUser: CurrentUser = ctx.state['nested.currentUser']
-    void [id, sessionValue, currentUser]
+  factory: () => ({
+    get(ctx) {
+      const id: string = ctx.input.params.id
+      const sessionValue: Session = ctx.state['nested.session']
+      const currentUser: CurrentUser = ctx.state['nested.currentUser']
+      void [id, sessionValue, currentUser]
 
-    ctx.response.unavailable({ body: { error: 'unavailable' } })
-    ctx.response.unauthorized({ body: { error: 'unauthorized' } })
-    return ctx.response.ok({
-      body: {
-        id: ctx.input.params.id,
-        userId: ctx.state['nested.currentUser'].id,
-      },
-    })
-  },
-}))
+      ctx.response.unavailable({ body: { error: 'unavailable' } })
+      ctx.response.unauthorized({ body: { error: 'unauthorized' } })
+      return ctx.response.ok({
+        body: {
+          id: ctx.input.params.id,
+          userId: ctx.state['nested.currentUser'].id,
+        },
+      })
+    },
+  }),
+})
 
 // resolved nodeはframework内部Contract shapeをpublic surfaceへ露出しない
 // @ts-expect-error resolved leafにproceduresは公開しない
@@ -118,19 +125,20 @@ const PublicContract = contract([
   }),
 ])
 
-defineImplementation({
+implementation({
   name: 'PublicProfileController',
   contract: PublicContract.http.public.profile,
   protocol: http,
-}).factory(() => ({
-  get(ctx) {
-    // @ts-expect-error 別mountのancestor Contextは伝播しない
-    ctx.state['nested.currentUser']
-    return ctx.response.ok({
-      body: { id: ctx.input.params.id, userId: 'public' },
-    })
-  },
-}))
+  factory: () => ({
+    get(ctx) {
+      // @ts-expect-error 別mountのancestor Contextは伝播しない
+      ctx.state['nested.currentUser']
+      return ctx.response.ok({
+        body: { id: ctx.input.params.id, userId: 'public' },
+      })
+    },
+  }),
+})
 
 // branch pipelineにterminalは置けない
 // @ts-expect-error branch pipelineのterminalを拒否する
@@ -255,18 +263,19 @@ const DeepContract = contract([
   }),
 ])
 
-defineImplementation({
+implementation({
   name: 'DeepRouteController',
   contract: DeepContract.http.v1.accounts.internal.bulk.route12,
   protocol: http,
-}).factory(() => ({
-  route12(ctx) {
-    const sessionValue: Session = ctx.state['nested.session']
-    const currentUser: CurrentUser = ctx.state['nested.currentUser']
-    void [sessionValue, currentUser]
-    return ctx.response.ok({ body: 'ok' })
-  },
-}))
+  factory: () => ({
+    route12(ctx) {
+      const sessionValue: Session = ctx.state['nested.session']
+      const currentUser: CurrentUser = ctx.state['nested.currentUser']
+      void [sessionValue, currentUser]
+      return ctx.response.ok({ body: 'ok' })
+    },
+  }),
+})
 
 // ancestor path解決後のmethod + path collisionをContract compile時に拒否する
 // @ts-expect-error 同じeffective GET /same/profile/{id}を持つrouteは共存できない

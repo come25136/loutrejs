@@ -453,23 +453,27 @@ Pipeline
 
 Context is passed to the next process by combining Layer, Validation, and Terminal.
 
-Layers are declared first and completed with a synchronous factory. The declaration owns static graph metadata, while the factory creates the runtime function used during execution.
+Layers are declared as a single object. Static graph metadata stays visible without running the synchronous factory, while `state: type<Contribution>()` carries only the state type needed to contextually type the factory.
 
 ```ts
-const auth = defineLayer({
+const auth = layer({
   name: 'auth',
   requires: [session],
-}).factory<{
-  currentUser: User
-}>((users = inject(UserService)) => async (ctx, next) => {
-  const currentUser = await users.resolve(ctx.state.session)
-  await next({ currentUser })
+  state: type<{
+    currentUser: User
+  }>(),
+  factory:
+    (users = inject(UserService)) =>
+    async (ctx, next) => {
+      const currentUser = await users.resolve(ctx.state.session)
+      await next({ currentUser })
+    },
 })
 ```
 
 `requires` contains exact Layer dependencies. A required Layer must have completed before the current Layer runs, and its transitive state is available through `ctx.state`.
 
-The generic passed to `factory<Contribution>()` describes the state contribution added by that Layer. Contributions are merged into `ctx.state`. Multiple Layers may extend the same top-level namespace when both values are plain objects and they add different payload properties; overwriting an existing namespace or payload property is rejected at Runtime.
+`type<T>()` has no runtime semantics; it is a value-level carrier for type information. The contribution declared by `state` is merged into `ctx.state`. Multiple Layers may extend the same top-level namespace when both values are plain objects and they add different payload properties; overwriting an existing namespace or payload property is rejected at Runtime.
 
 Runtime detects state and Layer contract violations such as:
 

@@ -1,9 +1,10 @@
 import {
-  defineLayer,
+  layer,
   registerLayerShortCircuits,
   shortCircuit,
-  type LayerDescriptor,
+  type as typeCarrier,
 } from '../core/index.js'
+import type { LayerDescriptor, Type, TypeOf } from '../core/index.js'
 import type { LogicalHttpResult } from './definitions.js'
 
 export interface BasicAuthCredentials {
@@ -16,9 +17,19 @@ export interface BasicAuthUnauthorized<TResponse extends string, TBody> {
   readonly body: TBody
 }
 
-export interface BasicAuthDefinition {
+export interface BasicAuthDefinition<
+  TState extends Type<object>,
+  TResponse extends string,
+  TUnauthorizedBody,
+> {
   readonly realm: string
   readonly name?: string
+  readonly state: TState
+  readonly factory: () => BasicAuthRuntime<
+    TypeOf<TState>,
+    TResponse,
+    TUnauthorizedBody
+  >
 }
 
 type BasicAuthShortCircuits<TResponse extends string> = readonly [
@@ -51,20 +62,6 @@ export interface BasicAuthRuntime<
   >
 }
 
-export interface BasicAuthBuilder {
-  factory<
-    TContribution extends object,
-    const TResponse extends string,
-    TUnauthorizedBody,
-  >(
-    factory: () => BasicAuthRuntime<
-      TContribution,
-      TResponse,
-      TUnauthorizedBody
-    >,
-  ): BasicAuthLayerDescriptor<TContribution, TResponse, TUnauthorizedBody>
-}
-
 export interface BasicAuthLayerDescriptor<
   TContribution extends object,
   TResponse extends string,
@@ -87,34 +84,26 @@ export interface BasicAuthContext {
   }
 }
 
-export function defineBasicAuth(
-  definition: BasicAuthDefinition,
-): BasicAuthBuilder {
+export function basicAuth<
+  const TState extends Type<object>,
+  const TResponse extends string,
+  TUnauthorizedBody,
+>(
+  definition: BasicAuthDefinition<TState, TResponse, TUnauthorizedBody>,
+): BasicAuthLayerDescriptor<TypeOf<TState>, TResponse, TUnauthorizedBody> {
   const challenge = formatBasicChallenge(definition.realm)
+  let descriptor: BasicAuthLayerDescriptor<
+    TypeOf<TState>,
+    TResponse,
+    TUnauthorizedBody
+  >
 
-  return Object.freeze({
-    factory<
-      TContribution extends object,
-      const TResponse extends string,
-      TUnauthorizedBody,
-    >(
-      factory: () => BasicAuthRuntime<
-        TContribution,
-        TResponse,
-        TUnauthorizedBody
-      >,
-    ): BasicAuthLayerDescriptor<TContribution, TResponse, TUnauthorizedBody> {
-      let descriptor: BasicAuthLayerDescriptor<
-        TContribution,
-        TResponse,
-        TUnauthorizedBody
-      >
-
-      descriptor = defineLayer({
-        name: definition.name ?? 'basicAuth',
-      }).factory<
-        TContribution,
-        BasicAuthContext,
+  descriptor = layer({
+    name: definition.name ?? 'basicAuth',
+    state: definition.state,
+    context: typeCarrier<BasicAuthContext>(),
+    result:
+      typeCarrier<
         string extends TResponse
           ? unknown
           : LogicalHttpResult<
@@ -122,39 +111,39 @@ export function defineBasicAuth(
               TUnauthorizedBody,
               BasicAuthResponseHeaders
             >
-      >(() => {
-        const runtime = factory()
-        registerLayerShortCircuits(descriptor, [
-          {
-            protocol: 'http',
-            response: runtime.unauthorized().response,
-            metadata: { status: 401 },
-          },
-        ])
+      >(),
+    factory: () => {
+      const runtime = definition.factory()
+      registerLayerShortCircuits(descriptor, [
+        {
+          protocol: 'http',
+          response: runtime.unauthorized().response,
+          metadata: { status: 401 },
+        },
+      ])
 
-        return async (ctx, next) => {
-          const credentials = decodeBasicCredentials(
-            ctx.input.headers.authorization,
-          )
-          if (!credentials) {
-            return unauthorizedResult(runtime.unauthorized(), challenge)
-          }
-
-          const value = await runtime.authenticate(credentials)
-          if (value == null) {
-            return unauthorizedResult(runtime.unauthorized(), challenge)
-          }
-          await next(value)
+      return async (ctx, next) => {
+        const credentials = decodeBasicCredentials(
+          ctx.input.headers.authorization,
+        )
+        if (!credentials) {
+          return unauthorizedResult(runtime.unauthorized(), challenge)
         }
-      }) as unknown as BasicAuthLayerDescriptor<
-        TContribution,
-        TResponse,
-        TUnauthorizedBody
-      >
 
-      return descriptor
+        const value = await runtime.authenticate(credentials)
+        if (value == null) {
+          return unauthorizedResult(runtime.unauthorized(), challenge)
+        }
+        await next(value)
+      }
     },
-  })
+  }) as unknown as BasicAuthLayerDescriptor<
+    TypeOf<TState>,
+    TResponse,
+    TUnauthorizedBody
+  >
+
+  return descriptor
 }
 
 function unauthorizedResult<TResponse extends string, TBody>(

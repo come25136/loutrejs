@@ -1,20 +1,21 @@
-import { defineImplementation, inject } from '@loutrejs/loutre'
+import { implementation, inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { UserRepository } from './repository.js'
 import { UsersContract } from './contract.js'
 
-export const UsersController = defineImplementation({
+export const UsersController = implementation({
   name: 'UsersController',
   contract: UsersContract,
   protocol: http,
-}).factory((users = inject(UserRepository)) => ({
-  create(ctx) {
-    return ctx.response.created({
-      body: users.create(
-        ctx.state.transaction,
-        ctx.input.body.name,
-        ctx.state.currentUser.id,
-      ),
-    })
-  },
-}))
+  factory: (users = inject(UserRepository)) => ({
+    create(ctx) {
+      return ctx.response.created({
+        body: users.create(
+          ctx.state.transaction,
+          ctx.input.body.name,
+          ctx.state.currentUser.id,
+        ),
+      })
+    },
+  }),
+})

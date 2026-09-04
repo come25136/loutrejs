@@ -1,20 +1,22 @@
-import { defineLayer, type PipelineItem, shortCircuit } from '@loutrejs/loutre'
+import { type, layer, type PipelineItem, shortCircuit } from '@loutrejs/loutre'
 import {
   type BasicAuthLayerDescriptor,
-  defineBasicAuth,
+  basicAuth,
   http,
 } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
-const authentication = defineBasicAuth({
+const authentication = basicAuth({
   realm: 'Loutre Test',
-}).factory(() => ({
-  authenticate: () => undefined,
-  unauthorized: () => ({
-    response: 'unauthorized' as const,
-    body: { error: '認証が必要です' },
+  state: type<{}>(),
+  factory: () => ({
+    authenticate: () => undefined,
+    unauthorized: () => ({
+      response: 'unauthorized',
+      body: { error: '認証が必要です' },
+    }),
   }),
-}))
+})
 
 // @ts-expect-error BasicAuthLayerDescriptorはcontribution/response/bodyを指定する
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -54,13 +56,17 @@ http.route({
   },
   // @ts-expect-error short-circuit bodyとresponse schemaが一致しない
   pipeline: [
-    defineBasicAuth({ realm: 'Loutre Test' }).factory(() => ({
-      authenticate: () => undefined,
-      unauthorized: () => ({
-        response: 'unauthorized' as const,
-        body: { message: '認証が必要です' },
+    basicAuth({
+      realm: 'Loutre Test',
+      state: type<{}>(),
+      factory: () => ({
+        authenticate: () => undefined,
+        unauthorized: () => ({
+          response: 'unauthorized',
+          body: { message: '認証が必要です' },
+        }),
       }),
-    })),
+    }),
     http.controller,
   ],
 })
@@ -109,7 +115,7 @@ type CustomUnauthorized = {
   readonly body: { readonly error: string }
 }
 
-const customAuthentication = defineLayer({
+const customAuthentication = layer({
   name: 'customAuthentication',
   shortCircuits: [
     {
@@ -118,8 +124,9 @@ const customAuthentication = defineLayer({
       metadata: { status: 401 },
     },
   ],
-}).factory<{}, CustomAuthContext, CustomUnauthorized>(
-  () => async (context) =>
+  context: type<CustomAuthContext>(),
+  result: type<CustomUnauthorized>(),
+  factory: () => async (context) =>
     shortCircuit({
       kind: 'http-result' as const,
       response: 'unauthorized' as const,
@@ -129,7 +136,7 @@ const customAuthentication = defineLayer({
           : '独自認証が必要です',
       },
     }),
-)
+})
 
 http.route({
   method: 'GET',
@@ -140,7 +147,7 @@ http.route({
       body: z.object({ error: z.string() }),
     },
   },
-  // @ts-expect-error defineBasicAuthが返すwww-authenticate headerはresponse schemaで宣言する必要がある
+  // @ts-expect-error basicAuthが返すwww-authenticate headerはresponse schemaで宣言する必要がある
   pipeline: [authentication, http.controller],
 })
 

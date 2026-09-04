@@ -1,19 +1,24 @@
-import { inject } from '@loutrejs/loutre'
-import { defineBasicAuth } from '@loutrejs/loutre/http'
+import { inject, type } from '@loutrejs/loutre'
+import { basicAuth } from '@loutrejs/loutre/http'
 import { UserRepository } from '../auth/repository.js'
+import type { User } from '../auth/user.js'
 
-export const basicAuthentication = defineBasicAuth({
+export const basicAuthentication = basicAuth({
   name: 'basicAuthentication',
   realm: 'Loutre Example',
-}).factory((users = inject(UserRepository)) => ({
-  authenticate(credentials) {
-    const currentUser = users.authenticate(credentials)
-    return currentUser === undefined ? undefined : { currentUser }
-  },
-  unauthorized() {
-    return {
-      response: 'unauthorized',
-      body: { error: 'Basic authentication required' },
-    }
-  },
-}))
+  state: type<{
+    currentUser: User
+  }>(),
+  factory: (users = inject(UserRepository)) => ({
+    authenticate(credentials) {
+      const currentUser = users.authenticate(credentials)
+      return currentUser === undefined ? undefined : { currentUser }
+    },
+    unauthorized() {
+      return {
+        response: 'unauthorized',
+        body: { error: 'Basic authentication required' },
+      }
+    },
+  }),
+})

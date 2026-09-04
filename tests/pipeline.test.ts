@@ -1,5 +1,6 @@
 import {
-  defineLayer,
+  type,
+  layer,
   inject,
   provide,
   shortCircuit,
@@ -46,13 +47,14 @@ function hooks(
 describe('continuation Pipeline', () => {
   it('next()をちょうど1回実行してcontinuationを包む', async () => {
     const events: string[] = []
-    const timing = defineLayer({ name: 'timing' }).factory(
-      () => async (_ctx, next) => {
+    const timing = layer({
+      name: 'timing',
+      factory: () => async (_ctx, next) => {
         events.push('before')
         await next()
         events.push('after')
       },
-    )
+    })
 
     await expect(executePipeline([timing, terminal], hooks({}))).resolves.toBe(
       'done',
@@ -61,9 +63,10 @@ describe('continuation Pipeline', () => {
   })
 
   it('正常returnでnext()を呼ばないLayerを拒否する', async () => {
-    const skipped = defineLayer({ name: 'skipped' }).factory(
-      () => async () => undefined,
-    )
+    const skipped = layer({
+      name: 'skipped',
+      factory: () => async () => undefined,
+    })
 
     await expect(
       executePipeline([skipped, terminal], hooks({})),
@@ -71,14 +74,15 @@ describe('continuation Pipeline', () => {
   })
 
   it('next()の2回目をLayerがcatchしても拒否する', async () => {
-    const reentered = defineLayer({ name: 'reentered' }).factory(
-      () => async (_ctx, next) => {
+    const reentered = layer({
+      name: 'reentered',
+      factory: () => async (_ctx, next) => {
         await next()
         try {
           await next()
         } catch {}
       },
-    )
+    })
 
     await expect(
       executePipeline([reentered, terminal], hooks({})),
@@ -87,8 +91,11 @@ describe('continuation Pipeline', () => {
 
   it('next()より前のthrowをそのまま伝播する', async () => {
     const failure = new Error('before next')
-    const broken = defineLayer({ name: 'broken' }).factory(() => async () => {
-      throw failure
+    const broken = layer({
+      name: 'broken',
+      factory: () => async () => {
+        throw failure
+      },
     })
 
     await expect(executePipeline([broken, terminal], hooks({}))).rejects.toBe(
@@ -98,15 +105,19 @@ describe('continuation Pipeline', () => {
 
   it('downstream errorをLayerが握り潰しても元errorを再throwする', async () => {
     const failure = new Error('child failure')
-    const wrapper = defineLayer({ name: 'wrapper' }).factory(
-      () => async (_ctx, next) => {
+    const wrapper = layer({
+      name: 'wrapper',
+      factory: () => async (_ctx, next) => {
         try {
           await next()
         } catch {}
       },
-    )
-    const broken = defineLayer({ name: 'child' }).factory(() => async () => {
-      throw failure
+    })
+    const broken = layer({
+      name: 'child',
+      factory: () => async () => {
+        throw failure
+      },
     })
 
     await expect(
@@ -115,9 +126,10 @@ describe('continuation Pipeline', () => {
   })
 
   it('next()なしのshortCircuitを正常結果にする', async () => {
-    const cached = defineLayer({ name: 'cached' }).factory(
-      () => async () => shortCircuit('cached-result'),
-    )
+    const cached = layer({
+      name: 'cached',
+      factory: () => async () => shortCircuit('cached-result'),
+    })
 
     await expect(executePipeline([cached, terminal], hooks({}))).resolves.toBe(
       'cached-result',
@@ -125,12 +137,13 @@ describe('continuation Pipeline', () => {
   })
 
   it('next()後のshortCircuitを拒否する', async () => {
-    const invalid = defineLayer({ name: 'invalid-short-circuit' }).factory(
-      () => async (_ctx, next) => {
+    const invalid = layer({
+      name: 'invalid-short-circuit',
+      factory: () => async (_ctx, next) => {
         await next()
         return shortCircuit('late')
       },
-    )
+    })
 
     await expect(
       executePipeline([invalid, terminal], hooks({})),
@@ -139,17 +152,23 @@ describe('continuation Pipeline', () => {
 
   it('next(contribution)のStateを後段へ追加する', async () => {
     const context: Record<string, unknown> = {}
-    const provider = defineLayer({ name: 'provider' }).factory<{
-      value: string
-    }>(() => async (_ctx, next) => {
-      await next({ value: 'ready' })
+    const provider = layer({
+      name: 'provider',
+      state: type<{
+        value: string
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ value: 'ready' })
+      },
     })
-    const consumer = defineLayer({
+    const consumer = layer({
       name: 'consumer',
       requires: [provider],
-    }).factory(() => async (ctx, next) => {
-      expect(ctx.state.value).toBe('ready')
-      await next()
+
+      factory: () => async (ctx, next) => {
+        expect(ctx.state.value).toBe('ready')
+        await next()
+      },
     })
 
     await executePipeline([provider, consumer, terminal], hooks(context))
@@ -157,30 +176,39 @@ describe('continuation Pipeline', () => {
   })
 
   it('同じState namespaceのpayloadをLayer間で拡張する', async () => {
-    const identity = defineLayer({ name: 'identity' }).factory<{
-      currentUser: { id: string; name: string }
-    }>(() => async (_ctx, next) => {
-      await next({ currentUser: { id: 'user-1', name: 'Loutre' } })
+    const identity = layer({
+      name: 'identity',
+      state: type<{
+        currentUser: { id: string; name: string }
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ currentUser: { id: 'user-1', name: 'Loutre' } })
+      },
     })
-    const authorization = defineLayer({
+    const authorization = layer({
       name: 'authorization',
       requires: [identity],
-    }).factory<{
-      currentUser: { roles: string[] }
-    }>(() => async (ctx, next) => {
-      expect(ctx.state.currentUser.id).toBe('user-1')
-      await next({ currentUser: { roles: ['admin'] } })
+
+      state: type<{
+        currentUser: { roles: string[] }
+      }>(),
+      factory: () => async (ctx, next) => {
+        expect(ctx.state.currentUser.id).toBe('user-1')
+        await next({ currentUser: { roles: ['admin'] } })
+      },
     })
-    const consumer = defineLayer({
+    const consumer = layer({
       name: 'consumer',
       requires: [authorization],
-    }).factory(() => async (ctx, next) => {
-      expect(ctx.state.currentUser).toEqual({
-        id: 'user-1',
-        name: 'Loutre',
-        roles: ['admin'],
-      })
-      await next()
+
+      factory: () => async (ctx, next) => {
+        expect(ctx.state.currentUser).toEqual({
+          id: 'user-1',
+          name: 'Loutre',
+          roles: ['admin'],
+        })
+        await next()
+      },
     })
 
     await executePipeline(
@@ -190,32 +218,43 @@ describe('continuation Pipeline', () => {
   })
 
   it('childが追加したStateを親Pipeline後段へ維持する', async () => {
-    const wrapper = defineLayer({ name: 'wrapper' }).factory(
-      () => async (_ctx, next) => {
+    const wrapper = layer({
+      name: 'wrapper',
+      factory: () => async (_ctx, next) => {
         await next()
       },
-    )
-    const provider = defineLayer({ name: 'child-provider' }).factory<{
-      childValue: string
-    }>(() => async (_ctx, next) => {
-      await next({ childValue: 'ready' })
     })
-    const consumer = defineLayer({
+    const provider = layer({
+      name: 'child-provider',
+      state: type<{
+        childValue: string
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ childValue: 'ready' })
+      },
+    })
+    const consumer = layer({
       name: 'parent-consumer',
       requires: [provider],
-    }).factory(() => async (ctx, next) => {
-      expect(ctx.state.childValue).toBe('ready')
-      await next()
+
+      factory: () => async (ctx, next) => {
+        expect(ctx.state.childValue).toBe('ready')
+        await next()
+      },
     })
 
     await executePipeline([wrapper([provider]), consumer, terminal], hooks({}))
   })
 
   it('既存State namespaceのscalar上書きを拒否する', async () => {
-    const provider = defineLayer({ name: 'provider' }).factory<{
-      session: string
-    }>(() => async (_ctx, next) => {
-      await next({ session: 'new' })
+    const provider = layer({
+      name: 'provider',
+      state: type<{
+        session: string
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ session: 'new' })
+      },
     })
 
     await expect(
@@ -227,15 +266,23 @@ describe('continuation Pipeline', () => {
   })
 
   it('同じState namespaceの既存payload property上書きを拒否する', async () => {
-    const first = defineLayer({ name: 'first' }).factory<{
-      session: { id: string }
-    }>(() => async (_ctx, next) => {
-      await next({ session: { id: 'first' } })
+    const first = layer({
+      name: 'first',
+      state: type<{
+        session: { id: string }
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ session: { id: 'first' } })
+      },
     })
-    const second = defineLayer({ name: 'second' }).factory<{
-      session: { id: string }
-    }>(() => async (_ctx, next) => {
-      await next({ session: { id: 'second' } })
+    const second = layer({
+      name: 'second',
+      state: type<{
+        session: { id: string }
+      }>(),
+      factory: () => async (_ctx, next) => {
+        await next({ session: { id: 'second' } })
+      },
     })
 
     await expect(
@@ -244,11 +291,12 @@ describe('continuation Pipeline', () => {
   })
 
   it('plain object以外のState contributionを拒否する', async () => {
-    const broken = defineLayer({ name: 'invalid-state' }).factory(
-      () => async (_ctx, next) => {
+    const broken = layer({
+      name: 'invalid-state',
+      factory: () => async (_ctx, next) => {
         await (next as (provided: unknown) => Promise<void>)(['invalid'])
       },
-    )
+    })
 
     await expect(
       executePipeline([broken, terminal], hooks({})),
@@ -256,16 +304,19 @@ describe('continuation Pipeline', () => {
   })
 
   it('requiresしたLayerが未実行なら拒否する', async () => {
-    const dependency = defineLayer({ name: 'dependency' }).factory(
-      () => async (_ctx, next) => {
+    const dependency = layer({
+      name: 'dependency',
+      factory: () => async (_ctx, next) => {
         await next()
       },
-    )
-    const consumer = defineLayer({
+    })
+    const consumer = layer({
       name: 'consumer',
       requires: [dependency],
-    }).factory(() => async (_ctx, next) => {
-      await next()
+
+      factory: () => async (_ctx, next) => {
+        await next()
+      },
     })
 
     await expect(
@@ -275,27 +326,30 @@ describe('continuation Pipeline', () => {
 
   it('Prisma風callback wrapperでchildだけを囲み親後段へ戻る', async () => {
     const events: string[] = []
-    const transaction = defineLayer({ name: 'transaction' }).factory(
-      () => async (_ctx, next) => {
+    const transaction = layer({
+      name: 'transaction',
+      factory: () => async (_ctx, next) => {
         events.push('transaction.enter')
         await (async (callback: () => Promise<void>) => {
           await callback()
         })(next)
         events.push('transaction.exit')
       },
-    )
-    const child = defineLayer({ name: 'child' }).factory(
-      () => async (_ctx, next) => {
+    })
+    const child = layer({
+      name: 'child',
+      factory: () => async (_ctx, next) => {
         events.push('child')
         await next()
       },
-    )
-    const parent = defineLayer({ name: 'parent' }).factory(
-      () => async (_ctx, next) => {
+    })
+    const parent = layer({
+      name: 'parent',
+      factory: () => async (_ctx, next) => {
         events.push('parent')
         await next()
       },
-    )
+    })
 
     await executePipeline([transaction([child]), parent, terminal], hooks({}))
     expect(events).toEqual([
@@ -310,21 +364,23 @@ describe('continuation Pipeline', () => {
     'request timing風finallyをchild成功=%sでも実行する',
     async (fails) => {
       const events: string[] = []
-      const timing = defineLayer({ name: 'timing' }).factory(
-        () => async (_ctx, next) => {
+      const timing = layer({
+        name: 'timing',
+        factory: () => async (_ctx, next) => {
           try {
             await next()
           } finally {
             events.push('finally')
           }
         },
-      )
-      const child = defineLayer({ name: 'child' }).factory(
-        () => async (_ctx, next) => {
+      })
+      const child = layer({
+        name: 'child',
+        factory: () => async (_ctx, next) => {
           if (fails) throw new Error('failure')
           await next()
         },
-      )
+      })
       const execution = executePipeline([timing([child]), terminal], hooks({}))
 
       if (fails) await expect(execution).rejects.toThrow('failure')
@@ -339,15 +395,16 @@ describe('continuation Pipeline', () => {
     }
     const SERVICE = token<Service>('layer.service')
     let constructions = 0
-    const injected = defineLayer({ name: 'injected' }).factory(
-      (service = inject(SERVICE)) => {
+    const injected = layer({
+      name: 'injected',
+      factory: (service = inject(SERVICE)) => {
         constructions += 1
         return async (_ctx, next) => {
           expect(service.value).toBe('resolved')
           await next()
         }
       },
-    )
+    })
     const pipeline: readonly PipelineItem[] = [injected([injected]), terminal]
     const container = new Container([
       provide(SERVICE).useValue({ value: 'resolved' }),
@@ -364,9 +421,10 @@ describe('continuation Pipeline', () => {
   })
 
   it('Layer contract errorを専用Error型で返す', async () => {
-    const skipped = defineLayer({ name: 'skipped' }).factory(
-      () => async () => undefined,
-    )
+    const skipped = layer({
+      name: 'skipped',
+      factory: () => async () => undefined,
+    })
     await expect(
       executePipeline([skipped, terminal], hooks({})),
     ).rejects.toBeInstanceOf(LayerContractError)

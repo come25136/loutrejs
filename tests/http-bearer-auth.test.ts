@@ -1,6 +1,7 @@
 import {
   contract,
-  defineImplementation,
+  type,
+  implementation,
   defineModule,
   inject,
   isShortCircuit,
@@ -9,7 +10,7 @@ import {
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
 import {
-  defineBearerAuth,
+  bearerAuth,
   http,
   type BearerAuthContext,
   type BearerAuthLayerDescriptor,
@@ -28,13 +29,17 @@ function createAuthentication(
     token: string,
   ) => { currentUser: { readonly id: string } } | undefined,
 ) {
-  return defineBearerAuth({ realm: 'Loutre Test' }).factory(() => ({
-    authenticate,
-    unauthorized,
-  }))
+  return bearerAuth({
+    realm: 'Loutre Test',
+    state: type<{ currentUser: { readonly id: string } }>(),
+    factory: () => ({
+      authenticate,
+      unauthorized,
+    }),
+  })
 }
 
-describe('defineBearerAuth', () => {
+describe('bearerAuth', () => {
   it('tokenを認証してstate contributionを後段へ渡す', async () => {
     const authenticate = vi.fn(() => ({ currentUser: { id: 'user-1' } }))
     const authentication = createAuthentication(authenticate)
@@ -54,22 +59,24 @@ describe('defineBearerAuth', () => {
       authenticate(token: string): { readonly id: string } | undefined
     }
 
-    const TOKEN_SERVICE = token<TokenService>('defineBearerAuth.tokenService')
+    const TOKEN_SERVICE = token<TokenService>('bearerAuth.tokenService')
     const tokenService: TokenService = {
       authenticate: vi.fn(() => ({ id: 'user-1' })),
     }
     let injectedService: TokenService | undefined
 
-    const authentication = defineBearerAuth({
+    const authentication = bearerAuth({
       realm: 'Loutre Test',
-    }).factory((service = inject(TOKEN_SERVICE)) => ({
-      authenticate(value) {
-        injectedService = service
-        const currentUser = service.authenticate(value)
-        return currentUser === undefined ? undefined : { currentUser }
-      },
-      unauthorized,
-    }))
+      state: type<{ currentUser: { readonly id: string } }>(),
+      factory: (service = inject(TOKEN_SERVICE)) => ({
+        authenticate(value) {
+          injectedService = service
+          const currentUser = service.authenticate(value)
+          return currentUser === undefined ? undefined : { currentUser }
+        },
+        unauthorized,
+      }),
+    })
 
     const container = new Container([
       provide(TOKEN_SERVICE).useValue(tokenService),
@@ -133,12 +140,14 @@ describe('defineBearerAuth', () => {
   })
 
   it('realmをquoted-stringとしてescapeする', async () => {
-    const authentication = defineBearerAuth({
+    const authentication = bearerAuth({
       realm: 'Loutre "API" \\ Area',
-    }).factory(() => ({
-      authenticate: () => undefined,
-      unauthorized,
-    }))
+      state: type<{}>(),
+      factory: () => ({
+        authenticate: () => undefined,
+        unauthorized,
+      }),
+    })
 
     const { result } = await runBearerAuth(authentication, {
       input: { headers: {} },
@@ -155,10 +164,14 @@ describe('defineBearerAuth', () => {
 
   it('空または制御文字を含むrealmを拒否する', () => {
     const create = (realm: string) =>
-      defineBearerAuth({ realm }).factory(() => ({
-        authenticate: () => undefined,
-        unauthorized,
-      }))
+      bearerAuth({
+        realm,
+        state: type<{}>(),
+        factory: () => ({
+          authenticate: () => undefined,
+          unauthorized,
+        }),
+      })
 
     expect(() => create('')).toThrow(TypeError)
     expect(() => create('Loutre\nAPI')).toThrow(TypeError)
@@ -190,15 +203,17 @@ describe('defineBearerAuth', () => {
         } as never,
       }),
     ])
-    const Implementation = defineImplementation({
+    const Implementation = implementation({
       name: 'Implementation',
       contract: Contract,
       protocol: http,
-    }).factory(() => ({
-      get(): never {
-        throw new Error('実行対象ではありません')
-      },
-    }))
+
+      factory: () => ({
+        get(): never {
+          throw new Error('実行対象ではありません')
+        },
+      }),
+    })
     const Module = defineModule(() => ({
       implementations: [Implementation],
     }))
