@@ -18,6 +18,7 @@ import type {
   StandardSchemaV1,
   TerminalLayerDescriptor,
   ValidationLayerDescriptor,
+  ValidatedInputPart,
 } from '../core/index.js'
 import { childPipelineOf } from '../core/index.js'
 import {
@@ -918,6 +919,7 @@ function defineHttp<const TDefinition extends HttpProtocolDefinition>(
   } else if (hasParamsValidation(definition.pipeline)) {
     throw new Error('validate.params requires request.params')
   }
+  assertNoDuplicateInputValidation(definition.pipeline)
   const body = definition.request?.body
   if (body && body.contentType.trim().length === 0) {
     throw new Error('HTTP request body contentType must not be empty')
@@ -929,6 +931,27 @@ function defineHttp<const TDefinition extends HttpProtocolDefinition>(
     dispatchKey: createHttpDispatchKey(definition.method, segments),
     definition,
   } as unknown as HttpProtocol<TDefinition>
+}
+
+function assertNoDuplicateInputValidation(
+  pipeline: readonly PipelineItem[],
+  validated = new Set<ValidatedInputPart>(),
+): void {
+  for (const item of pipeline) {
+    if (item.kind === 'validation') {
+      if (validated.has(item.part)) {
+        throw new Error(
+          `Duplicate HTTP input validation: validate.${item.part}`,
+        )
+      }
+      validated.add(item.part)
+      continue
+    }
+    if (item.kind === 'layer') {
+      const child = childPipelineOf(item)
+      if (child) assertNoDuplicateInputValidation(child, validated)
+    }
+  }
 }
 
 function hasParamsValidation(pipeline: readonly PipelineItem[]): boolean {

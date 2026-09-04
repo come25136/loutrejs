@@ -199,7 +199,6 @@ export function createHttpExecution(options: {
             logger: requestLogger,
             signal: request.signal,
           }
-          let bodyDecoded = false
           const logical = await executePipeline<
             MutableHttpContext,
             LogicalHttpResult
@@ -220,12 +219,11 @@ export function createHttpExecution(options: {
                   : declared
               if (schema) {
                 try {
-                  if (layer.part === 'body' && !bodyDecoded) {
+                  if (layer.part === 'body') {
                     context.input.body = await decodeRequestBody(
                       request,
                       declared as HttpRequestBodyDefinition,
                     )
-                    bodyDecoded = true
                   }
                   context.input[layer.part] =
                     layer.part === 'params'

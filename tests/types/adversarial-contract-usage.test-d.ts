@@ -110,6 +110,37 @@ http({
   },
 })
 
+// @ts-expect-error 同じinput partのvalidationはPipeline内に1回だけ置ける
+http({
+  duplicateBodyValidation: {
+    method: 'POST',
+    path: '/duplicate-body-validation',
+    request: {
+      body: {
+        contentType: 'application/json',
+        schema: z.object({ name: z.string() }),
+      },
+    },
+    responses: { ok: { status: 200, body: z.string() } },
+    pipeline: [validate.body, validate.body, http.controller],
+  },
+})
+
+// @ts-expect-error Layer childを含むPipelineでも同じvalidationは1回だけ置ける
+http({
+  duplicateNestedValidation: {
+    method: 'GET',
+    path: '/duplicate-nested-validation/{id}',
+    request: { params: { id: z.string() } },
+    responses: { ok: { status: 200, body: z.string() } },
+    pipeline: [
+      provideSession([validate.params]),
+      validate.params,
+      http.controller,
+    ],
+  },
+})
+
 const ValidContract = contract([
   http({
     valid: {
@@ -172,6 +203,31 @@ implementation({
 
 const Module = defineModule(() => ({ implementations: [LeafController] }))
 defineApplication({ modules: [Module()] })
+const BodyValidatedContract = contract([
+  http({
+    create: {
+      method: 'POST',
+      path: '/create',
+      request: {
+        body: {
+          contentType: 'application/json',
+          schema: z.object({ name: z.string() }),
+        },
+      },
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [validate.body, http.controller],
+    },
+  }),
+])
+
+// @ts-expect-error branchとleafを合成したeffective Pipelineでも同じvalidationは1回だけ置ける
+http({
+  api: {
+    pipeline: [validate.body],
+    routes: BodyValidatedContract.http,
+  },
+})
+
 // @ts-expect-error Application ContractはImplementationのresolved nodeから推論する
 defineApplication({ contract: NestedContract, modules: [Module()] })
 
