@@ -3,6 +3,8 @@ import {
   contract,
   defineModule,
   implementation,
+  layer,
+  shortCircuit,
   type ImplementationDescriptor,
 } from '@loutrejs/loutre'
 import { http, validate } from '@loutrejs/loutre/http'
@@ -65,6 +67,65 @@ describe('HTTP request semantics', () => {
       header: 'first, second',
     })
   })
+  it('validate.body到達前にshort circuitした場合はbodyをconsumeしない', async () => {
+    let controllerCalled = false
+    const reject = layer({
+      name: 'reject-before-body',
+      factory: () => async () =>
+        shortCircuit({
+          kind: 'http-result' as const,
+          response: 'unauthorized' as const,
+          body: { error: 'Unauthorized' },
+        }),
+    })
+    const Contract = contract([
+      http({
+        create: {
+          method: 'POST',
+          path: '/lazy-body',
+          request: {
+            body: {
+              contentType: 'application/json',
+              schema: z.object({ name: z.string() }),
+            },
+          },
+          responses: {
+            unauthorized: {
+              status: 401,
+              body: z.object({ error: z.string() }),
+            },
+            ok: { status: 200, body: z.object({ name: z.string() }) },
+          },
+          pipeline: [reject, validate.body, http.controller],
+        },
+      }),
+    ])
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+
+      factory: () => ({
+        create(ctx) {
+          controllerCalled = true
+          return ctx.response.ok({ body: ctx.input.body })
+        },
+      }),
+    })
+    const application = applicationFor(Implementation)
+    const request = new Request('https://fixture.test/lazy-body', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{invalid-json',
+    })
+    const response = await application.fetch(request)
+
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({ error: 'Unauthorized' })
+    expect(controllerCalled).toBe(false)
+    expect(request.bodyUsed).toBe(false)
+  })
+
   it('validate.bodyが無い場合はmultipart bodyを未消費のstreamとして渡す', async () => {
     const Contract = contract([
       http({
