@@ -54,9 +54,9 @@ http.implementation({
       return ctx.response.ok({ body: 'ok', headers: { etag: 'v1' } })
     },
     defaults(ctx) {
-      // @ts-expect-error defaultsはFWが付与するためhandlerから返さない
       ctx.response.ok({
         body: 'ng',
+        // @ts-expect-error defaultsはFWが付与するためhandlerから返さない
         headers: { 'cache-control': 'override' },
       })
       return ctx.response.ok({ body: 'ok' })
