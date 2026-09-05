@@ -356,6 +356,7 @@ jobs:
           cd "$consumer"
 
           loutre="$(realpath "$tarballs"/loutrejs-loutre-*.tgz)"
+          http="$(realpath "$tarballs"/loutrejs-http-*.tgz)"
           cli="$(realpath "$tarballs"/loutrejs-cli-*.tgz)"
           create="$(realpath "$tarballs"/create-loutre-*.tgz)"
           cat > package.json <<JSON
@@ -365,11 +366,13 @@ jobs:
             "type": "module",
             "dependencies": {
               "@loutrejs/loutre": "file:$loutre",
+              "@loutrejs/http": "file:$http",
               "@loutrejs/cli": "file:$cli",
               "create-loutre": "file:$create"
             },
             "overrides": {
-              "@loutrejs/loutre": "file:$loutre"
+              "@loutrejs/loutre": "file:$loutre",
+              "@loutrejs/http": "file:$http"
             }
           }
           JSON
@@ -416,6 +419,7 @@ jobs:
             tar -xzf "$archive" -C "$extracted/$destination" --strip-components=1
           }
           extract_package "$tarballs"/loutrejs-loutre-*.tgz loutre
+          extract_package "$tarballs"/loutrejs-http-*.tgz http
           extract_package "$tarballs"/loutrejs-cli-*.tgz cli
           extract_package "$tarballs"/create-loutre-*.tgz create-loutre
 
@@ -428,6 +432,7 @@ jobs:
             "type": "module",
             "dependencies": {
               "@loutrejs/loutre": "$version",
+              "@loutrejs/http": "$version",
               "@loutrejs/cli": "$version",
               "create-loutre": "$version"
             }
@@ -438,6 +443,7 @@ jobs:
             "nodeModulesDir": "manual",
             "links": [
               "$extracted/loutre",
+              "$extracted/http",
               "$extracted/cli",
               "$extracted/create-loutre"
             ]
