@@ -52,6 +52,18 @@ export interface HttpRequestDefinition {
 export type HttpHeaderValue = string | readonly string[]
 export type HttpHeaders = Readonly<Record<string, HttpHeaderValue | undefined>>
 
+export interface HttpResponseHeadersWithDefaults<
+  TSchema extends StandardSchemaV1 = StandardSchemaV1,
+> {
+  readonly schema: TSchema
+  readonly defaults: HttpHeaders
+}
+
+export type HttpResponseHeadersDefinition =
+  | StandardSchemaV1
+  | HttpHeaders
+  | HttpResponseHeadersWithDefaults
+
 export interface HttpErrorMatcher<TError extends { readonly data: unknown }> {
   is(error: unknown): error is TError
 }
@@ -69,8 +81,7 @@ export interface HttpResponseDefinition {
   readonly status: number
   readonly description?: string
   readonly body: StandardSchemaV1
-  readonly headers?: StandardSchemaV1
-  readonly staticHeaders?: HttpHeaders
+  readonly headers?: HttpResponseHeadersDefinition
   readonly error?: HttpErrorMapping<any, any>
   readonly stream?: 'server'
 }
@@ -437,11 +448,24 @@ type ResponseBodyOutput<TResponse extends HttpResponseDefinition> =
     ? AsyncIterable<SchemaOutput<TResponse['body']>>
     : SchemaOutput<TResponse['body']>
 
+type ResponseHeadersSchema<TResponse extends HttpResponseDefinition> =
+  TResponse extends { readonly headers: infer THeaders }
+    ? THeaders extends StandardSchemaV1
+      ? THeaders
+      : THeaders extends {
+            readonly schema: infer TSchema extends StandardSchemaV1
+          }
+        ? TSchema
+        : never
+    : never
+
 type ResponseHeadersOutput<TResponse extends HttpResponseDefinition> =
-  TResponse extends {
-    readonly headers: infer THeaders extends StandardSchemaV1
-  }
-    ? SchemaOutput<THeaders>
+  ResponseHeadersSchema<TResponse> extends infer TSchema
+    ? [TSchema] extends [never]
+      ? never
+      : TSchema extends StandardSchemaV1
+        ? SchemaOutput<TSchema>
+        : never
     : never
 
 type DeclaredHttpResults<
@@ -652,13 +676,15 @@ type AreResponseStatusesCompatible<
 
 type IsResponseHeadersSchemaCompatible<TResponse> =
   TResponse extends HttpResponseDefinition
-    ? TResponse extends {
-        readonly headers: infer THeaders extends StandardSchemaV1
-      }
-      ? SchemaOutput<THeaders> extends HttpHeaders | undefined
+    ? ResponseHeadersSchema<TResponse> extends infer TSchema
+      ? [TSchema] extends [never]
         ? true
-        : false
-      : true
+        : TSchema extends StandardSchemaV1
+          ? SchemaOutput<TSchema> extends HttpHeaders | undefined
+            ? true
+            : false
+          : false
+      : false
     : false
 
 type AreResponseHeadersSchemasCompatible<
