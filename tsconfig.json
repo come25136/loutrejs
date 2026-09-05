@@ -30,6 +30,10 @@
       "@loutrejs/loutre/graph": ["./packages/loutre/src/graph/index.ts"],
       "@loutrejs/loutre/runtime": ["./packages/loutre/src/runtime/index.ts"],
       "@loutrejs/loutre/http": ["./packages/loutre/src/http/index.ts"],
+      "@loutrejs/http": ["./packages/http/src/index.ts"],
+      "@loutrejs/websocket": ["./packages/websocket/src/index.ts"],
+      "@loutrejs/tasks": ["./packages/tasks/src/index.ts"],
+      "@loutrejs/message-port": ["./packages/message-port/src/index.ts"],
       "@loutrejs/loutre/message-port": [
         "./packages/loutre/src/message-port/index.ts"
       ],

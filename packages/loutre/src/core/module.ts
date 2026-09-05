@@ -1,4 +1,9 @@
 import type { EnvClass } from './env.js'
+import type {
+  ExecutionDefinition,
+  ExtensionOfDefinition,
+  HostApiOfExtension,
+} from './extension.js'
 import type { ImplementationDescriptor } from './implementation.js'
 import type { ModuleLifecycle } from './lifecycle.js'
 import { environmentProvider, type ProviderDeclaration } from './provider.js'
@@ -9,6 +14,7 @@ export interface ModuleDefinition {
   readonly imports?: readonly ModuleInstance[]
   readonly environment?: readonly EnvClass[]
   readonly providers?: readonly ProviderDeclaration[]
+  readonly executions?: readonly ExecutionDefinition[]
   readonly implementations?: readonly ImplementationDescriptor[]
   readonly exports?: readonly unknown[]
   readonly lifecycle?: ModuleLifecycle
@@ -22,7 +28,31 @@ export interface ModuleTypeInfo<
 > {
   readonly protocols: ProtocolsOfModuleDefinition<TDefinition>
   readonly capabilities: CapabilitiesOfModuleDefinition<TDefinition>
+  readonly extensions: ExtensionsOfModuleDefinition<TDefinition>
 }
+
+type DirectExtensions<TDefinition extends ModuleDefinition> =
+  TDefinition['executions'] extends readonly ExecutionDefinition[]
+    ? ExtensionOfDefinition<TDefinition['executions'][number]>
+    : never
+
+type ImportedExtensions<TDefinition extends ModuleDefinition> =
+  TDefinition['imports'] extends readonly ModuleInstance[]
+    ? ModuleExtensions<TDefinition['imports'][number]>
+    : never
+
+export type ExtensionsOfModuleDefinition<
+  TDefinition extends ModuleDefinition,
+> = DirectExtensions<TDefinition> | ImportedExtensions<TDefinition>
+
+export type ModuleExtensions<TModule> =
+  TModule extends ModuleInstance<infer TDefinition>
+    ? ExtensionsOfModuleDefinition<TDefinition>
+    : never
+
+export type ModuleHostApis<TModule> = HostApiOfExtension<
+  ModuleExtensions<TModule>
+>
 
 type DirectProtocols<TDefinition extends ModuleDefinition> =
   TDefinition['implementations'] extends readonly ImplementationDescriptor[]

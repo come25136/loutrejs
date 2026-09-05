@@ -16,12 +16,17 @@ for (const directory of await readdir(packagesDirectory)) {
   if (manifest.repository?.url !== repositoryUrl) {
     failures.push(`${manifest.name}: repository.url must be ${repositoryUrl}`)
   }
-  const result = JSON.parse(
-    execFileSync('npm', ['pack', packageDirectory, '--dry-run', '--json'], {
-      cwd: repository,
+  const packed = JSON.parse(
+    execFileSync('npm', ['pack', '--dry-run', '--json'], {
+      cwd: packageDirectory,
       encoding: 'utf8',
     }),
-  )[0]
+  )
+  const result = Array.isArray(packed) ? packed[0] : Object.values(packed)[0]
+  if (!result?.files) {
+    failures.push(`${manifest.name}: npm pack did not return package files`)
+    continue
+  }
   const files = new Set(result.files.map(({ path }) => path))
   const required = new Set(['package.json', 'README.md'])
   if (manifest.types) required.add(normalizeTarget(manifest.types))

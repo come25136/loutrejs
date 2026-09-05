@@ -5,6 +5,10 @@
   "fixed": [
     [
       "@loutrejs/loutre",
+      "@loutrejs/http",
+      "@loutrejs/websocket",
+      "@loutrejs/tasks",
+      "@loutrejs/message-port",
       "@loutrejs/node",
       "@loutrejs/bullmq",
       "@loutrejs/cli",
