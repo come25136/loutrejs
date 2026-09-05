@@ -145,22 +145,92 @@ describe('OpenAPI generation', () => {
       operation?.responses['400'].content['application/json'].schema.oneOf,
     ).toHaveLength(2)
   })
-  it('rejects an empty request body content type at contract definition', () => {
-    expect(() =>
-      http.route({
-        method: 'POST',
-        path: '/invalid',
-        request: {
-          body: {
-            contentType: '',
-            schema: z.object({ value: z.string() }),
+  it('Content-Typeの有限集合をrequestBody contentへ投影する', () => {
+    const Contract = contract([
+      http({
+        create: {
+          method: 'POST',
+          path: '/representations',
+          request: {
+            headers: z.object({
+              'content-type': z.union([
+                z.literal('application/json'),
+                z.literal('text/plain'),
+              ]),
+              'x-request-id': z.string(),
+            }),
+            body: z.union([z.object({ value: z.string() }), z.string()]),
           },
+          responses: {
+            ok: { status: 200, body: z.object({ ok: z.boolean() }) },
+          },
+          pipeline: [validate.headers, validate.body, http.controller],
         },
-        responses: {
-          ok: { status: 200, body: z.object({ ok: z.boolean() }) },
-        },
-        pipeline: [validate.body, http.controller],
       }),
-    ).toThrow('HTTP request body contentType must not be empty')
+    ])
+    const Implementation = implementation({
+      name: 'RepresentationImplementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        create(ctx) {
+          return ctx.response.ok({ body: { ok: true } })
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ implementations: [Implementation] }))
+    const application = defineApplication({ modules: [Module()] })
+
+    const document = generateOpenApi(application, {
+      info: { title: 'Representations API', version: '1.0.0' },
+    })
+    const operation = document.paths['/representations']?.post as
+      | Record<string, any>
+      | undefined
+
+    expect(Object.keys(operation?.requestBody.content ?? {})).toEqual([
+      'application/json',
+      'text/plain',
+    ])
+    expect(operation?.parameters).toEqual([
+      expect.objectContaining({ name: 'x-request-id', in: 'header' }),
+    ])
+  })
+
+  it('Content-Typeを有限集合へ解決できない場合はOpenAPI生成を失敗させる', () => {
+    const Contract = contract([
+      http({
+        create: {
+          method: 'POST',
+          path: '/dynamic-content-type',
+          request: {
+            headers: z.object({ 'content-type': z.string() }),
+            body: z.object({ value: z.string() }),
+          },
+          responses: {
+            ok: { status: 200, body: z.object({ ok: z.boolean() }) },
+          },
+          pipeline: [validate.headers, validate.body, http.controller],
+        },
+      }),
+    ])
+    const Implementation = implementation({
+      name: 'DynamicContentTypeImplementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        create(ctx) {
+          return ctx.response.ok({ body: { ok: true } })
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ implementations: [Implementation] }))
+    const application = defineApplication({ modules: [Module()] })
+
+    expect(() =>
+      generateOpenApi(application, {
+        info: { title: 'Dynamic API', version: '1.0.0' },
+      }),
+    ).toThrow('LUTRE_OPENAPI_CONTENT_TYPE_002')
   })
 })

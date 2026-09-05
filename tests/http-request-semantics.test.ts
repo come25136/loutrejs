@@ -84,10 +84,10 @@ describe('HTTP request semantics', () => {
           method: 'POST',
           path: '/lazy-body',
           request: {
-            body: {
-              contentType: 'application/json',
-              schema: z.object({ name: z.string() }),
-            },
+            headers: z.object({
+              'content-type': z.literal('application/json'),
+            }),
+            body: z.object({ name: z.string() }),
           },
           responses: {
             unauthorized: {
@@ -96,7 +96,7 @@ describe('HTTP request semantics', () => {
             },
             ok: { status: 200, body: z.object({ name: z.string() }) },
           },
-          pipeline: [reject, validate.body, http.controller],
+          pipeline: [reject, validate.headers, validate.body, http.controller],
         },
       }),
     ])
@@ -133,11 +133,10 @@ describe('HTTP request semantics', () => {
           method: 'POST',
           path: '/raw-multipart',
           request: {
-            headers: z.object({ 'content-type': z.string() }),
-            body: {
-              contentType: 'multipart/form-data',
-              schema: z.instanceof(FormData),
-            },
+            headers: z.object({
+              'content-type': z.literal('multipart/form-data'),
+            }),
+            body: z.instanceof(FormData),
           },
           responses: {
             accepted: {
@@ -145,7 +144,7 @@ describe('HTTP request semantics', () => {
               body: z.object({ name: z.string(), size: z.number() }),
             },
           },
-          pipeline: [validate.headers, http.controller],
+          pipeline: [http.controller],
         },
       }),
     ])
@@ -157,8 +156,11 @@ describe('HTTP request semantics', () => {
       factory: () => ({
         async upload(ctx) {
           expect(ctx.input.body).toBeInstanceOf(ReadableStream)
+          const contentType = ctx.input.headers['content-type']
+          expect(contentType).toContain('boundary=')
+          if (!contentType) throw new Error('content-type is required')
           const body = await new Response(ctx.input.body, {
-            headers: { 'content-type': ctx.input.headers['content-type'] },
+            headers: { 'content-type': contentType },
           }).formData()
           const file = body.get('file')
           return ctx.response.accepted({
@@ -191,10 +193,10 @@ describe('HTTP request semantics', () => {
           method: 'POST',
           path: '/raw-json',
           request: {
-            body: {
-              contentType: 'application/json',
-              schema: z.object({ name: z.string() }),
-            },
+            headers: z.object({
+              'content-type': z.literal('application/json'),
+            }),
+            body: z.object({ name: z.string() }),
           },
           responses: {
             ok: {
@@ -239,10 +241,8 @@ describe('HTTP request semantics', () => {
           method: 'POST',
           path: '/raw-text',
           request: {
-            body: {
-              contentType: 'text/plain',
-              schema: z.string(),
-            },
+            headers: z.object({ 'content-type': z.literal('text/plain') }),
+            body: z.string(),
           },
           responses: { ok: { status: 200, body: z.string() } },
           pipeline: [http.controller],
@@ -274,6 +274,69 @@ describe('HTTP request semantics', () => {
     expect(await response.json()).toBe('loutre')
   })
 
+  it('1つのprocedureで複数Content-Typeをdecodeできる', async () => {
+    const Contract = contract([
+      http({
+        inspect: {
+          method: 'POST',
+          path: '/representations',
+          request: {
+            headers: z.object({
+              'content-type': z.enum(['application/json', 'text/plain']),
+            }),
+            body: z.union([z.object({ name: z.string() }), z.string()]),
+          },
+          responses: {
+            ok: {
+              status: 200,
+              body: z.object({
+                kind: z.enum(['json', 'text']),
+                value: z.string(),
+              }),
+            },
+          },
+          pipeline: [validate.headers, validate.body, http.controller],
+        },
+      }),
+    ])
+    const Implementation = implementation({
+      name: 'Implementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        inspect(ctx) {
+          return ctx.response.ok({
+            body:
+              typeof ctx.input.body === 'string'
+                ? { kind: 'text', value: ctx.input.body }
+                : { kind: 'json', value: ctx.input.body.name },
+          })
+        },
+      }),
+    })
+    const application = applicationFor(Implementation)
+
+    const jsonResponse = await application.fetch(
+      new Request('https://fixture.test/representations', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({ name: 'loutre' }),
+      }),
+    )
+    expect(jsonResponse.status).toBe(200)
+    expect(await jsonResponse.json()).toEqual({ kind: 'json', value: 'loutre' })
+
+    const textResponse = await application.fetch(
+      new Request('https://fixture.test/representations', {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain; charset=utf-8' },
+        body: 'otter',
+      }),
+    )
+    expect(textResponse.status).toBe(200)
+    expect(await textResponse.json()).toEqual({ kind: 'text', value: 'otter' })
+  })
+
   it('multipart/form-dataをFormDataとして1回だけdecodeする', async () => {
     const Contract = contract([
       http({
@@ -281,10 +344,10 @@ describe('HTTP request semantics', () => {
           method: 'POST',
           path: '/multipart',
           request: {
-            body: {
-              contentType: 'multipart/form-data',
-              schema: z.instanceof(FormData),
-            },
+            headers: z.object({
+              'content-type': z.literal('multipart/form-data'),
+            }),
+            body: z.instanceof(FormData),
           },
           responses: {
             accepted: {
@@ -292,7 +355,7 @@ describe('HTTP request semantics', () => {
               body: z.object({ name: z.string(), size: z.number() }),
             },
           },
-          pipeline: [validate.body, http.controller],
+          pipeline: [validate.headers, validate.body, http.controller],
         },
       }),
     ])
@@ -330,15 +393,15 @@ describe('HTTP request semantics', () => {
           method: 'POST',
           path: '/invalid-multipart',
           request: {
-            body: {
-              contentType: 'multipart/form-data',
-              schema: z.instanceof(FormData),
-            },
+            headers: z.object({
+              'content-type': z.literal('multipart/form-data'),
+            }),
+            body: z.instanceof(FormData),
           },
           responses: {
             ok: { status: 200, body: z.object({ ok: z.boolean() }) },
           },
-          pipeline: [validate.body, http.controller],
+          pipeline: [validate.headers, validate.body, http.controller],
         },
       }),
     ])
@@ -372,13 +435,11 @@ describe('HTTP request semantics', () => {
           method: 'POST',
           path: '/broken-text',
           request: {
-            body: {
-              contentType: 'text/plain',
-              schema: z.string(),
-            },
+            headers: z.object({ 'content-type': z.literal('text/plain') }),
+            body: z.string(),
           },
           responses: { ok: { status: 200, body: z.string() } },
-          pipeline: [validate.body, http.controller],
+          pipeline: [validate.headers, validate.body, http.controller],
         },
       }),
     ])

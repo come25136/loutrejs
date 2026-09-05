@@ -722,7 +722,9 @@ Path parameterはvalidationされるまではraw `string`です。
 
 Schemaを宣言しただけで値が自動変換されることはなく、Pipelineの`validate.params`が明示的なrefinement boundaryになります。
 
-HTTP bodyも同様に、`validate.body`がdecodeとvalidationの明示的な境界です。`validate.body`へ到達するまではLoutreは`Request.body`をconsumeせず、前段のLayerがshort circuitした場合もbodyは未消費のままです。`validate.body`を置かない場合、body定義を持つControllerの`ctx.input.body`には未消費の`ReadableStream<Uint8Array> | null`が渡され、利用者側でmultipart parserなどを選択できます。同じeffective Pipelineに同じ`validate.*`を複数回置くことはできません。branchやLayerのchild Pipelineを含む合成後のPipelineでも、各input partのvalidationは1回だけです。
+HTTP bodyも同様に、`validate.body`がdecodeとvalidationの明示的な境界です。body schemaは`request.body`へ直接宣言し、bodyの表現を決める`Content-Type`はHTTP headerとして`request.headers` schemaへ宣言します。`validate.body`は`validate.headers`より後に置く必要があります。`validate.headers`は`Content-Type`のparameterを除いたmedia typeへ正規化してからheader schemaを検証し、`validate.body`はそのmedia typeに応じてJSON、text、`FormData`またはraw streamへdecodeします。
+
+`validate.body`へ到達するまではLoutreは`Request.body`をconsumeせず、前段のLayerがshort circuitした場合もbodyは未消費のままです。`validate.headers` / `validate.body`を置かない場合、Controllerはraw header値と未消費の`ReadableStream<Uint8Array> | null`を受け取れるため、multipart boundaryを含む`Content-Type`を使って任意のparserを選択できます。同じeffective Pipelineに同じ`validate.*`を複数回置くことはできません。branchやLayerのchild Pipelineを含む合成後のPipelineでも、各input partのvalidationは1回だけです。
 
 CORSやBasic AuthもProtocolの外側に特別な仕組みを追加するのではなく、Layerとtyped Contextを使って構成します。
 

@@ -1,4 +1,5 @@
 import {
+  SchemaValidationError,
   validateSchema,
   type ImplementationDescriptor,
   type ModuleInstance,
@@ -21,7 +22,6 @@ import type {
   HttpParamsSchemas,
   HttpProtocol,
   HttpProtocolDefinition,
-  HttpRequestBodyDefinition,
   LogicalHttpResult,
 } from './definitions.js'
 import {
@@ -208,21 +208,17 @@ export function createHttpExecution(options: {
             validate: async (layer, context) => {
               const declared = routeMatch.route.protocol.definition.request?.[
                 layer.part
-              ] as
-                | StandardSchemaV1
-                | HttpParamsSchemas
-                | HttpRequestBodyDefinition
-                | undefined
-              const schema =
-                layer.part === 'body' && declared
-                  ? (declared as HttpRequestBodyDefinition).schema
-                  : declared
+              ] as StandardSchemaV1 | HttpParamsSchemas | undefined
+              const schema = declared
               if (schema) {
                 try {
-                  if (layer.part === 'body') {
-                    context.input.body = await decodeRequestBody(
+                  let input = context.input[layer.part]
+                  if (layer.part === 'headers') {
+                    input = requestHeadersForValidation(request.headers)
+                  } else if (layer.part === 'body') {
+                    input = await decodeRequestBody(
                       request,
-                      declared as HttpRequestBodyDefinition,
+                      validatedContentType(context.input.headers),
                     )
                   }
                   context.input[layer.part] =
@@ -231,16 +227,20 @@ export function createHttpExecution(options: {
                           schema as HttpParamsSchemas,
                           context.input.params as Record<string, string>,
                         )
-                      : await validateSchema(
-                          schema as StandardSchemaV1,
-                          context.input[layer.part],
-                        )
+                      : await validateSchema(schema as StandardSchemaV1, input)
                 } catch (error) {
-                  if (
-                    error instanceof HttpInputDecodeError ||
-                    error instanceof HttpUnsupportedMediaTypeError
-                  ) {
+                  if (error instanceof HttpInputDecodeError) {
                     throw error
+                  }
+                  if (
+                    layer.part === 'headers' &&
+                    routeMatch.route.protocol.definition.request?.body &&
+                    error instanceof SchemaValidationError &&
+                    hasContentTypeIssue(error)
+                  ) {
+                    throw new HttpUnsupportedMediaTypeError(
+                      normalizeMediaType(request.headers.get('content-type')),
+                    )
                   }
                   throw new HttpInputValidationError(error)
                 }
@@ -431,35 +431,57 @@ function decodeRequest(
   return { params, query, headers, body }
 }
 
+function requestHeadersForValidation(headers: Headers): Record<string, string> {
+  const decoded = Object.fromEntries(headers.entries())
+  const contentType = normalizeMediaType(headers.get('content-type'))
+  if (contentType) decoded['content-type'] = contentType
+  return decoded
+}
+
+function validatedContentType(headers: unknown): string {
+  if (typeof headers !== 'object' || headers === null) {
+    throw new TypeError('validate.body requires validated request headers')
+  }
+  const contentType = (headers as Record<string, unknown>)['content-type']
+  if (typeof contentType !== 'string' || contentType.length === 0) {
+    throw new TypeError(
+      'validate.body requires request.headers content-type to resolve to a string',
+    )
+  }
+  return contentType
+}
+
+function hasContentTypeIssue(error: SchemaValidationError): boolean {
+  return error.issues.some((issue) => {
+    const first = issue.path?.[0]
+    const key =
+      typeof first === 'object' && first !== null && 'key' in first
+        ? first.key
+        : first
+    return key === 'content-type'
+  })
+}
+
 async function decodeRequestBody(
   request: Request,
-  definition: HttpRequestBodyDefinition,
+  contentType: string,
 ): Promise<unknown> {
-  const actualMediaType = normalizeMediaType(
-    request.headers.get('content-type'),
-  )
-  const declaredMediaType = normalizeMediaType(definition.contentType)!
-  if (request.body !== null && actualMediaType !== declaredMediaType) {
-    throw new HttpUnsupportedMediaTypeError(declaredMediaType, actualMediaType)
-  }
-  if (
-    declaredMediaType === 'application/json' ||
-    declaredMediaType.endsWith('+json')
-  ) {
+  const mediaType = normalizeMediaType(contentType)!
+  if (mediaType === 'application/json' || mediaType.endsWith('+json')) {
     try {
       return await request.json()
     } catch (error) {
       throw new HttpInputDecodeError(error)
     }
   }
-  if (declaredMediaType === 'multipart/form-data') {
+  if (mediaType === 'multipart/form-data') {
     try {
       return await request.formData()
     } catch (error) {
       throw new HttpInputDecodeError(error)
     }
   }
-  if (declaredMediaType.startsWith('text/')) {
+  if (mediaType.startsWith('text/')) {
     try {
       return await request.text()
     } catch (error) {
@@ -765,13 +787,8 @@ class HttpInputDecodeError extends Error {
 }
 
 class HttpUnsupportedMediaTypeError extends Error {
-  constructor(
-    readonly expected: string,
-    readonly actual: string | undefined,
-  ) {
-    super(
-      `Unsupported HTTP request media type: expected ${expected}, received ${actual ?? '(missing)'}`,
-    )
+  constructor(readonly actual: string | undefined) {
+    super(`Unsupported HTTP request media type: ${actual ?? '(missing)'}`)
     this.name = 'HttpUnsupportedMediaTypeError'
   }
 }

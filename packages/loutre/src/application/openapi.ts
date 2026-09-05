@@ -6,8 +6,6 @@ import {
 import { resolveContractProcedureIdentity } from '../core/contract-internal.js'
 import { assertValidCompilation, compileApplication } from '../graph/index.js'
 import {
-  httpRequestBodyContentType,
-  httpRequestBodySchema,
   type HttpProtocol,
   type HttpProtocolDefinition,
   type HttpResponseDefinition,
@@ -203,7 +201,7 @@ function createOperation(
   }
 
   const requestBody = request?.body
-    ? createRequestBody(request.body, registry, target)
+    ? createRequestBody(request.body, request.headers, registry, target)
     : undefined
 
   return {
@@ -226,21 +224,87 @@ function createOperation(
 
 function createRequestBody(
   body: NonNullable<NonNullable<HttpProtocolDefinition['request']>['body']>,
+  headers: NonNullable<HttpProtocolDefinition['request']>['headers'],
   registry: SchemaRegistry,
   target: HttpOperationTarget,
 ): OpenApiObject {
-  const contentType = httpRequestBodyContentType(body)
+  const mediaTypes = requestBodyMediaTypes(headers, registry, target)
+  const schema = registry.reference(
+    body,
+    'input',
+    componentName(target, 'RequestBody_Input'),
+  )
   return {
-    content: {
-      [contentType]: {
-        schema: registry.reference(
-          httpRequestBodySchema(body),
-          'input',
-          componentName(target, 'RequestBody_Input'),
-        ),
-      },
-    },
+    content: Object.fromEntries(
+      mediaTypes.map((mediaType) => [mediaType, { schema }]),
+    ),
   }
+}
+
+function requestBodyMediaTypes(
+  headers: NonNullable<HttpProtocolDefinition['request']>['headers'],
+  registry: SchemaRegistry,
+  target: HttpOperationTarget,
+): readonly string[] {
+  if (!headers) {
+    throw openApiError(
+      'LUTRE_OPENAPI_CONTENT_TYPE_001',
+      `${describeTarget(target)} request body requires a request headers schema with content-type.`,
+    )
+  }
+  const materialized = registry.materialize(
+    headers,
+    'input',
+    componentName(target, 'RequestHeaders_Input'),
+  )
+  const properties = objectProperties(
+    materialized.schema,
+    'LUTRE_OPENAPI_HEADER_SCHEMA_001',
+    `${describeTarget(target)} request headers`,
+  )
+  const contentType = properties['content-type']
+  if (!contentType) {
+    throw openApiError(
+      'LUTRE_OPENAPI_CONTENT_TYPE_001',
+      `${describeTarget(target)} request headers must declare content-type.`,
+    )
+  }
+  const values = finiteStringValues(contentType)
+  if (!values || values.length === 0) {
+    throw openApiError(
+      'LUTRE_OPENAPI_CONTENT_TYPE_002',
+      `${describeTarget(target)} request content-type must resolve to a finite set of string literals.`,
+    )
+  }
+  return [...new Set(values)]
+}
+
+function finiteStringValues(schema: JsonSchema): readonly string[] | undefined {
+  if (typeof schema.const === 'string') return [schema.const]
+  if (Array.isArray(schema.enum)) {
+    return schema.enum.every((value) => typeof value === 'string')
+      ? (schema.enum as string[])
+      : undefined
+  }
+  for (const keyword of ['anyOf', 'oneOf'] as const) {
+    const alternatives = schema[keyword]
+    if (!Array.isArray(alternatives)) continue
+    const values: string[] = []
+    for (const alternative of alternatives) {
+      if (
+        typeof alternative !== 'object' ||
+        alternative === null ||
+        Array.isArray(alternative)
+      ) {
+        return undefined
+      }
+      const nested = finiteStringValues(alternative as JsonSchema)
+      if (!nested) return undefined
+      values.push(...nested)
+    }
+    return values
+  }
+  return undefined
 }
 
 function createResponses(
@@ -391,12 +455,14 @@ function headerParameters(
         )
       : [],
   )
-  return Object.entries(properties).map(([name, propertySchema]) => ({
-    name,
-    in: 'header',
-    required: required.has(name),
-    schema: propertySchema,
-  }))
+  return Object.entries(properties)
+    .filter(([name]) => name.toLowerCase() !== 'content-type')
+    .map(([name, propertySchema]) => ({
+      name,
+      in: 'header',
+      required: required.has(name),
+      schema: propertySchema,
+    }))
 }
 
 function objectProperties(

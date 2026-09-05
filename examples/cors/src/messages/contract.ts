@@ -17,10 +17,8 @@ export const MessageContract = contract([
       method: 'POST',
       path: '/messages',
       request: {
-        body: {
-          contentType: 'application/json',
-          schema: CreateMessageBody,
-        },
+        headers: z.object({ 'content-type': z.literal('application/json') }),
+        body: CreateMessageBody,
       },
       responses: {
         created: {
@@ -39,6 +37,7 @@ export const MessageContract = contract([
           exposeHeaders: ['x-request-id'],
           maxAge: 600,
         }),
+        validate.headers,
         validate.body,
         http.controller,
       ],

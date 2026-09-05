@@ -15,7 +15,6 @@ import type {
   HttpParamsSchemas,
   HttpProtocol,
   HttpProtocolDefinition,
-  HttpRequestBodyDefinition,
   HttpResponseDefinition,
 } from './definitions.js'
 import {
@@ -30,7 +29,6 @@ export interface HttpClientTransportRequest {
   readonly query?: unknown
   readonly headers?: unknown
   readonly body?: unknown
-  readonly contentType?: string
 }
 
 export interface HttpClientTransportResponse {
@@ -63,9 +61,6 @@ type HttpDefinitionOf<
   TProcedure extends HttpProcedureNames<TContract>,
 > = HttpProtocolOf<TContract['procedures'][TProcedure]>['definition']
 
-type RequestBodySchema<TBody> =
-  TBody extends HttpRequestBodyDefinition<infer TSchema> ? TSchema : never
-
 type PathParamsInput<TDefinition extends HttpProtocolDefinition> =
   PathParamNames<TDefinition['path']> extends never
     ? never
@@ -88,9 +83,9 @@ type RequestPartInput<
 
 type RequestBodyInput<TDefinition extends HttpProtocolDefinition> =
   TDefinition['request'] extends {
-    readonly body: infer TBody extends HttpRequestBodyDefinition
+    readonly body: infer TBody extends StandardSchemaV1
   }
-    ? SchemaInput<RequestBodySchema<TBody>>
+    ? SchemaInput<TBody>
     : never
 
 type RequestField<TName extends string, TValue> = [TValue] extends [never]
@@ -182,9 +177,6 @@ export function createHttpClient<const TBinding extends ContractBinding>(
         ...(request.query === undefined ? {} : { query: request.query }),
         ...(request.headers === undefined ? {} : { headers: request.headers }),
         ...(request.body === undefined ? {} : { body: request.body }),
-        ...(definition.request?.body === undefined
-          ? {}
-          : { contentType: definition.request.body.contentType }),
       })
 
       return decodeResponse(procedureName, definition, response)
@@ -344,16 +336,22 @@ export function fetchHttpTransport(
 
     const headers = new Headers(options.headers)
     appendHeaders(headers, request.headers)
-    if (request.contentType && !headers.has('content-type')) {
-      headers.set('content-type', request.contentType)
+    const contentType = headers.get('content-type') ?? undefined
+    const body =
+      request.body === undefined
+        ? undefined
+        : encodeBody(request.body, contentType)
+    if (
+      body instanceof FormData &&
+      normalizeMediaType(contentType) === 'multipart/form-data'
+    ) {
+      headers.delete('content-type')
     }
 
     const response = await fetchImplementation(url, {
       method: request.method,
       headers,
-      ...(request.body === undefined
-        ? {}
-        : { body: encodeBody(request.body, request.contentType) }),
+      ...(body === undefined ? {} : { body }),
     })
     return {
       status: response.status,

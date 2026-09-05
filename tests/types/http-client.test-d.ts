@@ -31,10 +31,8 @@ const UsersContract = contract([
       method: 'POST',
       path: '/users',
       request: {
-        body: {
-          contentType: 'application/json',
-          schema: z.object({ name: z.string() }),
-        },
+        headers: z.object({ 'content-type': z.literal('application/json') }),
+        body: z.object({ name: z.string() }),
       },
       responses: {
         created: {
@@ -62,7 +60,17 @@ client.get({
   params: { id: '42' },
   query: { includePosts: true },
 })
-client.create({ body: { name: 'Ada' } })
+client.create({
+  headers: { 'content-type': 'application/json' },
+  body: { name: 'Ada' },
+})
+client.create({
+  headers: {
+    // @ts-expect-error Content-TypeはContractのheader schemaに従う
+    'content-type': 'text/plain',
+  },
+  body: { name: 'Ada' },
+})
 client.health()
 // @ts-expect-error path parameterはschema outputではなくwire inputを受け取る
 client.get({ params: { id: 42 }, query: {} })

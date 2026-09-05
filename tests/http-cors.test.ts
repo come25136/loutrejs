@@ -204,10 +204,8 @@ function createValidationFixture(corsLayer: ReturnType<typeof validate.cors>) {
         method: 'POST',
         path: '/cors-validation',
         request: {
-          body: {
-            contentType: 'application/json',
-            schema: z.object({ text: z.string() }),
-          },
+          headers: z.object({ 'content-type': z.literal('application/json') }),
+          body: z.object({ text: z.string() }),
         },
         responses: {
           created: {
@@ -215,7 +213,7 @@ function createValidationFixture(corsLayer: ReturnType<typeof validate.cors>) {
             body: z.object({ ok: z.boolean() }),
           },
         },
-        pipeline: [corsLayer, validate.body, http.controller],
+        pipeline: [corsLayer, validate.headers, validate.body, http.controller],
       },
     }),
   ])

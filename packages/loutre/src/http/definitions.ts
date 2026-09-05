@@ -42,18 +42,11 @@ import {
 
 export type HttpParamsSchemas = Readonly<Record<string, StandardSchemaV1>>
 
-export interface HttpRequestBodyDefinition<
-  TSchema extends StandardSchemaV1 = StandardSchemaV1,
-> {
-  readonly contentType: string
-  readonly schema: TSchema
-}
-
 export interface HttpRequestDefinition {
   readonly params?: HttpParamsSchemas
   readonly query?: StandardSchemaV1
   readonly headers?: StandardSchemaV1
-  readonly body?: HttpRequestBodyDefinition
+  readonly body?: StandardSchemaV1
 }
 
 export type HttpHeaderValue = string | readonly string[]
@@ -560,13 +553,63 @@ type IsHttpShortCircuitDeclarationCompatible<
       : false
   : true
 
+interface HttpValidationOrderState<
+  THeadersValidated extends boolean,
+  TValid extends boolean,
+> {
+  readonly headersValidated: THeadersValidated
+  readonly valid: TValid
+}
+
+type FoldHttpValidationOrder<
+  TPipeline extends readonly PipelineItem[],
+  TState extends HttpValidationOrderState<boolean, boolean>,
+> = TState['valid'] extends false
+  ? TState
+  : number extends TPipeline['length']
+    ? TState
+    : TPipeline extends readonly [infer THead, ...infer TTail]
+      ? FoldHttpValidationOrder<
+          Extract<TTail, readonly PipelineItem[]>,
+          FoldHttpValidationOrderItem<THead, TState>
+        >
+      : TState
+
+type FoldHttpValidationOrderItem<
+  TItem,
+  TState extends HttpValidationOrderState<boolean, boolean>,
+> = TItem extends ValidationLayerDescriptor
+  ? TItem['part'] extends 'headers'
+    ? HttpValidationOrderState<true, TState['valid']>
+    : TItem['part'] extends 'body'
+      ? TState['headersValidated'] extends true
+        ? TState
+        : HttpValidationOrderState<TState['headersValidated'], false>
+      : TState
+  : TItem extends {
+        readonly kind: 'layer'
+        readonly pipeline: infer TPipeline extends readonly PipelineItem[]
+      }
+    ? FoldHttpValidationOrder<TPipeline, TState>
+    : TState
+
+type IsHttpValidationOrderValid<TPipeline extends readonly PipelineItem[]> =
+  FoldHttpValidationOrder<
+    TPipeline,
+    HttpValidationOrderState<false, true>
+  >['valid'] extends true
+    ? true
+    : false
+
 type HttpPipelineConstraint<TDefinition extends HttpProtocolDefinition> =
   IsValidProtocolPipeline<TDefinition['pipeline'], 'http'> extends true
-    ? IsHttpPipelineCompatible<
-        TDefinition['pipeline'],
-        TDefinition['responses']
-      > extends true
-      ? unknown
+    ? IsHttpValidationOrderValid<TDefinition['pipeline']> extends true
+      ? IsHttpPipelineCompatible<
+          TDefinition['pipeline'],
+          TDefinition['responses']
+        > extends true
+        ? unknown
+        : { readonly pipeline: never }
       : { readonly pipeline: never }
     : { readonly pipeline: never }
 
@@ -677,6 +720,27 @@ type IsSingleStringLiteral<TValue extends string> = string extends TValue
   : true extends IsUnion<TValue>
     ? false
     : true
+
+type HasRequiredStringContentType<TValue> = [TValue] extends [
+  { readonly 'content-type': string },
+]
+  ? true
+  : false
+
+type HttpRequestConstraint<TDefinition extends HttpProtocolDefinition> =
+  TDefinition['request'] extends {
+    readonly body: StandardSchemaV1
+  }
+    ? TDefinition['request'] extends {
+        readonly headers: infer THeaders extends StandardSchemaV1
+      }
+      ? HasRequiredStringContentType<SchemaInput<THeaders>> extends true
+        ? HasRequiredStringContentType<SchemaOutput<THeaders>> extends true
+          ? unknown
+          : { readonly request: never }
+        : { readonly request: never }
+      : { readonly request: never }
+    : unknown
 
 type HttpPathConstraint<TDefinition extends HttpProtocolDefinition> =
   IsSingleStringLiteral<TDefinition['method']> extends false
@@ -822,6 +886,7 @@ type IsHttpResolvedLeafValid<
   >,
 > = IsConstraintSatisfied<
   HttpPipelineConstraint<TEffective> &
+    HttpRequestConstraint<TEffective> &
     HttpResponseConstraint<TEffective> &
     HttpPathConstraint<TEffective>
 >
@@ -888,6 +953,7 @@ type HttpTreeConstraint<TDefinitions extends HttpRouteTree> =
 function defineHttp<const TDefinition extends HttpProtocolDefinition>(
   definition: TDefinition &
     HttpPipelineConstraint<TDefinition> &
+    HttpRequestConstraint<TDefinition> &
     HttpResponseConstraint<TDefinition> &
     HttpPathConstraint<TDefinition>,
 ): HttpProtocol<TDefinition> {
@@ -919,10 +985,11 @@ function defineHttp<const TDefinition extends HttpProtocolDefinition>(
   } else if (hasParamsValidation(definition.pipeline)) {
     throw new Error('validate.params requires request.params')
   }
-  assertNoDuplicateInputValidation(definition.pipeline)
-  const body = definition.request?.body
-  if (body && body.contentType.trim().length === 0) {
-    throw new Error('HTTP request body contentType must not be empty')
+  assertInputValidationPipeline(definition.pipeline)
+  if (definition.request?.body && !definition.request.headers) {
+    throw new Error(
+      'HTTP request body requires request.headers with content-type',
+    )
   }
   return {
     kind: 'protocol',
@@ -933,12 +1000,15 @@ function defineHttp<const TDefinition extends HttpProtocolDefinition>(
   } as unknown as HttpProtocol<TDefinition>
 }
 
-function assertNoDuplicateInputValidation(
+function assertInputValidationPipeline(
   pipeline: readonly PipelineItem[],
   validated = new Set<ValidatedInputPart>(),
 ): void {
   for (const item of pipeline) {
     if (item.kind === 'validation') {
+      if (item.part === 'body' && !validated.has('headers')) {
+        throw new Error('validate.body requires validate.headers before it')
+      }
       if (validated.has(item.part)) {
         throw new Error(
           `Duplicate HTTP input validation: validate.${item.part}`,
@@ -949,7 +1019,7 @@ function assertNoDuplicateInputValidation(
     }
     if (item.kind === 'layer') {
       const child = childPipelineOf(item)
-      if (child) assertNoDuplicateInputValidation(child, validated)
+      if (child) assertInputValidationPipeline(child, validated)
     }
   }
 }
@@ -1370,9 +1440,6 @@ type HttpProtocolAt<
     : never
   : never
 
-type RequestBodySchema<TBody> =
-  TBody extends HttpRequestBodyDefinition<infer TSchema> ? TSchema : never
-
 type PartOutput<
   TDefinition extends HttpProtocolDefinition,
   TPart extends keyof HttpRequestDefinition,
@@ -1385,22 +1452,22 @@ type PartOutput<
       : never
     : RawPathParams<TDefinition['path']>
   : HasValidationBeforeTerminal<TDefinition['pipeline'], TPart> extends false
-    ? TPart extends 'body'
-      ? TDefinition['request'] extends {
-          readonly body: HttpRequestBodyDefinition
-        }
-        ? ReadableStream<Uint8Array> | null
-        : unknown
-      : unknown
+    ? TPart extends 'query'
+      ? Readonly<Record<string, string | readonly string[] | undefined>>
+      : TPart extends 'headers'
+        ? Readonly<Record<string, string | undefined>>
+        : TPart extends 'body'
+          ? TDefinition['request'] extends {
+              readonly body: StandardSchemaV1
+            }
+            ? ReadableStream<Uint8Array> | null
+            : unknown
+          : unknown
     : TDefinition['request'] extends HttpRequestDefinition
       ? TPart extends keyof TDefinition['request']
-        ? TPart extends 'body'
-          ? SchemaOutput<
-              RequestBodySchema<NonNullable<TDefinition['request'][TPart]>>
-            >
-          : NonNullable<TDefinition['request'][TPart]> extends StandardSchemaV1
-            ? SchemaOutput<NonNullable<TDefinition['request'][TPart]>>
-            : unknown
+        ? NonNullable<TDefinition['request'][TPart]> extends StandardSchemaV1
+          ? SchemaOutput<NonNullable<TDefinition['request'][TPart]>>
+          : unknown
         : unknown
       : unknown
 
