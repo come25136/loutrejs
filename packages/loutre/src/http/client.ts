@@ -16,6 +16,8 @@ import type {
   HttpProtocol,
   HttpProtocolDefinition,
   HttpResponseDefinition,
+  HttpResponseHeadersDefinition,
+  HttpResponseHeadersWithDefaults,
 } from './definitions.js'
 import {
   parseHttpPath,
@@ -105,11 +107,24 @@ type ResponseBodyOutput<TResponse extends HttpResponseDefinition> =
     ? AsyncIterable<SchemaOutput<TResponse['body']>>
     : SchemaOutput<TResponse['body']>
 
+type ResponseHeadersSchema<TResponse extends HttpResponseDefinition> =
+  TResponse extends { readonly headers: infer THeaders }
+    ? THeaders extends StandardSchemaV1
+      ? THeaders
+      : THeaders extends {
+            readonly schema: infer TSchema extends StandardSchemaV1
+          }
+        ? TSchema
+        : never
+    : never
+
 type ResponseHeadersOutput<TResponse extends HttpResponseDefinition> =
-  TResponse extends {
-    readonly headers: infer THeaders extends StandardSchemaV1
-  }
-    ? SchemaOutput<THeaders>
+  ResponseHeadersSchema<TResponse> extends infer TSchema
+    ? [TSchema] extends [never]
+      ? HttpHeaders
+      : TSchema extends StandardSchemaV1
+        ? SchemaOutput<TSchema>
+        : HttpHeaders
     : HttpHeaders
 
 export type HttpClientResponse<TDefinition extends HttpProtocolDefinition> = {
@@ -249,8 +264,9 @@ async function decodeResponse(
             response.status,
           )
         : await validateSchema(candidate.body, response.body)
-      const headers = candidate.headers
-        ? await validateSchema(candidate.headers, response.headers ?? {})
+      const headerSchema = responseHeadersSchema(candidate.headers)
+      const headers = headerSchema
+        ? await validateSchema(headerSchema, response.headers ?? {})
         : (response.headers ?? {})
       return Object.freeze({ status: response.status, body, headers })
     } catch (error) {
@@ -266,6 +282,29 @@ async function decodeResponse(
     procedure,
     `${target} returned a response that does not match its Contract`,
     lastValidationError ? { cause: lastValidationError } : undefined,
+  )
+}
+
+function responseHeadersSchema(
+  headers: HttpResponseHeadersDefinition | undefined,
+): StandardSchemaV1 | undefined {
+  if (isStandardSchema(headers)) return headers
+  if (isResponseHeadersWithDefaults(headers)) return headers.schema
+  return undefined
+}
+
+function isStandardSchema(value: unknown): value is StandardSchemaV1 {
+  return typeof value === 'object' && value !== null && '~standard' in value
+}
+
+function isResponseHeadersWithDefaults(
+  value: unknown,
+): value is HttpResponseHeadersWithDefaults {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'schema' in value &&
+    isStandardSchema(value.schema)
   )
 }
 
