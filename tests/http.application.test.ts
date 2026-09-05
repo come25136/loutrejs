@@ -39,14 +39,16 @@ describe('HTTP application boundary', () => {
           responses: {
             updated: {
               status: 200,
-              headers: z.object({
-                'x-dynamic': z.string(),
-                'x-overridden': z.string(),
-                'content-type': z.string(),
-              }),
-              staticHeaders: {
-                'x-declared': 'static',
-                'x-overridden': 'static',
+              headers: {
+                schema: z.object({
+                  'x-dynamic': z.string(),
+                  'x-overridden': z.string(),
+                  'content-type': z.string(),
+                }),
+                defaults: {
+                  'x-declared': 'static',
+                  'x-overridden': 'static',
+                },
               },
               body: z.object({
                 id: z.string(),

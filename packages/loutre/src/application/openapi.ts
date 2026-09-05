@@ -9,6 +9,8 @@ import { assertValidCompilation, compileApplication } from '../graph/index.js'
 import {
   type HttpProtocol,
   type HttpProtocolDefinition,
+  type HttpResponseHeadersDefinition,
+  type HttpResponseHeadersWithDefaults,
   type HttpResponseDefinition,
 } from '../http/index.js'
 import type { ApplicationDefinition } from './index.js'
@@ -41,7 +43,6 @@ export interface GenerateOpenApiOptions {
 
 export interface OpenApiDocument {
   readonly openapi: '3.2.0'
-  readonly jsonSchemaDialect: 'https://json-schema.org/draft/2020-12/schema'
   readonly info: OpenApiInfo
   readonly servers?: readonly OpenApiServer[]
   readonly paths: Readonly<Record<string, OpenApiPathItem>>
@@ -149,7 +150,6 @@ export function generateOpenApi(
   const schemas = registry.components()
   return {
     openapi: '3.2.0',
-    jsonSchemaDialect: 'https://json-schema.org/draft/2020-12/schema',
     info: options.info,
     ...(options.servers === undefined ? {} : { servers: options.servers }),
     paths,
@@ -434,15 +434,17 @@ function mergeResponseHeaders(
   const result = new Map<string, JsonSchema[]>()
   for (const { name, response } of entries) {
     for (const [headerName, value] of Object.entries(
-      response.staticHeaders ?? {},
+      responseHeadersDefaults(response.headers) ?? {},
     )) {
+      if (value === undefined) continue
       const current = result.get(headerName) ?? []
-      current.push({ type: 'string', const: value })
+      current.push(responseHeaderDefaultSchema(value))
       result.set(headerName, current)
     }
-    if (!response.headers) continue
+    const headerSchema = responseHeadersSchema(response.headers)
+    if (!headerSchema) continue
     const materialized = registry.materialize(
-      response.headers,
+      headerSchema,
       'output',
       componentName(target, `Response_${name}_Headers_Output`),
     )
@@ -469,6 +471,48 @@ function mergeResponseHeaders(
       },
     ]),
   )
+}
+
+function responseHeadersSchema(
+  headers: HttpResponseHeadersDefinition | undefined,
+): StandardSchemaV1 | undefined {
+  if (isStandardSchema(headers)) return headers
+  if (isResponseHeadersWithDefaults(headers)) return headers.schema
+  return undefined
+}
+
+function responseHeadersDefaults(
+  headers: HttpResponseHeadersDefinition | undefined,
+) {
+  if (headers === undefined || isStandardSchema(headers)) return undefined
+  if (isResponseHeadersWithDefaults(headers)) return headers.defaults
+  return headers
+}
+
+function isStandardSchema(value: unknown): value is StandardSchemaV1 {
+  return typeof value === 'object' && value !== null && '~standard' in value
+}
+
+function isResponseHeadersWithDefaults(
+  value: unknown,
+): value is HttpResponseHeadersWithDefaults {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'schema' in value &&
+    isStandardSchema(value.schema)
+  )
+}
+
+function responseHeaderDefaultSchema(
+  value: string | readonly string[],
+): JsonSchema {
+  if (typeof value === 'string') return { type: 'string', const: value }
+  return {
+    type: 'array',
+    items: { type: 'string' },
+    const: [...value],
+  }
 }
 
 function headerParameters(

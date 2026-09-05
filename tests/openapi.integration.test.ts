@@ -13,9 +13,7 @@ describe('OpenAPI generation', () => {
       },
     })
     expect(document.openapi).toBe('3.2.0')
-    expect(document.jsonSchemaDialect).toBe(
-      'https://json-schema.org/draft/2020-12/schema',
-    )
+    expect(document).not.toHaveProperty('jsonSchemaDialect')
     const getUser = document.paths['/users/{id}']?.get as
       | Record<string, any>
       | undefined
@@ -195,6 +193,63 @@ describe('OpenAPI generation', () => {
     expect(operation?.parameters).toEqual([
       expect.objectContaining({ name: 'x-request-id', in: 'header' }),
     ])
+  })
+
+  it('response headerのschemaとdefaultsを単一headersから投影する', () => {
+    const Contract = contract([
+      http({
+        get: {
+          method: 'GET',
+          path: '/headers',
+          responses: {
+            ok: {
+              status: 200,
+              body: z.string(),
+              headers: {
+                schema: z.object({ etag: z.string() }),
+                defaults: {
+                  'cache-control': 'no-store',
+                  'set-cookie': ['first=one', 'second=two'],
+                },
+              },
+            },
+          },
+          pipeline: [http.controller],
+        },
+      }),
+    ])
+    const Implementation = implementation({
+      name: 'ResponseHeadersImplementation',
+      contract: Contract,
+      protocol: http,
+      factory: () => ({
+        get(ctx) {
+          return ctx.response.ok({ body: 'ok', headers: { etag: 'v1' } })
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ implementations: [Implementation] }))
+    const application = defineApplication({ modules: [Module()] })
+
+    const document = generateOpenApi(application, {
+      info: { title: 'Response Headers API', version: '1.0.0' },
+    })
+    const operation = document.paths['/headers']?.get as
+      | Record<string, any>
+      | undefined
+    const response = operation?.responses?.['200']
+
+    expect(response.headers.etag).toEqual({ schema: { type: 'string' } })
+    expect(response.headers['cache-control']).toEqual({
+      schema: { type: 'string', const: 'no-store' },
+    })
+    expect(response.headers['set-cookie']).toEqual({
+      schema: {
+        type: 'array',
+        items: { type: 'string' },
+        const: ['first=one', 'second=two'],
+      },
+    })
   })
 
   it('Content-Typeを有限集合へ解決できない場合はOpenAPI生成を失敗させる', () => {

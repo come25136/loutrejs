@@ -164,7 +164,7 @@ function createFixture(corsLayer: ReturnType<typeof validate.cors>) {
           created: {
             status: 200,
             body: z.object({ ok: z.boolean() }),
-            staticHeaders: {
+            headers: {
               vary: 'Accept',
               'x-request-id': 'request-1',
             },
