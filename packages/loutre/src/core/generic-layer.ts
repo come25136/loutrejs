@@ -1,5 +1,6 @@
 import type { RuntimeCapability } from './extension.js'
 import type { TokenLike, TokenValue } from './token.js'
+import type { Type } from './type.js'
 
 export interface GenericLayerContext<TState extends object = {}> {
   readonly state: Readonly<TState>
@@ -19,6 +20,7 @@ export interface GenericLayer<
   TInject extends readonly TokenLike[] = readonly TokenLike[],
 > {
   readonly kind: 'generic-layer'
+  readonly state?: Type<TContribution>
   readonly name: string
   readonly inject: TInject
   readonly capabilities: readonly RuntimeCapability[]
@@ -37,6 +39,7 @@ export function defineLayer<
   const TInject extends readonly TokenLike[] = readonly [],
 >(declaration: {
   readonly name: string
+  readonly state?: Type<TContribution>
   readonly inject?: TInject
   readonly capabilities?: readonly RuntimeCapability[]
   readonly factory: GenericLayer<
@@ -48,6 +51,7 @@ export function defineLayer<
 }): GenericLayer<TContext, TContribution, TOutcome, TInject> {
   return Object.freeze({
     kind: 'generic-layer',
+    ...(declaration.state === undefined ? {} : { state: declaration.state }),
     name: declaration.name,
     inject: declaration.inject ?? ([] as unknown as TInject),
     capabilities: declaration.capabilities ?? [],

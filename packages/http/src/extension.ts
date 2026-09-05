@@ -1,5 +1,6 @@
 import {
   defineExecution,
+  defineLayer,
   defineExecutionExtension,
   composeLayers,
   runtimeCapability,
@@ -14,6 +15,8 @@ import {
   type StandardSchemaV1,
   type TokenLike,
   type TokenValue,
+  type Type,
+  type ApplicationModel,
 } from '@loutrejs/loutre'
 import {
   assertValidHttpMethod,
@@ -336,9 +339,45 @@ export function bindHttpServer(
   return { capability: HTTP_SERVER, value: driver }
 }
 
+export function defineHttpMiddleware<
+  TContribution extends object = {},
+  const TInject extends readonly TokenLike[] = readonly [],
+>(definition: {
+  readonly name: string
+  readonly state?: Type<TContribution>
+  readonly inject?: TInject
+  readonly factory: HttpMiddleware<TContribution, TInject>['factory']
+}): HttpMiddleware<TContribution, TInject> {
+  return defineLayer<
+    HttpMiddlewareContext,
+    TContribution,
+    HttpExecutionResult,
+    TInject
+  >(definition)
+}
+
+export function collectHttpRoutes(model: ApplicationModel) {
+  // CLIがbundleしたApplicationではdescriptor identityが別になるため、Modelが一意性を検証したExtension名を使う。
+  return model.executions
+    .filter(
+      (execution) => execution.extension.name === httpExecutionExtension.name,
+    )
+    .flatMap((execution) =>
+      (execution.compiled as CompiledHttpExecution).routes.map((route) => ({
+        procedure: route.name,
+        definition: {
+          ...route.definition,
+          method: route.method,
+          path: route.path,
+        },
+      })),
+    )
+}
+
 export const executionHttp = Object.freeze({
   contract: defineHttpContract,
   implementation: defineHttpImplementation,
+  middleware: defineHttpMiddleware,
   extension: httpExecutionExtension,
   serverCapability: HTTP_SERVER,
   bindServer: bindHttpServer,
