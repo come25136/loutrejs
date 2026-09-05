@@ -22,6 +22,8 @@ import type {
   HttpParamsSchemas,
   HttpProtocol,
   HttpProtocolDefinition,
+  HttpResponseHeadersDefinition,
+  HttpResponseHeadersWithDefaults,
   LogicalHttpResult,
 } from './definitions.js'
 import {
@@ -549,7 +551,7 @@ async function finalizeResponse(
     throw new Error(`Undeclared HTTP response: ${result.response}`)
   }
   const responseHeaders = await validateResponseHeaders(
-    response.headers,
+    responseHeadersSchema(response.headers),
     result.headers,
   )
   if (response.stream === 'server') {
@@ -604,14 +606,21 @@ async function finalizeResponse(
     })
     return new Response(stream, {
       status: response.status,
-      headers: mergeResponseHeaders(response.staticHeaders, responseHeaders, {
-        'content-type': 'text/event-stream; charset=utf-8',
-        'cache-control': 'no-cache',
-      }),
+      headers: mergeResponseHeaders(
+        responseHeadersDefaults(response.headers),
+        responseHeaders,
+        {
+          'content-type': 'text/event-stream; charset=utf-8',
+          'cache-control': 'no-cache',
+        },
+      ),
     })
   }
   const body = await validateSchema(response.body, result.body)
-  const headers = mergeResponseHeaders(response.staticHeaders, responseHeaders)
+  const headers = mergeResponseHeaders(
+    responseHeadersDefaults(response.headers),
+    responseHeaders,
+  )
   if (
     response.status === 204 ||
     response.status === 205 ||
@@ -642,6 +651,37 @@ async function validateResponseHeaders(
     throw new Error('HTTP response header schema produced an invalid value')
   }
   return validated
+}
+
+function responseHeadersSchema(
+  headers: HttpResponseHeadersDefinition | undefined,
+): StandardSchemaV1 | undefined {
+  if (isStandardSchema(headers)) return headers
+  if (isResponseHeadersWithDefaults(headers)) return headers.schema
+  return undefined
+}
+
+function responseHeadersDefaults(
+  headers: HttpResponseHeadersDefinition | undefined,
+): HttpHeaders | undefined {
+  if (headers === undefined || isStandardSchema(headers)) return undefined
+  if (isResponseHeadersWithDefaults(headers)) return headers.defaults
+  return headers
+}
+
+function isStandardSchema(value: unknown): value is StandardSchemaV1 {
+  return typeof value === 'object' && value !== null && '~standard' in value
+}
+
+function isResponseHeadersWithDefaults(
+  value: unknown,
+): value is HttpResponseHeadersWithDefaults {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'schema' in value &&
+    isStandardSchema(value.schema)
+  )
 }
 
 function isHttpHeaders(value: unknown): value is HttpHeaders {
@@ -697,12 +737,12 @@ function jsonResponse(
 }
 
 function mergeResponseHeaders(
-  declared: HttpHeaders | undefined,
+  defaults: HttpHeaders | undefined,
   dynamic: HttpHeaders | undefined,
   framework: HttpHeaders | undefined = undefined,
 ): Headers {
   const headers = new Headers()
-  applyResponseHeaders(headers, declared)
+  applyResponseHeaders(headers, defaults)
   applyResponseHeaders(headers, dynamic)
   applyResponseHeaders(headers, framework)
   return headers
