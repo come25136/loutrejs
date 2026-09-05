@@ -7,7 +7,7 @@ const AppModule = defineModule(() => ({
   environment: [AppEnv],
   providers: [UserRepository],
   description: 'Example profile API protected by Basic authentication',
-  implementations: [ProfileController],
+  executions: [ProfileController],
 }))
 
 export default defineApplication({

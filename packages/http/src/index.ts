@@ -1,3 +1,12 @@
+export { cors } from './cors.js'
+export type { CorsOptions } from './cors.js'
+export { basicAuth, bearerAuth } from './auth.js'
+export type {
+  BasicAuthCredentials,
+  BasicAuthRuntime,
+  BearerAuthRuntime,
+  HttpAuthenticationFailure,
+} from './auth.js'
 export {
   bindHttpServer,
   defineHttpContract,
@@ -18,6 +27,8 @@ export type {
   HttpHandlers,
   HttpHostApi,
   HttpImplementationDefinition,
+  HttpLayer,
+  HttpLayerContext,
   HttpServerDriver,
 } from './extension.js'
 export { matchHttpPath, normalizeHttpPath, parseHttpPath } from './path.js'

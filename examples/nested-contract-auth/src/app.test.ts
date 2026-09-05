@@ -1,17 +1,19 @@
-import { bootstrap } from '@loutrejs/loutre/host'
+import { bootstrapApplication } from '@loutrejs/loutre'
+import { bindHttpServer } from '@loutrejs/http'
 import { afterAll, describe, expect, it } from 'vitest'
 import application from './app.js'
 
-const hosted = bootstrap({
+const hosted = await bootstrapApplication({
   application,
   environment: { PORT: '3003' },
+  capabilities: [bindHttpServer({ runtime: 'test' })],
 })
 
 afterAll(() => hosted.close())
 
 describe('Nested Contract authentication example', () => {
   it('rejects a request before the child Controller without credentials', async () => {
-    const response = await hosted.fetch(
+    const response = await hosted.http.fetch(
       new Request('http://example.test/api/me/profile'),
     )
 
@@ -20,7 +22,7 @@ describe('Nested Contract authentication example', () => {
   })
 
   it('passes the user provided by the parent authentication Layer to the child Controller', async () => {
-    const response = await hosted.fetch(
+    const response = await hosted.http.fetch(
       new Request('http://example.test/api/me/profile', {
         headers: {
           authorization: `Basic ${btoa('loutre:otter')}`,

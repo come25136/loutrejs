@@ -8,7 +8,7 @@ const AppModule = defineModule(() => ({
   name: 'DatabasePostgresExample',
   environment: [AppEnv],
   providers: [PostgresDatabase, UserRepository],
-  implementations: [UsersController],
+  executions: [UsersController],
 }))
 
 export default defineApplication({ modules: [AppModule()] })
