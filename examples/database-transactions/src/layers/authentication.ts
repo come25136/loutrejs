@@ -1,8 +1,8 @@
 import { defineLayer } from '@loutrejs/loutre'
-import type { HttpExecutionResult, HttpLayerContext } from '@loutrejs/http'
+import type { HttpExecutionResult, HttpMiddlewareContext } from '@loutrejs/http'
 
 export const authentication = defineLayer<
-  HttpLayerContext,
+  HttpMiddlewareContext,
   { readonly currentUser: { readonly id: string } },
   HttpExecutionResult
 >({

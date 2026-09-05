@@ -1,10 +1,10 @@
 import { defineLayer } from '@loutrejs/loutre'
-import type { HttpExecutionResult, HttpLayerContext } from '@loutrejs/http'
+import type { HttpExecutionResult, HttpMiddlewareContext } from '@loutrejs/http'
 import { Prisma } from '../generated/prisma/client.js'
 import { PrismaDatabase, type PrismaTransaction } from '../database/prisma.js'
 
 export const transaction = defineLayer<
-  HttpLayerContext,
+  HttpMiddlewareContext,
   { readonly transaction: PrismaTransaction },
   HttpExecutionResult,
   readonly [typeof PrismaDatabase]

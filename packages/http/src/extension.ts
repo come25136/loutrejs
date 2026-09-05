@@ -46,18 +46,18 @@ export interface HttpExecutionRouteDefinition {
   readonly path: string
   readonly request?: HttpExecutionRequestDefinition
   readonly responses: Readonly<Record<string, HttpExecutionResponseDefinition>>
-  readonly layers?: readonly AnyHttpLayer[]
+  readonly middlewares?: readonly AnyHttpMiddleware[]
 }
 
-type AnyHttpLayer = GenericLayer<any, any, HttpExecutionResult, any>
+type AnyHttpMiddleware = GenericLayer<any, any, HttpExecutionResult, any>
 
-export type HttpLayer<
+export type HttpMiddleware<
   TContribution extends object = object,
   TInject extends readonly TokenLike[] = readonly TokenLike[],
-  TContext extends object = HttpLayerContext,
+  TContext extends object = HttpMiddlewareContext,
 > = GenericLayer<TContext, TContribution, HttpExecutionResult, TInject>
 
-export interface HttpLayerContext {
+export interface HttpMiddlewareContext {
   readonly request: Request
   readonly params: Readonly<Record<string, unknown>>
   readonly query: unknown
@@ -66,8 +66,8 @@ export interface HttpLayerContext {
   readonly signal: AbortSignal
 }
 
-type LayerContribution<TLayer> =
-  TLayer extends GenericLayer<any, infer TContribution, any, any>
+type MiddlewareContribution<TMiddleware> =
+  TMiddleware extends GenericLayer<any, infer TContribution, any, any>
     ? TContribution
     : {}
 
@@ -77,11 +77,11 @@ type UnionToIntersection<TUnion> = (
   ? TIntersection
   : never
 
-type HttpLayerState<TRoute extends HttpExecutionRouteDefinition> =
+type HttpMiddlewareState<TRoute extends HttpExecutionRouteDefinition> =
   TRoute extends {
-    readonly layers: infer TLayers extends readonly AnyHttpLayer[]
+    readonly middlewares: infer TMiddlewares extends readonly AnyHttpMiddleware[]
   }
-    ? UnionToIntersection<LayerContribution<TLayers[number]>>
+    ? UnionToIntersection<MiddlewareContribution<TMiddlewares[number]>>
     : {}
 
 export interface HttpContract<
@@ -146,7 +146,7 @@ export type HttpExecutionContext<
   readonly body: RequestValue<TRoute['request'], 'body', undefined>
   readonly response: ResponseHelpers<TRoute>
   readonly signal: AbortSignal
-  readonly state: Readonly<HttpLayerState<TRoute>>
+  readonly state: Readonly<HttpMiddlewareState<TRoute>>
 }
 
 export type HttpHandlers<TContract extends HttpContract> = {
@@ -174,7 +174,7 @@ interface CompiledHttpRoute {
   readonly segments: readonly HttpPathSegment[]
   readonly dispatch: string
   readonly definition: HttpExecutionRouteDefinition
-  readonly layers: readonly AnyHttpLayer[]
+  readonly middlewares: readonly AnyHttpMiddleware[]
 }
 
 interface CompiledHttpExecution {
@@ -220,7 +220,7 @@ export const httpExecutionExtension = defineExecutionExtension<
           segments,
           dispatch: createHttpDispatchKey(route.method, segments),
           definition: route,
-          layers: route.layers ?? [],
+          middlewares: route.middlewares ?? [],
         })
       },
     )
@@ -235,7 +235,7 @@ export const httpExecutionExtension = defineExecutionExtension<
         ...new Set([
           ...definition.inject,
           ...routes.flatMap((route) =>
-            route.layers.flatMap((layer) => layer.inject),
+            route.middlewares.flatMap((middleware) => middleware.inject),
           ),
         ]),
       ],
@@ -243,7 +243,7 @@ export const httpExecutionExtension = defineExecutionExtension<
         ...new Set([
           HTTP_SERVER,
           ...routes.flatMap((route) =>
-            route.layers.flatMap((layer) => layer.capabilities),
+            route.middlewares.flatMap((middleware) => middleware.capabilities),
           ),
         ]),
       ],
@@ -408,10 +408,10 @@ function createHttpExtensionRuntime(
             }
             const result = await composeLayers({
               context,
-              layers: route.layers,
+              layers: route.middlewares,
               resolve: (token) => applicationRuntime.resolve(token),
-              terminal: async (layerContext) =>
-                handler(layerContext as HttpExecutionContext),
+              terminal: async (middlewareContext) =>
+                handler(middlewareContext as HttpExecutionContext),
             })
             return await finalizeHttpResult(route.definition, result)
           } catch (error) {

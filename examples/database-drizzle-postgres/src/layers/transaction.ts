@@ -1,12 +1,12 @@
 import { defineLayer } from '@loutrejs/loutre'
-import type { HttpExecutionResult, HttpLayerContext } from '@loutrejs/http'
+import type { HttpExecutionResult, HttpMiddlewareContext } from '@loutrejs/http'
 import {
   DrizzleDatabase,
   type DrizzleTransaction,
 } from '../database/drizzle.js'
 
 export const transaction = defineLayer<
-  HttpLayerContext,
+  HttpMiddlewareContext,
   { readonly transaction: DrizzleTransaction },
   HttpExecutionResult,
   readonly [typeof DrizzleDatabase]

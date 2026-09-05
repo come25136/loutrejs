@@ -1,8 +1,8 @@
 import { defineLayer, type TokenLike, type TokenValue } from '@loutrejs/loutre'
 import type {
   HttpExecutionResult,
-  HttpLayer,
-  HttpLayerContext,
+  HttpMiddleware,
+  HttpMiddlewareContext,
 } from './extension.js'
 
 export interface BasicAuthCredentials {
@@ -42,10 +42,10 @@ export function basicAuth<
   readonly factory: (
     ...dependencies: { [K in keyof TInject]: TokenValue<TInject[K]> }
   ) => BasicAuthRuntime<TContribution, TResponse, TUnauthorizedBody>
-}): HttpLayer<TContribution, TInject> {
+}): HttpMiddleware<TContribution, TInject> {
   const challenge = `Basic realm="${escapeChallengeValue(definition.realm)}", charset="UTF-8"`
   return defineLayer<
-    HttpLayerContext,
+    HttpMiddlewareContext,
     TContribution,
     HttpExecutionResult,
     TInject
@@ -98,10 +98,10 @@ export function bearerAuth<
   readonly factory: (
     ...dependencies: { [K in keyof TInject]: TokenValue<TInject[K]> }
   ) => BearerAuthRuntime<TContribution, TResponse, TUnauthorizedBody>
-}): HttpLayer<TContribution, TInject> {
+}): HttpMiddleware<TContribution, TInject> {
   const challenge = `Bearer realm="${escapeChallengeValue(definition.realm)}"`
   return defineLayer<
-    HttpLayerContext,
+    HttpMiddlewareContext,
     TContribution,
     HttpExecutionResult,
     TInject

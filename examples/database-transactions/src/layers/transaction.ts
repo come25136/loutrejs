@@ -1,9 +1,9 @@
 import { defineLayer } from '@loutrejs/loutre'
-import type { HttpExecutionResult, HttpLayerContext } from '@loutrejs/http'
+import type { HttpExecutionResult, HttpMiddlewareContext } from '@loutrejs/http'
 import { DATABASE, type InMemoryClient } from '../database/in-memory.js'
 
 export const transaction = defineLayer<
-  HttpLayerContext,
+  HttpMiddlewareContext,
   { readonly transaction: InMemoryClient },
   HttpExecutionResult,
   readonly [typeof DATABASE]

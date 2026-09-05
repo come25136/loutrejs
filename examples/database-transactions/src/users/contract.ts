@@ -23,6 +23,6 @@ export const UsersContract = http.contract({
     responses: {
       created: { status: 201, body: UserResponse },
     },
-    layers: [authentication, transaction, authorization],
+    middlewares: [authentication, transaction, authorization],
   },
 })

@@ -13,6 +13,6 @@ export const BearerProfileContract = http.contract({
       ok: { status: 200, body: User },
       unauthorized: { status: 401, body: UnauthorizedBody },
     },
-    layers: [bearerAuthentication],
+    middlewares: [bearerAuthentication],
   },
 })

@@ -1,7 +1,7 @@
 import { defineLayer } from '@loutrejs/loutre'
-import type { HttpExecutionResult, HttpLayerContext } from '@loutrejs/http'
+import type { HttpExecutionResult, HttpMiddlewareContext } from '@loutrejs/http'
 
-export interface AuthenticatedHttpContext extends HttpLayerContext {
+export interface AuthenticatedHttpContext extends HttpMiddlewareContext {
   readonly state: Readonly<{
     currentUser: { readonly id: string }
   }>

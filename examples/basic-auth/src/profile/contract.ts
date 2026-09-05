@@ -13,6 +13,6 @@ export const ProfileContract = http.contract({
       ok: { status: 200, body: User },
       unauthorized: { status: 401, body: UnauthorizedBody },
     },
-    layers: [basicAuthentication],
+    middlewares: [basicAuthentication],
   },
 })

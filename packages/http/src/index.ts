@@ -27,8 +27,8 @@ export type {
   HttpHandlers,
   HttpHostApi,
   HttpImplementationDefinition,
-  HttpLayer,
-  HttpLayerContext,
+  HttpMiddleware,
+  HttpMiddlewareContext,
   HttpServerDriver,
 } from './extension.js'
 export { matchHttpPath, normalizeHttpPath, parseHttpPath } from './path.js'
