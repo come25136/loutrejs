@@ -14,6 +14,7 @@ export const AppContract = http.contract({
       unauthorized: {
         status: 401,
         body: z.object({ error: z.string() }),
+        headers: z.object({ 'www-authenticate': z.string() }),
       },
     },
     middlewares: [authentication],
