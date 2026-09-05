@@ -8,14 +8,16 @@ on:
       - .github/workflows/pr77-format-export.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   format:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout PR branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Setup workspace
         uses: ./.github/actions/setup-node-workspace
@@ -25,11 +27,13 @@ jobs:
       - name: Format ADRs
         run: npx oxfmt docs/adr/loutre_application_graph_kernel_architecture.md docs/adr/loutre_execution_extension_contract_architecture.md
 
-      - name: Upload formatted ADRs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: pr77-formatted-adrs
-          path: |
-            docs/adr/loutre_application_graph_kernel_architecture.md
-            docs/adr/loutre_execution_extension_contract_architecture.md
-          if-no-files-found: error
+      - name: Commit formatting and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/pr77-format-export.yml
+          git add docs/adr/loutre_application_graph_kernel_architecture.md docs/adr/loutre_execution_extension_contract_architecture.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "style(docs): format application graph ADRs"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
