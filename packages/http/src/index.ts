@@ -27,10 +27,14 @@ export type {
   HttpExecutionRouteDefinition,
   HttpExtensionRuntime,
   HttpHandlers,
+  HttpHeaderValue,
+  HttpHeaders,
   HttpHostApi,
   HttpImplementationDefinition,
   HttpMiddleware,
   HttpMiddlewareContext,
+  HttpResponseHeadersDefinition,
+  HttpResponseHeadersWithDefaults,
   HttpServerDriver,
 } from './extension.js'
 export { matchHttpPath, normalizeHttpPath, parseHttpPath } from './path.js'

@@ -39,10 +39,25 @@ export interface HttpExecutionRequestDefinition {
   readonly body?: StandardSchemaV1
 }
 
+export type HttpHeaderValue = string | readonly string[]
+export type HttpHeaders = Readonly<Record<string, HttpHeaderValue | undefined>>
+
+export interface HttpResponseHeadersWithDefaults<
+  TSchema extends StandardSchemaV1 = StandardSchemaV1,
+> {
+  readonly schema: TSchema
+  readonly defaults: HttpHeaders
+}
+
+export type HttpResponseHeadersDefinition =
+  | StandardSchemaV1
+  | HttpHeaders
+  | HttpResponseHeadersWithDefaults
+
 export interface HttpExecutionResponseDefinition {
   readonly status: number
   readonly body?: StandardSchemaV1
-  readonly headers?: Readonly<Record<string, string>>
+  readonly headers?: HttpResponseHeadersDefinition
 }
 
 export interface HttpExecutionRouteDefinition {
@@ -115,30 +130,83 @@ type HttpParamsValue<
     : Readonly<Record<string, string>>
   : Readonly<Record<string, string>>
 
-export interface HttpExecutionResult<
+type IsAny<T> = 0 extends 1 & T ? true : false
+type IsUnknown<T> = unknown extends T
+  ? [keyof T] extends [never]
+    ? true
+    : false
+  : false
+
+type ResponseHeadersSchema<TResponse> = TResponse extends {
+  readonly headers: infer THeaders
+}
+  ? THeaders extends StandardSchemaV1
+    ? THeaders
+    : THeaders extends {
+          readonly schema: infer TSchema extends StandardSchemaV1
+        }
+      ? TSchema
+      : never
+  : never
+
+type ResponseHeadersOutput<TResponse> =
+  ResponseHeadersSchema<TResponse> extends infer TSchema
+    ? [TSchema] extends [never]
+      ? never
+      : TSchema extends StandardSchemaV1
+        ? SchemaOutput<TSchema>
+        : never
+    : never
+
+type HttpResultHeaders<THeaders> =
+  IsAny<THeaders> extends true
+    ? { readonly headers?: HttpHeaders }
+    : IsUnknown<THeaders> extends true
+      ? { readonly headers?: HttpHeaders }
+      : [THeaders] extends [never]
+        ? { readonly headers?: never }
+        : undefined extends THeaders
+          ? { readonly headers?: Exclude<THeaders, undefined> }
+          : { readonly headers: THeaders }
+
+export type HttpExecutionResult<
   TVariant extends string = string,
   TBody = unknown,
-> {
+  THeaders = unknown,
+> = {
   readonly kind: 'http-result'
   readonly response: TVariant
   readonly body: TBody
-  readonly headers?: HeadersInit
-}
+} & HttpResultHeaders<THeaders>
+
+type ResponseValue<TResponse extends HttpExecutionResponseDefinition> =
+  (TResponse['body'] extends StandardSchemaV1
+    ? { readonly body: SchemaOutput<TResponse['body']> }
+    : { readonly body?: undefined }) &
+    HttpResultHeaders<ResponseHeadersOutput<TResponse>>
+
+type DeclaredHttpResult<
+  TRoute extends HttpExecutionRouteDefinition,
+  TVariant extends keyof TRoute['responses'] & string,
+> = HttpExecutionResult<
+  TVariant,
+  TRoute['responses'][TVariant]['body'] extends StandardSchemaV1
+    ? SchemaOutput<TRoute['responses'][TVariant]['body']>
+    : undefined,
+  ResponseHeadersOutput<TRoute['responses'][TVariant]>
+>
+
+type DeclaredHttpResults<TRoute extends HttpExecutionRouteDefinition> = {
+  [TVariant in keyof TRoute['responses'] & string]: DeclaredHttpResult<
+    TRoute,
+    TVariant
+  >
+}[keyof TRoute['responses'] & string]
 
 type ResponseHelpers<TRoute extends HttpExecutionRouteDefinition> = {
   readonly [TVariant in keyof TRoute['responses'] & string]: (
-    value: TRoute['responses'][TVariant]['body'] extends StandardSchemaV1
-      ? {
-          readonly body: SchemaOutput<TRoute['responses'][TVariant]['body']>
-          readonly headers?: HeadersInit
-        }
-      : { readonly body?: undefined; readonly headers?: HeadersInit },
-  ) => HttpExecutionResult<
-    TVariant,
-    TRoute['responses'][TVariant]['body'] extends StandardSchemaV1
-      ? SchemaOutput<TRoute['responses'][TVariant]['body']>
-      : undefined
-  >
+    value: ResponseValue<TRoute['responses'][TVariant]>,
+  ) => DeclaredHttpResult<TRoute, TVariant>
 }
 
 export type HttpExecutionContext<
@@ -157,7 +225,9 @@ export type HttpExecutionContext<
 export type HttpHandlers<TContract extends HttpContract> = {
   readonly [TName in keyof TContract['routes']]: (
     context: HttpExecutionContext<TContract['routes'][TName]>,
-  ) => HttpExecutionResult | Promise<HttpExecutionResult>
+  ) =>
+    | DeclaredHttpResults<TContract['routes'][TName]>
+    | Promise<DeclaredHttpResults<TContract['routes'][TName]>>
 }
 
 export interface HttpImplementationDefinition<
@@ -383,6 +453,25 @@ export const executionHttp = Object.freeze({
   bindServer: bindHttpServer,
 })
 
+const httpFrameworkHeaders = Symbol('loutre.http.framework-headers')
+
+type HttpExecutionResultWithFrameworkHeaders = HttpExecutionResult & {
+  readonly [httpFrameworkHeaders]?: HttpHeaders
+}
+
+export function withHttpFrameworkHeaders(
+  result: HttpExecutionResult,
+  headers: HttpHeaders,
+): HttpExecutionResult {
+  const current = (result as HttpExecutionResultWithFrameworkHeaders)[
+    httpFrameworkHeaders
+  ]
+  return {
+    ...result,
+    [httpFrameworkHeaders]: { ...current, ...headers },
+  }
+}
+
 function createHttpExtensionRuntime(
   executions: readonly {
     readonly id: string
@@ -522,7 +611,7 @@ async function createHttpContext(
     Object.keys(route.definition.responses).map((name) => [
       name,
       (
-        value: { readonly body?: unknown; readonly headers?: HeadersInit } = {},
+        value: { readonly body?: unknown; readonly headers?: HttpHeaders } = {},
       ) => ({
         kind: 'http-result' as const,
         response: name,
@@ -560,12 +649,18 @@ async function finalizeHttpResult(
   const body = response.body
     ? await validateSchema(response.body, result.body)
     : undefined
-  const headers = new Headers(response.headers)
-  if (result.headers) {
-    new Headers(result.headers).forEach((value, name) =>
-      headers.set(name, value),
-    )
-  }
+  const responseHeaders = await validateResponseHeaders(
+    responseHeadersSchema(response.headers),
+    result.headers,
+  )
+  const headers = mergeResponseHeaders(
+    responseHeadersDefaults(response.headers),
+    responseHeaders,
+  )
+  applyFrameworkResponseHeaders(
+    headers,
+    (result as HttpExecutionResultWithFrameworkHeaders)[httpFrameworkHeaders],
+  )
   if (body === undefined)
     return new Response(null, { status: response.status, headers })
   if (
@@ -586,4 +681,122 @@ async function finalizeHttpResult(
     status: response.status,
     headers,
   })
+}
+
+async function validateResponseHeaders(
+  schema: StandardSchemaV1 | undefined,
+  headers: HttpHeaders | undefined,
+): Promise<HttpHeaders | undefined> {
+  if (!schema) {
+    if (headers !== undefined) {
+      throw new Error('Undeclared HTTP response header was returned')
+    }
+    return undefined
+  }
+  const validated = await validateSchema(schema, headers)
+  if (validated === undefined) return undefined
+  if (!isHttpHeaders(validated)) {
+    throw new Error('HTTP response header schema produced an invalid value')
+  }
+  return validated
+}
+
+function responseHeadersSchema(
+  headers: HttpResponseHeadersDefinition | undefined,
+): StandardSchemaV1 | undefined {
+  if (isStandardSchema(headers)) return headers
+  if (isResponseHeadersWithDefaults(headers)) return headers.schema
+  return undefined
+}
+
+function responseHeadersDefaults(
+  headers: HttpResponseHeadersDefinition | undefined,
+): HttpHeaders | undefined {
+  if (headers === undefined || isStandardSchema(headers)) return undefined
+  if (isResponseHeadersWithDefaults(headers)) return headers.defaults
+  return headers
+}
+
+function isStandardSchema(value: unknown): value is StandardSchemaV1 {
+  return typeof value === 'object' && value !== null && '~standard' in value
+}
+
+function isResponseHeadersWithDefaults(
+  value: unknown,
+): value is HttpResponseHeadersWithDefaults {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'schema' in value &&
+    isStandardSchema(value.schema)
+  )
+}
+
+function isHttpHeaders(value: unknown): value is HttpHeaders {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+  return Object.values(value).every(
+    (header) =>
+      header === undefined ||
+      typeof header === 'string' ||
+      (Array.isArray(header) &&
+        header.every((item) => typeof item === 'string')),
+  )
+}
+
+function mergeResponseHeaders(
+  defaults: HttpHeaders | undefined,
+  dynamic: HttpHeaders | undefined,
+): Headers {
+  const headers = new Headers()
+  applyResponseHeaders(headers, defaults)
+  applyResponseHeaders(headers, dynamic)
+  return headers
+}
+
+function applyResponseHeaders(
+  headers: Headers,
+  source: HttpHeaders | undefined,
+): void {
+  if (!source) return
+  for (const [name, value] of Object.entries(source)) {
+    if (value === undefined) continue
+    headers.delete(name)
+    if (typeof value === 'string') {
+      headers.set(name, value)
+      continue
+    }
+    for (const item of value) headers.append(name, item)
+  }
+}
+
+function applyFrameworkResponseHeaders(
+  headers: Headers,
+  source: HttpHeaders | undefined,
+): void {
+  if (!source) return
+  for (const [name, value] of Object.entries(source)) {
+    if (value === undefined) continue
+    if (name.toLowerCase() === 'vary') {
+      const values = typeof value === 'string' ? [value] : value
+      for (const item of values.flatMap((header) => header.split(','))) {
+        appendVary(headers, item.trim())
+      }
+      continue
+    }
+    applyResponseHeaders(headers, { [name]: value })
+  }
+}
+
+function appendVary(headers: Headers, value: string): void {
+  if (value.length === 0) return
+  const values = (headers.get('vary') ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (!values.some((item) => item.toLowerCase() === value.toLowerCase())) {
+    values.push(value)
+  }
+  headers.set('vary', values.join(', '))
 }

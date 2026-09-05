@@ -1,5 +1,9 @@
 import { defineLayer } from '@loutrejs/loutre'
-import type { HttpExecutionResult, HttpMiddlewareContext } from './extension.js'
+import {
+  withHttpFrameworkHeaders,
+  type HttpExecutionResult,
+  type HttpMiddlewareContext,
+} from './extension.js'
 
 export interface CorsOptions {
   readonly origin?: string | readonly string[]
@@ -23,7 +27,7 @@ export function cors(options: CorsOptions = {}) {
       const result = await next()
       const origin = context.request.headers.get('origin')
       if (!origin || !isAllowedOrigin(options.origin, origin)) return result
-      const headers = new Headers(result.headers)
+      const headers = new Headers()
       headers.set(
         'access-control-allow-origin',
         isWildcardOrigin(options.origin) ? '*' : origin,
@@ -50,7 +54,7 @@ export function cors(options: CorsOptions = {}) {
           options.exposeHeaders.join(', '),
         )
       }
-      return { ...result, headers }
+      return withHttpFrameworkHeaders(result, Object.fromEntries(headers))
     },
   })
 }

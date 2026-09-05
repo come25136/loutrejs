@@ -130,7 +130,11 @@ export function bearerAuth<
 function authenticationFailure<TResponse extends string, TBody>(
   failure: HttpAuthenticationFailure<TResponse, TBody>,
   challenge: string,
-): HttpExecutionResult<TResponse, TBody> {
+): HttpExecutionResult<
+  TResponse,
+  TBody,
+  { readonly 'www-authenticate': string }
+> {
   return {
     kind: 'http-result',
     response: failure.response,
