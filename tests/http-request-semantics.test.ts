@@ -281,9 +281,15 @@ describe('HTTP request semantics', () => {
           method: 'POST',
           path: '/representations',
           request: {
-            headers: z.object({
-              'content-type': z.enum(['application/json', 'text/plain']),
-            }),
+            headers: z.union([
+              z.object({
+                'content-type': z.literal('application/json'),
+              }),
+              z.object({
+                'content-type': z.literal('text/plain'),
+                'x-custom-header': z.string(),
+              }),
+            ]),
             body: z.union([z.object({ name: z.string() }), z.string()]),
           },
           responses: {
@@ -329,12 +335,27 @@ describe('HTTP request semantics', () => {
     const textResponse = await application.fetch(
       new Request('https://fixture.test/representations', {
         method: 'POST',
-        headers: { 'content-type': 'text/plain; charset=utf-8' },
+        headers: {
+          'content-type': 'text/plain; charset=utf-8',
+          'x-custom-header': 'required-for-text',
+        },
         body: 'otter',
       }),
     )
     expect(textResponse.status).toBe(200)
     expect(await textResponse.json()).toEqual({ kind: 'text', value: 'otter' })
+
+    const invalidTextResponse = await application.fetch(
+      new Request('https://fixture.test/representations', {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain; charset=utf-8' },
+        body: 'otter',
+      }),
+    )
+    expect(invalidTextResponse.status).toBe(400)
+    expect(await invalidTextResponse.json()).toEqual({
+      error: 'Validation failed',
+    })
   })
 
   it('multipart/form-dataをFormDataとして1回だけdecodeする', async () => {

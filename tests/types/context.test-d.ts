@@ -288,3 +288,44 @@ provide(STORAGE).select(TestEnv.key('DRIVER'), {
 })
 // @ts-expect-error finite Env unionの全branchを指定する必要がある
 provide(STORAGE).select(TestEnv.key('DRIVER'), { memory: MemoryStorage })
+
+const RepresentationHeaders = z.union([
+  z.object({ 'content-type': z.literal('application/json') }),
+  z.object({
+    'content-type': z.literal('text/plain'),
+    'x-custom-header': z.string(),
+  }),
+])
+
+const RepresentationContract = contract([
+  http({
+    create: {
+      method: 'POST',
+      path: '/representations',
+      request: {
+        headers: RepresentationHeaders,
+        body: z.union([z.object({ name: z.string() }), z.string()]),
+      },
+      responses: { ok: { status: 200, body: z.string() } },
+      pipeline: [validate.headers, validate.body, http.controller],
+    },
+  }),
+])
+
+type RepresentationController = ControllerOf<
+  typeof RepresentationContract,
+  'http'
+>
+type RepresentationContext = ContextOf<RepresentationController, 'create'>
+declare const representationContext: RepresentationContext
+if (representationContext.input.headers['content-type'] === 'text/plain') {
+  const customHeader: string =
+    representationContext.input.headers['x-custom-header']
+  void customHeader
+} else {
+  const contentType: 'application/json' =
+    representationContext.input.headers['content-type']
+  void contentType
+  // @ts-expect-error application/json variantにはx-custom-headerを要求しない
+  representationContext.input.headers['x-custom-header']
+}

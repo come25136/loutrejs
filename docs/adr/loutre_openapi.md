@@ -71,7 +71,9 @@ bodyを宣言するrequestでは、`request.headers`のinput/output型がrequire
 
 1つのProcedureは複数の`Content-Type`を受け入れられる。media typeごとに同じmethod/pathのProcedureを重複定義するのではなく、header schemaのunion/enumとbody schemaのunionでrequest representationを表現する。
 
-OpenAPI生成時は`request.headers`のStandard JSON Schema input projectionから`content-type` propertyを読み、`const`、`enum`、`anyOf`、`oneOf`で有限な文字列集合へ解決できる場合に`requestBody.content`のkeyへ投影する。有限集合へ正確に解決できない場合は生成を失敗させる。`Content-Type`自体は通常のHeader Parameterとして重複出力しない。
+OpenAPI生成時は`request.headers`のStandard JSON Schema input projectionからobject schemaまたは`anyOf` / `oneOf`によるobject unionを解析する。各variantの`content-type` propertyを`const`、`enum`、`anyOf`、`oneOf`で有限な文字列集合へ解決し、`requestBody.content`のkeyへ投影する。有限集合へ正確に解決できない場合は生成を失敗させる。`Content-Type`自体は通常のHeader Parameterとして重複出力しない。
+
+OpenAPIのParameter Objectはrequest headerを1項目ずつ記述するため、`Content-Type`と別headerのrequirednessなど、header object unionが持つcross-header相関を標準fieldだけで完全には表現できない。その場合、通常のHeader Parameterには全variantの安全な合成を出力し、requiredは全variantで必須の場合だけ`true`とする。同時にOperation Objectの`x-loutre-request-headers`へ元のStandard JSON Schema input projectionを保持し、Loutre-aware toolingがunionと相関をlosslessに復元できるようにする。これは利用者が任意のOpenAPI断片を注入するescape hatchではなく、Contractから決定的に生成するLoutre固有projectionである。
 
 ## Operation metadata
 
@@ -97,7 +99,7 @@ response variant は `description` を宣言できる。
 
 - path parameter は `request.params` から生成し、常に `required: true` とする
 - query schema は OpenAPI 3.2 の `in: querystring` parameter として出力する
-- header schema は top-level `properties` を持つ object JSON Schema へ変換可能である必要があり、各 property を Parameter Object へ投影する
+- header schema はobject JSON Schemaまたは`anyOf` / `oneOf`によるobject unionへ変換し、各named propertyをHeader Parameterへ安全に合成する。元のheader object schemaは`x-loutre-request-headers`にも保持する
 - request bodyは`request.headers`の`content-type`有限集合を`requestBody.content`へ投影し、bodyのStandard JSON Schema input schemaを各media typeで共有する
 - unary response は `application/json` と Standard JSON Schema の output schema を使う
 - 同じ HTTP status を持つ複数の response variant は `oneOf` にまとめる
@@ -112,7 +114,8 @@ response variant は `description` を宣言できる。
 
 - Standard JSON Schema を実装していない schema
 - JSON Schema 変換の失敗
-- named header として表現できない request / response header schema
+- objectまたはobject unionとして解析できないrequest header schema
+- named headerとして表現できないresponse header schema
 - 同じ HTTP status に streaming と non-streaming の互換性がない variant が混在している場合
 - `operationId` の衝突
 
