@@ -565,11 +565,12 @@ Hosted Application APIはexecution kind文字列ではなく、Application Defin
 概念:
 
 ```ts
-type ExtensionsOf<TApplication> =
-  ExtensionOfExecutionDefinitions<ModulesOf<TApplication>>
+type ExtensionsOf<TApplication> = ExtensionOfExecutionDefinitions<
+  ModulesOf<TApplication>
+>
 
-type HostedApplication<TApplication> =
-  BaseApplication & HostApisOf<ExtensionsOf<TApplication>>
+type HostedApplication<TApplication> = BaseApplication &
+  HostApisOf<ExtensionsOf<TApplication>>
 ```
 
 Coreは次を行わない。
