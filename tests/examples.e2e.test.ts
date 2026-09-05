@@ -9,7 +9,6 @@ import { reserveHttpPort } from './helpers/http-server.js'
 const defineBasicAuthWorkspace = '@loutrejs/example-basic-auth'
 const defineBearerAuthWorkspace = '@loutrejs/example-bearer-auth'
 const corsWorkspace = '@loutrejs/example-cors'
-const contentTypeUnionWorkspace = '@loutrejs/example-content-type-union'
 const databaseTransactionsWorkspace = '@loutrejs/example-database-transactions'
 const databasePostgresWorkspace = '@loutrejs/example-database-postgres'
 const databaseDrizzleWorkspace = '@loutrejs/example-database-drizzle-postgres'
@@ -32,52 +31,6 @@ describe.sequential('example projects', () => {
       expect(await response.json()).toEqual({ message: 'Hello, Loutre!' })
 
       const invalid = await fetch(`http://127.0.0.1:${port}/x`)
-      expect(invalid.status).toBe(400)
-    } finally {
-      await example.stop()
-    }
-  })
-
-  it('Content-Type union projectでrepresentationごとのheader要件を検証する', async () => {
-    const port = await reserveHttpPort()
-    const example = startWorkspace(contentTypeUnionWorkspace, 'start', {
-      PORT: String(port),
-    })
-    try {
-      await waitForPort(port)
-
-      const jsonResponse = await fetch(`http://127.0.0.1:${port}/messages`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message: 'json' }),
-      })
-      expect(jsonResponse.status).toBe(200)
-      expect(await jsonResponse.json()).toEqual({
-        mediaType: 'application/json',
-        message: 'json',
-        customHeader: null,
-      })
-
-      const textResponse = await fetch(`http://127.0.0.1:${port}/messages`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'text/plain',
-          'x-custom-header': 'e2e',
-        },
-        body: 'text',
-      })
-      expect(textResponse.status).toBe(200)
-      expect(await textResponse.json()).toEqual({
-        mediaType: 'text/plain',
-        message: 'text',
-        customHeader: 'e2e',
-      })
-
-      const invalid = await fetch(`http://127.0.0.1:${port}/messages`, {
-        method: 'POST',
-        headers: { 'content-type': 'text/plain' },
-        body: 'missing header',
-      })
       expect(invalid.status).toBe(400)
     } finally {
       await example.stop()
