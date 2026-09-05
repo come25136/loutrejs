@@ -2,6 +2,9 @@
 
 import type {
   ArgsClass,
+  ApplicationModel,
+  HostApiOfExtension,
+  ModuleExtensions,
   ModuleProtocols,
   ModuleInstance,
   SchemaInput,
@@ -12,6 +15,7 @@ import type {
   TokenValue,
   TriggerDescriptor,
 } from '../core/index.js'
+import { buildApplicationModel } from '../core/index.js'
 import type { ApplicationGraphIR } from '../graph/index.js'
 import type { Logger } from '../runtime/index.js'
 
@@ -38,6 +42,7 @@ export interface ApplicationDefinition<
   TTriggers extends readonly TriggerDescriptor[] = readonly TriggerDescriptor[],
 > {
   readonly kind: 'application-definition'
+  readonly model: ApplicationModel
   readonly modules: TModules
   readonly arguments: TArguments
   readonly tasks: TTasks
@@ -60,6 +65,12 @@ export function defineApplication<
 ): ApplicationDefinition<TModules, TArguments, TTasks, TTriggers> {
   return Object.freeze({
     kind: 'application-definition',
+    model: buildApplicationModel({
+      modules: options.modules,
+      ...(options.arguments === undefined
+        ? {}
+        : { arguments: options.arguments }),
+    }),
     modules: options.modules,
     arguments: options.arguments as TArguments,
     tasks: options.tasks ?? ([] as unknown as TTasks),
@@ -158,6 +169,19 @@ export type HostedApplication<TDefinition extends ApplicationDefinition> =
 export type InvocationApplication<TDefinition extends ApplicationDefinition> =
   BaseApplication & TaskCapability<TDefinition>
 
+type UnionToIntersection<TUnion> = (
+  TUnion extends unknown ? (value: TUnion) => void : never
+) extends (value: infer TIntersection) => void
+  ? TIntersection
+  : never
+
+export type ApplicationExtensions<TDefinition extends ApplicationDefinition> =
+  ModuleExtensions<TDefinition['modules'][number]>
+
+export type ApplicationExtensionHostApis<
+  TDefinition extends ApplicationDefinition,
+> = UnionToIntersection<HostApiOfExtension<ApplicationExtensions<TDefinition>>>
+
 export { binding } from './binding.js'
 export type {
   HostBinding,
@@ -166,3 +190,4 @@ export type {
   InvocationBindingBaseOptions,
   InvocationBindingOptions,
 } from './binding.js'
+export * from './kernel.js'
