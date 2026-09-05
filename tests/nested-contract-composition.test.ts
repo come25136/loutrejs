@@ -138,6 +138,37 @@ describe('Nested Contract composition', () => {
     await application.close()
   })
 
+  it('型境界を迂回してもbranchとleafの重複validationを拒否する', () => {
+    const UploadContract = contract([
+      http({
+        create: {
+          method: 'POST',
+          path: '/upload',
+          request: {
+            body: {
+              contentType: 'application/json',
+              schema: z.object({ name: z.string() }),
+            },
+          },
+          responses: {
+            ok: { status: 200, body: z.object({ name: z.string() }) },
+          },
+          pipeline: [validate.body, http.controller],
+        },
+      }),
+    ])
+
+    expect(() =>
+      (http as any)({
+        api: {
+          path: '/api',
+          pipeline: [validate.body],
+          routes: { upload: UploadContract.http.create },
+        },
+      }),
+    ).toThrow(/Duplicate HTTP input validation: validate\.body/)
+  })
+
   it('resolved nodeはopaqueで、root identityとcanonical procedureをGraphへ保持する', () => {
     expect(Object.keys(AppContract.http.api)).toEqual(['me'])
     expect(Object.keys(AppContract.http.api.me.profile)).toEqual([])

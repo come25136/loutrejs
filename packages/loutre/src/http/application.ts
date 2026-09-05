@@ -187,7 +187,7 @@ export function createHttpExecution(options: {
           )
 
         try {
-          const decoded = await decodeRequest(
+          const decoded = decodeRequest(
             request,
             url,
             routeMatch.params,
@@ -219,6 +219,12 @@ export function createHttpExecution(options: {
                   : declared
               if (schema) {
                 try {
+                  if (layer.part === 'body') {
+                    context.input.body = await decodeRequestBody(
+                      request,
+                      declared as HttpRequestBodyDefinition,
+                    )
+                  }
                   context.input[layer.part] =
                     layer.part === 'params'
                       ? await validateHttpParamsSchemas(
@@ -230,6 +236,12 @@ export function createHttpExecution(options: {
                           context.input[layer.part],
                         )
                 } catch (error) {
+                  if (
+                    error instanceof HttpInputDecodeError ||
+                    error instanceof HttpUnsupportedMediaTypeError
+                  ) {
+                    throw error
+                  }
                   throw new HttpInputValidationError(error)
                 }
               }
@@ -396,12 +408,12 @@ interface DecodedHttpContext {
   body: unknown
 }
 
-async function decodeRequest(
+function decodeRequest(
   request: Request,
   url: URL,
   params: Record<string, string>,
   definition: HttpProtocolDefinition,
-): Promise<DecodedHttpContext> {
+): DecodedHttpContext {
   const query: Record<string, string | string[]> = {}
   for (const [key, value] of url.searchParams) {
     const current = query[key]
@@ -414,42 +426,47 @@ async function decodeRequest(
   }
 
   const headers = Object.fromEntries(request.headers.entries())
-  let body: unknown = undefined
-  const bodyDefinition = definition.request?.body
-  if (bodyDefinition) {
-    const actualMediaType = normalizeMediaType(
-      request.headers.get('content-type'),
-    )
-    const declaredMediaType = normalizeMediaType(bodyDefinition.contentType)!
-    if (request.body !== null && actualMediaType !== declaredMediaType) {
-      throw new HttpUnsupportedMediaTypeError(
-        declaredMediaType,
-        actualMediaType,
-      )
-    }
-    if (
-      declaredMediaType === 'application/json' ||
-      declaredMediaType.endsWith('+json')
-    ) {
-      try {
-        body = await request.json()
-      } catch (error) {
-        throw new HttpInputDecodeError(error)
-      }
-    } else if (declaredMediaType === 'multipart/form-data') {
-      try {
-        body = await request.formData()
-      } catch (error) {
-        throw new HttpInputDecodeError(error)
-      }
-    } else if (declaredMediaType.startsWith('text/')) {
-      body = await request.text()
-    } else {
-      body = request.body
-    }
-  }
+  const body = definition.request?.body ? request.body : undefined
 
   return { params, query, headers, body }
+}
+
+async function decodeRequestBody(
+  request: Request,
+  definition: HttpRequestBodyDefinition,
+): Promise<unknown> {
+  const actualMediaType = normalizeMediaType(
+    request.headers.get('content-type'),
+  )
+  const declaredMediaType = normalizeMediaType(definition.contentType)!
+  if (request.body !== null && actualMediaType !== declaredMediaType) {
+    throw new HttpUnsupportedMediaTypeError(declaredMediaType, actualMediaType)
+  }
+  if (
+    declaredMediaType === 'application/json' ||
+    declaredMediaType.endsWith('+json')
+  ) {
+    try {
+      return await request.json()
+    } catch (error) {
+      throw new HttpInputDecodeError(error)
+    }
+  }
+  if (declaredMediaType === 'multipart/form-data') {
+    try {
+      return await request.formData()
+    } catch (error) {
+      throw new HttpInputDecodeError(error)
+    }
+  }
+  if (declaredMediaType.startsWith('text/')) {
+    try {
+      return await request.text()
+    } catch (error) {
+      throw new HttpInputDecodeError(error)
+    }
+  }
+  return request.body
 }
 
 function normalizeMediaType(

@@ -400,11 +400,13 @@ type FoldPipelineItemRequirements<
     boolean
   >,
 > = TItem extends ValidationLayerDescriptor
-  ? PipelineRequirementState<
-      TState['available'],
-      TState['validated'] | TItem['part'],
-      TState['valid']
-    >
+  ? TItem['part'] extends TState['validated']
+    ? InvalidPipelineRequirementState
+    : PipelineRequirementState<
+        TState['available'],
+        TState['validated'] | TItem['part'],
+        TState['valid']
+      >
   : TItem extends LayerOccurrenceDescriptor<
         any,
         any,

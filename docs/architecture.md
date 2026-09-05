@@ -722,6 +722,8 @@ Path parameter is raw `string` until validation.
 
 Just by declaring Schema, the value will not be automatically converted, and `validate.params` of Pipeline becomes an explicit refinement boundary.
 
+HTTP body follows the same rule: `validate.body` is the explicit decode and validation boundary. Loutre does not consume `Request.body` before the Pipeline reaches `validate.body`, so a preceding Layer can short-circuit while leaving the body untouched. If `validate.body` is omitted, a Controller with a body declaration receives the unconsumed `ReadableStream<Uint8Array> | null` in `ctx.input.body`, allowing the application to choose its own multipart parser or other body handling. The same `validate.*` item cannot appear more than once in an effective Pipeline. This uniqueness rule also applies after composing branches and Layer child Pipelines, so each input part has a single validation boundary.
+
 CORS and Basic Auth are also configured using layers and typed contexts, rather than adding special mechanisms outside of the protocol.
 
 HTTP-specific validation errors and preflight responses are finalized by the HTTP Protocol.
