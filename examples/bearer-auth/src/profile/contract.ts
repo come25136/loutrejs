@@ -11,7 +11,11 @@ export const BearerProfileContract = http.contract({
     path: '/profile',
     responses: {
       ok: { status: 200, body: User },
-      unauthorized: { status: 401, body: UnauthorizedBody },
+      unauthorized: {
+        status: 401,
+        body: UnauthorizedBody,
+        headers: z.object({ 'www-authenticate': z.string() }),
+      },
     },
     middlewares: [bearerAuthentication],
   },

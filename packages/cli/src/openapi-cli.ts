@@ -1,7 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { generateOpenApi } from '@loutrejs/loutre/openapi'
-import { collectHttpRoutes } from '@loutrejs/http'
+import {
+  collectHttpRoutes,
+  type HttpResponseHeadersDefinition,
+  type HttpResponseHeadersWithDefaults,
+} from '@loutrejs/http'
+import type { StandardSchemaV1 } from '@loutrejs/loutre'
 import { loadApplicationDefinition } from './application-loader.js'
 
 export interface OpenApiCliIO {
@@ -46,13 +51,21 @@ export async function runOpenApiCli(
           responses: Object.fromEntries(
             Object.entries(definition.responses).map(([name, response]) => {
               const { headers, ...rest } = response
-              return [
-                name,
-                {
-                  ...rest,
-                  ...(headers === undefined ? {} : { staticHeaders: headers }),
-                },
-              ]
+              if (headers === undefined) return [name, rest]
+              if (isStandardSchema(headers)) {
+                return [name, { ...rest, headers }]
+              }
+              if (isResponseHeadersWithDefaults(headers)) {
+                return [
+                  name,
+                  {
+                    ...rest,
+                    headers: headers.schema,
+                    staticHeaders: headers.defaults,
+                  },
+                ]
+              }
+              return [name, { ...rest, staticHeaders: headers }]
             }),
           ),
         },
@@ -69,6 +82,21 @@ export async function runOpenApiCli(
   await writeFile(outputPath, serialized, 'utf8')
   io.stdout(`Wrote OpenAPI 3.2 document: ${outputPath}`)
   return 0
+}
+
+function isStandardSchema(value: unknown): value is StandardSchemaV1 {
+  return typeof value === 'object' && value !== null && '~standard' in value
+}
+
+function isResponseHeadersWithDefaults(
+  value: HttpResponseHeadersDefinition,
+): value is HttpResponseHeadersWithDefaults {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'schema' in value &&
+    isStandardSchema(value.schema)
+  )
 }
 
 async function readPackageInfo(

@@ -123,6 +123,59 @@ describe('HTTP Execution Extension', () => {
     await application.close()
   })
 
+  it('固定headerと動的headerをheadersで統一してmergeする', async () => {
+    const contract = http.contract({
+      headers: {
+        method: 'GET',
+        path: '/headers',
+        responses: {
+          ok: {
+            status: 200,
+            body: z.object({ ok: z.boolean() }),
+            headers: {
+              schema: z.object({
+                'x-dynamic': z.string(),
+                'x-overridden': z.string(),
+              }),
+              defaults: {
+                'x-static': 'static',
+                'x-overridden': 'default',
+              },
+            },
+          },
+        },
+      },
+    })
+    const controller = http.implementation({
+      contract,
+      factory: () => ({
+        headers: (context) =>
+          context.response.ok({
+            body: { ok: true },
+            headers: {
+              'x-dynamic': 'dynamic',
+              'x-overridden': 'dynamic',
+            },
+          }),
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+
+    const response = await application.http.fetch(
+      new Request('http://fixture.test/headers'),
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('x-static')).toBe('static')
+    expect(response.headers.get('x-dynamic')).toBe('dynamic')
+    expect(response.headers.get('x-overridden')).toBe('dynamic')
+    await application.close()
+  })
+
   it('HTTP semanticsをExtension内でcompileしてdispatchする', async () => {
     const contract = http.contract({
       getUser: {
@@ -256,6 +309,7 @@ describe('HTTP Execution Extension', () => {
           unauthorized: {
             status: 401,
             body: z.object({ error: z.string() }),
+            headers: z.object({ 'www-authenticate': z.string() }),
           },
         },
         middlewares: [authentication],
@@ -322,6 +376,7 @@ describe('HTTP Execution Extension', () => {
           unauthorized: {
             status: 401,
             body: z.object({ error: z.string() }),
+            headers: z.object({ 'www-authenticate': z.string() }),
           },
         },
         middlewares: [authentication],
