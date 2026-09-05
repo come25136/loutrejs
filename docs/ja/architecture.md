@@ -723,7 +723,6 @@ Path parameterはvalidationされるまではraw `string`です。
 Schemaを宣言しただけで値が自動変換されることはなく、Pipelineの`validate.params`が明示的なrefinement boundaryになります。
 
 HTTP bodyも同様に、`validate.body`がdecodeとvalidationの明示的な境界です。body schemaは`request.body`へ直接宣言し、bodyの表現を決める`Content-Type`はHTTP headerとして`request.headers` schemaへ宣言します。`validate.body`は`validate.headers`より後に置く必要があります。`validate.headers`は`Content-Type`のparameterを除いたmedia typeへ正規化してからheader schemaを検証し、`validate.body`はそのmedia typeに応じてJSON、text、`FormData`またはraw streamへdecodeします。
-`request.headers`はobject schemaだけでなく`anyOf` / `oneOf`相当のobject unionも利用でき、`Content-Type`によって別headerの必須性が変わるContractも型推論・runtime validationできます。OpenAPIではnamed Header Parameterへ安全な合成を出力し、標準fieldだけでは保持できないcross-header相関をOperation Objectの`x-loutre-request-headers`へ元のStandard JSON Schemaとして保持します。
 
 `validate.body`へ到達するまではLoutreは`Request.body`をconsumeせず、前段のLayerがshort circuitした場合もbodyは未消費のままです。`validate.headers` / `validate.body`を置かない場合、Controllerはraw header値と未消費の`ReadableStream<Uint8Array> | null`を受け取れるため、multipart boundaryを含む`Content-Type`を使って任意のparserを選択できます。同じeffective Pipelineに同じ`validate.*`を複数回置くことはできません。branchやLayerのchild Pipelineを含む合成後のPipelineでも、各input partのvalidationは1回だけです。
 

@@ -189,15 +189,19 @@ function createOperation(
       },
     })
   }
-  const requestHeaders = request?.headers
-    ? requestHeadersProjection(request.headers, registry, target)
-    : undefined
-  if (requestHeaders) {
-    parameters.push(...headerParameters(requestHeaders))
+  if (request?.headers) {
+    parameters.push(
+      ...headerParameters(
+        request.headers,
+        registry,
+        target,
+        'RequestHeaders_Input',
+      ),
+    )
   }
 
   const requestBody = request?.body
-    ? createRequestBody(request.body, requestHeaders, registry, target)
+    ? createRequestBody(request.body, request.headers, registry, target)
     : undefined
 
   return {
@@ -210,9 +214,6 @@ function createOperation(
       : { description: definition.description }),
     ...(operationId === undefined ? {} : { operationId }),
     ...(parameters.length === 0 ? {} : { parameters }),
-    ...(requestHeaders === undefined
-      ? {}
-      : { 'x-loutre-request-headers': requestHeaders.schema }),
     ...(requestBody === undefined ? {} : { requestBody }),
     responses: createResponses(target, registry),
     ...(definition.deprecated === undefined
@@ -223,11 +224,11 @@ function createOperation(
 
 function createRequestBody(
   body: NonNullable<NonNullable<HttpProtocolDefinition['request']>['body']>,
-  headers: RequestHeadersProjection | undefined,
+  headers: NonNullable<HttpProtocolDefinition['request']>['headers'],
   registry: SchemaRegistry,
   target: HttpOperationTarget,
 ): OpenApiObject {
-  const mediaTypes = requestBodyMediaTypes(headers, target)
+  const mediaTypes = requestBodyMediaTypes(headers, registry, target)
   const schema = registry.reference(
     body,
     'input',
@@ -240,88 +241,9 @@ function createRequestBody(
   }
 }
 
-interface RequestHeaderVariant {
-  readonly schema: JsonSchema
-  readonly properties: Readonly<Record<string, JsonSchema>>
-  readonly required: ReadonlySet<string>
-}
-
-interface RequestHeadersProjection {
-  readonly schema: JsonSchema
-  readonly variants: readonly RequestHeaderVariant[]
-}
-
-function requestHeadersProjection(
-  schema: StandardSchemaV1,
-  registry: SchemaRegistry,
-  target: HttpOperationTarget,
-): RequestHeadersProjection {
-  const materialized = registry.materialize(
-    schema,
-    'input',
-    componentName(target, 'RequestHeaders_Input'),
-  )
-  return {
-    schema: materialized.schema,
-    variants: requestHeaderVariants(materialized.schema, target),
-  }
-}
-
-function requestHeaderVariants(
-  schema: JsonSchema,
-  target: HttpOperationTarget,
-): readonly RequestHeaderVariant[] {
-  const alternatives = objectSchemaAlternatives(schema)
-  if (!alternatives) {
-    throw openApiError(
-      'LUTRE_OPENAPI_HEADER_SCHEMA_001',
-      `${describeTarget(target)} request headers must convert to an object JSON Schema or a union of object JSON Schemas with properties.`,
-    )
-  }
-  return alternatives.map((alternative) => ({
-    schema: alternative,
-    properties: objectProperties(
-      alternative,
-      'LUTRE_OPENAPI_HEADER_SCHEMA_001',
-      `${describeTarget(target)} request headers variant`,
-    ),
-    required: new Set(
-      Array.isArray(alternative.required)
-        ? alternative.required.filter(
-            (value): value is string => typeof value === 'string',
-          )
-        : [],
-    ),
-  }))
-}
-
-function objectSchemaAlternatives(
-  schema: JsonSchema,
-): readonly JsonSchema[] | undefined {
-  if (schema.type === 'object') return [schema]
-  for (const keyword of ['anyOf', 'oneOf'] as const) {
-    const alternatives = schema[keyword]
-    if (!Array.isArray(alternatives)) continue
-    const result: JsonSchema[] = []
-    for (const alternative of alternatives) {
-      if (
-        typeof alternative !== 'object' ||
-        alternative === null ||
-        Array.isArray(alternative)
-      ) {
-        return undefined
-      }
-      const nested = objectSchemaAlternatives(alternative as JsonSchema)
-      if (!nested) return undefined
-      result.push(...nested)
-    }
-    return result
-  }
-  return undefined
-}
-
 function requestBodyMediaTypes(
-  headers: RequestHeadersProjection | undefined,
+  headers: NonNullable<HttpProtocolDefinition['request']>['headers'],
+  registry: SchemaRegistry,
   target: HttpOperationTarget,
 ): readonly string[] {
   if (!headers) {
@@ -330,25 +252,31 @@ function requestBodyMediaTypes(
       `${describeTarget(target)} request body requires a request headers schema with content-type.`,
     )
   }
-  const mediaTypes: string[] = []
-  for (const variant of headers.variants) {
-    const contentType = variant.properties['content-type']
-    if (!contentType || !variant.required.has('content-type')) {
-      throw openApiError(
-        'LUTRE_OPENAPI_CONTENT_TYPE_001',
-        `${describeTarget(target)} request header variants must require content-type.`,
-      )
-    }
-    const values = finiteStringValues(contentType)
-    if (!values || values.length === 0) {
-      throw openApiError(
-        'LUTRE_OPENAPI_CONTENT_TYPE_002',
-        `${describeTarget(target)} request content-type must resolve to a finite set of string literals.`,
-      )
-    }
-    mediaTypes.push(...values)
+  const materialized = registry.materialize(
+    headers,
+    'input',
+    componentName(target, 'RequestHeaders_Input'),
+  )
+  const properties = objectProperties(
+    materialized.schema,
+    'LUTRE_OPENAPI_HEADER_SCHEMA_001',
+    `${describeTarget(target)} request headers`,
+  )
+  const contentType = properties['content-type']
+  if (!contentType) {
+    throw openApiError(
+      'LUTRE_OPENAPI_CONTENT_TYPE_001',
+      `${describeTarget(target)} request headers must declare content-type.`,
+    )
   }
-  return [...new Set(mediaTypes)]
+  const values = finiteStringValues(contentType)
+  if (!values || values.length === 0) {
+    throw openApiError(
+      'LUTRE_OPENAPI_CONTENT_TYPE_002',
+      `${describeTarget(target)} request content-type must resolve to a finite set of string literals.`,
+    )
+  }
+  return [...new Set(values)]
 }
 
 function finiteStringValues(schema: JsonSchema): readonly string[] | undefined {
@@ -505,31 +433,36 @@ function mergeResponseHeaders(
 }
 
 function headerParameters(
-  projection: RequestHeadersProjection,
+  schema: StandardSchemaV1,
+  registry: SchemaRegistry,
+  target: HttpOperationTarget,
+  suffix: string,
 ): OpenApiObject[] {
-  const names = new Set<string>()
-  for (const variant of projection.variants) {
-    for (const name of Object.keys(variant.properties)) {
-      if (name.toLowerCase() !== 'content-type') names.add(name)
-    }
-  }
-
-  return [...names].map((name) => {
-    const schemas = dedupeJsonSchemas(
-      projection.variants.flatMap((variant) =>
-        variant.properties[name] ? [variant.properties[name]] : [],
-      ),
-    )
-    return {
+  const materialized = registry.materialize(
+    schema,
+    'input',
+    componentName(target, suffix),
+  )
+  const properties = objectProperties(
+    materialized.schema,
+    'LUTRE_OPENAPI_HEADER_SCHEMA_001',
+    `${describeTarget(target)} request headers`,
+  )
+  const required = new Set(
+    Array.isArray(materialized.schema.required)
+      ? materialized.schema.required.filter(
+          (value): value is string => typeof value === 'string',
+        )
+      : [],
+  )
+  return Object.entries(properties)
+    .filter(([name]) => name.toLowerCase() !== 'content-type')
+    .map(([name, propertySchema]) => ({
       name,
       in: 'header',
-      required: projection.variants.every(
-        (variant) =>
-          variant.required.has(name) && variant.properties[name] !== undefined,
-      ),
-      schema: schemas.length === 1 ? schemas[0]! : { anyOf: schemas },
-    }
-  })
+      required: required.has(name),
+      schema: propertySchema,
+    }))
 }
 
 function objectProperties(

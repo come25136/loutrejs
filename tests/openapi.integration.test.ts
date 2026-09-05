@@ -145,22 +145,20 @@ describe('OpenAPI generation', () => {
       operation?.responses['400'].content['application/json'].schema.oneOf,
     ).toHaveLength(2)
   })
-  it('header object unionをrequestBodyとheader parameterへ投影し相関をextensionへ保持する', () => {
+  it('Content-Typeの有限集合をrequestBody contentへ投影する', () => {
     const Contract = contract([
       http({
         create: {
           method: 'POST',
           path: '/representations',
           request: {
-            headers: z.union([
-              z.object({
-                'content-type': z.literal('application/json'),
-              }),
-              z.object({
-                'content-type': z.literal('text/plain'),
-                'x-custom-header': z.string(),
-              }),
-            ]),
+            headers: z.object({
+              'content-type': z.union([
+                z.literal('application/json'),
+                z.literal('text/plain'),
+              ]),
+              'x-request-id': z.string(),
+            }),
             body: z.union([z.object({ value: z.string() }), z.string()]),
           },
           responses: {
@@ -195,25 +193,8 @@ describe('OpenAPI generation', () => {
       'text/plain',
     ])
     expect(operation?.parameters).toEqual([
-      expect.objectContaining({
-        name: 'x-custom-header',
-        in: 'header',
-        required: false,
-        schema: expect.objectContaining({ type: 'string' }),
-      }),
+      expect.objectContaining({ name: 'x-request-id', in: 'header' }),
     ])
-    expect(operation?.['x-loutre-request-headers']).toEqual(
-      expect.objectContaining({
-        anyOf: [
-          expect.objectContaining({
-            required: ['content-type'],
-          }),
-          expect.objectContaining({
-            required: ['content-type', 'x-custom-header'],
-          }),
-        ],
-      }),
-    )
   })
 
   it('Content-Typeを有限集合へ解決できない場合はOpenAPI生成を失敗させる', () => {
