@@ -433,12 +433,9 @@ function createHttpExtensionRuntime(
                 handler(middlewareContext as HttpExecutionContext),
             })
             return await finalizeHttpResult(route.definition, result)
-          } catch (error) {
+          } catch {
             return Response.json(
-              {
-                error: 'Internal Server Error',
-                message: error instanceof Error ? error.message : String(error),
-              },
+              { error: 'Internal Server Error' },
               { status: 500 },
             )
           } finally {

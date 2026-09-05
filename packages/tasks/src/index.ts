@@ -37,6 +37,7 @@ export type TaskArguments<TTask> = [TaskInput<TTask>] extends [void]
   : readonly [input: TaskInput<TTask>]
 
 interface CompiledTask {
+  readonly definition: object
   readonly name: string
   readonly inject: readonly TokenLike[]
   readonly factory: (...dependencies: any[]) => (...arguments_: any[]) => any
@@ -44,7 +45,7 @@ interface CompiledTask {
 
 export interface TasksExtensionRuntime {
   run<TTask extends TaskDefinitionData<any, any, any>>(
-    task: TTask,
+    task: TTask & ExecutionDefinition,
     ...arguments_: TaskArguments<TTask>
   ): Promise<TaskOutput<TTask>>
   drain(): void
@@ -52,7 +53,7 @@ export interface TasksExtensionRuntime {
 
 export interface TasksHostApi {
   run<TTask extends TaskDefinitionData<any, any, any>>(
-    task: TTask,
+    task: TTask & ExecutionDefinition,
     ...arguments_: TaskArguments<TTask>
   ): Promise<TaskOutput<TTask>>
 }
@@ -75,6 +76,7 @@ export const tasksExtension = defineExecutionExtension<
       dependencies: definition.inject,
       capabilities: [],
       compiled: {
+        definition,
         name: definition.name,
         inject: definition.inject,
         factory: definition.factory as CompiledTask['factory'],
@@ -139,7 +141,7 @@ function createTasksRuntime(
   }[],
   applicationRuntime: ExecutionKernelRuntime,
 ): TasksExtensionRuntime {
-  const runtimes = new Map<string, (...arguments_: any[]) => any>()
+  const runtimes = new Map<object, (...arguments_: any[]) => any>()
   for (const execution of executions) {
     const dependencies = execution.compiled.inject.map((token) =>
       applicationRuntime.resolve(token),
@@ -155,11 +157,11 @@ function createTasksRuntime(
       },
       () => execution.compiled.factory(...dependencies),
     )
-    runtimes.set(execution.compiled.name, runtime)
+    runtimes.set(execution.compiled.definition, runtime)
   }
   return {
     async run(definition, ...arguments_) {
-      const runtime = runtimes.get(definition.name)
+      const runtime = runtimes.get(definition)
       if (!runtime) {
         throw new Error(`LUTRE_TASK_NOT_REGISTERED: ${definition.name}`)
       }

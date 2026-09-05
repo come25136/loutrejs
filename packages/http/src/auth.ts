@@ -142,11 +142,16 @@ function authenticationFailure<TResponse extends string, TBody>(
 function decodeBasicCredentials(
   authorization: string | null,
 ): BasicAuthCredentials | undefined {
-  if (!authorization?.startsWith('Basic ')) return undefined
-  const encoded = authorization.slice('Basic '.length).trim()
-  if (encoded.length === 0) return undefined
+  const encoded = /^Basic +([A-Za-z0-9+/]+={0,2})$/i.exec(
+    authorization ?? '',
+  )?.[1]
+  if (!encoded) return undefined
   try {
-    const decoded = atob(encoded)
+    const binary = atob(encoded)
+    const bytes = Uint8Array.from(binary, (character) =>
+      character.charCodeAt(0),
+    )
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     const separator = decoded.indexOf(':')
     if (separator < 0) return undefined
     return {
@@ -159,9 +164,7 @@ function decodeBasicCredentials(
 }
 
 function readBearerToken(authorization: string | null): string | undefined {
-  if (!authorization?.startsWith('Bearer ')) return undefined
-  const token = authorization.slice('Bearer '.length).trim()
-  return token.length === 0 ? undefined : token
+  return /^Bearer +([^\s]+)$/i.exec(authorization ?? '')?.[1]
 }
 
 function escapeChallengeValue(value: string): string {

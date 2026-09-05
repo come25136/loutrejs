@@ -169,7 +169,15 @@ export function buildApplicationModel(
     for (const declaration of module.definition.providers ?? []) {
       const provider = normalizeProvider(declaration)
       const providerId = `provider:${moduleId}:${tokenName(provider.provide)}`
-      if (providerNodes.has(provider.provide)) {
+      const existingProvider = providerNodes.get(provider.provide)
+      if (
+        existingProvider?.provider.kind === 'environment' &&
+        provider.kind === 'environment'
+      ) {
+        edges.push({ from: moduleId, to: existingProvider.id, kind: 'owns' })
+        continue
+      }
+      if (existingProvider) {
         diagnostics.push(
           diagnostic(
             'LUTRE_PROVIDER_DUPLICATE',
@@ -302,6 +310,7 @@ export function buildApplicationModel(
           if (
             providerModule &&
             provider.moduleId !== moduleId &&
+            !moduleDeclaresToken(module, dependency) &&
             !isTokenVisible(module, providerModule, dependency)
           ) {
             diagnostics.push(
@@ -460,6 +469,15 @@ function validateHostNamespaces(
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function moduleDeclaresToken(
+  module: ModuleInstance,
+  token: TokenLike,
+): boolean {
+  return (module.definition.providers ?? []).some(
+    (provider) => normalizeProvider(provider).provide === token,
+  )
 }
 
 function isTokenVisible(

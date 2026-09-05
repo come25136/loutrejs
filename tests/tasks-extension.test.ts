@@ -30,6 +30,13 @@ describe('Task Execution Extension', () => {
     await expect(application.tasks.run(greet, 'loutre')).resolves.toBe(
       'hello:loutre',
     )
+    const unregistered = task<string, string>({
+      name: 'greet',
+      factory: () => async (name) => `unregistered:${name}`,
+    })
+    await expect(application.tasks.run(unregistered, 'loutre')).rejects.toThrow(
+      'LUTRE_TASK_NOT_REGISTERED',
+    )
     expect(application.graph.edges).toContainEqual(
       expect.objectContaining({
         from: 'task.greet',
