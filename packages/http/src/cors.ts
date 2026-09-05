@@ -1,5 +1,5 @@
 import { defineLayer } from '@loutrejs/loutre'
-import type { HttpExecutionResult, HttpLayerContext } from './extension.js'
+import type { HttpExecutionResult, HttpMiddlewareContext } from './extension.js'
 
 export interface CorsOptions {
   readonly origin?: string | readonly string[]
@@ -12,7 +12,7 @@ export interface CorsOptions {
 }
 
 export function cors(options: CorsOptions = {}) {
-  return defineLayer<HttpLayerContext, {}, HttpExecutionResult>({
+  return defineLayer<HttpMiddlewareContext, {}, HttpExecutionResult>({
     name: options.name ?? 'cors',
     factory: () => async (context, next) => {
       const result = await next()

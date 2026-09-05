@@ -10,7 +10,7 @@ const Message = z.object({
   text: z.string(),
 })
 
-const corsLayer = cors({
+const corsMiddleware = cors({
   origin: ['http://localhost:5173'],
   allowMethods: ['POST'],
   allowHeaders: ['content-type'],
@@ -25,7 +25,7 @@ export const MessageContract = http.contract({
     responses: {
       ok: { status: 204 },
     },
-    layers: [corsLayer],
+    middlewares: [corsMiddleware],
   },
   create: {
     method: 'POST',
@@ -43,6 +43,6 @@ export const MessageContract = http.contract({
         },
       },
     },
-    layers: [corsLayer],
+    middlewares: [corsMiddleware],
   },
 })

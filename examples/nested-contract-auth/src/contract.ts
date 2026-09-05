@@ -16,6 +16,6 @@ export const AppContract = http.contract({
         body: z.object({ error: z.string() }),
       },
     },
-    layers: [authentication],
+    middlewares: [authentication],
   },
 })

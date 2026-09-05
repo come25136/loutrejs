@@ -2,7 +2,9 @@
 
 Loutre Application Graph KernelへHTTP request executionを接続する公式Extensionです。
 
-HTTP route、request validation、response、dispatch、Graph projection、Host APIを所有します。CoreはHTTP method、path、status codeを解釈しません。
+HTTP route、request validation、response、middleware、dispatch、Graph projection、Host APIを所有します。CoreはHTTP method、path、status codeを解釈しません。
+
+Coreのgeneric LayerはHTTP上ではMiddlewareとして扱い、routeの`middlewares`へ指定します。
 
 ```ts
 import { defineApplication, defineModule } from '@loutrejs/loutre'

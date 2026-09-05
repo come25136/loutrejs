@@ -110,7 +110,7 @@ describe('HTTP Execution Extension', () => {
       expect.objectContaining({ code: 'LUTRE_HTTP_DUPLICATE_ROUTE' }),
     )
   })
-  it('generic LayerのDI・state・short-circuitをHTTP executionへ合成する', async () => {
+  it('generic LayerのDI・state・short-circuitをHTTP middlewareへ合成する', async () => {
     class UserRepository {
       authenticate(username: string, password: string) {
         return username === 'loutre' && password === 'otter'
@@ -150,7 +150,7 @@ describe('HTTP Execution Extension', () => {
             body: z.object({ error: z.string() }),
           },
         },
-        layers: [authentication],
+        middlewares: [authentication],
       },
     })
     const controller = http.implementation({
