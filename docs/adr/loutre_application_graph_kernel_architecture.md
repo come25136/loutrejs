@@ -484,9 +484,9 @@ interface ExecutionExtension<
   readonly kind: 'execution-extension'
   readonly name: TName
 
-  createRuntime(context: ExecutionExtensionRuntimeContext):
-    | ExecutionExtensionRuntime
-    | Promise<ExecutionExtensionRuntime>
+  createRuntime(
+    context: ExecutionExtensionRuntimeContext,
+  ): ExecutionExtensionRuntime | Promise<ExecutionExtensionRuntime>
 
   project?(context: ExecutionProjectionContext): unknown
 
@@ -596,15 +596,13 @@ HTTPがContract / Implementation splitを必要とする場合はHTTP packageで
 const UsersController = http.implementation({
   contract: UsersApi,
 
-  factory:
-    (users = inject(UserService)) =>
-    ({
-      async get(ctx) {
-        return ctx.response.found({
-          body: await users.get(ctx.params.id),
-        })
-      },
-    }),
+  factory: (users = inject(UserService)) => ({
+    async get(ctx) {
+      return ctx.response.found({
+        body: await users.get(ctx.params.id),
+      })
+    },
+  }),
 })
 ```
 
@@ -614,15 +612,13 @@ WebSocketも独自implementation shapeを持てる。
 const RealtimeController = websocket.implementation({
   contract: Realtime,
 
-  factory:
-    (rooms = inject(RoomService)) =>
-    ({
-      async chat(ctx) {
-        for await (const message of ctx.messages) {
-          // ...
-        }
-      },
-    }),
+  factory: (rooms = inject(RoomService)) => ({
+    async chat(ctx) {
+      for await (const message of ctx.messages) {
+        // ...
+      }
+    },
+  }),
 })
 ```
 
@@ -1074,8 +1070,8 @@ interface HostExtension<TApi extends object> {
 Hosted Application型はApplication Definitionに含まれるExtension contributionsから生成する。
 
 ```ts
-type HostedApplication<TDefinition> =
-  BaseApplication & HostExtensionsOf<TDefinition>
+type HostedApplication<TDefinition> = BaseApplication &
+  HostExtensionsOf<TDefinition>
 ```
 
 Coreは`http`というnamespace名を知らない。
