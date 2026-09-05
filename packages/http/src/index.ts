@@ -5,7 +5,7 @@ export {
   executionHttp as http,
   httpExecutionExtension,
   HTTP_SERVER,
-} from '@loutrejs/loutre/http'
+} from './extension.js'
 export type {
   HttpContract,
   HttpExecutionContext,
@@ -19,10 +19,6 @@ export type {
   HttpHostApi,
   HttpImplementationDefinition,
   HttpServerDriver,
-} from '@loutrejs/loutre/http'
-export {
-  matchHttpPath,
-  normalizeHttpPath,
-  parseHttpPath,
-} from '@loutrejs/loutre/http'
-export type { HttpPathSegment } from '@loutrejs/loutre/http'
+} from './extension.js'
+export { matchHttpPath, normalizeHttpPath, parseHttpPath } from './path.js'
+export type { HttpPathSegment } from './path.js'

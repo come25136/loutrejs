@@ -11,7 +11,7 @@ import {
   type StandardSchemaV1,
   type TokenLike,
   type TokenValue,
-} from '../core/index.js'
+} from '@loutrejs/loutre'
 import {
   assertValidHttpMethod,
   createHttpDispatchKey,
