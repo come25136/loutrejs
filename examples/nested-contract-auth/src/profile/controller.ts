@@ -1,12 +1,10 @@
-import { implementation } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
-import { AppContract } from '../contract.js'
+import { http } from '@loutrejs/http'
 import type { User } from '../auth/user.js'
+import { AppContract } from '../contract.js'
 
-export const ProfileController = implementation({
+export const ProfileController = http.implementation({
   name: 'ProfileController',
-  contract: AppContract.http.api.me.profile,
-  protocol: http,
+  contract: AppContract,
   factory: () => ({
     profile(ctx) {
       const currentUser: User = ctx.state.currentUser

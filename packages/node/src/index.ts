@@ -3,13 +3,20 @@ import { createServer, type Server } from 'node:http'
 import { Readable } from 'node:stream'
 import {
   binding,
+  createKernelApplication,
   type ApplicationDefinition,
+  type ApplicationExtensions,
   type BootstrapArguments,
   type HasHttp,
   type HostBindingApplication,
+  type KernelHostedApplication,
   type InvocationBindingOptions,
 } from '@loutrejs/loutre'
-import { type HttpProtocolExecution } from '@loutrejs/loutre/http'
+import {
+  bindHttpServer,
+  httpExecutionExtension,
+  type HttpHostApi,
+} from '@loutrejs/http'
 import {
   LOUTRE_VERSION,
   detectPresentationTerminal,
@@ -23,12 +30,22 @@ import {
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
+type HasHttpExecutionExtension<TDefinition extends ApplicationDefinition> =
+  Extract<
+    ApplicationExtensions<TDefinition>,
+    typeof httpExecutionExtension
+  > extends never
+    ? false
+    : true
+
 type HttpApplication<TDefinition extends ApplicationDefinition> =
   IsAny<TDefinition> extends true
     ? TDefinition
     : HasHttp<TDefinition> extends true
       ? TDefinition
-      : never
+      : HasHttpExecutionExtension<TDefinition> extends true
+        ? TDefinition
+        : never
 
 export type NodeCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
@@ -46,9 +63,14 @@ export interface NodeListenerHandle {
   readonly port: number
 }
 
+type NodeHostedApplication<TDefinition extends ApplicationDefinition> =
+  HasHttpExecutionExtension<TDefinition> extends true
+    ? KernelHostedApplication<TDefinition>
+    : HostBindingApplication<TDefinition>
+
 export type NodeRuntimeApplication<
   TDefinition extends ApplicationDefinition = ApplicationDefinition,
-> = HostBindingApplication<TDefinition> & {
+> = NodeHostedApplication<TDefinition> & {
   serve(options?: NodeServeOptions): Promise<NodeListenerHandle>
 }
 
@@ -69,23 +91,47 @@ async function create<const TDefinition extends ApplicationDefinition>(
       write: (value) => console.log(value),
     },
   )
-  const host = binding.host({
-    application: options.application,
-    environment: 'environment' in options ? options.environment : process.env,
-    ...('arguments' in options ? { arguments: options.arguments } : {}),
-  } as unknown as InvocationBindingOptions<TDefinition>)
-  const http = 'http' in host ? (host.http as HttpProtocolExecution) : undefined
-  if (!http) {
-    await host.application.close()
-    throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: nodeRuntime.create() requires an HTTP-capable Application.',
-    )
+  const usesHttpExecutionExtension = options.application.model.extensions.some(
+    ({ extension }) => extension === httpExecutionExtension,
+  )
+
+  let application: NodeRuntimeApplication<TDefinition>
+  let http: NodeHttpRequestHandler
+
+  if (usesHttpExecutionExtension) {
+    const hosted = createKernelApplication({
+      application: options.application,
+      capabilities: [bindHttpServer({ runtime: 'node' })],
+      environment: 'environment' in options ? options.environment : process.env,
+      ...('arguments' in options ? { arguments: options.arguments } : {}),
+    })
+    await hosted.init()
+    application = hosted as NodeRuntimeApplication<TDefinition>
+    http = (hosted as unknown as { readonly http: HttpHostApi }).http
+  } else {
+    const host = binding.host({
+      application: options.application,
+      environment: 'environment' in options ? options.environment : process.env,
+      ...('arguments' in options ? { arguments: options.arguments } : {}),
+    } as unknown as InvocationBindingOptions<TDefinition>)
+    const legacyHttp =
+      'http' in host ? (host.http as LegacyHttpProtocolExecution) : undefined
+    if (!legacyHttp) {
+      await host.application.close()
+      throw new Error(
+        'LUTRE_RUNTIME_HTTP_REQUIRED: nodeRuntime.create() requires an HTTP-capable Application.',
+      )
+    }
+    await host.application.init()
+    application = host.application as NodeRuntimeApplication<TDefinition>
+    http = {
+      initialize: () => legacyHttp.initialize(),
+      fetch: (request) => legacyHttp.handle(request),
+      onServerListening: (url) => legacyHttp.onServerListening?.(url),
+    }
   }
 
-  await host.application.init()
-
-  const application = host.application as NodeRuntimeApplication<TDefinition>
-  const closeApplication = host.application.close.bind(host.application)
+  const closeApplication = application.close.bind(application)
   let server: Server | undefined
   let removeShutdownHooks: (() => void) | undefined
   let serving = false
@@ -184,15 +230,27 @@ function registerNodeShutdownHooks(
   return remove
 }
 
+interface LegacyHttpProtocolExecution {
+  initialize(): Promise<void>
+  handle(request: Request): Promise<Response>
+  onServerListening?(url: string): void
+}
+
+interface NodeHttpRequestHandler {
+  initialize?(): Promise<void>
+  fetch(request: Request): Promise<Response>
+  onServerListening?(url: string): void
+}
+
 interface NodeHttpServerDriverOptions {
   readonly onListening?: (url: string) => void
 }
 
 function createNodeHttpServerDriver(
-  application: HttpProtocolExecution,
+  application: NodeHttpRequestHandler,
   options: NodeHttpServerDriverOptions = {},
 ): Server {
-  const initialization = application.initialize()
+  const initialization = application.initialize?.() ?? Promise.resolve()
   void initialization.catch(() => undefined)
 
   const server = createServer(async (incoming, outgoing) => {
@@ -230,7 +288,7 @@ function createNodeHttpServerDriver(
           : {}),
       }
       const request = new Request(new URL(incoming.url ?? '/', origin), init)
-      const response = await application.handle(request)
+      const response = await application.fetch(request)
       outgoing.statusCode = response.status
       response.headers.forEach((value: string, name: string) => {
         if (name !== 'set-cookie') outgoing.setHeader(name, value)
@@ -263,7 +321,7 @@ function createNodeHttpServerDriver(
       address.family === 'IPv6' ? `[${address.address}]` : address.address
     const url = `http://${host}:${address.port}`
     options.onListening?.(url)
-    application.onServerListening(url)
+    application.onServerListening?.(url)
   })
   return server
 }

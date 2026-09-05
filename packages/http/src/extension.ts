@@ -1,11 +1,13 @@
 import {
   defineExecution,
   defineExecutionExtension,
+  composeLayers,
   runtimeCapability,
   runInInjectionContext,
   validateSchema,
   type ExecutionDefinition,
   type ExecutionKernelRuntime,
+  type GenericLayer,
   type RuntimeCapabilityBinding,
   type SchemaOutput,
   type StandardSchemaV1,
@@ -44,7 +46,43 @@ export interface HttpExecutionRouteDefinition {
   readonly path: string
   readonly request?: HttpExecutionRequestDefinition
   readonly responses: Readonly<Record<string, HttpExecutionResponseDefinition>>
+  readonly layers?: readonly AnyHttpLayer[]
 }
+
+type AnyHttpLayer = GenericLayer<any, any, HttpExecutionResult, any>
+
+export type HttpLayer<
+  TContribution extends object = object,
+  TInject extends readonly TokenLike[] = readonly TokenLike[],
+  TContext extends object = HttpLayerContext,
+> = GenericLayer<TContext, TContribution, HttpExecutionResult, TInject>
+
+export interface HttpLayerContext {
+  readonly request: Request
+  readonly params: Readonly<Record<string, unknown>>
+  readonly query: unknown
+  readonly headers: unknown
+  readonly body: unknown
+  readonly signal: AbortSignal
+}
+
+type LayerContribution<TLayer> =
+  TLayer extends GenericLayer<any, infer TContribution, any, any>
+    ? TContribution
+    : {}
+
+type UnionToIntersection<TUnion> = (
+  TUnion extends unknown ? (value: TUnion) => void : never
+) extends (value: infer TIntersection) => void
+  ? TIntersection
+  : never
+
+type HttpLayerState<TRoute extends HttpExecutionRouteDefinition> =
+  TRoute extends {
+    readonly layers: infer TLayers extends readonly AnyHttpLayer[]
+  }
+    ? UnionToIntersection<LayerContribution<TLayers[number]>>
+    : {}
 
 export interface HttpContract<
   TRoutes extends Readonly<Record<string, HttpExecutionRouteDefinition>> =
@@ -108,6 +146,7 @@ export type HttpExecutionContext<
   readonly body: RequestValue<TRoute['request'], 'body', undefined>
   readonly response: ResponseHelpers<TRoute>
   readonly signal: AbortSignal
+  readonly state: Readonly<HttpLayerState<TRoute>>
 }
 
 export type HttpHandlers<TContract extends HttpContract> = {
@@ -135,6 +174,7 @@ interface CompiledHttpRoute {
   readonly segments: readonly HttpPathSegment[]
   readonly dispatch: string
   readonly definition: HttpExecutionRouteDefinition
+  readonly layers: readonly AnyHttpLayer[]
 }
 
 interface CompiledHttpExecution {
@@ -180,6 +220,7 @@ export const httpExecutionExtension = defineExecutionExtension<
           segments,
           dispatch: createHttpDispatchKey(route.method, segments),
           definition: route,
+          layers: route.layers ?? [],
         })
       },
     )
@@ -190,8 +231,22 @@ export const httpExecutionExtension = defineExecutionExtension<
         `${context.moduleId}.http.${context.definitionIndex}`,
       executionKind: 'http.request',
       extension: definition.extension,
-      dependencies: definition.inject,
-      capabilities: [HTTP_SERVER],
+      dependencies: [
+        ...new Set([
+          ...definition.inject,
+          ...routes.flatMap((route) =>
+            route.layers.flatMap((layer) => layer.inject),
+          ),
+        ]),
+      ],
+      capabilities: [
+        ...new Set([
+          HTTP_SERVER,
+          ...routes.flatMap((route) =>
+            route.layers.flatMap((layer) => layer.capabilities),
+          ),
+        ]),
+      ],
       compiled: {
         routes,
         inject: definition.inject,
@@ -351,7 +406,13 @@ function createHttpExtensionRuntime(
                 `LUTRE_HTTP_HANDLER_MISSING: ${execution.id}.${route.name}`,
               )
             }
-            const result = await handler(context)
+            const result = await composeLayers({
+              context,
+              layers: route.layers,
+              resolve: (token) => applicationRuntime.resolve(token),
+              terminal: async (layerContext) =>
+                handler(layerContext as HttpExecutionContext),
+            })
             return await finalizeHttpResult(route.definition, result)
           } catch (error) {
             return Response.json(

@@ -1,17 +1,18 @@
-import { implementation } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/http'
 import { MessageContract } from './contract.js'
 
-export const MessageController = implementation({
+export const MessageController = http.implementation({
   name: 'MessageController',
   contract: MessageContract,
-  protocol: http,
   factory: () => ({
+    preflight(ctx) {
+      return ctx.response.ok({})
+    },
     create(ctx) {
       return ctx.response.created({
         body: {
           id: crypto.randomUUID(),
-          text: ctx.input.body.text,
+          text: ctx.body.text,
         },
       })
     },

@@ -1,14 +1,19 @@
-import { bootstrap } from '@loutrejs/loutre/host'
+import { bootstrapApplication } from '@loutrejs/loutre'
+import { bindHttpServer } from '@loutrejs/http'
 import { afterAll, describe, expect, it } from 'vitest'
 import application from './app.js'
 
-const hosted = bootstrap({ application, environment: {} })
+const hosted = await bootstrapApplication({
+  application,
+  environment: {},
+  capabilities: [bindHttpServer({ runtime: 'test' })],
+})
 
 afterAll(() => hosted.close())
 
 describe('Basic認証サンプル', () => {
   it('Authorization headerがなければ401を返す', async () => {
-    const response = await hosted.fetch(
+    const response = await hosted.http.fetch(
       new Request('http://example.test/profile'),
     )
 
@@ -22,7 +27,7 @@ describe('Basic認証サンプル', () => {
   })
 
   it('資格情報が不正なら401を返す', async () => {
-    const response = await hosted.fetch(
+    const response = await hosted.http.fetch(
       new Request('http://example.test/profile', {
         headers: { authorization: `Basic ${btoa('loutre:wrong')}` },
       }),
@@ -32,7 +37,7 @@ describe('Basic認証サンプル', () => {
   })
 
   it('資格情報が正しければプロフィールを返す', async () => {
-    const response = await hosted.fetch(
+    const response = await hosted.http.fetch(
       new Request('http://example.test/profile', {
         headers: { authorization: `Basic ${btoa('loutre:otter')}` },
       }),

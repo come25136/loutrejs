@@ -5,7 +5,7 @@ import { ProfileController } from './profile/controller.js'
 const AppModule = defineModule(() => ({
   environment: [AppEnv],
   description: 'Nested Contract authentication and inherited Context example',
-  implementations: [ProfileController],
+  executions: [ProfileController],
 }))
 
 export default defineApplication({

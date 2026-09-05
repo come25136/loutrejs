@@ -1,15 +1,8 @@
-import { type } from '@loutrejs/loutre'
-import { basicAuth } from '@loutrejs/loutre/http'
+import { basicAuth } from '@loutrejs/http'
 
 export const authentication = basicAuth({
   name: 'authentication',
   realm: 'Loutre Nested Contract Example',
-  state: type<{
-    currentUser: {
-      id: string
-      name: string
-    }
-  }>(),
   factory: () => ({
     authenticate({ username, password }) {
       if (username !== 'loutre' || password !== 'otter') return undefined

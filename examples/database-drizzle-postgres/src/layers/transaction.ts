@@ -1,24 +1,22 @@
-import { type, layer, inject } from '@loutrejs/loutre'
+import { defineLayer } from '@loutrejs/loutre'
+import type { HttpExecutionResult, HttpLayerContext } from '@loutrejs/http'
 import {
   DrizzleDatabase,
   type DrizzleTransaction,
 } from '../database/drizzle.js'
 
-export const transaction = layer({
+export const transaction = defineLayer<
+  HttpLayerContext,
+  { readonly transaction: DrizzleTransaction },
+  HttpExecutionResult,
+  readonly [typeof DrizzleDatabase]
+>({
   name: 'database.transaction',
-  state: type<{ transaction: DrizzleTransaction }>(),
-  factory:
-    (database = inject(DrizzleDatabase)) =>
-    async (_ctx, next) => {
-      await database.transaction(
-        async (client) => {
-          await next({ transaction: client })
-        },
-        {
-          isolationLevel: 'read committed',
-          accessMode: 'read write',
-          deferrable: false,
-        },
-      )
-    },
+  inject: [DrizzleDatabase],
+  factory: (database) => async (_context, next) =>
+    database.transaction((client) => next({ transaction: client }), {
+      isolationLevel: 'read committed',
+      accessMode: 'read write',
+      deferrable: false,
+    }),
 })

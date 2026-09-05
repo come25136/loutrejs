@@ -14,13 +14,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@loutrejs/http": "0.5.0",
     "@loutrejs/loutre": "0.5.0",
-    "zod": "^4.4.3",
-    "@loutrejs/node": "0.5.0"
+    "@loutrejs/node": "0.5.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@loutrejs/cli": "0.5.0",
-    "typescript": "^7.0.2",
-    "tsx": "^4.23.12"
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
   }
 }

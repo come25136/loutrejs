@@ -1,4 +1,4 @@
-import type { BasicAuthCredentials } from '@loutrejs/loutre/http'
+import type { BasicAuthCredentials } from '@loutrejs/http'
 import type { User } from './user.js'
 
 export class UserRepository {

@@ -33,6 +33,28 @@ describe('Execution Extension package境界', () => {
     },
   )
 
+  it('@loutrejs/nodeはlegacy HTTP subpathへ依存しない', async () => {
+    const sources = await readTypeScriptSources(
+      resolve(repository, 'packages', 'node', 'src'),
+    )
+
+    for (const [path, source] of sources) {
+      expect(source, path).not.toMatch(
+        /(?:from\s+|import\s*\()['"]@loutrejs\/loutre\/http['"]/u,
+      )
+    }
+  })
+
+  it('examplesはlegacy HTTP / MessagePort subpathを使わない', async () => {
+    const sources = await readTypeScriptSources(resolve(repository, 'examples'))
+
+    for (const [path, source] of sources) {
+      expect(source, path).not.toMatch(
+        /(?:from\s+|import\s*\()['"]@loutrejs\/loutre\/(?:http|message-port)(?:\/[^'"]+)?['"]/u,
+      )
+    }
+  })
+
   it('Core packageはExecution Extension packageへ依存しない', async () => {
     const manifest = JSON.parse(
       await readFile(
