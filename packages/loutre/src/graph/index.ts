@@ -1,4 +1,5 @@
 export * from './ir.js'
+export * from './model.js'
 export {
   StaticValidationError,
   assertValidCompilation,

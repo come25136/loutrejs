@@ -1,5 +1,4 @@
-import { contract } from '@loutrejs/loutre'
-import { http, validate } from '@loutrejs/loutre/http'
+import { cors, http } from '@loutrejs/http'
 import { z } from 'zod'
 
 const CreateMessageBody = z.object({
@@ -11,36 +10,39 @@ const Message = z.object({
   text: z.string(),
 })
 
-export const MessageContract = contract([
-  http({
-    create: {
-      method: 'POST',
-      path: '/messages',
-      request: {
-        headers: z.object({ 'content-type': z.literal('application/json') }),
-        body: CreateMessageBody,
-      },
-      responses: {
-        created: {
-          status: 201,
-          body: Message,
-          staticHeaders: {
-            'x-request-id': 'cors-example',
-          },
+const corsMiddleware = cors({
+  origin: ['http://localhost:5173'],
+  allowMethods: ['POST'],
+  allowHeaders: ['content-type'],
+  exposeHeaders: ['x-request-id'],
+  maxAge: 600,
+})
+
+export const MessageContract = http.contract({
+  preflight: {
+    method: 'OPTIONS',
+    path: '/messages',
+    responses: {
+      ok: { status: 204 },
+    },
+    middlewares: [corsMiddleware],
+  },
+  create: {
+    method: 'POST',
+    path: '/messages',
+    request: {
+      headers: z.object({ 'content-type': z.literal('application/json') }),
+      body: CreateMessageBody,
+    },
+    responses: {
+      created: {
+        status: 201,
+        body: Message,
+        headers: {
+          'x-request-id': 'cors-example',
         },
       },
-      pipeline: [
-        validate.cors({
-          origin: ['http://localhost:5173'],
-          allowMethods: ['POST'],
-          allowHeaders: ['content-type'],
-          exposeHeaders: ['x-request-id'],
-          maxAge: 600,
-        }),
-        validate.headers,
-        validate.body,
-        http.controller,
-      ],
     },
-  }),
-])
+    middlewares: [corsMiddleware],
+  },
+})

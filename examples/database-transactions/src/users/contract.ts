@@ -1,5 +1,4 @@
-import { contract } from '@loutrejs/loutre'
-import { http, validate } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/http'
 import { z } from 'zod'
 import { authentication } from '../layers/authentication.js'
 import { authorization } from '../layers/authorization.js'
@@ -13,24 +12,17 @@ const UserResponse = z.object({
   createdBy: z.string(),
 })
 
-export const UsersContract = contract([
-  http({
-    create: {
-      method: 'POST',
-      path: '/users',
-      request: {
-        headers: z.object({ 'content-type': z.literal('application/json') }),
-        body: CreateUserBody,
-      },
-      responses: {
-        created: { status: 201, body: UserResponse },
-      },
-      pipeline: [
-        authentication,
-        validate.headers,
-        validate.body,
-        transaction([authorization, http.controller]),
-      ],
+export const UsersContract = http.contract({
+  create: {
+    method: 'POST',
+    path: '/users',
+    request: {
+      headers: z.object({ 'content-type': z.literal('application/json') }),
+      body: CreateUserBody,
     },
-  }),
-])
+    responses: {
+      created: { status: 201, body: UserResponse },
+    },
+    middlewares: [authentication, transaction, authorization],
+  },
+})

@@ -6,7 +6,7 @@ const AppModule = defineModule(() => ({
   environment: [AppEnv],
   name: 'MessageModule',
   description: 'Example HTTP API with CORS enabled',
-  implementations: [MessageController],
+  executions: [MessageController],
 }))
 
 export default defineApplication({

@@ -8,7 +8,7 @@ const AppModule = defineModule(() => ({
   name: 'DatabasePrismaPostgresExample',
   environment: [AppEnv],
   providers: [PrismaDatabase, UserRepository],
-  implementations: [UsersController],
+  executions: [UsersController],
 }))
 
 export default defineApplication({ modules: [AppModule()] })

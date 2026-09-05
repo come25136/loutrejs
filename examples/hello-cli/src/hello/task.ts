@@ -1,10 +1,8 @@
-import { inject, task } from '@loutrejs/loutre'
+import { task } from '@loutrejs/tasks'
 import { AppArgs } from '../config/args.js'
 
-export const hello = task<void, string>({
+export const hello = task<void, string, readonly [typeof AppArgs]>({
   name: 'hello',
-  factory:
-    (args = inject(AppArgs)) =>
-    () =>
-      `Hello, ${args.name}!`,
+  inject: [AppArgs],
+  factory: (args) => () => `Hello, ${args.name}!`,
 })

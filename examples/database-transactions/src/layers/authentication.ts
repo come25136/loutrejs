@@ -1,13 +1,12 @@
-import { type, layer } from '@loutrejs/loutre'
+import { defineLayer } from '@loutrejs/loutre'
+import type { HttpExecutionResult, HttpMiddlewareContext } from '@loutrejs/http'
 
-export const authentication = layer({
+export const authentication = defineLayer<
+  HttpMiddlewareContext,
+  { readonly currentUser: { readonly id: string } },
+  HttpExecutionResult
+>({
   name: 'authentication.demo',
-  state: type<{
-    currentUser: {
-      readonly id: string
-    }
-  }>(),
-  factory: () => async (_ctx, next) => {
-    await next({ currentUser: { id: 'demo-user' } })
-  },
+  factory: () => async (_context, next) =>
+    next({ currentUser: { id: 'demo-user' } }),
 })

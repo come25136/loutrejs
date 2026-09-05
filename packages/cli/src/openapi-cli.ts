@@ -1,6 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { generateOpenApi } from '@loutrejs/loutre/openapi'
+import {
+  collectHttpRoutes,
+  type HttpResponseHeadersDefinition,
+  type HttpResponseHeadersWithDefaults,
+} from '@loutrejs/http'
+import type { StandardSchemaV1 } from '@loutrejs/loutre'
 import { loadApplicationDefinition } from './application-loader.js'
 
 export interface OpenApiCliIO {
@@ -37,6 +43,34 @@ export async function runOpenApiCli(
   const application = await loadApplicationDefinition(resolve(io.cwd, entry))
   const document = generateOpenApi(application, {
     info: { title, version },
+    routes: collectHttpRoutes(application.model).map(
+      ({ procedure, definition }) => ({
+        procedure,
+        definition: {
+          ...definition,
+          responses: Object.fromEntries(
+            Object.entries(definition.responses).map(([name, response]) => {
+              const { headers, ...rest } = response
+              if (headers === undefined) return [name, rest]
+              if (isStandardSchema(headers)) {
+                return [name, { ...rest, headers }]
+              }
+              if (isResponseHeadersWithDefaults(headers)) {
+                return [
+                  name,
+                  {
+                    ...rest,
+                    headers: headers.schema,
+                    staticHeaders: headers.defaults,
+                  },
+                ]
+              }
+              return [name, { ...rest, staticHeaders: headers }]
+            }),
+          ),
+        },
+      }),
+    ),
   })
   const serialized = `${JSON.stringify(document, null, 2)}\n`
   if (!output) {
@@ -48,6 +82,21 @@ export async function runOpenApiCli(
   await writeFile(outputPath, serialized, 'utf8')
   io.stdout(`Wrote OpenAPI 3.2 document: ${outputPath}`)
   return 0
+}
+
+function isStandardSchema(value: unknown): value is StandardSchemaV1 {
+  return typeof value === 'object' && value !== null && '~standard' in value
+}
+
+function isResponseHeadersWithDefaults(
+  value: HttpResponseHeadersDefinition,
+): value is HttpResponseHeadersWithDefaults {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'schema' in value &&
+    isStandardSchema(value.schema)
+  )
 }
 
 async function readPackageInfo(
