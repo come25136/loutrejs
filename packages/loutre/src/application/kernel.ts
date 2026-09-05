@@ -42,8 +42,10 @@ export function createKernelApplication<
 >(
   options: KernelApplicationOptions<TDefinition>,
 ): KernelHostedApplication<TDefinition> {
+  const logger = options.logger ?? options.application.logger
   const runtime = new ApplicationKernelRuntime(options.application.model, {
     ...options,
+    ...(logger === undefined ? {} : { logger }),
     ...('environment' in options
       ? { environmentSource: options.environment }
       : {}),

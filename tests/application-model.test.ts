@@ -1,19 +1,23 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { z } from 'zod'
 import {
   ApplicationKernelRuntime,
   bindRuntimeCapability,
   bootstrapApplication,
   buildApplicationModel,
   defineApplication,
+  defineEnv,
   defineExecution,
   defineExecutionExtension,
   defineModule,
+  inject,
   projectApplicationModel,
   runtimeCapability,
   type ExecutionDefinition,
   type ExecutionExtensionRuntimeContext,
   type ExecutionExtensionRuntime,
 } from '@loutrejs/loutre'
+import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
 
 interface ProbeDriver {
   invoke(name: string): Promise<string>
@@ -126,6 +130,50 @@ function createProbeExtension(events: string[] = []) {
 }
 
 describe('Application Model', () => {
+  it('同一Environment Contractを複数Moduleで共有する', async () => {
+    class SharedEnv extends defineEnv(z.object({ VALUE: z.string() })) {}
+    const FirstModule = defineModule(() => ({ environment: [SharedEnv] }))
+    const SecondModule = defineModule(() => ({ environment: [SharedEnv] }))
+    const definition = defineApplication({
+      modules: [FirstModule(), SecondModule()],
+    })
+
+    expect(definition.model.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_PROVIDER_DUPLICATE' }),
+    )
+    expect(
+      definition.model.providers.filter(
+        (provider) => provider.provide === SharedEnv,
+      ),
+    ).toHaveLength(1)
+
+    const application = await bootstrapApplication({
+      application: definition,
+      environment: { VALUE: 'shared' },
+    })
+    expect(application.get(SharedEnv).VALUE).toBe('shared')
+    await application.close()
+  })
+
+  it('Application DefinitionのLoggerをProviderへ引き継ぐ', async () => {
+    const records: LogRecord[] = []
+    const logger = new Logger({ write: (record) => records.push(record) })
+    class Service {
+      readonly logger = inject(Logger)
+    }
+    const Module = defineModule(() => ({ providers: [Service] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()], logger }),
+    })
+
+    application.get(Service).logger.info('Kernel Loggerを利用しました')
+
+    expect(records).toContainEqual(
+      expect.objectContaining({ message: 'Kernel Loggerを利用しました' }),
+    )
+    await application.close()
+  })
+
   it('compile済みcontributionをRuntimeとGraph projectionで共有する', async () => {
     const fixture = createProbeExtension()
     const execution = defineExecution(fixture.extension, {

@@ -8,13 +8,85 @@ import {
 } from '@loutrejs/loutre'
 import {
   basicAuth,
+  bearerAuth,
   bindHttpServer,
+  cors,
   http,
   type HttpExecutionContext,
   type HttpHostApi,
 } from '@loutrejs/http'
 
 describe('HTTP Execution Extension', () => {
+  it('内部例外の詳細を500 responseへ公開しない', async () => {
+    const contract = http.contract({
+      failure: {
+        method: 'GET',
+        path: '/failure',
+        responses: { ok: { status: 204 } },
+      },
+    })
+    const controller = http.implementation({
+      contract,
+      factory: () => ({
+        failure() {
+          throw new Error('database-password=secret')
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+
+    const response = await application.http.fetch(
+      new Request('http://fixture.test/failure'),
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Internal Server Error',
+    })
+    await application.close()
+  })
+
+  it('credential CORSのwildcardを拒否し特定originへVaryを付与する', async () => {
+    expect(() => cors({ credentials: true })).toThrow(
+      'CORS origin cannot be a wildcard',
+    )
+
+    const corsMiddleware = cors({ origin: ['https://app.example.com'] })
+    const contract = http.contract({
+      hello: {
+        method: 'GET',
+        path: '/hello',
+        responses: { ok: { status: 204 } },
+        middlewares: [corsMiddleware],
+      },
+    })
+    const controller = http.implementation({
+      contract,
+      factory: () => ({ hello: (context) => context.response.ok({}) }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+
+    const response = await application.http.fetch(
+      new Request('http://fixture.test/hello', {
+        headers: { origin: 'https://app.example.com' },
+      }),
+    )
+
+    expect(response.headers.get('access-control-allow-origin')).toBe(
+      'https://app.example.com',
+    )
+    expect(response.headers.get('vary')).toBe('Origin')
+    await application.close()
+  })
+
   it('HTTP semanticsをExtension内でcompileしてdispatchする', async () => {
     const contract = http.contract({
       getUser: {
@@ -113,7 +185,7 @@ describe('HTTP Execution Extension', () => {
   it('generic LayerのDI・state・short-circuitをHTTP middlewareへ合成する', async () => {
     class UserRepository {
       authenticate(username: string, password: string) {
-        return username === 'loutre' && password === 'otter'
+        return username === 'かわうそ' && password === '秘密'
           ? { id: 'user-1', name: 'Loutre User' }
           : undefined
       }
@@ -181,7 +253,7 @@ describe('HTTP Execution Extension', () => {
     const authorized = await application.http.fetch(
       new Request('http://fixture.test/profile', {
         headers: {
-          authorization: `Basic ${btoa('loutre:otter')}`,
+          authorization: `basic ${base64Utf8('かわうそ:秘密')}`,
         },
       }),
     )
@@ -192,4 +264,54 @@ describe('HTTP Execution Extension', () => {
     })
     await application.close()
   })
+
+  it('Bearer schemeを大小文字に依存せず解釈する', async () => {
+    const authentication = bearerAuth({
+      realm: 'Loutre Test',
+      factory: () => ({
+        authenticate: (token: string) =>
+          token === 'valid-token' ? { authenticated: true } : undefined,
+        unauthorized: () => ({
+          response: 'unauthorized',
+          body: { error: 'Authentication required' },
+        }),
+      }),
+    })
+    const contract = http.contract({
+      profile: {
+        method: 'GET',
+        path: '/bearer-profile',
+        responses: {
+          ok: { status: 204 },
+          unauthorized: {
+            status: 401,
+            body: z.object({ error: z.string() }),
+          },
+        },
+        middlewares: [authentication],
+      },
+    })
+    const controller = http.implementation({
+      contract,
+      factory: () => ({ profile: (context) => context.response.ok({}) }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+
+    const response = await application.http.fetch(
+      new Request('http://fixture.test/bearer-profile', {
+        headers: { authorization: 'bearer valid-token' },
+      }),
+    )
+
+    expect(response.status).toBe(204)
+    await application.close()
+  })
 })
+
+function base64Utf8(value: string): string {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(value)))
+}
