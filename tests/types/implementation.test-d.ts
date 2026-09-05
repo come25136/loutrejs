@@ -25,11 +25,11 @@ const Contract = contract([
       request: {
         params: { id: z.coerce.number() },
         query: z.object({ page: z.coerce.number() }),
-        headers: z.object({ authorization: z.string() }),
-        body: {
-          contentType: 'application/json',
-          schema: z.object({ name: z.string() }),
-        },
+        headers: z.object({
+          'content-type': z.literal('application/json'),
+          authorization: z.string(),
+        }),
+        body: z.object({ name: z.string() }),
       },
       responses: { ok: { status: 200, body: z.string() } },
       pipeline: [

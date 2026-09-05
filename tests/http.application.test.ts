@@ -30,11 +30,11 @@ describe('HTTP application boundary', () => {
           request: {
             params: { id: z.string().min(2) },
             query: z.object({ page: z.coerce.number().int() }),
-            headers: z.object({ 'x-kind': z.literal('fixture') }),
-            body: {
-              contentType: 'application/json',
-              schema: z.object({ name: z.string() }),
-            },
+            headers: z.object({
+              'content-type': z.literal('application/json'),
+              'x-kind': z.literal('fixture'),
+            }),
+            body: z.object({ name: z.string() }),
           },
           responses: {
             updated: {
@@ -199,6 +199,21 @@ describe('HTTP application boundary', () => {
     expect(response.status).toBe(204)
     expect(response.headers.get('content-type')).toBeNull()
     expect(await response.text()).toBe('')
+  })
+
+  it('型境界を迂回してもvalidate.bodyをheaders validationより先に置けない', () => {
+    expect(() =>
+      (http.route as any)({
+        method: 'POST',
+        path: '/invalid-body-validation-order',
+        request: {
+          headers: z.object({ 'content-type': z.literal('application/json') }),
+          body: z.object({ value: z.string() }),
+        },
+        responses: { ok: { status: 200, body: z.string() } },
+        pipeline: [validate.body, validate.headers, http.controller],
+      }),
+    ).toThrow('validate.body requires validate.headers before it')
   })
 
   it('型境界を迂回しても不正なHTTP response statusを拒否する', () => {
@@ -443,10 +458,8 @@ function createInputDecodeFixture() {
         path: '/decode/{value}',
         request: {
           params: { value: z.string() },
-          body: {
-            contentType: 'application/json',
-            schema: z.object({}).optional(),
-          },
+          headers: z.object({ 'content-type': z.literal('application/json') }),
+          body: z.object({}).optional(),
         },
         responses: {
           ok: {
@@ -454,7 +467,12 @@ function createInputDecodeFixture() {
             body: z.object({ value: z.string() }),
           },
         },
-        pipeline: [validate.params, validate.body, http.controller],
+        pipeline: [
+          validate.params,
+          validate.headers,
+          validate.body,
+          http.controller,
+        ],
       },
     }),
   ])

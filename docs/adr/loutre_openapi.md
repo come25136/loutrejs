@@ -49,24 +49,29 @@ Loutre 独自の Zod 専用 OpenAPI DSL は追加しない。Standard JSON Schem
 
 ## HTTP request body Contract
 
-request body は `Content-Type` を明示して宣言する。
+request bodyのschemaは`request.body`へ直接宣言する。bodyの表現を決める`Content-Type`はbody固有metadataとして二重管理せず、HTTP headerとして`request.headers` schemaへ宣言する。
 
 ```ts
 request: {
-  body: {
-    contentType: 'application/json',
-    schema: CreateUser,
-  },
+  headers: z.object({
+    'content-type': z.enum([
+      'application/json',
+      'text/plain',
+    ]),
+  }),
+  body: z.union([JsonInput, TextInput]),
 }
 ```
 
-従来の `body: schema` 形式は削除する。これは意図した破壊的変更とする。
+旧`body: { contentType, schema }`形式は廃止する。`Content-Type`はwire上のheaderであり、typed client、runtime validation、body decode、OpenAPI projectionが同じheader宣言をsource of truthとして利用する。
 
-プロパティ名は `mediaType` ではなく `contentType` とする。OpenAPI の `content` map の key は media type だが、Loutre の Contract が宣言しているものは HTTP request の `Content-Type` だからである。利用側 API では HTTP の概念をそのまま名前に使う。
+bodyを宣言するrequestでは、`request.headers`のinput/output型がrequiredな`content-type: string`を持つ必要がある。`validate.body`は`validate.headers`より後に置く。runtimeはheader validation時に`Content-Type`から`charset`やmultipart `boundary`などのparameterを除いてmedia typeへ正規化し、その値をheader schemaへ渡す。header validation後に`validate.body`へ到達した時点で、実際のmedia typeに応じてbodyをdecodeしてbody schemaを検証する。
 
-宣言した `contentType` は runtime decode と OpenAPI 生成の両方で共有する。body を持つ request の `Content-Type` が宣言値と一致しない場合、HTTP runtime は `415 Unsupported Media Type` を返す。
+`validate.headers` / `validate.body`を置かない場合はraw HTTP handlingとして扱う。`ctx.input.headers`にはparameterを含む元のheader値、`ctx.input.body`には未消費の`ReadableStream`を渡すため、Application側のmultipart parserなどがboundaryを直接利用できる。
 
-これにより、実際の HTTP runtime contract と生成される API description の乖離を防ぐ。
+1つのProcedureは複数の`Content-Type`を受け入れられる。media typeごとに同じmethod/pathのProcedureを重複定義するのではなく、header schemaのunion/enumとbody schemaのunionでrequest representationを表現する。
+
+OpenAPI生成時は`request.headers`のStandard JSON Schema input projectionから`content-type` propertyを読み、`const`、`enum`、`anyOf`、`oneOf`で有限な文字列集合へ解決できる場合に`requestBody.content`のkeyへ投影する。有限集合へ正確に解決できない場合は生成を失敗させる。`Content-Type`自体は通常のHeader Parameterとして重複出力しない。
 
 ## Operation metadata
 
@@ -93,7 +98,7 @@ response variant は `description` を宣言できる。
 - path parameter は `request.params` から生成し、常に `required: true` とする
 - query schema は OpenAPI 3.2 の `in: querystring` parameter として出力する
 - header schema は top-level `properties` を持つ object JSON Schema へ変換可能である必要があり、各 property を Parameter Object へ投影する
-- request body は宣言された `contentType` と Standard JSON Schema の input schema を使う
+- request bodyは`request.headers`の`content-type`有限集合を`requestBody.content`へ投影し、bodyのStandard JSON Schema input schemaを各media typeで共有する
 - unary response は `application/json` と Standard JSON Schema の output schema を使う
 - 同じ HTTP status を持つ複数の response variant は `oneOf` にまとめる
 - server-stream response は `text/event-stream` とし、event payload を `itemSchema` で表現する
@@ -118,7 +123,7 @@ response variant は `description` を宣言できる。
 - 実行時の schema object を serializable Application Graph IR に埋め込むこと
 - Zod 専用 OpenAPI adapter を追加すること
 - CORS preflight を application operation として生成すること
-- Content-Type を推測したり、未対応 schema を `{}` へ置き換えたりすること
+- Content-Typeを推測したり、有限集合へ解決できないheader schemaや未対応schemaを`{}`へ置き換えたりすること
 - HTTP Contract に無制限な `openapi: { ... }` escape hatch を追加すること
 
 ## Follow-up

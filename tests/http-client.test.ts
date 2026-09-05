@@ -2,6 +2,7 @@ import { contract } from '@loutrejs/loutre'
 import {
   HttpClientResponseError,
   createHttpClient,
+  fetchHttpTransport,
   http,
   type HttpClientTransportRequest,
 } from '@loutrejs/loutre/http'
@@ -16,11 +17,11 @@ describe('HTTP typed client', () => {
           request: {
             params: { id: z.string() },
             query: z.object({ notify: z.boolean() }),
-            headers: z.object({ 'x-request-id': z.string() }),
-            body: {
-              contentType: 'application/json',
-              schema: z.object({ name: z.string() }),
-            },
+            headers: z.object({
+              'content-type': z.literal('application/json'),
+              'x-request-id': z.string(),
+            }),
+            body: z.object({ name: z.string() }),
           },
           responses: {
             updated: {
@@ -48,16 +49,21 @@ describe('HTTP typed client', () => {
     const response = await client.update({
       params: { id: '42' },
       query: { notify: true },
-      headers: { 'x-request-id': 'req-1' },
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': 'req-1',
+      },
       body: { name: 'Ada' },
     })
     expect(sent).toEqual({
       method: 'PUT',
       path: '/users/42',
       query: { notify: true },
-      headers: { 'x-request-id': 'req-1' },
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': 'req-1',
+      },
       body: { name: 'Ada' },
-      contentType: 'application/json',
     })
     expect(response).toEqual({
       status: 200,
@@ -65,6 +71,52 @@ describe('HTTP typed client', () => {
       headers: { 'x-version': '7' },
     })
   })
+  it('fetch transportはContent-Type headerからJSON bodyをencodeする', async () => {
+    let captured: Request | undefined
+    const transport = fetchHttpTransport({
+      baseUrl: 'https://fixture.test',
+      fetch: async (input, init) => {
+        captured = new Request(input, init)
+        return new Response(null, { status: 204 })
+      },
+    })
+
+    await transport({
+      method: 'POST',
+      path: '/json',
+      headers: { 'content-type': 'application/json' },
+      body: { name: 'loutre' },
+    })
+
+    expect(captured?.headers.get('content-type')).toBe('application/json')
+    expect(await captured?.json()).toEqual({ name: 'loutre' })
+  })
+
+  it('fetch transportはmultipartのboundaryをFetchへ委ねる', async () => {
+    let captured: Request | undefined
+    const transport = fetchHttpTransport({
+      baseUrl: 'https://fixture.test',
+      fetch: async (input, init) => {
+        captured = new Request(input, init)
+        return new Response(null, { status: 204 })
+      },
+    })
+    const body = new FormData()
+    body.set('name', 'loutre')
+
+    await transport({
+      method: 'POST',
+      path: '/multipart',
+      headers: { 'content-type': 'multipart/form-data' },
+      body,
+    })
+
+    expect(captured?.headers.get('content-type')).toMatch(
+      /^multipart\/form-data; boundary=/,
+    )
+    expect((await captured?.formData())?.get('name')).toBe('loutre')
+  })
+
   it('Contractにないstatusをtyped client境界で拒否する', async () => {
     const Contract = contract([
       http({

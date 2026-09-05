@@ -223,14 +223,14 @@ describe('Application Graph IRとsemantic validation', () => {
       provider,
       {
         kind: 'validation',
-        name: 'validate.body',
-        part: 'body',
+        name: 'validate.headers',
+        part: 'headers',
       },
     ])
     const consumer = layer({
       name: 'recursive-consumer',
       requires: [provider],
-      requiresValidated: ['body'],
+      requiresValidated: ['headers'],
 
       factory: () => async (_ctx, next) => {
         await next()

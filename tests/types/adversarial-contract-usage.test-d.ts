@@ -116,13 +116,39 @@ http({
     method: 'POST',
     path: '/duplicate-body-validation',
     request: {
-      body: {
-        contentType: 'application/json',
-        schema: z.object({ name: z.string() }),
-      },
+      headers: z.object({ 'content-type': z.literal('application/json') }),
+      body: z.object({ name: z.string() }),
     },
     responses: { ok: { status: 200, body: z.string() } },
-    pipeline: [validate.body, validate.body, http.controller],
+    pipeline: [validate.headers, validate.body, validate.body, http.controller],
+  },
+})
+
+// @ts-expect-error validate.bodyはvalidate.headersより後に置く必要がある
+http({
+  invalidBodyValidationOrder: {
+    method: 'POST',
+    path: '/invalid-body-validation-order',
+    request: {
+      headers: z.object({ 'content-type': z.literal('application/json') }),
+      body: z.object({ name: z.string() }),
+    },
+    responses: { ok: { status: 200, body: z.string() } },
+    pipeline: [validate.body, validate.headers, http.controller],
+  },
+})
+
+// @ts-expect-error bodyを宣言するrequestはrequired stringのcontent-type headerを持つ必要がある
+http({
+  missingBodyContentType: {
+    method: 'POST',
+    path: '/missing-body-content-type',
+    request: {
+      headers: z.object({ authorization: z.string() }),
+      body: z.object({ name: z.string() }),
+    },
+    responses: { ok: { status: 200, body: z.string() } },
+    pipeline: [validate.headers, validate.body, http.controller],
   },
 })
 
@@ -203,28 +229,22 @@ implementation({
 
 const Module = defineModule(() => ({ implementations: [LeafController] }))
 defineApplication({ modules: [Module()] })
-const BodyValidatedContract = contract([
-  http({
-    create: {
-      method: 'POST',
-      path: '/create',
-      request: {
-        body: {
-          contentType: 'application/json',
-          schema: z.object({ name: z.string() }),
-        },
-      },
-      responses: { ok: { status: 200, body: z.string() } },
-      pipeline: [validate.body, http.controller],
-    },
-  }),
-])
-
 // @ts-expect-error branchとleafを合成したeffective Pipelineでも同じvalidationは1回だけ置ける
 http({
   api: {
-    pipeline: [validate.body],
-    routes: BodyValidatedContract.http,
+    pipeline: [validate.headers, validate.body],
+    routes: {
+      create: {
+        method: 'POST',
+        path: '/create',
+        request: {
+          headers: z.object({ 'content-type': z.literal('application/json') }),
+          body: z.object({ name: z.string() }),
+        },
+        responses: { ok: { status: 200, body: z.string() } },
+        pipeline: [validate.body, http.controller],
+      },
+    },
   },
 })
 

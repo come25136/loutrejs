@@ -139,31 +139,27 @@ describe('Nested Contract composition', () => {
   })
 
   it('型境界を迂回してもbranchとleafの重複validationを拒否する', () => {
-    const UploadContract = contract([
-      http({
-        create: {
-          method: 'POST',
-          path: '/upload',
-          request: {
-            body: {
-              contentType: 'application/json',
-              schema: z.object({ name: z.string() }),
-            },
-          },
-          responses: {
-            ok: { status: 200, body: z.object({ name: z.string() }) },
-          },
-          pipeline: [validate.body, http.controller],
-        },
-      }),
-    ])
-
     expect(() =>
       (http as any)({
         api: {
           path: '/api',
-          pipeline: [validate.body],
-          routes: { upload: UploadContract.http.create },
+          pipeline: [validate.headers, validate.body],
+          routes: {
+            upload: {
+              method: 'POST',
+              path: '/upload',
+              request: {
+                headers: z.object({
+                  'content-type': z.literal('application/json'),
+                }),
+                body: z.object({ name: z.string() }),
+              },
+              responses: {
+                ok: { status: 200, body: z.object({ name: z.string() }) },
+              },
+              pipeline: [validate.body, http.controller],
+            },
+          },
         },
       }),
     ).toThrow(/Duplicate HTTP input validation: validate\.body/)

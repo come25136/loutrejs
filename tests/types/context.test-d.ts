@@ -72,22 +72,24 @@ const Contract = contract([
       method: 'POST',
       path: '/nested-validation',
       request: {
-        body: {
-          contentType: 'application/json',
-          schema: z.object({ name: z.string() }),
-        },
+        headers: z.object({ 'content-type': z.literal('application/json') }),
+        body: z.object({ name: z.string() }),
       },
       responses: { ok: { status: 200, body: z.string() } },
-      pipeline: [wrapperLayer([validate.body]), http.controller],
+      pipeline: [
+        validate.headers,
+        wrapperLayer([validate.body]),
+        http.controller,
+      ],
     },
     rawBody: {
       method: 'POST',
       path: '/raw-body',
       request: {
-        body: {
-          contentType: 'application/octet-stream',
-          schema: z.instanceof(Uint8Array),
-        },
+        headers: z.object({
+          'content-type': z.literal('application/octet-stream'),
+        }),
+        body: z.instanceof(Uint8Array),
       },
       responses: { ok: { status: 200, body: z.string() } },
       pipeline: [http.controller],
@@ -193,6 +195,9 @@ type RawBodyContext = ContextOf<HttpController, 'rawBody'>
 declare const rawBodyContext: RawBodyContext
 const rawBody: ReadableStream<Uint8Array> | null = rawBodyContext.input.body
 void rawBody
+const rawContentType: string | undefined =
+  rawBodyContext.input.headers['content-type']
+void rawContentType
 // @ts-expect-error validate.bodyなしではschema outputへ変換されない
 const decodedRawBody: Uint8Array = rawBodyContext.input.body
 void decodedRawBody

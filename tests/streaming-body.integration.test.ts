@@ -32,10 +32,10 @@ describe('streaming validate.body', () => {
           method: 'POST',
           path: '/upload',
           request: {
-            body: {
-              contentType: 'application/octet-stream',
-              schema: BodyStreamSchema,
-            },
+            headers: z.object({
+              'content-type': z.literal('application/octet-stream'),
+            }),
+            body: BodyStreamSchema,
           },
           responses: {
             accepted: {
@@ -43,7 +43,7 @@ describe('streaming validate.body', () => {
               body: z.object({ bytes: z.number() }),
             },
           },
-          pipeline: [validate.body, http.controller],
+          pipeline: [validate.headers, validate.body, http.controller],
         },
       }),
     ])

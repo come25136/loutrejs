@@ -19,16 +19,15 @@ export const UsersContract = contract([
       method: 'POST',
       path: '/users',
       request: {
-        body: {
-          contentType: 'application/json',
-          schema: CreateUserBody,
-        },
+        headers: z.object({ 'content-type': z.literal('application/json') }),
+        body: CreateUserBody,
       },
       responses: {
         created: { status: 201, body: UserResponse },
       },
       pipeline: [
         authentication,
+        validate.headers,
         validate.body,
         transaction([authorization, http.controller]),
       ],
