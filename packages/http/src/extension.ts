@@ -4,6 +4,7 @@ import {
   composeLayers,
   runtimeCapability,
   runInInjectionContext,
+  SchemaValidationError,
   validateSchema,
   type ExecutionDefinition,
   type ExecutionKernelRuntime,
@@ -79,7 +80,8 @@ type UnionToIntersection<TUnion> = (
 
 type HttpMiddlewareState<TRoute extends HttpExecutionRouteDefinition> =
   TRoute extends {
-    readonly middlewares: infer TMiddlewares extends readonly AnyHttpMiddleware[]
+    readonly middlewares: infer TMiddlewares extends
+      readonly AnyHttpMiddleware[]
   }
     ? UnionToIntersection<MiddlewareContribution<TMiddlewares[number]>>
     : {}
@@ -393,13 +395,30 @@ function createHttpExtensionRuntime(
           request.signal.addEventListener('abort', abortRequest, { once: true })
           if (request.signal.aborted) abortRequest()
           try {
-            const context = await createHttpContext(
-              request,
-              url,
-              params,
-              route,
-              lease.signal,
-            )
+            let context: HttpExecutionContext
+            try {
+              context = await createHttpContext(
+                request,
+                url,
+                params,
+                route,
+                lease.signal,
+              )
+            } catch (error) {
+              if (error instanceof SchemaValidationError) {
+                return Response.json(
+                  { error: 'Validation failed' },
+                  { status: 400 },
+                )
+              }
+              if (error instanceof SyntaxError) {
+                return Response.json(
+                  { error: 'Invalid request' },
+                  { status: 400 },
+                )
+              }
+              throw error
+            }
             const handler = handlers.get(execution.id)?.[route.name]
             if (!handler) {
               throw new Error(
