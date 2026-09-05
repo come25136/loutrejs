@@ -466,10 +466,11 @@ export function withHttpFrameworkHeaders(
   const current = (result as HttpExecutionResultWithFrameworkHeaders)[
     httpFrameworkHeaders
   ]
-  return {
+  const withFrameworkHeaders: HttpExecutionResultWithFrameworkHeaders = {
     ...result,
     [httpFrameworkHeaders]: { ...current, ...headers },
   }
+  return withFrameworkHeaders
 }
 
 function createHttpExtensionRuntime(
