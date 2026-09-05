@@ -5,6 +5,7 @@ import {
   type ApplicationExtensions,
   defineApplication,
   defineModule,
+  type,
 } from '@loutrejs/loutre'
 import {
   basicAuth,
@@ -17,6 +18,41 @@ import {
 } from '@loutrejs/http'
 
 describe('HTTP Execution Extension', () => {
+  it('typeで宣言したMiddleware stateをhandlerへ渡す', async () => {
+    const identity = http.middleware({
+      name: 'identity',
+      state: type<{ userId: string }>(),
+      factory: () => async (_context, next) => next({ userId: 'user-42' }),
+    })
+    const contract = http.contract({
+      profile: {
+        method: 'GET',
+        path: '/profile',
+        middlewares: [identity],
+        responses: { ok: { status: 200, body: z.string() } },
+      },
+    })
+    const controller = http.implementation({
+      contract,
+      factory: () => ({
+        profile: (context) =>
+          context.response.ok({ body: context.state.userId }),
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+    try {
+      const response = await application.http.fetch(
+        new Request('http://fixture.test/profile'),
+      )
+      expect(await response.text()).toBe('user-42')
+    } finally {
+      await application.close()
+    }
+  })
   it('内部例外の詳細を500 responseへ公開しない', async () => {
     const contract = http.contract({
       failure: {

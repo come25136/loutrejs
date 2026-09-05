@@ -1,5 +1,6 @@
 import {
   supportsJsonSchema,
+  assertValidApplicationModel,
   type ModuleInstance,
   type StandardSchemaV1,
 } from '../core/index.js'
@@ -30,6 +31,7 @@ export interface OpenApiOperationIdContext {
 }
 
 export interface GenerateOpenApiOptions {
+  readonly routes?: readonly HttpOperationTarget[]
   readonly info: OpenApiInfo
   readonly servers?: readonly OpenApiServer[]
   readonly operationId?: (
@@ -60,8 +62,17 @@ interface SchemaMaterialization {
   readonly reference: { readonly $ref: string }
 }
 
-interface HttpOperationTarget {
-  readonly definition: HttpProtocolDefinition
+type OpenApiResponseDefinition = Omit<HttpResponseDefinition, 'body'> & {
+  readonly body?: StandardSchemaV1
+}
+
+export interface HttpOperationTarget {
+  readonly definition: Omit<
+    HttpProtocolDefinition,
+    'pipeline' | 'responses'
+  > & {
+    readonly responses: Readonly<Record<string, OpenApiResponseDefinition>>
+  }
   readonly procedure: string
 }
 
@@ -81,20 +92,35 @@ export function generateOpenApi(
   application: ApplicationDefinition,
   options: GenerateOpenApiOptions,
 ): OpenApiDocument {
-  assertValidCompilation(
-    compileApplication({
-      modules: application.modules,
-      ...(application.arguments === undefined
-        ? {}
-        : { arguments: application.arguments }),
-      tasks: application.tasks,
-      triggers: application.triggers,
-    }),
+  if (options.routes) assertValidApplicationModel(application.model)
+  const modules = collectModules(application.modules)
+  if (
+    !options.routes ||
+    modules.some(
+      (module) => (module.definition.implementations?.length ?? 0) > 0,
+    )
   )
+    assertValidCompilation(
+      compileApplication({
+        modules: application.modules,
+        ...(application.arguments === undefined
+          ? {}
+          : { arguments: application.arguments }),
+        tasks: application.tasks,
+        triggers: application.triggers,
+      }),
+    )
   const registry = new SchemaRegistry()
   const paths: Record<string, OpenApiPathItem> = {}
   const operationIds = new Set<string>()
-  for (const module of collectModules(application.modules)) {
+  for (const target of options.routes ?? []) {
+    attachOperation(
+      paths,
+      target.definition,
+      createOperation(target, registry, operationIds, options.operationId),
+    )
+  }
+  for (const module of modules) {
     for (const implementation of module.definition.implementations ?? []) {
       if (implementation.protocol !== 'http') continue
       for (const procedure of implementation.procedures) {
@@ -313,7 +339,7 @@ function createResponses(
 ): Record<string, OpenApiObject> {
   const grouped = new Map<
     number,
-    { readonly name: string; readonly response: HttpResponseDefinition }[]
+    { readonly name: string; readonly response: OpenApiResponseDefinition }[]
   >()
   for (const [name, response] of Object.entries(target.definition.responses)) {
     const current = grouped.get(response.status) ?? []
@@ -335,7 +361,7 @@ function createResponse(
   target: HttpOperationTarget,
   entries: readonly {
     readonly name: string
-    readonly response: HttpResponseDefinition
+    readonly response: OpenApiResponseDefinition
   }[],
   registry: SchemaRegistry,
 ): OpenApiObject {
@@ -348,13 +374,15 @@ function createResponse(
       `${describeTarget(target)} declares streaming and non-streaming responses with the same status.`,
     )
   }
-  const schemas = entries.map(({ name, response }) =>
-    registry.reference(
-      response.body,
-      'output',
-      componentName(target, `Response_${name}_Output`),
-    ),
-  )
+  const schemas = entries
+    .filter(({ response }) => response.body !== undefined)
+    .map(({ name, response }) =>
+      registry.reference(
+        response.body!,
+        'output',
+        componentName(target, `Response_${name}_Output`),
+      ),
+    )
   const payloadSchema = schemas.length === 1 ? schemas[0]! : { oneOf: schemas }
   const streaming = entries[0]?.response.stream === 'server'
   const headers = mergeResponseHeaders(entries, registry, target)
@@ -367,40 +395,51 @@ function createResponse(
   return {
     description: descriptions.join(' / '),
     ...(headers === undefined ? {} : { headers }),
-    content: streaming
-      ? {
-          'text/event-stream': {
-            itemSchema: {
-              type: 'object',
-              required: ['data'],
-              properties: {
-                data: {
-                  type: 'string',
-                  contentMediaType: 'application/json',
-                  contentSchema: payloadSchema,
+    ...(schemas.length === 0
+      ? {}
+      : {
+          content: streaming
+            ? {
+                'text/event-stream': {
+                  itemSchema: {
+                    type: 'object',
+                    required: ['data'],
+                    properties: {
+                      data: {
+                        type: 'string',
+                        contentMediaType: 'application/json',
+                        contentSchema: payloadSchema,
+                      },
+                    },
+                  },
+                },
+              }
+            : {
+                'application/json': {
+                  schema: payloadSchema,
                 },
               },
-            },
-          },
-        }
-      : {
-          'application/json': {
-            schema: payloadSchema,
-          },
-        },
+        }),
   }
 }
 
 function mergeResponseHeaders(
   entries: readonly {
     readonly name: string
-    readonly response: HttpResponseDefinition
+    readonly response: OpenApiResponseDefinition
   }[],
   registry: SchemaRegistry,
   target: HttpOperationTarget,
 ): Record<string, OpenApiObject> | undefined {
   const result = new Map<string, JsonSchema[]>()
   for (const { name, response } of entries) {
+    for (const [headerName, value] of Object.entries(
+      response.staticHeaders ?? {},
+    )) {
+      const current = result.get(headerName) ?? []
+      current.push({ type: 'string', const: value })
+      result.set(headerName, current)
+    }
     if (!response.headers) continue
     const materialized = registry.materialize(
       response.headers,
@@ -487,7 +526,7 @@ function objectProperties(
 
 function attachOperation(
   paths: Record<string, OpenApiPathItem>,
-  definition: HttpProtocolDefinition,
+  definition: HttpOperationTarget['definition'],
   operation: OpenApiObject,
 ): void {
   const path = definition.path

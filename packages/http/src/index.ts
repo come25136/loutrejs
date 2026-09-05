@@ -11,6 +11,8 @@ export {
   bindHttpServer,
   defineHttpContract,
   defineHttpImplementation,
+  defineHttpMiddleware,
+  collectHttpRoutes,
   executionHttp as http,
   httpExecutionExtension,
   HTTP_SERVER,
