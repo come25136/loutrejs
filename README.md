@@ -106,6 +106,7 @@ Runtimeごとの役割と対応範囲は[Getting Started](./docs/getting-started
 実行可能なprojectを[`examples/`](./examples/)に置いています。
 
 - [`hello-http`](./examples/hello-http/) — Contract、Implementation、DIを使うHTTP Application
+- [`content-type-union`](./examples/content-type-union/) — Content-Typeごとにrequest header要件を切り替え、OpenAPIへprojectionするHTTP Application
 - [`hello-cli`](./examples/hello-cli/) — Argumentsを受け取りTaskを実行するApplication
 - [`hello-worker`](./examples/hello-worker/) — `fixedDelay` TriggerでTaskを定期実行するWorker
 - [`basic-auth`](./examples/basic-auth/) / [`bearer-auth`](./examples/bearer-auth/) — HTTP認証
