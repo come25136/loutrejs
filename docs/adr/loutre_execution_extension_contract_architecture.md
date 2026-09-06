@@ -128,6 +128,18 @@ Runtime Capability requirement collection
 static metadata normalization
 ```
 
+Execution DefinitionのDIは、利用者へ`inject: []` metadataを要求しない。Implementation / Layer / Task等のfactoryでは、framework-managed classと同じくdefault parameterの`inject()`をdependency declarationとする。
+
+```ts
+factory: (users = inject(UserRepository)) => ({
+  // ...
+})
+```
+
+Extensionの`compile()`はこの同期constructionをdependency probeし、得られたtokenを`ExecutionContribution.dependencies`へ正規化する。Runtimeでは同じfactoryをInjection Context内で呼び、`inject()`を実値へresolveする。Application Modelの内部都合を公開Execution APIの`inject`配列へ漏らしてはならない。
+
+Factory Provider / Lifecycle hookのexplicit dependency metadataは別のCore APIであり、この原則の対象外とする。
+
 ## 5. Compiled Execution Contribution
 
 Coreへ渡すcanonical contributionは次の形とする。

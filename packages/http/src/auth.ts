@@ -1,4 +1,4 @@
-import { defineLayer, type TokenLike, type TokenValue } from '@loutrejs/loutre'
+import { defineLayer } from '@loutrejs/loutre'
 import type {
   HttpExecutionResult,
   HttpMiddleware,
@@ -43,46 +43,41 @@ export function basicAuth<
   const TContribution extends object,
   const TResponse extends string,
   TUnauthorizedBody,
-  const TInject extends readonly TokenLike[] = readonly [],
 >(definition: {
   readonly name?: string
   readonly realm: string
-  readonly inject?: TInject
-  readonly factory: (
-    ...dependencies: { [K in keyof TInject]: TokenValue<TInject[K]> }
-  ) => BasicAuthRuntime<TContribution, TResponse, TUnauthorizedBody>
+  readonly factory: () => BasicAuthRuntime<
+    TContribution,
+    TResponse,
+    TUnauthorizedBody
+  >
 }): HttpMiddleware<
   TContribution,
-  TInject,
   HttpMiddlewareContext,
   AuthenticationShortCircuit<TResponse, TUnauthorizedBody>
 > {
   const challenge = formatBasicChallenge(definition.realm)
-  return defineLayer<
-    HttpMiddlewareContext,
-    TContribution,
-    HttpExecutionResult,
-    TInject
-  >({
-    name: definition.name ?? 'basicAuth',
-    ...(definition.inject === undefined ? {} : { inject: definition.inject }),
-    factory: (...dependencies) => {
-      const runtime = definition.factory(...dependencies)
-      return async (context, next) => {
-        const credentials = decodeBasicCredentials(
-          context.request.headers.get('authorization'),
-        )
-        if (!credentials) {
-          return authenticationFailure(runtime.unauthorized(), challenge)
+  return defineLayer<HttpMiddlewareContext, TContribution, HttpExecutionResult>(
+    {
+      name: definition.name ?? 'basicAuth',
+      factory: () => {
+        const runtime = definition.factory()
+        return async (context, next) => {
+          const credentials = decodeBasicCredentials(
+            context.request.headers.get('authorization'),
+          )
+          if (!credentials) {
+            return authenticationFailure(runtime.unauthorized(), challenge)
+          }
+          const contribution = await runtime.authenticate(credentials)
+          if (contribution == null) {
+            return authenticationFailure(runtime.unauthorized(), challenge)
+          }
+          return next(contribution)
         }
-        const contribution = await runtime.authenticate(credentials)
-        if (contribution == null) {
-          return authenticationFailure(runtime.unauthorized(), challenge)
-        }
-        return next(contribution)
-      }
+      },
     },
-  })
+  )
 }
 
 export interface BearerAuthRuntime<
@@ -104,46 +99,41 @@ export function bearerAuth<
   const TContribution extends object,
   const TResponse extends string,
   TUnauthorizedBody,
-  const TInject extends readonly TokenLike[] = readonly [],
 >(definition: {
   readonly name?: string
   readonly realm: string
-  readonly inject?: TInject
-  readonly factory: (
-    ...dependencies: { [K in keyof TInject]: TokenValue<TInject[K]> }
-  ) => BearerAuthRuntime<TContribution, TResponse, TUnauthorizedBody>
+  readonly factory: () => BearerAuthRuntime<
+    TContribution,
+    TResponse,
+    TUnauthorizedBody
+  >
 }): HttpMiddleware<
   TContribution,
-  TInject,
   HttpMiddlewareContext,
   AuthenticationShortCircuit<TResponse, TUnauthorizedBody>
 > {
   const challenge = formatBearerChallenge(definition.realm)
-  return defineLayer<
-    HttpMiddlewareContext,
-    TContribution,
-    HttpExecutionResult,
-    TInject
-  >({
-    name: definition.name ?? 'bearerAuth',
-    ...(definition.inject === undefined ? {} : { inject: definition.inject }),
-    factory: (...dependencies) => {
-      const runtime = definition.factory(...dependencies)
-      return async (context, next) => {
-        const token = readBearerToken(
-          context.request.headers.get('authorization'),
-        )
-        if (!token) {
-          return authenticationFailure(runtime.unauthorized(), challenge)
+  return defineLayer<HttpMiddlewareContext, TContribution, HttpExecutionResult>(
+    {
+      name: definition.name ?? 'bearerAuth',
+      factory: () => {
+        const runtime = definition.factory()
+        return async (context, next) => {
+          const token = readBearerToken(
+            context.request.headers.get('authorization'),
+          )
+          if (!token) {
+            return authenticationFailure(runtime.unauthorized(), challenge)
+          }
+          const contribution = await runtime.authenticate(token)
+          if (contribution == null) {
+            return authenticationFailure(runtime.unauthorized(), challenge)
+          }
+          return next(contribution)
         }
-        const contribution = await runtime.authenticate(token)
-        if (contribution == null) {
-          return authenticationFailure(runtime.unauthorized(), challenge)
-        }
-        return next(contribution)
-      }
+      },
     },
-  })
+  )
 }
 
 function authenticationFailure<TResponse extends string, TBody>(

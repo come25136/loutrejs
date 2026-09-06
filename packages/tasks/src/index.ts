@@ -1,36 +1,28 @@
 import {
+  collectInjectedDependencies,
   defineExecution,
   defineExecutionExtension,
   runInInjectionContext,
   type ExecutionDefinition,
   type ExecutionKernelRuntime,
-  type TokenLike,
-  type TokenValue,
 } from '@loutrejs/loutre'
 
 export type TaskRuntime<TInput, TOutput> = [TInput] extends [void]
   ? () => TOutput | Promise<TOutput>
   : (input: TInput) => TOutput | Promise<TOutput>
 
-export interface TaskDefinitionData<
-  TInput = unknown,
-  TOutput = unknown,
-  TInject extends readonly TokenLike[] = readonly TokenLike[],
-> {
+export interface TaskDefinitionData<TInput = unknown, TOutput = unknown> {
   readonly name: string
-  readonly inject: TInject
-  readonly factory: (
-    ...dependencies: { [K in keyof TInject]: TokenValue<TInject[K]> }
-  ) => TaskRuntime<TInput, TOutput>
+  readonly factory: () => TaskRuntime<TInput, TOutput>
   readonly '~input'?: TInput
   readonly '~output'?: TOutput
 }
 
 export type TaskInput<TTask> =
-  TTask extends TaskDefinitionData<infer TInput, any, any> ? TInput : never
+  TTask extends TaskDefinitionData<infer TInput, any> ? TInput : never
 
 export type TaskOutput<TTask> =
-  TTask extends TaskDefinitionData<any, infer TOutput, any> ? TOutput : never
+  TTask extends TaskDefinitionData<any, infer TOutput> ? TOutput : never
 
 export type TaskArguments<TTask> = [TaskInput<TTask>] extends [void]
   ? readonly []
@@ -39,12 +31,11 @@ export type TaskArguments<TTask> = [TaskInput<TTask>] extends [void]
 interface CompiledTask {
   readonly definition: object
   readonly name: string
-  readonly inject: readonly TokenLike[]
-  readonly factory: (...dependencies: any[]) => (...arguments_: any[]) => any
+  readonly factory: () => (...arguments_: any[]) => any
 }
 
 export interface TasksExtensionRuntime {
-  run<TTask extends TaskDefinitionData<any, any, any>>(
+  run<TTask extends TaskDefinitionData<any, any>>(
     task: TTask & ExecutionDefinition,
     ...arguments_: TaskArguments<TTask>
   ): Promise<TaskOutput<TTask>>
@@ -52,7 +43,7 @@ export interface TasksExtensionRuntime {
 }
 
 export interface TasksHostApi {
-  run<TTask extends TaskDefinitionData<any, any, any>>(
+  run<TTask extends TaskDefinitionData<any, any>>(
     task: TTask & ExecutionDefinition,
     ...arguments_: TaskArguments<TTask>
   ): Promise<TaskOutput<TTask>>
@@ -73,12 +64,18 @@ export const tasksExtension = defineExecutionExtension<
       id: `task.${definition.name}`,
       executionKind: 'task.invocation',
       extension: definition.extension,
-      dependencies: definition.inject,
+      dependencies: collectInjectedDependencies(
+        {
+          kind: 'task-consumer',
+          id: `task:${definition.name}`,
+          name: definition.name,
+        },
+        () => definition.factory(),
+      ),
       capabilities: [],
       compiled: {
         definition,
         name: definition.name,
-        inject: definition.inject,
         factory: definition.factory as CompiledTask['factory'],
       },
     }
@@ -115,24 +112,17 @@ export const tasksExtension = defineExecutionExtension<
 export type TaskDefinition<
   TInput = unknown,
   TOutput = unknown,
-  TInject extends readonly TokenLike[] = readonly TokenLike[],
-> = TaskDefinitionData<TInput, TOutput, TInject> &
+> = TaskDefinitionData<TInput, TOutput> &
   ExecutionDefinition<typeof tasksExtension>
 
-export function task<
-  TInput = void,
-  TOutput = void,
-  const TInject extends readonly TokenLike[] = readonly [],
->(definition: {
+export function task<TInput = void, TOutput = void>(definition: {
   readonly name: string
-  readonly inject?: TInject
-  readonly factory: TaskDefinitionData<TInput, TOutput, TInject>['factory']
-}): TaskDefinition<TInput, TOutput, TInject> {
+  readonly factory: TaskDefinitionData<TInput, TOutput>['factory']
+}): TaskDefinition<TInput, TOutput> {
   return defineExecution(tasksExtension, {
     name: definition.name,
-    inject: definition.inject ?? ([] as unknown as TInject),
     factory: definition.factory,
-  }) as TaskDefinition<TInput, TOutput, TInject>
+  }) as TaskDefinition<TInput, TOutput>
 }
 
 function createTasksRuntime(
@@ -143,9 +133,6 @@ function createTasksRuntime(
 ): TasksExtensionRuntime {
   const runtimes = new Map<object, (...arguments_: any[]) => any>()
   for (const execution of executions) {
-    const dependencies = execution.compiled.inject.map((token) =>
-      applicationRuntime.resolve(token),
-    )
     const runtime = runInInjectionContext(
       {
         consumer: {
@@ -155,7 +142,7 @@ function createTasksRuntime(
         },
         resolve: (token) => applicationRuntime.resolve(token),
       },
-      () => execution.compiled.factory(...dependencies),
+      () => execution.compiled.factory(),
     )
     runtimes.set(execution.compiled.definition, runtime)
   }

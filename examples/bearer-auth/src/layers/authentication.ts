@@ -1,11 +1,11 @@
+import { inject } from '@loutrejs/loutre'
 import { bearerAuth } from '@loutrejs/http'
 import { UserRepository } from '../auth/repository.js'
 
 export const bearerAuthentication = bearerAuth({
   name: 'bearerAuthentication',
   realm: 'Loutre Example',
-  inject: [UserRepository],
-  factory: (users) => ({
+  factory: (users = inject(UserRepository)) => ({
     authenticate(token) {
       const currentUser = users.authenticate(token)
       return currentUser === undefined ? undefined : { currentUser }

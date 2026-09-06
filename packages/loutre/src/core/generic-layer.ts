@@ -1,5 +1,6 @@
 import type { RuntimeCapability } from './extension.js'
-import type { TokenLike, TokenValue } from './token.js'
+import { runInInjectionContext } from './injection.js'
+import type { TokenLike } from './token.js'
 import type { Type } from './type.js'
 
 export interface GenericLayerContext<TState extends object = {}> {
@@ -17,16 +18,12 @@ export interface GenericLayer<
   TContext extends object = object,
   TContribution extends object = {},
   TOutcome = unknown,
-  TInject extends readonly TokenLike[] = readonly TokenLike[],
 > {
   readonly kind: 'generic-layer'
   readonly state?: Type<TContribution>
   readonly name: string
-  readonly inject: TInject
   readonly capabilities: readonly RuntimeCapability[]
-  readonly factory: (
-    ...dependencies: { [K in keyof TInject]: TokenValue<TInject[K]> }
-  ) => (
+  readonly factory: () => (
     context: TContext & GenericLayerContext,
     next: GenericLayerNext<TContribution, TOutcome>,
   ) => Promise<TOutcome>
@@ -36,24 +33,16 @@ export function defineLayer<
   TContext extends object = object,
   TContribution extends object = {},
   TOutcome = unknown,
-  const TInject extends readonly TokenLike[] = readonly [],
 >(declaration: {
   readonly name: string
   readonly state?: Type<TContribution>
-  readonly inject?: TInject
   readonly capabilities?: readonly RuntimeCapability[]
-  readonly factory: GenericLayer<
-    TContext,
-    TContribution,
-    TOutcome,
-    TInject
-  >['factory']
-}): GenericLayer<TContext, TContribution, TOutcome, TInject> {
+  readonly factory: GenericLayer<TContext, TContribution, TOutcome>['factory']
+}): GenericLayer<TContext, TContribution, TOutcome> {
   return Object.freeze({
     kind: 'generic-layer',
     ...(declaration.state === undefined ? {} : { state: declaration.state }),
     name: declaration.name,
-    inject: declaration.inject ?? ([] as unknown as TInject),
     capabilities: declaration.capabilities ?? [],
     factory: declaration.factory,
   })
@@ -61,15 +50,23 @@ export function defineLayer<
 
 export function composeLayers<TContext extends object, TOutcome>(options: {
   readonly context: TContext
-  readonly layers: readonly GenericLayer<any, any, TOutcome, any>[]
+  readonly layers: readonly GenericLayer<any, any, TOutcome>[]
   readonly resolve: <TValue>(token: TokenLike<TValue>) => TValue
   readonly terminal: (
     context: TContext & GenericLayerContext<Record<string, unknown>>,
   ) => Promise<TOutcome>
 }): Promise<TOutcome> {
-  const runtimes = options.layers.map((layer) =>
-    layer.factory(
-      ...layer.inject.map((token: TokenLike) => options.resolve(token)),
+  const runtimes = options.layers.map((layer, index) =>
+    runInInjectionContext(
+      {
+        consumer: {
+          kind: 'layer-consumer',
+          id: `layer:${index}:${layer.name}`,
+          name: layer.name,
+        },
+        resolve: options.resolve,
+      },
+      () => layer.factory(),
     ),
   )
   const dispatch = (

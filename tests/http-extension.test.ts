@@ -5,6 +5,7 @@ import {
   type ApplicationExtensions,
   defineApplication,
   defineModule,
+  inject,
   type,
 } from '@loutrejs/loutre'
 import {
@@ -283,8 +284,7 @@ describe('HTTP Execution Extension', () => {
     const authentication = basicAuth({
       name: 'profile.basic-auth',
       realm: 'Loutre Test',
-      inject: [UserRepository],
-      factory: (users) => ({
+      factory: (users = inject(UserRepository)) => ({
         authenticate({ username, password }) {
           const currentUser = users.authenticate(username, password)
           return currentUser ? { currentUser } : undefined

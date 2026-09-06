@@ -1,4 +1,5 @@
 import {
+  collectInjectedDependencies,
   composeLayers,
   defineExecution,
   defineExecutionExtension,
@@ -15,8 +16,6 @@ import {
   type SchemaInput,
   type SchemaOutput,
   type StandardSchemaV1,
-  type TokenLike,
-  type TokenValue,
   type Type,
 } from '@loutrejs/loutre'
 import {
@@ -76,15 +75,14 @@ export interface HttpExecutionRouteDefinition {
   readonly middlewares?: readonly AnyHttpMiddleware[]
 }
 
-type AnyHttpMiddleware = GenericLayer<any, any, HttpExecutionResult, any>
+type AnyHttpMiddleware = GenericLayer<any, any, HttpExecutionResult>
 declare const httpMiddlewareShortCircuit: unique symbol
 
 export type HttpMiddleware<
   TContribution extends object = object,
-  TInject extends readonly TokenLike[] = readonly TokenLike[],
   TContext extends object = HttpMiddlewareContext,
   TShortCircuit extends HttpExecutionResult = never,
-> = GenericLayer<TContext, TContribution, HttpExecutionResult, TInject> & {
+> = GenericLayer<TContext, TContribution, HttpExecutionResult> & {
   readonly [httpMiddlewareShortCircuit]?: TShortCircuit
 }
 
@@ -98,7 +96,7 @@ export interface HttpMiddlewareContext {
 }
 
 type MiddlewareContribution<TMiddleware> =
-  TMiddleware extends GenericLayer<any, infer TContribution, any, any>
+  TMiddleware extends GenericLayer<any, infer TContribution, any>
     ? TContribution
     : {}
 
@@ -258,14 +256,10 @@ export type HttpHandlers<TContract extends HttpContract> = {
 
 export interface HttpImplementationDefinition<
   TContract extends HttpContract = HttpContract,
-  TInject extends readonly TokenLike[] = readonly TokenLike[],
 > {
   readonly name: string
   readonly contract: TContract
-  readonly inject: TInject
-  readonly factory: (
-    ...dependencies: { [K in keyof TInject]: TokenValue<TInject[K]> }
-  ) => HttpHandlers<TContract>
+  readonly factory: () => HttpHandlers<TContract>
 }
 
 interface CompiledHttpRoute {
@@ -280,10 +274,7 @@ interface CompiledHttpRoute {
 
 interface CompiledHttpExecution {
   readonly routes: readonly CompiledHttpRoute[]
-  readonly inject: readonly TokenLike[]
-  readonly factory: (
-    ...dependencies: any[]
-  ) => Record<
+  readonly factory: () => Record<
     string,
     (
       context: HttpExecutionContext,
@@ -318,21 +309,38 @@ export const httpExecutionExtension = defineExecutionExtension<
     const routes = Object.entries(definition.contract.routes).map(
       ([name, route]) => compileHttpRoute(name, route),
     )
+    const id =
+      definition.name || `${context.moduleId}.http.${context.definitionIndex}`
+    const dependencies = new Set(
+      collectInjectedDependencies(
+        {
+          kind: 'implementation-consumer',
+          id: `http:${id}`,
+          name: id,
+        },
+        () => definition.factory(),
+      ),
+    )
+    routes.forEach((route) => {
+      route.middlewares.forEach((middleware, index) => {
+        for (const dependency of collectInjectedDependencies(
+          {
+            kind: 'layer-consumer',
+            id: `http:${id}:${route.name}:${index}`,
+            name: middleware.name,
+          },
+          () => middleware.factory(),
+        )) {
+          dependencies.add(dependency)
+        }
+      })
+    })
     return {
       kind: 'execution',
-      id:
-        definition.name ||
-        `${context.moduleId}.http.${context.definitionIndex}`,
+      id,
       executionKind: 'http.request',
       extension: definition.extension,
-      dependencies: [
-        ...new Set([
-          ...definition.inject,
-          ...routes.flatMap((route) =>
-            route.middlewares.flatMap((middleware) => middleware.inject),
-          ),
-        ]),
-      ],
+      dependencies: [...dependencies],
       capabilities: [
         ...new Set([
           HTTP_SERVER,
@@ -343,7 +351,6 @@ export const httpExecutionExtension = defineExecutionExtension<
       ],
       compiled: {
         routes,
-        inject: definition.inject,
         factory: definition.factory as CompiledHttpExecution['factory'],
       },
     }
@@ -395,8 +402,7 @@ export const httpExecutionExtension = defineExecutionExtension<
 
 export type HttpExecutionDefinition<
   TContract extends HttpContract = HttpContract,
-  TInject extends readonly TokenLike[] = readonly TokenLike[],
-> = HttpImplementationDefinition<TContract, TInject> &
+> = HttpImplementationDefinition<TContract> &
   ExecutionDefinition<typeof httpExecutionExtension>
 
 type HttpStatusDigit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
@@ -564,19 +570,16 @@ export function defineHttpContract<
 
 export function defineHttpImplementation<
   const TContract extends HttpContract,
-  const TInject extends readonly TokenLike[] = readonly [],
 >(definition: {
   readonly name?: string
   readonly contract: TContract
-  readonly inject?: TInject
-  readonly factory: HttpImplementationDefinition<TContract, TInject>['factory']
-}): HttpExecutionDefinition<TContract, TInject> {
+  readonly factory: HttpImplementationDefinition<TContract>['factory']
+}): HttpExecutionDefinition<TContract> {
   return defineExecution(httpExecutionExtension, {
     name: definition.name ?? '',
     contract: definition.contract,
-    inject: definition.inject ?? ([] as unknown as TInject),
     factory: definition.factory,
-  }) as HttpExecutionDefinition<TContract, TInject>
+  }) as HttpExecutionDefinition<TContract>
 }
 
 export function bindHttpServer(
@@ -587,19 +590,14 @@ export function bindHttpServer(
 
 export function defineHttpMiddleware<
   TContribution extends object = {},
-  const TInject extends readonly TokenLike[] = readonly [],
 >(definition: {
   readonly name: string
   readonly state?: Type<TContribution>
-  readonly inject?: TInject
-  readonly factory: HttpMiddleware<TContribution, TInject>['factory']
-}): HttpMiddleware<TContribution, TInject> {
-  return defineLayer<
-    HttpMiddlewareContext,
-    TContribution,
-    HttpExecutionResult,
-    TInject
-  >(definition)
+  readonly factory: HttpMiddleware<TContribution>['factory']
+}): HttpMiddleware<TContribution> {
+  return defineLayer<HttpMiddlewareContext, TContribution, HttpExecutionResult>(
+    definition,
+  )
 }
 
 export function collectHttpRoutes(model: ApplicationModel) {
@@ -730,9 +728,6 @@ function createHttpExtensionRuntime(
     ReturnType<CompiledHttpExecution['factory']>
   >()
   for (const execution of executions) {
-    const dependencies = execution.compiled.inject.map((token) =>
-      applicationRuntime.resolve(token),
-    )
     handlers.set(
       execution.id,
       runInInjectionContext(
@@ -744,7 +739,7 @@ function createHttpExtensionRuntime(
           },
           resolve: (token) => applicationRuntime.resolve(token),
         },
-        () => execution.compiled.factory(...dependencies),
+        () => execution.compiled.factory(),
       ),
     )
   }

@@ -16,7 +16,7 @@ import {
 
 async function createHttpApplication<const TContract extends HttpContract>(
   contract: TContract,
-  factory: HttpImplementationDefinition<TContract, readonly []>['factory'],
+  factory: HttpImplementationDefinition<TContract>['factory'],
 ) {
   const implementation = http.implementation({ contract, factory })
   const Module = defineModule(() => ({ executions: [implementation] }))

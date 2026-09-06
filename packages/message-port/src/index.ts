@@ -1,4 +1,5 @@
 import {
+  collectInjectedDependencies,
   defineExecution,
   defineExecutionExtension,
   runInInjectionContext,
@@ -7,8 +8,6 @@ import {
   type ExecutionKernelRuntime,
   type SchemaOutput,
   type StandardSchemaV1,
-  type TokenLike,
-  type TokenValue,
 } from '@loutrejs/loutre'
 
 export interface MessagePortRouteDefinition {
@@ -57,22 +56,15 @@ export type MessagePortHandlers<TContract extends MessagePortContract> = {
 
 export interface MessagePortImplementationData<
   TContract extends MessagePortContract = MessagePortContract,
-  TInject extends readonly TokenLike[] = readonly TokenLike[],
 > {
   readonly name: string
   readonly contract: TContract
-  readonly inject: TInject
-  readonly factory: (
-    ...dependencies: { [K in keyof TInject]: TokenValue<TInject[K]> }
-  ) => MessagePortHandlers<TContract>
+  readonly factory: () => MessagePortHandlers<TContract>
 }
 
 interface CompiledMessagePortExecution {
   readonly routes: MessagePortContract['routes']
-  readonly inject: readonly TokenLike[]
-  readonly factory: (
-    ...dependencies: any[]
-  ) => Readonly<
+  readonly factory: () => Readonly<
     Record<
       string,
       (
@@ -108,11 +100,19 @@ export const messagePortExtension = defineExecutionExtension<
         `${context.moduleId}.message-port.${context.definitionIndex}`,
       executionKind: 'message-port.invocation',
       extension: definition.extension,
-      dependencies: definition.inject,
+      dependencies: collectInjectedDependencies(
+        {
+          kind: 'implementation-consumer',
+          id: `message-port:${definition.name || `${context.moduleId}.message-port.${context.definitionIndex}`}`,
+          name:
+            definition.name ||
+            `${context.moduleId}.message-port.${context.definitionIndex}`,
+        },
+        () => definition.factory(),
+      ),
       capabilities: [],
       compiled: {
         routes: definition.contract.routes,
-        inject: definition.inject,
         factory: definition.factory as CompiledMessagePortExecution['factory'],
       },
     }
@@ -151,8 +151,7 @@ export const messagePortExtension = defineExecutionExtension<
 
 export type MessagePortExecutionDefinition<
   TContract extends MessagePortContract = MessagePortContract,
-  TInject extends readonly TokenLike[] = readonly TokenLike[],
-> = MessagePortImplementationData<TContract, TInject> &
+> = MessagePortImplementationData<TContract> &
   ExecutionDefinition<typeof messagePortExtension>
 
 export function defineMessagePortContract<
@@ -163,19 +162,16 @@ export function defineMessagePortContract<
 
 export function defineMessagePortImplementation<
   const TContract extends MessagePortContract,
-  const TInject extends readonly TokenLike[] = readonly [],
 >(definition: {
   readonly name?: string
   readonly contract: TContract
-  readonly inject?: TInject
-  readonly factory: MessagePortImplementationData<TContract, TInject>['factory']
-}): MessagePortExecutionDefinition<TContract, TInject> {
+  readonly factory: MessagePortImplementationData<TContract>['factory']
+}): MessagePortExecutionDefinition<TContract> {
   return defineExecution(messagePortExtension, {
     name: definition.name ?? '',
     contract: definition.contract,
-    inject: definition.inject ?? ([] as unknown as TInject),
     factory: definition.factory,
-  }) as MessagePortExecutionDefinition<TContract, TInject>
+  }) as MessagePortExecutionDefinition<TContract>
 }
 
 export const messagePort = Object.freeze({
@@ -201,9 +197,6 @@ function createMessagePortRuntime(
   >()
   let accepting = true
   for (const execution of executions) {
-    const dependencies = execution.compiled.inject.map((token) =>
-      applicationRuntime.resolve(token),
-    )
     const handlers = runInInjectionContext(
       {
         consumer: {
@@ -213,7 +206,7 @@ function createMessagePortRuntime(
         },
         resolve: (token) => applicationRuntime.resolve(token),
       },
-      () => execution.compiled.factory(...dependencies),
+      () => execution.compiled.factory(),
     )
     for (const [method, definition] of Object.entries(
       execution.compiled.routes,

@@ -3,6 +3,7 @@ import {
   bootstrapApplication,
   defineApplication,
   defineLayer,
+  inject,
   defineModule,
   provide,
   token,
@@ -13,10 +14,12 @@ import { task, type TasksHostApi } from '@loutrejs/tasks'
 describe('Task Execution Extension', () => {
   it('Task invocationをHost APIとactive executionへcontributeする', async () => {
     const PREFIX = token<string>('prefix')
-    const greet = task<string, string, readonly [typeof PREFIX]>({
+    const greet = task<string, string>({
       name: 'greet',
-      inject: [PREFIX],
-      factory: (prefix) => async (name) => `${prefix}:${name}`,
+      factory:
+        (prefix = inject(PREFIX)) =>
+        async (name) =>
+          `${prefix}:${name}`,
     })
     const Module = defineModule(() => ({
       providers: [provide(PREFIX).useValue('hello')],

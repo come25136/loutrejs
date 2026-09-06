@@ -1,4 +1,5 @@
 import {
+  collectInjectedDependencies,
   defineExecution,
   defineExecutionExtension,
   runtimeCapability,
@@ -9,8 +10,6 @@ import {
   type RuntimeCapabilityBinding,
   type SchemaOutput,
   type StandardSchemaV1,
-  type TokenLike,
-  type TokenValue,
 } from '@loutrejs/loutre'
 import type {
   HttpExecutionRequestDefinition,
@@ -142,14 +141,10 @@ export type WebSocketHandlers<TContract extends WebSocketContract> = {
 
 export interface WebSocketImplementationDefinition<
   TContract extends WebSocketContract = WebSocketContract,
-  TInject extends readonly TokenLike[] = readonly TokenLike[],
 > {
   readonly name: string
   readonly contract: TContract
-  readonly inject: TInject
-  readonly factory: (
-    ...dependencies: { [K in keyof TInject]: TokenValue<TInject[K]> }
-  ) => WebSocketHandlers<TContract>
+  readonly factory: () => WebSocketHandlers<TContract>
 }
 
 interface CompiledWebSocketRoute {
@@ -164,7 +159,6 @@ interface CompiledWebSocketRoute {
 
 interface CompiledWebSocketExecution {
   readonly routes: readonly CompiledWebSocketRoute[]
-  readonly inject: readonly TokenLike[]
   readonly factory: WebSocketImplementationDefinition['factory']
 }
 
@@ -200,11 +194,19 @@ export const websocketExtension = defineExecutionExtension<
         `${context.moduleId}.websocket.${context.definitionIndex}`,
       executionKind: 'websocket.session',
       extension: definition.extension,
-      dependencies: definition.inject,
+      dependencies: collectInjectedDependencies(
+        {
+          kind: 'implementation-consumer',
+          id: `websocket:${definition.name || `${context.moduleId}.websocket.${context.definitionIndex}`}`,
+          name:
+            definition.name ||
+            `${context.moduleId}.websocket.${context.definitionIndex}`,
+        },
+        () => definition.factory(),
+      ),
       capabilities: [WEBSOCKET_SERVER],
       compiled: {
         routes: compileRouteTree(definition.contract.routes),
-        inject: definition.inject,
         factory: definition.factory,
       },
     }
@@ -260,8 +262,7 @@ export const websocketExtension = defineExecutionExtension<
 
 export type WebSocketExecutionDefinition<
   TContract extends WebSocketContract = WebSocketContract,
-  TInject extends readonly TokenLike[] = readonly TokenLike[],
-> = WebSocketImplementationDefinition<TContract, TInject> &
+> = WebSocketImplementationDefinition<TContract> &
   ExecutionDefinition<typeof websocketExtension>
 
 export function defineWebSocketContract<
@@ -272,22 +273,16 @@ export function defineWebSocketContract<
 
 export function defineWebSocketImplementation<
   const TContract extends WebSocketContract,
-  const TInject extends readonly TokenLike[] = readonly [],
 >(definition: {
   readonly name?: string
   readonly contract: TContract
-  readonly inject?: TInject
-  readonly factory: WebSocketImplementationDefinition<
-    TContract,
-    TInject
-  >['factory']
-}): WebSocketExecutionDefinition<TContract, TInject> {
+  readonly factory: WebSocketImplementationDefinition<TContract>['factory']
+}): WebSocketExecutionDefinition<TContract> {
   return defineExecution(websocketExtension, {
     name: definition.name ?? '',
     contract: definition.contract,
-    inject: definition.inject ?? ([] as unknown as TInject),
     factory: definition.factory,
-  }) as WebSocketExecutionDefinition<TContract, TInject>
+  }) as WebSocketExecutionDefinition<TContract>
 }
 
 export function bindWebSocketServer(
@@ -411,9 +406,6 @@ function createWebSocketRuntime(
   const sessions = new Set<ActiveSession>()
   let state: 'running' | 'draining' | 'stopped' = 'running'
   for (const execution of executions) {
-    const dependencies = execution.compiled.inject.map((token) =>
-      applicationRuntime.resolve(token),
-    )
     handlers.set(
       execution.id,
       runInInjectionContext(
@@ -425,7 +417,7 @@ function createWebSocketRuntime(
           },
           resolve: (token) => applicationRuntime.resolve(token),
         },
-        () => execution.compiled.factory(...dependencies) as never,
+        () => execution.compiled.factory() as never,
       ),
     )
   }
