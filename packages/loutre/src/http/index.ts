@@ -33,7 +33,6 @@ export {
   defineHttpImplementation,
   defineHttpMiddleware,
   httpError,
-  collectHttpRoutes,
   executionHttp as http,
   httpExecutionExtension,
   HTTP_SERVER,

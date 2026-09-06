@@ -21,8 +21,8 @@
       "import": "./dist/application/binding.js"
     },
     "./openapi": {
-      "types": "./dist/application/openapi.d.ts",
-      "import": "./dist/application/openapi.js"
+      "types": "./dist/http/openapi.d.ts",
+      "import": "./dist/http/openapi.js"
     },
     "./presentation": {
       "types": "./dist/presentation.d.ts",
@@ -67,6 +67,10 @@
     "./runtime/electron": {
       "types": "./dist/adapters/electron.d.ts",
       "import": "./dist/adapters/electron.js"
+    },
+    "./http/openapi": {
+      "types": "./dist/http/openapi.d.ts",
+      "import": "./dist/http/openapi.js"
     }
   },
   "sideEffects": false,

@@ -1,7 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { generateOpenApi } from '@loutrejs/loutre/openapi'
-import { collectHttpRoutes } from '@loutrejs/loutre/http'
+import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 import { loadApplicationDefinition } from './application-loader.js'
 
 export interface OpenApiCliIO {
@@ -36,9 +35,8 @@ export async function runOpenApiCli(
   }
 
   const application = await loadApplicationDefinition(resolve(io.cwd, entry))
-  const document = generateOpenApi(application, {
+  const document = generateOpenApi(application.model, {
     info: { title, version },
-    routes: collectHttpRoutes(application.model),
   })
   const serialized = `${JSON.stringify(document, null, 2)}\n`
   if (!output) {

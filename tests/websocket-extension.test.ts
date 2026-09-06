@@ -117,7 +117,7 @@ describe('WebSocket Execution Extension', () => {
       WebSocketHandlerContext<(typeof contract.routes)['chat']>
     >()
     expect(
-      definition.model.extensions.map(({ extension }) => extension.name),
+      [...definition.model.extensions].map(({ extension }) => extension.name),
     ).toEqual(['@loutrejs/websocket'])
 
     const response = await application.websocket.upgrade(

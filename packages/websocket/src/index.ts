@@ -193,7 +193,6 @@ export const websocketExtension = defineExecutionExtension<
         definition.name ||
         `${context.moduleId}.websocket.${context.definitionIndex}`,
       executionKind: 'websocket.session',
-      extension: definition.extension,
       dependencies: collectInjectedDependencies(
         {
           kind: 'implementation-consumer',
@@ -237,7 +236,7 @@ export const websocketExtension = defineExecutionExtension<
       context.applicationRuntime,
     )
   },
-  project: ({ execution }) => ({
+  projectGraph: ({ execution }) => ({
     routes: execution.compiled.routes.map((route) => ({
       name: route.name,
       path: route.path,

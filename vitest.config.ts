@@ -14,7 +14,10 @@ export default defineConfig({
         'packages/loutre/src/application/binding.ts',
       ),
       '@loutrejs/loutre/openapi': resolve(
-        'packages/loutre/src/application/openapi.ts',
+        'packages/loutre/src/http/openapi.ts',
+      ),
+      '@loutrejs/loutre/http/openapi': resolve(
+        'packages/loutre/src/http/openapi.ts',
       ),
       '@loutrejs/loutre/presentation': resolve(
         'packages/loutre/src/presentation.ts',

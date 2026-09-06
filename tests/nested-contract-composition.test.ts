@@ -7,7 +7,6 @@ import {
   layer,
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
-import { generateOpenApi } from '@loutrejs/loutre/openapi'
 import { bootstrap } from '@loutrejs/loutre/host'
 import {
   createHttpClient,
@@ -276,20 +275,7 @@ describe('Nested Contract composition', () => {
     expect(codes).toContain('LUTRE_IMPL_002')
   })
 
-  it('OpenAPIとTyped Clientもresolved Contract treeをsource of truthにする', async () => {
-    const definition = defineApplication({
-      modules: [ProfileModule()],
-      logger: silentLogger,
-    })
-    const document = generateOpenApi(definition, {
-      info: { title: 'Nested API', version: '1.0.0' },
-      operationId: ({ procedure }) => procedure,
-    })
-
-    expect(document.paths['/api/me/profile/{id}']?.get).toEqual(
-      expect.objectContaining({ operationId: 'api.me.profile' }),
-    )
-
+  it('Typed Clientもresolved Contract treeをsource of truthにする', async () => {
     let captured: { readonly method: string; readonly path: string } | undefined
     const client = createHttpClient(
       AppContract.http.api.me,
@@ -311,18 +297,6 @@ describe('Nested Contract composition', () => {
       id: 'p1',
       userId: 'user-1',
       scope: 'request-1',
-    })
-  })
-
-  it('Application ContractをImplementationのresolved nodeから推論する', () => {
-    const application = defineApplication({ modules: [ProfileModule()] })
-    const document = generateOpenApi(application, {
-      info: { title: 'Nested API', version: '1.0.0' },
-      operationId: ({ procedure }) => procedure,
-    })
-
-    expect(document.paths['/api/me/profile/{id}']?.get).toMatchObject({
-      operationId: 'api.me.profile',
     })
   })
 

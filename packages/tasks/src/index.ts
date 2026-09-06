@@ -63,7 +63,6 @@ export const tasksExtension = defineExecutionExtension<
       kind: 'execution',
       id: `task.${definition.name}`,
       executionKind: 'task.invocation',
-      extension: definition.extension,
       dependencies: collectInjectedDependencies(
         {
           kind: 'task-consumer',
@@ -99,7 +98,7 @@ export const tasksExtension = defineExecutionExtension<
   createRuntime({ executions, applicationRuntime }) {
     return createTasksRuntime(executions, applicationRuntime)
   },
-  project: ({ execution }) => ({ name: execution.compiled.name }),
+  projectGraph: ({ execution }) => ({ name: execution.compiled.name }),
   host: {
     namespace: 'tasks',
     create: ({ runtime }) => ({

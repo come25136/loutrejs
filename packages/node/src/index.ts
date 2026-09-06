@@ -91,9 +91,9 @@ async function create<const TDefinition extends ApplicationDefinition>(
       write: (value) => console.log(value),
     },
   )
-  const usesHttpExecutionExtension = options.application.model.extensions.some(
-    ({ extension }) => extension === httpExecutionExtension,
-  )
+  const usesHttpExecutionExtension =
+    options.application.model.extensions.get(httpExecutionExtension) !==
+    undefined
 
   let application: NodeRuntimeApplication<TDefinition>
   let http: NodeHttpRequestHandler

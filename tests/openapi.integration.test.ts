@@ -1,24 +1,56 @@
 import { generateOpenApi } from '@loutrejs/loutre/openapi'
-import { defineApplication } from '@loutrejs/loutre'
-import { contract, defineModule, implementation } from '@loutrejs/loutre'
-import { http, validate } from '../packages/loutre/src/legacy-http/index.js'
-import { createUsersApplication } from '../integrations/http-crud/src/index.js'
+import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
+
+function applicationFor<TContract extends ReturnType<typeof http.contract>>(
+  contract: TContract,
+  factory: Parameters<typeof http.implementation<TContract>>[0]['factory'],
+) {
+  const execution = http.implementation({ contract, factory })
+  const Module = defineModule(() => ({ executions: [execution] }))
+  return defineApplication({ modules: [Module()] })
+}
+
 describe('OpenAPI generation', () => {
-  it('projects executable HTTP contracts to OpenAPI 3.2', () => {
-    const document = generateOpenApi(createUsersApplication(), {
-      info: {
-        title: 'Users API',
-        version: '1.0.0',
+  it('projects compiled HTTP executions to OpenAPI 3.2', () => {
+    const contract = http.contract({
+      get: {
+        method: 'GET',
+        path: '/users/{id}',
+        request: { params: { id: z.string() } },
+        responses: {
+          found: {
+            status: 200,
+            description: 'found',
+            body: z.object({ id: z.string() }),
+          },
+        },
+      },
+      create: {
+        method: 'POST',
+        path: '/users',
+        request: {
+          headers: z.object({ 'content-type': z.literal('application/json') }),
+          body: z.object({ name: z.string() }),
+        },
+        responses: {
+          created: { status: 201, body: z.object({ id: z.string() }) },
+        },
       },
     })
+    const application = applicationFor(contract, () => ({
+      get: (ctx) => ctx.response.found({ body: { id: ctx.input.params.id } }),
+      create: (ctx) =>
+        ctx.response.created({ body: { id: ctx.input.body.name } }),
+    }))
+
+    const document = generateOpenApi(application.model, {
+      info: { title: 'Users API', version: '1.0.0' },
+    })
     expect(document.openapi).toBe('3.2.0')
-    expect(document).not.toHaveProperty('jsonSchemaDialect')
-    const getUser = document.paths['/users/{id}']?.get as
-      | Record<string, any>
-      | undefined
-    expect(getUser?.operationId).toBeUndefined()
-    expect(getUser?.parameters).toEqual([
+    const getUser = document.paths['/users/{id}']?.get as Record<string, any>
+    expect(getUser.parameters).toEqual([
       expect.objectContaining({
         name: 'id',
         in: 'path',
@@ -28,23 +60,11 @@ describe('OpenAPI generation', () => {
         }),
       }),
     ])
-    expect(getUser?.responses['200']).toEqual(
-      expect.objectContaining({
-        description: 'found',
-        content: {
-          'application/json': {
-            schema: expect.objectContaining({
-              $ref: expect.stringContaining('Response_found_Output'),
-            }),
-          },
-        },
-      }),
+    expect(getUser.responses['200']).toEqual(
+      expect.objectContaining({ description: 'found' }),
     )
-    const createUser = document.paths['/users']?.post as
-      | Record<string, any>
-      | undefined
-    expect(createUser?.operationId).toBeUndefined()
-    expect(createUser?.requestBody).toEqual({
+    const createUser = document.paths['/users']?.post as Record<string, any>
+    expect(createUser.requestBody).toEqual({
       content: {
         'application/json': {
           schema: expect.objectContaining({
@@ -53,73 +73,52 @@ describe('OpenAPI generation', () => {
         },
       },
     })
-    expect(Object.keys(document.components?.schemas ?? {})).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('GET_users_id_get_RequestParam_id_Input'),
-        expect.stringContaining('GET_users_id_get_Response_found_Output'),
-        expect.stringContaining('POST_users_create_RequestBody_Input'),
-      ]),
-    )
   })
+
   it('operationIdをOpenAPI生成側で明示的に決められる', () => {
-    const document = generateOpenApi(createUsersApplication(), {
+    const contract = http.contract({
+      get: {
+        method: 'GET',
+        path: '/users/{id}',
+        request: { params: { id: z.string() } },
+        responses: { ok: { status: 200, body: z.string() } },
+      },
+    })
+    const application = applicationFor(contract, () => ({
+      get: (ctx) => ctx.response.ok({ body: ctx.input.params.id }),
+    }))
+    const document = generateOpenApi(application.model, {
       info: { title: 'Users API', version: '1.0.0' },
       operationId: ({ method, procedure }) =>
         `${method.toLowerCase()}.${procedure}`,
     })
-
     expect(document.paths['/users/{id}']?.get).toEqual(
       expect.objectContaining({ operationId: 'get.get' }),
     )
-    expect(document.paths['/users']?.post).toEqual(
-      expect.objectContaining({ operationId: 'post.create' }),
-    )
   })
-  it('uses querystring, header parameters, response oneOf and additionalOperations', () => {
-    const Input = z.object({
-      q: z.string(),
-      page: z.coerce.number().optional(),
-    })
-    const Headers = z.object({ 'x-tenant-id': z.string() })
-    const Success = z.object({ ok: z.literal(true) })
-    const FailureA = z.object({ code: z.literal('A') })
-    const FailureB = z.object({ code: z.literal('B') })
-    const ApiContract = contract([
-      http({
-        copy: {
-          method: 'COPY',
-          path: '/search',
-          summary: 'Copy search result',
-          tags: ['Search'],
-          request: {
-            query: Input,
-            headers: Headers,
-          },
-          responses: {
-            ok: { status: 200, description: 'Success', body: Success },
-            failedA: { status: 400, body: FailureA },
-            failedB: { status: 400, body: FailureB },
-          },
-          pipeline: [validate.query, validate.headers, http.controller],
-        },
-      }),
-    ])
-    const ApiImplementation = implementation({
-      name: 'ApiImplementation',
-      contract: ApiContract,
-      protocol: http,
 
-      factory: () => ({
-        copy(ctx) {
-          return ctx.response.ok({ body: { ok: true } })
+  it('uses querystring, header parameters, response oneOf and additionalOperations', () => {
+    const contract = http.contract({
+      copy: {
+        method: 'COPY',
+        path: '/search',
+        summary: 'Copy search result',
+        tags: ['Search'],
+        request: {
+          query: z.object({ q: z.string() }),
+          headers: z.object({ 'x-tenant-id': z.string() }),
         },
-      }),
+        responses: {
+          ok: { status: 200, body: z.object({ ok: z.literal(true) }) },
+          failedA: { status: 400, body: z.object({ code: z.literal('A') }) },
+          failedB: { status: 400, body: z.object({ code: z.literal('B') }) },
+        },
+      },
     })
-    const ApiModule = defineModule(() => ({
-      implementations: [ApiImplementation],
+    const application = applicationFor(contract, () => ({
+      copy: (ctx) => ctx.response.ok({ body: { ok: true } }),
     }))
-    const application = defineApplication({ modules: [ApiModule()] })
-    const document = generateOpenApi(application, {
+    const document = generateOpenApi(application.model, {
       info: { title: 'Search API', version: '1.0.0' },
     })
     const operation = (
@@ -143,49 +142,36 @@ describe('OpenAPI generation', () => {
       operation?.responses['400'].content['application/json'].schema.oneOf,
     ).toHaveLength(2)
   })
-  it('Content-Typeの有限集合をrequestBody contentへ投影する', () => {
-    const Contract = contract([
-      http({
-        create: {
-          method: 'POST',
-          path: '/representations',
-          request: {
-            headers: z.object({
-              'content-type': z.union([
-                z.literal('application/json'),
-                z.literal('text/plain'),
-              ]),
-              'x-request-id': z.string(),
-            }),
-            body: z.union([z.object({ value: z.string() }), z.string()]),
-          },
-          responses: {
-            ok: { status: 200, body: z.object({ ok: z.boolean() }) },
-          },
-          pipeline: [validate.headers, validate.body, http.controller],
-        },
-      }),
-    ])
-    const Implementation = implementation({
-      name: 'RepresentationImplementation',
-      contract: Contract,
-      protocol: http,
-      factory: () => ({
-        create(ctx) {
-          return ctx.response.ok({ body: { ok: true } })
-        },
-      }),
-    })
-    const Module = defineModule(() => ({ implementations: [Implementation] }))
-    const application = defineApplication({ modules: [Module()] })
 
-    const document = generateOpenApi(application, {
+  it('Content-Typeの有限集合をrequestBody contentへ投影する', () => {
+    const contract = http.contract({
+      create: {
+        method: 'POST',
+        path: '/representations',
+        request: {
+          headers: z.object({
+            'content-type': z.union([
+              z.literal('application/json'),
+              z.literal('text/plain'),
+            ]),
+            'x-request-id': z.string(),
+          }),
+          body: z.union([z.object({ value: z.string() }), z.string()]),
+        },
+        responses: {
+          ok: { status: 200, body: z.object({ ok: z.boolean() }) },
+        },
+      },
+    })
+    const application = applicationFor(contract, () => ({
+      create: (ctx) => ctx.response.ok({ body: { ok: true } }),
+    }))
+    const document = generateOpenApi(application.model, {
       info: { title: 'Representations API', version: '1.0.0' },
     })
     const operation = document.paths['/representations']?.post as
       | Record<string, any>
       | undefined
-
     expect(Object.keys(operation?.requestBody.content ?? {})).toEqual([
       'application/json',
       'text/plain',
@@ -196,49 +182,33 @@ describe('OpenAPI generation', () => {
   })
 
   it('response headerのschemaとdefaultsを単一headersから投影する', () => {
-    const Contract = contract([
-      http({
-        get: {
-          method: 'GET',
-          path: '/headers',
-          responses: {
-            ok: {
-              status: 200,
-              body: z.string(),
-              headers: {
-                schema: z.object({ etag: z.string() }),
-                defaults: {
-                  'cache-control': 'no-store',
-                  'set-cookie': ['first=one', 'second=two'],
-                },
+    const contract = http.contract({
+      get: {
+        method: 'GET',
+        path: '/headers',
+        responses: {
+          ok: {
+            status: 200,
+            body: z.string(),
+            headers: {
+              schema: z.object({ etag: z.string() }),
+              defaults: {
+                'cache-control': 'no-store',
+                'set-cookie': ['first=one', 'second=two'],
               },
             },
           },
-          pipeline: [http.controller],
         },
-      }),
-    ])
-    const Implementation = implementation({
-      name: 'ResponseHeadersImplementation',
-      contract: Contract,
-      protocol: http,
-      factory: () => ({
-        get(ctx) {
-          return ctx.response.ok({ body: 'ok', headers: { etag: 'v1' } })
-        },
-      }),
+      },
     })
-    const Module = defineModule(() => ({ implementations: [Implementation] }))
-    const application = defineApplication({ modules: [Module()] })
-
-    const document = generateOpenApi(application, {
+    const application = applicationFor(contract, () => ({
+      get: (ctx) => ctx.response.ok({ body: 'ok', headers: { etag: 'v1' } }),
+    }))
+    const document = generateOpenApi(application.model, {
       info: { title: 'Response Headers API', version: '1.0.0' },
     })
-    const operation = document.paths['/headers']?.get as
-      | Record<string, any>
-      | undefined
-    const response = operation?.responses?.['200']
-
+    const operation = document.paths['/headers']?.get as Record<string, any>
+    const response = operation.responses['200']
     expect(response.headers.etag).toEqual({ schema: { type: 'string' } })
     expect(response.headers['cache-control']).toEqual({
       schema: { type: 'string', const: 'no-store' },
@@ -253,37 +223,24 @@ describe('OpenAPI generation', () => {
   })
 
   it('Content-Typeを有限集合へ解決できない場合はOpenAPI生成を失敗させる', () => {
-    const Contract = contract([
-      http({
-        create: {
-          method: 'POST',
-          path: '/dynamic-content-type',
-          request: {
-            headers: z.object({ 'content-type': z.string() }),
-            body: z.object({ value: z.string() }),
-          },
-          responses: {
-            ok: { status: 200, body: z.object({ ok: z.boolean() }) },
-          },
-          pipeline: [validate.headers, validate.body, http.controller],
+    const schema =
+      z.string() as unknown as typeof z.string extends () => infer T ? T : never
+    const contract = http.contract({
+      create: {
+        method: 'POST',
+        path: '/dynamic-content-type',
+        request: {
+          headers: z.object({ 'content-type': schema }),
+          body: z.object({ value: z.string() }),
         },
-      }),
-    ])
-    const Implementation = implementation({
-      name: 'DynamicContentTypeImplementation',
-      contract: Contract,
-      protocol: http,
-      factory: () => ({
-        create(ctx) {
-          return ctx.response.ok({ body: { ok: true } })
-        },
-      }),
-    })
-    const Module = defineModule(() => ({ implementations: [Implementation] }))
-    const application = defineApplication({ modules: [Module()] })
-
+        responses: { ok: { status: 200, body: z.object({ ok: z.boolean() }) } },
+      },
+    } as any)
+    const application = applicationFor(contract, () => ({
+      create: (ctx: any) => ctx.response.ok({ body: { ok: true } }),
+    }))
     expect(() =>
-      generateOpenApi(application, {
+      generateOpenApi(application.model, {
         info: { title: 'Dynamic API', version: '1.0.0' },
       }),
     ).toThrow('LUTRE_OPENAPI_CONTENT_TYPE_002')

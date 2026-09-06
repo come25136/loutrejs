@@ -47,16 +47,17 @@ export default defineApplication({
 
 主なsubpath exportは次のとおりです。
 
-| Entry point                     | Role                     |
-| ------------------------------- | ------------------------ |
-| `@loutrejs/loutre/http`         | HTTP Contract / Pipeline |
-| `@loutrejs/loutre/host`         | Application bootstrap    |
-| `@loutrejs/loutre/binding`      | Host / Queue binding     |
-| `@loutrejs/loutre/runtime`      | Runtime capability       |
-| `@loutrejs/loutre/graph`        | Application Graph        |
-| `@loutrejs/loutre/openapi`      | OpenAPI generation       |
-| `@loutrejs/loutre/presentation` | startup presentation     |
-| `@loutrejs/loutre/message-port` | MessagePort protocol     |
+| Entry point                     | Role                           |
+| ------------------------------- | ------------------------------ |
+| `@loutrejs/loutre/http`         | HTTP Contract / Pipeline       |
+| `@loutrejs/loutre/host`         | Application bootstrap          |
+| `@loutrejs/loutre/binding`      | Host / Queue binding           |
+| `@loutrejs/loutre/runtime`      | Runtime capability             |
+| `@loutrejs/loutre/graph`        | Application Graph              |
+| `@loutrejs/loutre/openapi`      | OpenAPI compatibility alias    |
+| `@loutrejs/loutre/http/openapi` | OpenAPI generation (canonical) |
+| `@loutrejs/loutre/presentation` | startup presentation           |
+| `@loutrejs/loutre/message-port` | MessagePort protocol           |
 
 ## HTTP subpath
 

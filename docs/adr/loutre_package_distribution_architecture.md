@@ -31,7 +31,8 @@ Loutreのソースコード上のアーキテクチャ境界を、そのままnp
 | `@loutrejs/loutre/runtime`                    | Runtime abstraction                                            |
 | `@loutrejs/loutre/host`                       | Runtime-neutral host primitive                                 |
 | `@loutrejs/loutre/binding`                    | Invocation / Host binding                                      |
-| `@loutrejs/loutre/openapi`                    | OpenAPI generation                                             |
+| `@loutrejs/loutre/openapi`                    | OpenAPI generation compatibility alias                         |
+| `@loutrejs/loutre/http/openapi`               | Canonical HTTP OpenAPI tooling                                 |
 | `@loutrejs/loutre/runtime/bun`                | Bun adapter                                                    |
 | `@loutrejs/loutre/runtime/deno`               | Deno adapter                                                   |
 | `@loutrejs/loutre/runtime/cloudflare-workers` | workerd / Workers adapter                                      |

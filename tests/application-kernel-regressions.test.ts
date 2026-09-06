@@ -27,7 +27,6 @@ describe('Application Kernel regression', () => {
         kind: 'execution',
         id: definition.id,
         executionKind: 'fixture.broken-host',
-        extension: definition.extension,
         dependencies: [],
         capabilities: [],
         compiled: {},

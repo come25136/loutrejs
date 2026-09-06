@@ -8,7 +8,6 @@ import {
   runtimeCapability,
   SchemaValidationError,
   validateSchema,
-  type ApplicationModel,
   type ExecutionDefinition,
   type ExecutionKernelRuntime,
   type GenericLayer,
@@ -384,7 +383,6 @@ export const httpExecutionExtension = defineExecutionExtension<
       kind: 'execution',
       id,
       executionKind: 'http.request',
-      extension: definition.extension,
       dependencies: [...dependencies],
       capabilities: [
         ...new Set([
@@ -426,7 +424,7 @@ export const httpExecutionExtension = defineExecutionExtension<
       context.applicationRuntime,
     )
   },
-  project: ({ execution }) => ({
+  projectGraph: ({ execution }) => ({
     routes: execution.compiled.routes.map((route) => ({
       name: route.name,
       method: route.method,
@@ -708,23 +706,6 @@ export function defineHttpMiddleware<
   return defineLayer<TContribution, HttpMiddlewareContext, HttpExecutionResult>(
     definition,
   )
-}
-
-export function collectHttpRoutes(model: ApplicationModel) {
-  return model.executions
-    .filter(
-      (execution) => execution.extension.name === httpExecutionExtension.name,
-    )
-    .flatMap((execution) =>
-      (execution.compiled as CompiledHttpExecution).routes.map((route) => ({
-        procedure: route.name,
-        definition: {
-          ...route.definition,
-          method: route.method,
-          path: route.path,
-        },
-      })),
-    )
 }
 
 export const executionHttp = Object.freeze({

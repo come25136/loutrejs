@@ -2,6 +2,7 @@ import { diagnostic, type Diagnostic } from './diagnostic.js'
 import type { ArgsClass } from './args.js'
 import {
   isExecutionDefinition,
+  type AnyExecutionExtension,
   type ExecutionContribution,
   type ExecutionExtension,
   type RuntimeCapability,
@@ -16,6 +17,7 @@ import {
   normalizeProvider,
   type ProviderDescriptor,
 } from './provider.js'
+import { collectInjectedDependencies } from './injection.js'
 import { isFrameworkProvidedToken } from './token-internal.js'
 import { tokenName, type TokenLike } from './token.js'
 
@@ -32,17 +34,17 @@ export interface ProviderModelNode {
   readonly token: TokenLike
   readonly provider: ProviderDescriptor
   readonly moduleId: string
+  readonly dependencies: readonly TokenLike[]
 }
 
-export interface ExecutionModelNode {
+export interface ExecutionModelNode<TCompiled = unknown> {
   readonly kind: 'execution'
   readonly id: string
   readonly executionKind: string
   readonly moduleId: string
-  readonly extension: ExecutionExtension
   readonly dependencies: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
-  readonly compiled: unknown
+  readonly compiled: TCompiled
 }
 
 export interface LifecycleModelNode {
@@ -79,9 +81,51 @@ export interface ApplicationModelEdge {
     | 'wraps'
 }
 
-export interface ApplicationModelExtension {
-  readonly extension: ExecutionExtension
-  readonly executions: readonly ExecutionModelNode[]
+export type CompiledOf<TExtension extends AnyExecutionExtension> =
+  TExtension extends ExecutionExtension<any, infer TCompiled, any, any, any>
+    ? TCompiled
+    : never
+
+export interface ApplicationModelExtension<
+  TExtension extends AnyExecutionExtension = AnyExecutionExtension,
+> {
+  readonly extension: TExtension
+  readonly executions: readonly ExecutionModelNode<CompiledOf<TExtension>>[]
+}
+
+export interface ApplicationModelExtensions extends Iterable<ApplicationModelExtension> {
+  get<TExtension extends AnyExecutionExtension>(
+    extension: TExtension,
+  ): ApplicationModelExtension<TExtension> | undefined
+  values(): readonly ApplicationModelExtension[]
+}
+
+class ApplicationModelExtensionRegistry implements ApplicationModelExtensions {
+  readonly #ordered: readonly ApplicationModelExtension[]
+  readonly #groups: ReadonlyMap<symbol, ApplicationModelExtension>
+
+  constructor(groups: readonly ApplicationModelExtension[]) {
+    this.#ordered = Object.freeze([...groups])
+    this.#groups = new Map(
+      groups.map((group) => [group.extension.identity, group]),
+    )
+  }
+
+  get<TExtension extends AnyExecutionExtension>(
+    extension: TExtension,
+  ): ApplicationModelExtension<TExtension> | undefined {
+    return this.#groups.get(extension.identity) as
+      | ApplicationModelExtension<TExtension>
+      | undefined
+  }
+
+  values(): readonly ApplicationModelExtension[] {
+    return this.#ordered
+  }
+
+  [Symbol.iterator](): Iterator<ApplicationModelExtension> {
+    return this.#ordered[Symbol.iterator]()
+  }
 }
 
 export interface ApplicationModel {
@@ -92,7 +136,7 @@ export interface ApplicationModel {
   readonly nodes: readonly ApplicationModelNode[]
   readonly edges: readonly ApplicationModelEdge[]
   readonly executions: readonly ExecutionModelNode[]
-  readonly extensions: readonly ApplicationModelExtension[]
+  readonly extensions: ApplicationModelExtensions
   readonly diagnostics: readonly Diagnostic[]
 }
 
@@ -194,6 +238,7 @@ export function buildApplicationModel(
         token: provider.provide,
         provider,
         moduleId,
+        dependencies: collectProviderDependencies(provider),
       }
       providers.push(provider)
       providerNodes.set(provider.provide, node)
@@ -214,10 +259,90 @@ export function buildApplicationModel(
       token: options.arguments,
       provider,
       moduleId: 'application',
+      dependencies: Object.freeze([]),
     }
     providers.push(provider)
     providerNodes.set(options.arguments, node)
     nodes.push(node)
+  }
+
+  for (const provider of providerNodes.values()) {
+    if (provider.moduleId === 'application') continue
+    const sourceModule = modules.find(
+      (candidate) => moduleIds.get(candidate) === provider.moduleId,
+    )
+    if (!sourceModule) continue
+    for (const dependency of provider.dependencies) {
+      const target = providerNodes.get(dependency)
+      if (target) {
+        edges.push({ from: provider.id, to: target.id, kind: 'injects' })
+        const targetModule = modules.find(
+          (candidate) => moduleIds.get(candidate) === target.moduleId,
+        )
+        if (
+          targetModule &&
+          target.moduleId !== provider.moduleId &&
+          !moduleDeclaresToken(sourceModule, dependency) &&
+          !isTokenVisible(sourceModule, targetModule, dependency)
+        ) {
+          diagnostics.push(
+            diagnostic(
+              'LUTRE_MODULE_VISIBILITY',
+              `Provider ${tokenName(provider.token)} depends on private ${tokenName(dependency)} from another Module.`,
+              provider.id,
+            ),
+          )
+        }
+      } else if (!isFrameworkProvidedToken(dependency)) {
+        diagnostics.push(
+          diagnostic(
+            'LUTRE_PROVIDER_DEPENDENCY_MISSING',
+            `Provider ${tokenName(provider.token)} requires ${tokenName(dependency)}, but no provider is declared.`,
+            provider.id,
+          ),
+        )
+      }
+    }
+  }
+
+  for (const module of modules) {
+    const moduleId = moduleIds.get(module)!
+    for (const [phase, hook] of Object.entries(
+      module.definition.lifecycle ?? {},
+    )) {
+      const lifecycleId = `lifecycle:${moduleId}:${phase}`
+      for (const dependency of hook.inject) {
+        const provider = providerNodes.get(dependency)
+        if (provider) {
+          edges.push({ from: lifecycleId, to: provider.id, kind: 'injects' })
+          const providerModule = modules.find(
+            (candidate) => moduleIds.get(candidate) === provider.moduleId,
+          )
+          if (
+            providerModule &&
+            provider.moduleId !== moduleId &&
+            !moduleDeclaresToken(module, dependency) &&
+            !isTokenVisible(module, providerModule, dependency)
+          ) {
+            diagnostics.push(
+              diagnostic(
+                'LUTRE_MODULE_VISIBILITY',
+                `Lifecycle ${phase} depends on private ${tokenName(dependency)} from another Module.`,
+                lifecycleId,
+              ),
+            )
+          }
+        } else if (!isFrameworkProvidedToken(dependency)) {
+          diagnostics.push(
+            diagnostic(
+              'LUTRE_LIFECYCLE_DEPENDENCY_MISSING',
+              `Lifecycle ${phase} requires ${tokenName(dependency)}, but no provider is declared.`,
+              lifecycleId,
+            ),
+          )
+        }
+      }
+    }
   }
 
   const extensionExecutions = new Map<
@@ -267,16 +392,6 @@ export function buildApplicationModel(
       } catch (error) {
         diagnostics.push(
           diagnostic('LUTRE_EXTENSION_COMPILE', describeError(error), path),
-        )
-        continue
-      }
-      if (contribution.extension !== extension) {
-        diagnostics.push(
-          diagnostic(
-            'LUTRE_EXTENSION_IDENTITY_MISMATCH',
-            `Extension ${extension.name} returned a contribution owned by another descriptor.`,
-            path,
-          ),
         )
         continue
       }
@@ -363,7 +478,7 @@ export function buildApplicationModel(
     }
   }
 
-  const extensions = [...extensionExecutions].map(
+  const extensionGroups = [...extensionExecutions].map(
     ([extension, ownedExecutions]): ApplicationModelExtension => {
       const extensionId = `extension:${extension.name}`
       nodes.push({
@@ -378,7 +493,7 @@ export function buildApplicationModel(
       if (extension.validate) {
         try {
           diagnostics.push(
-            ...extension.validate({ executions: ownedExecutions as never }),
+            ...extension.validate({ executions: ownedExecutions }),
           )
         } catch (error) {
           diagnostics.push(
@@ -397,7 +512,9 @@ export function buildApplicationModel(
     },
   )
 
-  validateHostNamespaces(extensions, diagnostics)
+  const extensions = new ApplicationModelExtensionRegistry(extensionGroups)
+
+  validateHostNamespaces(extensionGroups, diagnostics)
 
   return Object.freeze({
     kind: 'application-model' as const,
@@ -409,9 +526,38 @@ export function buildApplicationModel(
     nodes: Object.freeze(nodes),
     edges: Object.freeze(edges),
     executions: Object.freeze(executions),
-    extensions: Object.freeze(extensions),
+    extensions,
     diagnostics: Object.freeze(diagnostics),
   })
+}
+
+function collectProviderDependencies(
+  provider: ProviderDescriptor,
+): readonly TokenLike[] {
+  switch (provider.kind) {
+    case 'class':
+      return collectInjectedDependencies(provider.provide, () =>
+        Reflect.construct(provider.useClass, []),
+      )
+    case 'factory':
+      return Object.freeze([...provider.inject])
+    case 'conditional': {
+      const dependencies = new Set<TokenLike>()
+      for (const implementation of Object.values(provider.mapping)) {
+        for (const dependency of collectInjectedDependencies(
+          provider.provide,
+          () => Reflect.construct(implementation, []),
+        )) {
+          dependencies.add(dependency)
+        }
+      }
+      return Object.freeze([...dependencies])
+    }
+    case 'value':
+    case 'environment':
+    case 'arguments':
+      return Object.freeze([])
+  }
 }
 
 function collectModules(

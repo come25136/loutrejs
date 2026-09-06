@@ -9,7 +9,6 @@ import {
 import { generateOpenApi } from '@loutrejs/loutre/openapi'
 import {
   bindHttpServer,
-  collectHttpRoutes,
   createHttpClient,
   fetchHttpTransport,
   http,
@@ -144,9 +143,8 @@ describe('HTTP Execution Extension public API compatibility', () => {
       }),
     )
     try {
-      const document = generateOpenApi(definition, {
+      const document = generateOpenApi(definition.model, {
         info: { title: 'fixture', version: '1.0.0' },
-        routes: collectHttpRoutes(definition.model),
       })
       const operation = document.paths['/users/{id}']?.get as
         | Record<string, unknown>
@@ -257,9 +255,8 @@ describe('HTTP Execution Extension public API compatibility', () => {
       for await (const event of clientResponse.body) events.push(event)
       expect(events).toEqual([{ sequence: 1 }, { sequence: 2 }])
 
-      const document = generateOpenApi(definition, {
+      const document = generateOpenApi(definition.model, {
         info: { title: 'fixture', version: '1.0.0' },
-        routes: collectHttpRoutes(definition.model),
       })
       const operation = document.paths['/events']?.get as
         | Record<string, unknown>

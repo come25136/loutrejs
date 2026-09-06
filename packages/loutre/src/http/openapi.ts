@@ -1,19 +1,16 @@
 import {
   supportsJsonSchema,
   assertValidApplicationModel,
-  type ModuleInstance,
+  type ApplicationModel,
   type StandardSchemaV1,
 } from '../core/index.js'
-import { resolveContractProcedureIdentity } from '../core/contract-internal.js'
-import { assertValidCompilation, compileApplication } from '../graph/index.js'
 import {
-  type HttpProtocol,
-  type HttpProtocolDefinition,
+  httpExecutionExtension,
+  type HttpExecutionResponseDefinition,
+  type HttpExecutionRouteDefinition,
   type HttpResponseHeadersDefinition,
   type HttpResponseHeadersWithDefaults,
-  type HttpResponseDefinition,
-} from '../legacy-http/index.js'
-import type { ApplicationDefinition } from './index.js'
+} from './extension.js'
 
 export interface OpenApiInfo {
   readonly title: string
@@ -33,7 +30,6 @@ export interface OpenApiOperationIdContext {
 }
 
 export interface GenerateOpenApiOptions {
-  readonly routes?: readonly HttpOperationTarget[]
   readonly info: OpenApiInfo
   readonly servers?: readonly OpenApiServer[]
   readonly operationId?: (
@@ -63,15 +59,10 @@ interface SchemaMaterialization {
   readonly reference: { readonly $ref: string }
 }
 
-type OpenApiResponseDefinition = Omit<HttpResponseDefinition, 'body'> & {
-  readonly body?: StandardSchemaV1
-}
+type OpenApiResponseDefinition = HttpExecutionResponseDefinition
 
 export interface HttpOperationTarget {
-  readonly definition: Omit<
-    HttpProtocolDefinition,
-    'pipeline' | 'responses'
-  > & {
+  readonly definition: Omit<HttpExecutionRouteDefinition, 'responses'> & {
     readonly responses: Readonly<Record<string, OpenApiResponseDefinition>>
   }
   readonly procedure: string
@@ -90,60 +81,31 @@ const FIXED_METHODS = new Set([
 ])
 
 export function generateOpenApi(
-  application: ApplicationDefinition,
+  source: ApplicationModel | { readonly model: ApplicationModel },
   options: GenerateOpenApiOptions,
 ): OpenApiDocument {
-  if (options.routes) assertValidApplicationModel(application.model)
-  const modules = collectModules(application.modules)
-  if (
-    !options.routes ||
-    modules.some(
-      (module) => (module.definition.implementations?.length ?? 0) > 0,
-    )
-  )
-    assertValidCompilation(
-      compileApplication({
-        modules: application.modules,
-        ...(application.arguments === undefined
-          ? {}
-          : { arguments: application.arguments }),
-        tasks: application.tasks,
-        triggers: application.triggers,
-      }),
-    )
+  const model = 'model' in source ? source.model : source
+  assertValidApplicationModel(model)
+
   const registry = new SchemaRegistry()
   const paths: Record<string, OpenApiPathItem> = {}
   const operationIds = new Set<string>()
-  for (const target of options.routes ?? []) {
-    attachOperation(
-      paths,
-      target.definition,
-      createOperation(target, registry, operationIds, options.operationId),
-    )
-  }
-  for (const module of modules) {
-    for (const implementation of module.definition.implementations ?? []) {
-      if (implementation.protocol !== 'http') continue
-      for (const procedure of implementation.procedures) {
-        const protocol =
-          implementation.contract.procedures[procedure]?.protocols.http
-        if (!protocol || protocol.protocol !== 'http') continue
-        const typed = protocol as HttpProtocol
-        const target: HttpOperationTarget = {
-          definition: typed.definition,
-          procedure: resolveContractProcedureIdentity(
-            implementation.contract,
-            procedure,
-          ).procedure,
-        }
-        const operation = createOperation(
-          target,
-          registry,
-          operationIds,
-          options.operationId,
-        )
-        attachOperation(paths, typed.definition, operation)
+  const http = model.extensions.get(httpExecutionExtension)
+  for (const execution of http?.executions ?? []) {
+    for (const route of execution.compiled.routes) {
+      const target: HttpOperationTarget = {
+        procedure: route.name,
+        definition: {
+          ...route.definition,
+          method: route.method,
+          path: route.path,
+        },
       }
+      attachOperation(
+        paths,
+        target.definition,
+        createOperation(target, registry, operationIds, options.operationId),
+      )
     }
   }
 
@@ -249,8 +211,10 @@ function createOperation(
 }
 
 function createRequestBody(
-  body: NonNullable<NonNullable<HttpProtocolDefinition['request']>['body']>,
-  headers: NonNullable<HttpProtocolDefinition['request']>['headers'],
+  body: NonNullable<
+    NonNullable<HttpExecutionRouteDefinition['request']>['body']
+  >,
+  headers: NonNullable<HttpExecutionRouteDefinition['request']>['headers'],
   registry: SchemaRegistry,
   target: HttpOperationTarget,
 ): OpenApiObject {
@@ -268,7 +232,7 @@ function createRequestBody(
 }
 
 function requestBodyMediaTypes(
-  headers: NonNullable<HttpProtocolDefinition['request']>['headers'],
+  headers: NonNullable<HttpExecutionRouteDefinition['request']>['headers'],
   registry: SchemaRegistry,
   target: HttpOperationTarget,
 ): readonly string[] {
@@ -600,19 +564,29 @@ function attachOperation(
   additional[methodName] = operation
 }
 
-function collectModules(
-  roots: readonly ModuleInstance[],
-): readonly ModuleInstance[] {
-  const result: ModuleInstance[] = []
-  const seen = new Set<ModuleInstance>()
-  const visit = (module: ModuleInstance) => {
-    if (seen.has(module)) return
-    seen.add(module)
-    for (const imported of module.definition.imports ?? []) visit(imported)
-    result.push(module)
+function rebaseLocalDefinitions(
+  schema: JsonSchema,
+  schemaComponentName: string,
+): JsonSchema {
+  const visit = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(visit)
+    if (typeof value !== 'object' || value === null) return value
+    const result: Record<string, unknown> = {}
+    for (const [key, child] of Object.entries(value)) {
+      if (
+        key === '$ref' &&
+        typeof child === 'string' &&
+        child.startsWith('#/$defs/')
+      ) {
+        result[key] =
+          `#/components/schemas/${escapeJsonPointer(schemaComponentName)}/$defs/${child.slice('#/$defs/'.length)}`
+      } else {
+        result[key] = visit(child)
+      }
+    }
+    return result
   }
-  for (const root of roots) visit(root)
-  return result
+  return visit(schema) as JsonSchema
 }
 
 class SchemaRegistry {
@@ -671,31 +645,6 @@ class SchemaRegistry {
   components(): Readonly<Record<string, JsonSchema>> {
     return this.schemas
   }
-}
-
-function rebaseLocalDefinitions(
-  schema: JsonSchema,
-  schemaComponentName: string,
-): JsonSchema {
-  const visit = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(visit)
-    if (typeof value !== 'object' || value === null) return value
-    const result: Record<string, unknown> = {}
-    for (const [key, child] of Object.entries(value)) {
-      if (
-        key === '$ref' &&
-        typeof child === 'string' &&
-        child.startsWith('#/$defs/')
-      ) {
-        result[key] =
-          `#/components/schemas/${escapeJsonPointer(schemaComponentName)}/$defs/${child.slice('#/$defs/'.length)}`
-      } else {
-        result[key] = visit(child)
-      }
-    }
-    return result
-  }
-  return visit(schema) as JsonSchema
 }
 
 function componentName(target: HttpOperationTarget, suffix: string): string {

@@ -73,7 +73,7 @@ interface ExecutionExtension<
     context: ExecutionExtensionRuntimeContext<TCompiled>,
   ): TRuntime | Promise<TRuntime>
 
-  project?(context: ExecutionProjectionContext<TCompiled>): unknown
+  projectGraph?(context: ExecutionProjectionContext<TCompiled>): unknown
 
   readonly host?: HostExtension<TNamespace, THostApi, TCompiled, TRuntime>
 }
@@ -149,7 +149,6 @@ interface ExecutionContribution<TCompiled = unknown> {
   readonly kind: 'execution'
   readonly id: string
   readonly executionKind: string
-  readonly extension: ExecutionExtension
   readonly dependencies: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
   readonly compiled: TCompiled
@@ -161,12 +160,15 @@ Coreが意味を理解するfield:
 ```text
 id
 executionKind as opaque identifier
-extension identity
 dependencies
 capabilities
 ```
 
 `compiled`はExtension-owned opaque valueである。
+
+Execution ownershipは`ExecutionContribution`や`ExecutionModelNode`へ重複保持しない。Coreは`ExecutionDefinition.extension`をdispatch keyとして`compile()`を呼び、Application Modelでは`ApplicationModelExtension { extension, executions }`だけをownerの正本とする。これによりowner不整合というinvalid stateを表現できなくする。
+
+Extension固有のtoolingがcompiled型を取り戻す場合は、ordered typed registryである`ApplicationModel.extensions.get(extension)`を使う。`defineExecutionExtension()`はExtension名から`Symbol.for()`ベースのstable identityを生成し、registryはこのidentityだけでlookupする。これによりCLIのesbuild bundle/import境界でdescriptor objectが複製されても同じExtensionとして解決できる。Extension名はApplication内で一意であり、異なるdescriptorによる同名Extensionは`LUTRE_EXTENSION_NAME_COLLISION`で拒否する。heterogeneous storageからの型復元castはregistry実装内部だけへ局所化し、Core/Graph/RuntimeやExtension作者へ漏らさない。Coreはstable Extension identityをopaqueに扱うだけで、HTTP等の具体的な値による分岐は行わない。
 
 HTTPならresolved route、middleware、factory等を保持できる。WebSocketならroute、codec、session factory等を保持できる。
 

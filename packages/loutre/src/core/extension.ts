@@ -3,6 +3,7 @@ import type { TokenLike } from './token.js'
 
 declare const runtimeCapabilityValue: unique symbol
 declare const executionExtensionTypeInfo: unique symbol
+const executionExtensionIdentityNamespace = 'loutre.execution-extension:'
 
 export interface RuntimeCapability<TValue = unknown> {
   readonly kind: 'runtime-capability'
@@ -97,14 +98,10 @@ export interface ExecutionCompileContext {
   readonly definitionIndex: number
 }
 
-export interface ExecutionContribution<
-  TCompiled = unknown,
-  TExtension extends AnyExecutionExtension = AnyExecutionExtension,
-> {
+export interface ExecutionContribution<TCompiled = unknown> {
   readonly kind: 'execution'
   readonly id: string
   readonly executionKind: string
-  readonly extension: TExtension
   readonly dependencies: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
   readonly compiled: TCompiled
@@ -152,18 +149,19 @@ export interface ExecutionExtension<
 > {
   readonly kind: 'execution-extension'
   readonly name: string
+  readonly identity: symbol
   readonly [executionExtensionTypeInfo]?: readonly [TNamespace, THostApi]
   compile(
     definition: TDefinition,
     context: ExecutionCompileContext,
-  ): ExecutionContribution<TCompiled, any>
+  ): ExecutionContribution<TCompiled>
   validate?(
     context: ExecutionExtensionValidationContext<TCompiled>,
   ): readonly Diagnostic[]
   createRuntime(
     context: ExecutionExtensionRuntimeContext<TCompiled>,
   ): TRuntime | Promise<TRuntime>
-  project?(context: ExecutionProjectionContext<TCompiled>): unknown
+  projectGraph?(context: ExecutionProjectionContext<TCompiled>): unknown
   readonly host?: HostExtension<TNamespace, THostApi, TCompiled, TRuntime>
 }
 
@@ -174,15 +172,17 @@ export function defineExecutionExtension<
   THostApi extends object = {},
   TRuntime extends ExecutionExtensionRuntime = ExecutionExtensionRuntime,
 >(
-  extension: ExecutionExtension<
-    TDefinition,
-    TCompiled,
-    TNamespace,
-    THostApi,
-    TRuntime
+  extension: Omit<
+    ExecutionExtension<TDefinition, TCompiled, TNamespace, THostApi, TRuntime>,
+    'identity'
   >,
 ): ExecutionExtension<TDefinition, TCompiled, TNamespace, THostApi, TRuntime> {
-  return Object.freeze(extension)
+  return Object.freeze({
+    ...extension,
+    identity: Symbol.for(
+      `${executionExtensionIdentityNamespace}${extension.name}`,
+    ),
+  })
 }
 
 export const executionDefinitionBrand: unique symbol = Symbol(

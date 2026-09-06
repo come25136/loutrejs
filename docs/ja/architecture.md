@@ -80,7 +80,8 @@ Core packageの`@loutrejs/loutre`は、用途ごとにsubpathを公開します�
 | `@loutrejs/loutre/runtime`      | Runtime、Lifecycle、Capability metadata |
 | `@loutrejs/loutre/http`         | HTTP Protocol、Layer、Client            |
 | `@loutrejs/loutre/message-port` | MessagePort Protocol                    |
-| `@loutrejs/loutre/openapi`      | OpenAPI 3.2生成                         |
+| `@loutrejs/loutre/openapi`      | OpenAPI 3.2互換alias                    |
+| `@loutrejs/loutre/http/openapi` | OpenAPI 3.2生成（正規）                 |
 | `@loutrejs/loutre/presentation` | 起動時presentation                      |
 | `@loutrejs/loutre/runtime/*`    | RuntimeごとのAdapter                    |
 

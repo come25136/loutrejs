@@ -11,6 +11,7 @@ import {
   defineExecutionExtension,
   defineModule,
   inject,
+  hook,
   projectApplicationModel,
   runtimeCapability,
   type ExecutionDefinition,
@@ -50,7 +51,6 @@ function createProbeExtension(events: string[] = []) {
       readonly kind: 'execution'
       readonly id: string
       readonly executionKind: string
-      readonly extension: typeof definition.extension
       readonly dependencies: readonly []
       readonly capabilities: readonly [typeof PROBE_DRIVER]
       readonly compiled: ProbeCompiled
@@ -58,7 +58,6 @@ function createProbeExtension(events: string[] = []) {
       kind: 'execution',
       id: definition.id,
       executionKind: 'probe.invoke',
-      extension: definition.extension,
       dependencies: [],
       capabilities: [PROBE_DRIVER],
       compiled: { dispatch: definition.dispatch },
@@ -118,7 +117,9 @@ function createProbeExtension(events: string[] = []) {
       })
     },
     createRuntime,
-    project: ({ execution }) => ({ dispatch: execution.compiled.dispatch }),
+    projectGraph: ({ execution }) => ({
+      dispatch: execution.compiled.dispatch,
+    }),
     host: {
       namespace: 'probe',
       create: ({ runtime }) => ({
@@ -200,6 +201,83 @@ describe('Application Model', () => {
     expect(await application.probe.invoke('probe.hello')).toBe('pong:hello')
     expectTypeOf(application.probe).toEqualTypeOf<ProbeHostApi>()
     await application.close()
+  })
+
+  it('Extension Registryからcompiled型付きexecutionを取得する', () => {
+    const fixture = createProbeExtension()
+    const Module = defineModule(() => ({
+      executions: [
+        defineExecution(fixture.extension, {
+          id: 'probe.typed',
+          dispatch: 'typed',
+        }),
+      ],
+    }))
+    const model = buildApplicationModel({ modules: [Module()] })
+
+    const group = model.extensions.get(fixture.extension)
+    expect(group?.executions[0]?.compiled.dispatch).toBe('typed')
+    expect(group?.executions[0]).not.toHaveProperty('extension')
+    expect(model.executions[0]).not.toHaveProperty('extension')
+  })
+
+  it('ProviderとLifecycleのDI edgeをcanonical modelへ保持する', () => {
+    class Repository {}
+    class Service {
+      readonly repository = inject(Repository)
+    }
+    const Module = defineModule(() => ({
+      providers: [Repository, Service],
+      lifecycle: {
+        onModuleInit: hook({ inject: [Service], run: () => undefined }),
+      },
+    }))
+    const model = buildApplicationModel({ modules: [Module()] })
+    const repository = model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === Repository,
+    )
+    const service = model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === Service,
+    )
+    const lifecycle = model.nodes.find(
+      (node) => node.kind === 'lifecycle' && node.phase === 'onModuleInit',
+    )
+
+    expect(service).toMatchObject({ dependencies: [Repository] })
+    expect(model.edges).toContainEqual({
+      from: service?.id,
+      to: repository?.id,
+      kind: 'injects',
+    })
+    expect(model.edges).toContainEqual({
+      from: lifecycle?.id,
+      to: service?.id,
+      kind: 'injects',
+    })
+  })
+
+  it('Provider dependencyにもModule visibilityを適用する', () => {
+    class PrivateRepository {}
+    class Service {
+      readonly repository = inject(PrivateRepository)
+    }
+    const RepositoryModule = defineModule(() => ({
+      providers: [PrivateRepository],
+    }))
+    const repositoryModule = RepositoryModule()
+    const ServiceModule = defineModule(() => ({
+      imports: [repositoryModule],
+      providers: [Service],
+    }))
+
+    const model = buildApplicationModel({ modules: [ServiceModule()] })
+
+    expect(model.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 'LUTRE_MODULE_VISIBILITY',
+        message: expect.stringContaining('Provider Service depends on private'),
+      }),
+    )
   })
 
   it('Extension単位のglobal validationをApplication diagnosticsへ統合する', () => {

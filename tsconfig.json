@@ -21,9 +21,7 @@
       "@loutrejs/loutre/binding": [
         "./packages/loutre/src/application/binding.ts"
       ],
-      "@loutrejs/loutre/openapi": [
-        "./packages/loutre/src/application/openapi.ts"
-      ],
+      "@loutrejs/loutre/openapi": ["./packages/loutre/src/http/openapi.ts"],
       "@loutrejs/loutre/presentation": [
         "./packages/loutre/src/presentation.ts"
       ],
@@ -54,7 +52,8 @@
       ],
       "@loutrejs/node": ["./packages/node/src/index.ts"],
       "@loutrejs/bullmq": ["./packages/bullmq/src/index.ts"],
-      "@loutrejs/cli": ["./packages/cli/src/index.ts"]
+      "@loutrejs/cli": ["./packages/cli/src/index.ts"],
+      "@loutrejs/loutre/http/openapi": ["./packages/loutre/src/http/openapi.ts"]
     },
     "types": ["node", "vitest/globals"]
   },

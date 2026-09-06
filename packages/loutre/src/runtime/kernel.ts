@@ -91,7 +91,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       await this.#initializeProviders()
       for (const modelExtension of this.model.extensions) {
         const runtime = await modelExtension.extension.createRuntime({
-          executions: modelExtension.executions as never,
+          executions: modelExtension.executions,
           capabilities: this.capabilities,
           applicationRuntime: this,
         })
@@ -247,7 +247,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     if (this.#activeExecutions.size > 0) {
       await new Promise<void>((resolve) => this.#idleWaiters.add(resolve))
     }
-    for (const { extension } of this.model.extensions.toReversed()) {
+    for (const { extension } of [...this.model.extensions].toReversed()) {
       const runtime = this.#extensionRuntimes.get(extension)
       if (runtime?.close) await collectError(() => runtime.close!(), errors)
     }

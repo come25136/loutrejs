@@ -99,7 +99,6 @@ export const messagePortExtension = defineExecutionExtension<
         definition.name ||
         `${context.moduleId}.message-port.${context.definitionIndex}`,
       executionKind: 'message-port.invocation',
-      extension: definition.extension,
       dependencies: collectInjectedDependencies(
         {
           kind: 'implementation-consumer',
@@ -138,7 +137,7 @@ export const messagePortExtension = defineExecutionExtension<
   createRuntime({ executions, applicationRuntime }) {
     return createMessagePortRuntime(executions, applicationRuntime)
   },
-  project: ({ execution }) => ({
+  projectGraph: ({ execution }) => ({
     methods: Object.keys(execution.compiled.routes),
   }),
   host: {

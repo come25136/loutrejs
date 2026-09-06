@@ -1,8 +1,10 @@
 import {
   diagnostic,
   tokenName,
+  type AnyExecutionExtension,
   type ApplicationModel,
   type ApplicationModelEdge,
+  type ApplicationModelExtension,
   type ApplicationModelNode,
   type Diagnostic,
   type ExecutionModelNode,
@@ -47,7 +49,17 @@ export function projectApplicationModel(
   model: ApplicationModel,
 ): ApplicationModelGraphIR {
   const diagnostics = [...model.diagnostics]
-  const nodes = model.nodes.map((node) => projectNode(node, diagnostics))
+  const projectedExecutions = new Map<string, GraphNodeIR>()
+  for (const group of model.extensions) {
+    for (const execution of projectExtensionGroup(group, diagnostics)) {
+      projectedExecutions.set(execution.id, execution)
+    }
+  }
+  const nodes = model.nodes.map((node) =>
+    node.kind === 'execution'
+      ? (projectedExecutions.get(node.id) ?? projectExecutionBase(node))
+      : projectCoreNode(node),
+  )
   const edges = model.edges.map((edge) => ({ ...edge }))
   return Object.freeze({
     nodes: Object.freeze(nodes),
@@ -61,9 +73,8 @@ export function projectApplicationModel(
   })
 }
 
-function projectNode(
-  node: ApplicationModelNode,
-  diagnostics: Diagnostic[],
+function projectCoreNode(
+  node: Exclude<ApplicationModelNode, ExecutionModelNode>,
 ): GraphNodeIR {
   switch (node.kind) {
     case 'module':
@@ -86,8 +97,6 @@ function projectNode(
           scope: node.provider.scope,
         },
       }
-    case 'execution':
-      return projectExecution(node, diagnostics)
     case 'lifecycle':
       return {
         id: node.id,
@@ -105,49 +114,56 @@ function projectNode(
   }
 }
 
-function projectExecution(
-  execution: ExecutionModelNode,
+function projectExtensionGroup<TExtension extends AnyExecutionExtension>(
+  group: ApplicationModelExtension<TExtension>,
   diagnostics: Diagnostic[],
-): GraphNodeIR {
-  let metadata: JsonValue | undefined
-  if (execution.extension.project) {
-    try {
-      const projected = execution.extension.project({
-        execution: execution as never,
-      })
-      if (projected !== undefined) {
-        if (!isJsonValue(projected)) {
-          diagnostics.push(
-            diagnostic(
-              'LUTRE_EXTENSION_PROJECTION_NOT_SERIALIZABLE',
-              `Extension ${execution.extension.name} returned non-serializable metadata.`,
-              execution.id,
-            ),
-          )
-        } else {
-          metadata = projected
+): readonly GraphNodeIR[] {
+  return group.executions.map((execution) => {
+    let metadata: JsonValue | undefined
+    const project = group.extension.projectGraph
+    if (project) {
+      try {
+        const projected = project({ execution })
+        if (projected !== undefined) {
+          if (!isJsonValue(projected)) {
+            diagnostics.push(
+              diagnostic(
+                'LUTRE_EXTENSION_PROJECTION_NOT_SERIALIZABLE',
+                `Extension ${group.extension.name} returned non-serializable metadata.`,
+                execution.id,
+              ),
+            )
+          } else {
+            metadata = projected
+          }
         }
+      } catch (error) {
+        diagnostics.push(
+          diagnostic(
+            'LUTRE_EXTENSION_PROJECTION',
+            error instanceof Error ? error.message : String(error),
+            execution.id,
+          ),
+        )
       }
-    } catch (error) {
-      diagnostics.push(
-        diagnostic(
-          'LUTRE_EXTENSION_PROJECTION',
-          error instanceof Error ? error.message : String(error),
-          execution.id,
-        ),
-      )
     }
-  }
+    return {
+      ...projectExecutionBase(execution),
+      extension: {
+        name: group.extension.name,
+        ...(metadata === undefined ? {} : { metadata }),
+      },
+    }
+  })
+}
+
+function projectExecutionBase(execution: ExecutionModelNode): GraphNodeIR {
   return {
     id: execution.id,
     kind: execution.kind,
     module: execution.moduleId,
     executionKind: execution.executionKind,
     capabilities: execution.capabilities.map((capability) => capability.id),
-    extension: {
-      name: execution.extension.name,
-      ...(metadata === undefined ? {} : { metadata }),
-    },
   }
 }
 

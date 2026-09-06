@@ -80,7 +80,8 @@ Core package `@loutrejs/loutre` exposes subpaths for each use.
 | `@loutrejs/loutre/runtime`      | Runtime, Lifecycle, Capability metadata |
 | `@loutrejs/loutre/http`         | HTTP Protocol, Layer, Client            |
 | `@loutrejs/loutre/message-port` | MessagePort Protocol                    |
-| `@loutrejs/loutre/openapi`      | OpenAPI 3.2 generation                  |
+| `@loutrejs/loutre/openapi`      | OpenAPI 3.2 compatibility alias         |
+| `@loutrejs/loutre/http/openapi` | OpenAPI 3.2 generation (canonical)      |
 | `@loutrejs/loutre/presentation` | Presentation at startup                 |
 | `@loutrejs/loutre/runtime/*`    | Adapter per Runtime                     |
 
