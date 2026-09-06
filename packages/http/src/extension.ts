@@ -482,13 +482,13 @@ type MiddlewareShortCircuit<TMiddleware> =
       : never
     : never
 
-type RouteMiddlewareShortCircuits<
-  TRoute extends HttpExecutionRouteDefinition,
-> = TRoute extends {
-  readonly middlewares: infer TMiddlewares extends readonly AnyHttpMiddleware[]
-}
-  ? MiddlewareShortCircuit<TMiddlewares[number]>
-  : never
+type RouteMiddlewareShortCircuits<TRoute extends HttpExecutionRouteDefinition> =
+  TRoute extends {
+    readonly middlewares: infer TMiddlewares extends
+      readonly AnyHttpMiddleware[]
+  }
+    ? MiddlewareShortCircuit<TMiddlewares[number]>
+    : never
 
 type AreMiddlewareShortCircuitsCompatible<
   TRoute extends HttpExecutionRouteDefinition,
@@ -507,31 +507,31 @@ type HttpRouteConstraint<TRoute extends HttpExecutionRouteDefinition> =
       ? unknown
       : { readonly responses: never }
     : { readonly responses: never }) &
-  (TRoute['request'] extends { readonly body: StandardSchemaV1 }
-    ? TRoute['request'] extends {
-        readonly headers: infer THeaders extends StandardSchemaV1
-      }
-      ? HasRequiredStringContentType<SchemaInput<THeaders>> extends true
-        ? HasRequiredStringContentType<SchemaOutput<THeaders>> extends true
+    (TRoute['request'] extends { readonly body: StandardSchemaV1 }
+      ? TRoute['request'] extends {
+          readonly headers: infer THeaders extends StandardSchemaV1
+        }
+        ? HasRequiredStringContentType<SchemaInput<THeaders>> extends true
+          ? HasRequiredStringContentType<SchemaOutput<THeaders>> extends true
+            ? unknown
+            : { readonly request: never }
+          : { readonly request: never }
+        : { readonly request: never }
+      : unknown) &
+    (TRoute['request'] extends {
+      readonly params: infer TParams extends Readonly<
+        Record<string, StandardSchemaV1>
+      >
+    }
+      ? IsExactParamsSchemaMap<TRoute['path'], TParams> extends true
+        ? DoParamsSchemasAcceptStrings<TParams> extends true
           ? unknown
           : { readonly request: never }
         : { readonly request: never }
-      : { readonly request: never }
-    : unknown) &
-  (TRoute['request'] extends {
-    readonly params: infer TParams extends Readonly<
-      Record<string, StandardSchemaV1>
-    >
-  }
-    ? IsExactParamsSchemaMap<TRoute['path'], TParams> extends true
-      ? DoParamsSchemasAcceptStrings<TParams> extends true
-        ? unknown
-        : { readonly request: never }
-      : { readonly request: never }
-    : unknown) &
-  (AreMiddlewareShortCircuitsCompatible<TRoute> extends true
-    ? unknown
-    : { readonly middlewares: never })
+      : unknown) &
+    (AreMiddlewareShortCircuitsCompatible<TRoute> extends true
+      ? unknown
+      : { readonly middlewares: never })
 
 type HttpContractConstraint<
   TRoutes extends Readonly<Record<string, HttpExecutionRouteDefinition>>,
@@ -663,7 +663,9 @@ function assertValidHttpRouteDefinition(
   if (route.request?.params) {
     const pathParams = segments
       .filter(
-        (segment): segment is Extract<HttpPathSegment, { readonly kind: 'param' }> =>
+        (
+          segment,
+        ): segment is Extract<HttpPathSegment, { readonly kind: 'param' }> =>
           segment.kind === 'param',
       )
       .map((segment) => segment.name)
@@ -734,9 +736,10 @@ function createHttpExtensionRuntime(
   }
   const routes = executions
     .flatMap((execution) =>
-      execution.compiled.routes.map(
-        (route): RuntimeHttpRoute => ({ executionId: execution.id, route }),
-      ),
+      execution.compiled.routes.map((route): RuntimeHttpRoute => ({
+        executionId: execution.id,
+        route,
+      })),
     )
     .toSorted((left, right) =>
       compareHttpPathSpecificity(left.route.segments, right.route.segments),
@@ -861,13 +864,12 @@ function createHttpExtensionRuntime(
           terminal: async (middlewareContext) =>
             handler(middlewareContext as HttpExecutionContext),
         })
-        return complete(await finalizeHttpResult(match.route.definition, result))
+        return complete(
+          await finalizeHttpResult(match.route.definition, result),
+        )
       } catch {
         return applyFrameworkHeadersToResponse(
-          Response.json(
-            { error: 'Internal Server Error' },
-            { status: 500 },
-          ),
+          Response.json({ error: 'Internal Server Error' }, { status: 500 }),
           await safeCorsHeaders(match.route.middlewares, request),
         )
       } finally {
@@ -882,7 +884,9 @@ function findRuntimeHttpRoute(
   routes: readonly RuntimeHttpRoute[],
   method: string,
   pathname: string,
-): (RuntimeHttpRoute & { readonly params: Record<string, string> }) | undefined {
+):
+  | (RuntimeHttpRoute & { readonly params: Record<string, string> })
+  | undefined {
   for (const candidate of routes) {
     if (candidate.route.method !== method) continue
     const params = matchHttpPath(candidate.route.segments, pathname)

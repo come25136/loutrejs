@@ -4,10 +4,7 @@ import {
   registerCorsPolicy,
   type CorsOrigin,
 } from './cors-internal.js'
-import type {
-  HttpExecutionResult,
-  HttpMiddlewareContext,
-} from './extension.js'
+import type { HttpExecutionResult, HttpMiddlewareContext } from './extension.js'
 
 export type { CorsOrigin } from './cors-internal.js'
 

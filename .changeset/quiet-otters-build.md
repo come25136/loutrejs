@@ -12,15 +12,15 @@ Application Modelを正本とするExecution Extension architectureを導入し�
 
 Loutre 0.xの破壊的再設計として、Protocol中心の旧APIからExecution Extension APIへ移行します。
 
-| 旧API | 新API |
-| --- | --- |
-| `@loutrejs/loutre/http` | `@loutrejs/http` |
-| `@loutrejs/loutre/message-port` | `@loutrejs/message-port` |
-| Moduleの`implementations` | Moduleの`executions` |
-| HTTP routeの`pipeline` | HTTP routeの`middlewares` |
-| `ctx.input.params/query/headers/body` | `ctx.params/query/headers/body` |
-| Core Protocol / Procedure / ProtocolDescriptor | Extension-owned Contract / Execution Definition |
-| response `staticHeaders` | response `headers`（固定値、schema、または`{ schema, defaults }`） |
+| 旧API                                          | 新API                                                              |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| `@loutrejs/loutre/http`                        | `@loutrejs/http`                                                   |
+| `@loutrejs/loutre/message-port`                | `@loutrejs/message-port`                                           |
+| Moduleの`implementations`                      | Moduleの`executions`                                               |
+| HTTP routeの`pipeline`                         | HTTP routeの`middlewares`                                          |
+| `ctx.input.params/query/headers/body`          | `ctx.params/query/headers/body`                                    |
+| Core Protocol / Procedure / ProtocolDescriptor | Extension-owned Contract / Execution Definition                    |
+| response `staticHeaders`                       | response `headers`（固定値、schema、または`{ schema, defaults }`） |
 
 HTTP request bodyを宣言するContractでは、`request.headers`でrequiredな`content-type: string`を宣言する契約を維持します。Content-Typeの正規化、JSON / `+json` / multipart / text decodingは、そのContractでvalidateされたContent-Typeに従ってHTTP Extensionが実行します。
 

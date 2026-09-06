@@ -43,7 +43,9 @@ describe('HTTP Execution Extension regression', () => {
         new Request('http://fixture.test/users/%E0%A4%A'),
       )
       expect(response.status).toBe(400)
-      await expect(response.json()).resolves.toEqual({ error: 'Invalid request' })
+      await expect(response.json()).resolves.toEqual({
+        error: 'Invalid request',
+      })
     } finally {
       await application.close()
     }

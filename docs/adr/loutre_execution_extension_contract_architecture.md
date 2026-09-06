@@ -73,16 +73,9 @@ interface ExecutionExtension<
     context: ExecutionExtensionRuntimeContext<TCompiled>,
   ): TRuntime | Promise<TRuntime>
 
-  project?(
-    context: ExecutionProjectionContext<TCompiled>,
-  ): unknown
+  project?(context: ExecutionProjectionContext<TCompiled>): unknown
 
-  readonly host?: HostExtension<
-    TNamespace,
-    THostApi,
-    TCompiled,
-    TRuntime
-  >
+  readonly host?: HostExtension<TNamespace, THostApi, TCompiled, TRuntime>
 }
 ```
 

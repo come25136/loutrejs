@@ -18,9 +18,7 @@ export type CorsPolicy = Readonly<{
     | { readonly kind: 'exact'; readonly origins: ReadonlySet<string> }
     | {
         readonly kind: 'predicate'
-        readonly predicate: (
-          origin: string,
-        ) => boolean | Promise<boolean>
+        readonly predicate: (origin: string) => boolean | Promise<boolean>
       }
   allowMethods: readonly string[] | undefined
   allowHeaders: readonly string[] | undefined

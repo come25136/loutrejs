@@ -19,8 +19,10 @@ type AuthenticationChallengeHeaders = {
   readonly 'www-authenticate': string
 }
 
-type AuthenticationShortCircuit<TResponse extends string, TBody> =
-  HttpExecutionResult<TResponse, TBody, AuthenticationChallengeHeaders>
+type AuthenticationShortCircuit<
+  TResponse extends string,
+  TBody,
+> = HttpExecutionResult<TResponse, TBody, AuthenticationChallengeHeaders>
 
 export interface BasicAuthRuntime<
   TContribution extends object,
