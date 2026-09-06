@@ -132,7 +132,6 @@ class ApplicationModelExtensionRegistry implements ApplicationModelExtensions {
 
 export interface ApplicationModel {
   readonly kind: 'application-model'
-  readonly modules: readonly ModuleInstance[]
   readonly arguments?: ArgsClass
   readonly providers: readonly ProviderDescriptor[]
   readonly nodes: readonly ApplicationModelNode[]
@@ -184,6 +183,7 @@ export function buildApplicationModel(
   const executions: ExecutionModelNode[] = []
   const providerNodes = new Map<TokenLike, ProviderModelNode>()
   const moduleNames = new Set<string>()
+  let providerOrdinal = 0
 
   for (const module of modules) {
     const moduleId = moduleIds.get(module)!
@@ -214,8 +214,8 @@ export function buildApplicationModel(
       if (target) edges.push({ from: moduleId, to: target, kind: 'imports' })
     }
     for (const declaration of module.definition.providers ?? []) {
-      const provider = normalizeProvider(declaration)
-      const providerId = `provider:${moduleId}:${tokenName(provider.provide)}`
+      const provider = snapshotProvider(normalizeProvider(declaration))
+      const providerId = `provider:${++providerOrdinal}`
       const existingProvider = providerNodes.get(provider.provide)
       if (
         existingProvider?.provider.kind === 'environment' &&
@@ -282,10 +282,10 @@ export function buildApplicationModel(
   }
 
   if (options.arguments) {
-    const provider = argumentsProvider(options.arguments)
+    const provider = snapshotProvider(argumentsProvider(options.arguments))
     const node: ProviderModelNode = {
       kind: 'provider',
-      id: `provider:application:${options.arguments.name}`,
+      id: `provider:${++providerOrdinal}`,
       token: options.arguments,
       provider,
       moduleId: 'application',
@@ -376,14 +376,19 @@ export function buildApplicationModel(
   }
 
   const extensionExecutions = new Map<
-    ExecutionExtension,
+    symbol,
     {
       readonly extension: ExecutionExtension
       readonly executions: ExecutionModelNode[]
     }
   >()
-  const extensionNames = new Map<string, ExecutionExtension>()
+  const extensionNames = new Map<string, symbol>()
+  const extensionIdentities = new Map<
+    symbol,
+    { readonly name: string; readonly extension: ExecutionExtension }
+  >()
   const executionIds = new Set<string>()
+  const capabilityNodeIds = new Set<string>()
 
   for (const module of modules) {
     const moduleId = moduleIds.get(module)!
@@ -402,8 +407,8 @@ export function buildApplicationModel(
         continue
       }
       const extension = value.extension
-      const sameName = extensionNames.get(extension.name)
-      if (sameName && sameName !== extension) {
+      const namedIdentity = extensionNames.get(extension.name)
+      if (namedIdentity && namedIdentity !== extension.identity) {
         diagnostics.push(
           diagnostic(
             'LUTRE_EXTENSION_NAME_COLLISION',
@@ -413,7 +418,24 @@ export function buildApplicationModel(
         )
         continue
       }
-      extensionNames.set(extension.name, extension)
+      const identityOwner = extensionIdentities.get(extension.identity)
+      if (identityOwner && identityOwner.name !== extension.name) {
+        diagnostics.push(
+          diagnostic(
+            'LUTRE_EXTENSION_IDENTITY_COLLISION',
+            `Extension identity is shared by ${identityOwner.name} and ${extension.name}.`,
+            path,
+          ),
+        )
+        continue
+      }
+      const canonicalExtension =
+        identityOwner?.extension ?? snapshotExecutionExtension(extension)
+      extensionNames.set(extension.name, extension.identity)
+      extensionIdentities.set(extension.identity, {
+        name: extension.name,
+        extension: canonicalExtension,
+      })
 
       let contribution: ExecutionContribution
       try {
@@ -440,17 +462,19 @@ export function buildApplicationModel(
       executionIds.add(contribution.id)
       const execution: ExecutionModelNode = Object.freeze({
         ...contribution,
+        dependencies: Object.freeze([...contribution.dependencies]),
+        capabilities: Object.freeze([...contribution.capabilities]),
         moduleId,
       })
       executions.push(execution)
       nodes.push(execution)
       edges.push({ from: moduleId, to: execution.id, kind: 'owns' })
-      const grouped = extensionExecutions.get(extension) ?? {
-        extension,
+      const grouped = extensionExecutions.get(extension.identity) ?? {
+        extension: canonicalExtension,
         executions: [] as ExecutionModelNode[],
       }
       grouped.executions.push(execution)
-      extensionExecutions.set(extension, grouped)
+      extensionExecutions.set(extension.identity, grouped)
       for (const dependency of execution.dependencies) {
         const provider = providerNodes.get(dependency)
         if (provider) {
@@ -484,7 +508,8 @@ export function buildApplicationModel(
       }
       for (const capability of execution.capabilities) {
         const capabilityId = `capability:${capability.id}`
-        if (!nodes.some((node) => node.id === capabilityId)) {
+        if (!capabilityNodeIds.has(capabilityId)) {
+          capabilityNodeIds.add(capabilityId)
           nodes.push({
             kind: 'framework',
             id: capabilityId,
@@ -538,19 +563,21 @@ export function buildApplicationModel(
   const extensions = new ApplicationModelExtensionRegistry(extensionGroups)
 
   validateHostNamespaces(extensionGroups, diagnostics)
+  validateNodeIds(nodes, diagnostics)
 
   return Object.freeze({
     kind: 'application-model' as const,
-    modules: Object.freeze([...modules]),
     ...(options.arguments === undefined
       ? {}
       : { arguments: options.arguments }),
     providers: Object.freeze(providers),
-    nodes: Object.freeze(nodes),
-    edges: Object.freeze(edges),
+    nodes: Object.freeze(nodes.map((node) => Object.freeze(node))),
+    edges: Object.freeze(edges.map((edge) => Object.freeze(edge))),
     executions: Object.freeze(executions),
     extensions,
-    diagnostics: Object.freeze(diagnostics),
+    diagnostics: Object.freeze(
+      diagnostics.map((item) => Object.freeze({ ...item })),
+    ),
   })
 }
 
@@ -559,8 +586,10 @@ function collectProviderDependencies(
 ): readonly TokenLike[] {
   switch (provider.kind) {
     case 'class':
-      return collectInjectedDependencies(provider.provide, () =>
-        Reflect.construct(provider.useClass, []),
+      return Object.freeze(
+        collectInjectedDependencies(provider.provide, () =>
+          Reflect.construct(provider.useClass, []),
+        ),
       )
     case 'factory':
       return Object.freeze([...provider.inject])
@@ -609,7 +638,13 @@ function appendLifecycleNodes(
   if (!lifecycle) return
   for (const [phase, hook] of Object.entries(lifecycle)) {
     const id = `lifecycle:${moduleId}:${phase}`
-    nodes.push({ kind: 'lifecycle', id, moduleId, phase, hook })
+    nodes.push({
+      kind: 'lifecycle',
+      id,
+      moduleId,
+      phase,
+      hook: snapshotLifecycleHook(hook),
+    })
     edges.push({ from: moduleId, to: id, kind: 'owns' })
   }
 }
@@ -618,12 +653,33 @@ function validateHostNamespaces(
   extensions: readonly ApplicationModelExtension[],
   diagnostics: Diagnostic[],
 ): void {
+  const reserved = new Set([
+    'graph',
+    'init',
+    'get',
+    'close',
+    'serve',
+    'then',
+    '__proto__',
+    'prototype',
+    'constructor',
+  ])
   const owners = new Map<string, ExecutionExtension>()
   for (const { extension } of extensions) {
     const namespace = extension.host?.namespace
     if (!namespace) continue
+    if (reserved.has(namespace)) {
+      diagnostics.push(
+        diagnostic(
+          'LUTRE_HOST_NAMESPACE_RESERVED',
+          `Host namespace ${namespace} is reserved by the Application or runtime adapter API.`,
+          `host.${namespace}`,
+        ),
+      )
+      continue
+    }
     const owner = owners.get(namespace)
-    if (owner && owner !== extension) {
+    if (owner && owner.identity !== extension.identity) {
       diagnostics.push(
         diagnostic(
           'LUTRE_HOST_NAMESPACE_COLLISION',
@@ -635,6 +691,68 @@ function validateHostNamespaces(
     }
     owners.set(namespace, extension)
   }
+}
+
+function validateNodeIds(
+  nodes: readonly ApplicationModelNode[],
+  diagnostics: Diagnostic[],
+): void {
+  const seen = new Set<string>()
+  for (const node of nodes) {
+    if (!seen.has(node.id)) {
+      seen.add(node.id)
+      continue
+    }
+    diagnostics.push(
+      diagnostic(
+        'LUTRE_APPLICATION_NODE_ID_COLLISION',
+        `Application Model node id ${node.id} is not globally unique.`,
+        node.id,
+      ),
+    )
+  }
+}
+
+function snapshotProvider(provider: ProviderDescriptor): ProviderDescriptor {
+  switch (provider.kind) {
+    case 'class':
+      return Object.freeze({ ...provider })
+    case 'value':
+      return Object.freeze({ ...provider })
+    case 'factory':
+      return Object.freeze({
+        ...provider,
+        inject: Object.freeze([...provider.inject]),
+      })
+    case 'conditional':
+      return Object.freeze({
+        ...provider,
+        select: Object.freeze({ ...provider.select }),
+        mapping: Object.freeze({ ...provider.mapping }),
+      })
+    case 'environment':
+    case 'arguments':
+      return Object.freeze({ ...provider })
+  }
+}
+
+function snapshotLifecycleHook(hook: LifecycleHook<any>): LifecycleHook<any> {
+  return Object.freeze({
+    kind: 'lifecycle-hook',
+    inject: Object.freeze([...hook.inject]),
+    run: hook.run,
+  })
+}
+
+function snapshotExecutionExtension(
+  extension: ExecutionExtension,
+): ExecutionExtension {
+  return Object.freeze({
+    ...extension,
+    ...(extension.host === undefined
+      ? {}
+      : { host: Object.freeze({ ...extension.host }) }),
+  })
 }
 
 function describeError(error: unknown): string {

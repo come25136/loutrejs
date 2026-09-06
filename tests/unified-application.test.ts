@@ -124,7 +124,7 @@ describe('Task/Trigger Application', () => {
     await execution
     await closing
     await expect(application.tasks.run(job)).rejects.toThrow(
-      'LUTRE_TASKS_DRAINING',
+      'LUTRE_TASKS_STOPPED',
     )
     await expect(application.close()).resolves.toBeUndefined()
   })

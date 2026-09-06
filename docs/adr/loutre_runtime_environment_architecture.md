@@ -245,95 +245,20 @@ JavaScript で同期 construction できるものまで Lifecycle へ追い出�
 
 ---
 
-## 6. Graph Probe
+## 6. Application Model dependency collection
 
-`loutre graph` / `loutre check` / `loutre build` は deployment secret を要求しない。
+`loutre graph` / `loutre check` / `loutre build`はdeployment secretを要求しない。Runtime Containerでraw Moduleを再walkする別Graphは持たず、Application Model buildが収集したdependency edgeを正本とする。
 
-ただし、そのために Application code の自然な constructor 設計を制限してはならない。
-
-### 6.1 Probe Boundary
-
-Graph Probe の Environment は opaque value とする。
-
-```text
-probe PostgresDatabase
-        ↓
-inject(AppEnv)
-        ↓
-edge: PostgresDatabase → AppEnv
-        ↓
-env.databaseUrl を読む
-        ↓
-GraphProbeBoundary
-        ↓
-この provider の runtime-dependent construction を終了
-```
-
-Environment concrete value access は **diagnostic errorではない**。
-
-`LUTRE_ENV_004` は存在しない。
-
-Graph Probe が「ここから先は runtime value がなければ意味を持たない」と判断する正常な終了境界として扱う。
-
-### 6.2 Opaque placeholder
-
-nested dependency の Probe Boundary は親 construction へそのまま伝播させない。
-
-代わりに opaque placeholder を返す。
-
-```text
-probe Service
-
-constructor(
-  database = inject(PostgresDatabase),
-                       │
-                       ▼
-             probe PostgresDatabase
-                       │
-                 inject(AppEnv)
-                       │
-                env.databaseUrl
-                       │
-                Probe Boundary
-                       │
-                       ▼
-                opaque Database
-                       │
-                       └──── 親へ返す
-
-  logger = inject(Logger)
-                 │
-                 └──── probe継続
-)
-```
-
-結果として Graph は後続 dependency も失わない。
-
-```text
-Service
- ├─ PostgresDatabase
- └─ Logger
-
-PostgresDatabase
- └─ AppEnv
-```
-
-opaque placeholder 自体を具体的に利用しようとした場合は再び Probe Boundary となる。
-
-### 6.3 Dependency wiring の canonical form
-
-Graph が安定して dependency を収集できるよう、DI dependency は constructor / factory の default parameter へ宣言する。
+DI dependencyはconstructor / factoryのdefault parameterへ宣言する。
 
 ```ts
 constructor(
   readonly env = inject(AppEnv),
   readonly logger = inject(Logger),
-) {
-  // dependencyを使う処理はここで自由に行ってよい
-}
+) {}
 ```
 
-runtime value に応じて imperative に `inject()` topology を切り替える形は canonical にしない。
+runtime valueに応じてimperativeに`inject()` topologyを切り替える形はcanonicalにしない。
 
 ```ts
 if (env.driver === 's3') {
@@ -343,7 +268,7 @@ if (env.driver === 's3') {
 }
 ```
 
-この用途には conditional Provider を使う。
+この用途にはconditional Providerを使う。Provider implementation constructorとExecution factoryのdependency collection contractはApplication Graph Kernel ADRおよびExecution Extension Contract ADRを正本とする。
 
 ---
 

@@ -1,28 +1,12 @@
 import type { TokenLike, TokenValue } from './token.js'
 
-export interface LayerConsumer {
-  readonly kind: 'layer-consumer'
+export interface DependencyConsumerDescriptor {
   readonly id: string
   readonly name: string
+  readonly kind?: string
 }
 
-export interface ImplementationConsumer {
-  readonly kind: 'implementation-consumer'
-  readonly id: string
-  readonly name: string
-}
-
-export interface TaskConsumer {
-  readonly kind: 'task-consumer'
-  readonly id: string
-  readonly name: string
-}
-
-export type DependencyConsumer =
-  | TokenLike
-  | LayerConsumer
-  | ImplementationConsumer
-  | TaskConsumer
+export type DependencyConsumer = TokenLike | DependencyConsumerDescriptor
 
 export interface InjectionContext {
   readonly consumer: DependencyConsumer

@@ -1,13 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
+import * as runtimeApi from '@loutrejs/loutre/runtime'
 import {
   bindRuntimeCapability,
   bootstrapApplication,
   buildApplicationModel,
+  defineArgs,
   defineApplication,
   defineExecution,
   defineExecutionExtension,
   defineModule,
   hook,
+  isExecutionDefinition,
+  provide,
+  token,
   RuntimeCapabilityRegistry,
   runtimeCapability,
   type ExecutionDefinition,
@@ -42,7 +48,21 @@ function fixtureExtension(name: string, marker: string) {
 }
 
 describe('Application Model identity regressions', () => {
-  it('同名だが別descriptorのExtensionを同じownerへmergeしない', () => {
+  it('raw Moduleを再walkする旧Runtime Graph APIを公開しない', () => {
+    const removedExports = [
+      ['collect', 'Runtime', 'Module', 'Graph'].join(''),
+      ['Runtime', 'Module', 'Graph'].join(''),
+      ['Dependency', 'Recorder'].join(''),
+    ]
+    for (const name of removedExports) {
+      expect(runtimeApi).not.toHaveProperty(name)
+    }
+    expect(runtimeApi.Container.prototype).not.toHaveProperty(
+      ['probe', 'Class'].join(''),
+    )
+  })
+
+  it('同じstable identityのExtension descriptorをbundle境界で同じownerへ統合する', () => {
     const first = fixtureExtension('@fixture/collision', 'first')
     const second = fixtureExtension('@fixture/collision', 'second')
     const Module = defineModule(() => ({
@@ -54,15 +74,14 @@ describe('Application Model identity regressions', () => {
 
     const model = buildApplicationModel({ modules: [Module()] })
 
-    expect(model.diagnostics).toContainEqual(
-      expect.objectContaining({ code: 'LUTRE_EXTENSION_NAME_COLLISION' }),
-    )
+    expect(model.diagnostics).toEqual([])
     expect(model.executions.map((execution) => execution.id)).toEqual([
       'fixture.first',
+      'fixture.second',
     ])
     expect(first.compile).toHaveBeenCalledTimes(1)
     expect(first.validate).toHaveBeenCalledTimes(1)
-    expect(second.compile).not.toHaveBeenCalled()
+    expect(second.compile).toHaveBeenCalledTimes(1)
     expect(second.validate).not.toHaveBeenCalled()
   })
 
@@ -97,6 +116,156 @@ describe('Application Model identity regressions', () => {
 
     expect(bundled).not.toBe(host)
     expect(registry.get(bundled)).toBe(value)
+  })
+
+  it('Execution Definition brandをdual-copy相当のglobal symbolで認識する', () => {
+    const fixture = fixtureExtension('@fixture/dual-copy-definition', 'copy')
+    const definition = Object.freeze({
+      kind: 'execution-definition' as const,
+      extension: fixture.extension,
+      id: 'fixture.dual-copy',
+      [Symbol.for('loutre.execution-definition')]: true,
+    })
+    const Module = defineModule(() => ({
+      executions: [definition as unknown as ExecutionDefinition],
+    }))
+
+    expect(isExecutionDefinition(definition)).toBe(true)
+    expect(buildApplicationModel({ modules: [Module()] }).diagnostics).toEqual(
+      [],
+    )
+  })
+
+  it('同名の別Provider tokenへordinal node IDを割り当てる', () => {
+    const First = class Duplicate {}
+    const Second = class Duplicate {}
+    const Module = defineModule(() => ({ providers: [First, Second] }))
+    const model = buildApplicationModel({ modules: [Module()] })
+    const providers = model.nodes.filter((node) => node.kind === 'provider')
+
+    expect(providers.map((provider) => provider.id)).toEqual([
+      'provider:1',
+      'provider:2',
+    ])
+    expect(new Set(model.nodes.map((node) => node.id)).size).toBe(
+      model.nodes.length,
+    )
+  })
+
+  it('Execution ExtensionがCore node namespaceへ衝突するIDを返したら拒否する', () => {
+    const fixture = fixtureExtension('@fixture/node-collision', 'collision')
+    const Module = defineModule(() => ({
+      executions: [
+        defineExecution(fixture.extension, {
+          id: 'module:1',
+        }),
+      ],
+    }))
+
+    expect(
+      buildApplicationModel({ modules: [Module()] }).diagnostics,
+    ).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_APPLICATION_NODE_ID_COLLISION' }),
+    )
+  })
+
+  it.each(['close', '__proto__', 'constructor', 'prototype', 'serve', 'then'])(
+    'Host namespace %sを予約語として拒否する',
+    (namespace) => {
+      const extension = defineExecutionExtension<any, {}, string, {}>({
+        kind: 'execution-extension',
+        name: `@fixture/reserved-${namespace}`,
+        compile: () => ({
+          kind: 'execution',
+          id: `fixture.reserved.${namespace}`,
+          executionKind: 'fixture.reserved',
+          dependencies: [],
+          capabilities: [],
+          compiled: {},
+        }),
+        createRuntime: () => ({}),
+        host: {
+          namespace,
+          create: () => ({}),
+        },
+      })
+      const Module = defineModule(() => ({
+        executions: [defineExecution(extension, {})],
+      }))
+
+      expect(
+        buildApplicationModel({ modules: [Module()] }).diagnostics,
+      ).toContainEqual(
+        expect.objectContaining({ code: 'LUTRE_HOST_NAMESPACE_RESERVED' }),
+      )
+    },
+  )
+
+  it('Provider・conditional mapping・Lifecycle metadataをModel build時点でsnapshotする', async () => {
+    const CLOCK = token<number>('snapshot.clock')
+    const MESSAGE = token<string>('snapshot.message')
+    const SERVICE = token<object>('snapshot.service')
+    const CLASS_SERVICE = token<object>('snapshot.class-service')
+    const VALUE_SERVICE = token<object>('snapshot.value-service')
+    const Args = defineArgs(z.object({ mode: z.enum(['first', 'second']) }))
+    class FirstService {}
+    class SecondService {}
+    class MutatedService {}
+    const originalValue = { source: 'model' }
+    const classProvider = provide(CLASS_SERVICE).useClass(FirstService)
+    const valueProvider = provide(VALUE_SERVICE).useValue(originalValue)
+    const factoryInject = [CLOCK]
+    const lifecycleInject = [MESSAGE]
+    const factoryProvider = provide(MESSAGE).useFactory({
+      inject: factoryInject,
+      use: (clock) => `clock:${clock}`,
+    })
+    const mapping = { first: FirstService, second: SecondService }
+    const conditionalProvider = provide(SERVICE).select(
+      Args.key('mode'),
+      mapping,
+    )
+    const lifecycle = hook({
+      inject: lifecycleInject,
+      run: (message) => {
+        expect(message).toBe('clock:1')
+      },
+    })
+    const Module = defineModule(() => ({
+      providers: [
+        provide(CLOCK).useValue(1),
+        factoryProvider,
+        conditionalProvider,
+        classProvider,
+        valueProvider,
+      ],
+      lifecycle: { onModuleInit: lifecycle },
+    }))
+    const definition = defineApplication({
+      modules: [Module()],
+      arguments: Args,
+    })
+
+    factoryInject.splice(0)
+    lifecycleInject.splice(0)
+    mapping.first = MutatedService
+    ;(classProvider as { useClass: typeof MutatedService }).useClass =
+      MutatedService
+    ;(valueProvider as { useValue: object }).useValue = { source: 'mutated' }
+
+    const application = await bootstrapApplication({
+      application: definition,
+      arguments: { mode: 'first' },
+    })
+    try {
+      expect(application.get(MESSAGE)).toBe('clock:1')
+      expect(application.get(SERVICE)).toBeInstanceOf(FirstService)
+      expect(application.get(SERVICE)).not.toBeInstanceOf(MutatedService)
+      expect(application.get(CLASS_SERVICE)).toBeInstanceOf(FirstService)
+      expect(application.get(VALUE_SERVICE)).toBe(originalValue)
+    } finally {
+      await application.close()
+    }
   })
 
   it('Model構築後にraw Module Definitionが変化してもRuntimeへ影響しない', async () => {

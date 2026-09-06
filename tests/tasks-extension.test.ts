@@ -8,8 +8,16 @@ import {
   provide,
   token,
   composeLayers,
+  type ApplicationModel,
 } from '@loutrejs/loutre'
-import { task, type TasksHostApi } from '@loutrejs/tasks'
+import {
+  bindQueueDriver,
+  fixedDelay,
+  queue,
+  task,
+  type TasksHostApi,
+} from '@loutrejs/tasks'
+import { z } from 'zod'
 
 describe('Task Execution Extension', () => {
   it('Task invocationをHost APIとactive executionへcontributeする', async () => {
@@ -48,7 +56,91 @@ describe('Task Execution Extension', () => {
     )
     await application.close()
   })
+
+  it('Host境界でraw Taskをcanonical identityへ解決しRuntime・Trigger・Graphへ持ち込まない', async () => {
+    const registered = task<void, string>({
+      name: 'snapshot-task',
+      factory: () => async () => 'compiled-runtime',
+    })
+    const hostInput = { ...registered }
+    const trigger = fixedDelay({
+      name: 'snapshot-trigger',
+      delay: 10_000,
+      task: hostInput,
+    })
+    const Module = defineModule(() => ({
+      executions: [hostInput, trigger],
+    }))
+    const definition = defineApplication({ modules: [Module()] })
+    const compiled = definition.model.extensions
+      .values()[0]!
+      .executions.map((execution) => execution.compiled as object)
+
+    ;(hostInput as { name: string }).name = 'mutated-task'
+    ;(hostInput as { factory: () => () => string }).factory = () => () =>
+      'mutated-runtime'
+
+    expect(compiled).not.toContainEqual(
+      expect.objectContaining({ definition: expect.anything() }),
+    )
+    expect(compiled).not.toContainEqual(
+      expect.objectContaining({ task: expect.anything() }),
+    )
+    expect(
+      applicationTaskMetadata(definition.model, 'trigger.snapshot-trigger'),
+    ).toMatchObject({ task: 'snapshot-task' })
+
+    const application = await bootstrapApplication({ application: definition })
+    try {
+      await expect(application.tasks.run(hostInput)).resolves.toBe(
+        'compiled-runtime',
+      )
+    } finally {
+      await application.close()
+    }
+  })
+
+  it('close後は保持済みTrigger APIからresourceを再生成できない', async () => {
+    const job = task({ name: 'closed-task', factory: () => async () => {} })
+    const trigger = fixedDelay({
+      name: 'closed-trigger',
+      delay: 10_000,
+      task: job,
+    })
+    const Module = defineModule(() => ({ executions: [job, trigger] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+    const triggers = application.tasks.triggers
+
+    await application.close()
+
+    await expect(triggers.start()).rejects.toThrow('LUTRE_TASKS_STOPPED')
+    await expect(triggers.stop()).resolves.toBeUndefined()
+  })
+
+  it('Queue descriptorのprivate keyをbundle-safeなglobal identityにする', () => {
+    const descriptor = queue({ name: 'events', payload: z.string() })
+    const recreated = { ...descriptor }
+    const driver = { start: async () => ({ stop: async () => {} }) }
+
+    expect(
+      Reflect.get(recreated, Symbol.for('loutre.tasks.queue-driver')),
+    ).toBe(Reflect.get(descriptor, Symbol.for('loutre.tasks.queue-driver')))
+    expect(bindQueueDriver(recreated, driver).provide).toBe(
+      bindQueueDriver(descriptor, driver).provide,
+    )
+  })
 })
+
+function applicationTaskMetadata(
+  model: ApplicationModel,
+  executionId: string,
+): unknown {
+  const group = model.extensions.values()[0]
+  const execution = group?.executions.find((item) => item.id === executionId)
+  return group?.extension.projectGraph?.({ execution: execution! })
+}
 
 describe('generic Layer', () => {
   it('transport非依存stateをaround compositionでcontributeする', async () => {
@@ -110,5 +202,37 @@ describe('generic Layer', () => {
         terminal: async () => undefined,
       }),
     ).rejects.toThrow('cannot overwrite existing State property session.id')
+  })
+
+  it('awaitされないnext()を明示的に拒否しdownstream完了とerrorを回収する', async () => {
+    const events: string[] = []
+    const floating = defineLayer({
+      name: 'floating',
+      factory: () => async (_context, next) => {
+        next()
+      },
+    })
+
+    await expect(
+      composeLayers({
+        context: {},
+        layers: [floating],
+        resolve: () => undefined as never,
+        terminal: async () => {
+          await Promise.resolve()
+          events.push('downstream-completed')
+          throw new Error('downstream failure')
+        },
+      }),
+    ).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof AggregateError &&
+        error.message.includes('LUTRE_LAYER_NEXT_NOT_AWAITED') &&
+        error.errors.some(
+          (nested) =>
+            nested instanceof Error && nested.message === 'downstream failure',
+        ),
+    )
+    expect(events).toEqual(['downstream-completed'])
   })
 })

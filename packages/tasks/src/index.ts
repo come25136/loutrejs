@@ -37,11 +37,23 @@ export type TaskArguments<TTask> = [TaskInput<TTask>] extends [void]
   ? readonly []
   : readonly [input: TaskInput<TTask>]
 
-type AnyTaskDefinition = ExecutionDefinition & {
-  readonly type: 'task'
-  readonly name: string
-  readonly factory: () => Function
+const taskExecutionIdentityKey: unique symbol = Symbol.for(
+  'loutre.tasks.task-execution-identity',
+) as typeof taskExecutionIdentityKey
+const queueDriverToken: unique symbol = Symbol.for(
+  'loutre.tasks.queue-driver',
+) as typeof queueDriverToken
+
+export interface TaskExecutionIdentity {
+  readonly [taskExecutionIdentityKey]: symbol
 }
+
+type AnyTaskDefinition = ExecutionDefinition &
+  TaskExecutionIdentity & {
+    readonly type: 'task'
+    readonly name: string
+    readonly factory: () => Function
+  }
 
 type VoidTaskConstraint<TTask> = [TaskInput<TTask>] extends [void]
   ? unknown
@@ -69,8 +81,6 @@ export interface FixedDelayTriggerDefinitionData<
   readonly immediate: boolean
   readonly task: TTask
 }
-
-const queueDriverToken: unique symbol = Symbol('loutre.tasks.queue-driver')
 
 export interface QueueDescriptor<
   TSchema extends StandardSchemaV1 = StandardSchemaV1,
@@ -112,11 +122,13 @@ export type TriggerDefinitionData =
   | FixedDelayTriggerDefinitionData
   | QueueConsumerTriggerDefinitionData
 
-type TasksDefinitionData = TaskDefinitionData | TriggerDefinitionData
+type TasksDefinitionData =
+  | (TaskDefinitionData & TaskExecutionIdentity)
+  | TriggerDefinitionData
 
 export interface TasksCompiledTask {
   readonly type: 'task'
-  readonly definition: object
+  readonly taskExecutionId: symbol
   readonly name: string
   readonly factory: () => (...arguments_: any[]) => any
 }
@@ -127,7 +139,8 @@ export interface TasksCompiledCronTrigger {
   readonly expression: string
   readonly timezone: string
   readonly overlap: CronOverlap
-  readonly task: object
+  readonly taskExecutionId: symbol
+  readonly taskName: string
 }
 
 export interface TasksCompiledFixedDelayTrigger {
@@ -135,14 +148,18 @@ export interface TasksCompiledFixedDelayTrigger {
   readonly name: string
   readonly delay: number
   readonly immediate: boolean
-  readonly task: object
+  readonly taskExecutionId: symbol
+  readonly taskName: string
 }
 
 export interface TasksCompiledQueueConsumerTrigger {
   readonly type: 'queue-consumer'
   readonly name: string
-  readonly queue: QueueDescriptor
-  readonly task: object
+  readonly queueName: string
+  readonly queuePayload: StandardSchemaV1
+  readonly queueDriver: Token<QueueConsumerDriver>
+  readonly taskExecutionId: symbol
+  readonly taskName: string
 }
 
 export type TasksCompiledExecution =
@@ -153,7 +170,8 @@ export type TasksCompiledExecution =
 
 export interface TasksExtensionRuntime {
   run<TInput, TOutput>(
-    task: TaskDefinitionData<TInput, TOutput> & ExecutionDefinition,
+    taskExecutionId: symbol,
+    taskName: string,
     ...arguments_: [TInput] extends [void]
       ? readonly []
       : readonly [input: TInput]
@@ -166,7 +184,9 @@ export interface TasksExtensionRuntime {
 
 export interface TasksHostApi {
   run<TInput, TOutput>(
-    task: TaskDefinitionData<TInput, TOutput> & ExecutionDefinition,
+    task: TaskDefinitionData<TInput, TOutput> &
+      ExecutionDefinition &
+      TaskExecutionIdentity,
     ...arguments_: [TInput] extends [void]
       ? readonly []
       : readonly [input: TInput]
@@ -195,19 +215,19 @@ export const tasksExtension = defineExecutionExtension<
           executionKind: 'task.invocation',
           dependencies: collectInjectedDependencies(
             {
-              kind: 'task-consumer',
+              kind: 'execution',
               id: `task:${definition.name}`,
               name: definition.name,
             },
             () => definition.factory(),
           ),
           capabilities: [],
-          compiled: {
+          compiled: Object.freeze({
             type: 'task',
-            definition,
+            taskExecutionId: definition[taskExecutionIdentityKey],
             name: definition.name,
             factory: definition.factory as TasksCompiledTask['factory'],
-          },
+          }),
         }
       case 'cron':
         return {
@@ -216,14 +236,15 @@ export const tasksExtension = defineExecutionExtension<
           executionKind: 'trigger.cron',
           dependencies: [],
           capabilities: [],
-          compiled: {
+          compiled: Object.freeze({
             type: 'cron',
             name: definition.name,
             expression: definition.expression,
             timezone: definition.timezone,
             overlap: definition.overlap,
-            task: definition.task,
-          },
+            taskExecutionId: definition.task[taskExecutionIdentityKey],
+            taskName: definition.task.name,
+          }),
         }
       case 'fixed-delay':
         return {
@@ -232,13 +253,14 @@ export const tasksExtension = defineExecutionExtension<
           executionKind: 'trigger.fixed-delay',
           dependencies: [],
           capabilities: [],
-          compiled: {
+          compiled: Object.freeze({
             type: 'fixed-delay',
             name: definition.name,
             delay: definition.delay,
             immediate: definition.immediate,
-            task: definition.task,
-          },
+            taskExecutionId: definition.task[taskExecutionIdentityKey],
+            taskName: definition.task.name,
+          }),
         }
       case 'queue-consumer':
         return {
@@ -247,20 +269,23 @@ export const tasksExtension = defineExecutionExtension<
           executionKind: 'trigger.queue-consumer',
           dependencies: [queueRuntimeToken(definition.queue)],
           capabilities: [],
-          compiled: {
+          compiled: Object.freeze({
             type: 'queue-consumer',
             name: definition.name,
-            queue: definition.queue,
-            task: definition.task,
-          },
+            queueName: definition.queue.name,
+            queuePayload: definition.queue.payload,
+            queueDriver: queueRuntimeToken(definition.queue),
+            taskExecutionId: definition.task[taskExecutionIdentityKey],
+            taskName: definition.task.name,
+          }),
         }
     }
   },
   validate({ executions }) {
-    const taskDefinitions = new Set(
+    const taskExecutionIds = new Set(
       executions.flatMap((execution) =>
         execution.compiled.type === 'task'
-          ? [execution.compiled.definition]
+          ? [execution.compiled.taskExecutionId]
           : [],
       ),
     )
@@ -268,7 +293,7 @@ export const tasksExtension = defineExecutionExtension<
     for (const execution of executions) {
       const compiled = execution.compiled
       if (compiled.type === 'task') continue
-      if (!taskDefinitions.has(compiled.task)) {
+      if (!taskExecutionIds.has(compiled.taskExecutionId)) {
         diagnostics.push({
           code: 'LUTRE_TRIGGER_TASK_MISSING',
           message: `Trigger ${compiled.name} references a Task that is not registered in Module executions.`,
@@ -312,7 +337,7 @@ export const tasksExtension = defineExecutionExtension<
           expression: compiled.expression,
           timezone: compiled.timezone,
           overlap: compiled.overlap,
-          task: taskName(compiled.task),
+          task: compiled.taskName,
         }
       case 'fixed-delay':
         return {
@@ -320,14 +345,14 @@ export const tasksExtension = defineExecutionExtension<
           name: compiled.name,
           delay: compiled.delay,
           immediate: compiled.immediate,
-          task: taskName(compiled.task),
+          task: compiled.taskName,
         }
       case 'queue-consumer':
         return {
           type: 'queue-consumer',
           name: compiled.name,
-          queue: compiled.queue.name,
-          task: taskName(compiled.task),
+          queue: compiled.queueName,
+          task: compiled.taskName,
         }
     }
   },
@@ -335,7 +360,11 @@ export const tasksExtension = defineExecutionExtension<
     namespace: 'tasks',
     create: ({ runtime }) => ({
       run: (definition, ...arguments_) =>
-        runtime.run(definition, ...arguments_),
+        Reflect.apply(runtime.run, runtime, [
+          taskExecutionIdentity(definition),
+          definition.name,
+          ...arguments_,
+        ]),
       triggers: {
         start: () => runtime.startTriggers(),
         stop: () => runtime.stopTriggers(),
@@ -348,7 +377,8 @@ export type TaskDefinition<
   TInput = unknown,
   TOutput = unknown,
 > = TaskDefinitionData<TInput, TOutput> &
-  ExecutionDefinition<typeof tasksExtension>
+  ExecutionDefinition<typeof tasksExtension> &
+  TaskExecutionIdentity
 
 export type CronTriggerDefinition<
   TTask extends TaskDefinition<void, any> = TaskDefinition<void, any>,
@@ -375,10 +405,12 @@ export function task<TInput = void, TOutput = void>(definition: {
   readonly name: string
   readonly factory: () => TaskRuntime<TInput, TOutput>
 }): TaskDefinition<TInput, TOutput> {
+  const taskExecutionId = Symbol(`loutre.tasks.execution:${definition.name}`)
   return defineExecution(tasksExtension, {
     type: 'task' as const,
     name: definition.name,
     factory: definition.factory,
+    [taskExecutionIdentityKey]: taskExecutionId,
   }) as TaskDefinition<TInput, TOutput>
 }
 
@@ -506,7 +538,7 @@ function createTasksRuntime(
   }[],
   applicationRuntime: ExecutionKernelRuntime,
 ): TasksExtensionRuntime {
-  const runtimes = new Map<object, (...arguments_: any[]) => any>()
+  const runtimes = new Map<symbol, (...arguments_: any[]) => any>()
   const triggers: TasksCompiledExecution[] = []
   for (const execution of executions) {
     const compiled = execution.compiled
@@ -517,7 +549,7 @@ function createTasksRuntime(
     const runtime = runInInjectionContext(
       {
         consumer: {
-          kind: 'task-consumer',
+          kind: 'execution',
           id: `task:${compiled.name}`,
           name: compiled.name,
         },
@@ -526,18 +558,23 @@ function createTasksRuntime(
       },
       () => compiled.factory(),
     )
-    runtimes.set(compiled.definition, runtime)
+    runtimes.set(compiled.taskExecutionId, runtime)
   }
 
   let triggerHandles: TriggerHandle[] = []
   let triggersStarted = false
-  let accepting = true
+  let state: 'running' | 'draining' | 'stopped' = 'running'
 
-  const run = async (definition: AnyTaskDefinition, ...arguments_: any[]) => {
-    if (!accepting) throw new Error('LUTRE_TASKS_DRAINING')
-    const runtime = runtimes.get(definition)
+  const run = async (
+    taskExecutionId: symbol,
+    taskName: string,
+    ...arguments_: any[]
+  ) => {
+    if (state !== 'running')
+      throw new Error(`LUTRE_TASKS_${state.toUpperCase()}`)
+    const runtime = runtimes.get(taskExecutionId)
     if (!runtime) {
-      throw new Error(`LUTRE_TASK_NOT_REGISTERED: ${definition.name}`)
+      throw new Error(`LUTRE_TASK_NOT_REGISTERED: ${taskName}`)
     }
     const lease = applicationRuntime.beginExecution()
     try {
@@ -565,6 +602,9 @@ function createTasksRuntime(
   return {
     run: run as TasksExtensionRuntime['run'],
     async startTriggers() {
+      if (state !== 'running') {
+        throw new Error(`LUTRE_TASKS_${state.toUpperCase()}`)
+      }
       if (triggersStarted) {
         throw new Error(
           'LUTRE_TRIGGERS_ALREADY_STARTED: Trigger Engine is already started.',
@@ -575,7 +615,12 @@ function createTasksRuntime(
       try {
         for (const trigger of triggers) {
           if (trigger.type === 'task') continue
-          started.push(await startTrigger(trigger, run, applicationRuntime))
+          const handle = await startTrigger(trigger, run, applicationRuntime)
+          if (state !== 'running') {
+            await handle.stop()
+            throw tasksStateError(state)
+          }
+          started.push(handle)
         }
         triggerHandles = started
       } catch (error) {
@@ -588,11 +633,17 @@ function createTasksRuntime(
     },
     stopTriggers,
     async drain() {
-      accepting = false
+      if (state === 'stopped') return
+      state = 'draining'
       await stopTriggers()
     },
     async close() {
-      await stopTriggers()
+      if (state === 'stopped') return
+      try {
+        await stopTriggers()
+      } finally {
+        state = 'stopped'
+      }
     },
   }
 }
@@ -602,7 +653,8 @@ type TriggerHandle = { stop(): Promise<void> }
 async function startTrigger(
   trigger: Exclude<TasksCompiledExecution, TasksCompiledTask>,
   run: (
-    definition: AnyTaskDefinition,
+    taskExecutionId: symbol,
+    taskName: string,
     ...arguments_: any[]
   ) => Promise<unknown>,
   applicationRuntime: ExecutionKernelRuntime,
@@ -620,7 +672,8 @@ async function startTrigger(
 function startCronTrigger(
   trigger: TasksCompiledCronTrigger,
   run: (
-    definition: AnyTaskDefinition,
+    taskExecutionId: symbol,
+    taskName: string,
     ...arguments_: any[]
   ) => Promise<unknown>,
 ): TriggerHandle {
@@ -635,7 +688,7 @@ function startCronTrigger(
     if (lastMinute === minute) return
     lastMinute = minute
     if (trigger.overlap === 'skip' && active.size > 0) return
-    const execution = run(trigger.task as AnyTaskDefinition).catch(
+    const execution = run(trigger.taskExecutionId, trigger.taskName).catch(
       () => undefined,
     )
     active.add(execution)
@@ -656,7 +709,8 @@ function startCronTrigger(
 function startFixedDelayTrigger(
   trigger: TasksCompiledFixedDelayTrigger,
   run: (
-    definition: AnyTaskDefinition,
+    taskExecutionId: symbol,
+    taskName: string,
     ...arguments_: any[]
   ) => Promise<unknown>,
 ): TriggerHandle {
@@ -673,7 +727,7 @@ function startFixedDelayTrigger(
       }, trigger.delay)
     })
   const execute = async () => {
-    await run(trigger.task as AnyTaskDefinition).catch(() => undefined)
+    await run(trigger.taskExecutionId, trigger.taskName).catch(() => undefined)
   }
   const loop = (async () => {
     if (!trigger.immediate) await sleep()
@@ -700,35 +754,44 @@ function startFixedDelayTrigger(
 async function startQueueTrigger(
   trigger: TasksCompiledQueueConsumerTrigger,
   run: (
-    definition: AnyTaskDefinition,
+    taskExecutionId: symbol,
+    taskName: string,
     ...arguments_: any[]
   ) => Promise<unknown>,
   applicationRuntime: ExecutionKernelRuntime,
 ): Promise<QueueConsumerHandle> {
-  const driver = applicationRuntime.resolve(queueRuntimeToken(trigger.queue))
+  const driver = applicationRuntime.resolve(trigger.queueDriver)
   if (!driver || typeof driver.start !== 'function') {
     throw new Error(
-      `LUTRE_QUEUE_DRIVER_INVALID: Queue ${trigger.queue.name} driver is invalid.`,
+      `LUTRE_QUEUE_DRIVER_INVALID: Queue ${trigger.queueName} driver is invalid.`,
     )
   }
   const handle = await driver.start({
     consume: async (payload) => {
-      const validated = await validateSchema(trigger.queue.payload, payload)
-      await run(trigger.task as AnyTaskDefinition, validated)
+      const validated = await validateSchema(trigger.queuePayload, payload)
+      await run(trigger.taskExecutionId, trigger.taskName, validated)
     },
   })
   if (!handle || typeof handle.stop !== 'function') {
     throw new Error(
-      `LUTRE_QUEUE_DRIVER_INVALID: Queue ${trigger.queue.name} driver returned an invalid handle.`,
+      `LUTRE_QUEUE_DRIVER_INVALID: Queue ${trigger.queueName} driver returned an invalid handle.`,
     )
   }
   return handle
 }
 
-function taskName(definition: object): string {
-  return 'name' in definition && typeof definition.name === 'string'
-    ? definition.name
-    : 'unknown'
+function taskExecutionIdentity(definition: object): symbol {
+  if (
+    taskExecutionIdentityKey in definition &&
+    typeof definition[taskExecutionIdentityKey] === 'symbol'
+  ) {
+    return definition[taskExecutionIdentityKey]
+  }
+  return Symbol('loutre.tasks.unregistered')
+}
+
+function tasksStateError(state: string): Error {
+  return new Error(`LUTRE_TASKS_${state.toUpperCase()}`)
 }
 
 function matchesCronTrigger(

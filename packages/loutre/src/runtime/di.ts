@@ -1,16 +1,11 @@
 import {
-  asModuleInstance,
   isArgsClass,
   isEnvClass,
-  normalizeProvider,
   runInInjectionContext,
   tokenName,
   type ArgsClass,
   type Class,
-  type DependencyConsumer,
   type EnvClass,
-  type ModuleInstance,
-  type ModuleTemplate,
   type ProviderDescriptor,
   type TokenLike,
 } from '../core/index.js'
@@ -23,66 +18,18 @@ export class DependencyResolutionError extends Error {
   }
 }
 
-class GraphProbeBoundary extends Error {
-  constructor(readonly source: string) {
-    super(`Graph Probe reached runtime-dependent value: ${source}`)
-    this.name = 'GraphProbeBoundary'
-  }
-}
-
-export interface RuntimeModuleGraph {
-  readonly modules: readonly ModuleInstance[]
-  readonly providers: readonly ProviderDescriptor[]
-}
-
-export interface DependencyRecorder {
-  record(consumer: DependencyConsumer, dependency: TokenLike): void
-}
-
 export interface ContainerOptions {
   readonly logger?: Logger
-  readonly recorder?: DependencyRecorder
   readonly environment?: ReadonlyMap<EnvClass, object>
   readonly arguments?: ReadonlyMap<ArgsClass, object>
-  readonly probe?: boolean
-}
-
-export function collectRuntimeModuleGraph(
-  roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
-): RuntimeModuleGraph {
-  const modules: ModuleInstance[] = []
-  const providers: ProviderDescriptor[] = []
-  const environmentProviders = new Set<EnvClass>()
-  const visited = new Set<ModuleInstance>()
-
-  const visit = (moduleLike: ModuleInstance | ModuleTemplate<void>) => {
-    const module = asModuleInstance(moduleLike)
-    if (visited.has(module)) return
-    visited.add(module)
-    for (const imported of module.definition.imports ?? []) visit(imported)
-    modules.push(module)
-    for (const declaration of module.definition.providers ?? []) {
-      const provider = normalizeProvider(declaration)
-      if (provider.kind === 'environment') {
-        if (environmentProviders.has(provider.provide)) continue
-        environmentProviders.add(provider.provide)
-      }
-      providers.push(provider)
-    }
-  }
-
-  for (const root of roots) visit(root)
-  return { modules, providers }
 }
 
 export class Container {
   readonly #providers = new Map<TokenLike, ProviderDescriptor>()
   readonly #applicationCache = new Map<TokenLike, unknown>()
   readonly #logger: Logger
-  readonly #recorder: DependencyRecorder | undefined
   readonly #environment = new Map<EnvClass, object>()
   readonly #arguments = new Map<ArgsClass, object>()
-  readonly #probe: boolean
 
   constructor(
     providers: readonly ProviderDescriptor[],
@@ -90,9 +37,6 @@ export class Container {
   ) {
     this.#logger =
       options instanceof Logger ? options : (options.logger ?? new Logger())
-    this.#recorder = options instanceof Logger ? undefined : options.recorder
-    this.#probe = options instanceof Logger ? false : (options.probe ?? false)
-
     if (!(options instanceof Logger)) {
       for (const [environment, value] of options.environment ?? []) {
         this.#environment.set(environment, value)
@@ -213,17 +157,6 @@ export class Container {
     )
   }
 
-  probeClass<T>(target: Class<T>): T {
-    try {
-      return this.#instantiate(target, [target])
-    } catch (error) {
-      if (isGraphProbeBoundary(error)) {
-        return createOpaqueProbeValue(target.name) as T
-      }
-      throw error
-    }
-  }
-
   #resolve<T>(
     token: TokenLike<T>,
     source?: string,
@@ -283,7 +216,6 @@ export class Container {
           if (this.#environment.has(provider.provide)) {
             return this.#environment.get(provider.provide)
           }
-          if (this.#probe) return createOpaqueProbeValue(provider.provide.name)
           throw new DependencyResolutionError(
             `LUTRE_ENV_005: Environment ${provider.provide.name} requires a runtime Environment source before Application initialization.`,
           )
@@ -292,7 +224,6 @@ export class Container {
           if (this.#arguments.has(provider.provide)) {
             return this.#arguments.get(provider.provide)
           }
-          if (this.#probe) return createOpaqueProbeValue(provider.provide.name)
           throw new DependencyResolutionError(
             `LUTRE_ARGS_005: Arguments ${provider.provide.name} requires runtime Arguments before Application initialization.`,
           )
@@ -312,7 +243,6 @@ export class Container {
           return value
         }
         case 'conditional': {
-          if (this.#probe) return Object.create(null)
           const input = this.#resolve(
             provider.select.contract,
             tokenName(provider.provide),
@@ -332,9 +262,6 @@ export class Container {
       if (provider.scope === 'application') {
         this.#applicationCache.delete(provider.provide)
       }
-      if (this.#probe && isGraphProbeBoundary(error)) {
-        return createOpaqueProbeValue(tokenName(provider.provide))
-      }
       throw error
     }
   }
@@ -349,12 +276,6 @@ export class Container {
       {
         consumer: target,
         resolve: (token) => this.#resolve(token, target.name, lineage),
-        ...(this.#recorder === undefined
-          ? {}
-          : {
-              record: (consumer: DependencyConsumer, dependency: TokenLike) =>
-                this.#recorder!.record(consumer, dependency),
-            }),
       },
       () => new target(),
     )
@@ -368,44 +289,6 @@ function isRuntimeInputProvider(
   { kind: 'environment' | 'arguments' }
 > {
   return provider.kind === 'environment' || provider.kind === 'arguments'
-}
-
-function isGraphProbeBoundary(error: unknown): error is GraphProbeBoundary {
-  return error instanceof GraphProbeBoundary
-}
-
-function createOpaqueProbeValue(source: string): object {
-  const boundary = (operation: PropertyKey) =>
-    new GraphProbeBoundary(`${source}.${String(operation)}`)
-  return new Proxy(Object.create(null) as object, {
-    get(_target, key) {
-      throw boundary(key)
-    },
-    set(_target, key) {
-      throw boundary(key)
-    },
-    has(_target, key) {
-      throw boundary(key)
-    },
-    ownKeys() {
-      throw boundary('*')
-    },
-    getOwnPropertyDescriptor(_target, key) {
-      throw boundary(key)
-    },
-    defineProperty(_target, key) {
-      throw boundary(key)
-    },
-    deleteProperty(_target, key) {
-      throw boundary(key)
-    },
-    getPrototypeOf() {
-      throw boundary('[[Prototype]]')
-    },
-    setPrototypeOf() {
-      throw boundary('[[Prototype]]')
-    },
-  })
 }
 
 function isThenable(value: unknown): value is PromiseLike<unknown> {

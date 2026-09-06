@@ -95,7 +95,7 @@ interface CompiledMessagePortExecution {
 
 export interface MessagePortExtensionRuntime {
   invoke(method: string, input?: unknown): Promise<MessagePortResult>
-  drain(): void
+  drain(): Promise<void>
 }
 
 export interface MessagePortHostApi {
@@ -120,7 +120,7 @@ export const messagePortExtension = defineExecutionExtension<
       executionKind: 'message-port.invocation',
       dependencies: collectInjectedDependencies(
         {
-          kind: 'implementation-consumer',
+          kind: 'execution',
           id: `message-port:${definition.name || `${context.moduleId}.message-port.${context.definitionIndex}`}`,
           name:
             definition.name ||
@@ -129,10 +129,10 @@ export const messagePortExtension = defineExecutionExtension<
         () => definition.factory(),
       ),
       capabilities: [],
-      compiled: {
+      compiled: Object.freeze({
         routes: snapshotMessagePortRoutes(definition.contract.routes),
         factory: definition.factory as CompiledMessagePortExecution['factory'],
-      },
+      }),
     }
   },
   validate({ executions }) {
@@ -233,18 +233,21 @@ function createMessagePortRuntime(
   const routes = new Map<
     string,
     {
-      readonly definition: MessagePortRouteDefinition
+      readonly route: MessagePortRouteDefinition
       readonly handler: (
         context: MessagePortContext,
       ) => MessagePortResult | Promise<MessagePortResult>
     }
   >()
   let accepting = true
+  const activeStreams = new Set<{
+    abort(reason?: unknown): Promise<void>
+  }>()
   for (const execution of executions) {
     const handlers = runInInjectionContext(
       {
         consumer: {
-          kind: 'implementation-consumer',
+          kind: 'execution',
           id: `message-port:${execution.id}`,
           name: execution.id,
         },
@@ -256,7 +259,7 @@ function createMessagePortRuntime(
       execution.compiled.routes,
     )) {
       const handler = handlers[method]
-      if (handler) routes.set(method, { definition, handler })
+      if (handler) routes.set(method, { route: definition, handler })
     }
   }
   return {
@@ -267,12 +270,13 @@ function createMessagePortRuntime(
         throw new Error(`LUTRE_MESSAGE_PORT_METHOD_NOT_FOUND: ${method}`)
       }
       const lease = applicationRuntime.beginExecution()
+      let executionOwnedByStream = false
       try {
-        const value = route.definition.input
-          ? await validateSchema(route.definition.input, input)
+        const value = route.route.input
+          ? await validateSchema(route.route.input, input)
           : input
         const response = Object.fromEntries(
-          Object.keys(route.definition.responses).map((name) => [
+          Object.keys(route.route.responses).map((name) => [
             name,
             (result: unknown) => ({
               kind: 'message-port-result' as const,
@@ -286,45 +290,142 @@ function createMessagePortRuntime(
           response,
           signal: lease.signal,
         } as MessagePortContext)
-        const schema = route.definition.responses[result.response]
+        const schema = route.route.responses[result.response]
         if (!schema) {
           throw new Error(
             `LUTRE_MESSAGE_PORT_RESPONSE_UNDECLARED: ${result.response}`,
           )
         }
+        if (isMessagePortServerStreamResponse(schema)) {
+          if (!isAsyncIterable(result.value)) {
+            throw new TypeError('LUTRE_MESSAGE_PORT_STREAM_REQUIRED')
+          }
+          const stream = createLeasedMessagePortStream(
+            schema.body,
+            result.value,
+            lease,
+            activeStreams,
+          )
+          executionOwnedByStream = true
+          return { ...result, value: stream }
+        }
         return {
           ...result,
-          value: await validateMessagePortResponse(schema, result.value),
+          value: await validateSchema(schema, result.value),
         }
       } finally {
-        lease.complete()
+        if (!executionOwnedByStream) lease.complete()
       }
     },
-    drain() {
+    async drain() {
       accepting = false
+      const reason = new Error('LUTRE_MESSAGE_PORT_DRAINING')
+      const results = await Promise.allSettled(
+        [...activeStreams].map((stream) => stream.abort(reason)),
+      )
+      const errors = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      )
+      if (errors.length > 0) {
+        throw new AggregateError(errors, 'MessagePort stream drain failed.')
+      }
     },
   }
 }
 
-async function validateMessagePortResponse(
-  response: MessagePortResponseDefinition,
-  value: unknown,
-): Promise<unknown> {
-  if (isMessagePortServerStreamResponse(response)) {
-    if (!isAsyncIterable(value)) {
-      throw new TypeError('LUTRE_MESSAGE_PORT_STREAM_REQUIRED')
-    }
-    return validateMessagePortStream(response.body, value)
-  }
-  return validateSchema(response, value)
-}
-
-async function* validateMessagePortStream(
+function createLeasedMessagePortStream(
   schema: StandardSchemaV1,
   source: AsyncIterable<unknown>,
-): AsyncIterable<unknown> {
-  for await (const value of source) {
-    yield await validateSchema(schema, value)
+  lease: ReturnType<ExecutionKernelRuntime['beginExecution']>,
+  activeStreams: Set<{ abort(reason?: unknown): Promise<void> }>,
+): AsyncIterable<unknown> & { cancel(reason?: unknown): Promise<void> } {
+  const iterator = source[Symbol.asyncIterator]()
+  let finished = false
+  let cancellation: Promise<void> | undefined
+  let control: { abort(reason?: unknown): Promise<void> }
+
+  const finish = () => {
+    if (finished) return false
+    finished = true
+    lease.signal.removeEventListener('abort', onAbort)
+    activeStreams.delete(control)
+    lease.complete()
+    return true
+  }
+  const cancel = (reason?: unknown): Promise<void> => {
+    if (finished) return Promise.resolve()
+    if (cancellation) return cancellation
+    cancellation = (async () => {
+      try {
+        await iterator.return?.(reason)
+      } finally {
+        finish()
+      }
+    })()
+    return cancellation
+  }
+  const onAbort = () => {
+    // AbortSignalはasync cleanup errorを返せないため、error伝播が必要なdrainはcontrol.abort()を直接awaitする。
+    void cancel(lease.signal.reason).catch(() => undefined)
+  }
+  control = { abort: cancel }
+  activeStreams.add(control)
+  if (lease.signal.aborted) onAbort()
+  else lease.signal.addEventListener('abort', onAbort, { once: true })
+
+  const wrapped: AsyncIterator<unknown> = {
+    async next() {
+      if (finished) return { done: true, value: undefined }
+      try {
+        const result = await iterator.next()
+        if (result.done) {
+          finish()
+          return result
+        }
+        return {
+          done: false,
+          value: await validateSchema(schema, result.value),
+        }
+      } catch (error) {
+        try {
+          await iterator.return?.(error)
+        } catch (cleanupError) {
+          finish()
+          throw new AggregateError(
+            [error, cleanupError],
+            'MessagePort stream validation and cleanup failed.',
+            { cause: cleanupError },
+          )
+        }
+        finish()
+        throw error
+      }
+    },
+    async return(reason?: unknown) {
+      try {
+        return (
+          (await iterator.return?.(reason)) ?? {
+            done: true,
+            value: reason,
+          }
+        )
+      } finally {
+        finish()
+      }
+    },
+    async throw(reason?: unknown) {
+      try {
+        if (iterator.throw) return await iterator.throw(reason)
+        await iterator.return?.(reason)
+        throw reason
+      } finally {
+        finish()
+      }
+    },
+  }
+  return {
+    [Symbol.asyncIterator]: () => wrapped,
+    cancel,
   }
 }
 

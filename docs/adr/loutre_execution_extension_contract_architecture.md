@@ -43,6 +43,8 @@ interface ExecutionDefinition<
 
 利用者やExtension作者はbrandを手書きせず、`defineExecution(extension, definition)`を利用する。
 
+`executionDefinitionBrand`は`Symbol.for('loutre.execution-definition')`から得るglobal symbolとする。これにより別bundleまたは別Core copyの`defineExecution()`が作ったDefinitionも同じ論理brandとして認識する。Extension identity、Runtime Capability identity、Extension registry lookupも同じstable identity方針へ統一する。
+
 DefinitionはApplication Model構築前の入力であり、RuntimeやToolingがDefinitionを直接再解釈してはならない。
 
 ## 3. Execution Extension
@@ -138,6 +140,8 @@ factory: (users = inject(UserRepository)) => ({
 
 Extensionの`compile()`はこの同期constructionをdependency probeし、得られたtokenを`ExecutionContribution.dependencies`へ正規化する。Runtimeでは同じfactoryをInjection Context内で呼び、`inject()`を実値へresolveする。Application Modelの内部都合を公開Execution APIの`inject`配列へ漏らしてはならない。
 
+このためImplementation、Layer、Taskのfactory constructionはpureであることを公開contractとする。factory本体ではhandler closureの組み立てと`inject()`によるdependency宣言だけを行い、I/O、timer、resource生成、business operationはhandler実行またはLifecycleへ置く。dependency probeとRuntime初期化の双方でfactory constructionが起こり得るため、factory construction自体のexactly-once実行には依存しない。
+
 Factory Provider / Lifecycle hookのexplicit dependency metadataは別のCore APIであり、この原則の対象外とする。
 
 ## 5. Compiled Execution Contribution
@@ -168,7 +172,7 @@ capabilities
 
 Execution ownershipは`ExecutionContribution`や`ExecutionModelNode`へ重複保持しない。Coreは`ExecutionDefinition.extension`をdispatch keyとして`compile()`を呼び、Application Modelでは`ApplicationModelExtension { extension, executions }`だけをownerの正本とする。これによりowner不整合というinvalid stateを表現できなくする。
 
-Extension固有のtoolingがcompiled型を取り戻す場合は、ordered typed registryである`ApplicationModel.extensions.get(extension)`を使う。`defineExecutionExtension()`はExtension名から`Symbol.for()`ベースのstable identityを生成し、registryはこのidentityだけでlookupする。これによりCLIのesbuild bundle/import境界でdescriptor objectが複製されても同じExtensionとして解決できる。Extension名はApplication内で一意であり、異なるdescriptorによる同名Extensionは`LUTRE_EXTENSION_NAME_COLLISION`で拒否する。heterogeneous storageからの型復元castはregistry実装内部だけへ局所化し、Core/Graph/RuntimeやExtension作者へ漏らさない。Coreはstable Extension identityをopaqueに扱うだけで、HTTP等の具体的な値による分岐は行わない。
+Extension固有のtoolingがcompiled型を取り戻す場合は、ordered typed registryである`ApplicationModel.extensions.get(extension)`を使う。`defineExecutionExtension()`はExtension名から`Symbol.for()`ベースのstable identityを生成し、registryとApplication内のowner groupingはこのidentityで行う。これによりCLIのesbuild bundle/import境界でdescriptor objectが複製されても同じExtensionとしてcompile・lookupできる。同じstable identityを持つdescriptorは同じ論理Extensionとして統合し、identityと名前の対応が矛盾する場合だけcollisionとして拒否する。heterogeneous storageからの型復元castはregistry実装内部だけへ局所化し、Core/Graph/RuntimeやExtension作者へ漏らさない。Coreはstable Extension identityをopaqueに扱うだけで、HTTP等の具体的な値による分岐は行わない。
 
 HTTPならresolved route、middleware、factory等を保持できる。WebSocketならroute、codec、session factory等を保持できる。
 
@@ -264,6 +268,8 @@ interface RuntimeCapabilityBinding<TValue> {
 
 Runtimeは必要CapabilityがbindingされていることをExtension runtime生成前に検証する。
 
+Runtime support profileに記録する文字列はruntime featureの記述にも利用できるが、Application compatibilityのrequired setへ入るのはExecution contributionがtyped `RuntimeCapability`として要求したものだけである。現行HTTP streamingは`Request`、`Response`、`ReadableStream`というLoutreのWeb Platform baseline上で実装され、別driver bindingを必要としないため、routeごとの追加Capabilityにはしない。各adapterのstreaming対応はruntime conformanceで保証する。
+
 ## 8. createRuntime
 
 `createRuntime()`はApplication lifecycle中に一度生成されるExtension-owned runtime resourceを作る。
@@ -314,6 +320,10 @@ MessagePort -> app.messagePort.handle(...)
 ```
 
 Host APIの型はExtension identityからApplication型へ合成する。Coreへ`HasHttp`等の新しいprotocol hard-codeを増やさない。
+
+Host namespaceはExtension間だけでなくApplication base APIとruntime adapter APIに対しても一意でなければならない。`graph`、`init`、`get`、`close`、`serve`、Promise同化を起こす`then`と、`__proto__`、`constructor`、`prototype`は予約し、Model validationで拒否する。Host application object自体もnull prototypeで構築する。
+
+Tasksの`app.tasks.run(task)`は利用者向けergonomicsとしてDefinitionを受け取る。ただしHost境界でExtension-owned opaque Task execution identityへ解決し、Runtime dispatch、Trigger compiled model、validation、Graph projectionにはraw Task Definitionを渡さない。Queue descriptorのprivate property keyもglobal symbolにして、bundle copyが同じdescriptorを扱えるようにする。
 
 ### 9.1 Host create failure
 
@@ -372,6 +382,8 @@ complete
 
 complete時にsignalが未abortならexecution lifetime終了としてsignalをabortしてよい。
 
+server-streamを返すExecutionは、stream返却時にLeaseを完了せず、iteratorの正常終了、throw、consumerの`return()`、cancel、abortのいずれかまでownershipをstreamへ移す。完了処理はexactly-onceとし、Extensionの`drain()`は未完了streamへprotocol固有の停止要求を送る。
+
 ## 11. Shutdown order
 
 Application shutdown orderは次に固定する。
@@ -401,6 +413,10 @@ active workが0になった後のExtension-owned resource cleanup
 Extension runtimeの`close()`よりProvider cleanupを先に実行しない。Extension runtimeがProviderへ依存している可能性があるため。
 
 WebSocket等のlong-lived executionでは、drainによるprotocol-specific graceful close完了後に`complete()`する。
+
+`drain()`が失敗したfailure pathではactive executionが自然終了する保証を失うため、Kernelは残るLeaseをabortしてcooperative cancellationを要求し、active registryから強制削除せずにExtension `close()`とProvider cleanupへ進む。drain errorは失わず、他のcleanup errorとともに`AggregateError`へ保持する。上記のactive 0待機順はdrainが成功したhappy pathで維持する。
+
+初期化rollbackでは、構築済みProvider instanceと初期化完了済みModuleを追跡する。未到達ModuleのLifecycle hookを実行せず、cleanup dependency解決を通じて未初期化Providerを新規constructしない。
 
 ## 12. Projection
 

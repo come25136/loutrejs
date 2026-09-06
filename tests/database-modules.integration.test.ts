@@ -29,9 +29,12 @@ describe('database modules integration', () => {
       'primary.bootstrap',
       'analytics.bootstrap',
     ])
+    const primaryProvider = model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === PRIMARY_DB,
+    )
     expect(
-      model.modules.filter(({ definition }) =>
-        definition.exports?.includes(PRIMARY_DB),
+      model.edges.filter(
+        (edge) => edge.kind === 'exports' && edge.to === primaryProvider?.id,
       ),
     ).toHaveLength(1)
 

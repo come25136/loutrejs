@@ -195,7 +195,7 @@ export const websocketExtension = defineExecutionExtension<
       executionKind: 'websocket.session',
       dependencies: collectInjectedDependencies(
         {
-          kind: 'implementation-consumer',
+          kind: 'execution',
           id: `websocket:${definition.name || `${context.moduleId}.websocket.${context.definitionIndex}`}`,
           name:
             definition.name ||
@@ -204,10 +204,10 @@ export const websocketExtension = defineExecutionExtension<
         () => definition.factory(),
       ),
       capabilities: [WEBSOCKET_SERVER],
-      compiled: {
-        routes: compileRouteTree(definition.contract.routes),
+      compiled: Object.freeze({
+        routes: Object.freeze(compileRouteTree(definition.contract.routes)),
         factory: definition.factory,
-      },
+      }),
     }
   },
   validate({ executions }) {
@@ -438,7 +438,7 @@ function createWebSocketRuntime(
       runInInjectionContext(
         {
           consumer: {
-            kind: 'implementation-consumer',
+            kind: 'execution',
             id: `websocket:${execution.id}`,
             name: execution.id,
           },

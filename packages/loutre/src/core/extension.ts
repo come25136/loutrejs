@@ -183,15 +183,18 @@ export function defineExecutionExtension<
 ): ExecutionExtension<TDefinition, TCompiled, TNamespace, THostApi, TRuntime> {
   return Object.freeze({
     ...extension,
+    ...(extension.host === undefined
+      ? {}
+      : { host: Object.freeze({ ...extension.host }) }),
     identity: Symbol.for(
       `${executionExtensionIdentityNamespace}${extension.name}`,
     ),
   })
 }
 
-export const executionDefinitionBrand: unique symbol = Symbol(
+export const executionDefinitionBrand: unique symbol = Symbol.for(
   'loutre.execution-definition',
-)
+) as typeof executionDefinitionBrand
 
 export interface ExecutionDefinition<
   TExtension extends AnyExecutionExtension = AnyExecutionExtension,

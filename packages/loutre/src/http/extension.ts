@@ -368,7 +368,7 @@ export const httpExecutionExtension = defineExecutionExtension<
     const dependencies = new Set(
       collectInjectedDependencies(
         {
-          kind: 'implementation-consumer',
+          kind: 'execution',
           id: `http:${id}`,
           name: id,
         },
@@ -379,7 +379,7 @@ export const httpExecutionExtension = defineExecutionExtension<
       route.middlewares.forEach((middleware, index) => {
         for (const dependency of collectInjectedDependencies(
           {
-            kind: 'layer-consumer',
+            kind: 'layer',
             id: `http:${id}:${route.name}:${index}`,
             name: middleware.name,
           },
@@ -402,10 +402,10 @@ export const httpExecutionExtension = defineExecutionExtension<
           ),
         ]),
       ],
-      compiled: {
-        routes,
+      compiled: Object.freeze({
+        routes: Object.freeze(routes),
         factory: definition.factory as CompiledHttpExecution['factory'],
-      },
+      }),
     }
   },
   validate({ executions }) {
@@ -1006,7 +1006,7 @@ function createHttpExtensionRuntime(
       runInInjectionContext(
         {
           consumer: {
-            kind: 'implementation-consumer',
+            kind: 'execution',
             id: `http:${execution.id}`,
             name: execution.id,
           },

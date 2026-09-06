@@ -41,11 +41,9 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   readonly model: ApplicationModel
   readonly container: Container
   readonly capabilities: RuntimeCapabilityRegistry
-  readonly #extensionRuntimes = new Map<
-    ExecutionExtension,
-    ExecutionExtensionRuntime
-  >()
+  readonly #extensionRuntimes = new Map<symbol, ExecutionExtensionRuntime>()
   readonly #providerInstances = new Map<string, unknown[]>()
+  readonly #initializedModuleIds = new Set<string>()
   readonly #activeExecutions = new Set<ActiveExecution>()
   readonly #idleWaiters = new Set<() => void>()
   readonly #environmentSource: unknown
@@ -96,7 +94,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
           capabilities: this.capabilities,
           applicationRuntime: this,
         })
-        this.#extensionRuntimes.set(modelExtension.extension, runtime)
+        this.#extensionRuntimes.set(modelExtension.extension.identity, runtime)
       }
       this.#state = 'running'
     } catch (error) {
@@ -171,6 +169,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       await this.#runHook(
         lifecycleHookOf(this.model, module.id, 'onModuleInit'),
       )
+      this.#initializedModuleIds.add(module.id)
     }
     for (const module of moduleNodes(this.model)) {
       for (const instance of this.#providerInstances.get(module.id) ?? []) {
@@ -197,7 +196,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   extensionRuntime<TRuntime extends ExecutionExtensionRuntime>(
     extension: ExecutionExtension<any, any, any, any, TRuntime>,
   ): TRuntime {
-    const runtime = this.#extensionRuntimes.get(extension)
+    const runtime = this.#extensionRuntimes.get(extension.identity)
     if (!runtime) {
       throw new Error(
         `LUTRE_EXTENSION_RUNTIME_MISSING: ${extension.name} is not initialized.`,
@@ -246,15 +245,32 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     if (this.#state === 'stopped') return
     this.#state = 'draining'
     const errors: unknown[] = []
+    let drainFailed = false
     for (const { extension } of this.model.extensions) {
-      const runtime = this.#extensionRuntimes.get(extension)
-      if (runtime?.drain) await collectError(() => runtime.drain!(), errors)
+      const runtime = this.#extensionRuntimes.get(extension.identity)
+      if (!runtime?.drain) continue
+      try {
+        await runtime.drain()
+      } catch (error) {
+        drainFailed = true
+        errors.push(error)
+      }
     }
     if (this.#activeExecutions.size > 0) {
-      await new Promise<void>((resolve) => this.#idleWaiters.add(resolve))
+      if (drainFailed) {
+        const reason = new Error(
+          'LUTRE_APPLICATION_FORCE_SHUTDOWN: Extension drain failed.',
+        )
+        for (const execution of this.#activeExecutions) {
+          execution.abort(reason)
+        }
+        await Promise.resolve()
+      } else {
+        await new Promise<void>((resolve) => this.#idleWaiters.add(resolve))
+      }
     }
     for (const { extension } of [...this.model.extensions].toReversed()) {
-      const runtime = this.#extensionRuntimes.get(extension)
+      const runtime = this.#extensionRuntimes.get(extension.identity)
       if (runtime?.close) await collectError(() => runtime.close!(), errors)
     }
     await this.#cleanupProviders(signal, errors)
@@ -276,10 +292,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         )
       }
       await collectError(
-        () =>
-          this.#runHook(
-            lifecycleHookOf(this.model, module.id, 'beforeApplicationShutdown'),
-          ),
+        () => this.#runCleanupHook(module.id, 'beforeApplicationShutdown'),
         errors,
       )
     }
@@ -293,10 +306,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         )
       }
       await collectError(
-        () =>
-          this.#runHook(
-            lifecycleHookOf(this.model, module.id, 'onModuleDestroy'),
-          ),
+        () => this.#runCleanupHook(module.id, 'onModuleDestroy'),
         errors,
       )
     }
@@ -310,10 +320,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         )
       }
       await collectError(
-        () =>
-          this.#runHook(
-            lifecycleHookOf(this.model, module.id, 'onApplicationShutdown'),
-          ),
+        () => this.#runCleanupHook(module.id, 'onApplicationShutdown'),
         errors,
       )
     }
@@ -334,6 +341,11 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       this.container.resolve(token),
     )
     await hook.run(...dependencies)
+  }
+
+  async #runCleanupHook(moduleId: string, phase: string): Promise<void> {
+    if (!this.#initializedModuleIds.has(moduleId)) return
+    await this.#runHook(lifecycleHookOf(this.model, moduleId, phase))
   }
 }
 

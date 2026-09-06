@@ -61,7 +61,7 @@ export function composeLayers<TContext extends object, TOutcome>(options: {
     runInInjectionContext(
       {
         consumer: {
-          kind: 'layer-consumer',
+          kind: 'layer',
           id: `layer:${index}:${layer.name}`,
           name: layer.name,
         },
@@ -83,33 +83,81 @@ export function composeLayers<TContext extends object, TOutcome>(options: {
     let called = false
     let continuationCompleted = false
     let continuationResult: TOutcome | undefined
-    const runtimeResult = await runtime(
-      context,
-      async (contribution: object = {}) => {
-        if (called) {
-          throw new Error(
-            'LUTRE_LAYER_NEXT_MULTIPLE: next() can be called once.',
-          )
-        }
-        called = true
-        continuationResult = await dispatch(
-          index + 1,
-          mergeStateContribution(
-            options.layers[index]!.name,
-            state,
-            contribution,
-          ),
+    let continuationObserved = false
+    let continuation: Promise<void> | undefined
+    const runtimeResult = await runtime(context, ((
+      contribution: object = {},
+    ) => {
+      if (called) {
+        return Promise.reject(
+          new Error('LUTRE_LAYER_NEXT_MULTIPLE: next() can be called once.'),
         )
+      }
+      called = true
+      continuation = dispatch(
+        index + 1,
+        mergeStateContribution(
+          options.layers[index]!.name,
+          state,
+          contribution,
+        ),
+      ).then((result) => {
+        continuationResult = result
         continuationCompleted = true
-      },
-    )
+      })
+      return observePromise(continuation, () => {
+        continuationObserved = true
+      })
+    }) as GenericLayerNext<object>)
 
+    if (called && (!continuationObserved || !continuationCompleted)) {
+      const error = new Error(
+        `LUTRE_LAYER_NEXT_NOT_AWAITED: Layer ${options.layers[index]!.name} must await or return next().`,
+      )
+      try {
+        await continuation
+      } catch (downstreamError) {
+        throw new AggregateError([error, downstreamError], error.message, {
+          cause: downstreamError,
+        })
+      }
+      throw error
+    }
     if (called && continuationCompleted) {
       return continuationResult as TOutcome
     }
     return runtimeResult as TOutcome
   }
   return dispatch(0, {})
+}
+
+function observePromise(
+  promise: Promise<void>,
+  observe: () => void,
+): Promise<void> {
+  const observed = {
+    // `await next()`の観測にはnative Promiseではなくthenable境界が必要になる。
+    // eslint-disable-next-line unicorn/no-thenable
+    then<TResult1 = void, TResult2 = never>(
+      onfulfilled?: ((value: void) => TResult1 | PromiseLike<TResult1>) | null,
+      onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
+    ) {
+      observe()
+      return promise.then(onfulfilled, onrejected)
+    },
+    catch<TResult = never>(
+      onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | null,
+    ) {
+      observe()
+      return promise.catch(onrejected)
+    },
+    finally(onfinally?: (() => void) | null) {
+      observe()
+      return promise.finally(onfinally ?? undefined)
+    },
+    [Symbol.toStringTag]: 'Promise',
+  }
+  return observed as Promise<void>
 }
 
 function mergeStateContribution(

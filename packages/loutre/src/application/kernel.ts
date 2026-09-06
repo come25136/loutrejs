@@ -50,50 +50,54 @@ export function createKernelApplication<
     ...('arguments' in options ? { argumentsSource: options.arguments } : {}),
   })
   let initialized = false
-  const application: Record<PropertyKey, unknown> = {
-    graph: projectApplicationModel(options.application.model),
-    async init() {
-      await runtime.initialize()
-      if (initialized) return application
+  const application: Record<PropertyKey, unknown> = Object.assign(
+    Object.create(null) as Record<PropertyKey, unknown>,
+    {
+      graph: projectApplicationModel(options.application.model),
+      async init() {
+        await runtime.initialize()
+        if (initialized) return application
 
-      const createdNamespaces: string[] = []
-      try {
-        for (const modelExtension of options.application.model.extensions) {
-          const host = modelExtension.extension.host
-          if (!host) continue
-          application[host.namespace] = host.create({
-            executions: modelExtension.executions,
-            runtime: runtime.extensionRuntime(modelExtension.extension),
-            applicationRuntime: runtime,
-          })
-          createdNamespaces.push(host.namespace)
-        }
-        initialized = true
-        return application
-      } catch (error) {
-        for (const namespace of createdNamespaces) delete application[namespace]
+        const createdNamespaces: string[] = []
         try {
-          await runtime.shutdown()
-        } catch (cleanupError) {
-          throw new AggregateError(
-            [error, cleanupError],
-            'Host API creation failed and runtime rollback also failed.',
-            { cause: cleanupError },
-          )
+          for (const modelExtension of options.application.model.extensions) {
+            const host = modelExtension.extension.host
+            if (!host) continue
+            application[host.namespace] = host.create({
+              executions: modelExtension.executions,
+              runtime: runtime.extensionRuntime(modelExtension.extension),
+              applicationRuntime: runtime,
+            })
+            createdNamespaces.push(host.namespace)
+          }
+          initialized = true
+          return application
+        } catch (error) {
+          for (const namespace of createdNamespaces)
+            delete application[namespace]
+          try {
+            await runtime.shutdown()
+          } catch (cleanupError) {
+            throw new AggregateError(
+              [error, cleanupError],
+              'Host API creation failed and runtime rollback also failed.',
+              { cause: cleanupError },
+            )
+          }
+          throw error
         }
-        throw error
-      }
+      },
+      get(token: TokenLike) {
+        return runtime.get(token)
+      },
+      close(signal?: string) {
+        return runtime.shutdown(signal)
+      },
+      [Symbol.asyncDispose]() {
+        return runtime.shutdown()
+      },
     },
-    get(token: TokenLike) {
-      return runtime.get(token)
-    },
-    close(signal?: string) {
-      return runtime.shutdown(signal)
-    },
-    [Symbol.asyncDispose]() {
-      return runtime.shutdown()
-    },
-  }
+  )
   return application as KernelHostedApplication<TDefinition>
 }
 

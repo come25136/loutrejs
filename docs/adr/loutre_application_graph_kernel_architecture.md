@@ -84,6 +84,12 @@ diagnostics
 
 Extension-owned compiled valueはopaqueとして保持する。Coreはそのshapeを解釈しない。
 
+Modelはbuild時点のimmutableなsnapshotである。Provider descriptor、dependency配列、conditional mapping、Lifecycle hookのdependency配列はbuild時に複製・固定し、RuntimeとGraphは同じsnapshotだけを参照する。handler factory、schema、user callback、Provider implementation class、`useValue`が指すservice instanceのような実行対象のidentityは維持するが、元DSL descriptorのproperty差し替えによってModelの意味が変化してはならない。
+
+DefinitionやModule instanceはbuild入力であり、Modelへraw objectとして保持しない。Runtime、Graph、CLI、BuildはModel node、edge、compiled contributionからのみ構成する。
+
+Application Model node IDは全kindを通じてglobal uniqueとする。Providerはtoken表示名ではなくbuild内ordinalからIDを生成し、token名は表示metadataとしてだけ投影する。ExtensionがCore node、Capability、他Executionと衝突するIDを返した場合はModel diagnosticで拒否する。
+
 ### 3.2 Module / Provider / DI
 
 ModuleはProviderの所有境界とvisibilityを定義する。
@@ -91,6 +97,8 @@ ModuleはProviderの所有境界とvisibilityを定義する。
 visibility violationやmissing dependencyはApplication Model diagnosticとして検出し、error diagnosticが存在するModelはRuntime開始前に拒否する。
 
 Container実装が内部的にflat lookupを利用していても、Module visibilityをadvisoryにはしない。
+
+dependency probeで使うconsumerは`id`、`name`、任意の`kind`だけを持つprotocol-neutral descriptorとする。CoreはTask、HTTP、MessagePort等のconsumer種別をclosed unionとして列挙しない。
 
 ### 3.3 Lifecycle
 
@@ -128,6 +136,8 @@ outcome passthrough
 ```
 
 HTTP response variant、WebSocket close code等のprotocol-specific short-circuit semanticsは各Extensionが所有する。
+
+Layerが`next()`を呼んだままawaitまたはreturnせず終了することは禁止する。Coreはdownstream Promiseを回収してから`LUTRE_LAYER_NEXT_NOT_AWAITED`を返し、downstream errorも`AggregateError`に保持する。これによりLayer終了後にdetached executionを残さない。
 
 ## 4. Coreが知らないもの
 
@@ -208,6 +218,8 @@ Application Model
 Graphへlive handler、factory、native resourceをserializeしない。
 
 Extension projectionはJSON-serializableでなければならない。
+
+Application Modelから独立してraw Module DefinitionをwalkするRuntime graph、dependency recorder、probe Containerは持たない。DI RuntimeはModelに収録済みのcanonical Provider descriptorだけを受け取る。
 
 OpenAPI等のprotocol-specific toolingはCore Graph IRそのものへHTTP semanticsを埋め込まず、HTTP Extensionが所有するcompiled contributionから生成する。
 
