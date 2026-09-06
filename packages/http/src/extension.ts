@@ -1,29 +1,37 @@
 import {
-  defineExecution,
-  defineLayer,
-  defineExecutionExtension,
   composeLayers,
-  runtimeCapability,
+  defineExecution,
+  defineExecutionExtension,
+  defineLayer,
   runInInjectionContext,
+  runtimeCapability,
   SchemaValidationError,
   validateSchema,
+  type ApplicationModel,
   type ExecutionDefinition,
   type ExecutionKernelRuntime,
   type GenericLayer,
   type RuntimeCapabilityBinding,
+  type SchemaInput,
   type SchemaOutput,
   type StandardSchemaV1,
   type TokenLike,
   type TokenValue,
   type Type,
-  type ApplicationModel,
 } from '@loutrejs/loutre'
 import {
+  createCorsActualResponseHeaders,
+  createCorsPreflightResponseHeaders,
+} from './cors-internal.js'
+import {
   assertValidHttpMethod,
+  compareHttpPathSpecificity,
   createHttpDispatchKey,
+  HttpPathDecodeError,
   matchHttpPath,
   parseHttpPath,
   type HttpPathSegment,
+  type PathParamNames,
 } from './path.js'
 
 export interface HttpServerDriver {
@@ -69,12 +77,16 @@ export interface HttpExecutionRouteDefinition {
 }
 
 type AnyHttpMiddleware = GenericLayer<any, any, HttpExecutionResult, any>
+declare const httpMiddlewareShortCircuit: unique symbol
 
 export type HttpMiddleware<
   TContribution extends object = object,
   TInject extends readonly TokenLike[] = readonly TokenLike[],
   TContext extends object = HttpMiddlewareContext,
-> = GenericLayer<TContext, TContribution, HttpExecutionResult, TInject>
+  TShortCircuit extends HttpExecutionResult = never,
+> = GenericLayer<TContext, TContribution, HttpExecutionResult, TInject> & {
+  readonly [httpMiddlewareShortCircuit]?: TShortCircuit
+}
 
 export interface HttpMiddlewareContext {
   readonly request: Request
@@ -265,6 +277,11 @@ interface CompiledHttpExecution {
   >
 }
 
+interface RuntimeHttpRoute {
+  readonly executionId: string
+  readonly route: CompiledHttpRoute
+}
+
 export interface HttpExtensionRuntime {
   fetch(request: Request): Promise<Response>
   drain(): void
@@ -285,19 +302,7 @@ export const httpExecutionExtension = defineExecutionExtension<
   name: '@loutrejs/http',
   compile(definition, context) {
     const routes = Object.entries(definition.contract.routes).map(
-      ([name, route]) => {
-        assertValidHttpMethod(route.method)
-        const segments = parseHttpPath(route.path)
-        return Object.freeze({
-          name,
-          method: route.method.toUpperCase(),
-          path: route.path,
-          segments,
-          dispatch: createHttpDispatchKey(route.method, segments),
-          definition: route,
-          middlewares: route.middlewares ?? [],
-        })
-      },
+      ([name, route]) => compileHttpRoute(name, route),
     )
     return {
       kind: 'execution',
@@ -380,9 +385,166 @@ export type HttpExecutionDefinition<
 > = HttpImplementationDefinition<TContract, TInject> &
   ExecutionDefinition<typeof httpExecutionExtension>
 
+type HttpStatusDigit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
+type HttpStatusHundreds = '2' | '3' | '4' | '5'
+
+type IsValidHttpResponseStatus<TStatus extends number> = number extends TStatus
+  ? false
+  : `${TStatus}` extends `${HttpStatusHundreds}${HttpStatusDigit}${HttpStatusDigit}`
+    ? true
+    : false
+
+type IsBodylessHttpStatus<TStatus extends number> = TStatus extends
+  | 204
+  | 205
+  | 304
+  ? true
+  : false
+
+type IsResponseStatusCompatible<TResponse> =
+  TResponse extends HttpExecutionResponseDefinition
+    ? IsValidHttpResponseStatus<TResponse['status']> extends true
+      ? IsBodylessHttpStatus<TResponse['status']> extends true
+        ? TResponse extends { readonly body: StandardSchemaV1 }
+          ? false
+          : true
+        : true
+      : false
+    : false
+
+type AreResponseStatusesCompatible<
+  TResponses extends HttpExecutionRouteDefinition['responses'],
+> = false extends {
+  [TVariant in keyof TResponses]: IsResponseStatusCompatible<
+    TResponses[TVariant]
+  >
+}[keyof TResponses]
+  ? false
+  : true
+
+type IsResponseHeadersSchemaCompatible<TResponse> =
+  ResponseHeadersSchema<TResponse> extends infer THeaders
+    ? [THeaders] extends [never]
+      ? true
+      : THeaders extends StandardSchemaV1
+        ? SchemaOutput<THeaders> extends HttpHeaders | undefined
+          ? true
+          : false
+        : true
+    : true
+
+type AreResponseHeadersSchemasCompatible<
+  TResponses extends HttpExecutionRouteDefinition['responses'],
+> = false extends {
+  [TVariant in keyof TResponses]: IsResponseHeadersSchemaCompatible<
+    TResponses[TVariant]
+  >
+}[keyof TResponses]
+  ? false
+  : true
+
+type HasRequiredStringContentType<TValue> = [TValue] extends [
+  { readonly 'content-type': string },
+]
+  ? true
+  : false
+
+type IsExactParamsSchemaMap<
+  TPath extends string,
+  TSchemas extends Readonly<Record<string, StandardSchemaV1>>,
+> =
+  Exclude<keyof TSchemas, PathParamNames<TPath>> extends never
+    ? Exclude<PathParamNames<TPath>, keyof TSchemas> extends never
+      ? true
+      : false
+    : false
+
+type IsRawStringCompatible<TInput> = string extends TInput
+  ? true
+  : [Extract<TInput, string>] extends [never]
+    ? false
+    : true
+
+type DoParamsSchemasAcceptStrings<
+  TSchemas extends Readonly<Record<string, StandardSchemaV1>>,
+> = false extends {
+  [TName in keyof TSchemas]: IsRawStringCompatible<SchemaInput<TSchemas[TName]>>
+}[keyof TSchemas]
+  ? false
+  : true
+
+type MiddlewareShortCircuit<TMiddleware> =
+  typeof httpMiddlewareShortCircuit extends keyof TMiddleware
+    ? TMiddleware extends {
+        readonly [httpMiddlewareShortCircuit]?: infer TResult
+      }
+      ? Exclude<TResult, undefined>
+      : never
+    : never
+
+type RouteMiddlewareShortCircuits<
+  TRoute extends HttpExecutionRouteDefinition,
+> = TRoute extends {
+  readonly middlewares: infer TMiddlewares extends readonly AnyHttpMiddleware[]
+}
+  ? MiddlewareShortCircuit<TMiddlewares[number]>
+  : never
+
+type AreMiddlewareShortCircuitsCompatible<
+  TRoute extends HttpExecutionRouteDefinition,
+> = [RouteMiddlewareShortCircuits<TRoute>] extends [never]
+  ? true
+  : Exclude<
+        RouteMiddlewareShortCircuits<TRoute>,
+        DeclaredHttpResults<TRoute>
+      > extends never
+    ? true
+    : false
+
+type HttpRouteConstraint<TRoute extends HttpExecutionRouteDefinition> =
+  (AreResponseStatusesCompatible<TRoute['responses']> extends true
+    ? AreResponseHeadersSchemasCompatible<TRoute['responses']> extends true
+      ? unknown
+      : { readonly responses: never }
+    : { readonly responses: never }) &
+  (TRoute['request'] extends { readonly body: StandardSchemaV1 }
+    ? TRoute['request'] extends {
+        readonly headers: infer THeaders extends StandardSchemaV1
+      }
+      ? HasRequiredStringContentType<SchemaInput<THeaders>> extends true
+        ? HasRequiredStringContentType<SchemaOutput<THeaders>> extends true
+          ? unknown
+          : { readonly request: never }
+        : { readonly request: never }
+      : { readonly request: never }
+    : unknown) &
+  (TRoute['request'] extends {
+    readonly params: infer TParams extends Readonly<
+      Record<string, StandardSchemaV1>
+    >
+  }
+    ? IsExactParamsSchemaMap<TRoute['path'], TParams> extends true
+      ? DoParamsSchemasAcceptStrings<TParams> extends true
+        ? unknown
+        : { readonly request: never }
+      : { readonly request: never }
+    : unknown) &
+  (AreMiddlewareShortCircuitsCompatible<TRoute> extends true
+    ? unknown
+    : { readonly middlewares: never })
+
+type HttpContractConstraint<
+  TRoutes extends Readonly<Record<string, HttpExecutionRouteDefinition>>,
+> = {
+  readonly [TName in keyof TRoutes]: HttpRouteConstraint<TRoutes[TName]>
+}
+
 export function defineHttpContract<
   const TRoutes extends Readonly<Record<string, HttpExecutionRouteDefinition>>,
->(routes: TRoutes): HttpContract<TRoutes> {
+>(routes: TRoutes & HttpContractConstraint<TRoutes>): HttpContract<TRoutes> {
+  for (const [name, route] of Object.entries(routes)) {
+    compileHttpRoute(name, route)
+  }
   return Object.freeze({ kind: 'http-contract', routes })
 }
 
@@ -427,7 +589,6 @@ export function defineHttpMiddleware<
 }
 
 export function collectHttpRoutes(model: ApplicationModel) {
-  // CLIがbundleしたApplicationではdescriptor identityが別になるため、Modelが一意性を検証したExtension名を使う。
   return model.executions
     .filter(
       (execution) => execution.extension.name === httpExecutionExtension.name,
@@ -466,11 +627,78 @@ export function withHttpFrameworkHeaders(
   const current = (result as HttpExecutionResultWithFrameworkHeaders)[
     httpFrameworkHeaders
   ]
-  const withFrameworkHeaders: HttpExecutionResultWithFrameworkHeaders = {
+  return {
     ...result,
     [httpFrameworkHeaders]: { ...current, ...headers },
+  } as HttpExecutionResultWithFrameworkHeaders
+}
+
+function compileHttpRoute(
+  name: string,
+  route: HttpExecutionRouteDefinition,
+): CompiledHttpRoute {
+  assertValidHttpMethod(route.method)
+  const segments = parseHttpPath(route.path)
+  assertValidHttpRouteDefinition(route, segments)
+  return Object.freeze({
+    name,
+    method: route.method.toUpperCase(),
+    path: route.path,
+    segments,
+    dispatch: createHttpDispatchKey(route.method, segments),
+    definition: route,
+    middlewares: route.middlewares ?? [],
+  })
+}
+
+function assertValidHttpRouteDefinition(
+  route: HttpExecutionRouteDefinition,
+  segments: readonly HttpPathSegment[],
+): void {
+  if (route.request?.body && !route.request.headers) {
+    throw new TypeError(
+      `HTTP ${route.method} ${route.path} declares a body but no request headers schema.`,
+    )
   }
-  return withFrameworkHeaders
+  if (route.request?.params) {
+    const pathParams = segments
+      .filter(
+        (segment): segment is Extract<HttpPathSegment, { readonly kind: 'param' }> =>
+          segment.kind === 'param',
+      )
+      .map((segment) => segment.name)
+      .toSorted()
+    const schemaParams = Object.keys(route.request.params).toSorted()
+    if (
+      pathParams.length !== schemaParams.length ||
+      pathParams.some((name, index) => name !== schemaParams[index])
+    ) {
+      throw new TypeError(
+        `HTTP ${route.method} ${route.path} request params must exactly match path parameters.`,
+      )
+    }
+  }
+  for (const [name, response] of Object.entries(route.responses)) {
+    if (
+      !Number.isInteger(response.status) ||
+      response.status < 200 ||
+      response.status > 599
+    ) {
+      throw new TypeError(
+        `HTTP response ${name} has invalid status ${response.status}.`,
+      )
+    }
+    if (
+      (response.status === 204 ||
+        response.status === 205 ||
+        response.status === 304) &&
+      response.body
+    ) {
+      throw new TypeError(
+        `HTTP response ${name} with status ${response.status} cannot declare a body.`,
+      )
+    }
+  }
 }
 
 function createHttpExtensionRuntime(
@@ -504,6 +732,16 @@ function createHttpExtensionRuntime(
       ),
     )
   }
+  const routes = executions
+    .flatMap((execution) =>
+      execution.compiled.routes.map(
+        (route): RuntimeHttpRoute => ({ executionId: execution.id, route }),
+      ),
+    )
+    .toSorted((left, right) =>
+      compareHttpPathSpecificity(left.route.segments, right.route.segments),
+    )
+
   return {
     drain() {
       accepting = false
@@ -514,68 +752,163 @@ function createHttpExtensionRuntime(
       }
       const url = new URL(request.url)
       const method = request.method.toUpperCase()
-      for (const execution of executions) {
-        for (const route of execution.compiled.routes) {
-          if (route.method !== method) continue
-          const params = matchHttpPath(route.segments, url.pathname)
-          if (!params) continue
-          const lease = applicationRuntime.beginExecution()
-          const abortRequest = () => lease.abort(request.signal.reason)
-          request.signal.addEventListener('abort', abortRequest, { once: true })
-          if (request.signal.aborted) abortRequest()
-          try {
-            let context: HttpExecutionContext
+
+      if (isCorsPreflightRequest(request)) {
+        try {
+          const requestedMethod = request.headers
+            .get('access-control-request-method')!
+            .toUpperCase()
+          const match = findRuntimeHttpRoute(
+            routes,
+            requestedMethod,
+            url.pathname,
+          )
+          if (match) {
+            const lease = applicationRuntime.beginExecution()
             try {
-              context = await createHttpContext(
+              const headers = await createCorsPreflightResponseHeaders(
+                match.route.middlewares,
                 request,
-                url,
-                params,
-                route,
-                lease.signal,
+                match.route.method,
               )
-            } catch (error) {
-              if (error instanceof SchemaValidationError) {
-                return Response.json(
-                  { error: 'Validation failed' },
-                  { status: 400 },
-                )
+              if (headers) {
+                return new Response(null, { status: 204, headers })
               }
-              if (error instanceof SyntaxError) {
-                return Response.json(
-                  { error: 'Invalid request' },
-                  { status: 400 },
-                )
-              }
-              throw error
+            } finally {
+              lease.complete()
             }
-            const handler = handlers.get(execution.id)?.[route.name]
-            if (!handler) {
-              throw new Error(
-                `LUTRE_HTTP_HANDLER_MISSING: ${execution.id}.${route.name}`,
-              )
-            }
-            const result = await composeLayers({
-              context,
-              layers: route.middlewares,
-              resolve: (token) => applicationRuntime.resolve(token),
-              terminal: async (middlewareContext) =>
-                handler(middlewareContext as HttpExecutionContext),
-            })
-            return await finalizeHttpResult(route.definition, result)
-          } catch {
-            return Response.json(
-              { error: 'Internal Server Error' },
-              { status: 500 },
-            )
-          } finally {
-            request.signal.removeEventListener('abort', abortRequest)
-            lease.complete()
           }
+        } catch (error) {
+          if (error instanceof HttpPathDecodeError) {
+            return Response.json({ error: 'Invalid request' }, { status: 400 })
+          }
+          return Response.json(
+            { error: 'Internal Server Error' },
+            { status: 500 },
+          )
         }
       }
-      return Response.json({ error: 'Not Found' }, { status: 404 })
+
+      let match: ReturnType<typeof findRuntimeHttpRoute>
+      try {
+        match = findRuntimeHttpRoute(routes, method, url.pathname)
+      } catch (error) {
+        if (error instanceof HttpPathDecodeError) {
+          return Response.json({ error: 'Invalid request' }, { status: 400 })
+        }
+        return Response.json(
+          { error: 'Internal Server Error' },
+          { status: 500 },
+        )
+      }
+      if (!match) {
+        return Response.json({ error: 'Not Found' }, { status: 404 })
+      }
+
+      const lease = applicationRuntime.beginExecution()
+      const abortRequest = () => lease.abort(request.signal.reason)
+      request.signal.addEventListener('abort', abortRequest, { once: true })
+      if (request.signal.aborted) abortRequest()
+      try {
+        const corsHeaders = await createCorsActualResponseHeaders(
+          match.route.middlewares,
+          request,
+        )
+        const complete = (response: Response): Response =>
+          applyFrameworkHeadersToResponse(response, corsHeaders)
+
+        let context: HttpExecutionContext
+        try {
+          context = await createHttpContext(
+            request,
+            url,
+            match.params,
+            match.route,
+            lease.signal,
+          )
+        } catch (error) {
+          if (error instanceof HttpUnsupportedMediaTypeError) {
+            return complete(
+              Response.json(
+                { error: 'Unsupported Media Type' },
+                { status: 415 },
+              ),
+            )
+          }
+          if (error instanceof HttpInputDecodeError) {
+            return complete(
+              Response.json({ error: 'Invalid request' }, { status: 400 }),
+            )
+          }
+          if (error instanceof SchemaValidationError) {
+            return complete(
+              Response.json({ error: 'Validation failed' }, { status: 400 }),
+            )
+          }
+          throw error
+        }
+
+        const handler = handlers.get(match.executionId)?.[match.route.name]
+        if (!handler) {
+          throw new Error(
+            `LUTRE_HTTP_HANDLER_MISSING: ${match.executionId}.${match.route.name}`,
+          )
+        }
+        const result = await composeLayers({
+          context,
+          layers: match.route.middlewares,
+          resolve: (token) => applicationRuntime.resolve(token),
+          terminal: async (middlewareContext) =>
+            handler(middlewareContext as HttpExecutionContext),
+        })
+        return complete(await finalizeHttpResult(match.route.definition, result))
+      } catch {
+        return applyFrameworkHeadersToResponse(
+          Response.json(
+            { error: 'Internal Server Error' },
+            { status: 500 },
+          ),
+          await safeCorsHeaders(match.route.middlewares, request),
+        )
+      } finally {
+        request.signal.removeEventListener('abort', abortRequest)
+        lease.complete()
+      }
     },
   }
+}
+
+function findRuntimeHttpRoute(
+  routes: readonly RuntimeHttpRoute[],
+  method: string,
+  pathname: string,
+): (RuntimeHttpRoute & { readonly params: Record<string, string> }) | undefined {
+  for (const candidate of routes) {
+    if (candidate.route.method !== method) continue
+    const params = matchHttpPath(candidate.route.segments, pathname)
+    if (!params) continue
+    return { ...candidate, params }
+  }
+  return undefined
+}
+
+async function safeCorsHeaders(
+  middlewares: readonly AnyHttpMiddleware[],
+  request: Request,
+): Promise<Headers | undefined> {
+  try {
+    return await createCorsActualResponseHeaders(middlewares, request)
+  } catch {
+    return undefined
+  }
+}
+
+function isCorsPreflightRequest(request: Request): boolean {
+  return (
+    request.method.toUpperCase() === 'OPTIONS' &&
+    request.headers.has('origin') &&
+    request.headers.has('access-control-request-method')
+  )
 }
 
 async function createHttpContext(
@@ -596,15 +929,16 @@ async function createHttpContext(
         ),
       )
     : rawParams
-  const rawQuery = Object.fromEntries(url.searchParams)
+  const rawQuery = decodeQuery(url.searchParams)
   const query = definition?.query
     ? await validateSchema(definition.query, rawQuery)
     : url.searchParams
-  const rawHeaders = Object.fromEntries(request.headers)
   const headers = definition?.headers
-    ? await validateSchema(definition.headers, rawHeaders)
+    ? await validateRequestHeaders(definition, request.headers)
     : request.headers
-  const rawBody = definition?.body ? await decodeBody(request) : undefined
+  const rawBody = definition?.body
+    ? await decodeBody(request, validatedContentType(headers))
+    : undefined
   const body = definition?.body
     ? await validateSchema(definition.body, rawBody)
     : undefined
@@ -632,11 +966,122 @@ async function createHttpContext(
   } as unknown as HttpExecutionContext
 }
 
-async function decodeBody(request: Request): Promise<unknown> {
-  const contentType = request.headers.get('content-type')?.split(';', 1)[0]
-  if (contentType === 'application/json') return request.json()
-  if (contentType?.startsWith('text/')) return request.text()
-  return request.arrayBuffer()
+function decodeQuery(
+  searchParams: URLSearchParams,
+): Readonly<Record<string, string | string[]>> {
+  const query: Record<string, string | string[]> = {}
+  for (const [key, value] of searchParams) {
+    const current = query[key]
+    query[key] =
+      current === undefined
+        ? value
+        : Array.isArray(current)
+          ? [...current, value]
+          : [current, value]
+  }
+  return query
+}
+
+async function validateRequestHeaders(
+  definition: HttpExecutionRequestDefinition,
+  headers: Headers,
+): Promise<unknown> {
+  const schema = definition.headers!
+  try {
+    return await validateSchema(schema, requestHeadersForValidation(headers))
+  } catch (error) {
+    if (
+      definition.body &&
+      error instanceof SchemaValidationError &&
+      hasContentTypeIssue(error)
+    ) {
+      throw new HttpUnsupportedMediaTypeError(
+        normalizeMediaType(headers.get('content-type')),
+      )
+    }
+    throw error
+  }
+}
+
+function requestHeadersForValidation(headers: Headers): Record<string, string> {
+  const decoded = Object.fromEntries(headers.entries())
+  const contentType = normalizeMediaType(headers.get('content-type'))
+  if (contentType) decoded['content-type'] = contentType
+  return decoded
+}
+
+function validatedContentType(headers: unknown): string {
+  if (typeof headers !== 'object' || headers === null) {
+    throw new TypeError('HTTP body requires validated request headers')
+  }
+  const contentType = (headers as Record<string, unknown>)['content-type']
+  if (typeof contentType !== 'string' || contentType.length === 0) {
+    throw new TypeError(
+      'HTTP body requires request.headers content-type to resolve to a string',
+    )
+  }
+  return contentType
+}
+
+function hasContentTypeIssue(error: SchemaValidationError): boolean {
+  return error.issues.some((issue) => {
+    const first = issue.path?.[0]
+    const key =
+      typeof first === 'object' && first !== null && 'key' in first
+        ? first.key
+        : first
+    return key === 'content-type'
+  })
+}
+
+async function decodeBody(
+  request: Request,
+  contentType: string,
+): Promise<unknown> {
+  const mediaType = normalizeMediaType(contentType)!
+  if (mediaType === 'application/json' || mediaType.endsWith('+json')) {
+    try {
+      return await request.json()
+    } catch (error) {
+      throw new HttpInputDecodeError(error)
+    }
+  }
+  if (mediaType === 'multipart/form-data') {
+    try {
+      return await request.formData()
+    } catch (error) {
+      throw new HttpInputDecodeError(error)
+    }
+  }
+  if (mediaType.startsWith('text/')) {
+    try {
+      return await request.text()
+    } catch (error) {
+      throw new HttpInputDecodeError(error)
+    }
+  }
+  return request.body
+}
+
+function normalizeMediaType(
+  value: string | null | undefined,
+): string | undefined {
+  const normalized = value?.split(';', 1)[0]?.trim().toLowerCase()
+  return normalized ? normalized : undefined
+}
+
+class HttpInputDecodeError extends Error {
+  constructor(readonly cause: unknown) {
+    super('HTTP request body decode failed', { cause })
+    this.name = 'HttpInputDecodeError'
+  }
+}
+
+class HttpUnsupportedMediaTypeError extends Error {
+  constructor(readonly mediaType: string | undefined) {
+    super('HTTP request content type is unsupported by the Contract')
+    this.name = 'HttpUnsupportedMediaTypeError'
+  }
 }
 
 async function finalizeHttpResult(
@@ -662,8 +1107,9 @@ async function finalizeHttpResult(
     headers,
     (result as HttpExecutionResultWithFrameworkHeaders)[httpFrameworkHeaders],
   )
-  if (body === undefined)
+  if (body === undefined) {
     return new Response(null, { status: response.status, headers })
+  }
   if (
     typeof body === 'string' ||
     body instanceof ArrayBuffer ||
@@ -770,6 +1216,20 @@ function applyResponseHeaders(
     }
     for (const item of value) headers.append(name, item)
   }
+}
+
+function applyFrameworkHeadersToResponse(
+  response: Response,
+  source: Headers | undefined,
+): Response {
+  if (!source) return response
+  const headers = new Headers(response.headers)
+  applyFrameworkResponseHeaders(headers, Object.fromEntries(source.entries()))
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
 }
 
 function applyFrameworkResponseHeaders(
