@@ -1,19 +1,14 @@
 import {
-  binding,
   createKernelApplication,
   type ApplicationDefinition,
   type ApplicationExtensionHostApis,
   type BootstrapArguments,
-  type HasHttp,
-  type HostBindingApplication,
-  type InvocationBindingOptions,
   type KernelHostedApplication,
 } from '../application/index.js'
 import {
   applicationHasHost,
   bindApplicationCapability,
 } from '../application/kernel-internal.js'
-import type { HttpProtocolExecution } from '../legacy-http/index.js'
 import { LOUTRE_VERSION, startStartupPresentation } from '../presentation.js'
 import { assertRuntimeEngine } from '../runtime/engine.js'
 import { serverUrl } from '../runtime/server-url.js'
@@ -26,11 +21,9 @@ type HasHttpExecutionExtension<TDefinition extends ApplicationDefinition> =
 type HttpApplication<TDefinition extends ApplicationDefinition> =
   IsAny<TDefinition> extends true
     ? TDefinition
-    : HasHttp<TDefinition> extends true
+    : HasHttpExecutionExtension<TDefinition> extends true
       ? TDefinition
-      : HasHttpExecutionExtension<TDefinition> extends true
-        ? TDefinition
-        : never
+      : never
 
 type DenoServer = { shutdown(): Promise<void> }
 
@@ -57,14 +50,9 @@ export interface DenoListenerHandle {
   readonly port: number
 }
 
-type DenoHostedApplication<TDefinition extends ApplicationDefinition> =
-  HasHttpExecutionExtension<TDefinition> extends true
-    ? KernelHostedApplication<TDefinition>
-    : HostBindingApplication<TDefinition>
-
 export type DenoRuntimeApplication<
   TDefinition extends ApplicationDefinition = ApplicationDefinition,
-> = DenoHostedApplication<TDefinition> & {
+> = KernelHostedApplication<TDefinition> & {
   serve(options?: DenoServeOptions): Promise<DenoListenerHandle>
 }
 
@@ -89,55 +77,32 @@ function bind<const TDefinition extends ApplicationDefinition>(
   options: DenoRuntimeOptions<TDefinition>,
 ): DenoBinding {
   assertRuntimeEngine('deno')
-  const environment = denoEnvironment()
-
-  if (applicationHasHost(options.application.model, 'http')) {
-    const application = createKernelApplication({
-      application: options.application,
-      capabilities: [
-        bindApplicationCapability(options.application.model, 'http.server', {
-          runtime: 'deno',
-        }),
-      ],
-      environment: 'environment' in options ? options.environment : environment,
-      ...('arguments' in options ? { arguments: options.arguments } : {}),
-    })
-    let initialization: Promise<unknown> | undefined
-    return {
-      async fetch(request) {
-        initialization ??= application.init()
-        await initialization
-        return (
-          application as unknown as { readonly http: DenoHttpRequestHandler }
-        ).http.fetch(request)
-      },
-      close: (signal) => application.close(signal),
-    }
-  }
-
-  const invocation = binding.invocation(
-    bindingOptions(
-      options,
-      environment,
-    ) as InvocationBindingOptions<TDefinition>,
-  )
-  const http =
-    'http' in invocation
-      ? (invocation.http as HttpProtocolExecution)
-      : undefined
-  if (!http) {
-    void invocation.application.close()
+  if (!applicationHasHost(options.application.model, 'http')) {
     throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: denoRuntime.bind() requires an HTTP-capable Application.',
+      'LUTRE_RUNTIME_HTTP_REQUIRED: denoRuntime.bind() requires the HTTP Execution Extension.',
     )
   }
-  const fetch = createDenoFetchDriver({
-    initialize: () => http.initialize(),
-    fetch: (request) => http.handle(request),
+  const application = createKernelApplication({
+    application: options.application,
+    capabilities: [
+      bindApplicationCapability(options.application.model, 'http.server', {
+        runtime: 'deno',
+      }),
+    ],
+    environment:
+      'environment' in options ? options.environment : denoEnvironment(),
+    ...('arguments' in options ? { arguments: options.arguments } : {}),
   })
+  let initialization: Promise<unknown> | undefined
   return {
-    fetch,
-    close: (signal) => invocation.application.close(signal),
+    async fetch(request) {
+      initialization ??= application.init()
+      await initialization
+      return (
+        application as unknown as { readonly http: DenoHttpRequestHandler }
+      ).http.fetch(request)
+    },
+    close: (signal) => application.close(signal),
   }
 }
 
@@ -158,50 +123,28 @@ async function create<const TDefinition extends ApplicationDefinition>(
       write: (value) => console.log(value),
     },
   )
-  const usesHttpExecutionExtension = applicationHasHost(
-    options.application.model,
-    'http',
-  )
 
-  let application: DenoRuntimeApplication<TDefinition>
-  let http: DenoHttpRequestHandler
-  if (usesHttpExecutionExtension) {
-    const hosted = createKernelApplication({
-      application: options.application,
-      capabilities: [
-        bindApplicationCapability(options.application.model, 'http.server', {
-          runtime: 'deno',
-        }),
-      ],
-      environment:
-        'environment' in options ? options.environment : denoEnvironment(),
-      ...('arguments' in options ? { arguments: options.arguments } : {}),
-    })
-    await hosted.init()
-    application = hosted as DenoRuntimeApplication<TDefinition>
-    http = (hosted as unknown as { readonly http: DenoHttpRequestHandler }).http
-  } else {
-    const host = binding.host(
-      bindingOptions(
-        options,
-        denoEnvironment(),
-      ) as InvocationBindingOptions<TDefinition>,
+  if (!applicationHasHost(options.application.model, 'http')) {
+    throw new Error(
+      'LUTRE_RUNTIME_HTTP_REQUIRED: denoRuntime.create() requires the HTTP Execution Extension.',
     )
-    const legacyHttp =
-      'http' in host ? (host.http as HttpProtocolExecution) : undefined
-    if (!legacyHttp) {
-      await host.application.close()
-      throw new Error(
-        'LUTRE_RUNTIME_HTTP_REQUIRED: denoRuntime.create() requires an HTTP-capable Application.',
-      )
-    }
-    await host.application.init()
-    application = host.application as DenoRuntimeApplication<TDefinition>
-    http = {
-      initialize: () => legacyHttp.initialize(),
-      fetch: (request) => legacyHttp.handle(request),
-    }
   }
+
+  const hosted = createKernelApplication({
+    application: options.application,
+    capabilities: [
+      bindApplicationCapability(options.application.model, 'http.server', {
+        runtime: 'deno',
+      }),
+    ],
+    environment:
+      'environment' in options ? options.environment : denoEnvironment(),
+    ...('arguments' in options ? { arguments: options.arguments } : {}),
+  })
+  await hosted.init()
+  const application = hosted as DenoRuntimeApplication<TDefinition>
+  const http = (hosted as unknown as { readonly http: DenoHttpRequestHandler })
+    .http
 
   const closeApplication = application.close.bind(application)
   let server: DenoServer | undefined
@@ -227,8 +170,9 @@ async function create<const TDefinition extends ApplicationDefinition>(
     } catch (error) {
       errors.push(error)
     }
-    if (errors.length > 0)
+    if (errors.length > 0) {
       throw new AggregateError(errors, 'Deno runtime shutdown failed')
+    }
   }
 
   const serve = async (
@@ -248,8 +192,6 @@ async function create<const TDefinition extends ApplicationDefinition>(
     }
     serving = true
     try {
-      if ('triggers' in application) await application.triggers.start()
-
       const requestedPort = serveOptions.port
       let port = requestedPort ?? 3000
       while (true) {
@@ -346,17 +288,6 @@ function createDenoFetchDriver(application: DenoHttpRequestHandler) {
     initialization ??= application.initialize?.() ?? Promise.resolve()
     await initialization
     return application.fetch(request)
-  }
-}
-
-function bindingOptions<TDefinition extends ApplicationDefinition>(
-  options: DenoRuntimeOptions<TDefinition>,
-  environment: unknown,
-): object {
-  return {
-    application: options.application,
-    environment: 'environment' in options ? options.environment : environment,
-    ...('arguments' in options ? { arguments: options.arguments } : {}),
   }
 }
 
