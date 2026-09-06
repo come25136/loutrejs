@@ -9,10 +9,10 @@ const profile = ProfileContract.routes.profile
 
 export const AppContract = http.contract({
   profile: {
-    ...profile,
+    method: profile.method,
     path: `/api/me${profile.path}`,
     responses: {
-      ...profile.responses,
+      ok: profile.responses.ok,
       unauthorized: {
         status: 401,
         body: z.object({ error: z.string() }),
