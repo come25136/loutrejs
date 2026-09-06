@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   bindRuntimeCapability,
+  bootstrapApplication,
   buildApplicationModel,
+  defineApplication,
   defineExecution,
   defineExecutionExtension,
   defineModule,
+  hook,
   RuntimeCapabilityRegistry,
   runtimeCapability,
   type ExecutionDefinition,
@@ -94,5 +97,46 @@ describe('Application Model identity regressions', () => {
 
     expect(bundled).not.toBe(host)
     expect(registry.get(bundled)).toBe(value)
+  })
+
+  it('Model構築後にraw Module Definitionが変化してもRuntimeへ影響しない', async () => {
+    const events: string[] = []
+    class Resource {
+      onModuleInit() {
+        events.push('provider:model')
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      lifecycle: {
+        onModuleInit: hook({
+          inject: [],
+          run: () => events.push('hook:model'),
+        }),
+      },
+    }))
+    const module = Module()
+    const definition = defineApplication({ modules: [module] })
+    const mutable = module as unknown as {
+      definition: {
+        providers: readonly unknown[]
+        lifecycle: { onModuleInit: ReturnType<typeof hook> }
+      }
+    }
+
+    mutable.definition.providers = []
+    mutable.definition.lifecycle = {
+      onModuleInit: hook({
+        inject: [],
+        run: () => events.push('hook:mutated'),
+      }),
+    }
+
+    const application = await bootstrapApplication({ application: definition })
+    try {
+      expect(events).toEqual(['provider:model', 'hook:model'])
+    } finally {
+      await application.close()
+    }
   })
 })
