@@ -1,9 +1,8 @@
-import { defineApplication } from '@loutrejs/loutre'
-import { bootstrap } from '@loutrejs/loutre/host'
+import { createKernelApplication, defineApplication } from '@loutrejs/loutre'
 
 describe('Application disposal', () => {
   it('await using delegates cleanup to the current close implementation', async () => {
-    const application = bootstrap({
+    const application = createKernelApplication({
       application: defineApplication({ modules: [] }),
     })
     const close = application.close.bind(application)
@@ -13,6 +12,10 @@ describe('Application disposal', () => {
       async close(signal?: string) {
         closeCalls += 1
         await close(signal)
+      },
+      async [Symbol.asyncDispose]() {
+        closeCalls += 1
+        await close()
       },
     })
 

@@ -1,5 +1,5 @@
 import { createKernelApplication } from '@loutrejs/loutre'
-import { bootstrap } from '@loutrejs/loutre/host'
+import { bootstrapApplication } from '@loutrejs/loutre'
 import { bindHttpServer } from '@loutrejs/loutre/http'
 import { runCli } from '@loutrejs/cli'
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
@@ -275,8 +275,9 @@ describe('Loutre CLI', () => {
         `${pathToFileURL(applicationPath).href}?test=${Date.now()}`
       )
       expect(built.default.kind).toBe('application-definition')
-      const application = bootstrap({ application: built.default })
-      await expect(application.init()).resolves.toBe(application)
+      const application = await bootstrapApplication({
+        application: built.default,
+      })
       await application.close()
     } finally {
       await rm(directory, { recursive: true, force: true })

@@ -67,7 +67,8 @@ function bind<const TDefinition extends ApplicationDefinition>(
   let application: KernelHostedApplication<TDefinition> | undefined
   let initialization: Promise<unknown> | undefined
   const resolve = async (environment: unknown) => {
-    application ??= createKernelApplication({
+    application ??= createKernelApplication<TDefinition>({
+      ...options,
       application: options.application,
       capabilities: [
         bindApplicationCapability(options.application.model, 'http.server', {
@@ -75,7 +76,6 @@ function bind<const TDefinition extends ApplicationDefinition>(
         }),
       ],
       environment,
-      ...('arguments' in options ? { arguments: options.arguments } : {}),
     })
     initialization ??= application.init()
     await initialization

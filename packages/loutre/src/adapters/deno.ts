@@ -82,7 +82,8 @@ function bind<const TDefinition extends ApplicationDefinition>(
       'LUTRE_RUNTIME_HTTP_REQUIRED: denoRuntime.bind() requires the HTTP Execution Extension.',
     )
   }
-  const application = createKernelApplication({
+  const application = createKernelApplication<TDefinition>({
+    ...options,
     application: options.application,
     capabilities: [
       bindApplicationCapability(options.application.model, 'http.server', {
@@ -91,7 +92,6 @@ function bind<const TDefinition extends ApplicationDefinition>(
     ],
     environment:
       'environment' in options ? options.environment : denoEnvironment(),
-    ...('arguments' in options ? { arguments: options.arguments } : {}),
   })
   let initialization: Promise<unknown> | undefined
   return {
@@ -130,7 +130,8 @@ async function create<const TDefinition extends ApplicationDefinition>(
     )
   }
 
-  const hosted = createKernelApplication({
+  const hosted = createKernelApplication<TDefinition>({
+    ...options,
     application: options.application,
     capabilities: [
       bindApplicationCapability(options.application.model, 'http.server', {
@@ -139,7 +140,6 @@ async function create<const TDefinition extends ApplicationDefinition>(
     ],
     environment:
       'environment' in options ? options.environment : denoEnvironment(),
-    ...('arguments' in options ? { arguments: options.arguments } : {}),
   })
   await hosted.init()
   const application = hosted as DenoRuntimeApplication<TDefinition>

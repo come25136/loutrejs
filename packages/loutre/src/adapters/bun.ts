@@ -91,7 +91,8 @@ async function create<const TDefinition extends ApplicationDefinition>(
     )
   }
 
-  const hosted = createKernelApplication({
+  const hosted = createKernelApplication<TDefinition>({
+    ...options,
     application: options.application,
     capabilities: [
       bindApplicationCapability(options.application.model, 'http.server', {
@@ -99,7 +100,6 @@ async function create<const TDefinition extends ApplicationDefinition>(
       }),
     ],
     environment: 'environment' in options ? options.environment : environment,
-    ...('arguments' in options ? { arguments: options.arguments } : {}),
   })
   await hosted.init()
   const application = hosted as BunRuntimeApplication<TDefinition>

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const examples = resolve(import.meta.dirname, '../examples')
 
-const forbiddenLegacyHttpPatterns = [
+const forbiddenRemovedHttpPatterns = [
   /validate\.(?:params|query|headers|body|cors)\b/u,
   /\bhttp\.controller\b/u,
   /\bpipeline\s*:/u,
@@ -14,11 +14,11 @@ const forbiddenLegacyHttpPatterns = [
 ] as const
 
 describe('examples README migration', () => {
-  it('Execution Extensionへ移行したexamplesにlegacy HTTP APIを残さない', async () => {
+  it('examples READMEに削除済みHTTP APIを残さない', async () => {
     const readmes = await readExampleReadmes(examples)
 
     for (const [path, content] of readmes) {
-      for (const pattern of forbiddenLegacyHttpPatterns) {
+      for (const pattern of forbiddenRemovedHttpPatterns) {
         expect(content, `${path}: ${pattern}`).not.toMatch(pattern)
       }
     }

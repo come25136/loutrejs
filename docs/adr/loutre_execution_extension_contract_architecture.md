@@ -196,7 +196,7 @@ Extension descriptorとその`compiled`型の相関を復元するcast/type eras
 duplicate HTTP route
 WebSocket route collision
 Extension-specific global invariant
-compiled middleware compatibility diagnostic
+compiled middleware composition diagnostic
 ```
 
 Validation failureは`Diagnostic`としてApplication Modelへ蓄積する。
@@ -212,7 +212,7 @@ status range
 bodyless status
 path params exactness
 body/content-type contract
-middleware short-circuit response compatibility
+middleware short-circuit response validation
 ```
 
 可能なものはTypeScript上でも検出し、dynamic inputや型escapeに備えてruntime/model validationも持つ。
@@ -431,7 +431,7 @@ next()
 outcome passthrough
 ```
 
-Protocol-specific Layer compatibilityはExtensionが所有する。
+Protocol-specific Layer semanticsはExtensionが所有する。
 
 HTTPならmiddleware short-circuit response variantとContract responseの整合性をHTTP Extensionが検証する。
 
@@ -447,13 +447,9 @@ Execution Extensionのarchitecture境界はnpm package分割を必須としな�
 
 これらのsource boundaryはdependency-cruiserでCI enforcementする。Extension間依存は明示allowlist制とし、現在はWebSocket handshake integrationのため`@loutrejs/websocket -> @loutrejs/loutre/http`を許可する。
 
-## 15. Compatibility
+## 15. Migration completion
 
-Execution Extension化の対象外subsystemを、この再設計の都合だけで無関係に破壊しない。
-
-Trigger Engineは本PRの対象外であり、`hello-worker`は既存利用体験を保つためlegacy Host pathを維持する。
-
-新Extension APIはlegacy pathへ依存せず、将来Trigger EngineをExtension化する場合は別PRで移行する。
+Execution semanticsはExtensionへ一本化する。Task / Trigger / Queue Consumer、MessagePort、HTTP、WebSocketの各実行経路はApplication ModelのExtension registryからRuntimeとHost APIを構成し、Core側に別系統のexecution hostを残さない。
 
 ## 16. 完了条件
 

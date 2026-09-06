@@ -27,7 +27,7 @@ async function createHttpApplication<const TContract extends HttpContract>(
 }
 
 describe('HTTP Execution Extension regression', () => {
-  it('schema未宣言のqueryとheadersを旧Loutre互換のplain recordで渡す', async () => {
+  it('schema未宣言のqueryとheadersをplain recordで渡す', async () => {
     const contract = http.contract({
       inspect: {
         method: 'GET',

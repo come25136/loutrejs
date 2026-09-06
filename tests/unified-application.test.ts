@@ -1,44 +1,49 @@
-import { binding, defineApplication } from '@loutrejs/loutre'
-import { bootstrap } from '@loutrejs/loutre/host'
 import {
-  consume,
-  cron,
+  bootstrapApplication,
+  defineApplication,
   defineArgs,
   defineModule,
-  fixedDelay,
   inject,
+} from '@loutrejs/loutre'
+import {
+  bindQueueDriver,
+  consume,
+  cron,
+  fixedDelay,
   queue,
   task,
-} from '@loutrejs/loutre'
-import { compileApplication } from '@loutrejs/loutre/graph'
+} from '@loutrejs/tasks'
 import { z } from 'zod'
 
-describe('Unified Application', () => {
-  test('public Taskを一度だけ構築し、descriptor指定で実行結果を返す', async () => {
+describe('Task/Trigger Application', () => {
+  test('Taskを一度だけ構築し、definition指定で実行結果を返す', async () => {
     let constructions = 0
-    const ServiceToken = class Service {
+    class Service {
       value = 40
     }
     const calculate = task<number, number>({
       name: 'calculate',
-      factory: (service = inject(ServiceToken)) => {
+      factory: (service = inject(Service)) => {
         constructions += 1
         return async (input) => service.value + input
       },
     })
-    const Module = defineModule(() => ({ providers: [ServiceToken] }))
-    const definition = defineApplication({
-      modules: [Module()],
-      tasks: [calculate],
-    })
-    const application = bootstrap({ application: definition })
+    const Module = defineModule(() => ({
+      providers: [Service],
+      executions: [calculate],
+    }))
+    const definition = defineApplication({ modules: [Module()] })
     constructions = 0
+    const application = await bootstrapApplication({ application: definition })
 
-    await expect(application.run(calculate, 2)).resolves.toBe(42)
-    await expect(application.run(calculate, 3)).resolves.toBe(43)
+    await expect(application.tasks.run(calculate, 2)).resolves.toBe(42)
+    await expect(application.tasks.run(calculate, 3)).resolves.toBe(43)
     expect(constructions).toBe(1)
     expect(application.graph.executions).toContainEqual(
-      expect.objectContaining({ id: 'task:calculate', kind: 'task' }),
+      expect.objectContaining({
+        id: 'task.calculate',
+        executionKind: 'task.invocation',
+      }),
     )
     await application.close()
   })
@@ -50,10 +55,11 @@ describe('Unified Application', () => {
         throw new Error('domain failure')
       },
     })
-    const application = bootstrap({
-      application: defineApplication({ modules: [], tasks: [fail] }),
+    const Module = defineModule(() => ({ executions: [fail] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
     })
-    await expect(application.run(fail)).rejects.toThrow('domain failure')
+    await expect(application.tasks.run(fail)).rejects.toThrow('domain failure')
     await application.close()
   })
 
@@ -68,53 +74,25 @@ describe('Unified Application', () => {
         () =>
           args.workers,
     })
+    const Module = defineModule(() => ({ executions: [read] }))
     const definition = defineApplication({
-      modules: [],
+      modules: [Module()],
       arguments: AppArgs,
-      tasks: [read],
     })
-    const application = bootstrap({
+    const application = await bootstrapApplication({
       application: definition,
       arguments: { workers: '8' },
     })
-    await expect(application.run(read)).resolves.toBe(8)
-    expect(application.get(AppArgs).workers).toBe(8)
-    expect(application.graph.arguments).toEqual({ name: 'AppArgs' })
-    expect(application.graph.nodes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'arguments:AppArgs',
-          kind: 'arguments',
-          label: 'AppArgs',
-        }),
-        expect.objectContaining({
-          id: 'task:arguments.read',
-          kind: 'task',
-          label: 'arguments.read',
-        }),
-      ]),
-    )
-    expect(application.graph.edges).toContainEqual({
-      from: 'task:arguments.read',
-      to: 'arguments:AppArgs',
-      kind: 'inject',
-      source: 'probed',
-    })
-    await application.close()
-  })
 
-  test('Task factory違反をTask diagnosticとして直接返す', () => {
-    const invalid = task<void, void>({
-      name: 'invalid.task',
-      factory: (async () => () => undefined) as never,
-    })
-    const result = compileApplication({ modules: [], tasks: [invalid] })
-    expect(result.diagnostics).toContainEqual(
+    await expect(application.tasks.run(read)).resolves.toBe(8)
+    expect(application.get(AppArgs).workers).toBe(8)
+    expect(application.graph.edges).toContainEqual(
       expect.objectContaining({
-        code: 'LUTRE_TASK_ASYNC_FACTORY',
-        path: 'task:invalid.task',
+        from: 'task.arguments.read',
+        kind: 'injects',
       }),
     )
+    await application.close()
   })
 
   test('closeはactive executionを待ち、新規executionを拒否する', async () => {
@@ -126,10 +104,11 @@ describe('Unified Application', () => {
       name: 'job',
       factory: () => async () => blocker,
     })
-    const application = bootstrap({
-      application: defineApplication({ modules: [], tasks: [job] }),
+    const Module = defineModule(() => ({ executions: [job] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
     })
-    const execution = application.run(job)
+    const execution = application.tasks.run(job)
     await Promise.resolve()
     const closing = application.close()
     let closed = false
@@ -138,15 +117,19 @@ describe('Unified Application', () => {
     })
     await Promise.resolve()
     expect(closed).toBe(false)
-    await expect(application.run(job)).rejects.toThrow('LUTRE_APP_STOPPING')
+    await expect(application.tasks.run(job)).rejects.toThrow(
+      'LUTRE_TASKS_DRAINING',
+    )
     release()
     await execution
     await closing
-    await expect(application.run(job)).rejects.toThrow('LUTRE_APP_STOPPED')
+    await expect(application.tasks.run(job)).rejects.toThrow(
+      'LUTRE_TASKS_DRAINING',
+    )
     await expect(application.close()).resolves.toBeUndefined()
   })
 
-  test('Cron / fixed-delay / Queue ConsumerをTrigger RootとしてTaskへ接続する', async () => {
+  test('Cron / fixed-delay / Queue ConsumerをExecution RootとしてTaskへ接続する', async () => {
     const cleanup = task<void, void>({
       name: 'cleanup',
       factory: () => () => undefined,
@@ -155,9 +138,12 @@ describe('Unified Application', () => {
       name: 'poll',
       factory: () => () => undefined,
     })
+    const processed: string[] = []
     const process = task<{ id: string }, void>({
       name: 'orders.process',
-      factory: () => () => undefined,
+      factory: () => (input) => {
+        processed.push(input.id)
+      },
     })
     const nightly = cron({
       name: 'cleanup.nightly',
@@ -168,7 +154,7 @@ describe('Unified Application', () => {
     const polling = fixedDelay({
       name: 'poll.remote',
       delay: 10_000,
-      immediate: true,
+      immediate: false,
       task: poll,
     })
     const orders = queue({
@@ -177,65 +163,62 @@ describe('Unified Application', () => {
     })
     let consumePayload: ((payload: unknown) => Promise<void>) | undefined
     const orderConsumer = consume({
-      name: 'orders.process',
+      name: 'orders.consumer',
       queue: orders,
       task: process,
     })
     const Module = defineModule(() => ({
       providers: [
-        binding.queue(orders, {
+        bindQueueDriver(orders, {
           async start({ consume: dispatch }) {
             consumePayload = dispatch
             return { stop: async () => undefined }
           },
         }),
       ],
+      executions: [cleanup, poll, process, nightly, polling, orderConsumer],
     }))
-    const application = bootstrap({
-      application: defineApplication({
-        modules: [Module()],
-        triggers: [nightly, polling, orderConsumer],
-      }),
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
     })
 
-    expect(application.graph.queues).toEqual([
-      expect.objectContaining({ id: 'queue:orders', name: 'orders' }),
-    ])
     expect(application.graph.executions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          kind: 'trigger',
-          trigger: 'cron',
-          name: 'cleanup.nightly',
-          task: 'cleanup',
+          id: 'trigger.cleanup.nightly',
+          executionKind: 'trigger.cron',
         }),
         expect.objectContaining({
-          kind: 'trigger',
-          trigger: 'fixed-delay',
-          name: 'poll.remote',
-          task: 'poll',
+          id: 'trigger.poll.remote',
+          executionKind: 'trigger.fixed-delay',
         }),
         expect.objectContaining({
-          kind: 'trigger',
-          trigger: 'queue-consumer',
-          name: 'orders.process',
-          task: 'orders.process',
+          id: 'trigger.orders.consumer',
+          executionKind: 'trigger.queue-consumer',
         }),
       ]),
     )
-    expect(application.graph.executions).not.toContainEqual(
-      expect.objectContaining({ kind: 'task', name: 'cleanup' }),
-    )
-    expect('run' in application).toBe(false)
-    await application.triggers.start()
-    await expect(application.triggers.start()).rejects.toThrow(
+    expect(
+      application.graph.executions.find(
+        (execution) => execution.id === 'trigger.orders.consumer',
+      )?.extension?.metadata,
+    ).toEqual({
+      type: 'queue-consumer',
+      name: 'orders.consumer',
+      queue: 'orders',
+      task: 'orders.process',
+    })
+
+    await application.tasks.triggers.start()
+    await expect(application.tasks.triggers.start()).rejects.toThrow(
       'LUTRE_TRIGGERS_ALREADY_STARTED',
     )
     await expect(consumePayload?.({ id: 'one' })).resolves.toBeUndefined()
+    expect(processed).toEqual(['one'])
     await application.close()
   })
 
-  test('Trigger重複名とportable cron違反をdiagnosticにする', () => {
+  test('portable cron違反・timezone違反・未登録TaskをApplication Model diagnosticにする', () => {
     const cleanup = task<void, void>({
       name: 'cleanup',
       factory: () => () => undefined,
@@ -246,19 +229,11 @@ describe('Unified Application', () => {
       timezone: 'Invalid/Timezone',
       task: cleanup,
     })
-    const duplicate = cron({
-      name: 'maintenance',
-      expression: '0 0 * * *',
-      timezone: 'UTC',
-      task: cleanup,
-    })
-    const result = compileApplication({
-      modules: [],
-      triggers: [invalidCron, duplicate],
-    })
-    expect(result.diagnostics.map(({ code }) => code)).toEqual(
+    const Module = defineModule(() => ({ executions: [invalidCron] }))
+    const definition = defineApplication({ modules: [Module()] })
+    expect(definition.model.diagnostics.map(({ code }) => code)).toEqual(
       expect.arrayContaining([
-        'LUTRE_TRIGGER_DUPLICATE',
+        'LUTRE_TRIGGER_TASK_MISSING',
         'LUTRE_TRIGGER_INVALID_CRON',
         'LUTRE_TRIGGER_INVALID_TIMEZONE',
       ]),

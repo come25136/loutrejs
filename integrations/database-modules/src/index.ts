@@ -1,4 +1,6 @@
 import {
+  bootstrapApplication,
+  defineApplication,
   defineEnv,
   defineModule,
   hook,
@@ -10,9 +12,9 @@ import {
   type OnApplicationShutdown,
   type OnModuleDestroy,
   type OnModuleInit,
+  type ModuleInstance,
   type Token,
 } from '@loutrejs/loutre'
-import { createApplicationRuntime } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
 const AppEnvSchema = z.object({
@@ -80,12 +82,14 @@ export const STORAGE = token<Storage>('storage')
 export const LIFECYCLE_EVENTS = token<string[]>('lifecycle.events')
 
 interface DatabaseModuleArgs {
+  readonly dependencies: ModuleInstance
   readonly provide: Token<Database>
   readonly name: string
   readonly url: EnvKey<string>
 }
 
 export const DatabaseModule = defineModule<DatabaseModuleArgs>((args) => ({
+  imports: [args.dependencies],
   description: `${args.name} database`,
   providers: [
     provide(args.provide).useFactory({
@@ -116,33 +120,41 @@ export async function createDatabaseIntegration(
     PRIMARY_DATABASE_URL: 'primary://example',
     ANALYTICS_DATABASE_URL: 'analytics://example',
   }
+  const DependenciesModule = defineModule(() => ({
+    environment: [AppEnv],
+    providers: [provide(LIFECYCLE_EVENTS).useValue(events)],
+    exports: [AppEnv, LIFECYCLE_EVENTS],
+  }))
+  const dependencies = DependenciesModule()
   const AppModule = defineModule(() => ({
     description: 'Database modules integration application',
     imports: [
+      dependencies,
       DatabaseModule({
+        dependencies,
         provide: PRIMARY_DB,
         name: 'primary',
         url: AppEnv.key('PRIMARY_DATABASE_URL'),
       }),
       DatabaseModule({
+        dependencies,
         provide: ANALYTICS_DB,
         name: 'analytics',
         url: AppEnv.key('ANALYTICS_DATABASE_URL'),
       }),
     ],
-    environment: [AppEnv],
     providers: [
-      provide(LIFECYCLE_EVENTS).useValue(events),
       provide(STORAGE).select(AppEnv.key('STORAGE_DRIVER'), {
         memory: MemoryStorage,
         s3: S3Storage,
       }),
     ],
   }))
-  const runtime = createApplicationRuntime([AppModule()], {
-    environmentSource,
+  const application = defineApplication({ modules: [AppModule()] })
+  const runtime = await bootstrapApplication({
+    application,
+    environment: environmentSource,
   })
-  await runtime.initialize()
-  const env = runtime.container.resolve(AppEnv)
-  return { runtime, events, env }
+  const env = runtime.get(AppEnv)
+  return { runtime, events, env, model: application.model }
 }

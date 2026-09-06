@@ -29,12 +29,15 @@
 
 LoutreではApplication DefinitionをRuntime固有の起動処理から分離し、Application Graphへcompileします。HTTP endpointもbackground executionも同じGraphに参加するため、Runtimeと`loutre check`、`loutre graph`、OpenAPI、buildが同じ構成を参照できます。
 
-たとえば、HTTP Moduleと定期TaskをひとつのApplicationとして宣言します。
+たとえば、HTTP executionと定期Taskを同じApplication Modelへ登録します。
 
 ```ts
+const WorkerModule = defineModule(() => ({
+  executions: [cleanup, heartbeat],
+}))
+
 export default defineApplication({
-  modules: [ApiModule()],
-  triggers: [heartbeat],
+  modules: [ApiModule(), WorkerModule()],
 })
 ```
 
@@ -48,10 +51,8 @@ npm exec loutre -- graph executions --entry src/app.ts --format mermaid
 
 ```mermaid
 flowchart LR
-  generated_task_cleanup["cleanup"]
-  generated_protocol_contract_1_status_http["protocol: status"]
-  generated_trigger_heartbeat["trigger: heartbeat"]
-  generated_trigger_heartbeat -->|"trigger"| generated_task_cleanup
+  n0["task.hello-worker.tick"]
+  n1["trigger.hello-worker"]
 ```
 
 Application Graphは可視化専用の表現ではありません。Module、dependency、Contract、execution、Runtime capabilityを検査し、Developer ToolingとRuntimeの共通モデルとして利用します。
@@ -96,7 +97,7 @@ Runtimeごとの役割と対応範囲は[Getting Started](./docs/getting-started
 
 - **Application Graph** — Module、dependency、Contract、execution、Runtime capabilityをひとつのGraphとして検査
 - **Unified execution model** — HTTP、Task、Trigger、Queueを同じApplication modelで表現
-- **Portable Application** — Application DefinitionとRuntime固有のHostを分離
+- **Portable Application** — Application DefinitionとRuntime固有のAdapterを分離
 - **Type-safe composition** — Contract、DI、Pipeline、Environment、ArgumentsをTypeScriptで接続
 - **Explicit architecture** — decoratorやfilesystem discoveryに依存せず、構成をcodeから追跡可能
 - **Developer Tooling** — validation、Graph visualization、OpenAPI、deployment artifact生成を提供
@@ -120,13 +121,16 @@ Runtimeごとの役割と対応範囲は[Getting Started](./docs/getting-started
 
 ## Packages
 
-| Package                                                              | Role                                    |
-| -------------------------------------------------------------------- | --------------------------------------- |
-| [`@loutrejs/loutre`](https://www.npmjs.com/package/@loutrejs/loutre) | Core Application API / Runtime bindings |
-| [`@loutrejs/node`](https://www.npmjs.com/package/@loutrejs/node)     | Node.js HTTP Runtime Adapter            |
-| [`@loutrejs/bullmq`](https://www.npmjs.com/package/@loutrejs/bullmq) | BullMQ Queue binding                    |
-| [`@loutrejs/cli`](https://www.npmjs.com/package/@loutrejs/cli)       | Graph / build / OpenAPI tooling         |
-| [`create-loutre`](https://www.npmjs.com/package/create-loutre)       | Project initializer                     |
+| Package                                                                          | Role                                    |
+| -------------------------------------------------------------------------------- | --------------------------------------- |
+| [`@loutrejs/loutre`](https://www.npmjs.com/package/@loutrejs/loutre)             | Application Graph Kernel / HTTP subpath |
+| [`@loutrejs/node`](https://www.npmjs.com/package/@loutrejs/node)                 | Node.js HTTP Runtime Adapter            |
+| [`@loutrejs/tasks`](https://www.npmjs.com/package/@loutrejs/tasks)               | Task / Trigger / Queue Extension        |
+| [`@loutrejs/message-port`](https://www.npmjs.com/package/@loutrejs/message-port) | MessagePort Extension                   |
+| [`@loutrejs/websocket`](https://www.npmjs.com/package/@loutrejs/websocket)       | WebSocket Extension                     |
+| [`@loutrejs/bullmq`](https://www.npmjs.com/package/@loutrejs/bullmq)             | BullMQ Queue Driver                     |
+| [`@loutrejs/cli`](https://www.npmjs.com/package/@loutrejs/cli)                   | Graph / build / OpenAPI tooling         |
+| [`create-loutre`](https://www.npmjs.com/package/create-loutre)                   | Project initializer                     |
 
 ## Project Status
 

@@ -33,8 +33,21 @@ describe('Execution Extension package境界', () => {
     ) as {
       readonly exports?: Readonly<Record<string, unknown>>
     }
-    expect(manifest.exports).toHaveProperty('./http')
-    expect(manifest.exports).not.toHaveProperty('./legacy-http')
+    expect(Object.keys(manifest.exports ?? {}).toSorted()).toEqual(
+      [
+        '.',
+        './graph',
+        './http',
+        './http/openapi',
+        './presentation',
+        './runtime',
+        './runtime/aws-lambda',
+        './runtime/bun',
+        './runtime/cloudflare-workers',
+        './runtime/deno',
+        './runtime/electron',
+      ].toSorted(),
+    )
   })
 
   it.each(['tasks', 'message-port'] as const)(
@@ -93,16 +106,12 @@ describe('Execution Extension package境界', () => {
     expect(source).not.toMatch(packageImportPattern('@loutrejs/http'))
   })
 
-  it('examplesは新HTTP subpathを使いstandalone HTTP / legacy MessagePortを使わない', async () => {
+  it('examplesはHTTPをmain package subpathから利用する', async () => {
     const sources = await readTypeScriptSources(resolve(repository, 'examples'))
     const standaloneHttp = packageImportPattern('@loutrejs/http')
-    const legacyMessagePort = packageImportPattern(
-      '@loutrejs/loutre/message-port',
-    )
 
     for (const [path, source] of sources) {
       expect(source, path).not.toMatch(standaloneHttp)
-      expect(source, path).not.toMatch(legacyMessagePort)
     }
   })
 

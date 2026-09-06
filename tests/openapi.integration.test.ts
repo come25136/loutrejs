@@ -1,4 +1,4 @@
-import { generateOpenApi } from '@loutrejs/loutre/openapi'
+import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'

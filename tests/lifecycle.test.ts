@@ -1,6 +1,9 @@
-import { defineModule } from '@loutrejs/loutre'
-import { compileApplication } from '@loutrejs/loutre/graph'
-import { createApplicationRuntime } from '@loutrejs/loutre/runtime'
+import {
+  buildApplicationModel,
+  createKernelApplication,
+  defineApplication,
+  defineModule,
+} from '@loutrejs/loutre'
 
 describe('Application Lifecycle', () => {
   it('初期化失敗時に対象instanceを逆順でcleanupする', async () => {
@@ -25,11 +28,13 @@ describe('Application Lifecycle', () => {
       }
     }
     const Module = defineModule(() => ({ providers: [ProviderA, ProviderB] }))
-    const runtime = createApplicationRuntime([Module()])
+    const application = createKernelApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
 
-    await expect(runtime.initialize()).rejects.toBe(failure)
+    await expect(application.init()).rejects.toBe(failure)
     expect(events).toEqual(['A.init', 'B.init', 'B.destroy', 'A.destroy'])
-    await expect(runtime.initialize()).rejects.toThrow('LUTRE_APP_STOPPED')
+    await expect(application.init()).rejects.toThrow('LUTRE_APPLICATION_STATE')
   })
 
   it('初期化errorとcleanup errorをoriginal先頭のAggregateErrorにする', async () => {
@@ -44,11 +49,13 @@ describe('Application Lifecycle', () => {
       }
     }
     const Module = defineModule(() => ({ providers: [Provider] }))
-    const runtime = createApplicationRuntime([Module()])
+    const application = createKernelApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
 
     let thrown: unknown
     try {
-      await runtime.initialize()
+      await application.init()
     } catch (error) {
       thrown = error
     }
@@ -61,28 +68,25 @@ describe('Application Lifecycle', () => {
 
   it('ProviderのDisposable protocolはLifecycleとして自動実行しない', async () => {
     const events: string[] = []
-
     class Provider {
       onModuleDestroy() {
         events.push('destroy')
       }
-
       [Symbol.asyncDispose]() {
         events.push('dispose')
         return Promise.resolve()
       }
     }
-
     const Module = defineModule(() => ({ providers: [Provider] }))
-    const runtime = createApplicationRuntime([Module()])
-    await runtime.initialize()
-
-    await runtime.shutdown()
-
+    const application = createKernelApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+    await application.init()
+    await application.close()
     expect(events).toEqual(['destroy'])
   })
 
-  it('shutdownはhook失敗後もcleanupを続け、最後にAggregateErrorを投げる', async () => {
+  it('shutdownはcleanup失敗後も続け、最後にAggregateErrorを投げる', async () => {
     const events: string[] = []
     const firstError = new Error('first cleanup')
     const secondError = new Error('second cleanup')
@@ -99,22 +103,24 @@ describe('Application Lifecycle', () => {
       }
     }
     const Module = defineModule(() => ({ providers: [First, Second] }))
-    const runtime = createApplicationRuntime([Module()])
-    await runtime.initialize()
+    const application = createKernelApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+    await application.init()
 
     let thrown: unknown
     try {
-      await runtime.shutdown()
+      await application.close()
     } catch (error) {
       thrown = error
     }
     expect(events).toEqual(['second', 'first'])
     expect(thrown).toBeInstanceOf(AggregateError)
     expect((thrown as AggregateError).errors).toEqual([secondError, firstError])
-    await expect(runtime.shutdown()).resolves.toBeUndefined()
+    await expect(application.close()).resolves.toBeUndefined()
   })
 
-  it('Graph ProbeではLifecycleを実行しない', () => {
+  it('Application Model構築ではLifecycleを実行しない', () => {
     let initialized = false
     let destroyed = false
     class Resource {
@@ -127,7 +133,9 @@ describe('Application Lifecycle', () => {
     }
     const Module = defineModule(() => ({ providers: [Resource] }))
 
-    expect(compileApplication({ modules: [Module()] }).diagnostics).toEqual([])
+    expect(buildApplicationModel({ modules: [Module()] }).diagnostics).toEqual(
+      [],
+    )
     expect(initialized).toBe(false)
     expect(destroyed).toBe(false)
   })

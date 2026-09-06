@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { bootstrap } from '@loutrejs/loutre/host'
+import { bootstrapApplication } from '@loutrejs/loutre'
 import application, {
   createProject,
 } from '../packages/create-loutre/src/app.js'
@@ -34,9 +34,9 @@ describe('create-loutre', () => {
   })
 
   it('Loutre TaskとしてNode.js HTTP Applicationを生成する', async () => {
-    const app = bootstrap({ application })
+    const app = await bootstrapApplication({ application })
     try {
-      const result = await app.run(createProject, {
+      const result = await app.tasks.run(createProject, {
         cwd: root,
         directory: 'My App',
         packageManager: 'npm',
@@ -133,9 +133,9 @@ describe('create-loutre', () => {
   ])(
     '$target向けentryとscriptを生成する',
     async ({ target, entry, script }) => {
-      const app = bootstrap({ application })
+      const app = await bootstrapApplication({ application })
       try {
-        const result = await app.run(createProject, {
+        const result = await app.tasks.run(createProject, {
           cwd: root,
           directory: target,
           packageManager: 'pnpm',
@@ -181,11 +181,11 @@ describe('create-loutre', () => {
     const targetDirectory = join(root, 'existing')
     await mkdir(targetDirectory)
     await writeFile(join(targetDirectory, 'keep.txt'), 'keep', 'utf8')
-    const app = bootstrap({ application })
+    const app = await bootstrapApplication({ application })
 
     try {
       await expect(
-        app.run(createProject, {
+        app.tasks.run(createProject, {
           cwd: root,
           directory: 'existing',
           packageManager: 'npm',

@@ -1,18 +1,16 @@
 import {
+  bootstrapApplication,
+  buildApplicationModel,
+  createKernelApplication,
   defineApplication,
   defineEnv,
   defineModule,
   inject,
   loadEnv,
   provide,
+  SchemaValidationError,
   token,
 } from '@loutrejs/loutre'
-import { compileApplication } from '@loutrejs/loutre/graph'
-import { bootstrap } from '@loutrejs/loutre/host'
-import {
-  createApplicationRuntime,
-  EnvironmentBindingError,
-} from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
 const AppEnvSchema = z
@@ -41,7 +39,7 @@ const AppEnvSchema = z
 class AppEnv extends defineEnv(AppEnvSchema) {}
 
 describe('Environment Contract', () => {
-  it('Standard Schemaのparse / cross-field validation / transform後outputをEnvとして公開する', async () => {
+  it('Standard Schema validationとtransform後outputをEnvとして公開する', async () => {
     const env = await loadEnv(AppEnv, {
       PORT: '3000',
       TLS: 'true',
@@ -59,171 +57,115 @@ describe('Environment Contract', () => {
     })
   })
 
-  it('Runtime sourceをvalidationしてからProvider constructionとLifecycleを開始する', async () => {
+  it('Runtime sourceをvalidationしてからProvider constructionを開始する', async () => {
     class Service {
       readonly port: number
-
       constructor(readonly env = inject(AppEnv)) {
         this.port = env.port
       }
     }
-
     const AppModule = defineModule(() => ({
       environment: [AppEnv],
       providers: [Service],
     }))
-
-    const runtime = createApplicationRuntime([AppModule()], {
-      environmentSource: {
-        PORT: '8080',
-        TLS: 'false',
-      },
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [AppModule()] }),
+      environment: { PORT: '8080', TLS: 'false' },
     })
 
-    await runtime.initialize()
-
-    expect(runtime.container.resolve(Service).port).toBe(8080)
-    expect(
-      runtime.graph.providers.filter(
-        (provider) => provider.kind === 'environment',
-      ),
-    ).toHaveLength(1)
-
-    await runtime.shutdown()
+    expect(application.get(Service).port).toBe(8080)
+    expect(application.get(AppEnv).port).toBe(8080)
+    await application.close()
   })
 
-  it('cross-field validation failureをsecret-safeなEnvironmentBindingErrorにする', async () => {
-    const AppModule = defineModule(() => ({
-      environment: [AppEnv],
-    }))
-    const runtime = createApplicationRuntime([AppModule()], {
-      environmentSource: {
-        PORT: '8080',
-        TLS: 'true',
-      },
-    })
-
-    await expect(runtime.initialize()).rejects.toBeInstanceOf(
-      EnvironmentBindingError,
-    )
+  it('cross-field validation failureをSchemaValidationErrorにする', async () => {
+    const AppModule = defineModule(() => ({ environment: [AppEnv] }))
+    await expect(
+      bootstrapApplication({
+        application: defineApplication({ modules: [AppModule()] }),
+        environment: { PORT: '8080', TLS: 'true' },
+      }),
+    ).rejects.toBeInstanceOf(SchemaValidationError)
   })
 
-  it('Graph ProbeはEnvironment accessを正常なboundaryとして扱い後続dependencyも収集する', () => {
+  it('Application ModelはEnvironment access boundaryと後続dependencyを収集する', () => {
     const AFTER = token<string>('after')
-
     class Database {
       readonly port: number
-
       constructor(env = inject(AppEnv)) {
         this.port = env.port
       }
     }
-
     class Service {
       constructor(
         readonly database = inject(Database),
         readonly after = inject(AFTER),
       ) {}
     }
-
     const AppModule = defineModule(() => ({
       environment: [AppEnv],
       providers: [Database, Service, provide(AFTER).useValue('after')],
     }))
+    const model = buildApplicationModel({ modules: [AppModule()] })
+    const database = model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === Database,
+    )
+    const service = model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === Service,
+    )
+    const environment = model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === AppEnv,
+    )
+    const after = model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === AFTER,
+    )
 
-    const { graph, diagnostics } = compileApplication({
-      modules: [AppModule()],
-    })
-
-    expect(diagnostics).toEqual([])
-
-    const database = graph.nodes.find(({ label }) => label === 'Database')
-    const service = graph.nodes.find(({ label }) => label === 'Service')
-    const environment = graph.nodes.find(({ label }) => label === 'AppEnv')
-    const after = graph.nodes.find(({ label }) => label === 'after')
-
-    expect(graph.edges).toEqual(
+    expect(model.diagnostics).toEqual([])
+    expect(model.edges).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          from: database?.id,
-          to: environment?.id,
-          kind: 'inject',
-          source: 'probed',
-        }),
-        expect.objectContaining({
-          from: service?.id,
-          to: database?.id,
-          kind: 'inject',
-          source: 'probed',
-        }),
-        expect.objectContaining({
-          from: service?.id,
-          to: after?.id,
-          kind: 'inject',
-          source: 'probed',
-        }),
+        { from: database?.id, to: environment?.id, kind: 'injects' },
+        { from: service?.id, to: database?.id, kind: 'injects' },
+        { from: service?.id, to: after?.id, kind: 'injects' },
       ]),
     )
   })
 
-  it('undeclared Env injectionとmanual provider conflictをdiagnosticする', async () => {
+  it('undeclared Env injectionとmanual provider conflictをModel diagnosticにする', async () => {
     class NeedsEnv {
       constructor(readonly env = inject(AppEnv)) {}
     }
-
-    const MissingModule = defineModule(() => ({
-      providers: [NeedsEnv],
-    }))
+    const MissingModule = defineModule(() => ({ providers: [NeedsEnv] }))
     expect(
-      compileApplication({ modules: [MissingModule()] }).diagnostics,
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: 'LUTRE_ENV_002',
-        }),
-      ]),
+      buildApplicationModel({ modules: [MissingModule()] }).diagnostics,
+    ).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_PROVIDER_DEPENDENCY_MISSING' }),
     )
 
-    const env = await loadEnv(AppEnv, {
-      PORT: '3000',
-      TLS: 'false',
-    })
+    const env = await loadEnv(AppEnv, { PORT: '3000', TLS: 'false' })
     const ConflictModule = defineModule(() => ({
       environment: [AppEnv],
       providers: [provide(AppEnv).useValue(env)],
     }))
     expect(
-      compileApplication({ modules: [ConflictModule()] }).diagnostics,
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: 'LUTRE_ENV_001',
-        }),
-      ]),
+      buildApplicationModel({ modules: [ConflictModule()] }).diagnostics,
+    ).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_PROVIDER_DUPLICATE' }),
     )
   })
 
   it('conditional Providerはtransform後のEnv keyで選択する', async () => {
     const DRIVER = token<{ readonly driver: string }>('driver')
-
     class PlainDriver {
       readonly driver = 'plain'
     }
-
     class SecureDriver {
       readonly driver = 'secure'
     }
-
-    const DriverEnvSchema = z
-      .object({
-        DRIVER: z.enum(['plain', 'secure']),
-      })
-      .transform((env) => ({
+    class DriverEnv extends defineEnv(
+      z.object({ DRIVER: z.enum(['plain', 'secure']) }).transform((env) => ({
         driver: env.DRIVER,
-      }))
-
-    class DriverEnv extends defineEnv(DriverEnvSchema) {}
-
+      })),
+    ) {}
     const AppModule = defineModule(() => ({
       environment: [DriverEnv],
       providers: [
@@ -233,30 +175,20 @@ describe('Environment Contract', () => {
         }),
       ],
     }))
-
-    const runtime = createApplicationRuntime([AppModule()], {
-      environmentSource: {
-        DRIVER: 'secure',
-      },
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [AppModule()] }),
+      environment: { DRIVER: 'secure' },
     })
 
-    await runtime.initialize()
-    expect(runtime.container.resolve(DRIVER)).toBeInstanceOf(SecureDriver)
-    await runtime.shutdown()
+    expect(application.get(DRIVER)).toBeInstanceOf(SecureDriver)
+    await application.close()
   })
-  it('Application Contextは初期化済みapplication scopeとEnvironmentだけをgetする', async () => {
-    let transientConstructions = 0
 
+  it('Application Contextはrunning中のapplication scopeだけをgetする', async () => {
     class Service {
       constructor(readonly env = inject(AppEnv)) {}
     }
-
-    class TransientService {
-      constructor() {
-        transientConstructions += 1
-      }
-    }
-
+    class TransientService {}
     const AppModule = defineModule(() => ({
       environment: [AppEnv],
       providers: [
@@ -266,26 +198,19 @@ describe('Environment Contract', () => {
         }),
       ],
     }))
-    const application = bootstrap({
+    const application = createKernelApplication({
       application: defineApplication({ modules: [AppModule()] }),
       environment: { PORT: '4321', TLS: 'false' },
     })
 
-    expect(() => application.get(AppEnv)).toThrow('LUTRE_APP_NOT_INITIALIZED')
-
+    expect(() => application.get(AppEnv)).toThrow('LUTRE_APPLICATION_STATE')
     await application.init()
-
     const env = application.get(AppEnv)
-    const service = application.get(Service)
-    expect(env.port).toBe(4321)
-    expect(service.env).toBe(env)
-    const constructionsBeforeGet = transientConstructions
+    expect(application.get(Service).env).toBe(env)
     expect(() => application.get(TransientService)).toThrow(
       'LUTRE_DI_SCOPED_GET',
     )
-    expect(transientConstructions).toBe(constructionsBeforeGet)
-
     await application.close()
-    expect(() => application.get(AppEnv)).toThrow('LUTRE_APP_STOPPED')
+    expect(() => application.get(AppEnv)).toThrow('LUTRE_APPLICATION_STATE')
   })
 })

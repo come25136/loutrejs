@@ -85,10 +85,10 @@ function attach<const TDefinition extends ApplicationDefinition>(
       : typeof process === 'undefined'
         ? undefined
         : process.env
-  const application = createKernelApplication({
+  const application = createKernelApplication<TDefinition>({
+    ...options,
     application: options.application,
     environment,
-    ...('arguments' in options ? { arguments: options.arguments } : {}),
   })
   const initialization = application.init()
   void initialization.catch(() => undefined)

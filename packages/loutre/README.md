@@ -1,8 +1,8 @@
 # @loutrejs/loutre
 
-LoutreのCore packageです。Application Definition、Contract、DI、Pipeline、Task、Trigger、Environment、Arguments、Runtime bindingなど、Loutre Applicationを構成するpublic APIを提供します。
+LoutreのApplication Graph Kernelです。Application Definition / Model、Module、DI、Environment、Arguments、Lifecycle、Runtime Capability、generic Layer、Kernel bootstrapを提供します。
 
-> Loutreは現在v0.xです。Public APIには破壊的変更が入る可能性があります。
+HTTPは同じpackageの`@loutrejs/loutre/http` subpathからExecution Extensionとして提供します。Task、MessagePort、WebSocketは独立Extension packageです。
 
 ## Install
 
@@ -10,65 +10,87 @@ LoutreのCore packageです。Application Definition、Contract、DI、Pipeline�
 npm install @loutrejs/loutre
 ```
 
-新しいApplicationを始める場合はinitializerも利用できます。
+新しいApplicationはinitializerから作成できます。
 
 ```sh
 npm create loutre@latest my-app
 ```
 
-## Application model
+## Application Model
 
-LoutreはHTTP endpointだけを中心にせず、Applicationが実行する処理を同じmodelへ載せます。
-
-- **Contract / Implementation** — protocolごとのinterfaceと実装
-- **Module / DI** — dependencyとApplication構成
-- **Pipeline / Layer** — requestやexecution contextの処理
-- **Task / Trigger / Queue** — 明示実行、schedule、queue consumer
-- **Environment / Arguments** — Hostから渡されるtyped input
-- **Application Graph** — Application構造をRuntimeとToolingで共有
-
-## Example
-
-```ts
-import { defineApplication, task } from '@loutrejs/loutre'
-
-export const hello = task<void, string>({
-  name: 'hello',
-  factory: () => () => 'Hello, Loutre!',
-})
-
-export default defineApplication({
-  modules: [],
-  tasks: [hello],
-})
-```
-
-## Entry points
-
-主なsubpath exportは次のとおりです。
-
-| Entry point                     | Role                           |
-| ------------------------------- | ------------------------------ |
-| `@loutrejs/loutre/http`         | HTTP Contract / Pipeline       |
-| `@loutrejs/loutre/host`         | Application bootstrap          |
-| `@loutrejs/loutre/binding`      | Host / Queue binding           |
-| `@loutrejs/loutre/runtime`      | Runtime capability             |
-| `@loutrejs/loutre/graph`        | Application Graph              |
-| `@loutrejs/loutre/openapi`      | OpenAPI compatibility alias    |
-| `@loutrejs/loutre/http/openapi` | OpenAPI generation (canonical) |
-| `@loutrejs/loutre/presentation` | startup presentation           |
-| `@loutrejs/loutre/message-port` | MessagePort protocol           |
-
-## HTTP subpath
-
-HTTPのContract、request/response validation、middleware、route dispatch、CORS/auth semanticsは`@loutrejs/loutre/http`から提供します。実装はWeb Platform API（`Request` / `Response` / `Headers` / `ReadableStream`等）だけに依存し、Node.js固有のlistener/bindingは`@loutrejs/node`が担当します。
+Applicationの構成は`defineApplication()`でcanonical `Application Model`へcompileされます。
 
 ```ts
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
+import { z } from 'zod'
+
+const HealthContract = http.contract({
+  health: {
+    method: 'GET',
+    path: '/health',
+    responses: {
+      ok: { status: 200, body: z.string() },
+    },
+  },
+})
+
+const HealthHttp = http.implementation({
+  name: 'HealthHttp',
+  contract: HealthContract,
+  factory: () => ({
+    health: (ctx) => ctx.response.ok({ body: 'ok' }),
+  }),
+})
+
+const AppModule = defineModule(() => ({
+  executions: [HealthHttp],
+}))
+
+export default defineApplication({ modules: [AppModule()] })
 ```
 
-HTTPは本体packageのsubpathですが、CoreからHTTPへの逆依存とHTTPからNode.js built-inへの依存は禁止し、CIで静的に検証します。
+## Kernel bootstrap
+
+portableなApplicationはroot packageから起動できます。
+
+```ts
+import { bootstrapApplication } from '@loutrejs/loutre'
+import { bindHttpServer } from '@loutrejs/loutre/http'
+
+const app = await bootstrapApplication({
+  application,
+  capabilities: [bindHttpServer({ runtime: 'test' })],
+})
+
+const response = await app.http.fetch(new Request('http://localhost/health'))
+```
+
+ExtensionがApplication Modelに存在するときだけ、そのExtensionのHost APIがApplicationへ合成されます。
+
+## Entry points
+
+| Entry point                     | Role                                          |
+| ------------------------------- | --------------------------------------------- |
+| `@loutrejs/loutre`              | Application Graph Kernel / Kernel bootstrap   |
+| `@loutrejs/loutre/http`         | HTTP Execution Extension                      |
+| `@loutrejs/loutre/graph`        | Application Model graph projection            |
+| `@loutrejs/loutre/runtime`      | Runtime capability / Kernel runtime primitive |
+| `@loutrejs/loutre/http/openapi` | OpenAPI projection                            |
+| `@loutrejs/loutre/presentation` | startup presentation                          |
+| `@loutrejs/loutre/runtime/*`    | portable Runtime adapter                      |
+
+Additional official Extensions:
+
+- `@loutrejs/tasks`
+- `@loutrejs/message-port`
+- `@loutrejs/websocket`
+
+Node.js listener ownership is provided by `@loutrejs/node`.
+
+## Architecture invariant
+
+Core never interprets HTTP, Task, MessagePort, or WebSocket identity. Execution Extensions compile their definitions into the single Application Model and own their runtime semantics, Host API, and Graph projection.
 
 ## Documentation
 

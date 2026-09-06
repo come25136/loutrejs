@@ -4,7 +4,6 @@ import type {
   ExtensionOfDefinition,
   HostApiOfExtension,
 } from './extension.js'
-import type { ImplementationDescriptor } from './implementation.js'
 import type { ModuleLifecycle } from './lifecycle.js'
 import { environmentProvider, type ProviderDeclaration } from './provider.js'
 
@@ -15,7 +14,6 @@ export interface ModuleDefinition {
   readonly environment?: readonly EnvClass[]
   readonly providers?: readonly ProviderDeclaration[]
   readonly executions?: readonly ExecutionDefinition[]
-  readonly implementations?: readonly ImplementationDescriptor[]
   readonly exports?: readonly unknown[]
   readonly lifecycle?: ModuleLifecycle
   readonly requires?: readonly string[]
@@ -26,8 +24,6 @@ export const moduleTypeInfo: unique symbol = Symbol('loutre.module-type-info')
 export interface ModuleTypeInfo<
   TDefinition extends ModuleDefinition = ModuleDefinition,
 > {
-  readonly protocols: ProtocolsOfModuleDefinition<TDefinition>
-  readonly capabilities: CapabilitiesOfModuleDefinition<TDefinition>
   readonly extensions: ExtensionsOfModuleDefinition<TDefinition>
 }
 
@@ -53,44 +49,6 @@ export type ModuleExtensions<TModule> =
 export type ModuleHostApis<TModule> = HostApiOfExtension<
   ModuleExtensions<TModule>
 >
-
-type DirectProtocols<TDefinition extends ModuleDefinition> =
-  TDefinition['implementations'] extends readonly ImplementationDescriptor[]
-    ? TDefinition['implementations'][number]['protocol']
-    : never
-
-type ImportedProtocols<TDefinition extends ModuleDefinition> =
-  TDefinition['imports'] extends readonly ModuleInstance[]
-    ? ModuleProtocols<TDefinition['imports'][number]>
-    : never
-
-export type ProtocolsOfModuleDefinition<TDefinition extends ModuleDefinition> =
-  | DirectProtocols<TDefinition>
-  | ImportedProtocols<TDefinition>
-
-type DirectCapabilities<TDefinition extends ModuleDefinition> =
-  TDefinition['implementations'] extends readonly ImplementationDescriptor[]
-    ? TDefinition['implementations'][number]['capabilities'][number]
-    : never
-
-type ImportedCapabilities<TDefinition extends ModuleDefinition> =
-  TDefinition['imports'] extends readonly ModuleInstance[]
-    ? ModuleCapabilities<TDefinition['imports'][number]>
-    : never
-
-export type CapabilitiesOfModuleDefinition<
-  TDefinition extends ModuleDefinition,
-> = DirectCapabilities<TDefinition> | ImportedCapabilities<TDefinition>
-
-export type ModuleProtocols<TModule> =
-  TModule extends ModuleInstance<infer TDefinition>
-    ? ProtocolsOfModuleDefinition<TDefinition>
-    : never
-
-export type ModuleCapabilities<TModule> =
-  TModule extends ModuleInstance<infer TDefinition>
-    ? CapabilitiesOfModuleDefinition<TDefinition>
-    : never
 
 export interface ModuleInstance<
   TDefinition extends ModuleDefinition = ModuleDefinition,

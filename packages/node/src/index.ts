@@ -90,11 +90,11 @@ async function create<const TDefinition extends ApplicationDefinition>(
     )
   }
 
-  const hosted = createKernelApplication({
+  const hosted = createKernelApplication<TDefinition>({
+    ...options,
     application: options.application,
     capabilities: [bindHttpServer({ runtime: 'node' })],
     environment: 'environment' in options ? options.environment : process.env,
-    ...('arguments' in options ? { arguments: options.arguments } : {}),
   })
   await hosted.init()
   const application = hosted as NodeRuntimeApplication<TDefinition>

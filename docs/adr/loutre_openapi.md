@@ -6,9 +6,9 @@
 
 Loutre は、実行可能な HTTP Contract から OpenAPI 3.2.0 ドキュメントを生成する。
 
-どの HTTP Execution が実行可能かは canonical Application Model が決定する。一方、method、path、request schema、response schema、Content-Type、streaming interaction といった HTTP wire-level の情報は HTTP Extension が所有する compiled execution を source of truth とする。RuntimeやOpenAPI toolingが生の Application Definition / legacy Implementation を再解釈してはならない。実行時の schema object 自体は serializable な Graph IR には埋め込まない。
+どの HTTP Execution が実行可能かは canonical Application Model が決定する。一方、method、path、request schema、response schema、Content-Type、streaming interaction といった HTTP wire-level の情報は HTTP Extension が所有する compiled execution を source of truth とする。RuntimeやOpenAPI toolingが生のApplication Definitionを別経路で再解釈してはならない。実行時の schema object 自体は serializable な Graph IR には埋め込まない。
 
-正規の公開 API は `@loutrejs/loutre/http/openapi` から提供する。`@loutrejs/loutre/openapi` は互換 import alias として同じ実装を指す。
+公開APIは`@loutrejs/loutre/http/openapi`だけから提供する。
 
 ```ts
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'

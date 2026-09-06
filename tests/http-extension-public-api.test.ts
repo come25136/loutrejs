@@ -6,7 +6,7 @@ import {
   defineError,
   defineModule,
 } from '@loutrejs/loutre'
-import { generateOpenApi } from '@loutrejs/loutre/openapi'
+import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 import {
   bindHttpServer,
   createHttpClient,
@@ -31,7 +31,7 @@ async function createApplication<
   return { application, definition }
 }
 
-describe('HTTP Execution Extension public API compatibility', () => {
+describe('HTTP Execution Extension public API surface', () => {
   it('typed clientを新HttpContractから生成する', async () => {
     const contract = http.contract({
       update: {

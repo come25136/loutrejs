@@ -146,7 +146,7 @@ protocol-specific short-circuit declaration
 
 Coreの型に`HasHttp`、`HasMessagePort`等の新しいprotocol hard-codeを追加しない。
 
-現在残るlegacy `HasHttp`等は既存Host compatibility pathの移行用surfaceであり、新Application Graph Kernelの概念ではない。新しいExtension機能はそこへ追加しない。
+Protocol固有のcapability判定はExtension registryとHost namespaceから導出し、Coreへprotocol別conditional typeを追加しない。
 
 ## 5. Execution Extension境界
 
@@ -159,7 +159,7 @@ Coreの型に`HasHttp`、`HasMessagePort`等の新しいprotocol hard-codeを追
 ├ HTTP Contract
 ├ request/response validation
 ├ route matching
-├ middleware compatibility
+├ middleware composition
 ├ CORS / auth semantics
 ├ Runtime fetch API
 └ OpenAPI projection source
@@ -284,7 +284,7 @@ sequenceDiagram
         HttpRuntime->>HttpRuntime: select body decoder
         HttpRuntime->>HttpRuntime: decode + validate request body
         HttpRuntime->>HttpRuntime: run middleware / resolve DI / compose state
-        HttpRuntime->>Impl: invoke implementation(ctx)
+        HttpRuntime->>Impl: invoke compiled handler
         Impl-->>HttpRuntime: contract response variant
         HttpRuntime->>HttpRuntime: validate response semantics
         HttpRuntime-->>Host: Response
@@ -322,15 +322,11 @@ Extension間依存は原則禁止し、protocol integrationとして必要なも
 
 別npm packageとして配布するExtensionについては、source importだけでなく`dependencies`、`peerDependencies`、`devDependencies`も境界テスト対象とする。
 
-## 10. Compatibility方針
+## 10. Migration completion
 
-このPRの中心はApplication Graph KernelとExecution Extensionへの破壊的移行である。
+このPRではApplication Graph KernelとExecution Extensionへの破壊的移行を完了する。
 
-ただし、未移行subsystemの利用者体験を無関係に壊すための変更は行わない。
-
-現在Trigger EngineはExecution Extension化の対象外であり、`hello-worker`は既存Trigger APIを維持するためlegacy Host pathを意図的に使用する。このcompatibility pathへ新機能は追加せず、Trigger Engineを再設計するPRで別途移行する。
-
-HTTP/CORS等、今回Extensionへ移行する領域では既存の外向きsemanticsを原則維持する。変更が必要な場合はruntime実装都合ではなくContract/API仕様として明示する。
+Task / Trigger / Queue Consumerは`@loutrejs/tasks`へ、MessagePortは`@loutrejs/message-port`へ移し、CoreとRuntimeに並行する旧execution modelを残さない。HTTP/CORS等の外向きsemanticsを変更する場合はruntime実装都合ではなくExtensionのContract/API仕様として明示する。
 
 ## 11. Non-goals
 

@@ -1,7 +1,6 @@
-import { defineApplication } from '@loutrejs/loutre'
-import { bootstrap } from '@loutrejs/loutre/host'
+import { createKernelApplication, defineApplication } from '@loutrejs/loutre'
 
-const application = bootstrap({
+const application = createKernelApplication({
   application: defineApplication({ modules: [] }),
 })
 const disposable: AsyncDisposable = application

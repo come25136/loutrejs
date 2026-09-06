@@ -9,13 +9,11 @@ import {
   projectApplicationModel,
   type ApplicationModelGraphIR,
 } from '../graph/index.js'
-import {
-  ApplicationKernelRuntime,
-  type ApplicationKernelRuntimeOptions,
-} from '../runtime/index.js'
+import { ApplicationKernelRuntime, type Logger } from '../runtime/index.js'
 import type {
   ApplicationDefinition,
   ApplicationExtensionHostApis,
+  BootstrapArguments,
 } from './index.js'
 
 export interface KernelApplicationBase extends AsyncDisposable {
@@ -28,14 +26,14 @@ export interface KernelApplicationBase extends AsyncDisposable {
 export type KernelHostedApplication<TDefinition extends ApplicationDefinition> =
   KernelApplicationBase & ApplicationExtensionHostApis<TDefinition>
 
-export interface KernelApplicationOptions<
+export type KernelApplicationOptions<
   TDefinition extends ApplicationDefinition,
-> extends ApplicationKernelRuntimeOptions {
+> = {
   readonly application: TDefinition
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
   readonly environment?: unknown
-  readonly arguments?: unknown
-}
+  readonly logger?: Logger
+} & BootstrapArguments<TDefinition>
 
 export function createKernelApplication<
   const TDefinition extends ApplicationDefinition,

@@ -253,6 +253,34 @@ export function buildApplicationModel(
     appendLifecycleNodes(module, moduleId, nodes, edges)
   }
 
+  for (const module of modules) {
+    const moduleId = moduleIds.get(module)!
+    for (const exported of module.definition.exports ?? []) {
+      if (moduleDeclaresToken(module, exported as TokenLike)) continue
+      const provider = providerNodes.get(exported as TokenLike)
+      const providerModule = provider
+        ? modules.find(
+            (candidate) => moduleIds.get(candidate) === provider.moduleId,
+          )
+        : undefined
+      if (
+        provider &&
+        providerModule &&
+        isTokenVisible(module, providerModule, exported as TokenLike)
+      ) {
+        edges.push({ from: moduleId, to: provider.id, kind: 'exports' })
+        continue
+      }
+      diagnostics.push(
+        diagnostic(
+          'LUTRE_MODULE_EXPORT_UNRESOLVED',
+          `Module export ${tokenName(exported as TokenLike)} is neither declared by the Module nor re-exported from an imported Module.`,
+          `${moduleId}.exports.${tokenName(exported as TokenLike)}`,
+        ),
+      )
+    }
+  }
+
   if (options.arguments) {
     const provider = argumentsProvider(options.arguments)
     const node: ProviderModelNode = {

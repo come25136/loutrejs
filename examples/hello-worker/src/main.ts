@@ -1,8 +1,8 @@
-import { bootstrap } from '@loutrejs/loutre/host'
+import { bootstrapApplication } from '@loutrejs/loutre'
 import application from './app.js'
 
-const app = bootstrap({ application })
-await app.triggers.start()
+const app = await bootstrapApplication({ application })
+await app.tasks.triggers.start()
 
 let closing = false
 
