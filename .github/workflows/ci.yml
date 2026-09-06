@@ -65,6 +65,7 @@ jobs:
           name: create-loutre-build
           path: |
             packages/loutre/dist
+            packages/tasks/dist
             packages/create-loutre/dist
           if-no-files-found: error
 
@@ -360,6 +361,7 @@ jobs:
           cd "$consumer"
 
           loutre="$(realpath "$tarballs"/loutrejs-loutre-*.tgz)"
+          tasks="$(realpath "$tarballs"/loutrejs-tasks-*.tgz)"
           cli="$(realpath "$tarballs"/loutrejs-cli-*.tgz)"
           create="$(realpath "$tarballs"/create-loutre-*.tgz)"
           cat > package.json <<JSON
@@ -369,11 +371,13 @@ jobs:
             "type": "module",
             "dependencies": {
               "@loutrejs/loutre": "file:$loutre",
+              "@loutrejs/tasks": "file:$tasks",
               "@loutrejs/cli": "file:$cli",
               "create-loutre": "file:$create"
             },
             "overrides": {
-              "@loutrejs/loutre": "file:$loutre"
+              "@loutrejs/loutre": "file:$loutre",
+              "@loutrejs/tasks": "file:$tasks"
             }
           }
           JSON
@@ -409,43 +413,39 @@ jobs:
         run: |
           set -euo pipefail
           tarballs="${RUNNER_TEMP}/loutre-package-tarballs"
-          extracted="${RUNNER_TEMP}/loutre-package-extracted-deno"
           consumer="${RUNNER_TEMP}/loutre-package-consumer-deno"
-          rm -rf "$extracted" "$consumer"
-          mkdir -p "$extracted" "$consumer"
+          rm -rf "$consumer"
+          mkdir -p "$consumer/packages"
 
           extract_package() {
             local archive="$1"
             local destination="$2"
-            mkdir -p "$extracted/$destination"
-            tar -xzf "$archive" -C "$extracted/$destination" --strip-components=1
+            mkdir -p "$consumer/packages/$destination"
+            tar -xzf "$archive" -C "$consumer/packages/$destination" --strip-components=1
           }
           extract_package "$tarballs"/loutrejs-loutre-*.tgz loutre
+          extract_package "$tarballs"/loutrejs-tasks-*.tgz tasks
           extract_package "$tarballs"/loutrejs-cli-*.tgz cli
           extract_package "$tarballs"/create-loutre-*.tgz create-loutre
 
-          version="$(deno eval "const manifest = JSON.parse(Deno.readTextFileSync('$extracted/loutre/package.json')); console.log(manifest.version)")"
           cd "$consumer"
-          cat > package.json <<JSON
+          cat > package.json <<'JSON'
           {
             "name": "loutre-package-consumer-deno",
             "private": true,
             "type": "module",
+            "workspaces": ["packages/*"],
             "dependencies": {
-              "@loutrejs/loutre": "$version",
-              "@loutrejs/cli": "$version",
-              "create-loutre": "$version"
+              "@loutrejs/loutre": "workspace:*",
+              "@loutrejs/tasks": "workspace:*",
+              "@loutrejs/cli": "workspace:*",
+              "create-loutre": "workspace:*"
             }
           }
           JSON
-          cat > deno.json <<JSON
+          cat > deno.json <<'JSON'
           {
-            "nodeModulesDir": "manual",
-            "links": [
-              "$extracted/loutre",
-              "$extracted/cli",
-              "$extracted/create-loutre"
-            ]
+            "nodeModulesDir": "manual"
           }
           JSON
 
