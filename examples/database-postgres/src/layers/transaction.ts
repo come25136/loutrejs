@@ -12,5 +12,7 @@ export const transaction = defineLayer<
   factory:
     (database = inject(PostgresDatabase)) =>
     async (_context, next) =>
-      database.transaction((client) => next({ transaction: client })),
+      database.transaction(async (client) => {
+        await next({ transaction: client })
+      }),
 })

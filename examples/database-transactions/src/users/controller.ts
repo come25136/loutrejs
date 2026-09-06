@@ -11,7 +11,7 @@ export const UsersController = http.implementation({
       return ctx.response.created({
         body: users.create(
           ctx.state.transaction,
-          ctx.body.name,
+          ctx.input.body.name,
           ctx.state.currentUser.id,
         ),
       })

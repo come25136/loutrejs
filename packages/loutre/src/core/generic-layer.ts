@@ -7,12 +7,10 @@ export interface GenericLayerContext<TState extends object = {}> {
   readonly state: Readonly<TState>
 }
 
-export type GenericLayerNext<
-  TContribution extends object,
-  TOutcome,
-> = keyof TContribution extends never
-  ? () => Promise<TOutcome>
-  : (contribution: TContribution) => Promise<TOutcome>
+export type GenericLayerNext<TContribution extends object> =
+  keyof TContribution extends never
+    ? () => Promise<void>
+    : (contribution: TContribution) => Promise<void>
 
 export interface GenericLayer<
   TContext extends object = object,
@@ -25,8 +23,8 @@ export interface GenericLayer<
   readonly capabilities: readonly RuntimeCapability[]
   readonly factory: () => (
     context: TContext & GenericLayerContext,
-    next: GenericLayerNext<TContribution, TOutcome>,
-  ) => Promise<TOutcome>
+    next: GenericLayerNext<TContribution>,
+  ) => Promise<void | TOutcome>
 }
 
 export function defineLayer<
@@ -69,7 +67,7 @@ export function composeLayers<TContext extends object, TOutcome>(options: {
       () => layer.factory(),
     ),
   )
-  const dispatch = (
+  const dispatch = async (
     index: number,
     state: Readonly<Record<string, unknown>>,
   ): Promise<TOutcome> => {
@@ -78,14 +76,31 @@ export function composeLayers<TContext extends object, TOutcome>(options: {
     }) as TContext & GenericLayerContext
     const runtime = runtimes[index]
     if (!runtime) return options.terminal(context)
+
     let called = false
-    return runtime(context, async (contribution: object = {}) => {
-      if (called) {
-        throw new Error('LUTRE_LAYER_NEXT_MULTIPLE: next() can be called once.')
-      }
-      called = true
-      return dispatch(index + 1, { ...state, ...contribution })
-    })
+    let continuationCompleted = false
+    let continuationResult: TOutcome | undefined
+    const runtimeResult = await runtime(
+      context,
+      async (contribution: object = {}) => {
+        if (called) {
+          throw new Error(
+            'LUTRE_LAYER_NEXT_MULTIPLE: next() can be called once.',
+          )
+        }
+        called = true
+        continuationResult = await dispatch(index + 1, {
+          ...state,
+          ...contribution,
+        })
+        continuationCompleted = true
+      },
+    )
+
+    if (called && continuationCompleted) {
+      return continuationResult as TOutcome
+    }
+    return runtimeResult as TOutcome
   }
   return dispatch(0, {})
 }

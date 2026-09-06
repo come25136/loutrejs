@@ -102,7 +102,7 @@ export const GreetingController = implementation({
   factory: (greetings = inject(GreetingService)) => ({
     async greet(ctx) {
       return ctx.response.ok({
-        body: greetings.greet(ctx.params.name),
+        body: greetings.greet(ctx.input.params.name),
       })
     },
   }),

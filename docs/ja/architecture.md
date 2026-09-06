@@ -146,7 +146,7 @@ const UsersController = implementation({
   factory: (users = inject(UsersService)) => ({
     async get(ctx) {
       return ctx.response.found({
-        body: await users.get(ctx.params.id),
+        body: await users.get(ctx.input.params.id),
       })
     },
   }),

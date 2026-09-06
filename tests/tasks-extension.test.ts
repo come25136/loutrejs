@@ -61,9 +61,8 @@ describe('generic Layer', () => {
       name: 'tracing',
       factory: () => async (_context, next) => {
         events.push('before')
-        const result = await next({ traceId: 'trace-1' })
+        await next({ traceId: 'trace-1' })
         events.push('after')
-        return result
       },
     })
 

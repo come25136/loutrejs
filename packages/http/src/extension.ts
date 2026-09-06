@@ -88,10 +88,12 @@ export type HttpMiddleware<
 
 export interface HttpMiddlewareContext {
   readonly request: Request
-  readonly params: Readonly<Record<string, unknown>>
-  readonly query: unknown
-  readonly headers: unknown
-  readonly body: unknown
+  readonly input: {
+    readonly params: Readonly<Record<string, unknown>>
+    readonly query: unknown
+    readonly headers: unknown
+    readonly body: unknown
+  }
   readonly signal: AbortSignal
 }
 
@@ -237,10 +239,12 @@ export type HttpExecutionContext<
   TRoute extends HttpExecutionRouteDefinition = HttpExecutionRouteDefinition,
 > = {
   readonly request: Request
-  readonly params: HttpParamsValue<TRoute['request']>
-  readonly query: RequestValue<TRoute['request'], 'query', URLSearchParams>
-  readonly headers: RequestValue<TRoute['request'], 'headers', Headers>
-  readonly body: RequestValue<TRoute['request'], 'body', undefined>
+  readonly input: {
+    readonly params: HttpParamsValue<TRoute['request']>
+    readonly query: RequestValue<TRoute['request'], 'query', URLSearchParams>
+    readonly headers: RequestValue<TRoute['request'], 'headers', Headers>
+    readonly body: RequestValue<TRoute['request'], 'body', undefined>
+  }
   readonly response: ResponseHelpers<TRoute['responses']>
   readonly signal: AbortSignal
   readonly state: Readonly<HttpMiddlewareState<TRoute>>
@@ -593,7 +597,7 @@ export function defineHttpMiddleware<
 >(definition: {
   readonly name: string
   readonly state?: Type<TContribution>
-  readonly factory: HttpMiddleware<TContribution>['factory']
+  readonly factory: HttpMiddleware<NoInfer<TContribution>>['factory']
 }): HttpMiddleware<TContribution> {
   return defineLayer<HttpMiddlewareContext, TContribution, HttpExecutionResult>(
     definition,
@@ -970,10 +974,7 @@ async function createHttpContext(
   )
   return {
     request,
-    params,
-    query,
-    headers,
-    body,
+    input: { params, query, headers, body },
     response,
     signal,
   } as unknown as HttpExecutionContext

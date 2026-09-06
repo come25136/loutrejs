@@ -18,7 +18,6 @@ Loutre 0.xの破壊的再設計として、Protocol中心の旧APIからExecutio
 | `@loutrejs/loutre/message-port`                | `@loutrejs/message-port`                                           |
 | Moduleの`implementations`                      | Moduleの`executions`                                               |
 | HTTP routeの`pipeline`                         | HTTP routeの`middlewares`                                          |
-| `ctx.input.params/query/headers/body`          | `ctx.params/query/headers/body`                                    |
 | Core Protocol / Procedure / ProtocolDescriptor | Extension-owned Contract / Execution Definition                    |
 | response `staticHeaders`                       | response `headers`（固定値、schema、または`{ schema, defaults }`） |
 

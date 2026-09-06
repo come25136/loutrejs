@@ -1,3 +1,4 @@
+import { type } from '@loutrejs/loutre'
 import { z } from 'zod'
 import { basicAuth, http } from '@loutrejs/http'
 
@@ -70,6 +71,7 @@ http.contract(nonStringParamInput)
 
 const authentication = basicAuth({
   realm: 'Loutre',
+  state: type<{ currentUser: { readonly id: string } }>(),
   factory: () => ({
     authenticate: () => ({ currentUser: { id: 'user-1' } }),
     unauthorized: () => ({

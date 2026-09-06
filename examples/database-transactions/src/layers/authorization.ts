@@ -17,6 +17,6 @@ export const authorization = defineLayer<
     if (context.state.currentUser.id.length === 0) {
       throw new Error('Could not identify the user')
     }
-    return next()
+    await next()
   },
 })

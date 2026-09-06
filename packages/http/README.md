@@ -29,7 +29,7 @@ const AppModule = defineModule(() => ({ executions: [Controller] }))
 export default defineApplication({ modules: [AppModule()] })
 ```
 
-Middlewareが追加するstateは`state: type<>()`で宣言します。`http.middleware()`ではHTTP Contextと戻り値の型が補われ、`inject`の依存型も推論されます。
+Middlewareが追加するstateは`state: type<>()`で宣言します。`http.middleware()`ではこの宣言から`next()`へ渡すstateの型を決め、HTTP Contextと`inject`の依存型も補います。`next()`は後段の実行結果を返さず`Promise<void>`です。
 
 ```ts
 import { type } from '@loutrejs/loutre'
@@ -39,7 +39,7 @@ const tracing = http.middleware({
   name: 'tracing',
   state: type<{ traceId: string }>(),
   factory: () => async (_context, next) => {
-    return next({ traceId: crypto.randomUUID() })
+    await next({ traceId: crypto.randomUUID() })
   },
 })
 ```

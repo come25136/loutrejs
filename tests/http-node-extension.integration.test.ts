@@ -27,7 +27,7 @@ describe('Node runtime + HTTP Execution Extension', () => {
       factory: () => ({
         hello: (context) =>
           context.response.ok({
-            body: { message: `Hello, ${context.params.name}!` },
+            body: { message: `Hello, ${context.input.params.name}!` },
           }),
       }),
     })

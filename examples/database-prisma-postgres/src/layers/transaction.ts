@@ -12,9 +12,14 @@ export const transaction = defineLayer<
   factory:
     (database = inject(PrismaDatabase)) =>
     async (_context, next) =>
-      database.transaction((client) => next({ transaction: client }), {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        maxWait: 5000,
-        timeout: 10000,
-      }),
+      database.transaction(
+        async (client) => {
+          await next({ transaction: client })
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 5000,
+          timeout: 10000,
+        },
+      ),
 })

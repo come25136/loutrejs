@@ -14,9 +14,14 @@ export const transaction = defineLayer<
   factory:
     (database = inject(DrizzleDatabase)) =>
     async (_context, next) =>
-      database.transaction((client) => next({ transaction: client }), {
-        isolationLevel: 'read committed',
-        accessMode: 'read write',
-        deferrable: false,
-      }),
+      database.transaction(
+        async (client) => {
+          await next({ transaction: client })
+        },
+        {
+          isolationLevel: 'read committed',
+          accessMode: 'read write',
+          deferrable: false,
+        },
+      ),
 })

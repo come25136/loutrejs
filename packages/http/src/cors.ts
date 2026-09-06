@@ -26,7 +26,9 @@ export function cors(options: CorsOptions = {}) {
     HttpExecutionResult
   >({
     name: options.name ?? 'cors',
-    factory: () => async (_context, next) => next(),
+    factory: () => async (_context, next) => {
+      await next()
+    },
   })
   registerCorsPolicy(middleware, policy)
   return middleware

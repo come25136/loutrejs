@@ -11,14 +11,17 @@ const identity = http.middleware({
     (prefix = inject(PREFIX)) =>
     async (context, next) => {
       const request: Request = context.request
+      const input: unknown = context.input
       void request
+      void input
       if (invalidInput) {
         // @ts-expect-error stateの必須propertyを省略できない
         await next()
         // @ts-expect-error userIdはstring
         await next({ userId: 42 })
       }
-      return next({ userId: `${prefix}:user` })
+      const result: void = await next({ userId: `${prefix}:user` })
+      void result
     },
 })
 const contract = http.contract({
@@ -45,6 +48,6 @@ defineLayer({
   factory: () => async (_context, next) => {
     // @ts-expect-error traceIdの型が異なる
     if (invalidInput) await next({ traceId: 42 })
-    return next({ traceId: 'trace' })
+    await next({ traceId: 'trace' })
   },
 })

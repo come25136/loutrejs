@@ -1,4 +1,4 @@
-import { defineLayer } from '@loutrejs/loutre'
+import { defineLayer, type Type } from '@loutrejs/loutre'
 import type {
   HttpExecutionResult,
   HttpMiddleware,
@@ -46,8 +46,9 @@ export function basicAuth<
 >(definition: {
   readonly name?: string
   readonly realm: string
+  readonly state: Type<TContribution>
   readonly factory: () => BasicAuthRuntime<
-    TContribution,
+    NoInfer<TContribution>,
     TResponse,
     TUnauthorizedBody
   >
@@ -60,6 +61,7 @@ export function basicAuth<
   return defineLayer<HttpMiddlewareContext, TContribution, HttpExecutionResult>(
     {
       name: definition.name ?? 'basicAuth',
+      state: definition.state,
       factory: () => {
         const runtime = definition.factory()
         return async (context, next) => {
@@ -73,7 +75,7 @@ export function basicAuth<
           if (contribution == null) {
             return authenticationFailure(runtime.unauthorized(), challenge)
           }
-          return next(contribution)
+          await next(contribution)
         }
       },
     },
@@ -102,8 +104,9 @@ export function bearerAuth<
 >(definition: {
   readonly name?: string
   readonly realm: string
+  readonly state: Type<TContribution>
   readonly factory: () => BearerAuthRuntime<
-    TContribution,
+    NoInfer<TContribution>,
     TResponse,
     TUnauthorizedBody
   >
@@ -116,6 +119,7 @@ export function bearerAuth<
   return defineLayer<HttpMiddlewareContext, TContribution, HttpExecutionResult>(
     {
       name: definition.name ?? 'bearerAuth',
+      state: definition.state,
       factory: () => {
         const runtime = definition.factory()
         return async (context, next) => {
@@ -129,7 +133,7 @@ export function bearerAuth<
           if (contribution == null) {
             return authenticationFailure(runtime.unauthorized(), challenge)
           }
-          return next(contribution)
+          await next(contribution)
         }
       },
     },

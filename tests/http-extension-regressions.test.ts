@@ -4,6 +4,7 @@ import {
   bootstrapApplication,
   defineApplication,
   defineModule,
+  type,
 } from '@loutrejs/loutre'
 import {
   basicAuth,
@@ -89,7 +90,7 @@ describe('HTTP Execution Extension regression', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      search: (context) => context.response.ok({ body: context.query }),
+      search: (context) => context.response.ok({ body: context.input.query }),
     }))
     try {
       const response = await application.http.fetch(
@@ -118,7 +119,7 @@ describe('HTTP Execution Extension regression', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      create: (context) => context.response.ok({ body: context.body }),
+      create: (context) => context.response.ok({ body: context.input.body }),
     }))
     try {
       const normalized = await application.http.fetch(
@@ -162,7 +163,7 @@ describe('HTTP Execution Extension regression', () => {
     })
     const application = await createHttpApplication(contract, () => ({
       upload: (context) =>
-        context.response.ok({ body: String(context.body.get('name')) }),
+        context.response.ok({ body: String(context.input.body.get('name')) }),
     }))
     try {
       const form = new FormData()
@@ -268,6 +269,7 @@ describe('HTTP Execution Extension regression', () => {
     expect(() =>
       basicAuth({
         realm: 'bad\r\nrealm',
+        state: type<{}>(),
         factory: () => ({
           authenticate: () => undefined,
           unauthorized: () => ({ response: 'unauthorized', body: undefined }),
