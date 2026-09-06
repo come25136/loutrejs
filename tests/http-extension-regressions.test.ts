@@ -1,19 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { bootstrapApplication, defineApplication, defineModule } from '@loutrejs/loutre'
-import { basicAuth, bindHttpServer, cors, http } from '@loutrejs/http'
+import {
+  bootstrapApplication,
+  defineApplication,
+  defineModule,
+} from '@loutrejs/loutre'
+import {
+  basicAuth,
+  bindHttpServer,
+  cors,
+  http,
+  type HttpContract,
+  type HttpImplementationDefinition,
+} from '@loutrejs/http'
 
-async function createHttpApplication<
-  const TContract extends ReturnType<typeof http.contract>,
->(
+async function createHttpApplication<const TContract extends HttpContract>(
   contract: TContract,
-  factory: () => Parameters<typeof http.implementation<TContract>>[0]['factory'] extends (
-    ...args: never[]
-  ) => infer TFactory
-    ? TFactory
-    : never,
+  factory: HttpImplementationDefinition<TContract, readonly []>['factory'],
 ) {
-  const implementation = http.implementation({ contract, factory } as never)
+  const implementation = http.implementation({ contract, factory })
   const Module = defineModule(() => ({ executions: [implementation] }))
   return bootstrapApplication({
     application: defineApplication({ modules: [Module()] }),
@@ -205,8 +210,12 @@ describe('HTTP Execution Extension regression', () => {
       expect(response.headers.get('access-control-allow-headers')).toBe(
         'x-request-id',
       )
-      expect(response.headers.get('vary')).toContain('Access-Control-Request-Method')
-      expect(response.headers.get('vary')).toContain('Access-Control-Request-Headers')
+      expect(response.headers.get('vary')).toContain(
+        'Access-Control-Request-Method',
+      )
+      expect(response.headers.get('vary')).toContain(
+        'Access-Control-Request-Headers',
+      )
     } finally {
       await application.close()
     }
