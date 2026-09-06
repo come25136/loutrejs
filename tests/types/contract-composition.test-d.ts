@@ -3,7 +3,10 @@ import {
   protocolGroup,
   type ProtocolDescriptor,
 } from '@loutrejs/loutre'
-import { type ControllerOf, http } from '@loutrejs/loutre/http'
+import {
+  type ControllerOf,
+  http,
+} from '../../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 
 const HttpGroup = http({

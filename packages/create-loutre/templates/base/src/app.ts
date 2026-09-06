@@ -4,7 +4,7 @@ import { AppController } from './hello/controller.js'
 const AppModule = defineModule(() => ({
   name: 'AppModule',
   description: 'HTTP Application entry module',
-  implementations: [AppController],
+  executions: [AppController],
 }))
 
 export default defineApplication({

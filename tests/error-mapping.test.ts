@@ -5,7 +5,7 @@ import {
   defineModule,
   implementation,
 } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import { http } from '../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 describe('Domain ErrorとProtocol mapping', () => {

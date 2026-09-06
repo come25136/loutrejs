@@ -16,7 +16,7 @@ import {
   bindHttpServer,
   httpExecutionExtension,
   type HttpHostApi,
-} from '@loutrejs/http'
+} from '@loutrejs/loutre/http'
 import {
   LOUTRE_VERSION,
   detectPresentationTerminal,

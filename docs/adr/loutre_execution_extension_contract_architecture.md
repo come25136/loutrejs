@@ -436,34 +436,13 @@ WebSocketならsession/message semanticsをWebSocket Extensionが検証する。
 
 Core Layer runtimeはHTTP statusやWebSocket close codeを解釈しない。
 
-## 14. Package boundary
+## 14. Package / source boundary
 
-Execution Extension packageはCore公開rootだけへ依存する。
+Execution Extensionのarchitecture境界はnpm package分割を必須としない。HTTPは`@loutrejs/loutre/http` subpathとして本体packageへ配置するが、Core/application/runtimeから`packages/loutre/src/http`への逆依存は禁止する。HTTP sourceからNode.js built-inへの依存も禁止し、runtime-neutralなWeb Platform APIだけを利用する。
 
-禁止例:
+別packageとして配布するExtensionはCore公開rootだけへ依存し、internal sourceへ依存しない。境界テストはstatic import、side-effect import、dynamic import、require、package dependencies、peerDependencies、devDependencies、source reverse dependencyを確認する。
 
-```ts
-import '@loutrejs/loutre/http'
-import { x } from '@loutrejs/loutre/internal'
-require('@loutrejs/loutre/http')
-```
-
-境界テストは次を確認する。
-
-```text
-static import
-side-effect import
-dynamic import
-require()
-package dependencies
-peerDependencies
-devDependencies
-source reverse dependency
-```
-
-Extension間依存は明示allowlist制とする。
-
-現在はWebSocket handshake integrationのため`@loutrejs/websocket -> @loutrejs/http`を許可する。
+これらのsource boundaryはdependency-cruiserでCI enforcementする。Extension間依存は明示allowlist制とし、現在はWebSocket handshake integrationのため`@loutrejs/websocket -> @loutrejs/loutre/http`を許可する。
 
 ## 15. Compatibility
 

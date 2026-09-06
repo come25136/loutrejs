@@ -1,4 +1,4 @@
-import { http } from '@loutrejs/http'
+import { http } from '@loutrejs/loutre/http'
 import { User } from '../auth/user.js'
 
 export const ProfileContract = http.contract({

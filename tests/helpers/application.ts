@@ -8,7 +8,7 @@ import {
   assertValidCompilation,
   compileApplication,
 } from '@loutrejs/loutre/graph'
-import type { HttpProtocolExecution } from '@loutrejs/loutre/http'
+import type { HttpProtocolExecution } from '../../packages/loutre/src/legacy-http/index.js'
 import { createMessagePortExecution } from '@loutrejs/loutre/message-port'
 import { ApplicationRuntime, type Logger } from '@loutrejs/loutre/runtime'
 

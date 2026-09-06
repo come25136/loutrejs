@@ -6,7 +6,7 @@ import {
   shortCircuit,
   type Type,
 } from '@loutrejs/loutre'
-import { basicAuth, http } from '@loutrejs/loutre/http'
+import { basicAuth, http } from '../../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 
 const authentication = basicAuth({

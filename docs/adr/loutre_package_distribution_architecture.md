@@ -44,6 +44,8 @@ CLIはbin・bundler・tsxなどDeveloper Tooling固有依存を持つため`@lou
 
 Bun / Deno / Cloudflare Workers / AWS Lambda / Electron adapterは追加のnpm dependencyを要求しないportable adapterなので本体subpathへ統合する。Runtime固有のsupport matrixはconformance testとdocumentationで保証し、package境界のためだけに分割しない。
 
+HTTP Execution Extensionも追加のnpm dependencyや独立install lifecycleを必要としないため、`@loutrejs/loutre/http` subpathとして本体へ配置する。HTTP固有semanticsは`packages/loutre/src/http`へ閉じ込め、CoreからHTTPへの逆依存とHTTPからNode.js built-inへの依存をdependency-cruiserで禁止する。Node固有のlistener/bindingは引き続き`@loutrejs/node`が所有する。
+
 ## Migration
 
 | before                               | after                                         |

@@ -4,7 +4,7 @@ import {
   http,
   type HttpClient,
   type HttpClientTransport,
-} from '@loutrejs/loutre/http'
+} from '../../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 const UsersContract = contract([
   http({

@@ -116,11 +116,19 @@ function readBearerToken(
 }
 
 function formatBearerChallenge(realm: string): string {
-  if (realm.length === 0 || /[\u0000-\u001f\u007f]/.test(realm)) {
+  if (realm.length === 0 || containsControlCharacter(realm)) {
     throw new TypeError(
       'Bearer authentication realm cannot be empty or contain control characters',
     )
   }
   const escaped = realm.replace(/[\\"]/g, '\\$&')
   return `Bearer realm="${escaped}"`
+}
+
+function containsControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0)
+    if (code <= 0x1f || code === 0x7f) return true
+  }
+  return false
 }

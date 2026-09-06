@@ -17,7 +17,7 @@ import {
   type SchemaOutput,
   type StandardSchemaV1,
   type Type,
-} from '@loutrejs/loutre'
+} from '../core/index.js'
 import {
   createCorsActualResponseHeaders,
   createCorsPreflightResponseHeaders,
@@ -308,7 +308,7 @@ export const httpExecutionExtension = defineExecutionExtension<
   HttpExtensionRuntime
 >({
   kind: 'execution-extension',
-  name: '@loutrejs/http',
+  name: '@loutrejs/loutre/http',
   compile(definition, context) {
     const routes = Object.entries(definition.contract.routes).map(
       ([name, route]) => compileHttpRoute(name, route),

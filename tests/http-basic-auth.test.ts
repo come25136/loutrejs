@@ -17,7 +17,7 @@ import {
   type BasicAuthContext,
   type BasicAuthCredentials,
   type HttpProtocolDefinition,
-} from '@loutrejs/loutre/http'
+} from '../packages/loutre/src/legacy-http/index.js'
 import { Container } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'
 
@@ -331,7 +331,7 @@ async function runBasicAuth<
   authentication: LayerDescriptor<
     TContribution,
     readonly [],
-    import('@loutrejs/loutre/http').LogicalHttpResult<
+    import('../packages/loutre/src/legacy-http/index.js').LogicalHttpResult<
       TResponse,
       TBody,
       { readonly 'www-authenticate': string }

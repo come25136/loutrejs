@@ -1,7 +1,7 @@
 import { createTestApplication } from './helpers/application.js'
 import { contract, defineModule, implementation } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
-import { http, validate } from '@loutrejs/loutre/http'
+import { http, validate } from '../packages/loutre/src/legacy-http/index.js'
 import {
   AccountController,
   AccountModule,

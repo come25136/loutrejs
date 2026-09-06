@@ -1,4 +1,4 @@
-import { cors, http } from '@loutrejs/http'
+import { cors, http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const CreateMessageBody = z.object({

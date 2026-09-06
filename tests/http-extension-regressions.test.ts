@@ -12,7 +12,7 @@ import {
   http,
   type HttpContract,
   type HttpImplementationDefinition,
-} from '@loutrejs/http'
+} from '@loutrejs/loutre/http'
 
 async function createHttpApplication<const TContract extends HttpContract>(
   contract: TContract,

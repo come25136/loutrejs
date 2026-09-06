@@ -1,4 +1,4 @@
-import { basicAuth } from '@loutrejs/http'
+import { basicAuth } from '@loutrejs/loutre/http'
 
 export const authentication = basicAuth({
   name: 'authentication',

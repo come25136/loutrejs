@@ -7,7 +7,6 @@ export default defineConfig({
       '@loutrejs/message-port': resolve('packages/message-port/src/index.ts'),
       '@loutrejs/tasks': resolve('packages/tasks/src/index.ts'),
       '@loutrejs/websocket': resolve('packages/websocket/src/index.ts'),
-      '@loutrejs/http': resolve('packages/http/src/index.ts'),
       '@loutrejs/loutre/host': resolve(
         'packages/loutre/src/application/host.ts',
       ),

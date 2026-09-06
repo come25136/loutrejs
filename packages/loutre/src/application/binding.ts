@@ -13,7 +13,7 @@ import { assertValidCompilation, compileApplication } from '../graph/index.js'
 import {
   createHttpExecution,
   type HttpProtocolExecution,
-} from '../http/index.js'
+} from '../legacy-http/index.js'
 import {
   createMessagePortExecution,
   type MessagePortProtocolExecution,

@@ -22,7 +22,6 @@
     "provenance": true
   },
   "dependencies": {
-    "@loutrejs/http": "^0.5.0",
     "@loutrejs/loutre": "^0.5.0",
     "esbuild": "^0.28.2"
   },

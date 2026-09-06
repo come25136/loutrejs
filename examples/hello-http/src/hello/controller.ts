@@ -1,4 +1,4 @@
-import { http } from '@loutrejs/http'
+import { http } from '@loutrejs/loutre/http'
 import { AppContract } from './contract.js'
 
 export const AppController = http.implementation({

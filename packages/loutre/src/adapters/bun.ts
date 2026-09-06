@@ -6,7 +6,7 @@ import {
   type HostBindingApplication,
   type InvocationBindingOptions,
 } from '../application/index.js'
-import type { HttpProtocolExecution } from '../http/index.js'
+import type { HttpProtocolExecution } from '../legacy-http/index.js'
 import {
   LOUTRE_VERSION,
   detectPresentationTerminal,

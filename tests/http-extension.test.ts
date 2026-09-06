@@ -16,7 +16,7 @@ import {
   http,
   type HttpExecutionContext,
   type HttpHostApi,
-} from '@loutrejs/http'
+} from '@loutrejs/loutre/http'
 
 describe('HTTP Execution Extension', () => {
   it('typeで宣言したMiddleware stateをhandlerへ渡す', async () => {
@@ -239,7 +239,7 @@ describe('HTTP Execution Extension', () => {
       expect.objectContaining({
         id: 'users.http',
         executionKind: 'http.request',
-        extension: expect.objectContaining({ name: '@loutrejs/http' }),
+        extension: expect.objectContaining({ name: '@loutrejs/loutre/http' }),
       }),
     )
     await application.close()

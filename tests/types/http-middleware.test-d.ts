@@ -1,5 +1,5 @@
 import { defineLayer, inject, type, token } from '@loutrejs/loutre'
-import { http } from '@loutrejs/http'
+import { http } from '@loutrejs/loutre/http'
 
 declare const invalidInput: boolean
 

@@ -6,7 +6,10 @@ import {
   layer,
   defineModule,
 } from '@loutrejs/loutre'
-import { http, validate } from '@loutrejs/loutre/http'
+import {
+  http,
+  validate,
+} from '../../../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 
 export interface AuthState {

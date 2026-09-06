@@ -12,7 +12,7 @@ import {
   type HttpResponseHeadersDefinition,
   type HttpResponseHeadersWithDefaults,
   type HttpResponseDefinition,
-} from '../http/index.js'
+} from '../legacy-http/index.js'
 import type { ApplicationDefinition } from './index.js'
 
 export interface OpenApiInfo {

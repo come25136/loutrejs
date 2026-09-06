@@ -1,5 +1,5 @@
 import { defineLayer } from '@loutrejs/loutre'
-import type { HttpMiddlewareContext } from '@loutrejs/http'
+import type { HttpMiddlewareContext } from '@loutrejs/loutre/http'
 
 export interface AuthenticatedHttpContext extends HttpMiddlewareContext {
   readonly state: Readonly<{

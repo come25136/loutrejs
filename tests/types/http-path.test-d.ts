@@ -4,7 +4,7 @@ import {
   type ControllerOf,
   http,
   validate,
-} from '@loutrejs/loutre/http'
+} from '../../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 const RawContract = contract([
   http({

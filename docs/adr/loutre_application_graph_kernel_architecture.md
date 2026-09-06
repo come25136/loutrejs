@@ -155,7 +155,7 @@ Coreの型に`HasHttp`、`HasMessagePort`等の新しいprotocol hard-codeを追
 例:
 
 ```text
-@loutrejs/http
+@loutrejs/loutre/http
 ├ HTTP Contract
 ├ request/response validation
 ├ route matching
@@ -181,7 +181,7 @@ Platform adapterはCoreとExtension Host APIをplatform primitiveへbindする�
 Node HTTPの例:
 
 ```text
-@loutrejs/http
+@loutrejs/loutre/http
   app.http.fetch(Request) -> Response
                 │
                 ▼
@@ -250,7 +250,7 @@ HTTP Definitionからrequest実行までの責務境界は次の通りとする�
 sequenceDiagram
     participant User as User Definition
     participant Builder as Application Model Builder
-    participant HttpExt as @loutrejs/http Extension
+    participant HttpExt as @loutrejs/loutre/http Extension
     participant Model as Application Model
     participant HttpRuntime as HTTP Runtime
     participant Host as app.http.fetch
@@ -299,22 +299,28 @@ HTTP固有のroute matching、header/body validation、decoder selection、middl
 
 Middlewareがresponseをshort-circuitした場合はUser Implementationの呼び出しを省略するが、返されたvariantのContract整合性とHTTP response semanticsの検証責務は引き続きHTTP Extensionにある。
 
-## 9. Package boundary
+## 9. Package / source boundary
 
-新しいExecution Extension packageはCoreの公開rootだけへ依存する。
+Execution Extensionのarchitecture境界を、そのままnpm package境界にはしない。HTTPは追加dependencyや独立install lifecycleを持たないため、`@loutrejs/loutre/http` subpathとして`@loutrejs/loutre`本体へ配置する。
 
 ```text
-@loutrejs/http --------┐
-@loutrejs/websocket ---┤
-@loutrejs/tasks -------┼──> @loutrejs/loutre
-@loutrejs/message-port ┘
+@loutrejs/loutre
+├ core / application / runtime
+│   └─ must not depend on ./http
+└ http
+    ├─ may depend on public Core primitives
+    └─ must not depend on Node.js built-ins
+
+@loutrejs/websocket ──────> @loutrejs/loutre/http
+@loutrejs/tasks ──────────> @loutrejs/loutre
+@loutrejs/message-port ───> @loutrejs/loutre
 ```
 
-Extension間依存は原則禁止し、protocol integrationとして必要なものだけ明示allowlistにする。
+同一npm package内でもHTTP semanticsをCoreへ逆流させない。`packages/loutre/src/http`とCoreのsource boundary、およびHTTPからNode.js built-inへの非依存はdependency-cruiserでCI enforcementする。
 
-WebSocket handshakeがHTTP semanticsを利用するため、`@loutrejs/websocket -> @loutrejs/http`は許可された依存とする。
+Extension間依存は原則禁止し、protocol integrationとして必要なものだけ明示allowlistにする。WebSocket handshakeがHTTP semanticsを利用するため、`@loutrejs/websocket -> @loutrejs/loutre/http`は許可された依存とする。
 
-CoreからExtension packageへの逆依存は禁止する。source importだけでなく`dependencies`、`peerDependencies`、`devDependencies`も境界テスト対象とする。
+別npm packageとして配布するExtensionについては、source importだけでなく`dependencies`、`peerDependencies`、`devDependencies`も境界テスト対象とする。
 
 ## 10. Compatibility方針
 

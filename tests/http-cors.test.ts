@@ -1,6 +1,6 @@
 import { createTestApplication } from './helpers/application.js'
 import { contract, defineModule, implementation } from '@loutrejs/loutre'
-import { http, validate } from '@loutrejs/loutre/http'
+import { http, validate } from '../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 describe('cors', () => {

@@ -12,7 +12,7 @@ import {
   queue,
   task,
 } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import { http } from '../../packages/loutre/src/legacy-http/index.js'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { nodeRuntime } from '@loutrejs/node'

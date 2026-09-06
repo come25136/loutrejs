@@ -1,4 +1,4 @@
-import { http } from '@loutrejs/http'
+import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { User } from '../auth/user.js'
 import { bearerAuthentication } from '../layers/authentication.js'

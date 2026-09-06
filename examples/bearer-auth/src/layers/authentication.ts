@@ -1,5 +1,5 @@
 import { inject } from '@loutrejs/loutre'
-import { bearerAuth } from '@loutrejs/http'
+import { bearerAuth } from '@loutrejs/loutre/http'
 import { UserRepository } from '../auth/repository.js'
 
 export const bearerAuthentication = bearerAuth({

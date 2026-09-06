@@ -1,5 +1,5 @@
 import { bootstrapApplication } from '@loutrejs/loutre'
-import { bindHttpServer } from '@loutrejs/http'
+import { bindHttpServer } from '@loutrejs/loutre/http'
 import { afterAll, describe, expect, it } from 'vitest'
 import application from './app.js'
 

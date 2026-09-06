@@ -9,7 +9,11 @@ import {
 import { compileApplication } from '@loutrejs/loutre/graph'
 import { generateOpenApi } from '@loutrejs/loutre/openapi'
 import { bootstrap } from '@loutrejs/loutre/host'
-import { createHttpClient, http, validate } from '@loutrejs/loutre/http'
+import {
+  createHttpClient,
+  http,
+  validate,
+} from '../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 

@@ -1,11 +1,9 @@
-import { implementation } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { AppContract } from './contract.js'
 
-export const AppController = implementation({
+export const AppController = http.implementation({
   name: 'AppController',
-  contract: AppContract.http.app.hello,
-  protocol: http,
+  contract: AppContract,
   factory: () => ({
     async hello(ctx) {
       return ctx.response.ok({

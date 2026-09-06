@@ -1,6 +1,6 @@
 import { defineApplication } from '@loutrejs/loutre'
 import { contract, defineModule, implementation } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import { http } from '../packages/loutre/src/legacy-http/index.js'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'

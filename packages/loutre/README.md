@@ -58,6 +58,17 @@ export default defineApplication({
 | `@loutrejs/loutre/presentation` | startup presentation     |
 | `@loutrejs/loutre/message-port` | MessagePort protocol     |
 
+## HTTP subpath
+
+HTTPのContract、request/response validation、middleware、route dispatch、CORS/auth semanticsは`@loutrejs/loutre/http`から提供します。実装はWeb Platform API（`Request` / `Response` / `Headers` / `ReadableStream`等）だけに依存し、Node.js固有のlistener/bindingは`@loutrejs/node`が担当します。
+
+```ts
+import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
+```
+
+HTTPは本体packageのsubpathですが、CoreからHTTPへの逆依存とHTTPからNode.js built-inへの依存は禁止し、CIで静的に検証します。
+
 ## Documentation
 
 - [Getting Started](https://github.com/come25136/loutrejs/blob/main/docs/getting-started.md)

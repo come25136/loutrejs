@@ -1,5 +1,5 @@
 import { inject } from '@loutrejs/loutre'
-import { basicAuth } from '@loutrejs/http'
+import { basicAuth } from '@loutrejs/loutre/http'
 import { UserRepository } from '../auth/repository.js'
 
 export const basicAuthentication = basicAuth({

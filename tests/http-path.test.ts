@@ -4,8 +4,8 @@ import {
   assertValidCompilation,
   compileApplication,
 } from '@loutrejs/loutre/graph'
-import { http, validate } from '@loutrejs/loutre/http'
-import { validateHttpParamsSchemas } from '../packages/loutre/src/http/params.js'
+import { http, validate } from '../packages/loutre/src/legacy-http/index.js'
+import { validateHttpParamsSchemas } from '../packages/loutre/src/legacy-http/params.js'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 const Result = z.object({ route: z.string(), value: z.unknown() })

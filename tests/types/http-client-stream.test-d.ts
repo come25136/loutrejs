@@ -1,5 +1,8 @@
 import { contract } from '@loutrejs/loutre'
-import { createHttpClient, http } from '@loutrejs/loutre/http'
+import {
+  createHttpClient,
+  http,
+} from '../../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 const Contract = contract([
   http({

@@ -5,7 +5,7 @@ import {
   inject,
 } from '@loutrejs/loutre'
 import { compileApplication } from '@loutrejs/loutre/graph'
-import { http } from '@loutrejs/loutre/http'
+import { http } from '../packages/loutre/src/legacy-http/index.js'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { ApplicationRuntime } from '@loutrejs/loutre/runtime'
 import { z } from 'zod'

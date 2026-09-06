@@ -3,7 +3,7 @@ import {
   protocolGroup,
   type ProtocolDescriptor,
 } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import { http } from '../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 
 function protocol<const TName extends string>(

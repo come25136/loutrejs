@@ -1,4 +1,4 @@
-import { defineLayer } from '@loutrejs/loutre'
+import { defineLayer } from '../core/index.js'
 import type {
   HttpExecutionResult,
   HttpMiddleware,

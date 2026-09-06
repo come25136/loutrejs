@@ -6,7 +6,7 @@ import {
   implementation,
   layer,
 } from '@loutrejs/loutre'
-import { http, validate } from '@loutrejs/loutre/http'
+import { http, validate } from '../../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 
 const OK = {
@@ -293,7 +293,10 @@ http({ 1: OK })
 // @ts-expect-error numeric-looking namespace keys are not stable architecture names
 http({ '2': OK })
 
-import type { ContextOf, ControllerOf } from '@loutrejs/loutre/http'
+import type {
+  ContextOf,
+  ControllerOf,
+} from '../../packages/loutre/src/legacy-http/index.js'
 
 type ResolvedLeafController = ControllerOf<
   typeof NestedContract.http.api.valid,

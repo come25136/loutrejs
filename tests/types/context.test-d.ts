@@ -8,7 +8,12 @@ import {
   provide,
   token,
 } from '@loutrejs/loutre'
-import { ContextOf, ControllerOf, http, validate } from '@loutrejs/loutre/http'
+import {
+  ContextOf,
+  ControllerOf,
+  http,
+  validate,
+} from '../../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 interface Session {
   readonly userId: string

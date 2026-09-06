@@ -3,7 +3,7 @@ import { NamedRepository as Repo } from './named-repository.js'
 import DefaultRepo from './default-repository.js'
 import * as services from './namespace-services.js'
 import { ReexportedRepository } from './barrel.js'
-import {} from '@loutrejs/loutre/http'
+import {} from '../../../packages/loutre/src/legacy-http/index.js'
 import {
   defineEnv,
   defineModule,

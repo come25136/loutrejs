@@ -1,4 +1,4 @@
-import { http } from '@loutrejs/http'
+import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 export const AppContract = http.contract({

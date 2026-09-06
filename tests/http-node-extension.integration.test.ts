@@ -1,6 +1,6 @@
 import { nodeRuntime } from '@loutrejs/node'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
-import { http } from '@loutrejs/http'
+import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { reserveHttpPort } from './helpers/http-server.js'
 

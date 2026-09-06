@@ -14,13 +14,13 @@ import {
 import type {
   HttpExecutionRequestDefinition,
   HttpExecutionResponseDefinition,
-} from '@loutrejs/http'
+} from '@loutrejs/loutre/http'
 import {
   matchHttpPath,
   normalizeHttpPath,
   parseHttpPath,
   type HttpPathSegment,
-} from '@loutrejs/http'
+} from '@loutrejs/loutre/http'
 
 export type WebSocketDataMessage =
   | { readonly type: 'text'; readonly data: string }

@@ -6,7 +6,7 @@ import {
   implementation,
   type StandardSchemaV1,
 } from '@loutrejs/loutre'
-import { http, validate } from '@loutrejs/loutre/http'
+import { http, validate } from '../packages/loutre/src/legacy-http/index.js'
 import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'

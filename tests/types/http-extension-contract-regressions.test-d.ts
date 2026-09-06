@@ -1,6 +1,6 @@
 import { type } from '@loutrejs/loutre'
 import { z } from 'zod'
-import { basicAuth, http } from '@loutrejs/http'
+import { basicAuth, http } from '@loutrejs/loutre/http'
 
 const bodyWithoutHeaders = {
   create: {

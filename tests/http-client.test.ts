@@ -5,7 +5,7 @@ import {
   fetchHttpTransport,
   http,
   type HttpClientTransportRequest,
-} from '@loutrejs/loutre/http'
+} from '../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 describe('HTTP typed client', () => {
   it('Contractに準拠したHTTP requestとresponseを扱える', async () => {

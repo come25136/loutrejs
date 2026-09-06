@@ -3,7 +3,7 @@ import {
   createHttpClient,
   fetchHttpTransport,
   http,
-} from '@loutrejs/loutre/http'
+} from '../packages/loutre/src/legacy-http/index.js'
 import { z } from 'zod'
 describe('HTTP typed client server stream', () => {
   it('server-stream responseの各itemをContractのoutputとして取得できる', async () => {

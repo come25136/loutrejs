@@ -1,4 +1,4 @@
-import { http } from '@loutrejs/http'
+import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import { authentication } from './layers/authentication.js'
 import { ProfileContract } from './profile/contract.js'

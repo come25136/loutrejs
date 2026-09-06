@@ -1,4 +1,4 @@
-import type { HttpProtocolExecution } from '../http/index.js'
+import type { HttpProtocolExecution } from '../legacy-http/index.js'
 import { binding } from './binding.js'
 import type {
   ApplicationDefinition,

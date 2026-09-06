@@ -5,7 +5,7 @@ import {
   implementation,
   inject,
 } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import { http } from '../../../packages/loutre/src/legacy-http/index.js'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
 export interface DomainEvent {
