@@ -56,7 +56,10 @@ export function createKernelApplication<
     graph: projectApplicationModel(options.application.model),
     async init() {
       await runtime.initialize()
-      if (!initialized) {
+      if (initialized) return application
+
+      const createdNamespaces: string[] = []
+      try {
         for (const modelExtension of options.application.model.extensions) {
           const host = modelExtension.extension.host
           if (!host) continue
@@ -65,10 +68,23 @@ export function createKernelApplication<
             runtime: runtime.extensionRuntime(modelExtension.extension),
             applicationRuntime: runtime,
           })
+          createdNamespaces.push(host.namespace)
         }
         initialized = true
+        return application
+      } catch (error) {
+        for (const namespace of createdNamespaces) delete application[namespace]
+        try {
+          await runtime.shutdown()
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [error, cleanupError],
+            'Host API creation failed and runtime rollback also failed.',
+            { cause: error },
+          )
+        }
+        throw error
       }
-      return application
     },
     get(token: TokenLike) {
       return runtime.get(token)
