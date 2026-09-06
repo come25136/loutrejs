@@ -82,6 +82,15 @@ export interface HttpExecutionResponseDefinition {
   readonly stream?: 'server'
 }
 
+export type HttpValidationPart = 'body'
+
+export interface HttpValidationMiddleware<
+  TPart extends HttpValidationPart = HttpValidationPart,
+> {
+  readonly kind: 'http-validation'
+  readonly part: TPart
+}
+
 export interface HttpExecutionRouteDefinition {
   readonly method: string
   readonly path: string
@@ -91,11 +100,12 @@ export interface HttpExecutionRouteDefinition {
   readonly deprecated?: boolean
   readonly request?: HttpExecutionRequestDefinition
   readonly responses: Readonly<Record<string, HttpExecutionResponseDefinition>>
-  readonly middlewares?: readonly AnyHttpMiddleware[]
+  readonly middlewares?: readonly HttpRouteMiddleware[]
   readonly interaction?: 'unary' | 'server-stream'
 }
 
 type AnyHttpMiddleware = GenericLayer<any, any, HttpExecutionResult>
+type HttpRouteMiddleware = AnyHttpMiddleware | HttpValidationMiddleware
 declare const httpMiddlewareShortCircuit: unique symbol
 
 export type HttpMiddleware<
@@ -131,7 +141,7 @@ type UnionToIntersection<TUnion> = (
 type HttpMiddlewareState<TRoute extends HttpExecutionRouteDefinition> =
   TRoute extends {
     readonly middlewares: infer TMiddlewares extends
-      readonly AnyHttpMiddleware[]
+      readonly HttpRouteMiddleware[]
   }
     ? UnionToIntersection<MiddlewareContribution<TMiddlewares[number]>>
     : {}
@@ -582,7 +592,7 @@ type MiddlewareShortCircuit<TMiddleware> =
 type RouteMiddlewareShortCircuits<TRoute extends HttpExecutionRouteDefinition> =
   TRoute extends {
     readonly middlewares: infer TMiddlewares extends
-      readonly AnyHttpMiddleware[]
+      readonly HttpRouteMiddleware[]
   }
     ? MiddlewareShortCircuit<TMiddlewares[number]>
     : never
@@ -708,10 +718,20 @@ export function defineHttpMiddleware<
   )
 }
 
+const bodyValidation = Object.freeze({
+  kind: 'http-validation' as const,
+  part: 'body' as const,
+}) satisfies HttpValidationMiddleware<'body'>
+
+export const validate = Object.freeze({
+  body: bodyValidation,
+})
+
 export const executionHttp = Object.freeze({
   contract: defineHttpContract,
   implementation: defineHttpImplementation,
   middleware: defineHttpMiddleware,
+  validate,
   error: httpError,
   extension: httpExecutionExtension,
   serverCapability: HTTP_SERVER,
@@ -751,8 +771,88 @@ function compileHttpRoute(
     segments,
     dispatch: createHttpDispatchKey(route.method, segments),
     definition: route,
-    middlewares: route.middlewares ?? [],
+    middlewares: compileHttpMiddlewares(route),
   })
+}
+
+function compileHttpMiddlewares(
+  route: HttpExecutionRouteDefinition,
+): readonly AnyHttpMiddleware[] {
+  const declared = route.middlewares ?? []
+  const compiled = declared.map((middleware) =>
+    isHttpValidationMiddleware(middleware)
+      ? compileHttpValidationMiddleware(middleware, route)
+      : middleware,
+  )
+  if (route.request?.body && !hasBodyValidation(declared)) {
+    compiled.push(createBodyValidationMiddleware(route.request.body))
+  }
+  return Object.freeze(compiled)
+}
+
+function compileHttpValidationMiddleware(
+  middleware: HttpValidationMiddleware,
+  route: HttpExecutionRouteDefinition,
+): AnyHttpMiddleware {
+  switch (middleware.part) {
+    case 'body': {
+      const schema = route.request?.body
+      if (!schema) {
+        throw new TypeError(
+          `HTTP ${route.method} ${route.path} uses validate.body but declares no request body.`,
+        )
+      }
+      return createBodyValidationMiddleware(schema)
+    }
+  }
+}
+
+function createBodyValidationMiddleware(
+  schema: StandardSchemaV1,
+): AnyHttpMiddleware {
+  return defineLayer<{}, HttpMiddlewareContext, HttpExecutionResult>({
+    name: 'validate.body',
+    factory: () => async (context, next) => {
+      const rawBody = await decodeBody(
+        context.request,
+        validatedContentType(context.input.headers),
+      )
+      try {
+        const body = await validateSchema(schema, rawBody)
+        ;(context.input as { body: unknown }).body = body
+      } catch (error) {
+        if (error instanceof SchemaValidationError) {
+          throw new HttpInputValidationError(error)
+        }
+        throw error
+      }
+      await next()
+    },
+  })
+}
+
+function isHttpValidationMiddleware(
+  middleware: HttpRouteMiddleware,
+): middleware is HttpValidationMiddleware {
+  return middleware.kind === 'http-validation'
+}
+
+function hasBodyValidation(
+  middlewares: readonly HttpRouteMiddleware[],
+): boolean {
+  return middlewares.some(
+    (middleware) =>
+      isHttpValidationMiddleware(middleware) && middleware.part === 'body',
+  )
+}
+
+function countBodyValidations(
+  middlewares: readonly HttpRouteMiddleware[],
+): number {
+  return middlewares.filter(
+    (middleware) =>
+      isHttpValidationMiddleware(middleware) && middleware.part === 'body',
+  ).length
 }
 
 function assertValidHttpRouteDefinition(
@@ -762,6 +862,17 @@ function assertValidHttpRouteDefinition(
   if (route.request?.body && !route.request.headers) {
     throw new TypeError(
       `HTTP ${route.method} ${route.path} declares a body but no request headers schema.`,
+    )
+  }
+  const bodyValidationCount = countBodyValidations(route.middlewares ?? [])
+  if (!route.request?.body && bodyValidationCount > 0) {
+    throw new TypeError(
+      `HTTP ${route.method} ${route.path} uses validate.body but declares no request body.`,
+    )
+  }
+  if (bodyValidationCount > 1) {
+    throw new TypeError(
+      `HTTP ${route.method} ${route.path} declares validate.body more than once.`,
     )
   }
   if (route.request?.params) {
@@ -992,6 +1103,18 @@ function createHttpExtensionRuntime(
         executionOwnedByStream = finalized.streaming
         return complete(finalized.response)
       } catch (error) {
+        if (error instanceof HttpInputDecodeError) {
+          return applyFrameworkHeadersToResponse(
+            Response.json({ error: 'Invalid request' }, { status: 400 }),
+            await safeCorsHeaders(match.route.middlewares, request),
+          )
+        }
+        if (error instanceof HttpInputValidationError) {
+          return applyFrameworkHeadersToResponse(
+            Response.json({ error: 'Validation failed' }, { status: 400 }),
+            await safeCorsHeaders(match.route.middlewares, request),
+          )
+        }
         try {
           const mapped = await mapDeclaredError(match.route.definition, error)
           if (mapped) {
@@ -1081,12 +1204,7 @@ async function createHttpContext(
   const headers = definition?.headers
     ? await validateRequestHeaders(definition, request.headers)
     : Object.fromEntries(request.headers.entries())
-  const rawBody = definition?.body
-    ? await decodeBody(request, validatedContentType(headers))
-    : undefined
-  const body = definition?.body
-    ? await validateSchema(definition.body, rawBody)
-    : undefined
+  const body = definition?.body ? request.body : undefined
   const response = Object.fromEntries(
     Object.keys(route.definition.responses).map((name) => [
       name,
@@ -1216,6 +1334,13 @@ class HttpInputDecodeError extends Error {
   constructor(readonly cause: unknown) {
     super('HTTP request body decode failed', { cause })
     this.name = 'HttpInputDecodeError'
+  }
+}
+
+class HttpInputValidationError extends Error {
+  constructor(readonly cause: unknown) {
+    super('HTTP request body validation failed', { cause })
+    this.name = 'HttpInputValidationError'
   }
 }
 
