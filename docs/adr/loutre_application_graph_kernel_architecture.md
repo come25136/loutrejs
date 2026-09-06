@@ -242,6 +242,63 @@ Contract body validation
 
 複数representationを将来導入する場合もdecoderの暗黙分岐を増やすのではなく、Contract/APIとして先に表現する。
 
+### 8.1 HTTP requestのbuild/runtime flow
+
+HTTP Definitionからrequest実行までの責務境界は次の通りとする。
+
+```mermaid
+sequenceDiagram
+    participant User as User Definition
+    participant Builder as Application Model Builder
+    participant HttpExt as @loutrejs/http Extension
+    participant Model as Application Model
+    participant HttpRuntime as HTTP Runtime
+    participant Host as app.http.fetch
+    participant Kernel as Execution Kernel
+    participant Impl as User Implementation
+
+    rect rgb(245, 245, 245)
+        Note over User,Model: Build phase
+        User->>Builder: http.contract() / http.implementation()
+        Builder->>HttpExt: compile(definition)
+        HttpExt-->>Builder: ExecutionContribution(compiled)
+        Builder->>Model: store canonical contribution
+        Note over Model: compiled value is Extension-owned and opaque to Core
+    end
+
+    rect rgb(245, 245, 245)
+        Note over Model,HttpRuntime: Runtime initialization
+        Model->>HttpExt: createRuntime(compiled contributions)
+        HttpExt-->>HttpRuntime: route table / middleware / factories
+        HttpRuntime-->>Host: host.create() exposes fetch(Request)
+    end
+
+    rect rgb(245, 245, 245)
+        Note over Host,Impl: One HTTP request
+        Host->>Kernel: beginExecution()
+        Kernel-->>Host: ExecutionLease
+        Host->>HttpRuntime: dispatch(Request, lease.signal)
+        HttpRuntime->>HttpRuntime: route match
+        HttpRuntime->>HttpRuntime: normalize media type
+        HttpRuntime->>HttpRuntime: validate contract headers
+        HttpRuntime->>HttpRuntime: select body decoder
+        HttpRuntime->>HttpRuntime: decode + validate request body
+        HttpRuntime->>HttpRuntime: run middleware / resolve DI / compose state
+        HttpRuntime->>Impl: invoke implementation(ctx)
+        Impl-->>HttpRuntime: contract response variant
+        HttpRuntime->>HttpRuntime: validate response semantics
+        HttpRuntime-->>Host: Response
+        Host->>Kernel: lease.complete()
+        Host-->>User: Response
+    end
+```
+
+Build phaseでDefinitionは一度だけcompileされ、requestごとに再compileしない。RuntimeはApplication Modelに保持されたcanonical compiled contributionから構築する。
+
+HTTP固有のroute matching、header/body validation、decoder selection、middleware short-circuit、response semanticsはHTTP Extensionが所有する。Coreがrequest execution中に理解するのはactive application workとしての`ExecutionLease`と、generic Layer / DI等のprotocol-neutral primitiveだけである。
+
+Middlewareがresponseをshort-circuitした場合はUser Implementationの呼び出しを省略するが、返されたvariantのContract整合性とHTTP response semanticsの検証責務は引き続きHTTP Extensionにある。
+
 ## 9. Package boundary
 
 新しいExecution Extension packageはCoreの公開rootだけへ依存する。
