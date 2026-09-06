@@ -346,12 +346,15 @@ export function buildApplicationModel(
   }
 
   const extensionExecutions = new Map<
-    ExecutionExtension,
-    ExecutionModelNode[]
+    symbol,
+    {
+      readonly extension: ExecutionExtension
+      readonly executions: ExecutionModelNode[]
+    }
   >()
-  const extensionNames = new Map<string, ExecutionExtension>()
+  const extensionNames = new Map<string, symbol>()
   const executionIds = new Set<string>()
-  const capabilityTokens = new Map<string, RuntimeCapability>()
+  const capabilityTokens = new Map<symbol, RuntimeCapability>()
 
   for (const module of modules) {
     const moduleId = moduleIds.get(module)!
@@ -371,7 +374,7 @@ export function buildApplicationModel(
       }
       const extension = value.extension
       const sameName = extensionNames.get(extension.name)
-      if (sameName && sameName !== extension) {
+      if (sameName && sameName !== extension.identity) {
         diagnostics.push(
           diagnostic(
             'LUTRE_EXTENSION_NAME_COLLISION',
@@ -381,7 +384,7 @@ export function buildApplicationModel(
         )
         continue
       }
-      extensionNames.set(extension.name, extension)
+      extensionNames.set(extension.name, extension.identity)
 
       let contribution: ExecutionContribution
       try {
@@ -413,9 +416,12 @@ export function buildApplicationModel(
       executions.push(execution)
       nodes.push(execution)
       edges.push({ from: moduleId, to: execution.id, kind: 'owns' })
-      const grouped = extensionExecutions.get(extension) ?? []
-      grouped.push(execution)
-      extensionExecutions.set(extension, grouped)
+      const grouped = extensionExecutions.get(extension.identity) ?? {
+        extension,
+        executions: [] as ExecutionModelNode[],
+      }
+      grouped.executions.push(execution)
+      extensionExecutions.set(extension.identity, grouped)
       for (const dependency of execution.dependencies) {
         const provider = providerNodes.get(dependency)
         if (provider) {
@@ -448,8 +454,8 @@ export function buildApplicationModel(
         }
       }
       for (const capability of execution.capabilities) {
-        const existingCapability = capabilityTokens.get(capability.id)
-        if (existingCapability && existingCapability !== capability) {
+        const existingCapability = capabilityTokens.get(capability.identity)
+        if (existingCapability && existingCapability.id !== capability.id) {
           diagnostics.push(
             diagnostic(
               'LUTRE_CAPABILITY_ID_COLLISION',
@@ -458,7 +464,7 @@ export function buildApplicationModel(
             ),
           )
         } else {
-          capabilityTokens.set(capability.id, capability)
+          capabilityTokens.set(capability.identity, capability)
         }
         const capabilityId = `capability:${capability.id}`
         if (!nodes.some((node) => node.id === capabilityId)) {
@@ -478,8 +484,8 @@ export function buildApplicationModel(
     }
   }
 
-  const extensionGroups = [...extensionExecutions].map(
-    ([extension, ownedExecutions]): ApplicationModelExtension => {
+  const extensionGroups = [...extensionExecutions.values()].map(
+    ({ extension, executions: ownedExecutions }): ApplicationModelExtension => {
       const extensionId = `extension:${extension.name}`
       nodes.push({
         kind: 'framework',

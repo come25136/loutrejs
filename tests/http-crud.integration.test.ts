@@ -20,11 +20,13 @@ describe('HTTP CRUD integration', () => {
         'application/json; charset=utf-8',
       )
       expect(await response.json()).toEqual({ id: 'user-1', name: 'test' })
-      expect(app.graph.capabilities).toContainEqual({
-        name: 'http.server',
-        scope: 'execution',
-        requiredBy: 'contract:1.get',
-      })
+      expect(app.graph.executions).toContainEqual(
+        expect.objectContaining({
+          id: 'UsersController',
+          executionKind: 'http.request',
+          capabilities: expect.arrayContaining(['http.server']),
+        }),
+      )
 
       const created = await fetch(`http://127.0.0.1:${port}/users`, {
         method: 'POST',

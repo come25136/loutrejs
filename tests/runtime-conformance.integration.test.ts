@@ -1,4 +1,4 @@
-import { defineApplication } from '@loutrejs/loutre'
+import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { checkCapabilities } from '@loutrejs/loutre/runtime'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
@@ -6,6 +6,8 @@ import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { nodeRuntime } from '@loutrejs/node'
 import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
+import { messagePort } from '@loutrejs/message-port'
+import { z } from 'zod'
 import { UsersModule } from '../integrations/http-crud/src/index.js'
 import { EventsModule } from '../integrations/streaming/src/index.js'
 import { silentLogger } from './helpers/silent-logger.js'
@@ -101,6 +103,61 @@ describe('Runtime conformance harness', () => {
     expect(new TextDecoder().decode(Buffer.concat(chunks))).toContain(
       'data:{"sequence":3,"message":"event-3"}',
     )
+  })
+
+  it('Electron attachが新MessagePort ExtensionをKernel経由で実行する', async () => {
+    Object.defineProperty(process.versions, 'electron', {
+      configurable: true,
+      value: '43.0.0',
+    })
+    try {
+      const contract = messagePort.contract({
+        greet: {
+          input: z.object({ name: z.string() }),
+          responses: { ok: z.object({ message: z.string() }) },
+        },
+      })
+      const handler = messagePort.implementation({
+        name: 'ElectronGreetHandler',
+        contract,
+        factory: () => ({
+          greet: (context) =>
+            context.response.ok({ message: `Hello, ${context.input.name}` }),
+        }),
+      })
+      const Module = defineModule(() => ({ executions: [handler] }))
+      let onMessage: ((event: { readonly data: unknown }) => void) | undefined
+      const posted: unknown[] = []
+      const attachment = electronRuntime.attach({
+        application: defineApplication({ modules: [Module()] }),
+        port: {
+          postMessage: (value) => posted.push(value),
+          on: (_type, listener) => {
+            onMessage = listener
+          },
+          start: () => undefined,
+        },
+      })
+
+      onMessage?.({
+        data: {
+          id: 'request-1',
+          procedure: 'greet',
+          input: { name: 'Loutre' },
+        },
+      })
+      await vi.waitFor(() => {
+        expect(posted).toContainEqual({
+          id: 'request-1',
+          response: 'ok',
+          value: { message: 'Hello, Loutre' },
+          done: true,
+        })
+      })
+      await attachment.close()
+    } finally {
+      delete (process.versions as Record<string, string | undefined>).electron
+    }
   })
 
   it('runtime identityはversionから独立している', () => {

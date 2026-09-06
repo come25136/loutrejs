@@ -4,10 +4,12 @@ import type { TokenLike } from './token.js'
 declare const runtimeCapabilityValue: unique symbol
 declare const executionExtensionTypeInfo: unique symbol
 const executionExtensionIdentityNamespace = 'loutre.execution-extension:'
+const runtimeCapabilityIdentityNamespace = 'loutre.runtime-capability:'
 
 export interface RuntimeCapability<TValue = unknown> {
   readonly kind: 'runtime-capability'
   readonly id: string
+  readonly identity: symbol
   readonly [runtimeCapabilityValue]?: TValue
 }
 
@@ -23,6 +25,7 @@ export function runtimeCapability<TValue>(
   return Object.freeze({
     kind: 'runtime-capability' as const,
     id,
+    identity: Symbol.for(`${runtimeCapabilityIdentityNamespace}${id}`),
   })
 }
 
@@ -44,36 +47,37 @@ export function bindRuntimeCapability<TValue>(
 }
 
 export class RuntimeCapabilityRegistry implements RuntimeCapabilityBindings {
-  readonly #values = new Map<RuntimeCapability<any>, unknown>()
-  readonly #capabilitiesById = new Map<string, RuntimeCapability<any>>()
+  readonly #values = new Map<symbol, unknown>()
+  readonly #capabilities = new Map<symbol, RuntimeCapability<any>>()
 
   constructor(bindings: Iterable<RuntimeCapabilityBinding> = []) {
     for (const binding of bindings) {
-      const existingId = this.#capabilitiesById.get(binding.capability.id)
-      if (existingId && existingId !== binding.capability) {
+      const identity = binding.capability.identity
+      const existing = this.#capabilities.get(identity)
+      if (existing && existing.id !== binding.capability.id) {
         throw new Error(
           `LUTRE_CAPABILITY_ID_COLLISION: ${binding.capability.id}`,
         )
       }
-      if (this.#values.has(binding.capability)) {
+      if (this.#values.has(identity)) {
         throw new Error(
           `LUTRE_CAPABILITY_DUPLICATE_BINDING: ${binding.capability.id}`,
         )
       }
-      this.#capabilitiesById.set(binding.capability.id, binding.capability)
-      this.#values.set(binding.capability, binding.value)
+      this.#capabilities.set(identity, binding.capability)
+      this.#values.set(identity, binding.value)
     }
   }
 
   has(capability: RuntimeCapability<any>): boolean {
-    return this.#values.has(capability)
+    return this.#values.has(capability.identity)
   }
 
   get<TValue>(capability: RuntimeCapability<TValue>): TValue {
-    if (!this.#values.has(capability)) {
+    if (!this.#values.has(capability.identity)) {
       throw new Error(`LUTRE_CAPABILITY_MISSING: ${capability.id}`)
     }
-    return this.#values.get(capability) as TValue
+    return this.#values.get(capability.identity) as TValue
   }
 }
 

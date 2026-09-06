@@ -1,4 +1,6 @@
+import { createKernelApplication } from '@loutrejs/loutre'
 import { bootstrap } from '@loutrejs/loutre/host'
+import { bindHttpServer } from '@loutrejs/loutre/http'
 import { runCli } from '@loutrejs/cli'
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -28,8 +30,8 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(0)
-    expect(output.stdout.join('\n')).toContain('contract:1.get [http]')
-    expect(output.stdout.join('\n')).toContain('http.controller terminal')
+    expect(output.stdout.join('\n')).toContain('UsersController.get [http]')
+    expect(output.stdout.join('\n')).toContain('GET /users/{id}')
   })
 
   it.each([
@@ -140,21 +142,19 @@ describe('Loutre CLI', () => {
     ).toBe(0)
     const graph = JSON.parse(output.stdout.join('\n'))
     expect(graph).not.toHaveProperty('version')
-    expect(graph.contracts).toContainEqual(
-      expect.objectContaining({ id: 'contract:1' }),
-    )
-    expect(graph.implementations).toContainEqual(
+    expect(graph.executions).toContainEqual(
       expect.objectContaining({
-        id: 'implementation:1',
-        name: 'UsersController',
-        contract: 'contract:1',
+        id: 'UsersController',
+        executionKind: 'http.request',
+        capabilities: expect.arrayContaining(['http.server']),
       }),
     )
-    expect(graph.pipelines).toContainEqual(
+    expect(graph.routes).toContainEqual(
       expect.objectContaining({
-        contract: 'contract:1',
-        procedure: 'get',
-        protocol: 'http',
+        execution: 'UsersController',
+        name: 'get',
+        method: 'GET',
+        path: '/users/{id}',
       }),
     )
   })
@@ -167,9 +167,7 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(0)
-    expect(output.stdout.join('\n')).toContain(
-      'protocol: protocol:contract:1:get:http',
-    )
+    expect(output.stdout.join('\n')).toContain('http.request: UsersController')
   })
 
   it('GraphをMermaidで出力する', async () => {
@@ -189,9 +187,9 @@ describe('Loutre CLI', () => {
     ).toBe(0)
     const graph = output.stdout.join('\n')
     expect(graph).toContain('flowchart LR')
-    expect(graph).toContain('UsersController [implementation, application]')
-    expect(graph).toContain('UsersService [class, application]')
-    expect(graph).toContain('inject/probed')
+    expect(graph).toContain('UsersController')
+    expect(graph).toContain('UsersService')
+    expect(graph).toContain('injects')
   })
 
   it('Module名をMermaid nodeへ出力する', async () => {
@@ -209,7 +207,7 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(0)
-    expect(output.stdout.join('\n')).toContain('m0["UsersModule"]')
+    expect(output.stdout.join('\n')).toContain('n0["UsersModule"]')
   })
 
   it('DOT formatを受け付けない', async () => {
@@ -238,9 +236,10 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(1)
-    expect(output.stdout.join('\n')).toContain('BrokenStorage')
-    expect(output.stdout.join('\n')).toContain('UNRESOLVED')
-    expect(output.stderr.join('\n')).toContain('LUTRE_DI_UNRESOLVED')
+    expect(output.stdout.join('\n')).toContain('graph-probe.storage')
+    expect(output.stderr.join('\n')).toContain(
+      'LUTRE_PROVIDER_DEPENDENCY_MISSING',
+    )
   })
 
   it('Application host commandは提供しない', async () => {
@@ -279,6 +278,43 @@ describe('Loutre CLI', () => {
       const application = bootstrap({ application: built.default })
       await expect(application.init()).resolves.toBe(application)
       await application.close()
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('bundle済みApplication ModelとHost側Capability identityを共有する', async () => {
+    const output = io()
+    const directory = await mkdtemp(join(tmpdir(), 'loutre-bundle-capability-'))
+    try {
+      expect(
+        await runCli(
+          ['build', 'examples/hello-http/src/app.ts', '--out-dir', directory],
+          output.value,
+        ),
+      ).toBe(0)
+      const built = await import(
+        `${pathToFileURL(join(directory, 'application.mjs')).href}?test=${Date.now()}`
+      )
+      const application = createKernelApplication({
+        application: built.default,
+        capabilities: [bindHttpServer({ runtime: 'bundle-test' })],
+        environment: {},
+      })
+      await application.init()
+      try {
+        const response = await (
+          application as unknown as {
+            readonly http: { fetch(request: Request): Promise<Response> }
+          }
+        ).http.fetch(new Request('https://fixture.test/Loutre'))
+        expect(response.status).toBe(200)
+        await expect(response.json()).resolves.toEqual({
+          message: 'Hello, Loutre!',
+        })
+      } finally {
+        await application.close()
+      }
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

@@ -13,6 +13,7 @@ import {
   inject,
   hook,
   projectApplicationModel,
+  RuntimeCapabilityRegistry,
   runtimeCapability,
   type ExecutionDefinition,
   type ExecutionExtensionRuntimeContext,
@@ -173,6 +174,19 @@ describe('Application Model', () => {
       expect.objectContaining({ message: 'Kernel Loggerを利用しました' }),
     )
     await application.close()
+  })
+
+  it('Runtime Capability identityをbundle境界で共有できる', () => {
+    const bundled = runtimeCapability<ProbeDriver>('probe.bundle-safe')
+    const host = runtimeCapability<ProbeDriver>('probe.bundle-safe')
+    const driver: ProbeDriver = { invoke: async (name) => name }
+    const registry = new RuntimeCapabilityRegistry([
+      bindRuntimeCapability(host, driver),
+    ])
+
+    expect(bundled).not.toBe(host)
+    expect(bundled.identity).toBe(host.identity)
+    expect(registry.get(bundled)).toBe(driver)
   })
 
   it('compile済みcontributionをRuntimeとGraph projectionで共有する', async () => {

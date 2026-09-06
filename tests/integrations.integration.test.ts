@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { join, relative } from 'node:path'
 
 const invalidIntegrations = new Map([
-  ['integrations/graph-probe/src/app.ts', 'LUTRE_DI_UNRESOLVED'],
+  ['integrations/graph-probe/src/app.ts', 'LUTRE_PROVIDER_DEPENDENCY_MISSING'],
 ])
 
 const integrationEntries = readdirSync('integrations', { withFileTypes: true })
@@ -30,7 +30,7 @@ describe('integrations', () => {
     const expectedDiagnostic = invalidIntegrations.get(entry)
 
     if (expectedDiagnostic) {
-      it(`${entry} は意図したGraph診断を返す`, () => {
+      it(`${entry} は意図したApplication Model診断を返す`, () => {
         const result = checkIntegration(entry)
 
         expect(result.status).not.toBe(0)
@@ -39,11 +39,11 @@ describe('integrations', () => {
       continue
     }
 
-    it(`${entry} は有効なApplication Graphとして読み込める`, () => {
+    it(`${entry} は有効なApplication Modelとして読み込める`, () => {
       const result = checkIntegration(entry)
 
       expect(result.status).toBe(0)
-      expect(result.stdout).toContain('Loutre Application Graph is valid.')
+      expect(result.stdout).toContain('Loutre Application Model is valid.')
     })
   }
 })

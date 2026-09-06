@@ -1,11 +1,18 @@
 import {
   binding,
+  createKernelApplication,
   type ApplicationDefinition,
+  type ApplicationExtensionHostApis,
   type BootstrapArguments,
   type HasHttp,
   type HostBindingApplication,
   type InvocationBindingOptions,
+  type KernelHostedApplication,
 } from '../application/index.js'
+import {
+  applicationHasHost,
+  bindApplicationCapability,
+} from '../application/kernel-internal.js'
 import type { HttpProtocolExecution } from '../legacy-http/index.js'
 import {
   LOUTRE_VERSION,
@@ -17,12 +24,17 @@ import { serverUrl } from '../runtime/server-url.js'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
+type HasHttpExecutionExtension<TDefinition extends ApplicationDefinition> =
+  'http' extends keyof ApplicationExtensionHostApis<TDefinition> ? true : false
+
 type HttpApplication<TDefinition extends ApplicationDefinition> =
   IsAny<TDefinition> extends true
     ? TDefinition
     : HasHttp<TDefinition> extends true
       ? TDefinition
-      : never
+      : HasHttpExecutionExtension<TDefinition> extends true
+        ? TDefinition
+        : never
 
 type BunServer = {
   stop(closeActiveConnections?: boolean): void | Promise<void>
@@ -43,9 +55,14 @@ export interface BunListenerHandle {
   readonly port: number
 }
 
+type BunHostedApplication<TDefinition extends ApplicationDefinition> =
+  HasHttpExecutionExtension<TDefinition> extends true
+    ? KernelHostedApplication<TDefinition>
+    : HostBindingApplication<TDefinition>
+
 export type BunRuntimeApplication<
   TDefinition extends ApplicationDefinition = ApplicationDefinition,
-> = HostBindingApplication<TDefinition> & {
+> = BunHostedApplication<TDefinition> & {
   serve(options?: BunServeOptions): Promise<BunListenerHandle>
 }
 
@@ -79,23 +96,50 @@ async function create<const TDefinition extends ApplicationDefinition>(
       write: (value) => console.log(value),
     },
   )
-  const host = binding.host({
-    application: options.application,
-    environment: 'environment' in options ? options.environment : environment,
-    ...('arguments' in options ? { arguments: options.arguments } : {}),
-  } as unknown as InvocationBindingOptions<TDefinition>)
-  const http = 'http' in host ? (host.http as HttpProtocolExecution) : undefined
-  if (!http) {
-    await host.application.close()
-    throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: bunRuntime.create() requires an HTTP-capable Application.',
-    )
+  const usesHttpExecutionExtension = applicationHasHost(
+    options.application.model,
+    'http',
+  )
+
+  let application: BunRuntimeApplication<TDefinition>
+  let http: BunHttpRequestHandler
+  if (usesHttpExecutionExtension) {
+    const hosted = createKernelApplication({
+      application: options.application,
+      capabilities: [
+        bindApplicationCapability(options.application.model, 'http.server', {
+          runtime: 'bun',
+        }),
+      ],
+      environment: 'environment' in options ? options.environment : environment,
+      ...('arguments' in options ? { arguments: options.arguments } : {}),
+    })
+    await hosted.init()
+    application = hosted as BunRuntimeApplication<TDefinition>
+    http = (hosted as unknown as { readonly http: BunHttpRequestHandler }).http
+  } else {
+    const host = binding.host({
+      application: options.application,
+      environment: 'environment' in options ? options.environment : environment,
+      ...('arguments' in options ? { arguments: options.arguments } : {}),
+    } as unknown as InvocationBindingOptions<TDefinition>)
+    const legacyHttp =
+      'http' in host ? (host.http as HttpProtocolExecution) : undefined
+    if (!legacyHttp) {
+      await host.application.close()
+      throw new Error(
+        'LUTRE_RUNTIME_HTTP_REQUIRED: bunRuntime.create() requires an HTTP-capable Application.',
+      )
+    }
+    await host.application.init()
+    application = host.application as BunRuntimeApplication<TDefinition>
+    http = {
+      initialize: () => legacyHttp.initialize(),
+      fetch: (request) => legacyHttp.handle(request),
+    }
   }
 
-  await host.application.init()
-
-  const application = host.application as BunRuntimeApplication<TDefinition>
-  const closeApplication = host.application.close.bind(host.application)
+  const closeApplication = application.close.bind(application)
   let server: BunServer | undefined
   let removeShutdownHooks: (() => void) | undefined
   let serving = false
@@ -215,12 +259,17 @@ function isAddressInUseError(error: unknown): boolean {
   )
 }
 
-function createBunFetchDriver(application: HttpProtocolExecution) {
+interface BunHttpRequestHandler {
+  initialize?(): Promise<void>
+  fetch(request: Request): Promise<Response>
+}
+
+function createBunFetchDriver(application: BunHttpRequestHandler) {
   let initialization: Promise<void> | undefined
   return async (request: Request): Promise<Response> => {
-    initialization ??= application.initialize()
+    initialization ??= application.initialize?.() ?? Promise.resolve()
     await initialization
-    return application.handle(request)
+    return application.fetch(request)
   }
 }
 
