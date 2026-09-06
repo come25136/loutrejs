@@ -26,9 +26,7 @@ describe('HTTP ExtensionのOpenAPI CLI', () => {
         ).toEqual({ schema: { type: 'string' } })
       }
       if (example === 'cors') {
-        expect(document.paths['/messages'].options.responses['204']).toEqual({
-          description: 'ok',
-        })
+        expect(document.paths['/messages'].options).toBeUndefined()
         expect(
           document.paths['/messages'].post.requestBody.content[
             'application/json'
