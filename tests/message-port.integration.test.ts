@@ -1,12 +1,12 @@
 import { MessageChannel } from 'node:worker_threads'
-import { attachMessagePort } from '@loutrejs/loutre/message-port'
+import { attachMessagePort } from '@loutrejs/message-port'
 import { createLinkedEventsMessagePortApplication } from './helpers/linked-applications.js'
 
 describe('MessagePort streaming integration', () => {
   it('同じdomain streamをMessagePortの複数messageへadaptする', async () => {
-    const application = createLinkedEventsMessagePortApplication()
+    const application = await createLinkedEventsMessagePortApplication()
     const channel = new MessageChannel()
-    attachMessagePort(application, channel.port1)
+    attachMessagePort(application.messagePort, channel.port1)
     const messages: unknown[] = []
 
     const completed = new Promise<void>((resolve) => {
@@ -42,6 +42,6 @@ describe('MessagePort streaming integration', () => {
 
     channel.port1.close()
     channel.port2.close()
-    await application.shutdown('test')
+    await application.close('test')
   })
 })

@@ -12,25 +12,26 @@ import {
   queue,
   task,
 } from '@loutrejs/loutre'
-import { http } from '../../packages/loutre/src/legacy-http/index.js'
+import { http as legacyHttp } from '../../packages/loutre/src/legacy-http/index.js'
+import { http } from '@loutrejs/loutre/http'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
 const HealthContract = contract([
-  http({
+  legacyHttp({
     get: {
       method: 'GET',
       path: '/health',
       responses: { ok: { status: 200, body: z.string() } },
-      pipeline: [http.controller],
+      pipeline: [legacyHttp.controller],
     },
   }),
 ])
 const HealthHttp = implementation({
   name: 'HealthHttp',
   contract: HealthContract,
-  protocol: http,
+  protocol: legacyHttp,
   factory: () => ({
     get: (context) => context.response.ok({ body: 'ok' }),
   }),
@@ -41,6 +42,28 @@ const HttpModule = defineModule(() => ({
   implementations: [HealthHttp],
 }))
 const ImportedHttpModule = defineModule(() => ({ imports: [HttpModule()] }))
+const RuntimeHealthContract = http.contract({
+  get: {
+    method: 'GET',
+    path: '/health',
+    responses: { ok: { status: 200, body: z.string() } },
+  },
+})
+const RuntimeHealthHttp = http.implementation({
+  name: 'RuntimeHealthHttp',
+  contract: RuntimeHealthContract,
+  factory: () => ({
+    get: (context) => context.response.ok({ body: 'ok' }),
+  }),
+})
+const RuntimeHttpModule = defineModule(() => ({
+  environment: [AppEnv],
+  providers: [HealthService],
+  executions: [RuntimeHealthHttp],
+}))
+const ImportedRuntimeHttpModule = defineModule(() => ({
+  imports: [RuntimeHttpModule()],
+}))
 const WorkerModule = defineModule(() => ({}))
 class AppEnv extends defineEnv(
   z.object({ PORT: z.coerce.number().default(3000) }).transform((env) => ({
@@ -94,7 +117,10 @@ const orderConsumer = consume({
 const httpDefinition = defineApplication({ modules: [ImportedHttpModule()] })
 const httpApplication = bootstrap({ application: httpDefinition })
 httpApplication.fetch(new Request('http://localhost/health'))
-nodeRuntime.create({ application: httpDefinition }).then((app) => {
+const runtimeHttpDefinition = defineApplication({
+  modules: [ImportedRuntimeHttpModule()],
+})
+nodeRuntime.create({ application: runtimeHttpDefinition }).then((app) => {
   const env: AppEnv = app.get(AppEnv)
   const health: HealthService = app.get(HealthService)
   void env
@@ -106,10 +132,10 @@ nodeRuntime.create({ application: httpDefinition }).then((app) => {
     presentation: { version: '0.1.0' },
   })
 })
-bunRuntime.create({ application: httpDefinition }).then((app) => {
+bunRuntime.create({ application: runtimeHttpDefinition }).then((app) => {
   app.serve({ shutdownHooks: false })
 })
-denoRuntime.create({ application: httpDefinition }).then((app) => {
+denoRuntime.create({ application: runtimeHttpDefinition }).then((app) => {
   app.serve({ shutdownHooks: false })
 })
 // @ts-expect-error static serve APIは公開しない

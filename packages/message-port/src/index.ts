@@ -10,9 +10,18 @@ import {
   type StandardSchemaV1,
 } from '@loutrejs/loutre'
 
+export interface MessagePortServerStreamResponseDefinition {
+  readonly body: StandardSchemaV1
+  readonly stream: 'server'
+}
+
+export type MessagePortResponseDefinition =
+  | StandardSchemaV1
+  | MessagePortServerStreamResponseDefinition
+
 export interface MessagePortRouteDefinition {
   readonly input?: StandardSchemaV1
-  readonly responses: Readonly<Record<string, StandardSchemaV1>>
+  readonly responses: Readonly<Record<string, MessagePortResponseDefinition>>
 }
 
 export interface MessagePortContract<
@@ -32,10 +41,20 @@ export interface MessagePortResult<
   readonly value: TValue
 }
 
+type MessagePortResponseValue<TResponse extends MessagePortResponseDefinition> =
+  TResponse extends MessagePortServerStreamResponseDefinition
+    ? AsyncIterable<SchemaOutput<TResponse['body']>>
+    : TResponse extends StandardSchemaV1
+      ? SchemaOutput<TResponse>
+      : never
+
 type ResponseHelpers<TRoute extends MessagePortRouteDefinition> = {
   readonly [TVariant in keyof TRoute['responses'] & string]: (
-    value: SchemaOutput<TRoute['responses'][TVariant]>,
-  ) => MessagePortResult<TVariant, SchemaOutput<TRoute['responses'][TVariant]>>
+    value: MessagePortResponseValue<TRoute['responses'][TVariant]>,
+  ) => MessagePortResult<
+    TVariant,
+    MessagePortResponseValue<TRoute['responses'][TVariant]>
+  >
 }
 
 export interface MessagePortContext<
@@ -250,7 +269,7 @@ function createMessagePortRuntime(
         }
         return {
           ...result,
-          value: await validateSchema(schema, result.value),
+          value: await validateMessagePortResponse(schema, result.value),
         }
       } finally {
         lease.complete()
@@ -260,4 +279,101 @@ function createMessagePortRuntime(
       accepting = false
     },
   }
+}
+
+async function validateMessagePortResponse(
+  response: MessagePortResponseDefinition,
+  value: unknown,
+): Promise<unknown> {
+  if (isMessagePortServerStreamResponse(response)) {
+    if (!isAsyncIterable(value)) {
+      throw new TypeError('LUTRE_MESSAGE_PORT_STREAM_REQUIRED')
+    }
+    return validateMessagePortStream(response.body, value)
+  }
+  return validateSchema(response, value)
+}
+
+async function* validateMessagePortStream(
+  schema: StandardSchemaV1,
+  source: AsyncIterable<unknown>,
+): AsyncIterable<unknown> {
+  for await (const value of source) {
+    yield await validateSchema(schema, value)
+  }
+}
+
+function isMessagePortServerStreamResponse(
+  response: MessagePortResponseDefinition,
+): response is MessagePortServerStreamResponseDefinition {
+  return (
+    typeof response === 'object' &&
+    response !== null &&
+    'stream' in response &&
+    response.stream === 'server' &&
+    'body' in response
+  )
+}
+
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Symbol.asyncIterator in value &&
+    typeof value[Symbol.asyncIterator] === 'function'
+  )
+}
+
+export interface MessagePortLike {
+  postMessage(value: unknown): void
+  addEventListener(
+    type: 'message',
+    listener: (event: { readonly data: unknown }) => void,
+  ): void
+  start?(): void
+}
+
+export function attachMessagePort(
+  host: MessagePortHostApi,
+  port: MessagePortLike,
+): void {
+  port.addEventListener('message', async (event) => {
+    const request = event.data as {
+      readonly id: string
+      readonly procedure: string
+      readonly input?: unknown
+    }
+    try {
+      const result = await host.invoke(request.procedure, request.input)
+      if (isAsyncIterable(result.value)) {
+        for await (const value of result.value) {
+          port.postMessage({
+            id: request.id,
+            response: result.response,
+            value,
+            done: false,
+          })
+        }
+        port.postMessage({
+          id: request.id,
+          response: result.response,
+          done: true,
+        })
+      } else {
+        port.postMessage({
+          id: request.id,
+          response: result.response,
+          value: result.value,
+          done: true,
+        })
+      }
+    } catch (error) {
+      port.postMessage({
+        id: request.id,
+        error: error instanceof Error ? error.message : String(error),
+        done: true,
+      })
+    }
+  })
+  port.start?.()
 }

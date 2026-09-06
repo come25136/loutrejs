@@ -111,7 +111,9 @@ describe('Application Model identity regressions', () => {
       lifecycle: {
         onModuleInit: hook({
           inject: [],
-          run: () => events.push('hook:model'),
+          run: () => {
+            events.push('hook:model')
+          },
         }),
       },
     }))
@@ -128,7 +130,9 @@ describe('Application Model identity regressions', () => {
     mutable.definition.lifecycle = {
       onModuleInit: hook({
         inject: [],
-        run: () => events.push('hook:mutated'),
+        run: () => {
+          events.push('hook:mutated')
+        },
       }),
     }
 

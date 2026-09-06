@@ -32,7 +32,9 @@ describe('HTTP validate.body boundary', () => {
       name: 'before-body-validation',
       factory: () => async (context, next) => {
         observations.push(
-          context.input.body instanceof ReadableStream ? 'before:raw' : 'before:decoded',
+          context.input.body instanceof ReadableStream
+            ? 'before:raw'
+            : 'before:decoded',
         )
         expect(context.request.bodyUsed).toBe(false)
         await next()
@@ -42,7 +44,9 @@ describe('HTTP validate.body boundary', () => {
       name: 'after-body-validation',
       factory: () => async (context, next) => {
         observations.push(
-          context.input.body instanceof ReadableStream ? 'after:raw' : 'after:decoded',
+          context.input.body instanceof ReadableStream
+            ? 'after:raw'
+            : 'after:decoded',
         )
         expect(context.request.bodyUsed).toBe(true)
         await next()
@@ -195,7 +199,9 @@ describe('HTTP validate.body boundary', () => {
         }),
       )
       expect(malformed.status).toBe(400)
-      await expect(malformed.json()).resolves.toEqual({ error: 'Invalid request' })
+      await expect(malformed.json()).resolves.toEqual({
+        error: 'Invalid request',
+      })
 
       const invalid = await application.http.fetch(
         new Request('http://fixture.test/items', {
@@ -205,7 +211,9 @@ describe('HTTP validate.body boundary', () => {
         }),
       )
       expect(invalid.status).toBe(400)
-      await expect(invalid.json()).resolves.toEqual({ error: 'Validation failed' })
+      await expect(invalid.json()).resolves.toEqual({
+        error: 'Validation failed',
+      })
     } finally {
       await application.close()
     }
@@ -229,7 +237,9 @@ describe('HTTP validate.body boundary', () => {
           method: 'POST',
           path: '/invalid',
           request: {
-            headers: z.object({ 'content-type': z.literal('application/json') }),
+            headers: z.object({
+              'content-type': z.literal('application/json'),
+            }),
             body: z.object({ value: z.string() }),
           },
           middlewares: [validate.body, validate.body],

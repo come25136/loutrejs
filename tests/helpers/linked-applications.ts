@@ -1,9 +1,10 @@
-import {
-  createTestApplication,
-  createTestMessagePortExecution,
-} from './application.js'
+import { bootstrapApplication, defineApplication } from '@loutrejs/loutre'
+import { createTestApplication } from './application.js'
 import { UsersModule } from '../../integrations/http-crud/src/index.js'
-import { EventsModule } from '../../integrations/streaming/src/index.js'
+import {
+  EventsHttpModule,
+  EventsMessagePortModule,
+} from '../../integrations/streaming/src/index.js'
 import { silentLogger } from './silent-logger.js'
 
 export function createLinkedUsersApplication() {
@@ -15,11 +16,16 @@ export function createLinkedUsersApplication() {
 
 export function createLinkedEventsApplication() {
   return createTestApplication({
-    modules: [EventsModule()],
+    modules: [EventsHttpModule()],
     logger: silentLogger,
   })
 }
 
 export function createLinkedEventsMessagePortApplication() {
-  return createTestMessagePortExecution([EventsModule()], silentLogger)
+  return bootstrapApplication({
+    application: defineApplication({
+      modules: [EventsMessagePortModule()],
+      logger: silentLogger,
+    }),
+  })
 }

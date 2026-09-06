@@ -1,12 +1,6 @@
-import {
-  contract as legacyContract,
-  defineApplication,
-  defineModule,
-  implementation as legacyImplementation,
-  inject,
-} from '@loutrejs/loutre'
+import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
-import { messagePort as legacyMessagePort } from '@loutrejs/loutre/message-port'
+import { messagePort } from '@loutrejs/message-port'
 import { z } from 'zod'
 
 export interface DomainEvent {
@@ -52,42 +46,45 @@ export const EventsController = http.implementation({
   }),
 })
 
-export const EventsMessagePortContract = legacyContract([
-  legacyMessagePort({
-    subscribe: {
-      interaction: 'server-stream',
-      responses: {
-        events: {
-          body: EventSchema,
-          stream: 'server',
-        },
+export const EventsMessagePortContract = messagePort.contract({
+  subscribe: {
+    responses: {
+      events: {
+        body: EventSchema,
+        stream: 'server',
       },
-      pipeline: [legacyMessagePort.handler],
     },
-  }),
-])
+  },
+})
 
-export const EventsMessageHandler = legacyImplementation({
+export const EventsMessageHandler = messagePort.implementation({
   name: 'EventsMessageHandler',
   contract: EventsMessagePortContract,
-  protocol: legacyMessagePort,
   factory: (streams = inject(EventStreamService)) => ({
     subscribe(ctx) {
-      return ctx.message.events(streams.events())
+      return ctx.response.events(streams.events())
     },
   }),
 })
 
-export const EventsModule = defineModule(() => ({
-  name: 'EventsModule',
+export const EventsHttpModule = defineModule(() => ({
+  name: 'EventsHttpModule',
   description: 'HTTP server-stream integration',
   providers: [EventStreamService],
   executions: [EventsController],
-  implementations: [EventsMessageHandler],
 }))
 
-export function createEventsDefinition() {
-  return defineApplication({
-    modules: [EventsModule()],
-  })
+export const EventsMessagePortModule = defineModule(() => ({
+  name: 'EventsMessagePortModule',
+  description: 'MessagePort server-stream integration',
+  providers: [EventStreamService],
+  executions: [EventsMessageHandler],
+}))
+
+export function createEventsHttpDefinition() {
+  return defineApplication({ modules: [EventsHttpModule()] })
+}
+
+export function createEventsMessagePortDefinition() {
+  return defineApplication({ modules: [EventsMessagePortModule()] })
 }

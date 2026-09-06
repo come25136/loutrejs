@@ -82,7 +82,8 @@ async function create<const TDefinition extends ApplicationDefinition>(
   )
 
   if (
-    options.application.model.extensions.get(httpExecutionExtension) === undefined
+    options.application.model.extensions.get(httpExecutionExtension) ===
+    undefined
   ) {
     throw new Error(
       'LUTRE_RUNTIME_HTTP_REQUIRED: nodeRuntime.create() requires the HTTP Execution Extension.',

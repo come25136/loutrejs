@@ -6,13 +6,16 @@ import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { nodeRuntime } from '@loutrejs/node'
 import { UsersModule } from '../integrations/http-crud/src/index.js'
-import { EventsModule } from '../integrations/streaming/src/index.js'
+import { EventsMessagePortModule } from '../integrations/streaming/src/index.js'
 import { silentLogger } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>
   defineApplication({ modules: [UsersModule()], logger: silentLogger })
 const eventsDefinition = () =>
-  defineApplication({ modules: [EventsModule()], logger: silentLogger })
+  defineApplication({
+    modules: [EventsMessagePortModule()],
+    logger: silentLogger,
+  })
 
 describe('Runtime engine', () => {
   const startupOutput = vi

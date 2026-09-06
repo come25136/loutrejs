@@ -278,11 +278,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       await collectError(
         () =>
           this.#runHook(
-            lifecycleHookOf(
-              this.model,
-              module.id,
-              'beforeApplicationShutdown',
-            ),
+            lifecycleHookOf(this.model, module.id, 'beforeApplicationShutdown'),
           ),
         errors,
       )

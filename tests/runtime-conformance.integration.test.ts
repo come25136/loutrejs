@@ -9,13 +9,13 @@ import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-wo
 import { messagePort } from '@loutrejs/message-port'
 import { z } from 'zod'
 import { UsersModule } from '../integrations/http-crud/src/index.js'
-import { EventsModule } from '../integrations/streaming/src/index.js'
+import { EventsHttpModule } from '../integrations/streaming/src/index.js'
 import { silentLogger } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>
   defineApplication({ modules: [UsersModule()], logger: silentLogger })
 const eventsDefinition = () =>
-  defineApplication({ modules: [EventsModule()], logger: silentLogger })
+  defineApplication({ modules: [EventsHttpModule()], logger: silentLogger })
 
 describe('Runtime conformance harness', () => {
   afterEach(() => {

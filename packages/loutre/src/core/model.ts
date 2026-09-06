@@ -95,8 +95,7 @@ export interface ApplicationModelExtension<
   readonly executions: readonly ExecutionModelNode<CompiledOf<TExtension>>[]
 }
 
-export interface ApplicationModelExtensions
-  extends Iterable<ApplicationModelExtension> {
+export interface ApplicationModelExtensions extends Iterable<ApplicationModelExtension> {
   get<TExtension extends AnyExecutionExtension>(
     extension: TExtension,
   ): ApplicationModelExtension<TExtension> | undefined
