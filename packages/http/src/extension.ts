@@ -226,8 +226,11 @@ type ResponseHelpers<
   // Keep the mapped key as `keyof TResponses`: intersecting it with `string`
   // makes TypeScript lose the source property used by go-to-definition.
   readonly [TVariant in keyof TResponses]: TVariant extends string
-    ? TResponses[TVariant] extends infer TResponse extends HttpExecutionResponseDefinition
-      ? (value: ResponseValue<TResponse>) => DeclaredHttpResponseResult<TVariant, TResponse>
+    ? TResponses[TVariant] extends infer TResponse extends
+        HttpExecutionResponseDefinition
+      ? (
+          value: ResponseValue<TResponse>,
+        ) => DeclaredHttpResponseResult<TVariant, TResponse>
       : never
     : never
 }
