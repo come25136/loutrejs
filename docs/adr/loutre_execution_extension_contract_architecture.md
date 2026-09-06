@@ -225,18 +225,19 @@ Runtime Capabilityはplatform/runtime primitiveへのtyped requirementである�
 interface RuntimeCapability<TValue = unknown> {
   readonly kind: 'runtime-capability'
   readonly id: string
+  readonly identity: symbol
 }
 ```
 
 ### 7.1 identity
 
-Capability tokenの参照identityは**token object identity**とする。
+Capabilityの参照identityは**`id`から導出するglobal symbol identity**とする。
 
 ```ts
 const HTTP_SERVER = runtimeCapability<HttpServerDriver>('http.server')
 ```
 
-Requirementとbindingは同じtoken objectを共有する。
+`runtimeCapability(id)`は`Symbol.for('loutre.runtime-capability:' + id)`を`identity`として持つ。したがって、bundle/import境界の両側で同じCapabilityを別token objectとして再生成しても、同じ`id`なら同じ論理Capabilityとしてlookupできる。token object自体の参照identityには依存しない。
 
 `id`は次に利用するstable identifierである。
 
@@ -244,13 +245,13 @@ Requirementとbindingは同じtoken objectを共有する。
 Application Model node
 Graph IR
 diagnostic
-collision detection
+logical capability identity
 error message
 ```
 
-異なるCapability token objectが同じ`id`を使用した場合はcollisionとして拒否する。
+同じ`id`から作られたCapability tokenは同じ`identity`を共有するため、Runtime bindingも同じCapabilityとして扱う。同一identityへの複数bindingは`LUTRE_CAPABILITY_DUPLICATE_BINDING`として拒否する。Capability idはApplication/bundle境界を跨いで衝突しない名前を選ぶ。
 
-`Symbol(id)`のような第2の未使用identity fieldは持たない。
+`identity`はCoreがopaqueなlookup keyとして扱い、HTTP等の具体Capabilityによる分岐には利用しない。
 
 ### 7.2 binding
 

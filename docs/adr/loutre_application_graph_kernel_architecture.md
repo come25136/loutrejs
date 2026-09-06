@@ -110,7 +110,7 @@ active execution APIの具体的な語彙とabort/complete semanticsはExecution
 
 ExtensionはRuntimeが必要とするplatform primitiveをtyped capabilityとして要求できる。
 
-Capability tokenは**object identityが参照identity**であり、`id`はApplication Model・diagnostic・collision検出に使うstable identifierとする。同じcapabilityは定義箇所からtoken objectを共有して利用する。
+Capabilityの参照identityは`runtimeCapability(id)`が`Symbol.for()`で生成するstableなglobal symbol identityとする。`id`はApplication Model・Graph IR・diagnostic・論理Capability identityに使うstable identifierであり、bundle/import境界でtoken objectが複製されても同じ`id`なら同じCapabilityとして解決できる。Coreはこのidentityをopaqueなlookup keyとして扱う。
 
 ### 3.6 generic Layer
 
