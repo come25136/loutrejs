@@ -324,21 +324,17 @@ function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
   )
 }
 
-export interface MessagePortLike {
+export type MessagePortLike = {
   postMessage(value: unknown): void
-  addEventListener(
-    type: 'message',
-    listener: (event: { readonly data: unknown }) => void,
-  ): void
   start?(): void
-}
+} & Pick<EventTarget, 'addEventListener'>
 
 export function attachMessagePort(
   host: MessagePortHostApi,
   port: MessagePortLike,
 ): void {
   port.addEventListener('message', async (event) => {
-    const request = event.data as {
+    const request = (event as MessageEvent<unknown>).data as {
       readonly id: string
       readonly procedure: string
       readonly input?: unknown
