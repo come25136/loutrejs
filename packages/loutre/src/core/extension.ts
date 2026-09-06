@@ -7,7 +7,6 @@ declare const executionExtensionTypeInfo: unique symbol
 export interface RuntimeCapability<TValue = unknown> {
   readonly kind: 'runtime-capability'
   readonly id: string
-  readonly key: symbol
   readonly [runtimeCapabilityValue]?: TValue
 }
 
@@ -23,7 +22,6 @@ export function runtimeCapability<TValue>(
   return Object.freeze({
     kind: 'runtime-capability' as const,
     id,
-    key: Symbol(id),
   })
 }
 
