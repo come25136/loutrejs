@@ -9,8 +9,9 @@ import {
   type ExecutionKernelRuntime,
   type ExecutionLease,
   type LifecycleHook,
-  type ModuleInstance,
-  type ProviderDescriptor,
+  type LifecycleModelNode,
+  type ModuleModelNode,
+  type ProviderModelNode,
   type RuntimeCapabilityBinding,
   type TokenLike,
 } from '../core/index.js'
@@ -44,7 +45,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     ExecutionExtension,
     ExecutionExtensionRuntime
   >()
-  readonly #providerInstances = new Map<ModuleInstance, unknown[]>()
+  readonly #providerInstances = new Map<string, unknown[]>()
   readonly #activeExecutions = new Set<ActiveExecution>()
   readonly #idleWaiters = new Set<() => void>()
   readonly #environmentSource: unknown
@@ -151,10 +152,11 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   }
 
   async #initializeProviders(): Promise<void> {
-    for (const module of this.model.modules) {
+    for (const module of moduleNodes(this.model)) {
       const instances: unknown[] = []
-      this.#providerInstances.set(module, instances)
-      for (const provider of providersOfModule(module, this.model.providers)) {
+      this.#providerInstances.set(module.id, instances)
+      for (const providerNode of providerNodesOfModule(this.model, module.id)) {
+        const provider = providerNode.provider
         if (
           provider.scope !== 'application' ||
           provider.kind === 'environment' ||
@@ -166,13 +168,17 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         instances.push(instance)
         await callLifecycle(instance, 'onModuleInit')
       }
-      await this.#runHook(module.definition.lifecycle?.onModuleInit)
+      await this.#runHook(
+        lifecycleHookOf(this.model, module.id, 'onModuleInit'),
+      )
     }
-    for (const module of this.model.modules) {
-      for (const instance of this.#providerInstances.get(module) ?? []) {
+    for (const module of moduleNodes(this.model)) {
+      for (const instance of this.#providerInstances.get(module.id) ?? []) {
         await callLifecycle(instance, 'onApplicationBootstrap')
       }
-      await this.#runHook(module.definition.lifecycle?.onApplicationBootstrap)
+      await this.#runHook(
+        lifecycleHookOf(this.model, module.id, 'onApplicationBootstrap'),
+      )
     }
   }
 
@@ -259,9 +265,10 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   }
 
   async #cleanupProviders(signal: string | undefined, errors: unknown[]) {
-    for (const module of this.model.modules.toReversed()) {
+    const modules = moduleNodes(this.model).toReversed()
+    for (const module of modules) {
       for (const instance of (
-        this.#providerInstances.get(module) ?? []
+        this.#providerInstances.get(module.id) ?? []
       ).toReversed()) {
         await collectError(
           () => callLifecycle(instance, 'beforeApplicationShutdown', signal),
@@ -270,13 +277,19 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       }
       await collectError(
         () =>
-          this.#runHook(module.definition.lifecycle?.beforeApplicationShutdown),
+          this.#runHook(
+            lifecycleHookOf(
+              this.model,
+              module.id,
+              'beforeApplicationShutdown',
+            ),
+          ),
         errors,
       )
     }
-    for (const module of this.model.modules.toReversed()) {
+    for (const module of modules) {
       for (const instance of (
-        this.#providerInstances.get(module) ?? []
+        this.#providerInstances.get(module.id) ?? []
       ).toReversed()) {
         await collectError(
           () => callLifecycle(instance, 'onModuleDestroy'),
@@ -284,13 +297,16 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         )
       }
       await collectError(
-        () => this.#runHook(module.definition.lifecycle?.onModuleDestroy),
+        () =>
+          this.#runHook(
+            lifecycleHookOf(this.model, module.id, 'onModuleDestroy'),
+          ),
         errors,
       )
     }
-    for (const module of this.model.modules.toReversed()) {
+    for (const module of modules) {
       for (const instance of (
-        this.#providerInstances.get(module) ?? []
+        this.#providerInstances.get(module.id) ?? []
       ).toReversed()) {
         await collectError(
           () => callLifecycle(instance, 'onApplicationShutdown', signal),
@@ -298,7 +314,10 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         )
       }
       await collectError(
-        () => this.#runHook(module.definition.lifecycle?.onApplicationShutdown),
+        () =>
+          this.#runHook(
+            lifecycleHookOf(this.model, module.id, 'onApplicationShutdown'),
+          ),
         errors,
       )
     }
@@ -322,16 +341,33 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   }
 }
 
-function providersOfModule(
-  module: ModuleInstance,
-  providers: readonly ProviderDescriptor[],
-): readonly ProviderDescriptor[] {
-  const declared = new Set(
-    (module.definition.providers ?? []).map((provider) =>
-      typeof provider === 'function' ? provider : provider.provide,
-    ),
+function moduleNodes(model: ApplicationModel): readonly ModuleModelNode[] {
+  return model.nodes.filter(
+    (node): node is ModuleModelNode => node.kind === 'module',
   )
-  return providers.filter((provider) => declared.has(provider.provide))
+}
+
+function providerNodesOfModule(
+  model: ApplicationModel,
+  moduleId: string,
+): readonly ProviderModelNode[] {
+  return model.nodes.filter(
+    (node): node is ProviderModelNode =>
+      node.kind === 'provider' && node.moduleId === moduleId,
+  )
+}
+
+function lifecycleHookOf(
+  model: ApplicationModel,
+  moduleId: string,
+  phase: string,
+): LifecycleHook<any> | undefined {
+  return model.nodes.find(
+    (node): node is LifecycleModelNode =>
+      node.kind === 'lifecycle' &&
+      node.moduleId === moduleId &&
+      node.phase === phase,
+  )?.hook
 }
 
 async function collectError(
