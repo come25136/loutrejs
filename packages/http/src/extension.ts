@@ -197,16 +197,21 @@ type ResponseValue<TResponse extends HttpExecutionResponseDefinition> =
     : { readonly body?: undefined }) &
     HttpResultHeaders<ResponseHeadersOutput<TResponse>>
 
+type DeclaredHttpResponseResult<
+  TVariant extends string,
+  TResponse extends HttpExecutionResponseDefinition,
+> = HttpExecutionResult<
+  TVariant,
+  TResponse['body'] extends StandardSchemaV1
+    ? SchemaOutput<TResponse['body']>
+    : undefined,
+  ResponseHeadersOutput<TResponse>
+>
+
 type DeclaredHttpResult<
   TRoute extends HttpExecutionRouteDefinition,
   TVariant extends keyof TRoute['responses'] & string,
-> = HttpExecutionResult<
-  TVariant,
-  TRoute['responses'][TVariant]['body'] extends StandardSchemaV1
-    ? SchemaOutput<TRoute['responses'][TVariant]['body']>
-    : undefined,
-  ResponseHeadersOutput<TRoute['responses'][TVariant]>
->
+> = DeclaredHttpResponseResult<TVariant, TRoute['responses'][TVariant]>
 
 type DeclaredHttpResults<TRoute extends HttpExecutionRouteDefinition> = {
   [TVariant in keyof TRoute['responses'] & string]: DeclaredHttpResult<
@@ -215,10 +220,16 @@ type DeclaredHttpResults<TRoute extends HttpExecutionRouteDefinition> = {
   >
 }[keyof TRoute['responses'] & string]
 
-type ResponseHelpers<TRoute extends HttpExecutionRouteDefinition> = {
-  readonly [TVariant in keyof TRoute['responses'] & string]: (
-    value: ResponseValue<TRoute['responses'][TVariant]>,
-  ) => DeclaredHttpResult<TRoute, TVariant>
+type ResponseHelpers<
+  TResponses extends HttpExecutionRouteDefinition['responses'],
+> = {
+  // Keep the mapped key as `keyof TResponses`: intersecting it with `string`
+  // makes TypeScript lose the source property used by go-to-definition.
+  readonly [TVariant in keyof TResponses]: TVariant extends string
+    ? TResponses[TVariant] extends infer TResponse extends HttpExecutionResponseDefinition
+      ? (value: ResponseValue<TResponse>) => DeclaredHttpResponseResult<TVariant, TResponse>
+      : never
+    : never
 }
 
 export type HttpExecutionContext<
@@ -229,7 +240,7 @@ export type HttpExecutionContext<
   readonly query: RequestValue<TRoute['request'], 'query', URLSearchParams>
   readonly headers: RequestValue<TRoute['request'], 'headers', Headers>
   readonly body: RequestValue<TRoute['request'], 'body', undefined>
-  readonly response: ResponseHelpers<TRoute>
+  readonly response: ResponseHelpers<TRoute['responses']>
   readonly signal: AbortSignal
   readonly state: Readonly<HttpMiddlewareState<TRoute>>
 }
