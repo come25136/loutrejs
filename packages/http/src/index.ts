@@ -1,5 +1,5 @@
 export { cors } from './cors.js'
-export type { CorsOptions } from './cors.js'
+export type { CorsOptions, CorsOrigin } from './cors.js'
 export { basicAuth, bearerAuth } from './auth.js'
 export type {
   BasicAuthCredentials,
@@ -37,5 +37,11 @@ export type {
   HttpResponseHeadersWithDefaults,
   HttpServerDriver,
 } from './extension.js'
-export { matchHttpPath, normalizeHttpPath, parseHttpPath } from './path.js'
-export type { HttpPathSegment } from './path.js'
+export {
+  compareHttpPathSpecificity,
+  HttpPathDecodeError,
+  matchHttpPath,
+  normalizeHttpPath,
+  parseHttpPath,
+} from './path.js'
+export type { HttpPathSegment, PathParamNames } from './path.js'
