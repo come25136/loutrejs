@@ -15,6 +15,13 @@ export interface HttpAuthenticationFailure<TResponse extends string, TBody> {
   readonly body: TBody
 }
 
+type AuthenticationChallengeHeaders = {
+  readonly 'www-authenticate': string
+}
+
+type AuthenticationShortCircuit<TResponse extends string, TBody> =
+  HttpExecutionResult<TResponse, TBody, AuthenticationChallengeHeaders>
+
 export interface BasicAuthRuntime<
   TContribution extends object,
   TResponse extends string,
@@ -42,8 +49,13 @@ export function basicAuth<
   readonly factory: (
     ...dependencies: { [K in keyof TInject]: TokenValue<TInject[K]> }
   ) => BasicAuthRuntime<TContribution, TResponse, TUnauthorizedBody>
-}): HttpMiddleware<TContribution, TInject> {
-  const challenge = `Basic realm="${escapeChallengeValue(definition.realm)}", charset="UTF-8"`
+}): HttpMiddleware<
+  TContribution,
+  TInject,
+  HttpMiddlewareContext,
+  AuthenticationShortCircuit<TResponse, TUnauthorizedBody>
+> {
+  const challenge = formatBasicChallenge(definition.realm)
   return defineLayer<
     HttpMiddlewareContext,
     TContribution,
@@ -98,8 +110,13 @@ export function bearerAuth<
   readonly factory: (
     ...dependencies: { [K in keyof TInject]: TokenValue<TInject[K]> }
   ) => BearerAuthRuntime<TContribution, TResponse, TUnauthorizedBody>
-}): HttpMiddleware<TContribution, TInject> {
-  const challenge = `Bearer realm="${escapeChallengeValue(definition.realm)}"`
+}): HttpMiddleware<
+  TContribution,
+  TInject,
+  HttpMiddlewareContext,
+  AuthenticationShortCircuit<TResponse, TUnauthorizedBody>
+> {
+  const challenge = formatBearerChallenge(definition.realm)
   return defineLayer<
     HttpMiddlewareContext,
     TContribution,
@@ -130,16 +147,30 @@ export function bearerAuth<
 function authenticationFailure<TResponse extends string, TBody>(
   failure: HttpAuthenticationFailure<TResponse, TBody>,
   challenge: string,
-): HttpExecutionResult<
-  TResponse,
-  TBody,
-  { readonly 'www-authenticate': string }
-> {
+): AuthenticationShortCircuit<TResponse, TBody> {
   return {
     kind: 'http-result',
     response: failure.response,
     body: failure.body,
     headers: { 'www-authenticate': challenge },
+  }
+}
+
+function formatBasicChallenge(realm: string): string {
+  assertValidRealm(realm, 'Basic')
+  return `Basic realm="${escapeChallengeValue(realm)}", charset="UTF-8"`
+}
+
+function formatBearerChallenge(realm: string): string {
+  assertValidRealm(realm, 'Bearer')
+  return `Bearer realm="${escapeChallengeValue(realm)}"`
+}
+
+function assertValidRealm(realm: string, scheme: 'Basic' | 'Bearer'): void {
+  if (realm.length === 0 || /[\u0000-\u001f\u007f]/.test(realm)) {
+    throw new TypeError(
+      `${scheme} authentication realm cannot be empty or contain control characters`,
+    )
   }
 }
 
