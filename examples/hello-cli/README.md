@@ -1,6 +1,6 @@
 # Hello CLI Example
 
-A minimal CLI application where the Host parses command-line arguments, binds Application Arguments, and runs a public `Task` once. Loutre itself does not interpret CLI syntax.
+A minimal CLI application where the Host parses command-line arguments, binds Application Arguments, and runs a public Task once. Loutre itself does not interpret CLI syntax.
 
 From this example directory, run:
 
@@ -16,4 +16,4 @@ Hello, World!
 Hello, Loutre!
 ```
 
-`src/main.ts` builds the Host with Node.js `parseArgs()`, then calls `app.run(hello)` after `bootstrap({ application, arguments })`.
+`src/main.ts` parses arguments with Node.js `parseArgs()`, starts the Application with `bootstrapApplication({ application, arguments })`, then invokes the Task through the Tasks Extension Host API with `app.tasks.run(hello)`.
