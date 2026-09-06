@@ -25,6 +25,7 @@ export interface GraphNodeIR {
   readonly capabilities?: readonly string[]
   readonly extension?: {
     readonly name: string
+    readonly hostNamespace?: string
     readonly metadata?: JsonValue
   }
   readonly attributes?: Readonly<Record<string, JsonValue>>
@@ -151,6 +152,9 @@ function projectExtensionGroup<TExtension extends AnyExecutionExtension>(
       ...projectExecutionBase(execution),
       extension: {
         name: group.extension.name,
+        ...(group.extension.host === undefined
+          ? {}
+          : { hostNamespace: group.extension.host.namespace }),
         ...(metadata === undefined ? {} : { metadata }),
       },
     }
