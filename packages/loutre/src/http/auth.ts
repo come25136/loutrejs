@@ -15,6 +15,28 @@ export interface HttpAuthenticationFailure<TResponse extends string, TBody> {
   readonly body: TBody
 }
 
+export type BasicAuthUnauthorized<
+  TResponse extends string,
+  TBody,
+> = HttpAuthenticationFailure<TResponse, TBody>
+
+export type BearerAuthUnauthorized<
+  TResponse extends string,
+  TBody,
+> = HttpAuthenticationFailure<TResponse, TBody>
+
+export interface BasicAuthContext {
+  readonly input: {
+    readonly headers: Readonly<Record<string, string | undefined>>
+  }
+}
+
+export interface BearerAuthContext {
+  readonly input: {
+    readonly headers: Readonly<Record<string, string | undefined>>
+  }
+}
+
 type AuthenticationChallengeHeaders = {
   readonly 'www-authenticate': string
 }
@@ -23,6 +45,20 @@ type AuthenticationShortCircuit<
   TResponse extends string,
   TBody,
 > = HttpExecutionResult<TResponse, TBody, AuthenticationChallengeHeaders>
+
+export interface BasicAuthDefinition<
+  TContribution extends object,
+  TResponse extends string,
+  TUnauthorizedBody,
+> {
+  readonly name?: string
+  readonly realm: string
+  readonly factory: () => BasicAuthRuntime<
+    TContribution,
+    TResponse,
+    TUnauthorizedBody
+  >
+}
 
 export interface BasicAuthRuntime<
   TContribution extends object,
@@ -43,15 +79,9 @@ export function basicAuth<
   const TContribution extends object,
   const TResponse extends string,
   TUnauthorizedBody,
->(definition: {
-  readonly name?: string
-  readonly realm: string
-  readonly factory: () => BasicAuthRuntime<
-    TContribution,
-    TResponse,
-    TUnauthorizedBody
-  >
-}): HttpMiddleware<
+>(
+  definition: BasicAuthDefinition<TContribution, TResponse, TUnauthorizedBody>,
+): HttpMiddleware<
   TContribution,
   HttpMiddlewareContext,
   AuthenticationShortCircuit<TResponse, TUnauthorizedBody>
@@ -80,6 +110,20 @@ export function basicAuth<
   )
 }
 
+export interface BearerAuthDefinition<
+  TContribution extends object,
+  TResponse extends string,
+  TUnauthorizedBody,
+> {
+  readonly name?: string
+  readonly realm: string
+  readonly factory: () => BearerAuthRuntime<
+    TContribution,
+    TResponse,
+    TUnauthorizedBody
+  >
+}
+
 export interface BearerAuthRuntime<
   TContribution extends object,
   TResponse extends string,
@@ -99,15 +143,9 @@ export function bearerAuth<
   const TContribution extends object,
   const TResponse extends string,
   TUnauthorizedBody,
->(definition: {
-  readonly name?: string
-  readonly realm: string
-  readonly factory: () => BearerAuthRuntime<
-    TContribution,
-    TResponse,
-    TUnauthorizedBody
-  >
-}): HttpMiddleware<
+>(
+  definition: BearerAuthDefinition<TContribution, TResponse, TUnauthorizedBody>,
+): HttpMiddleware<
   TContribution,
   HttpMiddlewareContext,
   AuthenticationShortCircuit<TResponse, TUnauthorizedBody>

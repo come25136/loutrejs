@@ -33,3 +33,5 @@ export function cors(options: CorsOptions = {}) {
   registerCorsPolicy(middleware, policy)
   return middleware
 }
+
+export type CorsLayerDescriptor = ReturnType<typeof cors>

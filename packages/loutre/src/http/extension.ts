@@ -49,6 +49,19 @@ export interface HttpExecutionRequestDefinition {
 export type HttpHeaderValue = string | readonly string[]
 export type HttpHeaders = Readonly<Record<string, HttpHeaderValue | undefined>>
 
+export interface HttpErrorMatcher<TError extends { readonly data: unknown }> {
+  is(error: unknown): error is TError
+}
+
+export interface HttpErrorMapping<
+  TError extends { readonly data: unknown } = { readonly data: unknown },
+  TResult = unknown,
+> {
+  readonly kind: 'http-error-mapping'
+  readonly definition: HttpErrorMatcher<TError>
+  readonly map: (error: TError) => TResult | Promise<TResult>
+}
+
 export interface HttpResponseHeadersWithDefaults<
   TSchema extends StandardSchemaV1 = StandardSchemaV1,
 > {
@@ -63,16 +76,24 @@ export type HttpResponseHeadersDefinition =
 
 export interface HttpExecutionResponseDefinition {
   readonly status: number
+  readonly description?: string
   readonly body?: StandardSchemaV1
   readonly headers?: HttpResponseHeadersDefinition
+  readonly error?: HttpErrorMapping<any, any>
+  readonly stream?: 'server'
 }
 
 export interface HttpExecutionRouteDefinition {
   readonly method: string
   readonly path: string
+  readonly summary?: string
+  readonly description?: string
+  readonly tags?: readonly string[]
+  readonly deprecated?: boolean
   readonly request?: HttpExecutionRequestDefinition
   readonly responses: Readonly<Record<string, HttpExecutionResponseDefinition>>
   readonly middlewares?: readonly AnyHttpMiddleware[]
+  readonly interaction?: 'unary' | 'server-stream'
 }
 
 type AnyHttpMiddleware = GenericLayer<any, any, HttpExecutionResult>
@@ -196,9 +217,23 @@ export type HttpExecutionResult<
   readonly body: TBody
 } & HttpResultHeaders<THeaders>
 
+export type HttpResponseResult<TBody, THeaders = unknown> = {
+  readonly body: TBody
+} & HttpResultHeaders<THeaders>
+
+type ResponseBodyOutput<TResponse extends HttpExecutionResponseDefinition> =
+  TResponse extends {
+    readonly stream: 'server'
+    readonly body: infer TBody extends StandardSchemaV1
+  }
+    ? AsyncIterable<SchemaOutput<TBody>>
+    : TResponse['body'] extends StandardSchemaV1
+      ? SchemaOutput<TResponse['body']>
+      : undefined
+
 type ResponseValue<TResponse extends HttpExecutionResponseDefinition> =
   (TResponse['body'] extends StandardSchemaV1
-    ? { readonly body: SchemaOutput<TResponse['body']> }
+    ? { readonly body: ResponseBodyOutput<TResponse> }
     : { readonly body?: undefined }) &
     HttpResultHeaders<ResponseHeadersOutput<TResponse>>
 
@@ -207,9 +242,7 @@ type DeclaredHttpResponseResult<
   TResponse extends HttpExecutionResponseDefinition,
 > = HttpExecutionResult<
   TVariant,
-  TResponse['body'] extends StandardSchemaV1
-    ? SchemaOutput<TResponse['body']>
-    : undefined,
+  ResponseBodyOutput<TResponse>,
   ResponseHeadersOutput<TResponse>
 >
 
@@ -437,10 +470,16 @@ type IsResponseStatusCompatible<TResponse> =
   TResponse extends HttpExecutionResponseDefinition
     ? IsValidHttpResponseStatus<TResponse['status']> extends true
       ? IsBodylessHttpStatus<TResponse['status']> extends true
-        ? TResponse extends { readonly body: StandardSchemaV1 }
+        ? TResponse extends
+            | { readonly body: StandardSchemaV1 }
+            | { readonly stream: 'server' }
           ? false
           : true
-        : true
+        : TResponse extends { readonly stream: 'server' }
+          ? TResponse extends { readonly body: StandardSchemaV1 }
+            ? true
+            : false
+          : true
       : false
     : false
 
@@ -471,6 +510,34 @@ type AreResponseHeadersSchemasCompatible<
   [TVariant in keyof TResponses]: IsResponseHeadersSchemaCompatible<
     TResponses[TVariant]
   >
+}[keyof TResponses]
+  ? false
+  : true
+
+type ErrorMappingResult<TResponse> = TResponse extends {
+  readonly error: infer TMapping extends HttpErrorMapping<any, any>
+}
+  ? Awaited<ReturnType<TMapping['map']>>
+  : never
+
+type IsErrorMappingCompatible<TResponse> =
+  TResponse extends HttpExecutionResponseDefinition
+    ? TResponse extends { readonly error: HttpErrorMapping<any, any> }
+      ? TResponse extends { readonly body: StandardSchemaV1 }
+        ? ErrorMappingResult<TResponse> extends HttpResponseResult<
+            ResponseBodyOutput<TResponse>,
+            ResponseHeadersOutput<TResponse>
+          >
+          ? true
+          : false
+        : false
+      : true
+    : false
+
+type AreErrorMappingsCompatible<
+  TResponses extends HttpExecutionRouteDefinition['responses'],
+> = false extends {
+  [TVariant in keyof TResponses]: IsErrorMappingCompatible<TResponses[TVariant]>
 }[keyof TResponses]
   ? false
   : true
@@ -536,7 +603,9 @@ type AreMiddlewareShortCircuitsCompatible<
 type HttpRouteConstraint<TRoute extends HttpExecutionRouteDefinition> =
   (AreResponseStatusesCompatible<TRoute['responses']> extends true
     ? AreResponseHeadersSchemasCompatible<TRoute['responses']> extends true
-      ? unknown
+      ? AreErrorMappingsCompatible<TRoute['responses']> extends true
+        ? unknown
+        : { readonly responses: never }
       : { readonly responses: never }
     : { readonly responses: never }) &
     (TRoute['request'] extends { readonly body: StandardSchemaV1 }
@@ -569,6 +638,35 @@ type HttpContractConstraint<
   TRoutes extends Readonly<Record<string, HttpExecutionRouteDefinition>>,
 > = {
   readonly [TName in keyof TRoutes]: HttpRouteConstraint<TRoutes[TName]>
+}
+
+type ErrorOf<TDefinition> =
+  TDefinition extends HttpErrorMatcher<infer TError> ? TError : never
+
+export function httpError<
+  TDefinition extends HttpErrorMatcher<{ readonly data: unknown }>,
+>(
+  definition: TDefinition,
+): HttpErrorMapping<
+  ErrorOf<TDefinition>,
+  { readonly body: ErrorOf<TDefinition>['data'] }
+>
+export function httpError<
+  TDefinition extends HttpErrorMatcher<{ readonly data: unknown }>,
+  const TResult,
+>(
+  definition: TDefinition,
+  map: (error: ErrorOf<TDefinition>) => TResult | Promise<TResult>,
+): HttpErrorMapping<ErrorOf<TDefinition>, TResult>
+export function httpError(
+  definition: HttpErrorMatcher<{ readonly data: unknown }>,
+  map?: (error: { readonly data: unknown }) => unknown | Promise<unknown>,
+): HttpErrorMapping {
+  return Object.freeze({
+    kind: 'http-error-mapping',
+    definition,
+    map: map ?? ((error) => ({ body: error.data })),
+  })
 }
 
 export function defineHttpContract<
@@ -633,6 +731,7 @@ export const executionHttp = Object.freeze({
   contract: defineHttpContract,
   implementation: defineHttpImplementation,
   middleware: defineHttpMiddleware,
+  error: httpError,
   extension: httpExecutionExtension,
   serverCapability: HTTP_SERVER,
   bindServer: bindHttpServer,
@@ -718,10 +817,15 @@ function assertValidHttpRouteDefinition(
       (response.status === 204 ||
         response.status === 205 ||
         response.status === 304) &&
-      response.body
+      (response.body || response.stream === 'server')
     ) {
       throw new TypeError(
-        `HTTP response ${name} with status ${response.status} cannot declare a body.`,
+        `HTTP response ${name} with status ${response.status} cannot declare a body or stream.`,
+      )
+    }
+    if (response.stream === 'server' && !response.body) {
+      throw new TypeError(
+        `HTTP server-stream response ${name} must declare a body schema.`,
       )
     }
   }
@@ -831,6 +935,14 @@ function createHttpExtensionRuntime(
 
       const lease = applicationRuntime.beginExecution()
       const abortRequest = () => lease.abort(request.signal.reason)
+      let executionOwnedByStream = false
+      let executionFinished = false
+      const finishExecution = () => {
+        if (executionFinished) return
+        executionFinished = true
+        request.signal.removeEventListener('abort', abortRequest)
+        lease.complete()
+      }
       request.signal.addEventListener('abort', abortRequest, { once: true })
       if (request.signal.aborted) abortRequest()
       try {
@@ -890,17 +1002,39 @@ function createHttpExtensionRuntime(
               state: middlewareContext.state,
             } as HttpExecutionContext),
         })
-        return complete(
-          await finalizeHttpResult(match.route.definition, result),
+        const finalized = await finalizeHttpResult(
+          match.route.definition,
+          result,
+          lease.signal,
+          finishExecution,
         )
-      } catch {
+        executionOwnedByStream = finalized.streaming
+        return complete(finalized.response)
+      } catch (error) {
+        try {
+          const mapped = await mapDeclaredError(match.route.definition, error)
+          if (mapped) {
+            const finalized = await finalizeHttpResult(
+              match.route.definition,
+              mapped,
+              lease.signal,
+              finishExecution,
+            )
+            executionOwnedByStream = finalized.streaming
+            return applyFrameworkHeadersToResponse(
+              finalized.response,
+              await safeCorsHeaders(match.route.middlewares, request),
+            )
+          }
+        } catch {
+          // Error mapping/finalization failures are exposed only as generic 500s.
+        }
         return applyFrameworkHeadersToResponse(
           Response.json({ error: 'Internal Server Error' }, { status: 500 }),
           await safeCorsHeaders(match.route.middlewares, request),
         )
       } finally {
-        request.signal.removeEventListener('abort', abortRequest)
-        lease.complete()
+        if (!executionOwnedByStream) finishExecution()
       }
     },
   }
@@ -1111,17 +1245,21 @@ class HttpUnsupportedMediaTypeError extends Error {
   }
 }
 
+interface FinalizedHttpResult {
+  readonly response: Response
+  readonly streaming: boolean
+}
+
 async function finalizeHttpResult(
   route: HttpExecutionRouteDefinition,
   result: HttpExecutionResult,
-): Promise<Response> {
+  signal: AbortSignal,
+  completeExecution: () => void,
+): Promise<FinalizedHttpResult> {
   const response = route.responses[result.response]
   if (!response) {
     throw new Error(`LUTRE_HTTP_RESPONSE_UNDECLARED: ${result.response}`)
   }
-  const body = response.body
-    ? await validateSchema(response.body, result.body)
-    : undefined
   const responseHeaders = await validateResponseHeaders(
     responseHeadersSchema(response.headers),
     result.headers,
@@ -1134,8 +1272,37 @@ async function finalizeHttpResult(
     headers,
     (result as HttpExecutionResultWithFrameworkHeaders)[httpFrameworkHeaders],
   )
+
+  if (response.stream === 'server') {
+    if (!response.body || !isAsyncIterable(result.body)) {
+      throw new Error('Server-stream response requires an AsyncIterable body')
+    }
+    applyResponseHeaders(headers, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache',
+    })
+    return {
+      response: new Response(
+        createServerSentEventStream(
+          result.body,
+          response.body,
+          signal,
+          completeExecution,
+        ),
+        { status: response.status, headers },
+      ),
+      streaming: true,
+    }
+  }
+
+  const body = response.body
+    ? await validateSchema(response.body, result.body)
+    : undefined
   if (body === undefined) {
-    return new Response(null, { status: response.status, headers })
+    return {
+      response: new Response(null, { status: response.status, headers }),
+      streaming: false,
+    }
   }
   if (
     typeof body === 'string' ||
@@ -1146,15 +1313,118 @@ async function finalizeHttpResult(
     body instanceof URLSearchParams ||
     body instanceof ReadableStream
   ) {
-    return new Response(body as BodyInit, { status: response.status, headers })
+    return {
+      response: new Response(body as BodyInit, {
+        status: response.status,
+        headers,
+      }),
+      streaming: false,
+    }
   }
   if (!headers.has('content-type')) {
     headers.set('content-type', 'application/json; charset=utf-8')
   }
-  return new Response(JSON.stringify(body), {
-    status: response.status,
-    headers,
+  return {
+    response: new Response(JSON.stringify(body), {
+      status: response.status,
+      headers,
+    }),
+    streaming: false,
+  }
+}
+
+function createServerSentEventStream(
+  source: AsyncIterable<unknown>,
+  schema: StandardSchemaV1,
+  signal: AbortSignal,
+  completeExecution: () => void,
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder()
+  const iterator = source[Symbol.asyncIterator]()
+  let finished = false
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined
+
+  const markFinished = () => {
+    if (finished) return false
+    finished = true
+    signal.removeEventListener('abort', abort)
+    return true
+  }
+  const abort = () => {
+    if (!markFinished()) return
+    void Promise.resolve(iterator.return?.(signal.reason)).finally(() => {
+      controller?.error(signal.reason ?? new Error('HTTP request was aborted'))
+      completeExecution()
+    })
+  }
+
+  return new ReadableStream<Uint8Array>({
+    start(value) {
+      controller = value
+      if (signal.aborted) abort()
+      else signal.addEventListener('abort', abort, { once: true })
+    },
+    async pull(value) {
+      if (finished) return
+      try {
+        const next = await iterator.next()
+        if (next.done) {
+          if (markFinished()) {
+            value.close()
+            completeExecution()
+          }
+          return
+        }
+        const item = await validateSchema(schema, next.value)
+        value.enqueue(encoder.encode(`data:${JSON.stringify(item)}\n\n`))
+      } catch (error) {
+        if (markFinished()) {
+          value.error(error)
+          completeExecution()
+        }
+      }
+    },
+    async cancel(reason) {
+      if (!markFinished()) return
+      try {
+        await iterator.return?.(reason)
+      } finally {
+        completeExecution()
+      }
+    },
   })
+}
+
+async function mapDeclaredError(
+  route: HttpExecutionRouteDefinition,
+  error: unknown,
+): Promise<HttpExecutionResult | undefined> {
+  for (const [responseName, response] of Object.entries(route.responses)) {
+    const mapping = response.error
+    if (!mapping?.definition.is(error)) continue
+    const mapped = await mapping.map(error)
+    if (typeof mapped !== 'object' || mapped === null || !('body' in mapped)) {
+      throw new Error('HTTP error mapping must return a body')
+    }
+    return {
+      kind: 'http-result',
+      response: responseName,
+      body: mapped.body,
+      ...('headers' in mapped
+        ? { headers: mapped.headers as HttpHeaders }
+        : {}),
+    }
+  }
+  return undefined
+}
+
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Symbol.asyncIterator in value &&
+    typeof value[Symbol.asyncIterator] === 'function'
+  )
 }
 
 async function validateResponseHeaders(
