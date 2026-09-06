@@ -71,13 +71,56 @@ http.contract(nonStringParamInput)
 
 const authentication = basicAuth({
   realm: 'Loutre',
-  state: type<{ currentUser: { readonly id: string } }>(),
   factory: () => ({
     authenticate: () => ({ currentUser: { id: 'user-1' } }),
     unauthorized: () => ({
       response: 'unauthorized' as const,
       body: { error: 'Authentication required' },
     }),
+  }),
+})
+
+interface ExplicitAuthState {
+  readonly currentUser: { readonly id: string }
+}
+
+const explicitlyTypedAuthentication = basicAuth({
+  realm: 'Loutre Explicit',
+  factory: () => ({
+    authenticate: (): ExplicitAuthState => ({
+      currentUser: { id: 'user-explicit' },
+    }),
+    unauthorized: () => ({
+      response: 'unauthorized-explicit' as const,
+      body: { error: 'Authentication required' },
+    }),
+  }),
+})
+
+const explicitlyTypedContract = http.contract({
+  profile: {
+    method: 'GET',
+    path: '/explicit-profile',
+    middlewares: [explicitlyTypedAuthentication],
+    responses: {
+      ok: { status: 204 },
+      'unauthorized-explicit': {
+        status: 401,
+        body: z.object({ error: z.string() }),
+        headers: z.object({ 'www-authenticate': z.string() }),
+      },
+    },
+  },
+})
+
+http.implementation({
+  contract: explicitlyTypedContract,
+  factory: () => ({
+    profile: (context) => {
+      const id: string = context.state.currentUser.id
+      void id
+      return context.response.ok({})
+    },
   }),
 })
 

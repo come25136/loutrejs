@@ -286,9 +286,6 @@ describe('HTTP Execution Extension', () => {
     const authentication = basicAuth({
       name: 'profile.basic-auth',
       realm: 'Loutre Test',
-      state: type<{
-        currentUser: { readonly id: string; readonly name: string }
-      }>(),
       factory: (users = inject(UserRepository)) => ({
         authenticate({ username, password }) {
           const currentUser = users.authenticate(username, password)
@@ -363,7 +360,6 @@ describe('HTTP Execution Extension', () => {
   it('Bearer schemeを大小文字に依存せず解釈する', async () => {
     const authentication = bearerAuth({
       realm: 'Loutre Test',
-      state: type<{ authenticated: boolean }>(),
       factory: () => ({
         authenticate: (token: string) =>
           token === 'valid-token' ? { authenticated: true } : undefined,

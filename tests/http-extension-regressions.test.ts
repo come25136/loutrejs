@@ -4,7 +4,6 @@ import {
   bootstrapApplication,
   defineApplication,
   defineModule,
-  type,
 } from '@loutrejs/loutre'
 import {
   basicAuth,
@@ -269,7 +268,6 @@ describe('HTTP Execution Extension regression', () => {
     expect(() =>
       basicAuth({
         realm: 'bad\r\nrealm',
-        state: type<{}>(),
         factory: () => ({
           authenticate: () => undefined,
           unauthorized: () => ({ response: 'unauthorized', body: undefined }),
