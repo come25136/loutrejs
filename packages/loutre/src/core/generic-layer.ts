@@ -92,10 +92,14 @@ export function composeLayers<TContext extends object, TOutcome>(options: {
           )
         }
         called = true
-        continuationResult = await dispatch(index + 1, {
-          ...state,
-          ...contribution,
-        })
+        continuationResult = await dispatch(
+          index + 1,
+          mergeStateContribution(
+            options.layers[index]!.name,
+            state,
+            contribution,
+          ),
+        )
         continuationCompleted = true
       },
     )
@@ -106,4 +110,54 @@ export function composeLayers<TContext extends object, TOutcome>(options: {
     return runtimeResult as TOutcome
   }
   return dispatch(0, {})
+}
+
+function mergeStateContribution(
+  layerName: string,
+  state: Readonly<Record<string, unknown>>,
+  contribution: unknown,
+): Readonly<Record<string, unknown>> {
+  if (!isPlainObject(contribution)) {
+    throw new Error(
+      `LUTRE_LAYER_STATE_INVALID: Layer ${layerName} must pass a plain State contribution to next().`,
+    )
+  }
+
+  const nextState: Record<string, unknown> = { ...state }
+  for (const [namespace, payload] of Object.entries(contribution)) {
+    if (namespace === '__proto__') {
+      throw new Error(
+        `LUTRE_LAYER_STATE_RESERVED: Layer ${layerName} cannot contribute reserved State namespace ${namespace}.`,
+      )
+    }
+    if (!Object.hasOwn(nextState, namespace)) {
+      nextState[namespace] = payload
+      continue
+    }
+
+    const current = nextState[namespace]
+    if (!isPlainObject(current) || !isPlainObject(payload)) {
+      throw new Error(
+        `LUTRE_LAYER_STATE_OVERWRITE: Layer ${layerName} cannot overwrite existing State namespace ${namespace}.`,
+      )
+    }
+
+    for (const key of Object.keys(payload)) {
+      if (Object.hasOwn(current, key)) {
+        throw new Error(
+          `LUTRE_LAYER_STATE_OVERWRITE: Layer ${layerName} cannot overwrite existing State property ${namespace}.${key}.`,
+        )
+      }
+    }
+    nextState[namespace] = { ...current, ...payload }
+  }
+  return nextState
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
 }

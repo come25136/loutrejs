@@ -150,3 +150,26 @@ http.contract({
     middlewares: [authentication],
   },
 })
+
+const rawInputContract = http.contract({
+  inspect: {
+    method: 'GET',
+    path: '/inspect',
+    responses: { ok: { status: 204 } },
+  },
+})
+
+http.implementation({
+  contract: rawInputContract,
+  factory: () => ({
+    inspect: (context) => {
+      const queryValue: string | readonly string[] | undefined =
+        context.input.query.tag
+      const headerValue: string | undefined =
+        context.input.headers['content-type']
+      void queryValue
+      void headerValue
+      return context.response.ok({})
+    },
+  }),
+})

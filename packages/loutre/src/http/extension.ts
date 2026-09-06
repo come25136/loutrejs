@@ -134,6 +134,11 @@ type RequestValue<
     : TFallback
   : TFallback
 
+type RawHttpQuery = Readonly<
+  Record<string, string | readonly string[] | undefined>
+>
+type RawHttpRequestHeaders = Readonly<Record<string, string | undefined>>
+
 type HttpParamsValue<
   TRequest extends HttpExecutionRequestDefinition | undefined,
 > = TRequest extends { readonly params: infer TParams }
@@ -240,8 +245,12 @@ export type HttpExecutionContext<
 > = {
   readonly input: {
     readonly params: HttpParamsValue<TRoute['request']>
-    readonly query: RequestValue<TRoute['request'], 'query', URLSearchParams>
-    readonly headers: RequestValue<TRoute['request'], 'headers', Headers>
+    readonly query: RequestValue<TRoute['request'], 'query', RawHttpQuery>
+    readonly headers: RequestValue<
+      TRoute['request'],
+      'headers',
+      RawHttpRequestHeaders
+    >
     readonly body: RequestValue<TRoute['request'], 'body', undefined>
   }
   readonly response: ResponseHelpers<TRoute['responses']>
@@ -953,10 +962,10 @@ async function createHttpContext(
   const rawQuery = decodeQuery(url.searchParams)
   const query = definition?.query
     ? await validateSchema(definition.query, rawQuery)
-    : url.searchParams
+    : rawQuery
   const headers = definition?.headers
     ? await validateRequestHeaders(definition, request.headers)
-    : request.headers
+    : Object.fromEntries(request.headers.entries())
   const rawBody = definition?.body
     ? await decodeBody(request, validatedContentType(headers))
     : undefined

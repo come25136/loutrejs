@@ -73,4 +73,42 @@ describe('generic Layer', () => {
     expect(result).toBe('request-1:trace-1')
     expect(events).toEqual(['before', 'after'])
   })
+  it('state namespaceの暗黙上書きを拒否しplain objectは非重複propertyだけmergeする', async () => {
+    const first = defineLayer<{ session: { id: string } }>({
+      name: 'first',
+      factory: () => async (_context, next) => {
+        await next({ session: { id: 'session-1' } })
+      },
+    })
+    const extend = defineLayer<{ session: { role: string } }>({
+      name: 'extend',
+      factory: () => async (_context, next) => {
+        await next({ session: { role: 'admin' } })
+      },
+    })
+    const overwrite = defineLayer<{ session: { id: string } }>({
+      name: 'overwrite',
+      factory: () => async (_context, next) => {
+        await next({ session: { id: 'session-2' } })
+      },
+    })
+
+    await expect(
+      composeLayers({
+        context: {},
+        layers: [first, extend],
+        resolve: () => undefined as never,
+        terminal: async (context) => context.state,
+      }),
+    ).resolves.toEqual({ session: { id: 'session-1', role: 'admin' } })
+
+    await expect(
+      composeLayers({
+        context: {},
+        layers: [first, overwrite],
+        resolve: () => undefined as never,
+        terminal: async () => undefined,
+      }),
+    ).rejects.toThrow('cannot overwrite existing State property session.id')
+  })
 })

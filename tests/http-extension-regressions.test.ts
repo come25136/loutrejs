@@ -27,6 +27,48 @@ async function createHttpApplication<const TContract extends HttpContract>(
 }
 
 describe('HTTP Execution Extension regression', () => {
+  it('schema未宣言のqueryとheadersを旧Loutre互換のplain recordで渡す', async () => {
+    const contract = http.contract({
+      inspect: {
+        method: 'GET',
+        path: '/inspect',
+        responses: {
+          ok: {
+            status: 200,
+            body: z.object({
+              tags: z.union([z.string(), z.array(z.string())]),
+              contentType: z.string(),
+            }),
+          },
+        },
+      },
+    })
+    const application = await createHttpApplication(contract, () => ({
+      inspect: (context) => {
+        const tag = context.input.query.tag
+        return context.response.ok({
+          body: {
+            tags:
+              tag === undefined ? '' : typeof tag === 'string' ? tag : [...tag],
+            contentType: context.input.headers['content-type'] ?? '',
+          },
+        })
+      },
+    }))
+    try {
+      const response = await application.http.fetch(
+        new Request('http://fixture.test/inspect?tag=a&tag=b', {
+          headers: { 'content-type': 'text/plain; charset=utf-8' },
+        }),
+      )
+      await expect(response.json()).resolves.toEqual({
+        tags: ['a', 'b'],
+        contentType: 'text/plain; charset=utf-8',
+      })
+    } finally {
+      await application.close()
+    }
+  })
   it('path decode errorを400にする', async () => {
     const contract = http.contract({
       user: {
