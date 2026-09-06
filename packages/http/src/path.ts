@@ -2,6 +2,11 @@ export type HttpPathSegment =
   | { readonly kind: 'static'; readonly value: string }
   | { readonly kind: 'param'; readonly name: string }
 
+export type PathParamNames<TPath extends string> =
+  TPath extends `${string}{${infer TName}}${infer TRest}`
+    ? TName | PathParamNames<TRest>
+    : never
+
 const PARAM_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 const HTTP_METHOD_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 
@@ -87,6 +92,20 @@ export function matchHttpPath(
     }
   }
   return params
+}
+
+export function compareHttpPathSpecificity(
+  left: readonly HttpPathSegment[],
+  right: readonly HttpPathSegment[],
+): number {
+  const length = Math.min(left.length, right.length)
+  for (let index = 0; index < length; index += 1) {
+    const leftSegment = left[index]!
+    const rightSegment = right[index]!
+    if (leftSegment.kind === rightSegment.kind) continue
+    return leftSegment.kind === 'static' ? -1 : 1
+  }
+  return right.length - left.length
 }
 
 export class HttpPathDecodeError extends Error {
