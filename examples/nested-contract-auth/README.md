@@ -1,16 +1,30 @@
 # Nested Contract Auth Example
 
-This example shows HTTP Contract composition where authentication belongs to a parent branch instead of each child route.
+This example shows HTTP Contract reuse where authentication is applied while composing an application-level Contract.
 
-`ProfileContract` defines only the profile endpoint. `AppContract` mounts it below `/api/me`, adds the authentication Layer to that parent branch, and declares the inherited `unauthorized` response there.
-
-The Controller binds to the resolved leaf:
+`ProfileContract` defines the profile endpoint. `AppContract` reuses `ProfileContract.routes.profile`, prefixes the path with `/api/me`, adds the authentication middleware, and declares the inherited `unauthorized` response.
 
 ```ts
-contract: AppContract.http.api.me.profile
+const profile = ProfileContract.routes.profile
+
+export const AppContract = http.contract({
+  profile: {
+    ...profile,
+    path: `/api/me${profile.path}`,
+    responses: {
+      ...profile.responses,
+      unauthorized: {
+        status: 401,
+        body: z.object({ error: z.string() }),
+        headers: z.object({ 'www-authenticate': z.string() }),
+      },
+    },
+    middlewares: [authentication],
+  },
+})
 ```
 
-Because that resolved leaf includes the ancestor pipeline, `ctx.state.currentUser` is inferred from the state contributed by the parent authentication Layer. The example keeps an explicit assignment in the Controller so TypeScript verifies that relationship:
+The Controller binds to `AppContract`. Because the route includes the authentication middleware, `ctx.state.currentUser` is inferred from the middleware state contribution. The example keeps an explicit assignment so TypeScript verifies that relationship:
 
 ```ts
 const currentUser: User = ctx.state.currentUser
@@ -22,13 +36,13 @@ From this example directory, start the application with:
 npm run dev
 ```
 
-A request without credentials is rejected by the parent branch:
+A request without credentials is rejected by the authentication middleware:
 
 ```sh
 curl -i http://127.0.0.1:3003/api/me/profile
 ```
 
-Use the example credentials to reach the child Controller:
+Use the example credentials to reach the Controller:
 
 ```sh
 curl -i -u loutre:otter http://127.0.0.1:3003/api/me/profile
@@ -40,7 +54,7 @@ curl -i -u loutre:otter http://127.0.0.1:3003/api/me/profile
 
 These credentials are for demonstration only.
 
-To validate the Application Graph, types, and behavior, run:
+To validate the Application Model, types, and behavior, run:
 
 ```sh
 npm run check
