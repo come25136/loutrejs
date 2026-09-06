@@ -36,6 +36,7 @@ export {
   executionHttp as http,
   httpExecutionExtension,
   HTTP_SERVER,
+  validate,
 } from './extension.js'
 export type {
   HttpContract,
@@ -59,6 +60,8 @@ export type {
   HttpResponseResult,
   HttpResponseHeadersWithDefaults,
   HttpServerDriver,
+  HttpValidationMiddleware,
+  HttpValidationPart,
 } from './extension.js'
 export {
   compareHttpPathSpecificity,
