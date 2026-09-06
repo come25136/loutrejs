@@ -1,19 +1,11 @@
 import {
-  binding,
   createKernelApplication,
   type ApplicationDefinition,
   type ApplicationExtensionHostApis,
   type BootstrapArguments,
-  type HasMessagePort,
-  type InvocationApplication,
-  type InvocationBindingOptions,
   type KernelHostedApplication,
 } from '../application/index.js'
-import {
-  attachMessagePort,
-  type MessagePortProtocolExecution,
-  type MessagePortLike,
-} from '../message-port/index.js'
+import { applicationHasHost } from '../application/kernel-internal.js'
 import { assertRuntimeEngine } from '../runtime/engine.js'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
@@ -27,16 +19,18 @@ type HasMessagePortExecutionExtension<
 type MessagePortApplication<TDefinition extends ApplicationDefinition> =
   IsAny<TDefinition> extends true
     ? TDefinition
-    : HasMessagePort<TDefinition> extends true
+    : HasMessagePortExecutionExtension<TDefinition> extends true
       ? TDefinition
-      : HasMessagePortExecutionExtension<TDefinition> extends true
-        ? TDefinition
-        : never
+      : never
 
-type ElectronHostedApplication<TDefinition extends ApplicationDefinition> =
-  HasMessagePortExecutionExtension<TDefinition> extends true
-    ? KernelHostedApplication<TDefinition>
-    : InvocationApplication<TDefinition>
+export interface MessagePortLike {
+  postMessage(value: unknown): void
+  addEventListener(
+    type: 'message',
+    listener: (event: { readonly data: unknown }) => void,
+  ): void
+  start?(): void
+}
 
 export interface ElectronMessagePortMainLike {
   postMessage(value: unknown): void
@@ -56,7 +50,7 @@ export type ElectronAttachOptions<TDefinition extends ApplicationDefinition> = {
 export interface ElectronAttachment<
   TDefinition extends ApplicationDefinition = ApplicationDefinition,
 > {
-  readonly application: ElectronHostedApplication<TDefinition>
+  readonly application: KernelHostedApplication<TDefinition>
   close(signal?: string): Promise<void>
 }
 
@@ -79,60 +73,37 @@ function attach<const TDefinition extends ApplicationDefinition>(
   options: ElectronAttachOptions<TDefinition>,
 ): ElectronAttachment<TDefinition> {
   assertRuntimeEngine('electron')
+  if (!applicationHasHost(options.application.model, 'messagePort')) {
+    throw new Error(
+      'LUTRE_RUNTIME_MESSAGE_PORT_REQUIRED: electronRuntime.attach() requires the MessagePort Execution Extension.',
+    )
+  }
+
   const environment =
     'environment' in options
       ? options.environment
       : typeof process === 'undefined'
         ? undefined
         : process.env
-  const usesMessagePortExecutionExtension = options.application.model.extensions
-    .values()
-    .some((group) => group.extension.host?.namespace === 'messagePort')
-
-  if (usesMessagePortExecutionExtension) {
-    const application = createKernelApplication({
-      application: options.application,
-      environment,
-      ...('arguments' in options ? { arguments: options.arguments } : {}),
-    })
-    const initialization = application.init()
-    void initialization.catch(() => undefined)
-    attachElectronMessagePortInvocation(async (method, input) => {
-      await initialization
-      const host = (
-        application as unknown as {
-          readonly messagePort: MessagePortHostApi
-        }
-      ).messagePort
-      return host.invoke(method, input)
-    }, options.port)
-    return {
-      application: application as ElectronHostedApplication<TDefinition>,
-      close: (signal) => application.close(signal),
-    }
-  }
-
-  const invocation = binding.invocation({
+  const application = createKernelApplication({
     application: options.application,
     environment,
     ...('arguments' in options ? { arguments: options.arguments } : {}),
-  } as unknown as InvocationBindingOptions<TDefinition>)
-  const messagePort =
-    'messagePort' in invocation
-      ? (invocation.messagePort as MessagePortProtocolExecution)
-      : undefined
-  if (!messagePort) {
-    void invocation.application.close()
-    throw new Error(
-      'LUTRE_RUNTIME_MESSAGE_PORT_REQUIRED: electronRuntime.attach() requires a MessagePort-capable Application.',
-    )
-  }
-
-  attachElectronMessagePort(messagePort, options.port)
+  })
+  const initialization = application.init()
+  void initialization.catch(() => undefined)
+  attachElectronMessagePortInvocation(async (method, input) => {
+    await initialization
+    const host = (
+      application as unknown as {
+        readonly messagePort: MessagePortHostApi
+      }
+    ).messagePort
+    return host.invoke(method, input)
+  }, options.port)
   return {
-    application:
-      invocation.application as ElectronHostedApplication<TDefinition>,
-    close: (signal) => invocation.application.close(signal),
+    application,
+    close: (signal) => application.close(signal),
   }
 }
 
@@ -191,16 +162,6 @@ function attachElectronMessagePortInvocation(
   normalized.start?.()
 }
 
-function attachElectronMessagePort(
-  application: MessagePortProtocolExecution,
-  port: MessagePortLike | ElectronMessagePortMainLike,
-): void {
-  const initialization = application.initialize()
-  void initialization.catch(() => undefined)
-
-  attachMessagePort(application, normalizeMessagePort(port))
-}
-
 function postToMessagePort(port: MessagePortLike, value: unknown): void {
   port.postMessage(value)
 }
@@ -212,7 +173,7 @@ function normalizeMessagePort(
   return {
     postMessage: (value: unknown) => port.postMessage(value),
     addEventListener: (
-      _type: string,
+      _type: 'message',
       listener: (event: { readonly data: unknown }) => void,
     ) => port.on('message', listener),
     start: () => port.start(),
