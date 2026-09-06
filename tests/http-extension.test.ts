@@ -22,7 +22,7 @@ import {
 describe('HTTP Execution Extension', () => {
   it('inject(Logger)へimplementationとmiddlewareのsourceを付与する', async () => {
     const records: LogRecord[] = []
-    const logger = new Logger({ write: (record) => records.push(record) })
+    const rootLogger = new Logger({ write: (record) => records.push(record) })
     const tracing = http.middleware({
       name: 'RequestTracing',
       factory:
@@ -54,7 +54,7 @@ describe('HTTP Execution Extension', () => {
     const application = await bootstrapApplication({
       application: defineApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
-      logger,
+      logger: rootLogger,
     })
 
     try {
