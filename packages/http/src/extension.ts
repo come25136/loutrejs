@@ -599,7 +599,7 @@ export function defineHttpMiddleware<
   readonly state?: Type<TContribution>
   readonly factory: HttpMiddleware<NoInfer<TContribution>>['factory']
 }): HttpMiddleware<TContribution> {
-  return defineLayer<HttpMiddlewareContext, TContribution, HttpExecutionResult>(
+  return defineLayer<TContribution, HttpMiddlewareContext, HttpExecutionResult>(
     definition,
   )
 }

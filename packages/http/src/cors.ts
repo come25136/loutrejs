@@ -21,8 +21,8 @@ export interface CorsOptions {
 export function cors(options: CorsOptions = {}) {
   const policy = normalizeCorsPolicy(options)
   const middleware = defineLayer<
-    HttpMiddlewareContext,
     {},
+    HttpMiddlewareContext,
     HttpExecutionResult
   >({
     name: options.name ?? 'cors',

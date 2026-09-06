@@ -53,11 +53,7 @@ describe('Task Execution Extension', () => {
 describe('generic Layer', () => {
   it('transport非依存stateをaround compositionでcontributeする', async () => {
     const events: string[] = []
-    const tracing = defineLayer<
-      { readonly requestId: string },
-      { readonly traceId: string },
-      string
-    >({
+    const tracing = defineLayer<{ readonly traceId: string }>({
       name: 'tracing',
       factory: () => async (_context, next) => {
         events.push('before')

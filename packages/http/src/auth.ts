@@ -58,7 +58,7 @@ export function basicAuth<
   AuthenticationShortCircuit<TResponse, TUnauthorizedBody>
 > {
   const challenge = formatBasicChallenge(definition.realm)
-  return defineLayer<HttpMiddlewareContext, TContribution, HttpExecutionResult>(
+  return defineLayer<TContribution, HttpMiddlewareContext, HttpExecutionResult>(
     {
       name: definition.name ?? 'basicAuth',
       state: definition.state,
@@ -116,7 +116,7 @@ export function bearerAuth<
   AuthenticationShortCircuit<TResponse, TUnauthorizedBody>
 > {
   const challenge = formatBearerChallenge(definition.realm)
-  return defineLayer<HttpMiddlewareContext, TContribution, HttpExecutionResult>(
+  return defineLayer<TContribution, HttpMiddlewareContext, HttpExecutionResult>(
     {
       name: definition.name ?? 'bearerAuth',
       state: definition.state,

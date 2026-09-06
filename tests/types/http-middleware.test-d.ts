@@ -51,3 +51,32 @@ defineLayer({
     await next({ traceId: 'trace' })
   },
 })
+
+const inferredGeneric = defineLayer<{ traceId: string }>({
+  name: 'generic.explicit-contribution',
+  factory: () => async (_context, next) => {
+    if (invalidInput) {
+      // @ts-expect-error traceIdの型が異なる
+      await next({ traceId: 42 })
+    }
+    await next({ traceId: 'trace' })
+  },
+})
+const inferredGenericContract = http.contract({
+  trace: {
+    method: 'GET',
+    path: '/trace',
+    middlewares: [inferredGeneric],
+    responses: { ok: { status: 204 } },
+  },
+})
+http.implementation({
+  contract: inferredGenericContract,
+  factory: () => ({
+    trace: (context) => {
+      const traceId: string = context.state.traceId
+      void traceId
+      return context.response.ok({})
+    },
+  }),
+})

@@ -1,15 +1,12 @@
 import { defineLayer, inject } from '@loutrejs/loutre'
-import type { HttpExecutionResult, HttpMiddlewareContext } from '@loutrejs/http'
 import {
   DrizzleDatabase,
   type DrizzleTransaction,
 } from '../database/drizzle.js'
 
-export const transaction = defineLayer<
-  HttpMiddlewareContext,
-  { readonly transaction: DrizzleTransaction },
-  HttpExecutionResult
->({
+export const transaction = defineLayer<{
+  readonly transaction: DrizzleTransaction
+}>({
   name: 'database.transaction',
   factory:
     (database = inject(DrizzleDatabase)) =>

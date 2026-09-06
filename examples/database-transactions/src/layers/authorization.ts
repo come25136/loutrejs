@@ -1,5 +1,5 @@
 import { defineLayer } from '@loutrejs/loutre'
-import type { HttpExecutionResult, HttpMiddlewareContext } from '@loutrejs/http'
+import type { HttpMiddlewareContext } from '@loutrejs/http'
 
 export interface AuthenticatedHttpContext extends HttpMiddlewareContext {
   readonly state: Readonly<{
@@ -7,11 +7,7 @@ export interface AuthenticatedHttpContext extends HttpMiddlewareContext {
   }>
 }
 
-export const authorization = defineLayer<
-  AuthenticatedHttpContext,
-  {},
-  HttpExecutionResult
->({
+export const authorization = defineLayer<{}, AuthenticatedHttpContext>({
   name: 'authorization.users.create',
   factory: () => async (context, next) => {
     if (context.state.currentUser.id.length === 0) {

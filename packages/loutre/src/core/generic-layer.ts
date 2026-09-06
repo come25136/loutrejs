@@ -28,9 +28,9 @@ export interface GenericLayer<
 }
 
 export function defineLayer<
-  TContext extends object = object,
   TContribution extends object = {},
-  TOutcome = unknown,
+  TContext extends object = object,
+  TOutcome = never,
 >(declaration: {
   readonly name: string
   readonly state?: Type<TContribution>
