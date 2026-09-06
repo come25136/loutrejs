@@ -346,15 +346,14 @@ export function buildApplicationModel(
   }
 
   const extensionExecutions = new Map<
-    symbol,
+    ExecutionExtension,
     {
       readonly extension: ExecutionExtension
       readonly executions: ExecutionModelNode[]
     }
   >()
-  const extensionNames = new Map<string, symbol>()
+  const extensionNames = new Map<string, ExecutionExtension>()
   const executionIds = new Set<string>()
-  const capabilityTokens = new Map<symbol, RuntimeCapability>()
 
   for (const module of modules) {
     const moduleId = moduleIds.get(module)!
@@ -374,7 +373,7 @@ export function buildApplicationModel(
       }
       const extension = value.extension
       const sameName = extensionNames.get(extension.name)
-      if (sameName && sameName !== extension.identity) {
+      if (sameName && sameName !== extension) {
         diagnostics.push(
           diagnostic(
             'LUTRE_EXTENSION_NAME_COLLISION',
@@ -384,7 +383,7 @@ export function buildApplicationModel(
         )
         continue
       }
-      extensionNames.set(extension.name, extension.identity)
+      extensionNames.set(extension.name, extension)
 
       let contribution: ExecutionContribution
       try {
@@ -416,12 +415,12 @@ export function buildApplicationModel(
       executions.push(execution)
       nodes.push(execution)
       edges.push({ from: moduleId, to: execution.id, kind: 'owns' })
-      const grouped = extensionExecutions.get(extension.identity) ?? {
+      const grouped = extensionExecutions.get(extension) ?? {
         extension,
         executions: [] as ExecutionModelNode[],
       }
       grouped.executions.push(execution)
-      extensionExecutions.set(extension.identity, grouped)
+      extensionExecutions.set(extension, grouped)
       for (const dependency of execution.dependencies) {
         const provider = providerNodes.get(dependency)
         if (provider) {
@@ -454,18 +453,6 @@ export function buildApplicationModel(
         }
       }
       for (const capability of execution.capabilities) {
-        const existingCapability = capabilityTokens.get(capability.identity)
-        if (existingCapability && existingCapability.id !== capability.id) {
-          diagnostics.push(
-            diagnostic(
-              'LUTRE_CAPABILITY_ID_COLLISION',
-              `Different Runtime Capability tokens use the same id ${capability.id}.`,
-              execution.id,
-            ),
-          )
-        } else {
-          capabilityTokens.set(capability.identity, capability)
-        }
         const capabilityId = `capability:${capability.id}`
         if (!nodes.some((node) => node.id === capabilityId)) {
           nodes.push({
