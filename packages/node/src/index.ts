@@ -2,15 +2,11 @@ import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import { Readable } from 'node:stream'
 import {
-  binding,
   createKernelApplication,
   type ApplicationDefinition,
   type ApplicationExtensions,
   type BootstrapArguments,
-  type HasHttp,
-  type HostBindingApplication,
   type KernelHostedApplication,
-  type InvocationBindingOptions,
 } from '@loutrejs/loutre'
 import {
   bindHttpServer,
@@ -41,11 +37,9 @@ type HasHttpExecutionExtension<TDefinition extends ApplicationDefinition> =
 type HttpApplication<TDefinition extends ApplicationDefinition> =
   IsAny<TDefinition> extends true
     ? TDefinition
-    : HasHttp<TDefinition> extends true
+    : HasHttpExecutionExtension<TDefinition> extends true
       ? TDefinition
-      : HasHttpExecutionExtension<TDefinition> extends true
-        ? TDefinition
-        : never
+      : never
 
 export type NodeCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
@@ -63,14 +57,9 @@ export interface NodeListenerHandle {
   readonly port: number
 }
 
-type NodeHostedApplication<TDefinition extends ApplicationDefinition> =
-  HasHttpExecutionExtension<TDefinition> extends true
-    ? KernelHostedApplication<TDefinition>
-    : HostBindingApplication<TDefinition>
-
 export type NodeRuntimeApplication<
   TDefinition extends ApplicationDefinition = ApplicationDefinition,
-> = NodeHostedApplication<TDefinition> & {
+> = KernelHostedApplication<TDefinition> & {
   serve(options?: NodeServeOptions): Promise<NodeListenerHandle>
 }
 
@@ -91,45 +80,24 @@ async function create<const TDefinition extends ApplicationDefinition>(
       write: (value) => console.log(value),
     },
   )
-  const usesHttpExecutionExtension =
-    options.application.model.extensions.get(httpExecutionExtension) !==
-    undefined
 
-  let application: NodeRuntimeApplication<TDefinition>
-  let http: NodeHttpRequestHandler
-
-  if (usesHttpExecutionExtension) {
-    const hosted = createKernelApplication({
-      application: options.application,
-      capabilities: [bindHttpServer({ runtime: 'node' })],
-      environment: 'environment' in options ? options.environment : process.env,
-      ...('arguments' in options ? { arguments: options.arguments } : {}),
-    })
-    await hosted.init()
-    application = hosted as NodeRuntimeApplication<TDefinition>
-    http = (hosted as unknown as { readonly http: HttpHostApi }).http
-  } else {
-    const host = binding.host({
-      application: options.application,
-      environment: 'environment' in options ? options.environment : process.env,
-      ...('arguments' in options ? { arguments: options.arguments } : {}),
-    } as unknown as InvocationBindingOptions<TDefinition>)
-    const legacyHttp =
-      'http' in host ? (host.http as LegacyHttpProtocolExecution) : undefined
-    if (!legacyHttp) {
-      await host.application.close()
-      throw new Error(
-        'LUTRE_RUNTIME_HTTP_REQUIRED: nodeRuntime.create() requires an HTTP-capable Application.',
-      )
-    }
-    await host.application.init()
-    application = host.application as NodeRuntimeApplication<TDefinition>
-    http = {
-      initialize: () => legacyHttp.initialize(),
-      fetch: (request) => legacyHttp.handle(request),
-      onServerListening: (url) => legacyHttp.onServerListening?.(url),
-    }
+  if (
+    options.application.model.extensions.get(httpExecutionExtension) === undefined
+  ) {
+    throw new Error(
+      'LUTRE_RUNTIME_HTTP_REQUIRED: nodeRuntime.create() requires the HTTP Execution Extension.',
+    )
   }
+
+  const hosted = createKernelApplication({
+    application: options.application,
+    capabilities: [bindHttpServer({ runtime: 'node' })],
+    environment: 'environment' in options ? options.environment : process.env,
+    ...('arguments' in options ? { arguments: options.arguments } : {}),
+  })
+  await hosted.init()
+  const application = hosted as NodeRuntimeApplication<TDefinition>
+  const http = (hosted as unknown as { readonly http: HttpHostApi }).http
 
   const closeApplication = application.close.bind(application)
   let server: Server | undefined
@@ -155,8 +123,9 @@ async function create<const TDefinition extends ApplicationDefinition>(
     } catch (error) {
       errors.push(error)
     }
-    if (errors.length > 0)
+    if (errors.length > 0) {
       throw new AggregateError(errors, 'Node runtime shutdown failed')
+    }
   }
 
   const serve = async (
@@ -172,8 +141,6 @@ async function create<const TDefinition extends ApplicationDefinition>(
     }
     serving = true
     try {
-      if ('triggers' in application) await application.triggers.start()
-
       server = createNodeHttpServerDriver(http)
       const requestedPort = serveOptions.port
       let port = requestedPort ?? 3000
@@ -228,12 +195,6 @@ function registerNodeShutdownHooks(
     process.once(signal, handler)
   }
   return remove
-}
-
-interface LegacyHttpProtocolExecution {
-  initialize(): Promise<void>
-  handle(request: Request): Promise<Response>
-  onServerListening?(url: string): void
 }
 
 interface NodeHttpRequestHandler {
