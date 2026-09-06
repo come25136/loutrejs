@@ -238,7 +238,6 @@ type ResponseHelpers<
 export type HttpExecutionContext<
   TRoute extends HttpExecutionRouteDefinition = HttpExecutionRouteDefinition,
 > = {
-  readonly request: Request
   readonly input: {
     readonly params: HttpParamsValue<TRoute['request']>
     readonly query: RequestValue<TRoute['request'], 'query', URLSearchParams>
@@ -875,7 +874,12 @@ function createHttpExtensionRuntime(
           layers: match.route.middlewares,
           resolve: (token) => applicationRuntime.resolve(token),
           terminal: async (middlewareContext) =>
-            handler(middlewareContext as HttpExecutionContext),
+            handler({
+              input: middlewareContext.input,
+              response: middlewareContext.response,
+              signal: middlewareContext.signal,
+              state: middlewareContext.state,
+            } as HttpExecutionContext),
         })
         return complete(
           await finalizeHttpResult(match.route.definition, result),

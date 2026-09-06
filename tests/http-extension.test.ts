@@ -200,13 +200,15 @@ describe('HTTP Execution Extension', () => {
       name: 'users.http',
       contract,
       factory: () => ({
-        getUser: async (context) =>
-          context.response.found({
+        getUser: async (context) => {
+          expect('request' in context).toBe(false)
+          return context.response.found({
             body: {
               id: context.input.params.id,
               detail: context.input.query.detail,
             },
-          }),
+          })
+        },
       }),
     })
     const Module = defineModule(() => ({ executions: [controller] }))

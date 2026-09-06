@@ -36,6 +36,8 @@ http.implementation({
   contract,
   factory: () => ({
     profile: (context) => {
+      // @ts-expect-error raw Requestはcontroller Contextへ公開しない
+      context.request
       const userId: string = context.state.userId
       void userId
       return context.response.ok({})
