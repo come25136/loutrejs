@@ -80,7 +80,7 @@ export function createKernelApplication<
           throw new AggregateError(
             [error, cleanupError],
             'Host API creation failed and runtime rollback also failed.',
-            { cause: error },
+            { cause: cleanupError },
           )
         }
         throw error

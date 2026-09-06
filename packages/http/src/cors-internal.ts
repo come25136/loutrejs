@@ -169,7 +169,7 @@ function normalizeOrigin(
     return Object.freeze({ kind: 'exact', origins: new Set<string>() })
   }
   for (const value of origins) {
-    if (value.length === 0 || /[\u0000-\u001f\u007f]/.test(value)) {
+    if (value.length === 0 || containsControlCharacter(value)) {
       throw new TypeError(
         'CORS origin cannot be empty or contain control characters',
       )
@@ -187,6 +187,14 @@ function normalizeOrigin(
     kind: 'exact',
     origins: new Set(origins),
   })
+}
+
+function containsControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0)
+    if (code <= 0x1f || code === 0x7f) return true
+  }
+  return false
 }
 
 function normalizeTokens(
