@@ -18,6 +18,7 @@ import {
   type ProviderDescriptor,
 } from './provider.js'
 import { collectInjectedDependencies } from './injection.js'
+import type { LifecycleHook } from './lifecycle.js'
 import { isFrameworkProvidedToken } from './token-internal.js'
 import { tokenName, type TokenLike } from './token.js'
 
@@ -52,6 +53,7 @@ export interface LifecycleModelNode {
   readonly id: string
   readonly moduleId: string
   readonly phase: string
+  readonly hook: LifecycleHook<any>
 }
 
 export interface FrameworkModelNode {
@@ -93,7 +95,8 @@ export interface ApplicationModelExtension<
   readonly executions: readonly ExecutionModelNode<CompiledOf<TExtension>>[]
 }
 
-export interface ApplicationModelExtensions extends Iterable<ApplicationModelExtension> {
+export interface ApplicationModelExtensions
+  extends Iterable<ApplicationModelExtension> {
   get<TExtension extends AnyExecutionExtension>(
     extension: TExtension,
   ): ApplicationModelExtension<TExtension> | undefined
@@ -305,42 +308,42 @@ export function buildApplicationModel(
     }
   }
 
-  for (const module of modules) {
-    const moduleId = moduleIds.get(module)!
-    for (const [phase, hook] of Object.entries(
-      module.definition.lifecycle ?? {},
-    )) {
-      const lifecycleId = `lifecycle:${moduleId}:${phase}`
-      for (const dependency of hook.inject) {
-        const provider = providerNodes.get(dependency)
-        if (provider) {
-          edges.push({ from: lifecycleId, to: provider.id, kind: 'injects' })
-          const providerModule = modules.find(
-            (candidate) => moduleIds.get(candidate) === provider.moduleId,
-          )
-          if (
-            providerModule &&
-            provider.moduleId !== moduleId &&
-            !moduleDeclaresToken(module, dependency) &&
-            !isTokenVisible(module, providerModule, dependency)
-          ) {
-            diagnostics.push(
-              diagnostic(
-                'LUTRE_MODULE_VISIBILITY',
-                `Lifecycle ${phase} depends on private ${tokenName(dependency)} from another Module.`,
-                lifecycleId,
-              ),
-            )
-          }
-        } else if (!isFrameworkProvidedToken(dependency)) {
+  for (const lifecycle of nodes.filter(
+    (node): node is LifecycleModelNode => node.kind === 'lifecycle',
+  )) {
+    for (const dependency of lifecycle.hook.inject) {
+      const provider = providerNodes.get(dependency)
+      if (provider) {
+        edges.push({ from: lifecycle.id, to: provider.id, kind: 'injects' })
+        const sourceModule = modules.find(
+          (candidate) => moduleIds.get(candidate) === lifecycle.moduleId,
+        )
+        const providerModule = modules.find(
+          (candidate) => moduleIds.get(candidate) === provider.moduleId,
+        )
+        if (
+          sourceModule &&
+          providerModule &&
+          provider.moduleId !== lifecycle.moduleId &&
+          !moduleDeclaresToken(sourceModule, dependency) &&
+          !isTokenVisible(sourceModule, providerModule, dependency)
+        ) {
           diagnostics.push(
             diagnostic(
-              'LUTRE_LIFECYCLE_DEPENDENCY_MISSING',
-              `Lifecycle ${phase} requires ${tokenName(dependency)}, but no provider is declared.`,
-              lifecycleId,
+              'LUTRE_MODULE_VISIBILITY',
+              `Lifecycle ${lifecycle.phase} depends on private ${tokenName(dependency)} from another Module.`,
+              lifecycle.id,
             ),
           )
         }
+      } else if (!isFrameworkProvidedToken(dependency)) {
+        diagnostics.push(
+          diagnostic(
+            'LUTRE_LIFECYCLE_DEPENDENCY_MISSING',
+            `Lifecycle ${lifecycle.phase} requires ${tokenName(dependency)}, but no provider is declared.`,
+            lifecycle.id,
+          ),
+        )
       }
     }
   }
@@ -577,9 +580,9 @@ function appendLifecycleNodes(
 ): void {
   const lifecycle = module.definition.lifecycle
   if (!lifecycle) return
-  for (const phase of Object.keys(lifecycle)) {
+  for (const [phase, hook] of Object.entries(lifecycle)) {
     const id = `lifecycle:${moduleId}:${phase}`
-    nodes.push({ kind: 'lifecycle', id, moduleId, phase })
+    nodes.push({ kind: 'lifecycle', id, moduleId, phase, hook })
     edges.push({ from: moduleId, to: id, kind: 'owns' })
   }
 }
