@@ -165,7 +165,7 @@ await app.tasks.triggers.start()
 
 ## MessagePortとWebSocket
 
-MessagePortは`@loutrejs/message-port`、WebSocketは`@loutrejs/websocket`が提供します。どちらもKernelのpublic surfaceだけに依存し、それぞれのexecution model、runtime、Host API、Graph projectionを所有します。
+MessagePortは`@loutrejs/message-port`、WebSocketは`@loutrejs/websocket`が提供し、それぞれのexecution model、runtime、Host API、Graph projectionを所有します。WebSocketはHTTP upgrade handshakeのためpublicなHTTP Extension surfaceにも依存しますが、Coreはtransport非依存のままです。
 
 ## DIとModule visibility
 

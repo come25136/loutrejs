@@ -1,5 +1,5 @@
 import { defineApplication, defineModule } from '@loutrejs/loutre'
-import { checkCapabilities } from '@loutrejs/loutre/runtime'
+import { checkRuntimeSupport } from '@loutrejs/loutre/runtime'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
@@ -190,10 +190,10 @@ describe('Runtime conformance harness', () => {
       cloudflareWorkersRuntime,
       awsLambdaRuntime,
     ]) {
-      expect(checkCapabilities(['http.server'], runtime).ok).toBe(true)
+      expect(checkRuntimeSupport(['http.server'], runtime).ok).toBe(true)
     }
     expect(
-      checkCapabilities(
+      checkRuntimeSupport(
         ['messagePort.send', 'messagePort.receive'],
         electronRuntime,
       ).ok,

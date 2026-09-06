@@ -7,6 +7,7 @@ import {
   type ApplicationExtensions,
   type BootstrapArguments,
   type KernelHostedApplication,
+  type RuntimeCapabilityBinding,
 } from '@loutrejs/loutre'
 import {
   bindHttpServer,
@@ -20,7 +21,7 @@ import {
 } from '@loutrejs/loutre/presentation'
 import {
   assertRuntimeEngine,
-  nodeRuntimeCapabilities,
+  nodeRuntimeSupport,
   serverUrl,
 } from '@loutrejs/loutre/runtime'
 
@@ -44,6 +45,7 @@ type HttpApplication<TDefinition extends ApplicationDefinition> =
 export type NodeCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
   readonly environment?: unknown
+  readonly capabilities?: readonly RuntimeCapabilityBinding[]
 } & BootstrapArguments<TDefinition>
 
 export interface NodeServeOptions {
@@ -64,7 +66,7 @@ export type NodeRuntimeApplication<
 }
 
 export const nodeRuntime = {
-  ...nodeRuntimeCapabilities,
+  ...nodeRuntimeSupport,
   create,
 } as const
 
@@ -93,7 +95,10 @@ async function create<const TDefinition extends ApplicationDefinition>(
   const hosted = createKernelApplication<TDefinition>({
     ...options,
     application: options.application,
-    capabilities: [bindHttpServer({ runtime: 'node' })],
+    capabilities: [
+      bindHttpServer({ runtime: 'node' }),
+      ...(options.capabilities ?? []),
+    ],
     environment: 'environment' in options ? options.environment : process.env,
   })
   await hosted.init()

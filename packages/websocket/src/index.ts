@@ -363,15 +363,43 @@ function compileRouteTree(
         path,
         normalizedPath: normalizeHttpPath(segments),
         segments,
-        ...(node.request === undefined ? {} : { request: node.request }),
-        responses: Object.freeze({
+        ...(node.request === undefined
+          ? {}
+          : { request: snapshotWebSocketRequest(node.request) }),
+        responses: snapshotWebSocketResponses({
           ...parentResponses,
           ...node.responses,
         }),
-        ...(node.messages === undefined ? {} : { messages: node.messages }),
+        ...(node.messages === undefined
+          ? {}
+          : { messages: Object.freeze({ ...node.messages }) }),
       }),
     ]
   })
+}
+
+function snapshotWebSocketRequest(
+  request: Omit<HttpExecutionRequestDefinition, 'body'>,
+): Omit<HttpExecutionRequestDefinition, 'body'> {
+  return Object.freeze({
+    ...request,
+    ...(request.params === undefined
+      ? {}
+      : { params: Object.freeze({ ...request.params }) }),
+  })
+}
+
+function snapshotWebSocketResponses(
+  responses: Readonly<Record<string, HttpExecutionResponseDefinition>>,
+): Readonly<Record<string, HttpExecutionResponseDefinition>> {
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(responses).map(([name, response]) => [
+        name,
+        Object.freeze({ ...response }),
+      ]),
+    ),
+  )
 }
 
 function isBranch(

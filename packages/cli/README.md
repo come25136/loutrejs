@@ -10,14 +10,14 @@ npm install --save-dev @loutrejs/cli
 
 ## Commands
 
-| Command   | Description                                           |
-| --------- | ----------------------------------------------------- |
-| `check`   | Application Graphをvalidation                         |
-| `doctor`  | runtime capabilityとの互換性を確認                    |
-| `graph`   | modules / DI / contracts / executions / runtimeを表示 |
-| `explain` | Graph上のtargetを説明                                 |
-| `build`   | Application bundleとdeployment entryを生成            |
-| `openapi` | OpenAPI 3.2 documentを生成                            |
+| Command   | Description                                      |
+| --------- | ------------------------------------------------ |
+| `check`   | Application Graphをvalidation                    |
+| `doctor`  | runtime capabilityとの互換性を確認               |
+| `graph`   | modules / DI / http / executions / runtimeを表示 |
+| `explain` | Graph上のtargetを説明                            |
+| `build`   | Application bundleとdeployment entryを生成       |
+| `openapi` | OpenAPI 3.2 documentを生成                       |
 
 ## Usage
 
@@ -26,7 +26,7 @@ npm exec loutre -- check --entry src/app.ts
 npm exec loutre -- doctor --entry src/app.ts
 npm exec loutre -- doctor --runtime electron --entry src/app.ts
 npm exec loutre -- graph di --entry src/app.ts
-npm exec loutre -- graph contracts --entry src/app.ts --format mermaid
+npm exec loutre -- graph http --entry src/app.ts --format mermaid
 npm exec loutre -- explain GreetingService --entry src/app.ts
 ```
 

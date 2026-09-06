@@ -4,6 +4,7 @@ import {
   type ApplicationExtensionHostApis,
   type BootstrapArguments,
 } from '../application/index.js'
+import type { RuntimeCapabilityBinding } from '../core/index.js'
 import {
   applicationHasHost,
   bindApplicationCapability,
@@ -27,6 +28,7 @@ export type AwsLambdaBindBaseOptions<
 > = {
   readonly application: HttpApplication<TDefinition>
   readonly environment?: unknown
+  readonly capabilities?: readonly RuntimeCapabilityBinding[]
 } & BootstrapArguments<TDefinition>
 
 export type AwsLambdaBindOptions<TDefinition extends ApplicationDefinition> =
@@ -118,6 +120,7 @@ function bind<const TDefinition extends ApplicationDefinition>(
       bindApplicationCapability(options.application.model, 'http.server', {
         runtime: 'aws-lambda',
       }),
+      ...(options.capabilities ?? []),
     ],
     environment: 'environment' in options ? options.environment : process.env,
   })

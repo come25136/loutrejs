@@ -5,6 +5,7 @@ import {
   type BootstrapArguments,
   type KernelHostedApplication,
 } from '../application/index.js'
+import type { RuntimeCapabilityBinding } from '../core/index.js'
 import {
   applicationHasHost,
   bindApplicationCapability,
@@ -27,6 +28,7 @@ export type CloudflareWorkersBindOptions<
   TDefinition extends ApplicationDefinition,
 > = {
   readonly application: HttpApplication<TDefinition>
+  readonly capabilities?: readonly RuntimeCapabilityBinding[]
 } & BootstrapArguments<TDefinition>
 
 export interface CloudflareWorkersBinding {
@@ -74,6 +76,7 @@ function bind<const TDefinition extends ApplicationDefinition>(
         bindApplicationCapability(options.application.model, 'http.server', {
           runtime: 'cloudflare-workers',
         }),
+        ...(options.capabilities ?? []),
       ],
       environment,
     })

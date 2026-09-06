@@ -139,6 +139,41 @@ describe('WebSocket Execution Extension', () => {
     await application.close()
   })
 
+  it('Application Model構築後のraw WebSocket Contract mutationをRuntimeへ漏らさない', async () => {
+    const connection = new FixtureConnection()
+    const route = {
+      path: '/snapshot/{roomId}',
+      request: { params: { roomId: z.string() } },
+    }
+    const contract = websocket.contract({ snapshot: route })
+    const controller = websocket.implementation({
+      contract,
+      factory: () => ({
+        async snapshot(context) {
+          await context.close(1000, 'done')
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const definition = defineApplication({ modules: [Module()] })
+
+    ;(route.request.params as Record<string, unknown>).roomId = z.number()
+
+    const application = await bootstrapApplication({
+      application: definition,
+      capabilities: [bindWebSocketServer(fixtureDriver(connection))],
+    })
+    try {
+      const response = await application.websocket.upgrade(
+        new Request('http://fixture.test/snapshot/stable'),
+      )
+      expect(response.status).toBe(200)
+      await connection.closed
+    } finally {
+      await application.close()
+    }
+  })
+
   it('shutdown時にactive sessionを1001でdrainしてから終了する', async () => {
     const connection = new FixtureConnection()
     let executionSignal: AbortSignal | undefined

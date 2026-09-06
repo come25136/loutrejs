@@ -7,10 +7,10 @@ import type {
   JsonValue,
 } from '@loutrejs/loutre/graph'
 import {
-  checkCapabilities,
+  checkRuntimeSupport,
   detectRuntimeEngine,
-  nodeRuntimeCapabilities,
-  type RuntimeCapabilities,
+  nodeRuntimeSupport,
+  type RuntimeSupportProfile,
 } from '@loutrejs/loutre/runtime'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
@@ -25,8 +25,8 @@ export interface CliIO {
   readonly stderr: (value: string) => void
 }
 
-const runtimes: Readonly<Record<string, RuntimeCapabilities>> = {
-  node: nodeRuntimeCapabilities,
+const runtimes: Readonly<Record<string, RuntimeSupportProfile>> = {
+  node: nodeRuntimeSupport,
   deno: denoRuntime,
   bun: bunRuntime,
   'cloudflare-workers': cloudflareWorkersRuntime,
@@ -37,7 +37,7 @@ const runtimes: Readonly<Record<string, RuntimeCapabilities>> = {
 const runtimeNames = Object.keys(runtimes)
 const deploymentRuntimes = ['aws-lambda', 'cloudflare-workers', 'deno'] as const
 type DeploymentRuntime = (typeof deploymentRuntimes)[number]
-type GraphSubject = 'modules' | 'di' | 'contracts' | 'runtime' | 'executions'
+type GraphSubject = 'modules' | 'di' | 'http' | 'runtime' | 'executions'
 
 export async function runCli(
   args: readonly string[],
@@ -98,7 +98,7 @@ export async function runCli(
       if (!target) return 2
       const graph = await loadApplicationGraph(target)
       const required = requiredCapabilities(graph)
-      const check = checkCapabilities(required, runtime)
+      const check = checkRuntimeSupport(required, runtime)
       io.stdout(`Runtime: ${runtime.runtime}`)
       io.stdout(`Required: ${check.required.join(', ') || '(none)'}`)
       io.stdout(`Missing: ${check.missing.join(', ') || '(none)'}`)
@@ -111,7 +111,7 @@ export async function runCli(
     case 'graph': {
       if (!isGraphSubject(subject)) {
         io.stderr(
-          'graph requires one of: modules, di, contracts, executions, runtime.',
+          'graph requires one of: modules, di, http, executions, runtime.',
         )
         return 2
       }
@@ -178,7 +178,7 @@ export async function runCli(
         return 1
       }
       if (deploymentRuntime) {
-        const compatibility = checkCapabilities(
+        const compatibility = checkRuntimeSupport(
           requiredCapabilities(graph),
           runtimes[deploymentRuntime]!,
         )
@@ -263,7 +263,7 @@ function isGraphSubject(value: string | undefined): value is GraphSubject {
   return (
     value === 'modules' ||
     value === 'di' ||
-    value === 'contracts' ||
+    value === 'http' ||
     value === 'runtime' ||
     value === 'executions'
   )
@@ -291,7 +291,7 @@ function graphData(
         edges: graph.edges,
         diagnostics: graph.diagnostics,
       }
-    case 'contracts':
+    case 'http':
       return {
         executions: httpExecutions(graph),
         routes: httpRoutes(graph),
@@ -330,7 +330,7 @@ function renderTextGraph(
     return
   }
 
-  if (subject === 'contracts') {
+  if (subject === 'http') {
     for (const route of httpRoutes(graph)) {
       write(`${route.execution}.${route.name} [http]`)
       write(`  ${route.method} ${route.path}`)
@@ -419,7 +419,7 @@ function renderMermaidGraph(
   const edge = (from: string, to: string, label?: string) =>
     lines.push(`  ${from} -->${label ? `|"${mermaidText(label)}"|` : ''} ${to}`)
 
-  if (subject === 'contracts') {
+  if (subject === 'http') {
     httpRoutes(graph).forEach((route, index) => {
       node(`r${index}`, `${route.method} ${route.path}`)
       node(`e${index}`, route.execution)
@@ -611,7 +611,7 @@ function httpRoutes(graph: ApplicationModelGraphIR): HttpRouteProjection[] {
 
 function selectNodes(
   graph: ApplicationModelGraphIR,
-  subject: Exclude<GraphSubject, 'contracts'>,
+  subject: Exclude<GraphSubject, 'http'>,
 ): readonly GraphNodeIR[] {
   switch (subject) {
     case 'modules':
@@ -695,7 +695,7 @@ function helpText(): string {
     'Loutre CLI',
     '  loutre check --entry <entry>',
     '  loutre doctor [--runtime node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
-    '  loutre graph modules|di|contracts|executions|runtime --entry <entry> [--format text|json|mermaid]',
+    '  loutre graph modules|di|http|executions|runtime --entry <entry> [--format text|json|mermaid]',
     '  loutre explain <target> --entry <entry>',
     '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',
     '',

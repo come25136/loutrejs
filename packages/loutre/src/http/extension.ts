@@ -764,15 +764,80 @@ function compileHttpRoute(
   assertValidHttpMethod(route.method)
   const segments = parseHttpPath(route.path)
   assertValidHttpRouteDefinition(route, segments)
+  const definition = snapshotHttpRouteDefinition(route)
   return Object.freeze({
     name,
     method: route.method.toUpperCase(),
     path: route.path,
     segments,
     dispatch: createHttpDispatchKey(route.method, segments),
-    definition: route,
-    middlewares: compileHttpMiddlewares(route),
+    definition,
+    middlewares: compileHttpMiddlewares(definition),
   })
+}
+
+function snapshotHttpRouteDefinition(
+  route: HttpExecutionRouteDefinition,
+): HttpExecutionRouteDefinition {
+  const request = route.request
+    ? Object.freeze({
+        ...route.request,
+        ...(route.request.params === undefined
+          ? {}
+          : { params: Object.freeze({ ...route.request.params }) }),
+      })
+    : undefined
+  const responses = Object.freeze(
+    Object.fromEntries(
+      Object.entries(route.responses).map(([name, response]) => [
+        name,
+        Object.freeze({
+          ...response,
+          ...(response.headers === undefined
+            ? {}
+            : { headers: snapshotHttpResponseHeaders(response.headers) }),
+          ...(response.error === undefined
+            ? {}
+            : { error: Object.freeze({ ...response.error }) }),
+        }),
+      ]),
+    ),
+  )
+  return Object.freeze({
+    ...route,
+    ...(route.tags === undefined
+      ? {}
+      : { tags: Object.freeze([...route.tags]) }),
+    ...(request === undefined ? {} : { request }),
+    responses,
+    ...(route.middlewares === undefined
+      ? {}
+      : { middlewares: Object.freeze([...route.middlewares]) }),
+  })
+}
+
+function snapshotHttpResponseHeaders(
+  headers: HttpResponseHeadersDefinition,
+): HttpResponseHeadersDefinition {
+  if (isStandardSchema(headers)) return headers
+  if (isResponseHeadersWithDefaults(headers)) {
+    return Object.freeze({
+      schema: headers.schema,
+      defaults: snapshotHttpHeaders(headers.defaults),
+    })
+  }
+  return snapshotHttpHeaders(headers)
+}
+
+function snapshotHttpHeaders(headers: HttpHeaders): HttpHeaders {
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(headers).map(([name, value]) => [
+        name,
+        Array.isArray(value) ? Object.freeze([...value]) : value,
+      ]),
+    ),
+  )
 }
 
 function compileHttpMiddlewares(

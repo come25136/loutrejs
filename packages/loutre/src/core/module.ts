@@ -16,7 +16,6 @@ export interface ModuleDefinition {
   readonly executions?: readonly ExecutionDefinition[]
   readonly exports?: readonly unknown[]
   readonly lifecycle?: ModuleLifecycle
-  readonly requires?: readonly string[]
 }
 
 export const moduleTypeInfo: unique symbol = Symbol('loutre.module-type-info')

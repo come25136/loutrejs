@@ -38,4 +38,38 @@ describe('MessagePort Execution Extension', () => {
     })
     await application.close()
   })
+
+  it('Application Model構築後のraw MessagePort Contract mutationをRuntimeへ漏らさない', async () => {
+    const route = {
+      input: z.string(),
+      responses: { ok: z.string() },
+    }
+    const contract = messagePort.contract({ echo: route })
+    const handler = messagePort.implementation({
+      name: 'echo.message-port',
+      contract,
+      factory: () => ({
+        echo: (context) => context.response.ok(context.input),
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [handler] }))
+    const definition = defineApplication({ modules: [Module()] })
+
+    ;(route as { input: unknown }).input = z.number()
+    ;(route.responses as Record<string, unknown>).ok = z.number()
+
+    const application = await bootstrapApplication({ application: definition })
+    try {
+      await expect(
+        application.messagePort.invoke('echo', 'stable'),
+      ).resolves.toEqual({
+        kind: 'message-port-result',
+        response: 'ok',
+        value: 'stable',
+      })
+      await expect(application.messagePort.invoke('echo', 42)).rejects.toThrow()
+    } finally {
+      await application.close()
+    }
+  })
 })

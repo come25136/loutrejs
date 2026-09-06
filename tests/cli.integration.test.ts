@@ -22,11 +22,11 @@ describe('Loutre CLI', () => {
     }
   }
 
-  it('Contract/Pipeline Graphを表示する', async () => {
+  it('HTTP Execution Graphを表示する', async () => {
     const output = io()
     expect(
       await runCli(
-        ['graph', 'contracts', '--entry', 'integrations/http-crud/src/app.ts'],
+        ['graph', 'http', '--entry', 'integrations/http-crud/src/app.ts'],
         output.value,
       ),
     ).toBe(0)
@@ -131,7 +131,7 @@ describe('Loutre CLI', () => {
       await runCli(
         [
           'graph',
-          'contracts',
+          'http',
           '--format',
           'json',
           '--entry',

@@ -165,7 +165,7 @@ await app.tasks.triggers.start()
 
 ## MessagePort and WebSocket
 
-MessagePort is provided by `@loutrejs/message-port`; WebSocket is provided by `@loutrejs/websocket`. Both packages depend only on the Kernel public surface and contribute their own execution model, runtime, host API, and graph projection.
+MessagePort is provided by `@loutrejs/message-port`; WebSocket is provided by `@loutrejs/websocket`. Both own their execution model, runtime, host API, and graph projection. WebSocket additionally depends on the public HTTP extension surface for its HTTP upgrade handshake; Core remains transport-agnostic.
 
 This keeps transport semantics outside Core while preserving one Application Model.
 

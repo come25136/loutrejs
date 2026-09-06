@@ -5,6 +5,7 @@ import {
   type BootstrapArguments,
   type KernelHostedApplication,
 } from '../application/index.js'
+import type { RuntimeCapabilityBinding } from '../core/index.js'
 import {
   applicationHasHost,
   bindApplicationCapability,
@@ -36,6 +37,7 @@ type BunServer = {
 export type BunCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
   readonly environment?: unknown
+  readonly capabilities?: readonly RuntimeCapabilityBinding[]
 } & BootstrapArguments<TDefinition>
 
 export interface BunServeOptions {
@@ -98,6 +100,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
       bindApplicationCapability(options.application.model, 'http.server', {
         runtime: 'bun',
       }),
+      ...(options.capabilities ?? []),
     ],
     environment: 'environment' in options ? options.environment : environment,
   })

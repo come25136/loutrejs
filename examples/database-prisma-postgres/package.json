@@ -12,7 +12,7 @@
     "db:stop": "docker compose down",
     "dev": "tsx watch src/main.ts",
     "generate": "prisma generate",
-    "graph": "loutre graph contracts --entry src/app.ts",
+    "graph": "loutre graph http --entry src/app.ts",
     "postinstall": "prisma generate",
     "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit"

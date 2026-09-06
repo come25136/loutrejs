@@ -5,6 +5,7 @@ import {
   type BootstrapArguments,
   type KernelHostedApplication,
 } from '../application/index.js'
+import type { RuntimeCapabilityBinding } from '../core/index.js'
 import {
   applicationHasHost,
   bindApplicationCapability,
@@ -30,6 +31,7 @@ type DenoServer = { shutdown(): Promise<void> }
 export type DenoRuntimeOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
   readonly environment?: unknown
+  readonly capabilities?: readonly RuntimeCapabilityBinding[]
 } & BootstrapArguments<TDefinition>
 
 export type DenoCreateOptions<TDefinition extends ApplicationDefinition> =
@@ -89,6 +91,7 @@ function bind<const TDefinition extends ApplicationDefinition>(
       bindApplicationCapability(options.application.model, 'http.server', {
         runtime: 'deno',
       }),
+      ...(options.capabilities ?? []),
     ],
     environment:
       'environment' in options ? options.environment : denoEnvironment(),
@@ -137,6 +140,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
       bindApplicationCapability(options.application.model, 'http.server', {
         runtime: 'deno',
       }),
+      ...(options.capabilities ?? []),
     ],
     environment:
       'environment' in options ? options.environment : denoEnvironment(),

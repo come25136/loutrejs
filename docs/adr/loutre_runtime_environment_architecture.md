@@ -368,9 +368,9 @@ Test / embedding では runtime adapter の Environment override を利用でき
 
 ## 8. Graph / Capability
 
-いずれかの Module が Environment Contract を宣言した場合、Graph は `env.runtime` capability を自動導出する。
+Environment Contract は runtime adapter が与える environment source をProviderとして解決する。Environment自体はExecution Capabilityではないため、Graphへ `env.runtime` のような疑似Capabilityを導出しない。
 
-Application 側で `requires: ['env.runtime']` を手書きする必要はない。
+Runtime CapabilityはExecution Extensionが `RuntimeCapability<T>` tokenとして要求するものだけをApplication Modelへ記録する。Module側に文字列 `requires` APIは持たせない。
 
 Graph IR では Environment provider を framework source として表現し、Environment value / secret は Graph IR / Manifest / diagnostics / logger に含めない。
 

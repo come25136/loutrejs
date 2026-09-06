@@ -13,6 +13,7 @@ import {
   type HttpContract,
   type HttpImplementationDefinition,
 } from '@loutrejs/loutre/http'
+import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 
 async function createHttpApplication<const TContract extends HttpContract>(
   contract: TContract,
@@ -316,6 +317,48 @@ describe('HTTP Execution Extension regression', () => {
         }),
       }),
     ).toThrow('cannot be empty or contain control characters')
+  })
+
+  it('Application Model構築後のraw HTTP Contract mutationをRuntime/OpenAPIへ漏らさない', async () => {
+    const route = {
+      method: 'GET',
+      path: '/snapshot',
+      responses: { ok: { status: 200 } },
+    } as const
+    const contract = http.contract({ snapshot: route })
+    const implementation = http.implementation({
+      contract,
+      factory: () => ({ snapshot: (context) => context.response.ok({}) }),
+    })
+    const Module = defineModule(() => ({ executions: [implementation] }))
+    const definition = defineApplication({ modules: [Module()] })
+
+    ;(route as { method: string }).method = 'POST'
+    ;(route as { path: string }).path = '/mutated'
+    ;(route.responses.ok as { status: number }).status = 201
+
+    const document = generateOpenApi(definition.model, {
+      info: { title: 'snapshot', version: '1.0.0' },
+    })
+    expect(document.paths).toHaveProperty('/snapshot')
+    expect(document.paths).not.toHaveProperty('/mutated')
+    expect(
+      (document.paths['/snapshot']?.get as { responses?: unknown } | undefined)
+        ?.responses,
+    ).toHaveProperty('200')
+
+    const application = await bootstrapApplication({
+      application: definition,
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+    try {
+      const response = await application.http.fetch(
+        new Request('http://fixture.test/snapshot'),
+      )
+      expect(response.status).toBe(200)
+    } finally {
+      await application.close()
+    }
   })
 
   it('dynamic contractでもstatus/bodyless/params/body headers invariantを検証する', () => {

@@ -1,21 +1,21 @@
-export type RuntimeCapability = string
+export type RuntimeCapabilityId = string
 
-export interface RuntimeCapabilities {
+export interface RuntimeSupportProfile {
   readonly runtime: string
-  readonly capabilities: ReadonlySet<RuntimeCapability>
+  readonly capabilities: ReadonlySet<RuntimeCapabilityId>
 }
 
-export interface CapabilityCheck {
+export interface RuntimeSupportCheck {
   readonly ok: boolean
-  readonly required: readonly RuntimeCapability[]
-  readonly supported: readonly RuntimeCapability[]
-  readonly missing: readonly RuntimeCapability[]
+  readonly required: readonly RuntimeCapabilityId[]
+  readonly supported: readonly RuntimeCapabilityId[]
+  readonly missing: readonly RuntimeCapabilityId[]
 }
 
-export function checkCapabilities(
-  required: Iterable<RuntimeCapability>,
-  runtime: RuntimeCapabilities,
-): CapabilityCheck {
+export function checkRuntimeSupport(
+  required: Iterable<RuntimeCapabilityId>,
+  runtime: RuntimeSupportProfile,
+): RuntimeSupportCheck {
   const requirements = [...new Set(required)]
   const missing = requirements.filter(
     (capability) => !runtime.capabilities.has(capability),
@@ -28,11 +28,11 @@ export function checkCapabilities(
   }
 }
 
-export class MissingCapabilitiesError extends Error {
-  constructor(readonly check: CapabilityCheck) {
+export class MissingRuntimeSupportError extends Error {
+  constructor(readonly check: RuntimeSupportCheck) {
     super(
       `Runtime is missing required capabilities: ${check.missing.join(', ')}`,
     )
-    this.name = 'MissingCapabilitiesError'
+    this.name = 'MissingRuntimeSupportError'
   }
 }

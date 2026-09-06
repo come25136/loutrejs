@@ -5,6 +5,7 @@ import {
   type BootstrapArguments,
   type KernelHostedApplication,
 } from '../application/index.js'
+import type { RuntimeCapabilityBinding } from '../core/index.js'
 import { applicationHasHost } from '../application/kernel-internal.js'
 import { assertRuntimeEngine } from '../runtime/engine.js'
 
@@ -45,6 +46,7 @@ export type ElectronAttachOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: MessagePortApplication<TDefinition>
   readonly port: MessagePortLike | ElectronMessagePortMainLike
   readonly environment?: unknown
+  readonly capabilities?: readonly RuntimeCapabilityBinding[]
 } & BootstrapArguments<TDefinition>
 
 export interface ElectronAttachment<

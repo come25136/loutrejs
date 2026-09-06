@@ -9,7 +9,7 @@
   "scripts": {
     "check": "loutre check --entry src/app.ts",
     "dev": "tsx watch src/main.ts",
-    "graph": "loutre graph contracts --entry src/app.ts",
+    "graph": "loutre graph http --entry src/app.ts",
     "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit"
   },

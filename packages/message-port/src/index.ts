@@ -130,7 +130,7 @@ export const messagePortExtension = defineExecutionExtension<
       ),
       capabilities: [],
       compiled: {
-        routes: definition.contract.routes,
+        routes: snapshotMessagePortRoutes(definition.contract.routes),
         factory: definition.factory as CompiledMessagePortExecution['factory'],
       },
     }
@@ -197,6 +197,31 @@ export const messagePort = Object.freeze({
   implementation: defineMessagePortImplementation,
   extension: messagePortExtension,
 })
+
+function snapshotMessagePortRoutes(
+  routes: MessagePortContract['routes'],
+): MessagePortContract['routes'] {
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(routes).map(([name, route]) => [
+        name,
+        Object.freeze({
+          ...(route.input === undefined ? {} : { input: route.input }),
+          responses: Object.freeze(
+            Object.fromEntries(
+              Object.entries(route.responses).map(([response, definition]) => [
+                response,
+                isMessagePortServerStreamResponse(definition)
+                  ? Object.freeze({ ...definition })
+                  : definition,
+              ]),
+            ),
+          ),
+        }),
+      ]),
+    ),
+  )
+}
 
 function createMessagePortRuntime(
   executions: readonly {

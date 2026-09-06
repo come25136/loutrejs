@@ -1,7 +1,7 @@
-import type { RuntimeCapabilities } from './capability.js'
+import type { RuntimeSupportProfile } from './capability.js'
 
 /** CLIが`@loutrejs/node`へ依存するとBun/DenoでもNode.js専用moduleを評価するため、Capability metadataだけをruntime-neutral側へ分離する。 */
-export const nodeRuntimeCapabilities = {
+export const nodeRuntimeSupport = {
   runtime: 'node',
   capabilities: new Set([
     'http.server',
@@ -17,4 +17,4 @@ export const nodeRuntimeCapabilities = {
     'env.runtime',
     'crypto.random',
   ]),
-} as const satisfies RuntimeCapabilities
+} as const satisfies RuntimeSupportProfile
