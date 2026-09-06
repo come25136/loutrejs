@@ -384,6 +384,8 @@ complete時にsignalが未abortならexecution lifetime終了としてsignalをa
 
 server-streamを返すExecutionは、stream返却時にLeaseを完了せず、iteratorの正常終了、throw、consumerの`return()`、cancel、abortのいずれかまでownershipをstreamへ移す。完了処理はexactly-onceとし、Extensionの`drain()`は未完了streamへprotocol固有の停止要求を送る。
 
+HTTP server-streamではExtension Runtimeが未完了streamのcontrolを保持する。`drain()`は新規requestを拒否した後、各Leaseをabortし、iteratorの`return()`とLeaseの`complete()`まで待機する。
+
 ## 11. Shutdown order
 
 Application shutdown orderは次に固定する。
@@ -394,6 +396,9 @@ Application shutdown orderは次に固定する。
 3. active executions == 0 を待機
 4. Extension Runtime close()   逆順
 5. Provider / Module cleanup   逆順
+   a. onModuleDestroy
+   b. beforeApplicationShutdown
+   c. onApplicationShutdown
 6. Application state -> stopped
 ```
 
@@ -414,7 +419,9 @@ Extension runtimeの`close()`よりProvider cleanupを先に実行しない。Ex
 
 WebSocket等のlong-lived executionでは、drainによるprotocol-specific graceful close完了後に`complete()`する。
 
-`drain()`が失敗したfailure pathではactive executionが自然終了する保証を失うため、Kernelは残るLeaseをabortしてcooperative cancellationを要求し、active registryから強制削除せずにExtension `close()`とProvider cleanupへ進む。drain errorは失わず、他のcleanup errorとともに`AggregateError`へ保持する。上記のactive 0待機順はdrainが成功したhappy pathで維持する。
+`drain()`が失敗したfailure pathではactive executionが自然終了する保証を失うため、Kernelは残るLeaseをabortしてcooperative cancellationを要求する。その後もactive registryから強制削除せず、active executions == 0を安全境界として維持する。
+
+協調停止は`forceShutdownTimeoutMs`（既定値5秒）まで待機する。期限内にactive executions == 0へ到達すればExtension `close()`とProvider cleanupを続行し、drain errorを最後の`AggregateError`へ保持する。期限を超えた場合はExtension `close()`とProvider cleanupを実行せず、Applicationを`draining`に保ったまま`AggregateError`を返す。残存Executionが後で`complete()`した後はshutdownを再試行できる。このfailure pathでは「完了していないExecutionが利用中のProviderをcleanupしない」ことをtotal completionより優先する。
 
 初期化rollbackでは、構築済みProvider instanceと初期化完了済みModuleを追跡する。未到達ModuleのLifecycle hookを実行せず、cleanup dependency解決を通じて未初期化Providerを新規constructしない。
 

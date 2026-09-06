@@ -33,6 +33,7 @@ export type KernelApplicationOptions<
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
   readonly environment?: unknown
   readonly logger?: Logger
+  readonly forceShutdownTimeoutMs?: number
 } & BootstrapArguments<TDefinition>
 
 export function createKernelApplication<

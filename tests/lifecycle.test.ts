@@ -6,7 +6,7 @@ import {
 } from '@loutrejs/loutre'
 
 describe('Application Lifecycle', () => {
-  it('初期化失敗時に対象instanceを逆順でcleanupする', async () => {
+  it('初期化失敗時は対象instanceのonModuleDestroyだけを逆順で実行する', async () => {
     const events: string[] = []
     const failure = new Error('B init failure')
     class ProviderA {
@@ -16,6 +16,12 @@ describe('Application Lifecycle', () => {
       }
       onModuleDestroy() {
         events.push('A.destroy')
+      }
+      beforeApplicationShutdown() {
+        events.push('A.before')
+      }
+      onApplicationShutdown() {
+        events.push('A.shutdown')
       }
     }
     class ProviderB {
@@ -118,6 +124,62 @@ describe('Application Lifecycle', () => {
     expect(thrown).toBeInstanceOf(AggregateError)
     expect((thrown as AggregateError).errors).toEqual([secondError, firstError])
     await expect(application.close()).resolves.toBeUndefined()
+  })
+
+  it('shutdown lifecycleをonModuleDestroyから既存順序で実行する', async () => {
+    const events: string[] = []
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+      beforeApplicationShutdown(signal?: string) {
+        events.push(`provider.before:${signal}`)
+      }
+      onApplicationShutdown(signal?: string) {
+        events.push(`provider.shutdown:${signal}`)
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      lifecycle: {
+        onModuleDestroy: {
+          kind: 'lifecycle-hook' as const,
+          inject: [],
+          run: () => {
+            events.push('module.destroy')
+          },
+        },
+        beforeApplicationShutdown: {
+          kind: 'lifecycle-hook' as const,
+          inject: [],
+          run: () => {
+            events.push('module.before')
+          },
+        },
+        onApplicationShutdown: {
+          kind: 'lifecycle-hook' as const,
+          inject: [],
+          run: () => {
+            events.push('module.shutdown')
+          },
+        },
+      },
+    }))
+    const application = createKernelApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+    await application.init()
+
+    await application.close('SIGTERM')
+
+    expect(events).toEqual([
+      'provider.destroy',
+      'module.destroy',
+      'provider.before:SIGTERM',
+      'module.before',
+      'provider.shutdown:SIGTERM',
+      'module.shutdown',
+    ])
   })
 
   it('Application Model構築ではLifecycleを実行しない', () => {

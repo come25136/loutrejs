@@ -277,4 +277,71 @@ describe('HTTP Execution Extension public API surface', () => {
       await application.close()
     }
   })
+
+  it('shutdown時に未完了server-streamを停止してExecutionを完了する', async () => {
+    const events: string[] = []
+    const contract = http.contract({
+      events: {
+        method: 'GET',
+        path: '/events',
+        interaction: 'server-stream',
+        responses: {
+          ok: {
+            status: 200,
+            stream: 'server',
+            body: z.object({ sequence: z.number() }),
+          },
+        },
+      },
+    })
+    const implementation = http.implementation({
+      contract,
+      factory: () => ({
+        events: (ctx) =>
+          ctx.response.ok({
+            body: (async function* () {
+              try {
+                let sequence = 0
+                while (true) yield { sequence: sequence++ }
+              } finally {
+                events.push('stream.finalized')
+              }
+            })(),
+          }),
+      }),
+    })
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [implementation],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+    const response = await application.http.fetch(
+      new Request('https://fixture.test/events'),
+    )
+    const reader = response.body!.getReader()
+    const readerClosed = reader.closed.catch(() => undefined)
+    await expect(reader.read()).resolves.toMatchObject({ done: false })
+
+    await expect(
+      Promise.race([
+        application.close(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error('HTTP server-stream drain timed out')),
+            250,
+          ),
+        ),
+      ]),
+    ).resolves.toBeUndefined()
+    await readerClosed
+    expect(events).toEqual(['stream.finalized', 'provider.destroy'])
+  })
 })

@@ -23,7 +23,10 @@ export interface ApplicationKernelRuntimeOptions {
   readonly logger?: Logger
   readonly environmentSource?: unknown
   readonly argumentsSource?: unknown
+  readonly forceShutdownTimeoutMs?: number
 }
+
+const defaultForceShutdownTimeoutMs = 5_000
 
 type RuntimeState =
   | 'created'
@@ -48,6 +51,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   readonly #idleWaiters = new Set<() => void>()
   readonly #environmentSource: unknown
   readonly #argumentsSource: unknown
+  readonly #forceShutdownTimeoutMs: number
   #state: RuntimeState = 'created'
   #initialization: Promise<void> | undefined
   #shutdown: Promise<void> | undefined
@@ -62,6 +66,16 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     )
     this.#environmentSource = options.environmentSource
     this.#argumentsSource = options.argumentsSource ?? Object.freeze({})
+    this.#forceShutdownTimeoutMs =
+      options.forceShutdownTimeoutMs ?? defaultForceShutdownTimeoutMs
+    if (
+      !Number.isFinite(this.#forceShutdownTimeoutMs) ||
+      this.#forceShutdownTimeoutMs < 0
+    ) {
+      throw new TypeError(
+        'LUTRE_FORCE_SHUTDOWN_TIMEOUT: forceShutdownTimeoutMs must be a non-negative finite number.',
+      )
+    }
     this.container = new Container(model.providers, {
       logger: options.logger ?? new Logger(),
     })
@@ -231,7 +245,9 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   shutdown(signal?: string): Promise<void> {
     if (this.#state === 'stopped') return Promise.resolve()
     if (this.#shutdown) return this.#shutdown
-    const shutdown = this.#shutdownApplication(signal)
+    const shutdown = this.#shutdownApplication(signal).finally(() => {
+      if (this.#shutdown === shutdown) this.#shutdown = undefined
+    })
     this.#shutdown = shutdown
     return shutdown
   }
@@ -264,9 +280,18 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         for (const execution of this.#activeExecutions) {
           execution.abort(reason)
         }
-        await Promise.resolve()
-      } else {
-        await new Promise<void>((resolve) => this.#idleWaiters.add(resolve))
+      }
+      try {
+        await this.#waitForActiveExecutions(
+          drainFailed ? this.#forceShutdownTimeoutMs : undefined,
+        )
+      } catch (error) {
+        errors.push(error)
+        throw new AggregateError(
+          errors,
+          'Application shutdown did not reach a safe cleanup boundary.',
+          { cause: error },
+        )
       }
     }
     for (const { extension } of [...this.model.extensions].toReversed()) {
@@ -287,12 +312,12 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         this.#providerInstances.get(module.id) ?? []
       ).toReversed()) {
         await collectError(
-          () => callLifecycle(instance, 'beforeApplicationShutdown', signal),
+          () => callLifecycle(instance, 'onModuleDestroy'),
           errors,
         )
       }
       await collectError(
-        () => this.#runCleanupHook(module.id, 'beforeApplicationShutdown'),
+        () => this.#runCleanupHook(module.id, 'onModuleDestroy'),
         errors,
       )
     }
@@ -301,12 +326,12 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         this.#providerInstances.get(module.id) ?? []
       ).toReversed()) {
         await collectError(
-          () => callLifecycle(instance, 'onModuleDestroy'),
+          () => callLifecycle(instance, 'beforeApplicationShutdown', signal),
           errors,
         )
       }
       await collectError(
-        () => this.#runCleanupHook(module.id, 'onModuleDestroy'),
+        () => this.#runCleanupHook(module.id, 'beforeApplicationShutdown'),
         errors,
       )
     }
@@ -326,12 +351,46 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     }
   }
 
+  #waitForActiveExecutions(timeoutMs?: number): Promise<void> {
+    if (this.#activeExecutions.size === 0) return Promise.resolve()
+    return new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const resolveWhenIdle = () => {
+        if (timer !== undefined) clearTimeout(timer)
+        resolve()
+      }
+      this.#idleWaiters.add(resolveWhenIdle)
+      if (timeoutMs === undefined) return
+      timer = setTimeout(() => {
+        this.#idleWaiters.delete(resolveWhenIdle)
+        reject(
+          new Error(
+            `LUTRE_APPLICATION_FORCE_SHUTDOWN_TIMEOUT: ${this.#activeExecutions.size} active execution(s) did not complete within ${timeoutMs}ms.`,
+          ),
+        )
+      }, timeoutMs)
+    })
+  }
+
   async #rollbackInitialization(): Promise<unknown[]> {
     const errors: unknown[] = []
     for (const runtime of [...this.#extensionRuntimes.values()].toReversed()) {
       if (runtime.close) await collectError(() => runtime.close!(), errors)
     }
-    await this.#cleanupProviders(undefined, errors)
+    for (const module of moduleNodes(this.model).toReversed()) {
+      await collectError(
+        () => this.#runCleanupHook(module.id, 'onModuleDestroy'),
+        errors,
+      )
+      for (const instance of (
+        this.#providerInstances.get(module.id) ?? []
+      ).toReversed()) {
+        await collectError(
+          () => callLifecycle(instance, 'onModuleDestroy'),
+          errors,
+        )
+      }
+    }
     return errors
   }
 

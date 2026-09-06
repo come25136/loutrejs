@@ -40,10 +40,10 @@ describe('database modules integration', () => {
 
     await runtime.close('test')
     expect(events.slice(-6)).toEqual([
-      'analytics.beforeShutdown:test',
-      'primary.beforeShutdown:test',
       'analytics.close',
       'primary.close',
+      'analytics.beforeShutdown:test',
+      'primary.beforeShutdown:test',
       'analytics.shutdown:test',
       'primary.shutdown:test',
     ])

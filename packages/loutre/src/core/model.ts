@@ -1,4 +1,4 @@
-import { diagnostic, type Diagnostic } from './diagnostic.js'
+import { diagnostic, isErrorDiagnostic, type Diagnostic } from './diagnostic.js'
 import type { ArgsClass } from './args.js'
 import {
   isExecutionDefinition,
@@ -162,9 +162,7 @@ export class ApplicationModelError extends Error {
 export function assertValidApplicationModel(
   model: ApplicationModel,
 ): ApplicationModel {
-  const errors = model.diagnostics.filter(
-    (item) => (item.severity ?? 'error') === 'error',
-  )
+  const errors = model.diagnostics.filter(isErrorDiagnostic)
   if (errors.length > 0) throw new ApplicationModelError(errors)
   return model
 }

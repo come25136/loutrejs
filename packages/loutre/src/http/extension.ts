@@ -343,7 +343,7 @@ interface RuntimeHttpRoute {
 
 export interface HttpExtensionRuntime {
   fetch(request: Request): Promise<Response>
-  drain(): void
+  drain(): Promise<void>
 }
 
 export interface HttpHostApi {
@@ -996,6 +996,7 @@ function createHttpExtensionRuntime(
   applicationRuntime: ExecutionKernelRuntime,
 ): HttpExtensionRuntime {
   let accepting = true
+  const activeServerStreams = new Set<ActiveHttpServerStream>()
   const handlers = new Map<
     string,
     ReturnType<CompiledHttpExecution['factory']>
@@ -1028,8 +1029,20 @@ function createHttpExtensionRuntime(
     )
 
   return {
-    drain() {
+    async drain() {
       accepting = false
+      const reason = new Error(
+        'LUTRE_HTTP_SERVER_STREAM_DRAIN: Application is shutting down.',
+      )
+      const results = await Promise.allSettled(
+        [...activeServerStreams].map((stream) => stream.abort(reason)),
+      )
+      const errors = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      )
+      if (errors.length > 0) {
+        throw new AggregateError(errors, 'HTTP server-stream drain failed.')
+      }
     },
     async fetch(request) {
       if (!accepting) {
@@ -1100,6 +1113,19 @@ function createHttpExtensionRuntime(
         request.signal.removeEventListener('abort', abortRequest)
         lease.complete()
       }
+      const adoptServerStream = (stream: ServerSentEventStreamControl) => {
+        executionOwnedByStream = true
+        const activeStream: ActiveHttpServerStream = {
+          async abort(reason) {
+            lease.abort(reason)
+            await stream.abort(reason)
+          },
+        }
+        activeServerStreams.add(activeStream)
+        void stream.finished.then(() => {
+          activeServerStreams.delete(activeStream)
+        })
+      }
       request.signal.addEventListener('abort', abortRequest, { once: true })
       if (request.signal.aborted) abortRequest()
       try {
@@ -1165,7 +1191,7 @@ function createHttpExtensionRuntime(
           lease.signal,
           finishExecution,
         )
-        executionOwnedByStream = finalized.streaming
+        if (finalized.serverStream) adoptServerStream(finalized.serverStream)
         return complete(finalized.response)
       } catch (error) {
         if (error instanceof HttpInputDecodeError) {
@@ -1189,7 +1215,9 @@ function createHttpExtensionRuntime(
               lease.signal,
               finishExecution,
             )
-            executionOwnedByStream = finalized.streaming
+            if (finalized.serverStream) {
+              adoptServerStream(finalized.serverStream)
+            }
             return applyFrameworkHeadersToResponse(
               finalized.response,
               await safeCorsHeaders(match.route.middlewares, request),
@@ -1418,7 +1446,17 @@ class HttpUnsupportedMediaTypeError extends Error {
 
 interface FinalizedHttpResult {
   readonly response: Response
-  readonly streaming: boolean
+  readonly serverStream?: ServerSentEventStreamControl
+}
+
+interface ActiveHttpServerStream {
+  abort(reason: unknown): Promise<void>
+}
+
+interface ServerSentEventStreamControl {
+  readonly stream: ReadableStream<Uint8Array>
+  readonly finished: Promise<void>
+  abort(reason: unknown): Promise<void>
 }
 
 async function finalizeHttpResult(
@@ -1452,17 +1490,18 @@ async function finalizeHttpResult(
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache',
     })
+    const serverStream = createServerSentEventStream(
+      result.body,
+      response.body,
+      signal,
+      completeExecution,
+    )
     return {
-      response: new Response(
-        createServerSentEventStream(
-          result.body,
-          response.body,
-          signal,
-          completeExecution,
-        ),
-        { status: response.status, headers },
-      ),
-      streaming: true,
+      response: new Response(serverStream.stream, {
+        status: response.status,
+        headers,
+      }),
+      serverStream,
     }
   }
 
@@ -1472,7 +1511,6 @@ async function finalizeHttpResult(
   if (body === undefined) {
     return {
       response: new Response(null, { status: response.status, headers }),
-      streaming: false,
     }
   }
   if (
@@ -1489,7 +1527,6 @@ async function finalizeHttpResult(
         status: response.status,
         headers,
       }),
-      streaming: false,
     }
   }
   if (!headers.has('content-type')) {
@@ -1500,7 +1537,6 @@ async function finalizeHttpResult(
       status: response.status,
       headers,
     }),
-    streaming: false,
   }
 }
 
@@ -1509,11 +1545,16 @@ function createServerSentEventStream(
   schema: StandardSchemaV1,
   signal: AbortSignal,
   completeExecution: () => void,
-): ReadableStream<Uint8Array> {
+): ServerSentEventStreamControl {
   const encoder = new TextEncoder()
   const iterator = source[Symbol.asyncIterator]()
   let finished = false
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined
+  let cleanup: Promise<void> | undefined
+  let resolveFinished!: () => void
+  const finishedPromise = new Promise<void>((resolve) => {
+    resolveFinished = resolve
+  })
 
   const markFinished = () => {
     if (finished) return false
@@ -1521,15 +1562,42 @@ function createServerSentEventStream(
     signal.removeEventListener('abort', abort)
     return true
   }
-  const abort = () => {
-    if (!markFinished()) return
-    void Promise.resolve(iterator.return?.(signal.reason)).finally(() => {
-      controller?.error(signal.reason ?? new Error('HTTP request was aborted'))
+  const complete = () => {
+    try {
       completeExecution()
-    })
+    } finally {
+      resolveFinished()
+    }
+  }
+  const stop = (reason: unknown, errorStream: boolean): Promise<void> => {
+    if (cleanup) return cleanup
+    if (!markFinished()) return finishedPromise
+    cleanup = (async () => {
+      let cleanupError: unknown
+      try {
+        await iterator.return?.(reason)
+      } catch (error) {
+        cleanupError = error
+      } finally {
+        try {
+          if (errorStream) {
+            controller?.error(
+              cleanupError ?? reason ?? new Error('HTTP request was aborted'),
+            )
+          }
+        } finally {
+          complete()
+        }
+      }
+      if (cleanupError !== undefined) throw cleanupError
+    })()
+    return cleanup
+  }
+  const abort = () => {
+    void stop(signal.reason, true).catch(() => undefined)
   }
 
-  return new ReadableStream<Uint8Array>({
+  const stream = new ReadableStream<Uint8Array>({
     start(value) {
       controller = value
       if (signal.aborted) abort()
@@ -1539,31 +1607,39 @@ function createServerSentEventStream(
       if (finished) return
       try {
         const next = await iterator.next()
+        if (finished) return
         if (next.done) {
           if (markFinished()) {
-            value.close()
-            completeExecution()
+            try {
+              value.close()
+            } finally {
+              complete()
+            }
           }
           return
         }
         const item = await validateSchema(schema, next.value)
+        if (finished) return
         value.enqueue(encoder.encode(`data:${JSON.stringify(item)}\n\n`))
       } catch (error) {
         if (markFinished()) {
-          value.error(error)
-          completeExecution()
+          try {
+            value.error(error)
+          } finally {
+            complete()
+          }
         }
       }
     },
-    async cancel(reason) {
-      if (!markFinished()) return
-      try {
-        await iterator.return?.(reason)
-      } finally {
-        completeExecution()
-      }
+    cancel(reason) {
+      return stop(reason, false)
     },
   })
+  return {
+    stream,
+    finished: finishedPromise,
+    abort: (reason) => stop(reason, true),
+  }
 }
 
 async function mapDeclaredError(

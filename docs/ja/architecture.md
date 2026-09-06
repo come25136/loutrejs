@@ -210,7 +210,7 @@ const app = await nodeRuntime.create({ application })
 await app.serve({ port: 3000 })
 ```
 
-shutdownはExtension-owned workとactive executionをdrainし、Extension runtimeをcloseした後、Provider lifecycle cleanupを実行します。
+shutdownはExtension-owned workとactive executionをdrainし、active executionが0になってからExtension runtimeをcloseします。その後のProvider lifecycle cleanupは`onModuleDestroy`、`beforeApplicationShutdown`、`onApplicationShutdown`の順で実行します。drain失敗後に協調停止の期限を超えた場合は、利用中のProviderをcleanupせずApplicationを`draining`に保ちます。
 
 ## GraphとTooling
 

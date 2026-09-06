@@ -5,6 +5,16 @@ export interface Diagnostic {
   readonly severity?: 'error' | 'warning'
 }
 
+export function isErrorDiagnostic(item: Diagnostic): boolean {
+  return (item.severity ?? 'error') === 'error'
+}
+
+export function hasErrorDiagnostics(
+  diagnostics: readonly Diagnostic[],
+): boolean {
+  return diagnostics.some(isErrorDiagnostic)
+}
+
 export function diagnostic(
   code: string,
   message: string,

@@ -6,6 +6,7 @@ import type {
   GraphNodeIR,
   JsonValue,
 } from '@loutrejs/loutre/graph'
+import { hasErrorDiagnostics } from '@loutrejs/loutre'
 import {
   checkRuntimeSupport,
   detectRuntimeEngine,
@@ -70,7 +71,8 @@ export async function runCli(
       const target = entry()
       if (!target) return 2
       const graph = await loadApplicationGraph(target)
-      if (graph.diagnostics.length === 0) {
+      if (!hasErrorDiagnostics(graph.diagnostics)) {
+        if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
         io.stdout('Loutre Application Model is valid.')
         return 0
       }
@@ -105,7 +107,7 @@ export async function runCli(
       renderApplicationSummary(graph, io.stdout)
       renderCapabilityReasons(graph, check.missing, io.stdout)
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
-      return check.ok && graph.diagnostics.length === 0 ? 0 : 1
+      return check.ok && !hasErrorDiagnostics(graph.diagnostics) ? 0 : 1
     }
 
     case 'graph': {
@@ -131,7 +133,7 @@ export async function runCli(
         renderTextGraph(graph, subject, io.stdout)
       }
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
-      return graph.diagnostics.length === 0 ? 0 : 1
+      return hasErrorDiagnostics(graph.diagnostics) ? 1 : 0
     }
 
     case 'explain': {
@@ -147,7 +149,7 @@ export async function runCli(
         return 1
       }
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
-      return graph.diagnostics.length === 0 ? 0 : 1
+      return hasErrorDiagnostics(graph.diagnostics) ? 1 : 0
     }
 
     case 'build': {
@@ -167,10 +169,11 @@ export async function runCli(
       }
       const applicationEntry = resolve(io.cwd, subject)
       const graph = await loadApplicationGraph(applicationEntry)
-      if (graph.diagnostics.length > 0) {
+      if (hasErrorDiagnostics(graph.diagnostics)) {
         writeDiagnostics(graph, io)
         return 1
       }
+      if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
       if (deploymentRuntime && !hasHostNamespace(graph, 'http')) {
         io.stderr(
           `Runtime ${deploymentRuntime} entry generation requires an HTTP-capable Application.`,
@@ -521,7 +524,9 @@ function renderApplicationSummary(
 ): void {
   write('Application:')
   if (target) write(`  Target: ${target}`)
-  write(`  Graph: ${graph.diagnostics.length === 0 ? 'valid' : 'invalid'}`)
+  write(
+    `  Graph: ${hasErrorDiagnostics(graph.diagnostics) ? 'invalid' : 'valid'}`,
+  )
   write(`  Modules: ${graph.modules.length}`)
   write(`  Providers: ${graph.providers.length}`)
   write(`  Executions: ${graph.executions.length}`)

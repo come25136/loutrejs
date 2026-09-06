@@ -97,8 +97,12 @@ describe('Application Kernel regression', () => {
       }),
       createRuntime: ({ applicationRuntime }) => ({
         start() {
-          activeLease = applicationRuntime.beginExecution()
-          return activeLease.signal
+          const lease = applicationRuntime.beginExecution()
+          activeLease = lease
+          lease.signal.addEventListener('abort', () => lease.complete(), {
+            once: true,
+          })
+          return lease.signal
         },
         drain() {
           events.push('extension.drain')
@@ -146,6 +150,77 @@ describe('Application Kernel regression', () => {
     expect(thrown).toBeInstanceOf(AggregateError)
     expect((thrown as AggregateError).errors).toContain(drainError)
     await expect(application.close()).resolves.toBeUndefined()
+  })
+
+  it('drain失敗後もactive executionが残る間はProviderをcleanupしない', async () => {
+    const events: string[] = []
+    let activeLease: ExecutionLease | undefined
+    const extension = defineExecutionExtension<
+      any,
+      {},
+      'fixture',
+      { start(): void }
+    >({
+      kind: 'execution-extension',
+      name: '@fixture/uncooperative-drain-failure',
+      compile: () => ({
+        kind: 'execution',
+        id: 'fixture.uncooperative-drain-failure',
+        executionKind: 'fixture.uncooperative-drain-failure',
+        dependencies: [],
+        capabilities: [],
+        compiled: {},
+      }),
+      createRuntime: ({ applicationRuntime }) => ({
+        start() {
+          activeLease = applicationRuntime.beginExecution()
+        },
+        drain() {
+          events.push('extension.drain')
+          throw new Error('drain failed')
+        },
+        close() {
+          events.push('extension.close')
+        },
+      }),
+      host: {
+        namespace: 'fixture',
+        create: ({ runtime }) => ({
+          start: () => (runtime as { start(): void }).start(),
+        }),
+      },
+    })
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [defineExecution(extension, {})],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      forceShutdownTimeoutMs: 5,
+    })
+    application.fixture.start()
+
+    await expect(application.close()).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
+    expect(activeLease?.signal.aborted).toBe(true)
+    expect(events).toEqual(['extension.drain'])
+
+    activeLease?.complete()
+    await expect(application.close()).rejects.toThrow(
+      'Application shutdown failed.',
+    )
+    expect(events).toEqual([
+      'extension.drain',
+      'extension.drain',
+      'extension.close',
+      'provider.destroy',
+    ])
   })
 
   it('initialization rollbackで未初期化ProviderをLifecycle hook注入から生成しない', async () => {
