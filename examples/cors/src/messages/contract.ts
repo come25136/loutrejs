@@ -19,14 +19,6 @@ const corsMiddleware = cors({
 })
 
 export const MessageContract = http.contract({
-  preflight: {
-    method: 'OPTIONS',
-    path: '/messages',
-    responses: {
-      ok: { status: 204 },
-    },
-    middlewares: [corsMiddleware],
-  },
   create: {
     method: 'POST',
     path: '/messages',
