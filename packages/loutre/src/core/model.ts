@@ -16,6 +16,7 @@ import {
   normalizeProvider,
   type ProviderDescriptor,
 } from './provider.js'
+import { isFrameworkProvidedToken } from './token-internal.js'
 import { tokenName, type TokenLike } from './token.js'
 
 export interface ModuleModelNode {
@@ -321,7 +322,7 @@ export function buildApplicationModel(
               ),
             )
           }
-        } else {
+        } else if (!isFrameworkProvidedToken(dependency)) {
           diagnostics.push(
             diagnostic(
               'LUTRE_EXECUTION_DEPENDENCY_MISSING',

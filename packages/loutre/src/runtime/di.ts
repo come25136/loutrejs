@@ -190,8 +190,8 @@ export class Container {
     this.#arguments.set(argumentsContract, value)
   }
 
-  resolve<T>(token: TokenLike<T>): T {
-    return this.#resolve(token)
+  resolve<T>(token: TokenLike<T>, source?: string): T {
+    return this.#resolve(token, source)
   }
 
   get<T>(token: TokenLike<T>): T {

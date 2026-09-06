@@ -415,7 +415,7 @@ function createWebSocketRuntime(
             id: `websocket:${execution.id}`,
             name: execution.id,
           },
-          resolve: (token) => applicationRuntime.resolve(token),
+          resolve: (token) => applicationRuntime.resolve(token, execution.id),
         },
         () => execution.compiled.factory() as never,
       ),

@@ -35,7 +35,8 @@ import {
   contractRootOf,
   resolveContractProcedureIdentity,
 } from '../core/contract-internal.js'
-import { Container, Logger, type DependencyRecorder } from '../runtime/index.js'
+import { isFrameworkProvidedToken } from '../core/token-internal.js'
+import { Container, type DependencyRecorder } from '../runtime/index.js'
 import type {
   ApplicationGraphIR,
   CompilationResult,
@@ -799,7 +800,7 @@ function buildDependencyGraph(
   const validateDeclaredDependency = (dependency: TokenLike, path: string) => {
     if (
       providersByToken.has(dependency) ||
-      dependency === (Logger as unknown as TokenLike)
+      isFrameworkProvidedToken(dependency)
     )
       return
     if (isEnvClass(dependency)) {

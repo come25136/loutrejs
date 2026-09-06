@@ -140,7 +140,8 @@ function createTasksRuntime(
           id: `task:${execution.compiled.name}`,
           name: execution.compiled.name,
         },
-        resolve: (token) => applicationRuntime.resolve(token),
+        resolve: (token) =>
+          applicationRuntime.resolve(token, execution.compiled.name),
       },
       () => execution.compiled.factory(),
     )

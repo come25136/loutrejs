@@ -176,11 +176,11 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     }
   }
 
-  resolve<TValue>(token: TokenLike<TValue>): TValue {
+  resolve<TValue>(token: TokenLike<TValue>, source?: string): TValue {
     if (this.#state === 'created' || this.#state === 'stopped') {
       throw applicationStateError(this.#state)
     }
-    return this.container.resolve(token)
+    return this.container.resolve(token, source)
   }
 
   get<TValue>(token: TokenLike<TValue>): TValue {

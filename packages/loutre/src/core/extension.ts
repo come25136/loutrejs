@@ -84,7 +84,7 @@ export interface ExecutionLease {
 
 export interface ExecutionKernelRuntime {
   beginExecution(): ExecutionLease
-  resolve<TValue>(token: TokenLike<TValue>): TValue
+  resolve<TValue>(token: TokenLike<TValue>, source?: string): TValue
 }
 
 export interface ExecutionExtensionRuntime {

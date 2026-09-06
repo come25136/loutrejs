@@ -182,6 +182,7 @@ export const messagePort = Object.freeze({
 
 function createMessagePortRuntime(
   executions: readonly {
+    readonly id: string
     readonly compiled: CompiledMessagePortExecution
   }[],
   applicationRuntime: ExecutionKernelRuntime,
@@ -201,10 +202,10 @@ function createMessagePortRuntime(
       {
         consumer: {
           kind: 'implementation-consumer',
-          id: 'message-port',
-          name: 'MessagePort execution',
+          id: `message-port:${execution.id}`,
+          name: execution.id,
         },
-        resolve: (token) => applicationRuntime.resolve(token),
+        resolve: (token) => applicationRuntime.resolve(token, execution.id),
       },
       () => execution.compiled.factory(),
     )

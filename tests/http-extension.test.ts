@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { z } from 'zod'
+import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
 import {
   bootstrapApplication,
   type ApplicationExtensions,
@@ -19,6 +20,64 @@ import {
 } from '@loutrejs/loutre/http'
 
 describe('HTTP Execution Extension', () => {
+  it('inject(Logger)へimplementationとmiddlewareのsourceを付与する', async () => {
+    const records: LogRecord[] = []
+    const logger = new Logger({ write: (record) => records.push(record) })
+    const tracing = http.middleware({
+      name: 'RequestTracing',
+      factory:
+        (logger = inject(Logger)) =>
+        async (_context, next) => {
+          logger.info('middleware')
+          await next()
+        },
+    })
+    const contract = http.contract({
+      hello: {
+        method: 'GET',
+        path: '/hello',
+        middlewares: [tracing],
+        responses: { ok: { status: 204 } },
+      },
+    })
+    const controller = http.implementation({
+      name: 'HelloController',
+      contract,
+      factory: (logger = inject(Logger)) => ({
+        hello(context) {
+          logger.info('handler')
+          return context.response.ok({})
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+      logger,
+    })
+
+    try {
+      const response = await application.http.fetch(
+        new Request('http://fixture.test/hello'),
+      )
+      expect(response.status).toBe(204)
+      expect(records).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: 'RequestTracing',
+            message: 'middleware',
+          }),
+          expect.objectContaining({
+            source: 'HelloController',
+            message: 'handler',
+          }),
+        ]),
+      )
+    } finally {
+      await application.close()
+    }
+  })
   it('typeで宣言したMiddleware stateをhandlerへ渡す', async () => {
     const identity = http.middleware({
       name: 'identity',

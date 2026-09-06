@@ -740,7 +740,7 @@ function createHttpExtensionRuntime(
             id: `http:${execution.id}`,
             name: execution.id,
           },
-          resolve: (token) => applicationRuntime.resolve(token),
+          resolve: (token) => applicationRuntime.resolve(token, execution.id),
         },
         () => execution.compiled.factory(),
       ),
@@ -872,7 +872,7 @@ function createHttpExtensionRuntime(
         const result = await composeLayers({
           context,
           layers: match.route.middlewares,
-          resolve: (token) => applicationRuntime.resolve(token),
+          resolve: (token, source) => applicationRuntime.resolve(token, source),
           terminal: async (middlewareContext) =>
             handler({
               input: middlewareContext.input,
