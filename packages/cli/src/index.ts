@@ -171,7 +171,7 @@ export async function runCli(
         writeDiagnostics(graph, io)
         return 1
       }
-      if (deploymentRuntime && !hasHttpExecution(graph)) {
+      if (deploymentRuntime && !hasHostNamespace(graph, 'http')) {
         io.stderr(
           `Runtime ${deploymentRuntime} entry generation requires an HTTP-capable Application.`,
         )
@@ -221,9 +221,12 @@ function parseDeploymentRuntime(value: string): DeploymentRuntime | undefined {
   return deploymentRuntimes.find((runtime) => runtime === value)
 }
 
-function hasHttpExecution(graph: ApplicationModelGraphIR): boolean {
+function hasHostNamespace(
+  graph: ApplicationModelGraphIR,
+  namespace: string,
+): boolean {
   return graph.executions.some(
-    (execution) => execution.executionKind === 'http.request',
+    (execution) => execution.extension?.hostNamespace === namespace,
   )
 }
 
@@ -434,8 +437,9 @@ function renderMermaidGraph(
     node(ids.get(candidate.id)!, nodeLabel(candidate))
   }
   for (const dependency of graph.edges) {
-    if (!selectedIds.has(dependency.from) || !selectedIds.has(dependency.to))
+    if (!selectedIds.has(dependency.from) || !selectedIds.has(dependency.to)) {
       continue
+    }
     edge(ids.get(dependency.from)!, ids.get(dependency.to)!, dependency.kind)
   }
   return lines.join('\n')
@@ -574,7 +578,7 @@ function httpExecutions(
   graph: ApplicationModelGraphIR,
 ): readonly GraphNodeIR[] {
   return graph.executions.filter(
-    (execution) => execution.executionKind === 'http.request',
+    (execution) => execution.extension?.hostNamespace === 'http',
   )
 }
 
