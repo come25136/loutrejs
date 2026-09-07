@@ -40,6 +40,9 @@ export {
 } from './extension.js'
 export type {
   HttpContract,
+  HttpContractBranchDefinition,
+  HttpContractNodeDefinition,
+  HttpContractRouteTree,
   HttpExecutionContext,
   HttpExecutionDefinition,
   HttpExecutionRequestDefinition,
@@ -62,6 +65,7 @@ export type {
   HttpServerDriver,
   HttpValidationMiddleware,
   HttpValidationPart,
+  ResolvedHttpContractRoutes,
 } from './extension.js'
 export {
   compareHttpPathSpecificity,

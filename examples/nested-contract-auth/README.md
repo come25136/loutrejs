@@ -1,48 +1,50 @@
 # Nested Contract Auth Example
 
-This example shows HTTP Contract reuse where authentication is applied while composing an application-level Contract.
+この例では、feature単位のHTTP ContractをApplicationのContract treeへネストし、親branchの認証を子routeへ継承します。
 
-`ProfileContract` defines the profile endpoint. `AppContract` reuses `ProfileContract.routes.profile`, prefixes the path with `/api/me`, adds the authentication middleware, and declares the inherited `unauthorized` response.
+`ProfileContract`はprofile endpointだけを定義します。`AppContract`はそのContractを`/api/me`配下へmountし、親branchで認証middlewareと`unauthorized` responseを宣言します。
 
 ```ts
-const profile = ProfileContract.routes.profile
-
 export const AppContract = http.contract({
-  profile: {
-    method: profile.method,
-    path: `/api/me${profile.path}`,
-    responses: {
-      ok: profile.responses.ok,
-      unauthorized: {
-        status: 401,
-        body: z.object({ error: z.string() }),
-        headers: z.object({ 'www-authenticate': z.string() }),
+  api: {
+    path: '/api',
+    routes: {
+      me: {
+        path: '/me',
+        responses: {
+          unauthorized: {
+            status: 401,
+            body: z.object({ error: z.string() }),
+            headers: z.object({ 'www-authenticate': z.string() }),
+          },
+        },
+        middlewares: [authentication],
+        routes: ProfileContract.routes,
       },
     },
-    middlewares: [authentication],
   },
 })
 ```
 
-The Controller binds to `AppContract`. Because the route includes the authentication middleware, `ctx.state.currentUser` is inferred from the middleware state contribution. The example keeps an explicit assignment so TypeScript verifies that relationship:
+Controllerは解決済みの`AppContract`へbindします。親branchの認証middlewareが提供する`ctx.state.currentUser`は子routeのContextへ型付きで継承されます。この関係をTypeScriptで検証できるよう、Controllerでは明示的な代入を残しています。
 
 ```ts
 const currentUser: User = ctx.state.currentUser
 ```
 
-From this example directory, start the application with:
+このexample directoryからApplicationを起動します。
 
 ```sh
 npm run dev
 ```
 
-A request without credentials is rejected by the authentication middleware:
+認証情報のないrequestは親branchの認証middlewareに拒否されます。
 
 ```sh
 curl -i http://127.0.0.1:3003/api/me/profile
 ```
 
-Use the example credentials to reach the Controller:
+example用の認証情報を渡すと子Controllerへ到達します。
 
 ```sh
 curl -i -u loutre:otter http://127.0.0.1:3003/api/me/profile
@@ -52,9 +54,9 @@ curl -i -u loutre:otter http://127.0.0.1:3003/api/me/profile
 { "id": "user-1", "name": "Loutre User" }
 ```
 
-These credentials are for demonstration only.
+この認証情報はexample専用です。
 
-To validate the Application Model, types, and behavior, run:
+Application Model、型、動作を検証します。
 
 ```sh
 npm run check

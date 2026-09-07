@@ -115,6 +115,107 @@ describe('HTTP Execution Extension', () => {
       await application.close()
     }
   })
+
+  it('nested Contractの親metadataを子routeへ継承する', async () => {
+    const identity = http.middleware({
+      name: 'nested.identity',
+      state: type<{ userId: string }>(),
+      factory: () => async (_context, next) => {
+        await next({ userId: 'user-42' })
+      },
+    })
+    const profileContract = http.contract({
+      profile: {
+        method: 'GET',
+        path: '/profile',
+        responses: { ok: { status: 200, body: z.string() } },
+      },
+    })
+    const contract = http.contract({
+      api: {
+        path: '/api',
+        responses: {
+          unavailable: { status: 503, body: z.string() },
+        },
+        routes: {
+          me: {
+            path: '/me',
+            middlewares: [identity],
+            routes: profileContract.routes,
+          },
+        },
+      },
+    })
+    const controller = http.implementation({
+      contract,
+      factory: () => ({
+        profile: (context) =>
+          context.response.ok({ body: context.state.userId }),
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+
+    try {
+      expect(contract.routes.profile.path).toBe('/api/me/profile')
+      expect(Object.keys(contract.routes.profile.responses)).toEqual([
+        'unavailable',
+        'ok',
+      ])
+      const response = await application.http.fetch(
+        new Request('http://fixture.test/api/me/profile'),
+      )
+      expect(response.status).toBe(200)
+      await expect(response.text()).resolves.toBe('user-42')
+    } finally {
+      await application.close()
+    }
+  })
+
+  it('nested Contractの曖昧な継承とleaf名衝突を拒否する', () => {
+    expect(() =>
+      http.contract({
+        api: {
+          responses: { failed: { status: 500 } },
+          routes: {
+            get: {
+              method: 'GET',
+              path: '/get',
+              responses: { failed: { status: 400 } },
+            },
+          },
+        },
+      } as any),
+    ).toThrow('Duplicate inherited HTTP response failed at get.')
+
+    expect(() =>
+      http.contract({
+        public: {
+          path: '/public',
+          routes: {
+            profile: {
+              method: 'GET',
+              path: '/profile',
+              responses: { ok: { status: 204 } },
+            },
+          },
+        },
+        admin: {
+          path: '/admin',
+          routes: {
+            profile: {
+              method: 'GET',
+              path: '/profile',
+              responses: { ok: { status: 204 } },
+            },
+          },
+        },
+      }),
+    ).toThrow('Duplicate nested HTTP route name: profile')
+  })
   it('内部例外の詳細を500 responseへ公開しない', async () => {
     const contract = http.contract({
       failure: {

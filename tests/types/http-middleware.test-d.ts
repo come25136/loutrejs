@@ -82,3 +82,46 @@ http.implementation({
     },
   }),
 })
+
+const nestedContract = http.contract({
+  api: {
+    path: '/api',
+    responses: { unavailable: { status: 503 } },
+    routes: {
+      traced: {
+        path: '/traced',
+        middlewares: [inferredGeneric],
+        routes: contract.routes,
+      },
+    },
+  },
+})
+http.implementation({
+  contract: nestedContract,
+  factory: () => ({
+    profile: (context) => {
+      const traceId: string = context.state.traceId
+      const path: '/api/traced/profile' = nestedContract.routes.profile.path
+      void [traceId, path]
+      if (invalidInput) {
+        return context.response.unavailable({})
+      }
+      return context.response.ok({})
+    },
+  }),
+})
+
+// 親子で同じresponse名を宣言すると継承結果が曖昧になる
+// @ts-expect-error inherited response名の衝突を拒否する
+http.contract({
+  api: {
+    responses: { failed: { status: 500 } },
+    routes: {
+      profile: {
+        method: 'GET',
+        path: '/profile',
+        responses: { failed: { status: 400 } },
+      },
+    },
+  },
+})

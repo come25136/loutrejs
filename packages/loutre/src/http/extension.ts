@@ -106,6 +106,22 @@ export interface HttpExecutionRouteDefinition {
 
 type AnyHttpMiddleware = GenericLayer<any, any, HttpExecutionResult>
 type HttpRouteMiddleware = AnyHttpMiddleware | HttpValidationMiddleware
+
+export interface HttpContractBranchDefinition {
+  readonly path?: string
+  readonly responses?: Readonly<Record<string, HttpExecutionResponseDefinition>>
+  readonly middlewares?: readonly AnyHttpMiddleware[]
+  readonly routes: HttpContractRouteTree
+}
+
+export type HttpContractNodeDefinition =
+  | HttpExecutionRouteDefinition
+  | HttpContractBranchDefinition
+
+export type HttpContractRouteTree = Readonly<
+  Record<string, HttpContractNodeDefinition>
+>
+
 declare const httpMiddlewareShortCircuit: unique symbol
 
 export type HttpMiddleware<
@@ -137,6 +153,153 @@ type UnionToIntersection<TUnion> = (
 ) extends (value: infer TIntersection) => void
   ? TIntersection
   : never
+
+type JoinHttpPath<
+  TPrefix extends string,
+  TPath extends string,
+> = TPrefix extends ''
+  ? TPath
+  : TPrefix extends '/'
+    ? TPath
+    : TPath extends '/'
+      ? TPrefix
+      : `${TPrefix}${TPath}`
+
+type BranchPath<TBranch extends HttpContractBranchDefinition> =
+  TBranch extends { readonly path: infer TPath extends string } ? TPath : ''
+
+type BranchResponses<TBranch extends HttpContractBranchDefinition> =
+  TBranch extends {
+    readonly responses: infer TResponses extends Readonly<
+      Record<string, HttpExecutionResponseDefinition>
+    >
+  }
+    ? TResponses
+    : {}
+
+type BranchMiddlewares<TBranch extends HttpContractBranchDefinition> =
+  TBranch extends {
+    readonly middlewares: infer TMiddlewares extends
+      readonly AnyHttpMiddleware[]
+  }
+    ? TMiddlewares
+    : readonly []
+
+type ResolveHttpRoute<
+  TRoute extends HttpExecutionRouteDefinition,
+  TPathPrefix extends string,
+  TResponses extends Readonly<Record<string, HttpExecutionResponseDefinition>>,
+  TMiddlewares extends readonly HttpRouteMiddleware[],
+> = Omit<TRoute, 'path' | 'responses' | 'middlewares'> & {
+  readonly path: JoinHttpPath<TPathPrefix, TRoute['path']>
+  readonly responses: TResponses & TRoute['responses']
+} & (readonly [
+    ...TMiddlewares,
+    ...(TRoute extends {
+      readonly middlewares: infer TRouteMiddlewares extends
+        readonly HttpRouteMiddleware[]
+    }
+      ? TRouteMiddlewares
+      : readonly []),
+  ] extends readonly []
+    ? {}
+    : {
+        readonly middlewares: readonly [
+          ...TMiddlewares,
+          ...(TRoute extends {
+            readonly middlewares: infer TRouteMiddlewares extends
+              readonly HttpRouteMiddleware[]
+          }
+            ? TRouteMiddlewares
+            : readonly []),
+        ]
+      })
+
+type ResolveHttpNode<
+  TName extends string,
+  TNode extends HttpContractNodeDefinition,
+  TPathPrefix extends string,
+  TResponses extends Readonly<Record<string, HttpExecutionResponseDefinition>>,
+  TMiddlewares extends readonly HttpRouteMiddleware[],
+> = TNode extends HttpExecutionRouteDefinition
+  ? Readonly<
+      Record<
+        TName,
+        ResolveHttpRoute<TNode, TPathPrefix, TResponses, TMiddlewares>
+      >
+    >
+  : TNode extends HttpContractBranchDefinition
+    ? ResolveHttpRouteTree<
+        TNode['routes'],
+        JoinHttpPath<TPathPrefix, BranchPath<TNode>>,
+        TResponses & BranchResponses<TNode>,
+        readonly [...TMiddlewares, ...BranchMiddlewares<TNode>]
+      >
+    : never
+
+type ResolveHttpRouteTree<
+  TTree extends HttpContractRouteTree,
+  TPathPrefix extends string = '',
+  TResponses extends Readonly<Record<string, HttpExecutionResponseDefinition>> =
+    {},
+  TMiddlewares extends readonly HttpRouteMiddleware[] = readonly [],
+> = UnionToIntersection<
+  {
+    [TName in keyof TTree & string]: ResolveHttpNode<
+      TName,
+      TTree[TName],
+      TPathPrefix,
+      TResponses,
+      TMiddlewares
+    >
+  }[keyof TTree & string]
+>
+
+export type ResolvedHttpContractRoutes<TTree extends HttpContractRouteTree> =
+  ResolveHttpRouteTree<TTree> extends infer TRoutes
+    ? {
+        readonly [TName in keyof TRoutes]: Extract<
+          TRoutes[TName],
+          HttpExecutionRouteDefinition
+        >
+      }
+    : never
+
+type HasResponseNameCollision<
+  TLeft extends Readonly<Record<string, HttpExecutionResponseDefinition>>,
+  TRight extends Readonly<Record<string, HttpExecutionResponseDefinition>>,
+> = Extract<keyof TLeft, keyof TRight> extends never ? false : true
+
+type IsHttpContractNodeInheritanceValid<
+  TNode extends HttpContractNodeDefinition,
+  TResponses extends Readonly<Record<string, HttpExecutionResponseDefinition>>,
+> = TNode extends HttpExecutionRouteDefinition
+  ? HasResponseNameCollision<TResponses, TNode['responses']> extends true
+    ? false
+    : true
+  : TNode extends HttpContractBranchDefinition
+    ? HasResponseNameCollision<TResponses, BranchResponses<TNode>> extends true
+      ? false
+      : IsHttpContractTreeInheritanceValid<
+          TNode['routes'],
+          TResponses & BranchResponses<TNode>
+        >
+    : false
+
+type IsHttpContractTreeInheritanceValid<
+  TTree extends HttpContractRouteTree,
+  TResponses extends Readonly<Record<string, HttpExecutionResponseDefinition>> =
+    {},
+> = string extends keyof TTree
+  ? true
+  : false extends {
+        [TName in keyof TTree]: IsHttpContractNodeInheritanceValid<
+          TTree[TName],
+          TResponses
+        >
+      }[keyof TTree]
+    ? false
+    : true
 
 type HttpMiddlewareState<TRoute extends HttpExecutionRouteDefinition> =
   TRoute extends {
@@ -677,13 +840,115 @@ export function httpError(
   })
 }
 
-export function defineHttpContract<
-  const TRoutes extends Readonly<Record<string, HttpExecutionRouteDefinition>>,
->(routes: TRoutes & HttpContractConstraint<TRoutes>): HttpContract<TRoutes> {
-  for (const [name, route] of Object.entries(routes)) {
+export function defineHttpContract<const TTree extends HttpContractRouteTree>(
+  routes: TTree &
+    (IsHttpContractTreeInheritanceValid<TTree> extends true ? unknown : never) &
+    (ResolvedHttpContractRoutes<TTree> extends HttpContractConstraint<
+      ResolvedHttpContractRoutes<TTree>
+    >
+      ? unknown
+      : never),
+): HttpContract<ResolvedHttpContractRoutes<TTree>>
+export function defineHttpContract(
+  routes: HttpContractRouteTree,
+): HttpContract {
+  const resolvedRoutes = resolveHttpContractRoutes(routes)
+  for (const [name, route] of Object.entries(resolvedRoutes)) {
     compileHttpRoute(name, route)
   }
-  return Object.freeze({ kind: 'http-contract', routes })
+  return Object.freeze({
+    kind: 'http-contract',
+    routes: Object.freeze(resolvedRoutes),
+  })
+}
+
+function resolveHttpContractRoutes(
+  tree: HttpContractRouteTree,
+): Record<string, HttpExecutionRouteDefinition> {
+  const resolved: Record<string, HttpExecutionRouteDefinition> = {}
+
+  const visit = (
+    current: HttpContractRouteTree,
+    pathPrefix: string,
+    inheritedResponses: Readonly<
+      Record<string, HttpExecutionResponseDefinition>
+    >,
+    inheritedMiddlewares: readonly HttpRouteMiddleware[],
+  ) => {
+    for (const [name, node] of Object.entries(current)) {
+      if ('method' in node) {
+        if ('routes' in node) {
+          throw new TypeError(
+            `HTTP Contract node ${name} must be either a branch or a leaf route.`,
+          )
+        }
+        if (resolved[name]) {
+          throw new TypeError(`Duplicate nested HTTP route name: ${name}`)
+        }
+        assertNoInheritedResponseCollision(
+          name,
+          inheritedResponses,
+          node.responses,
+        )
+        resolved[name] = {
+          ...node,
+          path: joinHttpPath(pathPrefix, node.path),
+          responses: { ...inheritedResponses, ...node.responses },
+          ...(inheritedMiddlewares.length === 0 && !node.middlewares
+            ? {}
+            : {
+                middlewares: [
+                  ...inheritedMiddlewares,
+                  ...(node.middlewares ?? []),
+                ],
+              }),
+        }
+        continue
+      }
+      if (!('routes' in node)) {
+        throw new TypeError(
+          `HTTP Contract node ${name} must declare method or routes.`,
+        )
+      }
+      const branchPath = node.path ?? ''
+      if (branchPath !== '') parseHttpPath(branchPath)
+      assertNoInheritedResponseCollision(
+        name,
+        inheritedResponses,
+        node.responses ?? {},
+      )
+      visit(
+        node.routes,
+        joinHttpPath(pathPrefix, branchPath),
+        { ...inheritedResponses, ...node.responses },
+        [...inheritedMiddlewares, ...(node.middlewares ?? [])],
+      )
+    }
+  }
+
+  visit(tree, '', {}, [])
+  return resolved
+}
+
+function joinHttpPath(prefix: string, path: string): string {
+  if (prefix === '') return path
+  if (prefix === '/') return path
+  if (path === '/') return prefix
+  return `${prefix}${path}`
+}
+
+function assertNoInheritedResponseCollision(
+  nodeName: string,
+  inherited: Readonly<Record<string, HttpExecutionResponseDefinition>>,
+  declared: Readonly<Record<string, HttpExecutionResponseDefinition>>,
+): void {
+  for (const name of Object.keys(declared)) {
+    if (name in inherited) {
+      throw new TypeError(
+        `Duplicate inherited HTTP response ${name} at ${nodeName}.`,
+      )
+    }
+  }
 }
 
 export function defineHttpImplementation<
