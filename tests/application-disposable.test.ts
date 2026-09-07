@@ -13,10 +13,6 @@ describe('Application disposal', () => {
         closeCalls += 1
         await close(signal)
       },
-      async [Symbol.asyncDispose]() {
-        closeCalls += 1
-        await close()
-      },
     })
 
     {

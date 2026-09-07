@@ -32,6 +32,7 @@ export type DenoRuntimeOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
   readonly environment?: unknown
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
+  readonly forceShutdownTimeoutMs?: number
 } & BootstrapArguments<TDefinition>
 
 export type DenoCreateOptions<TDefinition extends ApplicationDefinition> =
@@ -155,28 +156,39 @@ async function create<const TDefinition extends ApplicationDefinition>(
   let removeShutdownHooks: (() => void) | undefined
   let serving = false
   let closed = false
+  let closingPromise: Promise<void> | undefined
 
-  const close = async (signal?: string): Promise<void> => {
-    if (closed) return
-    closed = true
-    removeShutdownHooks?.()
-    removeShutdownHooks = undefined
-    const errors: unknown[] = []
-    if (server) {
+  const close = (signal?: string): Promise<void> => {
+    if (closed) return Promise.resolve()
+    if (closingPromise) return closingPromise
+
+    closingPromise = (async () => {
+      removeShutdownHooks?.()
+      removeShutdownHooks = undefined
+      const errors: unknown[] = []
+      if (server) {
+        try {
+          await server.shutdown()
+          server = undefined
+        } catch (error) {
+          errors.push(error)
+        }
+      }
       try {
-        await server.shutdown()
+        await closeApplication(signal)
       } catch (error) {
         errors.push(error)
       }
-    }
-    try {
-      await closeApplication(signal)
-    } catch (error) {
-      errors.push(error)
-    }
-    if (errors.length > 0) {
-      throw new AggregateError(errors, 'Deno runtime shutdown failed')
-    }
+      if (errors.length > 0) {
+        throw new AggregateError(errors, 'Deno runtime shutdown failed')
+      }
+      closed = true
+    })().catch((error: unknown) => {
+      closingPromise = undefined
+      throw error
+    })
+
+    return closingPromise
   }
 
   const serve = async (

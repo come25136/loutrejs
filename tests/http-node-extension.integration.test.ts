@@ -1,4 +1,5 @@
 import { nodeRuntime } from '@loutrejs/node'
+import type { Server } from 'node:http'
 import {
   bindRuntimeCapability,
   defineApplication,
@@ -109,5 +110,41 @@ describe('Node runtime + HTTP Execution Extension', () => {
 
     expect(createRuntime).toHaveBeenCalledTimes(1)
     await application.close('test')
+  })
+
+  it('await usingはadapterのcloseへ委譲してlistenerとshutdown hookを閉じる', async () => {
+    const contract = http.contract({
+      health: {
+        method: 'GET',
+        path: '/health',
+        responses: { ok: { status: 204 } },
+      },
+    })
+    const controller = http.implementation({
+      contract,
+      factory: () => ({ health: (context) => context.response.ok({}) }),
+    })
+    const AppModule = defineModule(() => ({ executions: [controller] }))
+    const definition = defineApplication({ modules: [AppModule()] })
+    const port = await reserveHttpPort()
+    const signalListeners = {
+      SIGINT: process.listenerCount('SIGINT'),
+      SIGTERM: process.listenerCount('SIGTERM'),
+    }
+    let server: Server | undefined
+
+    {
+      await using application = await nodeRuntime.create({
+        application: definition,
+      })
+      server = (await application.serve({ port, hostname: '127.0.0.1' })).server
+      expect(server.listening).toBe(true)
+      expect(process.listenerCount('SIGINT')).toBe(signalListeners.SIGINT + 1)
+      expect(process.listenerCount('SIGTERM')).toBe(signalListeners.SIGTERM + 1)
+    }
+
+    expect(server?.listening).toBe(false)
+    expect(process.listenerCount('SIGINT')).toBe(signalListeners.SIGINT)
+    expect(process.listenerCount('SIGTERM')).toBe(signalListeners.SIGTERM)
   })
 })
