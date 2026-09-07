@@ -196,9 +196,12 @@ describe('MessagePort Execution Extension', () => {
     }
   })
 
-  it('server-stream consume中のshutdownはstream停止完了までProvider cleanupへ進まない', async () => {
-    let release: (() => void) | undefined
-    let cleaned = false
+  it('server-stream consume中のshutdownはctx.signalでpending nextを解放しstream停止完了までProvider cleanupへ進まない', async () => {
+    const events: string[] = []
+    let notifyStarted!: () => void
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve
+    })
     const contract = messagePort.contract({
       values: {
         responses: { ok: { stream: 'server', body: z.number() } },
@@ -211,16 +214,30 @@ describe('MessagePort Execution Extension', () => {
         values: (context) =>
           context.response.ok(
             (async function* () {
-              yield await new Promise<number>((resolve) => {
-                release = () => resolve(1)
-              })
+              try {
+                await new Promise<void>((resolve) => {
+                  const onAbort = () => {
+                    events.push('signal.aborted')
+                    resolve()
+                  }
+                  if (context.signal.aborted) onAbort()
+                  else
+                    context.signal.addEventListener('abort', onAbort, {
+                      once: true,
+                    })
+                  notifyStarted()
+                })
+                yield 1
+              } finally {
+                events.push('iterator.return')
+              }
             })(),
           ),
       }),
     })
     class Resource {
       onModuleDestroy() {
-        cleaned = true
+        events.push('provider.destroy')
       }
     }
     const Module = defineModule(() => ({
@@ -235,13 +252,24 @@ describe('MessagePort Execution Extension', () => {
       Symbol.asyncIterator
     ]()
     const pending = iterator.next()
-    const closing = application.close()
-    await Promise.resolve()
+    await started
 
-    expect(cleaned).toBe(false)
-    release?.()
-    await pending
-    await closing
-    expect(cleaned).toBe(true)
+    await expect(
+      Promise.race([
+        application.close(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error('MessagePort stream drain timed out')),
+            250,
+          ),
+        ),
+      ]),
+    ).resolves.toBeUndefined()
+    await expect(pending).resolves.toMatchObject({ value: 1, done: false })
+    expect(events).toEqual([
+      'signal.aborted',
+      'iterator.return',
+      'provider.destroy',
+    ])
   })
 })

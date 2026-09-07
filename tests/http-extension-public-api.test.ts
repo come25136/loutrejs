@@ -278,6 +278,46 @@ describe('HTTP Execution Extension public API surface', () => {
     }
   })
 
+  it('server-streamのitem validation失敗時にsource iteratorを終了する', async () => {
+    let finalized = false
+    const contract = http.contract({
+      events: {
+        method: 'GET',
+        path: '/events',
+        interaction: 'server-stream',
+        responses: {
+          ok: {
+            status: 200,
+            stream: 'server',
+            body: z.object({ sequence: z.number() }),
+          },
+        },
+      },
+    })
+    const { application } = await createApplication(contract, () => ({
+      events: (ctx) =>
+        ctx.response.ok({
+          body: (async function* () {
+            try {
+              yield { sequence: 'invalid' } as never
+            } finally {
+              finalized = true
+            }
+          })(),
+        }),
+    }))
+    try {
+      const response = await application.http.fetch(
+        new Request('https://fixture.test/events'),
+      )
+
+      await expect(response.text()).rejects.toThrow()
+      expect(finalized).toBe(true)
+    } finally {
+      await application.close()
+    }
+  })
+
   it('shutdown時に未完了server-streamを停止してExecutionを完了する', async () => {
     const events: string[] = []
     const contract = http.contract({

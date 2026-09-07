@@ -1887,13 +1887,7 @@ function createServerSentEventStream(
         if (finished) return
         value.enqueue(encoder.encode(`data:${JSON.stringify(item)}\n\n`))
       } catch (error) {
-        if (markFinished()) {
-          try {
-            value.error(error)
-          } finally {
-            complete()
-          }
-        }
+        await stop(error, true)
       }
     },
     cancel(reason) {

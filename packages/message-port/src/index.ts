@@ -368,7 +368,12 @@ function createLeasedMessagePortStream(
     // AbortSignalはasync cleanup errorを返せないため、error伝播が必要なdrainはcontrol.abort()を直接awaitする。
     void cancel(lease.signal.reason).catch(() => undefined)
   }
-  control = { abort: cancel }
+  control = {
+    async abort(reason) {
+      lease.abort(reason)
+      await cancel(reason)
+    },
+  }
   activeStreams.add(control)
   if (lease.signal.aborted) onAbort()
   else lease.signal.addEventListener('abort', onAbort, { once: true })
