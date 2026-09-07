@@ -165,6 +165,7 @@ function createOperation(
   }
   if (request?.query) {
     parameters.push({
+      name: 'query',
       in: 'querystring',
       content: {
         'application/x-www-form-urlencoded': {

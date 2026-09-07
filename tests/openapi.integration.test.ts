@@ -128,9 +128,23 @@ describe('OpenAPI generation', () => {
     )?.COPY
     expect(operation?.summary).toBe('Copy search result')
     expect(operation?.tags).toEqual(['Search'])
+    expect(
+      operation?.parameters.find(
+        (parameter: Record<string, unknown>) => parameter.in === 'querystring',
+      ),
+    ).toEqual({
+      name: 'query',
+      in: 'querystring',
+      content: {
+        'application/x-www-form-urlencoded': {
+          schema: expect.objectContaining({
+            $ref: expect.stringContaining('RequestQuery_Input'),
+          }),
+        },
+      },
+    })
     expect(operation?.parameters).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ in: 'querystring' }),
         expect.objectContaining({
           in: 'header',
           name: 'x-tenant-id',
