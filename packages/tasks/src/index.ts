@@ -570,6 +570,7 @@ function createTasksRuntime(
 
   let triggerHandles: TriggerHandle[] = []
   let triggerStartup: Promise<void> | undefined
+  let triggerStop: Promise<void> | undefined
   let triggersStarted = false
   let state: 'running' | 'draining' | 'stopped' = 'running'
 
@@ -592,21 +593,35 @@ function createTasksRuntime(
     }
   }
 
-  const stopTriggers = async () => {
-    const startup = triggerStartup
-    if (startup) await startup.catch(() => undefined)
-    const handles = triggerHandles
-    triggerHandles = []
-    triggersStarted = false
-    const results = await Promise.allSettled(
-      handles.toReversed().map((handle) => handle.stop()),
-    )
-    const errors = results.flatMap((result) =>
-      result.status === 'rejected' ? [result.reason] : [],
-    )
-    if (errors.length > 0) {
-      throw new AggregateError(errors, 'Trigger stop failed')
-    }
+  const stopTriggers = (): Promise<void> => {
+    if (triggerStop) return triggerStop
+    const stopping = (async () => {
+      const startup = triggerStartup
+      if (startup) await startup.catch(() => undefined)
+      const handles = triggerHandles
+      const stopOrder = handles.toReversed()
+      const results = await Promise.allSettled(
+        stopOrder.map((handle) => handle.stop()),
+      )
+      const failedHandles: TriggerHandle[] = []
+      const errors: unknown[] = []
+      for (const [index, result] of results.entries()) {
+        if (result.status !== 'rejected') continue
+        failedHandles.push(stopOrder[index]!)
+        errors.push(result.reason)
+      }
+      triggerHandles = failedHandles.toReversed()
+      triggersStarted = failedHandles.length > 0
+      if (errors.length > 0) {
+        throw new AggregateError(errors, 'Trigger stop failed')
+      }
+    })()
+    let trackedStop!: Promise<void>
+    trackedStop = stopping.finally(() => {
+      if (triggerStop === trackedStop) triggerStop = undefined
+    })
+    triggerStop = trackedStop
+    return trackedStop
   }
 
   const startTriggers = async (): Promise<void> => {
@@ -627,18 +642,33 @@ function createTasksRuntime(
         for (const trigger of triggers) {
           if (trigger.type === 'task') continue
           const handle = await startTrigger(trigger, run, applicationRuntime)
+          started.push(handle)
           if (state !== 'running') {
-            await handle.stop()
             throw tasksStateError(state)
           }
-          started.push(handle)
         }
         triggerHandles = started
       } catch (error) {
-        await Promise.allSettled(
-          started.toReversed().map((handle) => handle.stop()),
+        const stopOrder = started.toReversed()
+        const cleanupResults = await Promise.allSettled(
+          stopOrder.map((handle) => handle.stop()),
         )
-        triggersStarted = false
+        const failedHandles: TriggerHandle[] = []
+        const cleanupErrors: unknown[] = []
+        for (const [index, result] of cleanupResults.entries()) {
+          if (result.status !== 'rejected') continue
+          failedHandles.push(stopOrder[index]!)
+          cleanupErrors.push(result.reason)
+        }
+        triggerHandles = failedHandles.toReversed()
+        triggersStarted = failedHandles.length > 0
+        if (cleanupErrors.length > 0) {
+          throw new AggregateError(
+            [error, ...cleanupErrors],
+            'Trigger startup failed and cleanup also failed.',
+            { cause: error },
+          )
+        }
         throw error
       }
     })()

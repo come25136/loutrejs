@@ -289,6 +289,70 @@ describe('Task Execution Extension', () => {
     ])
   })
 
+  it('Trigger startup失敗時は開始済みhandleのcleanup失敗も保持する', async () => {
+    const startupError = new Error('startup failure')
+    const cleanupError = new Error('cleanup failure')
+    let stopAttempts = 0
+    const firstQueue = queue({ name: 'first-startup', payload: z.string() })
+    const secondQueue = queue({ name: 'second-startup', payload: z.string() })
+    const job = task<string, void>({
+      name: 'startup-task',
+      factory: () => async () => undefined,
+    })
+    const FirstConsumer = consume({
+      name: 'first-startup-consumer',
+      queue: firstQueue,
+      task: job,
+    })
+    const SecondConsumer = consume({
+      name: 'second-startup-consumer',
+      queue: secondQueue,
+      task: job,
+    })
+    const Module = defineModule(() => ({
+      providers: [
+        bindQueueDriver(firstQueue, {
+          async start() {
+            return {
+              async stop() {
+                stopAttempts += 1
+                if (stopAttempts === 1) throw cleanupError
+              },
+            }
+          },
+        }),
+        bindQueueDriver(secondQueue, {
+          async start() {
+            throw startupError
+          },
+        }),
+      ],
+      executions: [FirstConsumer, SecondConsumer],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+
+    let thrown: unknown
+    try {
+      await application.tasks.start()
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError)
+    expect((thrown as AggregateError).errors).toEqual([
+      startupError,
+      cleanupError,
+    ])
+    await expect(application.tasks.start()).rejects.toThrow(
+      'LUTRE_TRIGGERS_ALREADY_STARTED',
+    )
+    await expect(application.tasks.stop()).resolves.toBeUndefined()
+    expect(stopAttempts).toBe(2)
+    await application.close()
+  })
+
   it('Queue descriptorのprivate keyをbundle-safeなglobal identityにする', () => {
     const descriptor = queue({ name: 'events', payload: z.string() })
     const recreated = { ...descriptor }
