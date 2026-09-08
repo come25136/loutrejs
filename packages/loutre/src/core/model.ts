@@ -401,6 +401,114 @@ export function buildApplicationModel(
   const capabilityNodeIds = new Set<string>()
   const visitedDefinitions = new Set<ExecutionDefinition>()
   const compiledDefinitions = new Map<ExecutionDefinition, ExecutionModelNode>()
+  const executionReferences: {
+    readonly from: ExecutionDefinition
+    readonly to: ExecutionDefinition
+  }[] = []
+  type ExecutionReferencesResult =
+    | { readonly references: readonly unknown[] }
+    | { readonly error: unknown }
+  const executionReferenceResults = new Map<
+    ExecutionDefinition,
+    ExecutionReferencesResult
+  >()
+  const getExecutionReferences = (
+    definition: ExecutionDefinition,
+  ): ExecutionReferencesResult => {
+    const cached = executionReferenceResults.get(definition)
+    if (cached) return cached
+    const references = definition.extension.references
+    if (!references) {
+      const result = { references: Object.freeze([]) }
+      executionReferenceResults.set(definition, result)
+      return result
+    }
+    try {
+      const result = {
+        references: references(definition as never) as readonly unknown[],
+      }
+      executionReferenceResults.set(definition, result)
+      return result
+    } catch (error) {
+      const result = { error }
+      executionReferenceResults.set(definition, result)
+      return result
+    }
+  }
+
+  const rootDefinitionOwners = new Map<
+    ExecutionDefinition,
+    Set<ModuleInstance>
+  >()
+  for (const module of modules) {
+    for (const value of module.definition.executions ?? []) {
+      if (!isExecutionDefinition(value)) continue
+      const owners =
+        rootDefinitionOwners.get(value) ?? new Set<ModuleInstance>()
+      owners.add(module)
+      rootDefinitionOwners.set(value, owners)
+    }
+  }
+
+  const reachableDefinitionModules = new Map<
+    ExecutionDefinition,
+    Set<ModuleInstance>
+  >()
+  for (const module of modules) {
+    const queue = (module.definition.executions ?? []).filter(
+      isExecutionDefinition,
+    )
+    const seen = new Set<ExecutionDefinition>()
+    let queueIndex = 0
+    while (queueIndex < queue.length) {
+      const value = queue[queueIndex++]!
+      if (seen.has(value)) continue
+      seen.add(value)
+
+      const explicitOwners = rootDefinitionOwners.get(value)
+      if (explicitOwners && !explicitOwners.has(module)) continue
+
+      const reachableModules =
+        reachableDefinitionModules.get(value) ?? new Set<ModuleInstance>()
+      reachableModules.add(module)
+      reachableDefinitionModules.set(value, reachableModules)
+
+      const referenceResult = getExecutionReferences(value)
+      if ('error' in referenceResult) continue
+      for (const reference of referenceResult.references) {
+        if (!isExecutionDefinition(reference)) continue
+        if (reference.extension.identity !== value.extension.identity) continue
+        queue.push(reference)
+      }
+    }
+  }
+
+  const definitionOwners = new Map<ExecutionDefinition, ModuleInstance>()
+  const ambiguousDefinitions = new Set<ExecutionDefinition>()
+  for (const [definition, explicitOwners] of rootDefinitionOwners) {
+    if (explicitOwners.size === 1) {
+      definitionOwners.set(definition, [...explicitOwners][0]!)
+    } else {
+      ambiguousDefinitions.add(definition)
+    }
+  }
+  for (const [definition, reachableModules] of reachableDefinitionModules) {
+    if (rootDefinitionOwners.has(definition)) continue
+    if (reachableModules.size === 1) {
+      definitionOwners.set(definition, [...reachableModules][0]!)
+    } else {
+      ambiguousDefinitions.add(definition)
+    }
+  }
+  if (ambiguousDefinitions.size > 0) {
+    diagnostics.push(
+      diagnostic(
+        'LUTRE_EXECUTION_OWNER_AMBIGUOUS',
+        'Execution Definition ownership is ambiguous across multiple Modules. Register each shared Definition in exactly one Module.executions; other Modules may reference it.',
+        'application.executions',
+      ),
+    )
+  }
 
   for (const module of modules) {
     const moduleId = moduleIds.get(module)!
@@ -422,10 +530,6 @@ export function buildApplicationModel(
       definitionIndex,
       path: `${moduleId}.executions.${definitionIndex}`,
     }))
-    const executionReferences: {
-      readonly from: ExecutionDefinition
-      readonly to: ExecutionDefinition
-    }[] = []
     let nextDiscoveredDefinitionIndex = rootDefinitions.length
     let queueIndex = 0
 
@@ -441,6 +545,8 @@ export function buildApplicationModel(
         )
         continue
       }
+      if (ambiguousDefinitions.has(value)) continue
+      if (definitionOwners.get(value) !== module) continue
       if (visitedDefinitions.has(value)) continue
       visitedDefinitions.add(value)
 
@@ -566,73 +672,68 @@ export function buildApplicationModel(
         })
       }
 
-      if (extension.references) {
-        let referencedDefinitions: readonly ExecutionDefinition[]
-        try {
-          referencedDefinitions = extension.references(value as never)
-        } catch (error) {
+      const referenceResult = getExecutionReferences(value)
+      if ('error' in referenceResult) {
+        diagnostics.push(
+          diagnostic(
+            'LUTRE_EXTENSION_REFERENCES',
+            describeError(referenceResult.error),
+            path,
+          ),
+        )
+        continue
+      }
+      for (const [
+        referenceIndex,
+        reference,
+      ] of referenceResult.references.entries()) {
+        const referencePath = `${path}.references.${referenceIndex}`
+        if (!isExecutionDefinition(reference)) {
           diagnostics.push(
             diagnostic(
-              'LUTRE_EXTENSION_REFERENCES',
-              describeError(error),
-              path,
+              'LUTRE_EXECUTION_REFERENCE_INVALID',
+              'Execution references accept only branded Execution Definitions.',
+              referencePath,
             ),
           )
           continue
         }
-        for (const [
-          referenceIndex,
-          reference,
-        ] of referencedDefinitions.entries()) {
-          const referencePath = `${path}.references.${referenceIndex}`
-          if (!isExecutionDefinition(reference)) {
-            diagnostics.push(
-              diagnostic(
-                'LUTRE_EXECUTION_REFERENCE_INVALID',
-                'Execution references accept only branded Execution Definitions.',
-                referencePath,
-              ),
-            )
-            continue
-          }
-          if (reference.extension.identity !== extension.identity) {
-            diagnostics.push(
-              diagnostic(
-                'LUTRE_EXECUTION_REFERENCE_EXTENSION',
-                `Execution ${execution.id} cannot reference an execution owned by ${reference.extension.name}.`,
-                referencePath,
-              ),
-            )
-            continue
-          }
-          executionReferences.push({ from: value, to: reference })
-          let referencedDefinitionIndex = rootDefinitionIndexes.get(reference)
-          if (referencedDefinitionIndex === undefined) {
-            referencedDefinitionIndex =
-              discoveredDefinitionIndexes.get(reference)
-            if (referencedDefinitionIndex === undefined) {
-              referencedDefinitionIndex = nextDiscoveredDefinitionIndex++
-              discoveredDefinitionIndexes.set(
-                reference,
-                referencedDefinitionIndex,
-              )
-            }
-          }
-          queue.push({
-            value: reference,
-            definitionIndex: referencedDefinitionIndex,
-            path: referencePath,
-          })
+        if (reference.extension.identity !== extension.identity) {
+          diagnostics.push(
+            diagnostic(
+              'LUTRE_EXECUTION_REFERENCE_EXTENSION',
+              `Execution ${execution.id} cannot reference an execution owned by ${reference.extension.name}.`,
+              referencePath,
+            ),
+          )
+          continue
         }
+        executionReferences.push({ from: value, to: reference })
+        let referencedDefinitionIndex = rootDefinitionIndexes.get(reference)
+        if (referencedDefinitionIndex === undefined) {
+          referencedDefinitionIndex = discoveredDefinitionIndexes.get(reference)
+          if (referencedDefinitionIndex === undefined) {
+            referencedDefinitionIndex = nextDiscoveredDefinitionIndex++
+            discoveredDefinitionIndexes.set(
+              reference,
+              referencedDefinitionIndex,
+            )
+          }
+        }
+        queue.push({
+          value: reference,
+          definitionIndex: referencedDefinitionIndex,
+          path: referencePath,
+        })
       }
     }
+  }
 
-    for (const reference of executionReferences) {
-      const from = compiledDefinitions.get(reference.from)
-      const to = compiledDefinitions.get(reference.to)
-      if (!from || !to) continue
-      edges.push({ from: from.id, to: to.id, kind: 'references' })
-    }
+  for (const reference of executionReferences) {
+    const from = compiledDefinitions.get(reference.from)
+    const to = compiledDefinitions.get(reference.to)
+    if (!from || !to) continue
+    edges.push({ from: from.id, to: to.id, kind: 'references' })
   }
 
   const extensionGroups = [...extensionExecutions.values()].map(

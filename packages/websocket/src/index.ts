@@ -6,6 +6,7 @@ import {
   runInInjectionContext,
   validateSchema,
   type ExecutionDefinition,
+  type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
   type RuntimeCapabilityBinding,
   type SchemaOutput,
@@ -213,7 +214,7 @@ interface RuntimeWebSocketRoute {
 
 export interface WebSocketExtensionRuntime {
   upgrade(request: Request): Promise<Response>
-  drain(): Promise<void>
+  drain(context: ExecutionExtensionDrainContext): Promise<void>
   close(): void
 }
 
@@ -633,20 +634,24 @@ function createWebSocketRuntime(
       }
       return upgraded.response
     },
-    async drain() {
+    async drain({ timeoutMs }) {
       if (state === 'stopped') return
       state = 'draining'
       await waitForPendingIngresses()
+      const gracefulTimeoutMs = webSocketGracefulShutdownBudget(timeoutMs)
       const results = await Promise.allSettled(
         [...sessions].map(async (session) => {
           const graceful = session
             .close(1001, 'Going Away')
             .then(() => true)
             .catch(() => false)
-          const completed = await Promise.race([
-            graceful,
-            delay(5_000).then(() => false),
-          ])
+          const completed =
+            gracefulTimeoutMs === 0
+              ? false
+              : await Promise.race([
+                  graceful,
+                  delay(gracefulTimeoutMs).then(() => false),
+                ])
           if (!completed) await session.terminate()
           await session.completion.catch(() => undefined)
         }),
@@ -920,6 +925,11 @@ function normalizeCloseInfo(info: WebSocketCloseInfo): WebSocketCloseInfo {
     reason: info.reason ?? '',
     wasClean: info.wasClean === true,
   }
+}
+
+function webSocketGracefulShutdownBudget(timeoutMs: number): number {
+  if (timeoutMs <= 0) return 0
+  return Math.min(5_000, Math.max(0, Math.floor(timeoutMs * 0.8)))
 }
 
 function delay(milliseconds: number): Promise<void> {

@@ -13,6 +13,8 @@
     "website"
   ],
   "scripts": {
+    "generate:prisma-example": "npm run generate --workspace @loutrejs/example-database-prisma-postgres",
+    "prebuild": "npm run generate:prisma-example",
     "build": "node scripts/generate-version.mjs && node scripts/clean-dist.mjs && tsc -b && node scripts/prepare-packages.mjs",
     "build:website": "npm run build --workspace website",
     "benchmark:http": "npm run build && node benchmarks/run.mjs",
@@ -20,6 +22,7 @@
     "format:check": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
+    "precheck": "npm run generate:prisma-example",
     "check": "tsc --noEmit --pretty false",
     "test": "npm run test:unit && npm run test:integration",
     "test:types": "tsc -p tests/types/tsconfig.json --pretty false",

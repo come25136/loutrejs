@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
@@ -496,6 +496,58 @@ describe('WebSocket Execution Extension', () => {
       { code: 1001, reason: 'Going Away' },
     ])
     expect(executionSignal?.aborted).toBe(true)
+  })
+
+  it('graceful closeが応答しなくてもhard shutdown budgetより前にterminateする', async () => {
+    vi.useFakeTimers()
+    try {
+      const closed = deferred<WebSocketCloseInfo>()
+      let terminateAttempts = 0
+      const connection: WebSocketConnectionDriver = {
+        messages: (async function* () {})(),
+        closed: closed.promise,
+        async send() {},
+        async close() {
+          await new Promise<void>(() => undefined)
+        },
+        terminate() {
+          terminateAttempts += 1
+          closed.resolve({ code: 1006, reason: '', wasClean: false })
+        },
+      }
+      const contract = websocket.contract({ wait: { path: '/wait' } })
+      const controller = websocket.implementation({
+        contract,
+        factory: () => ({
+          async wait(context) {
+            await context.closed
+          },
+        }),
+      })
+      const Module = defineModule(() => ({ executions: [controller] }))
+      const application = await bootstrapApplication({
+        application: defineApplication({ modules: [Module()] }),
+        capabilities: [
+          bindWebSocketServer({
+            runtime: 'test',
+            async upgrade() {
+              return { response: new Response(), connection }
+            },
+          }),
+        ],
+      })
+      await application.websocket.upgrade(
+        new Request('http://fixture.test/wait'),
+      )
+
+      const closing = application.close()
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      await expect(closing).resolves.toBeUndefined()
+      expect(terminateAttempts).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('transport終了後もhandlerが残る場合はshutdown timeoutでsafe boundaryを返す', async () => {

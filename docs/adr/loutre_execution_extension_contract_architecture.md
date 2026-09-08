@@ -104,6 +104,8 @@ heartbeat --references--> hello task
 
 `references()`は同一Extension内だけを対象とする。別ExtensionのDefinitionを返した場合はModel diagnosticで拒否する。これによりRuntimeで合成されるHost APIと、Module root Definitionから導出するcompile-time Host API型を一致させる。参照先Executionは参照元と同じModuleのexecution closureとして扱う。
 
+同じ参照先Definitionが複数Moduleのexecution closureから暗黙に到達可能な場合、Coreは探索順でownerを決めず`LUTRE_EXECUTION_OWNER_AMBIGUOUS`として拒否する。共有するDefinitionはちょうど1つのModuleのroot `executions`へ明示登録してcanonical ownerを確定し、他Moduleからは`references` edgeで参照する。
+
 Definition objectはclosure構築中だけ利用し、Application Modelへraw objectとして保持しない。Runtime、Graph、CLI、Buildはcompile済みnode/edgeだけを見る。
 
 ## 4. compile

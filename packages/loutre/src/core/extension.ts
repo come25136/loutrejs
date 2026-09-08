@@ -92,8 +92,12 @@ export interface ExecutionKernelRuntime {
   resolve<TValue>(token: TokenLike<TValue>, source?: string): TValue
 }
 
+export interface ExecutionExtensionDrainContext {
+  readonly timeoutMs: number
+}
+
 export interface ExecutionExtensionRuntime {
-  drain?(): void | Promise<void>
+  drain?(context: ExecutionExtensionDrainContext): void | Promise<void>
   close?(): void | Promise<void>
 }
 

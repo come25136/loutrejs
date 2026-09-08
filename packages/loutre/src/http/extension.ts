@@ -1348,6 +1348,7 @@ function createHttpExtensionRuntime(
           )
           if (match) {
             const lease = applicationRuntime.beginExecution()
+            const completePendingIngress = trackPendingIngress()
             try {
               const headers = await createCorsPreflightResponseHeaders(
                 match.route.middlewares,
@@ -1359,6 +1360,7 @@ function createHttpExtensionRuntime(
               }
             } finally {
               lease.complete()
+              completePendingIngress()
             }
           }
         } catch (error) {

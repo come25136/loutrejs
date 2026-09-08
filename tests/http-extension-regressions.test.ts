@@ -266,6 +266,68 @@ describe('HTTP Execution Extension regression', () => {
     }
   })
 
+  it('pending CORS preflightをshutdown timeoutの対象として追跡する', async () => {
+    let markOriginStarted!: () => void
+    const originStarted = new Promise<void>((resolve) => {
+      markOriginStarted = resolve
+    })
+    let resolveOrigin!: (allowed: boolean) => void
+    const originDecision = new Promise<boolean>((resolve) => {
+      resolveOrigin = resolve
+    })
+    const middleware = cors({
+      origin: async () => {
+        markOriginStarted()
+        return originDecision
+      },
+    })
+    const contract = http.contract({
+      create: {
+        method: 'POST',
+        path: '/messages',
+        responses: { ok: { status: 204 } },
+        middlewares: [middleware],
+      },
+    })
+    const implementation = http.implementation({
+      contract,
+      factory: () => ({ create: (context) => context.response.ok({}) }),
+    })
+    const Module = defineModule(() => ({ executions: [implementation] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+      forceShutdownTimeoutMs: 10,
+    })
+    const preflight = application.http.fetch(
+      new Request('http://fixture.test/messages', {
+        method: 'OPTIONS',
+        headers: {
+          origin: 'https://app.example.com',
+          'access-control-request-method': 'POST',
+        },
+      }),
+    )
+    await originStarted
+
+    try {
+      await expect(
+        Promise.race([
+          application.close(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('shutdown hung')), 100),
+          ),
+        ]),
+      ).rejects.toThrow(
+        'Application shutdown did not reach a safe cleanup boundary.',
+      )
+    } finally {
+      resolveOrigin(true)
+      await preflight.catch(() => undefined)
+      await application.close().catch(() => undefined)
+    }
+  })
+
   it('CORS denyでもVary: Originを返しpredicate originを許可する', async () => {
     const middleware = cors({
       origin: async (origin) => origin.endsWith('.example.com'),

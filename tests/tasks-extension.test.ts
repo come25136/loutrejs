@@ -141,11 +141,12 @@ describe('Task Execution Extension', () => {
     })
   })
 
-  it('同じTask Definitionを複数ModuleのTriggerから参照してもApplication全体で一度だけcompileする', () => {
+  it('明示ownerを持つ同じTask Definitionを複数Moduleから参照しても一度だけcompileする', () => {
     const job = task({
       name: 'shared-referenced-task',
       factory: () => async () => undefined,
     })
+    const TaskModule = defineModule(() => ({ executions: [job] }))
     const FirstModule = defineModule(() => ({
       executions: [
         fixedDelay({
@@ -166,7 +167,7 @@ describe('Task Execution Extension', () => {
     }))
 
     const definition = defineApplication({
-      modules: [FirstModule(), SecondModule()],
+      modules: [FirstModule(), TaskModule(), SecondModule()],
     })
 
     expect(definition.model.diagnostics).not.toContainEqual(
@@ -190,6 +191,52 @@ describe('Task Execution Extension', () => {
           kind: 'references',
         },
       ]),
+    )
+  })
+
+  it('implicit shared Taskのowner ambiguityをModule順に依存せずdiagnosticにする', () => {
+    const DEP = token<string>('shared-task-dependency')
+    const job = task({
+      name: 'ambiguous-shared-task',
+      factory:
+        (dependency = inject(DEP)) =>
+        async () =>
+          dependency,
+    })
+    const FirstModule = defineModule(() => ({
+      providers: [provide(DEP).useValue('first')],
+      executions: [
+        fixedDelay({
+          name: 'first-ambiguous-trigger',
+          delay: 10_000,
+          task: job,
+        }),
+      ],
+    }))
+    const SecondModule = defineModule(() => ({
+      executions: [
+        fixedDelay({
+          name: 'second-ambiguous-trigger',
+          delay: 10_000,
+          task: job,
+        }),
+      ],
+    }))
+    const first = FirstModule()
+    const second = SecondModule()
+
+    const forward = defineApplication({ modules: [first, second] }).model
+    const reversed = defineApplication({ modules: [second, first] }).model
+    const codes = (model: ApplicationModel) =>
+      model.diagnostics.map(({ code }) => code).toSorted()
+
+    expect(codes(forward)).toEqual(codes(reversed))
+    expect(codes(forward)).toContain('LUTRE_EXECUTION_OWNER_AMBIGUOUS')
+    expect(forward.executions).not.toContainEqual(
+      expect.objectContaining({ id: 'task.ambiguous-shared-task' }),
+    )
+    expect(reversed.executions).not.toContainEqual(
+      expect.objectContaining({ id: 'task.ambiguous-shared-task' }),
     )
   })
 

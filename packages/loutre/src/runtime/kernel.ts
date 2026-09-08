@@ -270,7 +270,9 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       const runtime = this.#extensionRuntimes.get(extension.identity)
       if (!runtime?.drain) continue
       let pending = true
-      const operation = startOperation(() => runtime.drain!())
+      const operation = startOperation(() =>
+        runtime.drain!({ timeoutMs: this.#forceShutdownTimeoutMs }),
+      )
       void operation.then(
         () => {
           pending = false
