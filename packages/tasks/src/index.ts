@@ -203,6 +203,7 @@ export const tasksExtension = defineExecutionExtension<
   TasksExtensionRuntime
 >({
   kind: 'execution-extension',
+  abiVersion: '1',
   name: '@loutrejs/tasks',
   compile(definition) {
     switch (definition.type) {

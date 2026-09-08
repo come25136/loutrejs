@@ -75,6 +75,7 @@ describe('Node runtime + HTTP Execution Extension', () => {
     })
     const extension = defineExecutionExtension<ExtraExecution, {}>({
       kind: 'execution-extension',
+      abiVersion: '1',
       name: '@fixture/node-extra-capability',
       compile: (definition) => ({
         kind: 'execution',

@@ -521,6 +521,7 @@ export const httpExecutionExtension = defineExecutionExtension<
   HttpExtensionRuntime
 >({
   kind: 'execution-extension',
+  abiVersion: '1',
   name: '@loutrejs/loutre/http',
   compile(definition, context) {
     const routes = Object.entries(definition.contract.routes).map(

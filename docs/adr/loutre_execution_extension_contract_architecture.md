@@ -61,6 +61,7 @@ interface ExecutionExtension<
 > {
   readonly kind: 'execution-extension'
   readonly name: string
+  readonly abiVersion: string
 
   compile(
     definition: TDefinition,
@@ -194,7 +195,7 @@ capabilities
 
 Execution ownershipは`ExecutionContribution`や`ExecutionModelNode`へ重複保持しない。Coreは`ExecutionDefinition.extension`をdispatch keyとして`compile()`を呼び、Application Modelでは`ApplicationModelExtension { extension, executions }`だけをownerの正本とする。これによりowner不整合というinvalid stateを表現できなくする。
 
-Extension固有のtoolingがcompiled型を取り戻す場合は、ordered typed registryである`ApplicationModel.extensions.get(extension)`を使う。`defineExecutionExtension()`はExtension名から`Symbol.for()`ベースのstable identityを生成し、registryとApplication内のowner groupingはこのidentityで行う。これによりCLIのesbuild bundle/import境界でdescriptor objectが複製されても同じExtensionとしてcompile・lookupできる。同じstable identityを持つdescriptorは同じ論理Extensionとして統合し、identityと名前の対応が矛盾する場合だけcollisionとして拒否する。heterogeneous storageからの型復元castはregistry実装内部だけへ局所化し、Core/Graph/RuntimeやExtension作者へ漏らさない。Coreはstable Extension identityをopaqueに扱うだけで、HTTP等の具体的な値による分岐は行わない。
+Extension固有のtoolingがcompiled型を取り戻す場合は、ordered typed registryである`ApplicationModel.extensions.get(extension)`を使う。`defineExecutionExtension()`はExtensionの`name + abiVersion`から`Symbol.for()`ベースのstable identityを生成し、registryとApplication内のowner groupingはこのidentityで行う。`abiVersion`はcompiled payload、`validate()`、`createRuntime()`、Host API間の互換性を表すstable ABI versionであり、互換性を壊す変更では必ず更新する。これによりCLIのesbuild bundle/import境界でdescriptor objectが複製されても、同じABI versionなら同じExtensionとしてcompile・lookupできる一方、同名Extensionの異なるABI versionがApplication内へ混在した場合は`LUTRE_EXTENSION_ABI_MISMATCH`としてModel build時に拒否する。heterogeneous storageからの型復元castはregistry実装内部だけへ局所化し、Core/Graph/RuntimeやExtension作者へ漏らさない。Coreはstable Extension identityをopaqueに扱うだけで、HTTP等の具体的な値による分岐は行わない。
 
 HTTPならresolved route、middleware、factory等を保持できる。WebSocketならroute、codec、session factory等を保持できる。
 
@@ -441,9 +442,9 @@ Extension runtimeの`close()`よりProvider cleanupを先に実行しない。Ex
 
 WebSocket等のlong-lived executionでは、drainによるprotocol-specific graceful close完了後に`complete()`する。
 
-`drain()`が失敗したfailure pathではactive executionが自然終了する保証を失うため、Kernelは残るLeaseをabortしてcooperative cancellationを要求する。その後もactive registryから強制削除せず、active executions == 0を安全境界として維持する。
+`drain()`が失敗したfailure pathではactive executionが自然終了する保証を失うため、Kernelは残るLeaseをabortしてcooperative cancellationを要求する。`drain()`自体が永久pendingになる場合もfailure pathの外へ逃がさず、各Extensionの`drain()`を`forceShutdownTimeoutMs`（既定値5秒）で期限切れにし、`LUTRE_EXTENSION_DRAIN_TIMEOUT`としてdrain failureに扱う。その後もactive registryから強制削除せず、active executions == 0を安全境界として維持する。
 
-協調停止は`forceShutdownTimeoutMs`（既定値5秒）まで待機する。期限内にactive executions == 0へ到達すればExtension `close()`とProvider cleanupを続行し、drain errorを最後の`AggregateError`へ保持する。期限を超えた場合はExtension `close()`とProvider cleanupを実行せず、Applicationを`draining`に保ったまま`AggregateError`を返す。残存Executionが後で`complete()`した後はshutdownを再試行できる。このfailure pathでは「完了していないExecutionが利用中のProviderをcleanupしない」ことをtotal completionより優先する。
+協調停止も`forceShutdownTimeoutMs`まで待機する。期限内にactive executions == 0へ到達すればExtension `close()`とProvider cleanupを続行し、drain errorまたはdrain timeoutを最後の`AggregateError`へ保持する。期限を超えた場合はExtension `close()`とProvider cleanupを実行せず、Applicationを`draining`に保ったまま`AggregateError`を返す。残存Executionが後で`complete()`した後はshutdownを再試行できる。このfailure pathでは「完了していないExecutionが利用中のProviderをcleanupしない」ことをtotal completionより優先する。
 
 初期化rollbackでは、構築済みProvider instanceと初期化完了済みModuleを追跡する。未到達ModuleのLifecycle hookを実行せず、cleanup dependency解決を通じて未初期化Providerを新規constructしない。
 

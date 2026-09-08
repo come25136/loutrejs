@@ -266,7 +266,14 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       const runtime = this.#extensionRuntimes.get(extension.identity)
       if (!runtime?.drain) continue
       try {
-        await runtime.drain()
+        await withTimeout(
+          () => runtime.drain!(),
+          this.#forceShutdownTimeoutMs,
+          () =>
+            new Error(
+              `LUTRE_EXTENSION_DRAIN_TIMEOUT: Extension ${extension.name} did not drain within ${this.#forceShutdownTimeoutMs}ms.`,
+            ),
+        )
       } catch (error) {
         drainFailed = true
         errors.push(error)
@@ -435,6 +442,24 @@ function lifecycleHookOf(
       node.moduleId === moduleId &&
       node.phase === phase,
   )?.hook
+}
+
+async function withTimeout<T>(
+  operation: () => T | Promise<T>,
+  timeoutMs: number,
+  createTimeoutError: () => Error,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(createTimeoutError()), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
 }
 
 async function collectError(

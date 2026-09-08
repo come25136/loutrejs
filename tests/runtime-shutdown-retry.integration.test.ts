@@ -119,6 +119,7 @@ function retryableShutdownFixture() {
     { start(): void }
   >({
     kind: 'execution-extension',
+    abiVersion: '1',
     name: '@fixture/runtime-shutdown-retry',
     compile: (definition) => ({
       kind: 'execution',

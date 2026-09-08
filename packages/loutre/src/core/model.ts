@@ -382,7 +382,10 @@ export function buildApplicationModel(
       readonly executions: ExecutionModelNode[]
     }
   >()
-  const extensionNames = new Map<string, symbol>()
+  const extensionNames = new Map<
+    string,
+    { readonly identity: symbol; readonly abiVersion: string }
+  >()
   const extensionIdentities = new Map<
     symbol,
     { readonly name: string; readonly extension: ExecutionExtension }
@@ -439,11 +442,11 @@ export function buildApplicationModel(
 
       const extension = value.extension
       const namedIdentity = extensionNames.get(extension.name)
-      if (namedIdentity && namedIdentity !== extension.identity) {
+      if (namedIdentity && namedIdentity.identity !== extension.identity) {
         diagnostics.push(
           diagnostic(
-            'LUTRE_EXTENSION_NAME_COLLISION',
-            `Different Extension descriptors use the same name ${extension.name}.`,
+            'LUTRE_EXTENSION_ABI_MISMATCH',
+            `Extension ${extension.name} mixes incompatible ABI versions ${namedIdentity.abiVersion} and ${extension.abiVersion}.`,
             path,
           ),
         )
@@ -462,7 +465,10 @@ export function buildApplicationModel(
       }
       const canonicalExtension =
         identityOwner?.extension ?? snapshotExecutionExtension(extension)
-      extensionNames.set(extension.name, extension.identity)
+      extensionNames.set(extension.name, {
+        identity: extension.identity,
+        abiVersion: extension.abiVersion,
+      })
       extensionIdentities.set(extension.identity, {
         name: extension.name,
         extension: canonicalExtension,

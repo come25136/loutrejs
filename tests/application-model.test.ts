@@ -100,6 +100,7 @@ function createProbeExtension(events: string[] = []) {
     ProbeRuntime
   >({
     kind: 'execution-extension',
+    abiVersion: '1',
     name: '@fixture/probe',
     compile,
     references: (definition) =>

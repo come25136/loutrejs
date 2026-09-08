@@ -185,6 +185,7 @@ export const websocketExtension = defineExecutionExtension<
   WebSocketExtensionRuntime
 >({
   kind: 'execution-extension',
+  abiVersion: '1',
   name: '@loutrejs/websocket',
   compile(definition, context) {
     return {

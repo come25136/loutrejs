@@ -110,6 +110,7 @@ export const messagePortExtension = defineExecutionExtension<
   MessagePortExtensionRuntime
 >({
   kind: 'execution-extension',
+  abiVersion: '1',
   name: '@loutrejs/message-port',
   compile(definition, context) {
     return {

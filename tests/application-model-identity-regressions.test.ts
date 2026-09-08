@@ -23,7 +23,7 @@ interface FixtureDefinition extends ExecutionDefinition {
   readonly id: string
 }
 
-function fixtureExtension(name: string, marker: string) {
+function fixtureExtension(name: string, marker: string, abiVersion = '1') {
   const compile = vi.fn((definition: FixtureDefinition) => ({
     kind: 'execution' as const,
     id: definition.id,
@@ -40,6 +40,7 @@ function fixtureExtension(name: string, marker: string) {
   >({
     kind: 'execution-extension',
     name,
+    abiVersion,
     compile,
     validate,
     createRuntime,
@@ -63,8 +64,8 @@ describe('Application Model identity regressions', () => {
   })
 
   it('同じstable identityのExtension descriptorをbundle境界で同じownerへ統合する', () => {
-    const first = fixtureExtension('@fixture/collision', 'first')
-    const second = fixtureExtension('@fixture/collision', 'second')
+    const first = fixtureExtension('@fixture/collision', 'compatible')
+    const second = fixtureExtension('@fixture/collision', 'compatible')
     const Module = defineModule(() => ({
       executions: [
         defineExecution(first.extension, { id: 'fixture.first' }),
@@ -85,9 +86,32 @@ describe('Application Model identity regressions', () => {
     expect(second.validate).not.toHaveBeenCalled()
   })
 
+  it('異なるExtension ABI versionをModel build時に拒否する', async () => {
+    const first = fixtureExtension('@fixture/abi-mismatch', 'v1', '1')
+    const second = fixtureExtension('@fixture/abi-mismatch', 'v2', '2')
+    const Module = defineModule(() => ({
+      executions: [
+        defineExecution(first.extension, { id: 'fixture.v1' }),
+        defineExecution(second.extension, { id: 'fixture.v2' }),
+      ],
+    }))
+
+    const model = buildApplicationModel({ modules: [Module()] })
+
+    expect(model.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_EXTENSION_ABI_MISMATCH' }),
+    )
+    expect(first.extension.identity).not.toBe(second.extension.identity)
+    await expect(
+      bootstrapApplication({
+        application: defineApplication({ modules: [Module()] }),
+      }),
+    ).rejects.toThrow('LUTRE_EXTENSION_ABI_MISMATCH')
+  })
+
   it('stable Extension identityはbundle境界lookupにだけ利用する', () => {
-    const bundled = fixtureExtension('@fixture/bundle-safe', 'bundled')
-    const host = fixtureExtension('@fixture/bundle-safe', 'host')
+    const bundled = fixtureExtension('@fixture/bundle-safe', 'compatible')
+    const host = fixtureExtension('@fixture/bundle-safe', 'compatible')
     const Module = defineModule(() => ({
       executions: [
         defineExecution(bundled.extension, { id: 'fixture.bundled' }),
@@ -99,7 +123,7 @@ describe('Application Model identity regressions', () => {
 
     expect(bundled.extension).not.toBe(host.extension)
     expect(bundled.extension.identity).toBe(host.extension.identity)
-    expect(group?.executions[0]?.compiled.marker).toBe('bundled')
+    expect(group?.executions[0]?.compiled.marker).toBe('compatible')
   })
 
   it('Runtime Capability idをbundle-safeな論理identityとして扱う', () => {
@@ -174,6 +198,7 @@ describe('Application Model identity regressions', () => {
     (namespace) => {
       const extension = defineExecutionExtension<any, {}, string, {}>({
         kind: 'execution-extension',
+        abiVersion: '1',
         name: `@fixture/reserved-${namespace}`,
         compile: () => ({
           kind: 'execution',

@@ -153,6 +153,7 @@ export interface ExecutionExtension<
 > {
   readonly kind: 'execution-extension'
   readonly name: string
+  readonly abiVersion: string
   readonly identity: symbol
   readonly [executionExtensionTypeInfo]?: readonly [TNamespace, THostApi]
   compile(
@@ -170,6 +171,12 @@ export interface ExecutionExtension<
   readonly host?: HostExtension<TNamespace, THostApi, TCompiled, TRuntime>
 }
 
+function executionExtensionIdentity(name: string, abiVersion: string): symbol {
+  return Symbol.for(
+    `${executionExtensionIdentityNamespace}${JSON.stringify([name, abiVersion])}`,
+  )
+}
+
 export function defineExecutionExtension<
   const TDefinition extends ExecutionDefinition,
   TCompiled,
@@ -182,14 +189,17 @@ export function defineExecutionExtension<
     'identity'
   >,
 ): ExecutionExtension<TDefinition, TCompiled, TNamespace, THostApi, TRuntime> {
+  if (extension.abiVersion.trim().length === 0) {
+    throw new Error(
+      'LUTRE_EXTENSION_ABI_VERSION: Extension abiVersion must not be empty.',
+    )
+  }
   return Object.freeze({
     ...extension,
     ...(extension.host === undefined
       ? {}
       : { host: Object.freeze({ ...extension.host }) }),
-    identity: Symbol.for(
-      `${executionExtensionIdentityNamespace}${extension.name}`,
-    ),
+    identity: executionExtensionIdentity(extension.name, extension.abiVersion),
   })
 }
 

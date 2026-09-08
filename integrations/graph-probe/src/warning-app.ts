@@ -12,6 +12,7 @@ interface WarningDefinition extends ExecutionDefinition {
 
 const warningExtension = defineExecutionExtension<WarningDefinition, {}>({
   kind: 'execution-extension',
+  abiVersion: '1',
   name: '@fixture/warning',
   compile: (definition) => ({
     kind: 'execution',

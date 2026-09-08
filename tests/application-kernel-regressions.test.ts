@@ -23,6 +23,7 @@ describe('Application Kernel regression', () => {
       { readonly value: string }
     >({
       kind: 'execution-extension',
+      abiVersion: '1',
       name: '@fixture/broken-host',
       compile: (definition) => ({
         kind: 'execution',
@@ -86,6 +87,7 @@ describe('Application Kernel regression', () => {
       }
     >({
       kind: 'execution-extension',
+      abiVersion: '1',
       name: '@fixture/drain-failure',
       compile: () => ({
         kind: 'execution',
@@ -152,6 +154,82 @@ describe('Application Kernel regression', () => {
     await expect(application.close()).resolves.toBeUndefined()
   })
 
+  it('drainが永久pendingでもforceShutdownTimeoutMsでabortしてsafe boundaryへ進む', async () => {
+    const events: string[] = []
+    let activeLease: ExecutionLease | undefined
+    const extension = defineExecutionExtension<
+      any,
+      {},
+      'fixture',
+      { start(): AbortSignal }
+    >({
+      kind: 'execution-extension',
+      abiVersion: '1',
+      name: '@fixture/hanging-drain',
+      compile: () => ({
+        kind: 'execution',
+        id: 'fixture.hanging-drain',
+        executionKind: 'fixture.hanging-drain',
+        dependencies: [],
+        capabilities: [],
+        compiled: {},
+      }),
+      createRuntime: ({ applicationRuntime }) => ({
+        start() {
+          const lease = applicationRuntime.beginExecution()
+          activeLease = lease
+          lease.signal.addEventListener('abort', () => lease.complete(), {
+            once: true,
+          })
+          return lease.signal
+        },
+        drain() {
+          events.push('extension.drain')
+          return new Promise<void>(() => undefined)
+        },
+        close() {
+          events.push('extension.close')
+        },
+      }),
+      host: {
+        namespace: 'fixture',
+        create: ({ runtime }) => ({
+          start: () => (runtime as { start(): AbortSignal }).start(),
+        }),
+      },
+    })
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [defineExecution(extension, {})],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      forceShutdownTimeoutMs: 10,
+    })
+    const signal = application.fixture.start()
+
+    const close = Promise.race([
+      application.close(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('shutdown hung')), 100),
+      ),
+    ])
+
+    await expect(close).rejects.toThrow('Application shutdown failed.')
+    expect(signal.aborted).toBe(true)
+    expect(activeLease?.signal.aborted).toBe(true)
+    expect(events).toEqual([
+      'extension.drain',
+      'extension.close',
+      'provider.destroy',
+    ])
+  })
+
   it('drain失敗後もactive executionが残る間はProviderをcleanupしない', async () => {
     const events: string[] = []
     let activeLease: ExecutionLease | undefined
@@ -162,6 +240,7 @@ describe('Application Kernel regression', () => {
       { start(): void }
     >({
       kind: 'execution-extension',
+      abiVersion: '1',
       name: '@fixture/uncooperative-drain-failure',
       compile: () => ({
         kind: 'execution',

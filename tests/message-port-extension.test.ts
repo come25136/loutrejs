@@ -272,4 +272,66 @@ describe('MessagePort Execution Extension', () => {
       'provider.destroy',
     ])
   })
+
+  it('server-streamのiterator.returnがpendingでもshutdown timeoutでsafe boundaryを返す', async () => {
+    const events: string[] = []
+    let resolveReturn!: (value: IteratorResult<number>) => void
+    const blockedReturn = new Promise<IteratorResult<number>>((resolve) => {
+      resolveReturn = resolve
+    })
+    const source: AsyncIterable<number> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next: () => new Promise<IteratorResult<number>>(() => undefined),
+          return() {
+            events.push('iterator.return')
+            return blockedReturn
+          },
+        }
+      },
+    }
+    const contract = messagePort.contract({
+      values: {
+        responses: { ok: { stream: 'server', body: z.number() } },
+      },
+    })
+    const execution = messagePort.implementation({
+      name: 'stream.hanging-return',
+      contract,
+      factory: () => ({
+        values: (context) => context.response.ok(source),
+      }),
+    })
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [execution],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      forceShutdownTimeoutMs: 10,
+    })
+    await application.messagePort.invoke('values')
+
+    await expect(
+      Promise.race([
+        application.close(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('shutdown hung')), 100),
+        ),
+      ]),
+    ).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
+    expect(events).toEqual(['iterator.return'])
+
+    resolveReturn({ done: true, value: undefined })
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    await expect(application.close()).resolves.toBeUndefined()
+    expect(events).toEqual(['iterator.return', 'provider.destroy'])
+  })
 })
