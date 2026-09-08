@@ -533,6 +533,24 @@ function createWebSocketRuntime(
   >()
   const sessions = new Set<ActiveSession>()
   let state: 'running' | 'draining' | 'stopped' = 'running'
+  let pendingIngresses = 0
+  const pendingIngressWaiters = new Set<() => void>()
+  const trackPendingIngress = () => {
+    pendingIngresses += 1
+    let completed = false
+    return () => {
+      if (completed) return
+      completed = true
+      pendingIngresses -= 1
+      if (pendingIngresses !== 0) return
+      for (const resolve of pendingIngressWaiters) resolve()
+      pendingIngressWaiters.clear()
+    }
+  }
+  const waitForPendingIngresses = () =>
+    pendingIngresses === 0
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => pendingIngressWaiters.add(resolve))
   for (const execution of executions) {
     handlers.set(
       execution.id,
@@ -586,11 +604,13 @@ function createWebSocketRuntime(
         return Response.json({ error: 'Service Unavailable' }, { status: 503 })
       }
       const lease = applicationRuntime.beginExecution()
+      const completePendingIngress = trackPendingIngress()
       let upgraded: WebSocketUpgradeResult
       try {
         upgraded = await driver.upgrade(request)
       } catch (error) {
         lease.complete()
+        completePendingIngress()
         throw error
       }
       const session = createSession(
@@ -605,11 +625,17 @@ function createWebSocketRuntime(
         () => sessions.delete(session.active),
         () => sessions.delete(session.active),
       )
+      completePendingIngress()
+      if (state !== 'running') {
+        await session.completion.catch(() => undefined)
+        return Response.json({ error: 'Service Unavailable' }, { status: 503 })
+      }
       return upgraded.response
     },
     async drain() {
-      if (state !== 'running') return
+      if (state === 'stopped') return
       state = 'draining'
+      await waitForPendingIngresses()
       const results = await Promise.allSettled(
         [...sessions].map(async (session) => {
           const graceful = session

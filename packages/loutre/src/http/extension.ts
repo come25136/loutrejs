@@ -1263,6 +1263,24 @@ function createHttpExtensionRuntime(
 ): HttpExtensionRuntime {
   let accepting = true
   const activeResponseStreams = new Set<ActiveHttpResponseStream>()
+  let pendingIngresses = 0
+  const pendingIngressWaiters = new Set<() => void>()
+  const trackPendingIngress = () => {
+    pendingIngresses += 1
+    let completed = false
+    return () => {
+      if (completed) return
+      completed = true
+      pendingIngresses -= 1
+      if (pendingIngresses !== 0) return
+      for (const resolve of pendingIngressWaiters) resolve()
+      pendingIngressWaiters.clear()
+    }
+  }
+  const waitForPendingIngresses = () =>
+    pendingIngresses === 0
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => pendingIngressWaiters.add(resolve))
   const handlers = new Map<
     string,
     ReturnType<CompiledHttpExecution['factory']>
@@ -1297,6 +1315,7 @@ function createHttpExtensionRuntime(
   return {
     async drain() {
       accepting = false
+      await waitForPendingIngresses()
       const reason = new Error(
         'LUTRE_HTTP_SERVER_STREAM_DRAIN: Application is shutting down.',
       )
@@ -1370,6 +1389,7 @@ function createHttpExtensionRuntime(
       }
 
       const lease = applicationRuntime.beginExecution()
+      const completePendingIngress = trackPendingIngress()
       const abortRequest = () => lease.abort(request.signal.reason)
       let executionOwnedByStream = false
       let executionFinished = false
@@ -1499,6 +1519,7 @@ function createHttpExtensionRuntime(
         )
       } finally {
         if (!executionOwnedByStream) finishExecution()
+        completePendingIngress()
       }
     },
   }

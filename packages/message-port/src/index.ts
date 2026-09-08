@@ -244,6 +244,24 @@ function createMessagePortRuntime(
   const activeStreams = new Set<{
     abort(reason?: unknown): Promise<void>
   }>()
+  let pendingIngresses = 0
+  const pendingIngressWaiters = new Set<() => void>()
+  const trackPendingIngress = () => {
+    pendingIngresses += 1
+    let completed = false
+    return () => {
+      if (completed) return
+      completed = true
+      pendingIngresses -= 1
+      if (pendingIngresses !== 0) return
+      for (const resolve of pendingIngressWaiters) resolve()
+      pendingIngressWaiters.clear()
+    }
+  }
+  const waitForPendingIngresses = () =>
+    pendingIngresses === 0
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => pendingIngressWaiters.add(resolve))
   for (const execution of executions) {
     const handlers = runInInjectionContext(
       {
@@ -271,6 +289,7 @@ function createMessagePortRuntime(
         throw new Error(`LUTRE_MESSAGE_PORT_METHOD_NOT_FOUND: ${method}`)
       }
       const lease = applicationRuntime.beginExecution()
+      const completePendingIngress = trackPendingIngress()
       let executionOwnedByStream = false
       try {
         const value = route.route.input
@@ -316,10 +335,12 @@ function createMessagePortRuntime(
         }
       } finally {
         if (!executionOwnedByStream) lease.complete()
+        completePendingIngress()
       }
     },
     async drain() {
       accepting = false
+      await waitForPendingIngresses()
       const reason = new Error('LUTRE_MESSAGE_PORT_DRAINING')
       const results = await Promise.allSettled(
         [...activeStreams].map((stream) => stream.abort(reason)),

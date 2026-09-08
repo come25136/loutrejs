@@ -497,4 +497,107 @@ describe('WebSocket Execution Extension', () => {
     ])
     expect(executionSignal?.aborted).toBe(true)
   })
+
+  it('upgrade待機中に始まったshutdownは後から確立したsessionも停止する', async () => {
+    const connection = new FixtureConnection()
+    const upgradeStarted = deferred<void>()
+    const resumeUpgrade = deferred<void>()
+    const contract = websocket.contract({ wait: { path: '/wait' } })
+    const controller = websocket.implementation({
+      contract,
+      factory: () => ({
+        async wait(context) {
+          await context.closed
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [
+        bindWebSocketServer({
+          runtime: 'test',
+          async upgrade() {
+            upgradeStarted.resolve()
+            await resumeUpgrade.promise
+            return {
+              response: new Response(null, { status: 200 }),
+              connection,
+            }
+          },
+        }),
+      ],
+    })
+    const upgrade = application.websocket.upgrade(
+      new Request('http://fixture.test/wait'),
+    )
+    await upgradeStarted.promise
+
+    const closing = application.close()
+    resumeUpgrade.resolve()
+
+    await expect(
+      Promise.race([
+        closing.then(() => 'closed' as const),
+        new Promise<'timeout'>((resolve) =>
+          setTimeout(() => resolve('timeout'), 250),
+        ),
+      ]),
+    ).resolves.toBe('closed')
+    await expect(upgrade).resolves.toHaveProperty('status', 503)
+    expect(connection.closeRequests).toEqual([
+      { code: 1001, reason: 'Going Away' },
+    ])
+  })
+
+  it('drain失敗後のshutdown再試行で残存sessionを再度terminateする', async () => {
+    const closed = deferred<WebSocketCloseInfo>()
+    let terminateAttempts = 0
+    const connection: WebSocketConnectionDriver = {
+      messages: (async function* () {})(),
+      closed: closed.promise,
+      async send() {},
+      async close() {
+        throw new Error('close failure')
+      },
+      terminate() {
+        terminateAttempts += 1
+        if (terminateAttempts === 1) {
+          throw new Error('first terminate failure')
+        }
+        closed.resolve({ code: 1006, reason: '', wasClean: false })
+      },
+    }
+    const contract = websocket.contract({ wait: { path: '/wait' } })
+    const controller = websocket.implementation({
+      contract,
+      factory: () => ({
+        async wait(context) {
+          await context.closed
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [
+        bindWebSocketServer({
+          runtime: 'test',
+          async upgrade() {
+            return { response: new Response(), connection }
+          },
+        }),
+      ],
+      forceShutdownTimeoutMs: 10,
+    })
+    await application.websocket.upgrade(new Request('http://fixture.test/wait'))
+
+    await expect(application.close()).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
+    expect(terminateAttempts).toBe(1)
+
+    await expect(application.close()).resolves.toBeUndefined()
+    expect(terminateAttempts).toBe(2)
+  })
 })

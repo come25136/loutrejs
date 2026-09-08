@@ -386,6 +386,68 @@ describe('HTTP Execution Extension public API surface', () => {
     expect(events).toEqual(['stream.finalized', 'provider.destroy'])
   })
 
+  it('handler待機中に始まったshutdownは後から移譲されたserver-streamも停止する', async () => {
+    let notifyHandlerStarted!: () => void
+    const handlerStarted = new Promise<void>((resolve) => {
+      notifyHandlerStarted = resolve
+    })
+    let resumeHandler!: () => void
+    const handlerResume = new Promise<void>((resolve) => {
+      resumeHandler = resolve
+    })
+    const contract = http.contract({
+      events: {
+        method: 'GET',
+        path: '/events',
+        interaction: 'server-stream',
+        responses: {
+          ok: {
+            status: 200,
+            stream: 'server',
+            body: z.number(),
+          },
+        },
+      },
+    })
+    const implementation = http.implementation({
+      contract,
+      factory: () => ({
+        async events(context) {
+          notifyHandlerStarted()
+          await handlerResume
+          return context.response.ok({
+            body: (async function* () {
+              let sequence = 0
+              while (true) yield sequence++
+            })(),
+          })
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [implementation] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+    const response = application.http.fetch(
+      new Request('https://fixture.test/events'),
+    )
+    await handlerStarted
+
+    const closing = application.close()
+    resumeHandler()
+
+    await expect(
+      Promise.race([
+        closing.then(() => 'closed' as const),
+        new Promise<'timeout'>((resolve) =>
+          setTimeout(() => resolve('timeout'), 250),
+        ),
+      ]),
+    ).resolves.toBe('closed')
+    await expect(response).resolves.toHaveProperty('status', 200)
+  })
+
   it('server-streamのiterator.returnが完了してもin-flight nextが残る間はProvider cleanupへ進まない', async () => {
     const events: string[] = []
     let resolveNext!: (value: IteratorResult<{ sequence: number }>) => void

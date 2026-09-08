@@ -273,6 +273,57 @@ describe('MessagePort Execution Extension', () => {
     ])
   })
 
+  it('handler待機中に始まったshutdownは後から移譲されたserver-streamも停止する', async () => {
+    let notifyHandlerStarted!: () => void
+    const handlerStarted = new Promise<void>((resolve) => {
+      notifyHandlerStarted = resolve
+    })
+    let resumeHandler!: () => void
+    const handlerResume = new Promise<void>((resolve) => {
+      resumeHandler = resolve
+    })
+    const contract = messagePort.contract({
+      values: {
+        responses: { ok: { stream: 'server', body: z.number() } },
+      },
+    })
+    const execution = messagePort.implementation({
+      name: 'stream.pending-handler',
+      contract,
+      factory: () => ({
+        async values(context) {
+          notifyHandlerStarted()
+          await handlerResume
+          return context.response.ok(
+            (async function* () {
+              await new Promise<void>(() => undefined)
+              yield 1
+            })(),
+          )
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [execution] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+    const invocation = application.messagePort.invoke('values')
+    await handlerStarted
+
+    const closing = application.close()
+    resumeHandler()
+
+    await expect(
+      Promise.race([
+        closing.then(() => 'closed' as const),
+        new Promise<'timeout'>((resolve) =>
+          setTimeout(() => resolve('timeout'), 250),
+        ),
+      ]),
+    ).resolves.toBe('closed')
+    await expect(invocation).resolves.toHaveProperty('response', 'ok')
+  })
+
   it('server-streamのiterator.returnが完了してもin-flight nextが残る間はProvider cleanupへ進まない', async () => {
     const events: string[] = []
     let resolveNext!: (value: IteratorResult<number>) => void
