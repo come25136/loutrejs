@@ -353,6 +353,58 @@ describe('Task Execution Extension', () => {
     await application.close()
   })
 
+  it('Trigger stopが永久pendingならshutdown timeout後もProvider cleanupへ進まない', async () => {
+    const events: string[] = []
+    const descriptor = queue({ name: 'pending-stop', payload: z.string() })
+    const job = task<string, void>({
+      name: 'pending-stop-task',
+      factory: () => async () => undefined,
+    })
+    const trigger = consume({
+      name: 'pending-stop-consumer',
+      queue: descriptor,
+      task: job,
+    })
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [
+        Resource,
+        bindQueueDriver(descriptor, {
+          async start() {
+            return {
+              stop() {
+                events.push('driver.stop')
+                return new Promise<void>(() => undefined)
+              },
+            }
+          },
+        }),
+      ],
+      executions: [trigger],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      forceShutdownTimeoutMs: 10,
+    })
+    await application.tasks.start()
+
+    await expect(
+      Promise.race([
+        application.close(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('shutdown hung')), 100),
+        ),
+      ]),
+    ).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
+    expect(events).toEqual(['driver.stop'])
+  })
+
   it('Queue descriptorのprivate keyをbundle-safeなglobal identityにする', () => {
     const descriptor = queue({ name: 'events', payload: z.string() })
     const recreated = { ...descriptor }

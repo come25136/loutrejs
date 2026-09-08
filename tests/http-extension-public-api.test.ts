@@ -448,6 +448,27 @@ describe('HTTP Execution Extension public API surface', () => {
     await expect(response).resolves.toHaveProperty('status', 200)
   })
 
+  it('shutdown開始と同一tickの新規requestを503で拒否する', async () => {
+    const contract = http.contract({
+      health: {
+        method: 'GET',
+        path: '/health',
+        responses: { ok: { status: 204 } },
+      },
+    })
+    const { application } = await createApplication(contract, () => ({
+      health: (context) => context.response.ok({}),
+    }))
+
+    const closing = application.close()
+    const response = application.http.fetch(
+      new Request('https://fixture.test/health'),
+    )
+
+    await expect(response).resolves.toHaveProperty('status', 503)
+    await expect(closing).resolves.toBeUndefined()
+  })
+
   it('server-streamのiterator.returnが完了してもin-flight nextが残る間はProvider cleanupへ進まない', async () => {
     const events: string[] = []
     let resolveNext!: (value: IteratorResult<{ sequence: number }>) => void

@@ -74,6 +74,51 @@ describe('Application Kernel regression', () => {
     ])
   })
 
+  it('複数Extensionのdrainを同一tickで開始する', async () => {
+    const events: string[] = []
+    let releaseFirstDrain!: () => void
+    const firstDrain = new Promise<void>((resolve) => {
+      releaseFirstDrain = resolve
+    })
+    const createExtension = (name: string, drain: () => void | Promise<void>) =>
+      defineExecutionExtension<BrokenHostDefinition, {}>({
+        kind: 'execution-extension',
+        abiVersion: '1',
+        name,
+        compile: (definition) => ({
+          kind: 'execution',
+          id: definition.id,
+          executionKind: name,
+          dependencies: [],
+          capabilities: [],
+          compiled: {},
+        }),
+        createRuntime: () => ({ drain }),
+      })
+    const first = createExtension('@fixture/first-drain', () => {
+      events.push('first.drain')
+      return firstDrain
+    })
+    const second = createExtension('@fixture/second-drain', () => {
+      events.push('second.drain')
+    })
+    const Module = defineModule(() => ({
+      executions: [
+        defineExecution(first, { id: 'first.drain' }),
+        defineExecution(second, { id: 'second.drain' }),
+      ],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+
+    const closing = application.close()
+
+    expect(events).toEqual(['first.drain', 'second.drain'])
+    releaseFirstDrain()
+    await expect(closing).resolves.toBeUndefined()
+  })
+
   it('drain失敗時はactive executionをabortしてclose・Provider cleanupまで到達する', async () => {
     const events: string[] = []
     const drainError = new Error('drain failed')
@@ -154,7 +199,7 @@ describe('Application Kernel regression', () => {
     await expect(application.close()).resolves.toBeUndefined()
   })
 
-  it('drainが永久pendingでもforceShutdownTimeoutMsでabortしてsafe boundaryへ進む', async () => {
+  it('drainが永久pendingならExtension closeとProvider cleanupの手前で停止する', async () => {
     const events: string[] = []
     let activeLease: ExecutionLease | undefined
     const extension = defineExecutionExtension<
@@ -220,14 +265,12 @@ describe('Application Kernel regression', () => {
       ),
     ])
 
-    await expect(close).rejects.toThrow('Application shutdown failed.')
+    await expect(close).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
     expect(signal.aborted).toBe(true)
     expect(activeLease?.signal.aborted).toBe(true)
-    expect(events).toEqual([
-      'extension.drain',
-      'extension.close',
-      'provider.destroy',
-    ])
+    expect(events).toEqual(['extension.drain'])
   })
 
   it('drain失敗後もactive executionが残る間はProviderをcleanupしない', async () => {

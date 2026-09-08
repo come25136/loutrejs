@@ -262,23 +262,47 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     if (this.#state === 'stopped') return
     this.#state = 'draining'
     const errors: unknown[] = []
-    let drainFailed = false
+    const drainOperations: {
+      readonly result: Promise<void>
+      readonly isPending: () => boolean
+    }[] = []
     for (const { extension } of this.model.extensions) {
       const runtime = this.#extensionRuntimes.get(extension.identity)
       if (!runtime?.drain) continue
-      try {
-        await withTimeout(
-          () => runtime.drain!(),
+      let pending = true
+      const operation = startOperation(() => runtime.drain!())
+      void operation.then(
+        () => {
+          pending = false
+        },
+        () => {
+          pending = false
+        },
+      )
+      drainOperations.push({
+        result: withTimeout(
+          () => operation,
           this.#forceShutdownTimeoutMs,
           () =>
-            new Error(
+            new ExtensionDrainTimeoutError(
               `LUTRE_EXTENSION_DRAIN_TIMEOUT: Extension ${extension.name} did not drain within ${this.#forceShutdownTimeoutMs}ms.`,
             ),
-        )
-      } catch (error) {
-        drainFailed = true
-        errors.push(error)
+        ),
+        isPending: () => pending,
+      })
+    }
+    const drainResults = await Promise.allSettled(
+      drainOperations.map(({ result }) => result),
+    )
+    let drainFailed = false
+    const timedOutDrains: (typeof drainOperations)[number][] = []
+    for (const [index, result] of drainResults.entries()) {
+      if (result.status === 'fulfilled') continue
+      drainFailed = true
+      if (result.reason instanceof ExtensionDrainTimeoutError) {
+        timedOutDrains.push(drainOperations[index]!)
       }
+      errors.push(result.reason)
     }
     if (this.#activeExecutions.size > 0) {
       if (drainFailed) {
@@ -301,6 +325,16 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
           { cause: error },
         )
       }
+    }
+    if (timedOutDrains.some(({ isPending }) => isPending())) {
+      const cause = errors.find(
+        (error) => error instanceof ExtensionDrainTimeoutError,
+      )
+      throw new AggregateError(
+        errors,
+        'Application shutdown did not reach a safe cleanup boundary.',
+        { cause },
+      )
     }
     for (const { extension } of [...this.model.extensions].toReversed()) {
       const runtime = this.#extensionRuntimes.get(extension.identity)
@@ -453,7 +487,7 @@ async function withTimeout<T>(
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
-      Promise.resolve().then(operation),
+      Promise.resolve(operation()),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(createTimeoutError()), timeoutMs)
       }),
@@ -462,6 +496,16 @@ async function withTimeout<T>(
     if (timer !== undefined) clearTimeout(timer)
   }
 }
+
+function startOperation<T>(operation: () => T | Promise<T>): Promise<T> {
+  try {
+    return Promise.resolve(operation())
+  } catch (error) {
+    return Promise.reject(error)
+  }
+}
+
+class ExtensionDrainTimeoutError extends Error {}
 
 async function collectError(
   operation: () => void | Promise<void>,

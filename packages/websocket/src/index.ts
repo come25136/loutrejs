@@ -203,6 +203,7 @@ interface CompiledWebSocketExecution {
 interface ActiveSession {
   readonly close: (code: number, reason: string) => Promise<void>
   readonly terminate: () => void | Promise<void>
+  readonly completion: Promise<void>
 }
 
 interface RuntimeWebSocketRoute {
@@ -647,6 +648,7 @@ function createWebSocketRuntime(
             delay(5_000).then(() => false),
           ])
           if (!completed) await session.terminate()
+          await session.completion.catch(() => undefined)
         }),
       )
       const errors = results.flatMap((result) =>
@@ -825,7 +827,11 @@ function createSession(
     }
   })()
   return {
-    active: { close, terminate: () => connection.terminate() },
+    active: {
+      close,
+      terminate: () => connection.terminate(),
+      completion,
+    },
     completion,
   }
 }

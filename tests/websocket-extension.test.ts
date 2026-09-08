@@ -498,6 +498,86 @@ describe('WebSocket Execution Extension', () => {
     expect(executionSignal?.aborted).toBe(true)
   })
 
+  it('transport終了後もhandlerが残る場合はshutdown timeoutでsafe boundaryを返す', async () => {
+    const connection = new FixtureConnection()
+    const events: string[] = []
+    const contract = websocket.contract({ wait: { path: '/wait' } })
+    const controller = websocket.implementation({
+      contract,
+      factory: () => ({
+        async wait() {
+          await new Promise<void>(() => undefined)
+        },
+      }),
+    })
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [controller],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindWebSocketServer(fixtureDriver(connection))],
+      forceShutdownTimeoutMs: 10,
+    })
+    await application.websocket.upgrade(new Request('http://fixture.test/wait'))
+
+    await expect(
+      Promise.race([
+        application.close(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('shutdown hung')), 100),
+        ),
+      ]),
+    ).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
+    expect(connection.closeRequests).toEqual([
+      { code: 1001, reason: 'Going Away' },
+    ])
+    expect(events).toEqual([])
+  })
+
+  it('shutdown開始と同一tickの新規upgradeを503で拒否する', async () => {
+    const connection = new FixtureConnection()
+    let upgrades = 0
+    const contract = websocket.contract({ wait: { path: '/wait' } })
+    const controller = websocket.implementation({
+      contract,
+      factory: () => ({
+        async wait(context) {
+          await context.closed
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [
+        bindWebSocketServer({
+          runtime: 'test',
+          async upgrade() {
+            upgrades += 1
+            return { response: new Response(), connection }
+          },
+        }),
+      ],
+    })
+
+    const closing = application.close()
+    const response = application.websocket.upgrade(
+      new Request('http://fixture.test/wait'),
+    )
+
+    await expect(response).resolves.toHaveProperty('status', 503)
+    await expect(closing).resolves.toBeUndefined()
+    expect(upgrades).toBe(0)
+  })
+
   it('upgrade待機中に始まったshutdownは後から確立したsessionも停止する', async () => {
     const connection = new FixtureConnection()
     const upgradeStarted = deferred<void>()

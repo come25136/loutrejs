@@ -324,6 +324,28 @@ describe('MessagePort Execution Extension', () => {
     await expect(invocation).resolves.toHaveProperty('response', 'ok')
   })
 
+  it('shutdown開始と同一tickの新規invokeをExtension state errorで拒否する', async () => {
+    const contract = messagePort.contract({
+      ping: { responses: { ok: z.string() } },
+    })
+    const execution = messagePort.implementation({
+      contract,
+      factory: () => ({
+        ping: (context) => context.response.ok('pong'),
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [execution] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+
+    const closing = application.close()
+    const invocation = application.messagePort.invoke('ping')
+
+    await expect(invocation).rejects.toThrow('LUTRE_MESSAGE_PORT_DRAINING')
+    await expect(closing).resolves.toBeUndefined()
+  })
+
   it('server-streamのiterator.returnが完了してもin-flight nextが残る間はProvider cleanupへ進まない', async () => {
     const events: string[] = []
     let resolveNext!: (value: IteratorResult<number>) => void
