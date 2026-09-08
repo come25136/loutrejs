@@ -16,6 +16,8 @@ import type {
   HttpExecutionResponseDefinition,
 } from '@loutrejs/loutre/http'
 import {
+  compareHttpPathSpecificity,
+  HttpPathDecodeError,
   matchHttpPath,
   normalizeHttpPath,
   parseHttpPath,
@@ -114,30 +116,66 @@ type SendApi<TRoute extends WebSocketRouteDefinition> =
       : {}
     : {}
 
+type OpeningRequestInput<TRoute extends WebSocketRouteDefinition> = {
+  readonly params: TRoute extends {
+    readonly request: {
+      readonly params: infer TParams extends Readonly<
+        Record<string, StandardSchemaV1>
+      >
+    }
+  }
+    ? { readonly [TName in keyof TParams]: SchemaOutput<TParams[TName]> }
+    : Readonly<Record<string, string>>
+  readonly query: TRoute extends {
+    readonly request: { readonly query: infer TQuery extends StandardSchemaV1 }
+  }
+    ? SchemaOutput<TQuery>
+    : Readonly<Record<string, string | string[]>>
+  readonly headers: TRoute extends {
+    readonly request: {
+      readonly headers: infer THeaders extends StandardSchemaV1
+    }
+  }
+    ? SchemaOutput<THeaders>
+    : Headers
+}
+
 export type WebSocketHandlerContext<
   TRoute extends WebSocketRouteDefinition = WebSocketRouteDefinition,
 > = {
-  readonly input: {
-    readonly params: Readonly<Record<string, unknown>>
-    readonly query: unknown
-    readonly headers: unknown
-  } & IncomingApi<TRoute>
+  readonly input: OpeningRequestInput<TRoute> & IncomingApi<TRoute>
   readonly signal: AbortSignal
   readonly closed: Promise<WebSocketCloseInfo>
   close(code?: number, reason?: string): Promise<void>
 } & SendApi<TRoute>
 
-export type WebSocketHandlers<TContract extends WebSocketContract> = {
-  readonly [
-    TName in keyof TContract['routes'] as TContract['routes'][TName] extends WebSocketRouteDefinition
-      ? TName
-      : never
-  ]: TContract['routes'][TName] extends WebSocketRouteDefinition
-    ? (
-        context: WebSocketHandlerContext<TContract['routes'][TName]>,
-      ) => void | Promise<void>
-    : never
-}
+type UnionToIntersection<TValue> = (
+  TValue extends unknown ? (value: TValue) => void : never
+) extends (value: infer TIntersection) => void
+  ? TIntersection
+  : never
+
+type WebSocketHandlersForTree<
+  TTree extends WebSocketRouteTree,
+  TPrefix extends string = '',
+> = UnionToIntersection<
+  {
+    readonly [
+      TName in keyof TTree & string
+    ]: TTree[TName] extends WebSocketBranchDefinition
+      ? WebSocketHandlersForTree<TTree[TName]['routes'], `${TPrefix}${TName}.`>
+      : TTree[TName] extends WebSocketRouteDefinition
+        ? {
+            readonly [THandlerName in `${TPrefix}${TName}`]: (
+              context: WebSocketHandlerContext<TTree[TName]>,
+            ) => void | Promise<void>
+          }
+        : never
+  }[keyof TTree & string]
+>
+
+export type WebSocketHandlers<TContract extends WebSocketContract> =
+  WebSocketHandlersForTree<TContract['routes']>
 
 export interface WebSocketImplementationDefinition<
   TContract extends WebSocketContract = WebSocketContract,
@@ -165,6 +203,11 @@ interface CompiledWebSocketExecution {
 interface ActiveSession {
   readonly close: (code: number, reason: string) => Promise<void>
   readonly terminate: () => void | Promise<void>
+}
+
+interface RuntimeWebSocketRoute {
+  readonly executionId: string
+  readonly route: CompiledWebSocketRoute
 }
 
 export interface WebSocketExtensionRuntime {
@@ -346,21 +389,42 @@ function compileRouteTree(
     Record<string, HttpExecutionResponseDefinition>
   > = {},
   prefix = '',
+  routeNames = new Set<string>(),
 ): readonly CompiledWebSocketRoute[] {
   return Object.entries(tree).flatMap(([name, node]) => {
     if (isBranch(node)) {
+      const branchPath = node.path ?? ''
+      if (branchPath !== '') parseHttpPath(branchPath)
+      assertNoInheritedResponseCollision(
+        name,
+        parentResponses,
+        node.responses ?? {},
+      )
       return compileRouteTree(
         node.routes,
-        joinPath(parentPath, node.path ?? ''),
+        joinPath(parentPath, branchPath),
         { ...parentResponses, ...node.responses },
         prefix ? `${prefix}.${name}` : name,
+        routeNames,
       )
     }
+    parseHttpPath(node.path)
     const path = joinPath(parentPath, node.path)
     const segments = parseHttpPath(path)
+    assertExactPathParams(path, segments, node.request?.params)
+    assertNoInheritedResponseCollision(
+      name,
+      parentResponses,
+      node.responses ?? {},
+    )
+    const routeName = prefix ? `${prefix}.${name}` : name
+    if (routeNames.has(routeName)) {
+      throw new TypeError(`Duplicate nested WebSocket route name: ${routeName}`)
+    }
+    routeNames.add(routeName)
     return [
       Object.freeze({
-        name: prefix ? `${prefix}.${name}` : name,
+        name: routeName,
         path,
         normalizedPath: normalizeHttpPath(segments),
         segments,
@@ -377,6 +441,40 @@ function compileRouteTree(
       }),
     ]
   })
+}
+
+function assertExactPathParams(
+  path: string,
+  segments: readonly HttpPathSegment[],
+  params: Readonly<Record<string, StandardSchemaV1>> | undefined,
+): void {
+  if (!params) return
+  const pathParams = segments
+    .flatMap((segment) => (segment.kind === 'param' ? [segment.name] : []))
+    .toSorted()
+  const schemaParams = Object.keys(params).toSorted()
+  if (
+    pathParams.length !== schemaParams.length ||
+    pathParams.some((name, index) => name !== schemaParams[index])
+  ) {
+    throw new TypeError(
+      `WebSocket ${path} request params must exactly match path parameters.`,
+    )
+  }
+}
+
+function assertNoInheritedResponseCollision(
+  nodeName: string,
+  inherited: Readonly<Record<string, HttpExecutionResponseDefinition>>,
+  declared: Readonly<Record<string, HttpExecutionResponseDefinition>>,
+): void {
+  for (const name of Object.keys(declared)) {
+    if (name in inherited) {
+      throw new TypeError(
+        `Duplicate inherited WebSocket response ${name} at ${nodeName}.`,
+      )
+    }
+  }
 }
 
 function snapshotWebSocketRequest(
@@ -410,8 +508,10 @@ function isBranch(
 }
 
 function joinPath(parent: string, child: string): string {
-  const joined = `${parent}/${child}`.replaceAll(/\/{2,}/g, '/')
-  return joined === '' ? '/' : joined.startsWith('/') ? joined : `/${joined}`
+  if (parent === '') return child || '/'
+  if (child === '' || child === '/') return parent
+  if (parent === '/') return child
+  return `${parent}${child}`
 }
 
 function createWebSocketRuntime(
@@ -449,12 +549,30 @@ function createWebSocketRuntime(
       ),
     )
   }
+  const routes = executions
+    .flatMap((execution) =>
+      execution.compiled.routes.map((route): RuntimeWebSocketRoute => ({
+        executionId: execution.id,
+        route,
+      })),
+    )
+    .toSorted((left, right) =>
+      compareHttpPathSpecificity(left.route.segments, right.route.segments),
+    )
   return {
     async upgrade(request) {
       if (state !== 'running') {
         return Response.json({ error: 'Service Unavailable' }, { status: 503 })
       }
-      const match = findRoute(executions, request)
+      let match: ReturnType<typeof findRoute>
+      try {
+        match = findRoute(routes, request)
+      } catch (error) {
+        if (error instanceof HttpPathDecodeError) {
+          return Response.json({ error: 'Invalid request' }, { status: 400 })
+        }
+        throw error
+      }
       if (!match) {
         return Response.json({ error: 'Not Found' }, { status: 404 })
       }
@@ -483,13 +601,16 @@ function createWebSocketRuntime(
         handlers.get(match.executionId)?.[match.route.name],
       )
       sessions.add(session.active)
-      void session.completion.finally(() => sessions.delete(session.active))
+      void session.completion.then(
+        () => sessions.delete(session.active),
+        () => sessions.delete(session.active),
+      )
       return upgraded.response
     },
     async drain() {
       if (state !== 'running') return
       state = 'draining'
-      await Promise.all(
+      const results = await Promise.allSettled(
         [...sessions].map(async (session) => {
           const graceful = session
             .close(1001, 'Going Away')
@@ -502,6 +623,12 @@ function createWebSocketRuntime(
           if (!completed) await session.terminate()
         }),
       )
+      const errors = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      )
+      if (errors.length > 0) {
+        throw new AggregateError(errors, 'WebSocket session drain failed.')
+      }
     },
     close() {
       state = 'stopped'
@@ -510,10 +637,7 @@ function createWebSocketRuntime(
 }
 
 function findRoute(
-  executions: readonly {
-    readonly id: string
-    readonly compiled: CompiledWebSocketExecution
-  }[],
+  routes: readonly RuntimeWebSocketRoute[],
   request: Request,
 ):
   | {
@@ -523,10 +647,14 @@ function findRoute(
     }
   | undefined {
   const url = new URL(request.url)
-  for (const execution of executions) {
-    for (const route of execution.compiled.routes) {
-      const params = matchHttpPath(route.segments, url.pathname)
-      if (params) return { executionId: execution.id, route, params }
+  for (const candidate of routes) {
+    const params = matchHttpPath(candidate.route.segments, url.pathname)
+    if (params) {
+      return {
+        executionId: candidate.executionId,
+        route: candidate.route,
+        params,
+      }
     }
   }
   return undefined
@@ -552,12 +680,10 @@ async function validateOpeningRequest(
       )
     : rawParams
   const url = new URL(request.url)
+  const rawQuery = decodeQuery(url.searchParams)
   const query = route.request?.query
-    ? await validateSchema(
-        route.request.query,
-        Object.fromEntries(url.searchParams),
-      )
-    : url.searchParams
+    ? await validateSchema(route.request.query, rawQuery)
+    : rawQuery
   const headers = route.request?.headers
     ? await validateSchema(
         route.request.headers,
@@ -565,6 +691,22 @@ async function validateOpeningRequest(
       )
     : request.headers
   return { params, query, headers }
+}
+
+function decodeQuery(
+  searchParams: URLSearchParams,
+): Readonly<Record<string, string | string[]>> {
+  const query: Record<string, string | string[]> = {}
+  for (const [key, value] of searchParams) {
+    const current = query[key]
+    query[key] =
+      current === undefined
+        ? value
+        : Array.isArray(current)
+          ? [...current, value]
+          : [current, value]
+  }
+  return query
 }
 
 function createSession(
@@ -584,11 +726,18 @@ function createSession(
   let transportFailed = false
   let sendTail = Promise.resolve()
   let closeOperation: Promise<void> | undefined
-  const closed = connection.closed.then((info) => {
-    state = 'closed'
-    lease.abort(info)
-    return normalizeCloseInfo(info)
-  })
+  const closed = connection.closed.then(
+    (info) => {
+      state = 'closed'
+      lease.abort(info)
+      return normalizeCloseInfo(info)
+    },
+    (error: unknown) => {
+      state = 'closed'
+      lease.abort(error)
+      throw error
+    },
+  )
   const close = (code = 1000, reason = ''): Promise<void> => {
     if (closeOperation) return closeOperation
     if (state === 'closed') return closed.then(() => undefined)
@@ -642,8 +791,11 @@ function createSession(
     } catch {
       if (state === 'open') await close(1011, '')
     } finally {
-      await closed
-      lease.complete()
+      try {
+        await closed
+      } finally {
+        lease.complete()
+      }
     }
   })()
   return {
@@ -673,7 +825,10 @@ async function* decodeMessages(
       continue
     }
     try {
-      yield { isValid: true, value: await validateSchema(codec.input, decoded) }
+      yield {
+        isValid: true,
+        value: await validateSchema(codec.input, decoded),
+      }
     } catch (error) {
       yield {
         isValid: false,

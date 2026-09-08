@@ -19,14 +19,17 @@ import {
 interface Deferred<T> {
   readonly promise: Promise<T>
   resolve(value: T): void
+  reject(reason: unknown): void
 }
 
 function deferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((complete) => {
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((complete, fail) => {
     resolve = complete
+    reject = fail
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 class FixtureConnection implements WebSocketConnectionDriver {
@@ -58,6 +61,10 @@ class FixtureConnection implements WebSocketConnectionDriver {
   terminate(): void {
     this.#closed.resolve({ code: 1006, reason: '', wasClean: false })
   }
+
+  fail(error: unknown): void {
+    this.#closed.reject(error)
+  }
 }
 
 function fixtureDriver(connection: FixtureConnection): WebSocketServerDriver {
@@ -70,6 +77,116 @@ function fixtureDriver(connection: FixtureConnection): WebSocketServerDriver {
 }
 
 describe('WebSocket Execution Extension', () => {
+  it('nested route名を型安全なhandler keyとして公開する', () => {
+    const contract = websocket.contract({
+      api: {
+        path: '/api',
+        routes: {
+          chat: { path: '/chat' },
+        },
+      },
+    })
+    const controller = websocket.implementation({
+      contract,
+      factory: () => ({
+        'api.chat': async (context) => {
+          await context.close()
+        },
+      }),
+    })
+
+    expectTypeOf<
+      keyof ReturnType<typeof controller.factory>
+    >().toEqualTypeOf<'api.chat'>()
+  })
+
+  it('不正なpath・params・nested route名衝突をModel diagnosticにする', () => {
+    const invalidPath = websocket.implementation({
+      name: 'invalid-path',
+      contract: websocket.contract({ route: { path: 'relative' } }),
+      factory: () => ({ route: async () => undefined }),
+    })
+    const invalidParams = websocket.implementation({
+      name: 'invalid-params',
+      contract: websocket.contract({
+        route: {
+          path: '/rooms/{roomId}',
+          request: { params: { other: z.string() } },
+        },
+      }),
+      factory: () => ({ route: async () => undefined }),
+    })
+    const duplicateNestedName = websocket.implementation({
+      name: 'duplicate-nested-name',
+      contract: websocket.contract({
+        'api.chat': { path: '/direct' },
+        api: {
+          path: '/api',
+          routes: { chat: { path: '/chat' } },
+        },
+      }),
+      factory: () => ({
+        'api.chat': async () => undefined,
+      }),
+    })
+    const duplicateInheritedResponse = websocket.implementation({
+      name: 'duplicate-inherited-response',
+      contract: websocket.contract({
+        api: {
+          responses: { unauthorized: { status: 401 } },
+          routes: {
+            route: {
+              path: '/route',
+              responses: { unauthorized: { status: 403 } },
+            },
+          },
+        },
+      }),
+      factory: () => ({
+        'api.route': async () => undefined,
+      }),
+    })
+    const Module = defineModule(() => ({
+      executions: [
+        invalidPath,
+        invalidParams,
+        duplicateNestedName,
+        duplicateInheritedResponse,
+      ],
+    }))
+
+    const diagnostics = defineApplication({
+      modules: [Module()],
+    }).model.diagnostics
+
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'LUTRE_EXTENSION_COMPILE',
+          message: expect.stringContaining('Invalid HTTP path'),
+        }),
+        expect.objectContaining({
+          code: 'LUTRE_EXTENSION_COMPILE',
+          message: expect.stringContaining(
+            'request params must exactly match path parameters',
+          ),
+        }),
+        expect.objectContaining({
+          code: 'LUTRE_EXTENSION_COMPILE',
+          message: expect.stringContaining(
+            'Duplicate nested WebSocket route name',
+          ),
+        }),
+        expect.objectContaining({
+          code: 'LUTRE_EXTENSION_COMPILE',
+          message: expect.stringContaining(
+            'Duplicate inherited WebSocket response',
+          ),
+        }),
+      ]),
+    )
+  })
+
   it('1 connectionを1 executionとしてcodecとsend orderingを管理する', async () => {
     const connection = new FixtureConnection([
       { type: 'text', data: '{' },
@@ -172,6 +289,182 @@ describe('WebSocket Execution Extension', () => {
     } finally {
       await application.close()
     }
+  })
+
+  it('静的routeをparameter routeより優先し、queryの重複値を保持する', async () => {
+    const connection = new FixtureConnection()
+    const selected: string[] = []
+    const contract = websocket.contract({
+      room: {
+        path: '/rooms/{roomId}',
+        request: { params: { roomId: z.string() } },
+      },
+      current: {
+        path: '/rooms/me',
+        request: {
+          query: z.object({ tag: z.array(z.string()) }),
+        },
+      },
+    })
+    const controller = websocket.implementation({
+      contract,
+      factory: () => ({
+        async room(context) {
+          selected.push(`room:${context.input.params.roomId}`)
+          await context.close()
+        },
+        async current(context) {
+          selected.push(`current:${context.input.query.tag.join(',')}`)
+          await context.close()
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindWebSocketServer(fixtureDriver(connection))],
+    })
+
+    const response = await application.websocket.upgrade(
+      new Request('http://fixture.test/rooms/me?tag=first&tag=second'),
+    )
+    expect(response.status).toBe(200)
+    await connection.closed
+    expect(selected).toEqual(['current:first,second'])
+    await application.close()
+  })
+
+  it('decodeできないpath parameterを400として返す', async () => {
+    const connection = new FixtureConnection()
+    let upgrades = 0
+    const contract = websocket.contract({
+      room: { path: '/rooms/{roomId}' },
+    })
+    const controller = websocket.implementation({
+      contract,
+      factory: () => ({
+        async room(context) {
+          await context.close()
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [
+        bindWebSocketServer({
+          runtime: 'test',
+          async upgrade() {
+            upgrades += 1
+            return { response: new Response(), connection }
+          },
+        }),
+      ],
+    })
+
+    const response = await application.websocket.upgrade(
+      new Request('http://fixture.test/rooms/%E0%A4%A'),
+    )
+
+    expect(response.status).toBe(400)
+    expect(upgrades).toBe(0)
+    await application.close()
+  })
+
+  it('closedがrejectしてもexecution leaseを解放する', async () => {
+    const connection = new FixtureConnection()
+    const contract = websocket.contract({
+      wait: { path: '/wait' },
+    })
+    const controller = websocket.implementation({
+      contract,
+      factory: () => ({
+        async wait(context) {
+          await context.closed
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindWebSocketServer(fixtureDriver(connection))],
+    })
+    await application.websocket.upgrade(new Request('http://fixture.test/wait'))
+
+    connection.fail(new Error('transport failure'))
+    await expect(application.close()).resolves.toBeUndefined()
+  })
+
+  it('複数sessionのdrain失敗をすべて保持する', async () => {
+    const firstDrainError = new Error('first terminate failure')
+    const secondDrainError = new Error('second terminate failure')
+    const firstClosed = deferred<WebSocketCloseInfo>()
+    const secondClosed = deferred<WebSocketCloseInfo>()
+    const connections: WebSocketConnectionDriver[] = [
+      {
+        messages: (async function* () {})(),
+        closed: firstClosed.promise,
+        async send() {},
+        async close() {
+          firstClosed.resolve({ code: 1001, reason: '', wasClean: false })
+          throw new Error('close failure')
+        },
+        terminate() {
+          throw firstDrainError
+        },
+      },
+      {
+        messages: (async function* () {})(),
+        closed: secondClosed.promise,
+        async send() {},
+        async close() {
+          secondClosed.resolve({ code: 1001, reason: '', wasClean: false })
+          throw new Error('close failure')
+        },
+        terminate() {
+          throw secondDrainError
+        },
+      },
+    ]
+    const contract = websocket.contract({
+      wait: { path: '/wait' },
+    })
+    const controller = websocket.implementation({
+      contract,
+      factory: () => ({
+        async wait(context) {
+          await context.closed
+        },
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [controller] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [
+        bindWebSocketServer({
+          runtime: 'test',
+          async upgrade() {
+            return {
+              response: new Response(),
+              connection: connections.shift()!,
+            }
+          },
+        }),
+      ],
+    })
+    await application.websocket.upgrade(new Request('http://fixture.test/wait'))
+    await application.websocket.upgrade(new Request('http://fixture.test/wait'))
+
+    await expect(application.close()).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof AggregateError &&
+        error.errors.some(
+          (nested) =>
+            nested instanceof AggregateError &&
+            nested.errors.includes(firstDrainError) &&
+            nested.errors.includes(secondDrainError),
+        ),
+    )
   })
 
   it('shutdown時にactive sessionを1001でdrainしてから終了する', async () => {

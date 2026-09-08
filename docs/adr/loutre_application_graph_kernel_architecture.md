@@ -60,7 +60,7 @@ Execution Extensionの具体的なcontractについては、次のADRを唯一�
 - shutdown ordering
 - Host API composition
 
-WebSocket固有のconnection lifecycle、ordering、backpressure、close semanticsはWebSocket ADRを正本とする。
+WebSocket固有のconnection lifecycle、ordering、backpressure、close semanticsは`@loutrejs/websocket`の公開contractと適合testを正本とする。
 
 この分離により、同じinterfaceやlifecycleを複数ADRへ転写して矛盾させない。
 
