@@ -65,7 +65,8 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       options.capabilities ?? [],
     )
     this.#environmentSource = options.environmentSource
-    this.#argumentsSource = options.argumentsSource ?? Object.freeze({})
+    this.#argumentsSource =
+      'argumentsSource' in options ? options.argumentsSource : Object.freeze({})
     this.#forceShutdownTimeoutMs =
       options.forceShutdownTimeoutMs ?? defaultForceShutdownTimeoutMs
     if (
@@ -180,10 +181,10 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         instances.push(instance)
         await callLifecycle(instance, 'onModuleInit')
       }
+      this.#initializedModuleIds.add(module.id)
       await this.#runHook(
         lifecycleHookOf(this.model, module.id, 'onModuleInit'),
       )
-      this.#initializedModuleIds.add(module.id)
     }
     for (const module of moduleNodes(this.model)) {
       for (const instance of this.#providerInstances.get(module.id) ?? []) {

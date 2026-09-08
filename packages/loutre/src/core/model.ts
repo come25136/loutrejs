@@ -222,6 +222,13 @@ export function buildApplicationModel(
         provider.kind === 'environment'
       ) {
         edges.push({ from: moduleId, to: existingProvider.id, kind: 'owns' })
+        if (module.definition.exports?.includes(provider.provide)) {
+          edges.push({
+            from: moduleId,
+            to: existingProvider.id,
+            kind: 'exports',
+          })
+        }
         continue
       }
       if (existingProvider) {

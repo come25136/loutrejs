@@ -3,9 +3,38 @@ import {
   createKernelApplication,
   defineApplication,
   defineModule,
+  hook,
 } from '@loutrejs/loutre'
 
 describe('Application Lifecycle', () => {
+  it('ModuleのonModuleInit失敗時も対応するonModuleDestroyを実行する', async () => {
+    const events: string[] = []
+    const failure = new Error('module init failure')
+    const Module = defineModule(() => ({
+      lifecycle: {
+        onModuleInit: hook({
+          inject: [],
+          run: () => {
+            events.push('module.init')
+            throw failure
+          },
+        }),
+        onModuleDestroy: hook({
+          inject: [],
+          run: () => {
+            events.push('module.destroy')
+          },
+        }),
+      },
+    }))
+    const application = createKernelApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+
+    await expect(application.init()).rejects.toBe(failure)
+    expect(events).toEqual(['module.init', 'module.destroy'])
+  })
+
   it('初期化失敗時は対象instanceのonModuleDestroyだけを逆順で実行する', async () => {
     const events: string[] = []
     const failure = new Error('B init failure')

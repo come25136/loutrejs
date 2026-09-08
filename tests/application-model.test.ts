@@ -166,8 +166,14 @@ describe('Application Model', () => {
 
   it('同一Environment Contractを複数Moduleで共有する', async () => {
     class SharedEnv extends defineEnv(z.object({ VALUE: z.string() })) {}
-    const FirstModule = defineModule(() => ({ environment: [SharedEnv] }))
-    const SecondModule = defineModule(() => ({ environment: [SharedEnv] }))
+    const FirstModule = defineModule(() => ({
+      environment: [SharedEnv],
+      exports: [SharedEnv],
+    }))
+    const SecondModule = defineModule(() => ({
+      environment: [SharedEnv],
+      exports: [SharedEnv],
+    }))
     const definition = defineApplication({
       modules: [FirstModule(), SecondModule()],
     })
@@ -180,6 +186,15 @@ describe('Application Model', () => {
         (provider) => provider.provide === SharedEnv,
       ),
     ).toHaveLength(1)
+    const environmentProvider = definition.model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === SharedEnv,
+    )
+    expect(
+      definition.model.edges.filter(
+        (edge) =>
+          edge.kind === 'exports' && edge.to === environmentProvider?.id,
+      ),
+    ).toHaveLength(2)
 
     const application = await bootstrapApplication({
       application: definition,

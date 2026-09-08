@@ -95,6 +95,23 @@ describe('Task/Trigger Application', () => {
     await application.close()
   })
 
+  test('明示したnullのArgumentsを既定値で上書きしない', async () => {
+    class AppArgs extends defineArgs(
+      z.null().transform(() => ({ source: 'null' as const })),
+    ) {}
+    const Module = defineModule(() => ({ providers: [] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({
+        modules: [Module()],
+        arguments: AppArgs,
+      }),
+      arguments: null,
+    })
+
+    expect(application.get(AppArgs)).toEqual({ source: 'null' })
+    await application.close()
+  })
+
   test('closeはactive executionを待ち、新規executionを拒否する', async () => {
     let release!: () => void
     const blocker = new Promise<void>((resolve) => {
