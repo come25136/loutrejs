@@ -112,6 +112,15 @@ async function create<const TDefinition extends ApplicationDefinition>(
   let serving = false
   let closed = false
   let closingPromise: Promise<void> | undefined
+  let serverClosingPromise: Promise<void> | undefined
+
+  const beginServerClose = (): Promise<void> => {
+    if (serverClosingPromise) return serverClosingPromise
+    if (!server?.listening) return Promise.resolve()
+    serverClosingPromise = closeServer(server)
+    void serverClosingPromise.catch(() => undefined)
+    return serverClosingPromise
+  }
 
   const close = (signal?: string): Promise<void> => {
     if (closed) return Promise.resolve()
@@ -121,17 +130,18 @@ async function create<const TDefinition extends ApplicationDefinition>(
       removeShutdownHooks?.()
       removeShutdownHooks = undefined
       const errors: unknown[] = []
-      if (server?.listening) {
-        try {
-          await closeServer(server)
-        } catch (error) {
-          errors.push(error)
-        }
-      }
+      const serverClosing = beginServerClose()
       try {
         await closeApplication(signal)
       } catch (error) {
         errors.push(error)
+      }
+      if (errors.length === 0) {
+        try {
+          await serverClosing
+        } catch (error) {
+          errors.push(error)
+        }
       }
       if (errors.length > 0) {
         throw new AggregateError(errors, 'Node runtime shutdown failed')
@@ -287,6 +297,10 @@ function createNodeHttpServerDriver(
       }
       outgoing.end()
     } catch {
+      if (outgoing.headersSent) {
+        outgoing.destroy()
+        return
+      }
       outgoing.statusCode = 500
       outgoing.setHeader('content-type', 'application/json; charset=utf-8')
       outgoing.end(JSON.stringify({ error: 'Internal Server Error' }))

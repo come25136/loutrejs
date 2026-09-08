@@ -569,6 +569,7 @@ function createTasksRuntime(
   }
 
   let triggerHandles: TriggerHandle[] = []
+  let triggerStartup: Promise<void> | undefined
   let triggersStarted = false
   let state: 'running' | 'draining' | 'stopped' = 'running'
 
@@ -592,6 +593,8 @@ function createTasksRuntime(
   }
 
   const stopTriggers = async () => {
+    const startup = triggerStartup
+    if (startup) await startup.catch(() => undefined)
     const handles = triggerHandles
     triggerHandles = []
     triggersStarted = false
@@ -606,19 +609,20 @@ function createTasksRuntime(
     }
   }
 
-  return {
-    run: run as TasksExtensionRuntime['run'],
-    async startTriggers() {
-      if (state !== 'running') {
-        throw new Error(`LUTRE_TASKS_${state.toUpperCase()}`)
-      }
-      if (triggersStarted) {
-        throw new Error(
-          'LUTRE_TRIGGERS_ALREADY_STARTED: Trigger Engine is already started.',
-        )
-      }
-      triggersStarted = true
-      const started: TriggerHandle[] = []
+  const startTriggers = async (): Promise<void> => {
+    if (state !== 'running') {
+      throw new Error(`LUTRE_TASKS_${state.toUpperCase()}`)
+    }
+    if (triggersStarted) {
+      throw new Error(
+        'LUTRE_TRIGGERS_ALREADY_STARTED: Trigger Engine is already started.',
+      )
+    }
+
+    const lease = applicationRuntime.beginExecution()
+    triggersStarted = true
+    const started: TriggerHandle[] = []
+    const startup = (async () => {
       try {
         for (const trigger of triggers) {
           if (trigger.type === 'task') continue
@@ -637,7 +641,19 @@ function createTasksRuntime(
         triggersStarted = false
         throw error
       }
-    },
+    })()
+    let trackedStartup!: Promise<void>
+    trackedStartup = startup.finally(() => {
+      lease.complete()
+      if (triggerStartup === trackedStartup) triggerStartup = undefined
+    })
+    triggerStartup = trackedStartup
+    await trackedStartup
+  }
+
+  return {
+    run: run as TasksExtensionRuntime['run'],
+    startTriggers,
     stopTriggers,
     async drain() {
       if (state === 'stopped') return

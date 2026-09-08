@@ -157,6 +157,22 @@ async function create<const TDefinition extends ApplicationDefinition>(
   let serving = false
   let closed = false
   let closingPromise: Promise<void> | undefined
+  let serverClosingPromise: Promise<void> | undefined
+
+  const beginServerClose = (): Promise<void> => {
+    if (serverClosingPromise) return serverClosingPromise
+    if (!server) return Promise.resolve()
+    const closingServer = server
+    try {
+      serverClosingPromise = closingServer.shutdown().then(() => {
+        if (server === closingServer) server = undefined
+      })
+    } catch (error) {
+      serverClosingPromise = Promise.reject(error)
+    }
+    void serverClosingPromise.catch(() => undefined)
+    return serverClosingPromise
+  }
 
   const close = (signal?: string): Promise<void> => {
     if (closed) return Promise.resolve()
@@ -166,18 +182,18 @@ async function create<const TDefinition extends ApplicationDefinition>(
       removeShutdownHooks?.()
       removeShutdownHooks = undefined
       const errors: unknown[] = []
-      if (server) {
-        try {
-          await server.shutdown()
-          server = undefined
-        } catch (error) {
-          errors.push(error)
-        }
-      }
+      const serverClosing = beginServerClose()
       try {
         await closeApplication(signal)
       } catch (error) {
         errors.push(error)
+      }
+      if (errors.length === 0) {
+        try {
+          await serverClosing
+        } catch (error) {
+          errors.push(error)
+        }
       }
       if (errors.length > 0) {
         throw new AggregateError(errors, 'Deno runtime shutdown failed')

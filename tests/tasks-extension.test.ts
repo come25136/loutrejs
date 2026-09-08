@@ -12,6 +12,7 @@ import {
 } from '@loutrejs/loutre'
 import {
   bindQueueDriver,
+  consume,
   fixedDelay,
   queue,
   task,
@@ -157,6 +158,83 @@ describe('Task Execution Extension', () => {
 
     await expect(tasks.start()).rejects.toThrow('LUTRE_TASKS_STOPPED')
     await expect(tasks.stop()).resolves.toBeUndefined()
+  })
+
+  it('Queue driver startup中のshutdownはProvider cleanupより先にstartupを回収する', async () => {
+    const events: string[] = []
+    let markStarted!: () => void
+    let releaseStart!: () => void
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve
+    })
+    const release = new Promise<void>((resolve) => {
+      releaseStart = resolve
+    })
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const descriptor = queue({ name: 'shutdown-events', payload: z.string() })
+    const job = task<string, void>({
+      name: 'shutdown-task',
+      factory:
+        (resource = inject(Resource)) =>
+        async () => {
+          void resource
+        },
+    })
+    const trigger = consume({
+      name: 'shutdown-consumer',
+      queue: descriptor,
+      task: job,
+    })
+    const driver = {
+      async start() {
+        events.push('driver.start')
+        markStarted()
+        await release
+        events.push('driver.started')
+        return {
+          async stop() {
+            events.push('driver.stop')
+          },
+        }
+      },
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource, bindQueueDriver(descriptor, driver)],
+      executions: [trigger],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      forceShutdownTimeoutMs: 10,
+    })
+    const startup = application.tasks.start()
+    await started
+
+    await expect(
+      Promise.race([
+        application.close(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('shutdown hung')), 100),
+        ),
+      ]),
+    ).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
+    expect(events).toEqual(['driver.start'])
+
+    releaseStart()
+    await expect(startup).rejects.toThrow('LUTRE_TASKS_DRAINING')
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    await expect(application.close()).resolves.toBeUndefined()
+    expect(events).toEqual([
+      'driver.start',
+      'driver.started',
+      'driver.stop',
+      'provider.destroy',
+    ])
   })
 
   it('Queue descriptorのprivate keyをbundle-safeなglobal identityにする', () => {
