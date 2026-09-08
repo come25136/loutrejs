@@ -141,6 +141,58 @@ describe('Task Execution Extension', () => {
     })
   })
 
+  it('同じTask Definitionを複数ModuleのTriggerから参照してもApplication全体で一度だけcompileする', () => {
+    const job = task({
+      name: 'shared-referenced-task',
+      factory: () => async () => undefined,
+    })
+    const FirstModule = defineModule(() => ({
+      executions: [
+        fixedDelay({
+          name: 'first-shared-trigger',
+          delay: 10_000,
+          task: job,
+        }),
+      ],
+    }))
+    const SecondModule = defineModule(() => ({
+      executions: [
+        fixedDelay({
+          name: 'second-shared-trigger',
+          delay: 10_000,
+          task: job,
+        }),
+      ],
+    }))
+
+    const definition = defineApplication({
+      modules: [FirstModule(), SecondModule()],
+    })
+
+    expect(definition.model.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_EXECUTION_ID_COLLISION' }),
+    )
+    expect(
+      definition.model.executions.filter(
+        ({ id }) => id === 'task.shared-referenced-task',
+      ),
+    ).toHaveLength(1)
+    expect(definition.model.edges).toEqual(
+      expect.arrayContaining([
+        {
+          from: 'trigger.first-shared-trigger',
+          to: 'task.shared-referenced-task',
+          kind: 'references',
+        },
+        {
+          from: 'trigger.second-shared-trigger',
+          to: 'task.shared-referenced-task',
+          kind: 'references',
+        },
+      ]),
+    )
+  })
+
   it('close後は保持済みTrigger APIからresourceを再生成できない', async () => {
     const job = task({ name: 'closed-task', factory: () => async () => {} })
     const trigger = fixedDelay({

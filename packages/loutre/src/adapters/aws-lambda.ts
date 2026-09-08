@@ -194,14 +194,30 @@ function createAwsLambdaStreamingHttpDriver(
       })
     }
     const reader = response.body?.getReader()
-    if (reader) {
-      while (true) {
-        const chunk = await reader.read()
-        if (chunk.done) break
-        if (!stream.write(chunk.value) && stream.once) {
-          await new Promise<void>((resolve) => {
-            stream.once?.('drain', resolve)
-          })
+    let completed = false
+    let failure: unknown
+    try {
+      if (reader) {
+        while (true) {
+          const chunk = await reader.read()
+          if (chunk.done) break
+          if (!stream.write(chunk.value) && stream.once) {
+            await new Promise<void>((resolve) => {
+              stream.once?.('drain', resolve)
+            })
+          }
+        }
+      }
+      completed = true
+    } catch (error) {
+      failure = error
+      throw error
+    } finally {
+      if (reader && !completed) {
+        try {
+          await reader.cancel(failure)
+        } catch {
+          // Preserve the original response pump failure.
         }
       }
     }

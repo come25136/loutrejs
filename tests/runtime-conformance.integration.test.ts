@@ -1,5 +1,6 @@
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { checkRuntimeSupport } from '@loutrejs/loutre/runtime'
+import { http } from '@loutrejs/loutre/http'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
@@ -103,6 +104,65 @@ describe('Runtime conformance harness', () => {
     expect(new TextDecoder().decode(Buffer.concat(chunks))).toContain(
       'data:{"sequence":3,"message":"event-3"}',
     )
+  })
+
+  it('AWS Lambda streamingのoutput書き込み失敗時にResponse bodyをcancelする', async () => {
+    vi.stubEnv('AWS_EXECUTION_ENV', 'AWS_Lambda_nodejs24.x')
+    let returned = 0
+    const source: AsyncIterable<{ sequence: number }> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            return { done: false, value: { sequence: 1 } }
+          },
+          async return() {
+            returned += 1
+            return { done: true, value: undefined }
+          },
+        }
+      },
+    }
+    const contract = http.contract({
+      events: {
+        method: 'GET',
+        path: '/events',
+        interaction: 'server-stream',
+        responses: {
+          ok: {
+            status: 200,
+            stream: 'server',
+            body: z.object({ sequence: z.number() }),
+          },
+        },
+      },
+    })
+    const implementation = http.implementation({
+      contract,
+      factory: () => ({
+        events: (context) => context.response.ok({ body: source }),
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [implementation] }))
+    const handler = awsLambdaRuntime.bind({
+      application: defineApplication({ modules: [Module()] }),
+      response: 'streaming',
+    })
+
+    await expect(
+      handler(
+        {
+          rawPath: '/events',
+          requestContext: { http: { method: 'GET' } },
+        },
+        {
+          write() {
+            throw new Error('output failed')
+          },
+          end() {},
+        },
+      ),
+    ).rejects.toThrow('output failed')
+    expect(returned).toBe(1)
   })
 
   it('Electron attachが新MessagePort ExtensionをKernel経由で実行する', async () => {

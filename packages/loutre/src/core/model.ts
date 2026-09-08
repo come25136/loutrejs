@@ -392,6 +392,8 @@ export function buildApplicationModel(
   >()
   const executionIds = new Set<string>()
   const capabilityNodeIds = new Set<string>()
+  const visitedDefinitions = new Set<ExecutionDefinition>()
+  const compiledDefinitions = new Map<ExecutionDefinition, ExecutionModelNode>()
 
   for (const module of modules) {
     const moduleId = moduleIds.get(module)!
@@ -413,11 +415,6 @@ export function buildApplicationModel(
       definitionIndex,
       path: `${moduleId}.executions.${definitionIndex}`,
     }))
-    const visitedDefinitions = new Set<ExecutionDefinition>()
-    const compiledDefinitions = new Map<
-      ExecutionDefinition,
-      ExecutionModelNode
-    >()
     const executionReferences: {
       readonly from: ExecutionDefinition
       readonly to: ExecutionDefinition

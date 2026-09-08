@@ -5,6 +5,7 @@ import {
   defineApplication,
   defineError,
   defineModule,
+  inject,
 } from '@loutrejs/loutre'
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 import {
@@ -385,12 +386,16 @@ describe('HTTP Execution Extension public API surface', () => {
     expect(events).toEqual(['stream.finalized', 'provider.destroy'])
   })
 
-  it('server-streamのiterator.returnがpendingでもshutdown timeoutでsafe boundaryを返す', async () => {
+  it('server-streamのiterator.returnが完了してもin-flight nextが残る間はProvider cleanupへ進まない', async () => {
     const events: string[] = []
-    let resolveReturn!: (value: IteratorResult<{ sequence: number }>) => void
-    const blockedReturn = new Promise<IteratorResult<{ sequence: number }>>(
+    let resolveNext!: (value: IteratorResult<{ sequence: number }>) => void
+    let markNextStarted!: () => void
+    const nextStarted = new Promise<void>((resolve) => {
+      markNextStarted = resolve
+    })
+    const blockedNext = new Promise<IteratorResult<{ sequence: number }>>(
       (resolve) => {
-        resolveReturn = resolve
+        resolveNext = resolve
       },
     )
     let nextCount = 0
@@ -404,9 +409,151 @@ describe('HTTP Execution Extension public API surface', () => {
                 value: { sequence: 0 },
               })
             }
-            return new Promise<IteratorResult<{ sequence: number }>>(
-              () => undefined,
-            )
+            markNextStarted()
+            return blockedNext
+          },
+          async return() {
+            events.push('iterator.return')
+            return { done: true, value: undefined }
+          },
+        }
+      },
+    }
+    const contract = http.contract({
+      events: {
+        method: 'GET',
+        path: '/events',
+        interaction: 'server-stream',
+        responses: {
+          ok: {
+            status: 200,
+            stream: 'server',
+            body: z.object({ sequence: z.number() }),
+          },
+        },
+      },
+    })
+    const implementation = http.implementation({
+      contract,
+      factory: () => ({
+        events: (context) => context.response.ok({ body: source }),
+      }),
+    })
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [implementation],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+      forceShutdownTimeoutMs: 10,
+    })
+    const response = await application.http.fetch(
+      new Request('https://fixture.test/events'),
+    )
+    const reader = response.body!.getReader()
+    const readerClosed = reader.closed.catch(() => undefined)
+    await expect(reader.read()).resolves.toMatchObject({ done: false })
+    await nextStarted
+
+    await expect(application.close()).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
+    expect(events).toEqual(['iterator.return'])
+
+    resolveNext({ done: true, value: undefined })
+    await readerClosed
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    await expect(application.close()).resolves.toBeUndefined()
+    expect(events).toEqual(['iterator.return', 'provider.destroy'])
+  })
+
+  it('通常HTTP ReadableStream responseもbody終了までExecution Leaseを保持する', async () => {
+    const events: string[] = []
+    const Body = z.custom<ReadableStream<Uint8Array>>(
+      (value) => value instanceof ReadableStream,
+    )
+    const contract = http.contract({
+      download: {
+        method: 'GET',
+        path: '/download',
+        responses: {
+          ok: { status: 200, body: Body },
+        },
+      },
+    })
+    class Resource {
+      stream() {
+        return new ReadableStream<Uint8Array>({
+          pull(controller) {
+            events.push('stream.pull')
+            controller.enqueue(new TextEncoder().encode('chunk'))
+          },
+          cancel() {
+            events.push('stream.cancel')
+          },
+        })
+      }
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const implementation = http.implementation({
+      contract,
+      factory: (resource = inject(Resource)) => ({
+        download: (context) => context.response.ok({ body: resource.stream() }),
+      }),
+    })
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [implementation],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+
+    const response = await application.http.fetch(
+      new Request('https://fixture.test/download'),
+    )
+    expect(events).not.toContain('provider.destroy')
+    await expect(application.close()).resolves.toBeUndefined()
+    expect(events.at(-2)).toBe('stream.cancel')
+    expect(events.at(-1)).toBe('provider.destroy')
+    await expect(response.text()).rejects.toThrow()
+  })
+
+  it('server-streamのiterator.returnがpendingでもshutdown timeoutでsafe boundaryを返す', async () => {
+    const events: string[] = []
+    let resolveReturn!: (value: IteratorResult<{ sequence: number }>) => void
+    const blockedReturn = new Promise<IteratorResult<{ sequence: number }>>(
+      (resolve) => {
+        resolveReturn = resolve
+      },
+    )
+    let resolveNext!: (value: IteratorResult<{ sequence: number }>) => void
+    const blockedNext = new Promise<IteratorResult<{ sequence: number }>>(
+      (resolve) => {
+        resolveNext = resolve
+      },
+    )
+    let nextCount = 0
+    const source: AsyncIterable<{ sequence: number }> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next() {
+            if (nextCount++ === 0) {
+              return Promise.resolve({
+                done: false as const,
+                value: { sequence: 0 },
+              })
+            }
+            return blockedNext
           },
           return() {
             events.push('iterator.return')
@@ -468,6 +615,7 @@ describe('HTTP Execution Extension public API surface', () => {
     expect(events).toEqual(['iterator.return'])
 
     resolveReturn({ done: true, value: undefined })
+    resolveNext({ done: true, value: undefined })
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
     await expect(application.close()).resolves.toBeUndefined()
     expect(events).toEqual(['iterator.return', 'provider.destroy'])

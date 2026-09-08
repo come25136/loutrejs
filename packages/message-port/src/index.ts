@@ -342,26 +342,56 @@ function createLeasedMessagePortStream(
 ): AsyncIterable<unknown> & { cancel(reason?: unknown): Promise<void> } {
   const iterator = source[Symbol.asyncIterator]()
   let finished = false
+  let completed = false
+  let inFlightOperations = 0
+  let cancellationSettled = true
   let cancellation: Promise<void> | undefined
+  let cancellationResult: IteratorResult<unknown> | undefined
+  let resolveCompleted!: () => void
+  const completedPromise = new Promise<void>((resolve) => {
+    resolveCompleted = resolve
+  })
   let control: { abort(reason?: unknown): Promise<void> }
 
-  const finish = () => {
+  const markFinished = () => {
     if (finished) return false
     finished = true
     lease.signal.removeEventListener('abort', onAbort)
-    activeStreams.delete(control)
-    lease.complete()
     return true
   }
+  const completeIfSafe = () => {
+    if (
+      completed ||
+      !finished ||
+      !cancellationSettled ||
+      inFlightOperations > 0
+    ) {
+      return
+    }
+    completed = true
+    activeStreams.delete(control)
+    try {
+      lease.complete()
+    } finally {
+      resolveCompleted()
+    }
+  }
   const cancel = (reason?: unknown): Promise<void> => {
-    if (finished) return Promise.resolve()
     if (cancellation) return cancellation
+    if (!markFinished()) return completedPromise
+    cancellationSettled = false
     cancellation = (async () => {
+      let cleanupError: unknown
       try {
-        await iterator.return?.(reason)
+        cancellationResult = await iterator.return?.(reason)
+      } catch (error) {
+        cleanupError = error
       } finally {
-        finish()
+        cancellationSettled = true
+        completeIfSafe()
       }
+      await completedPromise
+      if (cleanupError !== undefined) throw cleanupError
     })()
     return cancellation
   }
@@ -382,10 +412,11 @@ function createLeasedMessagePortStream(
   const wrapped: AsyncIterator<unknown> = {
     async next() {
       if (finished) return { done: true, value: undefined }
+      inFlightOperations += 1
       try {
         const result = await iterator.next()
         if (result.done) {
-          finish()
+          markFinished()
           return result
         }
         return {
@@ -393,44 +424,56 @@ function createLeasedMessagePortStream(
           value: await validateSchema(schema, result.value),
         }
       } catch (error) {
+        if (finished) throw error
+        let cleanupError: unknown
         try {
           await iterator.return?.(error)
-        } catch (cleanupError) {
-          finish()
+        } catch (caught) {
+          cleanupError = caught
+        } finally {
+          markFinished()
+        }
+        if (cleanupError !== undefined) {
           throw new AggregateError(
             [error, cleanupError],
             'MessagePort stream validation and cleanup failed.',
-            { cause: cleanupError },
+            { cause: error },
           )
         }
-        finish()
         throw error
+      } finally {
+        inFlightOperations -= 1
+        completeIfSafe()
       }
     },
     async return(reason?: unknown) {
-      try {
-        return (
-          (await iterator.return?.(reason)) ?? {
-            done: true,
-            value: reason,
-          }
-        )
-      } finally {
-        finish()
-      }
+      await cancel(reason)
+      return (
+        cancellationResult ?? {
+          done: true,
+          value: reason,
+        }
+      )
     },
-    async throw(reason?: unknown) {
+    async throw(error?: unknown) {
+      if (finished) throw error
+      inFlightOperations += 1
       try {
-        if (iterator.throw) return await iterator.throw(reason)
-        await iterator.return?.(reason)
-        throw reason
+        if (iterator.throw) return await iterator.throw(error)
+        await iterator.return?.(error)
+        throw error
       } finally {
-        finish()
+        markFinished()
+        inFlightOperations -= 1
+        completeIfSafe()
       }
     },
   }
+
   return {
-    [Symbol.asyncIterator]: () => wrapped,
+    [Symbol.asyncIterator]() {
+      return wrapped
+    },
     cancel,
   }
 }

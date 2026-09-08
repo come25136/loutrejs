@@ -1262,7 +1262,7 @@ function createHttpExtensionRuntime(
   applicationRuntime: ExecutionKernelRuntime,
 ): HttpExtensionRuntime {
   let accepting = true
-  const activeServerStreams = new Set<ActiveHttpServerStream>()
+  const activeResponseStreams = new Set<ActiveHttpResponseStream>()
   const handlers = new Map<
     string,
     ReturnType<CompiledHttpExecution['factory']>
@@ -1301,13 +1301,13 @@ function createHttpExtensionRuntime(
         'LUTRE_HTTP_SERVER_STREAM_DRAIN: Application is shutting down.',
       )
       const results = await Promise.allSettled(
-        [...activeServerStreams].map((stream) => stream.abort(reason)),
+        [...activeResponseStreams].map((stream) => stream.abort(reason)),
       )
       const errors = results.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : [],
       )
       if (errors.length > 0) {
-        throw new AggregateError(errors, 'HTTP server-stream drain failed.')
+        throw new AggregateError(errors, 'HTTP response stream drain failed.')
       }
     },
     async fetch(request) {
@@ -1379,17 +1379,17 @@ function createHttpExtensionRuntime(
         request.signal.removeEventListener('abort', abortRequest)
         lease.complete()
       }
-      const adoptServerStream = (stream: ServerSentEventStreamControl) => {
+      const adoptResponseStream = (stream: HttpResponseStreamControl) => {
         executionOwnedByStream = true
-        const activeStream: ActiveHttpServerStream = {
+        const activeStream: ActiveHttpResponseStream = {
           async abort(reason) {
             lease.abort(reason)
             await stream.abort(reason)
           },
         }
-        activeServerStreams.add(activeStream)
+        activeResponseStreams.add(activeStream)
         void stream.finished.then(() => {
-          activeServerStreams.delete(activeStream)
+          activeResponseStreams.delete(activeStream)
         })
       }
       request.signal.addEventListener('abort', abortRequest, { once: true })
@@ -1457,7 +1457,8 @@ function createHttpExtensionRuntime(
           lease.signal,
           finishExecution,
         )
-        if (finalized.serverStream) adoptServerStream(finalized.serverStream)
+        if (finalized.streamControl)
+          adoptResponseStream(finalized.streamControl)
         return complete(finalized.response)
       } catch (error) {
         if (error instanceof HttpInputDecodeError) {
@@ -1481,8 +1482,8 @@ function createHttpExtensionRuntime(
               lease.signal,
               finishExecution,
             )
-            if (finalized.serverStream) {
-              adoptServerStream(finalized.serverStream)
+            if (finalized.streamControl) {
+              adoptResponseStream(finalized.streamControl)
             }
             return applyFrameworkHeadersToResponse(
               finalized.response,
@@ -1712,18 +1713,20 @@ class HttpUnsupportedMediaTypeError extends Error {
 
 interface FinalizedHttpResult {
   readonly response: Response
-  readonly serverStream?: ServerSentEventStreamControl
+  readonly streamControl?: HttpResponseStreamControl
 }
 
-interface ActiveHttpServerStream {
+interface ActiveHttpResponseStream {
   abort(reason: unknown): Promise<void>
 }
 
-interface ServerSentEventStreamControl {
+interface HttpResponseStreamControl {
   readonly stream: ReadableStream<Uint8Array>
   readonly finished: Promise<void>
   abort(reason: unknown): Promise<void>
 }
+
+type ServerSentEventStreamControl = HttpResponseStreamControl
 
 async function finalizeHttpResult(
   route: HttpExecutionRouteDefinition,
@@ -1767,7 +1770,7 @@ async function finalizeHttpResult(
         status: response.status,
         headers,
       }),
-      serverStream,
+      streamControl: serverStream,
     }
   }
 
@@ -1779,14 +1782,27 @@ async function finalizeHttpResult(
       response: new Response(null, { status: response.status, headers }),
     }
   }
+  if (body instanceof ReadableStream) {
+    const responseStream = createLeasedReadableStream(
+      body,
+      signal,
+      completeExecution,
+    )
+    return {
+      response: new Response(responseStream.stream, {
+        status: response.status,
+        headers,
+      }),
+      streamControl: responseStream,
+    }
+  }
   if (
     typeof body === 'string' ||
     body instanceof ArrayBuffer ||
     ArrayBuffer.isView(body) ||
     body instanceof Blob ||
     body instanceof FormData ||
-    body instanceof URLSearchParams ||
-    body instanceof ReadableStream
+    body instanceof URLSearchParams
   ) {
     return {
       response: new Response(body as BodyInit, {
@@ -1806,15 +1822,16 @@ async function finalizeHttpResult(
   }
 }
 
-function createServerSentEventStream(
-  source: AsyncIterable<unknown>,
-  schema: StandardSchemaV1,
+function createLeasedReadableStream(
+  source: ReadableStream<Uint8Array>,
   signal: AbortSignal,
   completeExecution: () => void,
-): ServerSentEventStreamControl {
-  const encoder = new TextEncoder()
-  const iterator = source[Symbol.asyncIterator]()
+): HttpResponseStreamControl {
+  const reader = source.getReader()
   let finished = false
+  let completed = false
+  let inFlightOperations = 0
+  let cleanupSettled = true
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined
   let cleanup: Promise<void> | undefined
   let resolveFinished!: () => void
@@ -1828,7 +1845,16 @@ function createServerSentEventStream(
     signal.removeEventListener('abort', abort)
     return true
   }
-  const complete = () => {
+  const completeIfSafe = () => {
+    if (completed || !finished || !cleanupSettled || inFlightOperations > 0) {
+      return
+    }
+    completed = true
+    try {
+      reader.releaseLock()
+    } catch {
+      // A pending reader operation keeps the lock until it settles.
+    }
     try {
       completeExecution()
     } finally {
@@ -1838,23 +1864,23 @@ function createServerSentEventStream(
   const stop = (reason: unknown, errorStream: boolean): Promise<void> => {
     if (cleanup) return cleanup
     if (!markFinished()) return finishedPromise
+    cleanupSettled = false
     cleanup = (async () => {
       let cleanupError: unknown
       try {
-        await iterator.return?.(reason)
+        await reader.cancel(reason)
       } catch (error) {
         cleanupError = error
       } finally {
-        try {
-          if (errorStream) {
-            controller?.error(
-              cleanupError ?? reason ?? new Error('HTTP request was aborted'),
-            )
-          }
-        } finally {
-          complete()
+        cleanupSettled = true
+        if (errorStream) {
+          controller?.error(
+            cleanupError ?? reason ?? new Error('HTTP request was aborted'),
+          )
         }
+        completeIfSafe()
       }
+      await finishedPromise
       if (cleanupError !== undefined) throw cleanupError
     })()
     return cleanup
@@ -1871,25 +1897,124 @@ function createServerSentEventStream(
     },
     async pull(value) {
       if (finished) return
+      inFlightOperations += 1
+      try {
+        const next = await reader.read()
+        if (finished) return
+        if (next.done) {
+          if (markFinished()) value.close()
+          return
+        }
+        value.enqueue(next.value)
+      } catch (error) {
+        if (markFinished()) value.error(error)
+      } finally {
+        inFlightOperations -= 1
+        completeIfSafe()
+      }
+    },
+    cancel(reason) {
+      return stop(reason, false)
+    },
+  })
+  return {
+    stream,
+    finished: finishedPromise,
+    abort: (reason) => stop(reason, true),
+  }
+}
+
+function createServerSentEventStream(
+  source: AsyncIterable<unknown>,
+  schema: StandardSchemaV1,
+  signal: AbortSignal,
+  completeExecution: () => void,
+): ServerSentEventStreamControl {
+  const encoder = new TextEncoder()
+  const iterator = source[Symbol.asyncIterator]()
+  let finished = false
+  let completed = false
+  let inFlightOperations = 0
+  let cleanupSettled = true
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined
+  let cleanup: Promise<void> | undefined
+  let resolveFinished!: () => void
+  const finishedPromise = new Promise<void>((resolve) => {
+    resolveFinished = resolve
+  })
+
+  const markFinished = () => {
+    if (finished) return false
+    finished = true
+    signal.removeEventListener('abort', abort)
+    return true
+  }
+  const completeIfSafe = () => {
+    if (completed || !finished || !cleanupSettled || inFlightOperations > 0) {
+      return
+    }
+    completed = true
+    try {
+      completeExecution()
+    } finally {
+      resolveFinished()
+    }
+  }
+  const stop = (reason: unknown, errorStream: boolean): Promise<void> => {
+    if (cleanup) return cleanup
+    if (!markFinished()) return finishedPromise
+    cleanupSettled = false
+    cleanup = (async () => {
+      let cleanupError: unknown
+      try {
+        await iterator.return?.(reason)
+      } catch (error) {
+        cleanupError = error
+      } finally {
+        cleanupSettled = true
+        if (errorStream) {
+          controller?.error(
+            cleanupError ?? reason ?? new Error('HTTP request was aborted'),
+          )
+        }
+        completeIfSafe()
+      }
+      await finishedPromise
+      if (cleanupError !== undefined) throw cleanupError
+    })()
+    return cleanup
+  }
+  const abort = () => {
+    void stop(signal.reason, true).catch(() => undefined)
+  }
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(value) {
+      controller = value
+      if (signal.aborted) abort()
+      else signal.addEventListener('abort', abort, { once: true })
+    },
+    async pull(value) {
+      if (finished) return
+      inFlightOperations += 1
+      let stopPromise: Promise<void> | undefined
       try {
         const next = await iterator.next()
         if (finished) return
         if (next.done) {
-          if (markFinished()) {
-            try {
-              value.close()
-            } finally {
-              complete()
-            }
-          }
+          if (markFinished()) value.close()
           return
         }
         const item = await validateSchema(schema, next.value)
         if (finished) return
         value.enqueue(encoder.encode(`data:${JSON.stringify(item)}\n\n`))
       } catch (error) {
-        await stop(error, true)
+        stopPromise = stop(error, true)
+      } finally {
+        inFlightOperations -= 1
+        completeIfSafe()
       }
+      await stopPromise
     },
     cancel(reason) {
       return stop(reason, false)
