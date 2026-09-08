@@ -191,10 +191,8 @@ export interface TasksHostApi {
       ? readonly []
       : readonly [input: TInput]
   ): Promise<TOutput>
-  readonly triggers: {
-    start(): Promise<void>
-    stop(): Promise<void>
-  }
+  start(): Promise<void>
+  stop(): Promise<void>
 }
 
 export const tasksExtension = defineExecutionExtension<
@@ -281,6 +279,16 @@ export const tasksExtension = defineExecutionExtension<
         }
     }
   },
+  references(definition) {
+    switch (definition.type) {
+      case 'task':
+        return []
+      case 'cron':
+      case 'fixed-delay':
+      case 'queue-consumer':
+        return [definition.task]
+    }
+  },
   validate({ executions }) {
     const taskExecutionIds = new Set(
       executions.flatMap((execution) =>
@@ -296,7 +304,7 @@ export const tasksExtension = defineExecutionExtension<
       if (!taskExecutionIds.has(compiled.taskExecutionId)) {
         diagnostics.push({
           code: 'LUTRE_TRIGGER_TASK_MISSING',
-          message: `Trigger ${compiled.name} references a Task that is not registered in Module executions.`,
+          message: `Trigger ${compiled.name} references a Task that is unavailable in the compiled Tasks execution set.`,
           path: execution.id,
         })
       }
@@ -365,10 +373,8 @@ export const tasksExtension = defineExecutionExtension<
           definition.name,
           ...arguments_,
         ]),
-      triggers: {
-        start: () => runtime.startTriggers(),
-        stop: () => runtime.stopTriggers(),
-      },
+      start: () => runtime.startTriggers(),
+      stop: () => runtime.stopTriggers(),
     }),
   },
 })

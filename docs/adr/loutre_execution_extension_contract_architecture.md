@@ -67,6 +67,8 @@ interface ExecutionExtension<
     context: ExecutionCompileContext,
   ): ExecutionContribution<TCompiled>
 
+  references?(definition: TDefinition): readonly ExecutionDefinition[]
+
   validate?(
     context: ExecutionExtensionValidationContext<TCompiled>,
   ): readonly Diagnostic[]
@@ -82,6 +84,26 @@ interface ExecutionExtension<
 ```
 
 CoreはExtension名や`executionKind`の値でprotocol-specific分岐を行わない。
+
+### 3.1 Execution reference closure
+
+Extensionは`references()`で、あるDefinitionが同じExtension内で直接参照する別Execution Definitionを宣言できる。CoreはModuleのroot `executions`からこの参照を再帰的に辿り、同じDefinition objectは1回だけcompileしてcanonical Application Modelへ含める。参照関係はraw Definitionではなく`references` edgeとしてModelへ固定する。
+
+```text
+Module.executions: [heartbeat]
+          │
+          ▼
+heartbeat --references--> hello task
+          │                 │
+          └──── compile ─────┘
+                  │
+                  ▼
+        canonical Application Model
+```
+
+`references()`は同一Extension内だけを対象とする。別ExtensionのDefinitionを返した場合はModel diagnosticで拒否する。これによりRuntimeで合成されるHost APIと、Module root Definitionから導出するcompile-time Host API型を一致させる。参照先Executionは参照元と同じModuleのexecution closureとして扱う。
+
+Definition objectはclosure構築中だけ利用し、Application Modelへraw objectとして保持しない。Runtime、Graph、CLI、Buildはcompile済みnode/edgeだけを見る。
 
 ## 4. compile
 
@@ -315,7 +337,7 @@ interface HostExtension<
 
 ```text
 HTTP        -> app.http.fetch(request)
-Tasks       -> app.tasks.run(task)
+Tasks       -> app.tasks.run(task) / app.tasks.start() / app.tasks.stop()
 MessagePort -> app.messagePort.handle(...)
 ```
 
@@ -323,7 +345,7 @@ Host APIの型はExtension identityからApplication型へ合成する。Coreへ
 
 Host namespaceはExtension間だけでなくApplication base APIとruntime adapter APIに対しても一意でなければならない。`graph`、`init`、`get`、`close`、`serve`、Promise同化を起こす`then`と、`__proto__`、`constructor`、`prototype`は予約し、Model validationで拒否する。Host application object自体もnull prototypeで構築する。
 
-Tasksの`app.tasks.run(task)`は利用者向けergonomicsとしてDefinitionを受け取る。ただしHost境界でExtension-owned opaque Task execution identityへ解決し、Runtime dispatch、Trigger compiled model、validation、Graph projectionにはraw Task Definitionを渡さない。Queue descriptorのprivate property keyもglobal symbolにして、bundle copyが同じdescriptorを扱えるようにする。
+Tasksの`app.tasks.run(task)`は利用者向けergonomicsとしてDefinitionを受け取る。ただしHost境界でExtension-owned opaque Task execution identityへ解決し、Runtime dispatch、Trigger compiled model、validation、Graph projectionにはraw Task Definitionを渡さない。Triggerは`references()`でTaskを宣言するため、TriggerだけをModuleへ登録すれば参照先TaskもModelへ含まれる。Trigger engineの起動・停止は`app.tasks.start()` / `app.tasks.stop()`で行う。Queue descriptorのprivate property keyもglobal symbolにして、bundle copyが同じdescriptorを扱えるようにする。
 
 ### 9.1 Host create failure
 

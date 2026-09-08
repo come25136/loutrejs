@@ -2,7 +2,7 @@
 
 A minimal long-running Application using the official Tasks Execution Extension.
 
-`hello` and the `fixedDelay` trigger are registered in `Module.executions`. `src/main.ts` starts the portable Kernel Application with `bootstrapApplication()` and starts triggers through `app.tasks.triggers.start()`.
+Only the `fixedDelay` trigger is registered in `Module.executions`; its referenced `hello` Task is included automatically in the Application Model. `src/main.ts` starts the portable Kernel Application with `bootstrapApplication()` and starts trigger execution through `app.tasks.start()`.
 
 From this example directory, start the worker in development mode:
 

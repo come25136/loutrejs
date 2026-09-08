@@ -84,11 +84,11 @@ ModuleにはProviderとExecution Definitionを登録します。
 const AppModule = defineModule(() => ({
   environment: [AppEnv],
   providers: [UsersService],
-  executions: [UsersHttp, cleanupTask, heartbeat],
+  executions: [UsersHttp, heartbeat],
 }))
 ```
 
-Execution Definitionは所有するExtensionでbrandされます。Model構築時にExtensionがdependency edge、必要Runtime Capability、compiled payload、Graph metadataをprotocol-neutralなexecution contributionへcompileします。
+Execution Definitionは所有するExtensionでbrandされます。Model構築時にExtensionがdependency edge、必要Runtime Capability、compiled payload、Graph metadataをprotocol-neutralなexecution contributionへcompileします。Extensionは同じExtension内のexecution参照も公開でき、Coreがそのclosureを再帰的に辿るため、Triggerだけを登録すれば参照先Taskも自動でModelへ含まれます。compile済みModelへraw Definitionは保持しません。
 
 ## HTTP Extension
 
@@ -151,7 +151,7 @@ export const heartbeat = fixedDelay({
 })
 
 const WorkerModule = defineModule(() => ({
-  executions: [cleanup, heartbeat],
+  executions: [heartbeat],
 }))
 ```
 
@@ -160,7 +160,7 @@ Tasks executionを含むApplicationにはExtension-ownedな`tasks` Host APIが�
 ```ts
 const app = await bootstrapApplication({ application })
 await app.tasks.run(cleanup)
-await app.tasks.triggers.start()
+await app.tasks.start()
 ```
 
 ## MessagePortとWebSocket

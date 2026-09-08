@@ -44,7 +44,7 @@ const QueueModule = defineModule(() => ({
       connection: { host: '127.0.0.1', port: 6379 },
     }),
   ],
-  executions: [processOrder, orderConsumer],
+  executions: [orderConsumer],
 }))
 
 export default defineApplication({ modules: [QueueModule()] })
@@ -54,7 +54,7 @@ Trigger execution is started through the Tasks Extension Host API:
 
 ```ts
 const app = await bootstrapApplication({ application })
-await app.tasks.triggers.start()
+await app.tasks.start()
 ```
 
 ## Options

@@ -69,7 +69,7 @@ describe('Task Execution Extension', () => {
       task: hostInput,
     })
     const Module = defineModule(() => ({
-      executions: [hostInput, trigger],
+      executions: [trigger],
     }))
     const definition = defineApplication({ modules: [Module()] })
     const compiled = definition.model.extensions
@@ -89,6 +89,17 @@ describe('Task Execution Extension', () => {
     expect(
       applicationTaskMetadata(definition.model, 'trigger.snapshot-trigger'),
     ).toMatchObject({ task: 'snapshot-task' })
+    expect(definition.model.executions.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([
+        'trigger.snapshot-trigger',
+        'task.snapshot-task',
+      ]),
+    )
+    expect(definition.model.edges).toContainEqual({
+      from: 'trigger.snapshot-trigger',
+      to: 'task.snapshot-task',
+      kind: 'references',
+    })
 
     const application = await bootstrapApplication({ application: definition })
     try {
@@ -100,6 +111,35 @@ describe('Task Execution Extension', () => {
     }
   })
 
+  it('参照先Taskをexecutionsへ明示併記しても同じDefinitionを二重compileしない', () => {
+    const job = task({
+      name: 'explicit-task',
+      factory: () => async () => undefined,
+    })
+    const trigger = fixedDelay({
+      name: 'explicit-trigger',
+      delay: 10_000,
+      task: job,
+    })
+    const Module = defineModule(() => ({ executions: [job, trigger] }))
+
+    const definition = defineApplication({ modules: [Module()] })
+
+    expect(definition.model.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_EXECUTION_ID_COLLISION' }),
+    )
+    expect(
+      definition.model.executions.filter(
+        ({ id }) => id === 'task.explicit-task',
+      ),
+    ).toHaveLength(1)
+    expect(definition.model.edges).toContainEqual({
+      from: 'trigger.explicit-trigger',
+      to: 'task.explicit-task',
+      kind: 'references',
+    })
+  })
+
   it('close後は保持済みTrigger APIからresourceを再生成できない', async () => {
     const job = task({ name: 'closed-task', factory: () => async () => {} })
     const trigger = fixedDelay({
@@ -107,16 +147,16 @@ describe('Task Execution Extension', () => {
       delay: 10_000,
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [job, trigger] }))
+    const Module = defineModule(() => ({ executions: [trigger] }))
     const application = await bootstrapApplication({
       application: defineApplication({ modules: [Module()] }),
     })
-    const triggers = application.tasks.triggers
+    const tasks = application.tasks
 
     await application.close()
 
-    await expect(triggers.start()).rejects.toThrow('LUTRE_TASKS_STOPPED')
-    await expect(triggers.stop()).resolves.toBeUndefined()
+    await expect(tasks.start()).rejects.toThrow('LUTRE_TASKS_STOPPED')
+    await expect(tasks.stop()).resolves.toBeUndefined()
   })
 
   it('Queue descriptorのprivate keyをbundle-safeなglobal identityにする', () => {

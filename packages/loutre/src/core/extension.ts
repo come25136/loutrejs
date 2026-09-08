@@ -159,6 +159,7 @@ export interface ExecutionExtension<
     definition: TDefinition,
     context: ExecutionCompileContext,
   ): ExecutionContribution<TCompiled>
+  references?(definition: TDefinition): readonly ExecutionDefinition[]
   validate?(
     context: ExecutionExtensionValidationContext<TCompiled>,
   ): readonly Diagnostic[]

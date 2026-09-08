@@ -192,11 +192,13 @@ export const heartbeat = fixedDelay({
 })
 
 const WorkerModule = defineModule(() => ({
-  executions: [cleanup, heartbeat],
+  executions: [heartbeat],
 }))
 
 export default defineApplication({ modules: [WorkerModule()] })
 ```
+
+Registering the Trigger is enough: the Tasks Extension declares its referenced Task, and Core includes that Task in the canonical Application Model automatically.
 
 Run a Task manually or start Trigger execution through the Extension-owned Host API:
 
@@ -206,7 +208,7 @@ import application, { cleanup } from './app.js'
 
 const app = await bootstrapApplication({ application })
 await app.tasks.run(cleanup)
-await app.tasks.triggers.start()
+await app.tasks.start()
 ```
 
 ## Queue consumers

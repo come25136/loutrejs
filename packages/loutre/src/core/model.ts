@@ -4,6 +4,7 @@ import {
   isExecutionDefinition,
   type AnyExecutionExtension,
   type ExecutionContribution,
+  type ExecutionDefinition,
   type ExecutionExtension,
   type RuntimeCapability,
 } from './extension.js'
@@ -78,6 +79,7 @@ export interface ApplicationModelEdge {
     | 'imports'
     | 'exports'
     | 'injects'
+    | 'references'
     | 'requires'
     | 'starts'
     | 'wraps'
@@ -390,20 +392,51 @@ export function buildApplicationModel(
 
   for (const module of modules) {
     const moduleId = moduleIds.get(module)!
-    for (const [definitionIndex, value] of (
-      module.definition.executions ?? []
-    ).entries()) {
-      const path = `${moduleId}.executions.${definitionIndex}`
+    const rootDefinitions = module.definition.executions ?? []
+    const rootDefinitionIndexes = new Map<ExecutionDefinition, number>()
+    for (const [definitionIndex, value] of rootDefinitions.entries()) {
+      if (isExecutionDefinition(value) && !rootDefinitionIndexes.has(value)) {
+        rootDefinitionIndexes.set(value, definitionIndex)
+      }
+    }
+
+    const discoveredDefinitionIndexes = new Map<ExecutionDefinition, number>()
+    const queue: {
+      readonly value: unknown
+      readonly definitionIndex: number
+      readonly path: string
+    }[] = rootDefinitions.map((value, definitionIndex) => ({
+      value,
+      definitionIndex,
+      path: `${moduleId}.executions.${definitionIndex}`,
+    }))
+    const visitedDefinitions = new Set<ExecutionDefinition>()
+    const compiledDefinitions = new Map<
+      ExecutionDefinition,
+      ExecutionModelNode
+    >()
+    const executionReferences: {
+      readonly from: ExecutionDefinition
+      readonly to: ExecutionDefinition
+    }[] = []
+    let nextDiscoveredDefinitionIndex = rootDefinitions.length
+    let queueIndex = 0
+
+    while (queueIndex < queue.length) {
+      const { value, definitionIndex, path } = queue[queueIndex++]!
       if (!isExecutionDefinition(value)) {
         diagnostics.push(
           diagnostic(
             'LUTRE_EXECUTION_DEFINITION_INVALID',
-            'Module executions accepts only branded Execution Definitions.',
+            'Module executions and referenced executions accept only branded Execution Definitions.',
             path,
           ),
         )
         continue
       }
+      if (visitedDefinitions.has(value)) continue
+      visitedDefinitions.add(value)
+
       const extension = value.extension
       const namedIdentity = extensionNames.get(extension.name)
       if (namedIdentity && namedIdentity !== extension.identity) {
@@ -464,6 +497,7 @@ export function buildApplicationModel(
         capabilities: Object.freeze([...contribution.capabilities]),
         moduleId,
       })
+      compiledDefinitions.set(value, execution)
       executions.push(execution)
       nodes.push(execution)
       edges.push({ from: moduleId, to: execution.id, kind: 'owns' })
@@ -521,6 +555,73 @@ export function buildApplicationModel(
           kind: 'requires',
         })
       }
+
+      if (extension.references) {
+        let referencedDefinitions: readonly ExecutionDefinition[]
+        try {
+          referencedDefinitions = extension.references(value as never)
+        } catch (error) {
+          diagnostics.push(
+            diagnostic(
+              'LUTRE_EXTENSION_REFERENCES',
+              describeError(error),
+              path,
+            ),
+          )
+          continue
+        }
+        for (const [
+          referenceIndex,
+          reference,
+        ] of referencedDefinitions.entries()) {
+          const referencePath = `${path}.references.${referenceIndex}`
+          if (!isExecutionDefinition(reference)) {
+            diagnostics.push(
+              diagnostic(
+                'LUTRE_EXECUTION_REFERENCE_INVALID',
+                'Execution references accept only branded Execution Definitions.',
+                referencePath,
+              ),
+            )
+            continue
+          }
+          if (reference.extension.identity !== extension.identity) {
+            diagnostics.push(
+              diagnostic(
+                'LUTRE_EXECUTION_REFERENCE_EXTENSION',
+                `Execution ${execution.id} cannot reference an execution owned by ${reference.extension.name}.`,
+                referencePath,
+              ),
+            )
+            continue
+          }
+          executionReferences.push({ from: value, to: reference })
+          let referencedDefinitionIndex = rootDefinitionIndexes.get(reference)
+          if (referencedDefinitionIndex === undefined) {
+            referencedDefinitionIndex =
+              discoveredDefinitionIndexes.get(reference)
+            if (referencedDefinitionIndex === undefined) {
+              referencedDefinitionIndex = nextDiscoveredDefinitionIndex++
+              discoveredDefinitionIndexes.set(
+                reference,
+                referencedDefinitionIndex,
+              )
+            }
+          }
+          queue.push({
+            value: reference,
+            definitionIndex: referencedDefinitionIndex,
+            path: referencePath,
+          })
+        }
+      }
+    }
+
+    for (const reference of executionReferences) {
+      const from = compiledDefinitions.get(reference.from)
+      const to = compiledDefinitions.get(reference.to)
+      if (!from || !to) continue
+      edges.push({ from: from.id, to: to.id, kind: 'references' })
     }
   }
 

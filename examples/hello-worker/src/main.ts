@@ -2,7 +2,7 @@ import { bootstrapApplication } from '@loutrejs/loutre'
 import application from './app.js'
 
 const app = await bootstrapApplication({ application })
-await app.tasks.triggers.start()
+await app.tasks.start()
 
 let closing = false
 

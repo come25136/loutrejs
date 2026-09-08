@@ -190,11 +190,13 @@ export const heartbeat = fixedDelay({
 })
 
 const WorkerModule = defineModule(() => ({
-  executions: [cleanup, heartbeat],
+  executions: [heartbeat],
 }))
 
 export default defineApplication({ modules: [WorkerModule()] })
 ```
+
+Triggerだけを登録すれば十分です。Tasks Extensionが参照先Taskを宣言し、CoreがそのTaskをcanonical Application Modelへ自動で含めます。
 
 Taskのmanual executionとTrigger起動はExtension-owned Host APIから行います。
 
@@ -204,7 +206,7 @@ import application, { cleanup } from './app.js'
 
 const app = await bootstrapApplication({ application })
 await app.tasks.run(cleanup)
-await app.tasks.triggers.start()
+await app.tasks.start()
 ```
 
 ## Queue consumer

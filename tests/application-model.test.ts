@@ -30,6 +30,7 @@ const PROBE_DRIVER = runtimeCapability<ProbeDriver>('probe.driver')
 interface ProbeDefinition extends ExecutionDefinition {
   readonly id: string
   readonly dispatch: string
+  readonly reference?: ProbeDefinition
 }
 
 interface ProbeCompiled {
@@ -101,6 +102,8 @@ function createProbeExtension(events: string[] = []) {
     kind: 'execution-extension',
     name: '@fixture/probe',
     compile,
+    references: (definition) =>
+      definition.reference === undefined ? [] : [definition.reference],
     validate: ({ executions }) => {
       const seen = new Set<string>()
       return executions.flatMap((execution) => {
@@ -132,6 +135,34 @@ function createProbeExtension(events: string[] = []) {
 }
 
 describe('Application Model', () => {
+  it('Extension execution referenceを再帰展開してcanonical edgeへ固定する', () => {
+    const fixture = createProbeExtension()
+    const child = defineExecution(fixture.extension, {
+      id: 'probe.child',
+      dispatch: 'child',
+    })
+    const parent = defineExecution(fixture.extension, {
+      id: 'probe.parent',
+      dispatch: 'parent',
+      reference: child,
+    })
+    const Module = defineModule(() => ({ executions: [parent] }))
+
+    const model = buildApplicationModel({ modules: [Module()] })
+
+    expect(model.diagnostics).toEqual([])
+    expect(model.executions.map(({ id }) => id)).toEqual([
+      'probe.parent',
+      'probe.child',
+    ])
+    expect(model.edges).toContainEqual({
+      from: 'probe.parent',
+      to: 'probe.child',
+      kind: 'references',
+    })
+    expect(fixture.compile).toHaveBeenCalledTimes(2)
+  })
+
   it('同一Environment Contractを複数Moduleで共有する', async () => {
     class SharedEnv extends defineEnv(z.object({ VALUE: z.string() })) {}
     const FirstModule = defineModule(() => ({ environment: [SharedEnv] }))

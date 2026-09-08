@@ -79,7 +79,7 @@ const orderConsumer = consume({
   task: processOrder,
 })
 const WorkerModule = defineModule(() => ({
-  executions: [cleanup, calculate, processOrder, nightly, poll, orderConsumer],
+  executions: [calculate, nightly, poll, orderConsumer],
 }))
 
 const httpDefinition = defineApplication({ modules: [ImportedHttpModule()] })
@@ -97,8 +97,8 @@ const workerApplication = createKernelApplication({
   arguments: { instance: 'worker-1' },
 })
 workerApplication.tasks.run(calculate, 41)
-workerApplication.tasks.triggers.start()
-workerApplication.tasks.triggers.stop()
+workerApplication.tasks.start()
+workerApplication.tasks.stop()
 // @ts-expect-error Task inputはnumber
 workerApplication.tasks.run(calculate, '41')
 // @ts-expect-error HTTP executionが無いApplicationにはhttpを公開しない

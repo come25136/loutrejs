@@ -176,7 +176,7 @@ describe('Task/Trigger Application', () => {
           },
         }),
       ],
-      executions: [cleanup, poll, process, nightly, polling, orderConsumer],
+      executions: [nightly, polling, orderConsumer],
     }))
     const application = await bootstrapApplication({
       application: defineApplication({ modules: [Module()] }),
@@ -209,8 +209,8 @@ describe('Task/Trigger Application', () => {
       task: 'orders.process',
     })
 
-    await application.tasks.triggers.start()
-    await expect(application.tasks.triggers.start()).rejects.toThrow(
+    await application.tasks.start()
+    await expect(application.tasks.start()).rejects.toThrow(
       'LUTRE_TRIGGERS_ALREADY_STARTED',
     )
     await expect(consumePayload?.({ id: 'one' })).resolves.toBeUndefined()
@@ -218,7 +218,7 @@ describe('Task/Trigger Application', () => {
     await application.close()
   })
 
-  test('portable cron違反・timezone違反・未登録TaskをApplication Model diagnosticにする', () => {
+  test('referenced Taskを自動登録しportable cron違反・timezone違反だけをdiagnosticにする', () => {
     const cleanup = task<void, void>({
       name: 'cleanup',
       factory: () => () => undefined,
@@ -233,7 +233,6 @@ describe('Task/Trigger Application', () => {
     const definition = defineApplication({ modules: [Module()] })
     expect(definition.model.diagnostics.map(({ code }) => code)).toEqual(
       expect.arrayContaining([
-        'LUTRE_TRIGGER_TASK_MISSING',
         'LUTRE_TRIGGER_INVALID_CRON',
         'LUTRE_TRIGGER_INVALID_TIMEZONE',
       ]),

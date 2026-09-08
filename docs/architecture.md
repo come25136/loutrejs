@@ -84,11 +84,11 @@ A Module declares Providers and Execution Definitions:
 const AppModule = defineModule(() => ({
   environment: [AppEnv],
   providers: [UsersService],
-  executions: [UsersHttp, cleanupTask, heartbeat],
+  executions: [UsersHttp, heartbeat],
 }))
 ```
 
-Execution Definitions are branded by their owning Extension. During model construction, the Extension compiles each definition into a protocol-neutral execution contribution containing its dependency edges, required Runtime Capabilities, compiled payload, and Graph metadata.
+Execution Definitions are branded by their owning Extension. During model construction, the Extension compiles each definition into a protocol-neutral execution contribution containing its dependency edges, required Runtime Capabilities, compiled payload, and Graph metadata. An Extension may also expose same-Extension execution references; Core follows that reference closure recursively, so registering a Trigger automatically includes the Task it invokes without retaining raw definitions in the compiled model.
 
 ## HTTP Extension
 
@@ -151,7 +151,7 @@ export const heartbeat = fixedDelay({
 })
 
 const WorkerModule = defineModule(() => ({
-  executions: [cleanup, heartbeat],
+  executions: [heartbeat],
 }))
 ```
 
@@ -160,7 +160,7 @@ A hosted Application receives the Extension-owned `tasks` API only when the mode
 ```ts
 const app = await bootstrapApplication({ application })
 await app.tasks.run(cleanup)
-await app.tasks.triggers.start()
+await app.tasks.start()
 ```
 
 ## MessagePort and WebSocket
