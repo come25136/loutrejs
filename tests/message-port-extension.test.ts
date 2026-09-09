@@ -6,6 +6,7 @@ import {
   defineModule,
   RuntimeCapabilityRegistry,
   type ExecutionKernelRuntime,
+  type StandardSchemaV1,
 } from '@loutrejs/loutre'
 import {
   messagePort,
@@ -241,6 +242,90 @@ describe('MessagePort Execution Extension', () => {
       )
       expect(completed, testCase.name).toBe(1)
     }
+  })
+
+  it('item validation中のshutdownでもiterator cleanupを一度だけ実行する', async () => {
+    let notifyValidationStarted!: () => void
+    const validationStarted = new Promise<void>((resolve) => {
+      notifyValidationStarted = resolve
+    })
+    let finishValidation!: () => void
+    const validationGate = new Promise<void>((resolve) => {
+      finishValidation = resolve
+    })
+    const schema: StandardSchemaV1<unknown, number> = {
+      '~standard': {
+        version: 1,
+        vendor: 'loutre-test',
+        async validate() {
+          notifyValidationStarted()
+          await validationGate
+          return { issues: [{ message: 'validation failed' }] }
+        },
+      },
+    }
+    let notifyReturnStarted!: () => void
+    const returnStarted = new Promise<void>((resolve) => {
+      notifyReturnStarted = resolve
+    })
+    let returnCalls = 0
+    const source: AsyncIterable<number> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            return { done: false as const, value: 1 }
+          },
+          async return() {
+            returnCalls += 1
+            notifyReturnStarted()
+            if (returnCalls > 1) {
+              return new Promise<IteratorResult<number>>(() => undefined)
+            }
+            return { done: true as const, value: undefined }
+          },
+        }
+      },
+    }
+    const contract = messagePort.contract({
+      values: { responses: { ok: { stream: 'server', body: schema } } },
+    })
+    const execution = messagePort.implementation({
+      name: 'stream.validation-shutdown-race',
+      contract,
+      factory: () => ({
+        values: (context) => context.response.ok(source),
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [execution] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      forceShutdownTimeoutMs: 100,
+    })
+    const result = await application.messagePort.invoke('values')
+    const iterator = (result.value as AsyncIterable<number>)[
+      Symbol.asyncIterator
+    ]()
+    const pending = iterator.next()
+    await validationStarted
+
+    const closing = Promise.race([
+      application.close().then(
+        () => 'closed' as const,
+        () => 'failed' as const,
+      ),
+      new Promise<'timeout'>((resolve) =>
+        setTimeout(() => resolve('timeout'), 250),
+      ),
+    ])
+    const pendingValidation =
+      expect(pending).rejects.toThrow('validation failed')
+    await returnStarted
+    expect(returnCalls).toBe(1)
+    finishValidation()
+
+    await pendingValidation
+    await expect(closing).resolves.toBe('closed')
+    expect(returnCalls).toBe(1)
   })
 
   it('server-stream consume中のshutdownはctx.signalでpending nextを解放しstream停止完了までProvider cleanupへ進まない', async () => {

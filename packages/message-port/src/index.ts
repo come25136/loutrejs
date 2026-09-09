@@ -367,6 +367,7 @@ function createLeasedMessagePortStream(
   let inFlightOperations = 0
   let cancellationSettled = true
   let cancellation: Promise<void> | undefined
+  let iteratorCleanup: Promise<void> | undefined
   let cancellationResult: IteratorResult<unknown> | undefined
   let resolveCompleted!: () => void
   const completedPromise = new Promise<void>((resolve) => {
@@ -397,19 +398,29 @@ function createLeasedMessagePortStream(
       resolveCompleted()
     }
   }
-  const cancel = (reason?: unknown): Promise<void> => {
-    if (cancellation) return cancellation
-    if (!markFinished()) return completedPromise
+  const startIteratorCleanup = (reason?: unknown): Promise<void> => {
+    if (iteratorCleanup) return iteratorCleanup
+    if (!markFinished()) return Promise.resolve()
     cancellationSettled = false
-    cancellation = (async () => {
-      let cleanupError: unknown
+    iteratorCleanup = (async () => {
       try {
         cancellationResult = await iterator.return?.(reason)
-      } catch (error) {
-        cleanupError = error
       } finally {
         cancellationSettled = true
         completeIfSafe()
+      }
+    })()
+    void iteratorCleanup.catch(() => undefined)
+    return iteratorCleanup
+  }
+  const cancel = (reason?: unknown): Promise<void> => {
+    if (cancellation) return cancellation
+    cancellation = (async () => {
+      let cleanupError: unknown
+      try {
+        await startIteratorCleanup(reason)
+      } catch (error) {
+        cleanupError = error
       }
       await completedPromise
       if (cleanupError !== undefined) throw cleanupError
@@ -433,11 +444,9 @@ function createLeasedMessagePortStream(
   const closeAfterError = async (error: unknown): Promise<never> => {
     let cleanupError: unknown
     try {
-      await iterator.return?.(error)
+      await startIteratorCleanup(error)
     } catch (caught) {
       cleanupError = caught
-    } finally {
-      markFinished()
     }
     if (cleanupError !== undefined) {
       throw new AggregateError(
