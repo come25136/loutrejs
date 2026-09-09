@@ -62,7 +62,7 @@ function createProbeExtension(events: string[] = []) {
       executionKind: 'probe.invoke',
       dependencies: [],
       capabilities: [PROBE_DRIVER],
-      compiled: { dispatch: definition.dispatch },
+      compiled: Object.freeze({ dispatch: definition.dispatch }),
     }),
   )
   const createRuntime = vi.fn(

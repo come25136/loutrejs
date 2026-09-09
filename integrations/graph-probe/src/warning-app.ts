@@ -20,7 +20,7 @@ const warningExtension = defineExecutionExtension<WarningDefinition, {}>({
     executionKind: 'fixture.warning',
     dependencies: [],
     capabilities: [],
-    compiled: {},
+    compiled: Object.freeze({}),
   }),
   validate: ({ executions }) =>
     executions.map((execution) => ({

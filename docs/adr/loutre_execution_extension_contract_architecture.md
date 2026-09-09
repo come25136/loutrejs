@@ -180,7 +180,7 @@ interface ExecutionContribution<TCompiled = unknown> {
   readonly executionKind: string
   readonly dependencies: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
-  readonly compiled: TCompiled
+  readonly compiled: Readonly<TCompiled>
 }
 ```
 
@@ -195,13 +195,19 @@ capabilities
 
 `compiled`はExtension-owned opaque valueである。
 
+### 5.1 immutable compiled snapshot
+
+`compile()`はbuild時点のimmutableなsnapshotを`compiled`として返す。object型のtop-level valueは`Object.freeze()`済みでなければならず、CoreはModel build時に`Object.isFrozen()`で検査し、違反を`LUTRE_EXTENSION_COMPILED_NOT_FROZEN`として拒否する。primitive valueはそのまま利用できる。
+
+Coreは`compiled`のshapeを知らないため、deep cloneやdeep freezeを行わない。schema、callback、class等のidentityを壊さずにどのpropertyがModel semanticsを構成するかを判断できるのはExtensionだけである。Extensionは元Definitionのmutableなobjectやarrayを意味の一部として保持する場合、必要な深さまで複製・固定する。実行対象としてidentityを維持するschema、callback、class等は複製せず保持してよい。
+
 Execution ownershipは`ExecutionContribution`や`ExecutionModelNode`へ重複保持しない。Coreは`ExecutionDefinition.extension`をdispatch keyとして`compile()`を呼び、Application Modelでは`ApplicationModelExtension { extension, executions }`だけをownerの正本とする。これによりowner不整合というinvalid stateを表現できなくする。
 
 Extension固有のtoolingがcompiled型を取り戻す場合は、ordered typed registryである`ApplicationModel.extensions.get(extension)`を使う。`defineExecutionExtension()`はExtensionの`name + abiVersion`から`Symbol.for()`ベースのstable identityを生成し、registryとApplication内のowner groupingはこのidentityで行う。`abiVersion`はcompiled payload、`validate()`、`createRuntime()`、Host API間の互換性を表すstable ABI versionであり、互換性を壊す変更では必ず更新する。これによりCLIのesbuild bundle/import境界でdescriptor objectが複製されても、同じABI versionなら同じExtensionとしてcompile・lookupできる一方、同名Extensionの異なるABI versionがApplication内へ混在した場合は`LUTRE_EXTENSION_ABI_MISMATCH`としてModel build時に拒否する。heterogeneous storageからの型復元castはregistry実装内部だけへ局所化し、Core/Graph/RuntimeやExtension作者へ漏らさない。Coreはstable Extension identityをopaqueに扱うだけで、HTTP等の具体的な値による分岐は行わない。
 
 HTTPならresolved route、middleware、factory等を保持できる。WebSocketならroute、codec、session factory等を保持できる。
 
-### 5.1 heterogeneous modelのtype erasure
+### 5.2 heterogeneous modelのtype erasure
 
 Application Modelは異なるExtensionのcontributionを同一collectionへ保持するため、Core内部のheterogeneous boundaryでは`compiled: unknown`相当のtype erasureを許容する。
 

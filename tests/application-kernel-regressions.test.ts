@@ -31,7 +31,7 @@ describe('Application Kernel regression', () => {
         executionKind: 'fixture.broken-host',
         dependencies: [],
         capabilities: [],
-        compiled: {},
+        compiled: Object.freeze({}),
       }),
       createRuntime: () => ({
         drain() {
@@ -91,7 +91,7 @@ describe('Application Kernel regression', () => {
           executionKind: name,
           dependencies: [],
           capabilities: [],
-          compiled: {},
+          compiled: Object.freeze({}),
         }),
         createRuntime: () => ({ drain }),
       })
@@ -140,7 +140,7 @@ describe('Application Kernel regression', () => {
         executionKind: 'fixture.drain-failure',
         dependencies: [],
         capabilities: [],
-        compiled: {},
+        compiled: Object.freeze({}),
       }),
       createRuntime: ({ applicationRuntime }) => ({
         start() {
@@ -217,7 +217,7 @@ describe('Application Kernel regression', () => {
         executionKind: 'fixture.successful-drain-with-active-execution',
         dependencies: [],
         capabilities: [],
-        compiled: {},
+        compiled: Object.freeze({}),
       }),
       createRuntime: ({ applicationRuntime }) => ({
         start() {
@@ -292,7 +292,7 @@ describe('Application Kernel regression', () => {
         executionKind: 'fixture.hanging-drain',
         dependencies: [],
         capabilities: [],
-        compiled: {},
+        compiled: Object.freeze({}),
       }),
       createRuntime: ({ applicationRuntime }) => ({
         start() {
@@ -370,7 +370,7 @@ describe('Application Kernel regression', () => {
         executionKind: 'fixture.pending-drain-retry',
         dependencies: [],
         capabilities: [],
-        compiled: {},
+        compiled: Object.freeze({}),
       }),
       createRuntime: () => ({
         drain() {
@@ -432,7 +432,7 @@ describe('Application Kernel regression', () => {
         executionKind: 'fixture.uncooperative-drain-failure',
         dependencies: [],
         capabilities: [],
-        compiled: {},
+        compiled: Object.freeze({}),
       }),
       createRuntime: ({ applicationRuntime }) => ({
         start() {

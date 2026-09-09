@@ -191,7 +191,7 @@ function retryableShutdownFixture() {
       executionKind: 'fixture.runtime-shutdown-retry',
       dependencies: [],
       capabilities: [],
-      compiled: {},
+      compiled: Object.freeze({}),
     }),
     createRuntime: ({ applicationRuntime }) => ({
       start() {

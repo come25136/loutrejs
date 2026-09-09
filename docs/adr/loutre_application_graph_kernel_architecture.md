@@ -82,9 +82,9 @@ graph nodes / edges
 diagnostics
 ```
 
-Extension-owned compiled valueはopaqueとして保持する。Coreはそのshapeを解釈しない。
+Extension-owned compiled valueはopaqueとして保持する。Coreはそのshapeを解釈せずcloneもしない。object型のcompiled valueはExtensionがsnapshotしてfreezeした値だけを受理する。
 
-Modelはbuild時点のimmutableなsnapshotである。Provider descriptor、dependency配列、conditional mapping、Lifecycle hookのdependency配列はbuild時に複製・固定し、RuntimeとGraphは同じsnapshotだけを参照する。handler factory、schema、user callback、Provider implementation class、`useValue`が指すservice instanceのような実行対象のidentityは維持するが、元DSL descriptorのproperty差し替えによってModelの意味が変化してはならない。
+Modelはbuild時点のimmutableなsnapshotである。Provider descriptor、dependency配列、conditional mapping、Lifecycle hookのdependency配列はbuild時に複製・固定し、Extension-owned compiled valueはExtensionが必要な深さまでsnapshotして固定する。RuntimeとGraphは同じsnapshotだけを参照する。handler factory、schema、user callback、Provider implementation class、`useValue`が指すservice instanceのような実行対象のidentityは維持するが、元DSL descriptorのproperty差し替えによってModelの意味が変化してはならない。
 
 DefinitionやModule instanceはbuild入力であり、Modelへraw objectとして保持しない。Runtime、Graph、CLI、BuildはModel node、edge、compiled contributionからのみ構成する。
 

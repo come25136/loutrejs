@@ -14,6 +14,8 @@ HTTPは`@loutrejs/loutre/http`、Task / Trigger / Queue Consumerは`@loutrejs/ta
 
 ModuleはExtensionが生成したExecution Definitionを`executions`へ登録します。Runtime adapter、CLI、build、OpenAPIは同じcompile済みApplication Modelを参照し、並行するApplication representationを持ちません。
 
+Custom Extensionの`compile()`がobject型の`compiled`を返す場合は、元Definitionから必要な深さまでsnapshotし、top-levelを`Object.freeze()`した値を返す必要があります。mutableな値はModel build時にdiagnosticとして拒否します。
+
 HTTP request body decode、validation boundary、CORS、authentication、streaming、response headers、OpenAPI metadataはHTTP Extensionの責務です。Runtime Capability identityはbundle境界を越えて安定するidentityへ統一します。
 
 HTTPとMessagePortのserver-streamはshutdown時に`iterator.return()`が`done: false`を返してもiterator cleanupとExecution完了までdrainします。MessagePortはconsumer向けのAsyncIterator semanticsを維持します。Lifecycle cleanup順序は既存の`onModuleDestroy`、`beforeApplicationShutdown`、`onApplicationShutdown`を維持し、drainの成否にかかわらずactive executionが0になる前にProviderをcleanupせず、待機を`forceShutdownTimeoutMs`で打ち切ります。CLIは`warning` diagnosticを表示しつつ、`error`だけをblockingとして扱います。

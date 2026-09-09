@@ -83,7 +83,7 @@ describe('Node runtime + HTTP Execution Extension', () => {
         executionKind: 'fixture.node-extra',
         dependencies: [],
         capabilities: [EXTRA_DRIVER],
-        compiled: {},
+        compiled: Object.freeze({}),
       }),
       createRuntime,
     })

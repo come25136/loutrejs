@@ -30,7 +30,7 @@ function fixtureExtension(name: string, marker: string, abiVersion = '1') {
     executionKind: 'fixture.execution',
     dependencies: [],
     capabilities: [],
-    compiled: { marker },
+    compiled: Object.freeze({ marker }),
   }))
   const validate = vi.fn(() => [])
   const createRuntime = vi.fn(() => ({}))
@@ -107,6 +107,85 @@ describe('Application Model identity regressions', () => {
         application: defineApplication({ modules: [Module()] }),
       }),
     ).rejects.toThrow('LUTRE_EXTENSION_ABI_MISMATCH')
+  })
+
+  it('mutableなobject型compiled contributionをModel build時に拒否する', async () => {
+    const compiled = { marker: 'before' }
+    const extension = defineExecutionExtension<
+      FixtureDefinition,
+      { readonly marker: string }
+    >({
+      kind: 'execution-extension',
+      name: '@fixture/mutable-compiled',
+      abiVersion: '1',
+      compile: (definition) => ({
+        kind: 'execution',
+        id: definition.id,
+        executionKind: 'fixture.mutable-compiled',
+        dependencies: [],
+        capabilities: [],
+        compiled,
+      }),
+      createRuntime: () => ({}),
+    })
+    const Module = defineModule(() => ({
+      executions: [defineExecution(extension, { id: 'fixture.mutable' })],
+    }))
+    const definition = defineApplication({ modules: [Module()] })
+
+    expect(definition.model.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 'LUTRE_EXTENSION_COMPILED_NOT_FROZEN',
+      }),
+    )
+    expect(definition.model.executions).toEqual([])
+    await expect(
+      bootstrapApplication({ application: definition }),
+    ).rejects.toThrow('LUTRE_EXTENSION_COMPILED_NOT_FROZEN')
+  })
+
+  it('custom Extensionが元descriptorからimmutable compiled snapshotを構築する', () => {
+    interface SnapshotDefinition extends ExecutionDefinition {
+      readonly id: string
+      readonly options: { readonly marker: string }
+    }
+
+    const extension = defineExecutionExtension<
+      SnapshotDefinition,
+      { readonly options: { readonly marker: string } }
+    >({
+      kind: 'execution-extension',
+      name: '@fixture/compiled-snapshot',
+      abiVersion: '1',
+      compile: (definition) => ({
+        kind: 'execution',
+        id: definition.id,
+        executionKind: 'fixture.compiled-snapshot',
+        dependencies: [],
+        capabilities: [],
+        compiled: Object.freeze({
+          options: Object.freeze({ ...definition.options }),
+        }),
+      }),
+      createRuntime: () => ({}),
+    })
+    const options = { marker: 'before' }
+    const execution = defineExecution(extension, {
+      id: 'fixture.snapshot',
+      options,
+    })
+    const Module = defineModule(() => ({ executions: [execution] }))
+    const model = buildApplicationModel({ modules: [Module()] })
+    const compiled = model.extensions.get(extension)?.executions[0]?.compiled
+
+    options.marker = 'after'
+
+    expect(model.diagnostics).toEqual([])
+    expect(compiled).toEqual({
+      options: { marker: 'before' },
+    })
+    expect(Object.isFrozen(compiled)).toBe(true)
+    expect(Object.isFrozen(compiled?.options)).toBe(true)
   })
 
   it('stable Extension identityはbundle境界lookupにだけ利用する', () => {
@@ -206,7 +285,7 @@ describe('Application Model identity regressions', () => {
           executionKind: 'fixture.reserved',
           dependencies: [],
           capabilities: [],
-          compiled: {},
+          compiled: Object.freeze({}),
         }),
         createRuntime: () => ({}),
         host: {
