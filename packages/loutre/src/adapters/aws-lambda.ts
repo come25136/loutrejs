@@ -217,7 +217,7 @@ function createAwsLambdaStreamingHttpDriver(
         try {
           await reader.cancel(failure)
         } catch {
-          // Preserve the original response pump failure.
+          // cancel失敗でresponse pumpの元errorを上書きしない。
         }
       }
     }

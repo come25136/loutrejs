@@ -433,8 +433,7 @@ type DeclaredHttpResults<TRoute extends HttpExecutionRouteDefinition> = {
 type ResponseHelpers<
   TResponses extends HttpExecutionRouteDefinition['responses'],
 > = {
-  // Keep the mapped key as `keyof TResponses`: intersecting it with `string`
-  // makes TypeScript lose the source property used by go-to-definition.
+  // stringとのintersectionではproperty情報が失われるため、mapped keyはkeyof TResponsesのまま保つ。
   readonly [TVariant in keyof TResponses]: TVariant extends string
     ? TResponses[TVariant] extends infer TResponse extends
         HttpExecutionResponseDefinition
@@ -1513,7 +1512,7 @@ function createHttpExtensionRuntime(
             )
           }
         } catch {
-          // Error mapping/finalization failures are exposed only as generic 500s.
+          // 内部のmapping/finalization errorをclientへ公開しない。
         }
         return applyFrameworkHeadersToResponse(
           Response.json({ error: 'Internal Server Error' }, { status: 500 }),
@@ -1876,7 +1875,7 @@ function createLeasedReadableStream(
     try {
       reader.releaseLock()
     } catch {
-      // A pending reader operation keeps the lock until it settles.
+      // pending中のreader操作がsettleするまではlockを解放できない。
     }
     try {
       completeExecution()
