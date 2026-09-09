@@ -485,15 +485,6 @@ async function* decodeServerSentEvents(
         boundary = buffer.indexOf('\n\n')
       }
     }
-    buffer = buffer.trim()
-    if (buffer.length > 0) {
-      const data = buffer
-        .split('\n')
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice('data:'.length).trimStart())
-        .join('\n')
-      if (data.length > 0) yield JSON.parse(data)
-    }
   } finally {
     if (!completed) await reader.cancel()
     reader.releaseLock()

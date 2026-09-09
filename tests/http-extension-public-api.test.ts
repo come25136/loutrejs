@@ -345,6 +345,39 @@ describe('HTTP Execution Extension public API surface', () => {
     expect(events).toEqual([{ sequence: 1 }])
   })
 
+  it('空行で終端されずEOFへ到達したSSE eventを破棄する', async () => {
+    const contract = http.contract({
+      events: {
+        method: 'GET',
+        path: '/events',
+        interaction: 'server-stream',
+        responses: {
+          ok: {
+            status: 200,
+            stream: 'server',
+            body: z.object({ sequence: z.number() }),
+          },
+        },
+      },
+    })
+    const client = createHttpClient(
+      contract,
+      fetchHttpTransport({
+        baseUrl: 'https://fixture.test',
+        fetch: async () =>
+          new Response('data:{"sequence":1}', {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      }),
+    )
+
+    const response = await client.events()
+    const events: { sequence: number }[] = []
+    for await (const event of response.body) events.push(event)
+
+    expect(events).toEqual([])
+  })
+
   it('server-streamのitem validation失敗時にsource iteratorを終了する', async () => {
     let finalized = false
     const contract = http.contract({
