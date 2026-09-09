@@ -9,6 +9,7 @@ import {
   SchemaValidationError,
   validateSchema,
   type ExecutionDefinition,
+  type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
   type GenericLayer,
   type RuntimeCapabilityBinding,
@@ -505,7 +506,7 @@ interface RuntimeHttpRoute {
 
 export interface HttpExtensionRuntime {
   fetch(request: Request): Promise<Response>
-  drain(): Promise<void>
+  drain(context: ExecutionExtensionDrainContext): Promise<void>
 }
 
 export interface HttpHostApi {
@@ -1312,14 +1313,17 @@ function createHttpExtensionRuntime(
     )
 
   return {
-    async drain() {
+    async drain({ timeoutMs }) {
       accepting = false
+      const deadline = Date.now() + timeoutMs
       await waitForPendingIngresses()
       const reason = new Error(
         'LUTRE_HTTP_SERVER_STREAM_DRAIN: Application is shutting down.',
       )
       const results = await Promise.allSettled(
-        [...activeResponseStreams].map((stream) => stream.abort(reason)),
+        [...activeResponseStreams].map((stream) =>
+          stream.abort(reason, deadline),
+        ),
       )
       const errors = results.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : [],
@@ -1403,9 +1407,10 @@ function createHttpExtensionRuntime(
       const adoptResponseStream = (stream: HttpResponseStreamControl) => {
         executionOwnedByStream = true
         const activeStream: ActiveHttpResponseStream = {
-          async abort(reason) {
+          async abort(reason, deadline) {
+            stream.setDrainDeadline?.(deadline)
             lease.abort(reason)
-            await stream.abort(reason)
+            await stream.abort(reason, deadline)
           },
         }
         activeResponseStreams.add(activeStream)
@@ -1739,13 +1744,14 @@ interface FinalizedHttpResult {
 }
 
 interface ActiveHttpResponseStream {
-  abort(reason: unknown): Promise<void>
+  abort(reason: unknown, deadline: number): Promise<void>
 }
 
 interface HttpResponseStreamControl {
   readonly stream: ReadableStream<Uint8Array>
   readonly finished: Promise<void>
-  abort(reason: unknown): Promise<void>
+  setDrainDeadline?(deadline: number): void
+  abort(reason: unknown, deadline?: number): Promise<void>
 }
 
 type ServerSentEventStreamControl = HttpResponseStreamControl
@@ -1959,9 +1965,12 @@ function createServerSentEventStream(
   let inFlightOperations = 0
   let inFlightIteratorOperations = 0
   let iteratorDone = false
+  let cleanupComplete = false
   let cleanupSettled = true
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined
-  let cleanup: Promise<void> | undefined
+  let cleanupAttempt: Promise<void> | undefined
+  let cleanupDeadline: number | undefined
+  let returnContinuationPending = false
   const iteratorIdleWaiters = new Set<() => void>()
   let resolveFinished!: () => void
   const finishedPromise = new Promise<void>((resolve) => {
@@ -2005,43 +2014,80 @@ function createServerSentEventStream(
     if (result.done) iteratorDone = true
     return result
   }
-  const stop = (reason: unknown, errorStream: boolean): Promise<void> => {
-    if (cleanup) return cleanup
-    if (!markFinished()) return finishedPromise
+  const stop = (
+    reason: unknown,
+    errorStream: boolean,
+    deadline?: number,
+  ): Promise<void> => {
+    if (cleanupAttempt) {
+      if (deadline !== undefined) {
+        cleanupDeadline = Math.min(cleanupDeadline ?? deadline, deadline)
+      }
+      return cleanupAttempt
+    }
+    if (deadline !== undefined) cleanupDeadline = deadline
+    markFinished()
+    if (cleanupComplete) return finishedPromise
     cleanupSettled = false
-    cleanup = (async () => {
+    const operation = (async () => {
       let cleanupError: unknown
       try {
-        if (iterator.return) {
-          let result = await runIteratorOperation(async () =>
+        if (!returnContinuationPending) {
+          if (!iterator.return) {
+            iteratorDone = true
+            cleanupComplete = true
+            return
+          }
+          const result = await runIteratorOperation(async () =>
             recordIteratorResult(await iterator.return!(reason)),
           )
-          if (!result.done) {
-            await waitForIteratorIdle()
-            if (!iteratorDone) {
-              do {
-                result = await runIteratorOperation(async () =>
-                  recordIteratorResult(await iterator.next()),
-                )
-              } while (!result.done)
-            }
+          returnContinuationPending = !result.done
+          if (result.done) return
+        }
+        await waitForIteratorIdle()
+        let continuationSteps = 0
+        for (;;) {
+          if (iteratorDone) break
+          if (cleanupDeadline !== undefined && Date.now() >= cleanupDeadline) {
+            throw new IteratorCleanupDeadlineError()
+          }
+          const result = await runIteratorOperation(async () =>
+            recordIteratorResult(await iterator.next()),
+          )
+          if (result.done) break
+          continuationSteps += 1
+          if (continuationSteps % iteratorCleanupYieldInterval === 0) {
+            await yieldToEventLoop()
           }
         }
       } catch (error) {
+        if (error instanceof IteratorCleanupDeadlineError) throw error
         cleanupError = error
       } finally {
-        cleanupSettled = true
-        if (errorStream) {
-          controller?.error(
-            cleanupError ?? reason ?? new Error('HTTP request was aborted'),
-          )
+        if (iteratorDone || cleanupError !== undefined) {
+          cleanupComplete = true
+          cleanupSettled = true
+          if (errorStream) {
+            controller?.error(
+              cleanupError ?? reason ?? new Error('HTTP request was aborted'),
+            )
+          }
+          completeIfSafe()
         }
-        completeIfSafe()
       }
       await finishedPromise
       if (cleanupError !== undefined) throw cleanupError
     })()
-    return cleanup
+    cleanupAttempt = operation
+    void operation.then(
+      () => {
+        if (cleanupAttempt === operation) cleanupAttempt = undefined
+      },
+      () => {
+        if (cleanupAttempt === operation) cleanupAttempt = undefined
+      },
+    )
+    return operation
   }
   const abort = () => {
     void stop(signal.reason, true).catch(() => undefined)
@@ -2084,8 +2130,24 @@ function createServerSentEventStream(
   return {
     stream,
     finished: finishedPromise,
-    abort: (reason) => stop(reason, true),
+    setDrainDeadline(deadline) {
+      cleanupDeadline = deadline
+    },
+    abort: (reason, deadline) => stop(reason, true, deadline),
   }
+}
+
+const iteratorCleanupYieldInterval = 32
+
+class IteratorCleanupDeadlineError extends Error {
+  constructor() {
+    super('HTTP iterator cleanup exceeded the drain deadline.')
+    this.name = 'IteratorCleanupDeadlineError'
+  }
+}
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
 async function mapDeclaredError(

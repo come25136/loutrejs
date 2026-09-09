@@ -710,6 +710,89 @@ describe('HTTP Execution Extension public API surface', () => {
     await expect(response.text()).rejects.toThrow()
   })
 
+  it('server-stream cleanupが即時done:falseを返し続けてもshutdown deadlineで停止して再試行できる', async () => {
+    const events: string[] = []
+    let cleanupStarted = false
+    let cleanupCanFinish = false
+    let cleanupSteps = 0
+    const source: AsyncIterable<number> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            if (cleanupStarted) {
+              cleanupSteps += 1
+              return cleanupCanFinish
+                ? { done: true as const, value: undefined }
+                : { done: false as const, value: 1 }
+            }
+            return { done: false as const, value: 1 }
+          },
+          async return() {
+            cleanupStarted = true
+            return { done: false as const, value: 1 }
+          },
+        }
+      },
+    }
+    const contract = http.contract({
+      events: {
+        method: 'GET',
+        path: '/events',
+        interaction: 'server-stream',
+        responses: {
+          ok: { status: 200, stream: 'server', body: z.number() },
+        },
+      },
+    })
+    const implementation = http.implementation({
+      contract,
+      factory: () => ({
+        events: (context) => context.response.ok({ body: source }),
+      }),
+    })
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [implementation],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+      forceShutdownTimeoutMs: 10,
+    })
+    const response = await application.http.fetch(
+      new Request('https://fixture.test/events'),
+    )
+    const reader = response.body!.getReader()
+    const readerClosed = reader.closed.catch(() => undefined)
+    await expect(reader.read()).resolves.toMatchObject({ done: false })
+
+    await expect(
+      Promise.race([
+        application.close(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('shutdown hung')), 100),
+        ),
+      ]),
+    ).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
+    expect(cleanupSteps).toBeGreaterThan(0)
+    expect(events).toEqual([])
+    const pausedCleanupSteps = cleanupSteps
+    await new Promise<void>((resolve) => setTimeout(resolve, 20))
+    expect(cleanupSteps).toBe(pausedCleanupSteps)
+
+    cleanupCanFinish = true
+    await expect(application.close()).resolves.toBeUndefined()
+    await readerClosed
+    expect(events).toEqual(['provider.destroy'])
+  })
+
   it('server-streamのiterator.returnがpendingでもshutdown timeoutでsafe boundaryを返す', async () => {
     const events: string[] = []
     let resolveReturn!: (value: IteratorResult<{ sequence: number }>) => void

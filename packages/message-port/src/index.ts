@@ -5,6 +5,7 @@ import {
   runInInjectionContext,
   validateSchema,
   type ExecutionDefinition,
+  type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
   type SchemaOutput,
   type StandardSchemaV1,
@@ -95,7 +96,7 @@ interface CompiledMessagePortExecution {
 
 export interface MessagePortExtensionRuntime {
   invoke(method: string, input?: unknown): Promise<MessagePortResult>
-  drain(): Promise<void>
+  drain(context: ExecutionExtensionDrainContext): Promise<void>
 }
 
 export interface MessagePortHostApi {
@@ -242,7 +243,7 @@ function createMessagePortRuntime(
   >()
   let accepting = true
   const activeStreams = new Set<{
-    abort(reason?: unknown): Promise<void>
+    abort(reason: unknown, deadline: number): Promise<void>
   }>()
   let pendingIngresses = 0
   const pendingIngressWaiters = new Set<() => void>()
@@ -338,12 +339,13 @@ function createMessagePortRuntime(
         completePendingIngress()
       }
     },
-    async drain() {
+    async drain({ timeoutMs }) {
       accepting = false
+      const deadline = Date.now() + timeoutMs
       await waitForPendingIngresses()
       const reason = new Error('LUTRE_MESSAGE_PORT_DRAINING')
       const results = await Promise.allSettled(
-        [...activeStreams].map((stream) => stream.abort(reason)),
+        [...activeStreams].map((stream) => stream.abort(reason, deadline)),
       )
       const errors = results.flatMap((result) =>
         result.status === 'rejected' ? [result.reason] : [],
@@ -359,7 +361,9 @@ function createLeasedMessagePortStream(
   schema: StandardSchemaV1,
   source: AsyncIterable<unknown>,
   lease: ReturnType<ExecutionKernelRuntime['beginExecution']>,
-  activeStreams: Set<{ abort(reason?: unknown): Promise<void> }>,
+  activeStreams: Set<{
+    abort(reason: unknown, deadline: number): Promise<void>
+  }>,
 ): AsyncIterable<unknown> & { cancel(reason?: unknown): Promise<void> } {
   const iterator = source[Symbol.asyncIterator]()
   let finished = false
@@ -369,15 +373,19 @@ function createLeasedMessagePortStream(
   let cancellationSettled = true
   let cancellation: Promise<void> | undefined
   let iteratorCleanup: Promise<void> | undefined
+  let iteratorCleanupDeadline: number | undefined
   let consumerReturnPending = false
   let returnContinuationPending = false
   let iteratorDone = false
+  let iteratorCleanupComplete = false
   const iteratorIdleWaiters = new Set<() => void>()
   let resolveCompleted!: () => void
   const completedPromise = new Promise<void>((resolve) => {
     resolveCompleted = resolve
   })
-  let control: { abort(reason?: unknown): Promise<void> }
+  let control: {
+    abort(reason: unknown, deadline: number): Promise<void>
+  }
 
   const markFinished = () => {
     if (finished) return false
@@ -425,16 +433,32 @@ function createLeasedMessagePortStream(
     }
     return result
   }
-  const startIteratorCleanup = (reason?: unknown): Promise<void> => {
-    if (iteratorCleanup) return iteratorCleanup
-    if (!markFinished()) return Promise.resolve()
+  const startIteratorCleanup = (
+    reason?: unknown,
+    deadline?: number,
+  ): Promise<void> => {
+    if (iteratorCleanup) {
+      if (deadline !== undefined) {
+        iteratorCleanupDeadline = Math.min(
+          iteratorCleanupDeadline ?? deadline,
+          deadline,
+        )
+      }
+      return iteratorCleanup
+    }
+    if (deadline !== undefined) iteratorCleanupDeadline = deadline
+    markFinished()
+    if (iteratorCleanupComplete) return Promise.resolve()
     cancellationSettled = false
-    iteratorCleanup = (async () => {
+    const operation = (async () => {
       try {
         if (consumerReturnPending) await waitForIteratorIdle()
         if (iteratorDone) return
         if (!returnContinuationPending) {
-          if (!iterator.return) return
+          if (!iterator.return) {
+            iteratorCleanupComplete = true
+            return
+          }
           const result = await runIteratorOperation(async () => {
             const returned = recordIteratorResult(
               await iterator.return!(reason),
@@ -446,19 +470,45 @@ function createLeasedMessagePortStream(
         }
         await waitForIteratorIdle()
         if (iteratorDone) return
-        let result: IteratorResult<unknown>
-        do {
-          result = await runIteratorOperation(async () =>
+        let continuationSteps = 0
+        for (;;) {
+          if (iteratorDone) break
+          if (
+            iteratorCleanupDeadline !== undefined &&
+            Date.now() >= iteratorCleanupDeadline
+          ) {
+            throw new IteratorCleanupDeadlineError()
+          }
+          const result = await runIteratorOperation(async () =>
             recordIteratorResult(await iterator.next()),
           )
-        } while (!result.done)
-      } finally {
+          if (result.done) break
+          continuationSteps += 1
+          if (continuationSteps % iteratorCleanupYieldInterval === 0) {
+            await yieldToEventLoop()
+          }
+        }
+      } catch (error) {
+        if (error instanceof IteratorCleanupDeadlineError) throw error
+        iteratorCleanupComplete = true
         cancellationSettled = true
+        throw error
+      } finally {
+        if (iteratorDone) iteratorCleanupComplete = true
+        if (iteratorCleanupComplete) cancellationSettled = true
         completeIfSafe()
       }
     })()
-    void iteratorCleanup.catch(() => undefined)
-    return iteratorCleanup
+    iteratorCleanup = operation
+    void operation.then(
+      () => {
+        if (iteratorCleanup === operation) iteratorCleanup = undefined
+      },
+      () => {
+        if (iteratorCleanup === operation) iteratorCleanup = undefined
+      },
+    )
+    return operation
   }
   const cancel = (reason?: unknown): Promise<void> => {
     if (cancellation) return cancellation
@@ -479,9 +529,12 @@ function createLeasedMessagePortStream(
     void cancel(lease.signal.reason).catch(() => undefined)
   }
   control = {
-    async abort(reason) {
+    async abort(reason, deadline) {
+      iteratorCleanupDeadline = deadline
       lease.abort(reason)
-      await cancel(reason)
+      const cleanup = startIteratorCleanup(reason, deadline)
+      await cleanup
+      await completedPromise
     },
   }
   activeStreams.add(control)
@@ -611,6 +664,19 @@ function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
     Symbol.asyncIterator in value &&
     typeof value[Symbol.asyncIterator] === 'function'
   )
+}
+
+const iteratorCleanupYieldInterval = 32
+
+class IteratorCleanupDeadlineError extends Error {
+  constructor() {
+    super('MessagePort iterator cleanup exceeded the drain deadline.')
+    this.name = 'IteratorCleanupDeadlineError'
+  }
+}
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
 export type MessagePortLike = {
