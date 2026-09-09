@@ -16,4 +16,4 @@ ModuleはExtensionが生成したExecution Definitionを`executions`へ登録し
 
 HTTP request body decode、validation boundary、CORS、authentication、streaming、response headers、OpenAPI metadataはHTTP Extensionの責務です。Runtime Capability identityはbundle境界を越えて安定するidentityへ統一します。
 
-HTTP server-streamはshutdown時にiterator cleanupとExecution完了までdrainします。Lifecycle cleanup順序は既存の`onModuleDestroy`、`beforeApplicationShutdown`、`onApplicationShutdown`を維持し、drain失敗時もactive executionが0になる前にProviderをcleanupしません。CLIは`warning` diagnosticを表示しつつ、`error`だけをblockingとして扱います。
+HTTPとMessagePortのserver-streamはshutdown時に`iterator.return()`が`done: false`を返してもiterator cleanupとExecution完了までdrainします。MessagePortはconsumer向けのAsyncIterator semanticsを維持します。Lifecycle cleanup順序は既存の`onModuleDestroy`、`beforeApplicationShutdown`、`onApplicationShutdown`を維持し、drainの成否にかかわらずactive executionが0になる前にProviderをcleanupせず、待機を`forceShutdownTimeoutMs`で打ち切ります。CLIは`warning` diagnosticを表示しつつ、`error`だけをblockingとして扱います。

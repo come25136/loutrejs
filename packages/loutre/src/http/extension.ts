@@ -1957,9 +1957,12 @@ function createServerSentEventStream(
   let finished = false
   let completed = false
   let inFlightOperations = 0
+  let inFlightIteratorOperations = 0
+  let iteratorDone = false
   let cleanupSettled = true
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined
   let cleanup: Promise<void> | undefined
+  const iteratorIdleWaiters = new Set<() => void>()
   let resolveFinished!: () => void
   const finishedPromise = new Promise<void>((resolve) => {
     resolveFinished = resolve
@@ -1982,6 +1985,26 @@ function createServerSentEventStream(
       resolveFinished()
     }
   }
+  const runIteratorOperation = async <T>(operation: () => Promise<T>) => {
+    inFlightIteratorOperations += 1
+    try {
+      return await operation()
+    } finally {
+      inFlightIteratorOperations -= 1
+      if (inFlightIteratorOperations === 0) {
+        for (const resolve of iteratorIdleWaiters) resolve()
+        iteratorIdleWaiters.clear()
+      }
+    }
+  }
+  const waitForIteratorIdle = () => {
+    if (inFlightIteratorOperations === 0) return Promise.resolve()
+    return new Promise<void>((resolve) => iteratorIdleWaiters.add(resolve))
+  }
+  const recordIteratorResult = (result: IteratorResult<unknown>) => {
+    if (result.done) iteratorDone = true
+    return result
+  }
   const stop = (reason: unknown, errorStream: boolean): Promise<void> => {
     if (cleanup) return cleanup
     if (!markFinished()) return finishedPromise
@@ -1989,7 +2012,21 @@ function createServerSentEventStream(
     cleanup = (async () => {
       let cleanupError: unknown
       try {
-        await iterator.return?.(reason)
+        if (iterator.return) {
+          let result = await runIteratorOperation(async () =>
+            recordIteratorResult(await iterator.return!(reason)),
+          )
+          if (!result.done) {
+            await waitForIteratorIdle()
+            if (!iteratorDone) {
+              do {
+                result = await runIteratorOperation(async () =>
+                  recordIteratorResult(await iterator.next()),
+                )
+              } while (!result.done)
+            }
+          }
+        }
       } catch (error) {
         cleanupError = error
       } finally {
@@ -2021,7 +2058,9 @@ function createServerSentEventStream(
       inFlightOperations += 1
       let stopPromise: Promise<void> | undefined
       try {
-        const next = await iterator.next()
+        const next = await runIteratorOperation(async () =>
+          recordIteratorResult(await iterator.next()),
+        )
         if (finished) return
         if (next.done) {
           if (markFinished()) value.close()

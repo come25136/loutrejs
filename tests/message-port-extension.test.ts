@@ -4,6 +4,7 @@ import {
   bootstrapApplication,
   defineApplication,
   defineModule,
+  inject,
   RuntimeCapabilityRegistry,
   type ExecutionKernelRuntime,
   type StandardSchemaV1,
@@ -242,6 +243,156 @@ describe('MessagePort Execution Extension', () => {
       )
       expect(completed, testCase.name).toBe(1)
     }
+  })
+
+  it('consumerのreturnがdone falseなら後続nextでiterator cleanupを継続する', async () => {
+    const events: string[] = []
+    const source = async function* () {
+      try {
+        yield 1
+      } finally {
+        events.push('generator.cleanup.begin')
+        yield 2
+        events.push('generator.cleanup.end')
+      }
+    }
+    const contract = messagePort.contract({
+      values: { responses: { ok: { stream: 'server', body: z.number() } } },
+    })
+    const execution = messagePort.implementation({
+      name: 'stream.return-continuation',
+      contract,
+      factory: () => ({
+        values: (context) => context.response.ok(source()),
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [execution] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+    const result = await application.messagePort.invoke('values')
+    const iterator = (result.value as AsyncIterable<number>)[
+      Symbol.asyncIterator
+    ]()
+
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: 1 })
+    await expect(iterator.return?.('finished')).resolves.toEqual({
+      done: false,
+      value: 2,
+    })
+    expect(events).toEqual(['generator.cleanup.begin'])
+    await expect(iterator.next()).resolves.toEqual({
+      done: true,
+      value: 'finished',
+    })
+    expect(events).toEqual(['generator.cleanup.begin', 'generator.cleanup.end'])
+    await application.close()
+  })
+
+  it('shutdownはiterator.returnのdone falseを完了まで進めてからProviderをcleanupする', async () => {
+    const events: string[] = []
+    const source = async function* () {
+      try {
+        yield 1
+      } finally {
+        events.push('generator.cleanup.begin')
+        yield 2
+        events.push('generator.cleanup.end')
+      }
+    }
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const contract = messagePort.contract({
+      values: { responses: { ok: { stream: 'server', body: z.number() } } },
+    })
+    const execution = messagePort.implementation({
+      name: 'stream.shutdown-return-continuation',
+      contract,
+      factory: (resource = inject(Resource)) => ({
+        values: (context) => {
+          void resource
+          return context.response.ok(source())
+        },
+      }),
+    })
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [execution],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      forceShutdownTimeoutMs: 20,
+    })
+    const result = await application.messagePort.invoke('values')
+    const iterator = (result.value as AsyncIterable<number>)[
+      Symbol.asyncIterator
+    ]()
+    await iterator.next()
+
+    await expect(application.close()).resolves.toBeUndefined()
+    expect(events).toEqual([
+      'generator.cleanup.begin',
+      'generator.cleanup.end',
+      'provider.destroy',
+    ])
+  })
+
+  it('consumerのreturnがdone falseの途中でもshutdownは同じcleanupを継続する', async () => {
+    const events: string[] = []
+    const source = async function* () {
+      try {
+        yield 1
+      } finally {
+        events.push('generator.cleanup.begin')
+        yield 2
+        events.push('generator.cleanup.end')
+      }
+    }
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const contract = messagePort.contract({
+      values: { responses: { ok: { stream: 'server', body: z.number() } } },
+    })
+    const execution = messagePort.implementation({
+      name: 'stream.shutdown-return-in-progress',
+      contract,
+      factory: (resource = inject(Resource)) => ({
+        values: (context) => {
+          void resource
+          return context.response.ok(source())
+        },
+      }),
+    })
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [execution],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      forceShutdownTimeoutMs: 20,
+    })
+    const result = await application.messagePort.invoke('values')
+    const iterator = (result.value as AsyncIterable<number>)[
+      Symbol.asyncIterator
+    ]()
+    await iterator.next()
+    await expect(iterator.return?.()).resolves.toEqual({
+      done: false,
+      value: 2,
+    })
+
+    await expect(application.close()).resolves.toBeUndefined()
+    expect(events).toEqual([
+      'generator.cleanup.begin',
+      'generator.cleanup.end',
+      'provider.destroy',
+    ])
   })
 
   it('item validation中のshutdownでもiterator cleanupを一度だけ実行する', async () => {

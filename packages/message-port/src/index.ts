@@ -365,10 +365,14 @@ function createLeasedMessagePortStream(
   let finished = false
   let completed = false
   let inFlightOperations = 0
+  let inFlightIteratorOperations = 0
   let cancellationSettled = true
   let cancellation: Promise<void> | undefined
   let iteratorCleanup: Promise<void> | undefined
-  let cancellationResult: IteratorResult<unknown> | undefined
+  let consumerReturnPending = false
+  let returnContinuationPending = false
+  let iteratorDone = false
+  const iteratorIdleWaiters = new Set<() => void>()
   let resolveCompleted!: () => void
   const completedPromise = new Promise<void>((resolve) => {
     resolveCompleted = resolve
@@ -398,13 +402,56 @@ function createLeasedMessagePortStream(
       resolveCompleted()
     }
   }
+  const runIteratorOperation = async <T>(operation: () => Promise<T>) => {
+    inFlightIteratorOperations += 1
+    try {
+      return await operation()
+    } finally {
+      inFlightIteratorOperations -= 1
+      if (inFlightIteratorOperations === 0) {
+        for (const resolve of iteratorIdleWaiters) resolve()
+        iteratorIdleWaiters.clear()
+      }
+    }
+  }
+  const waitForIteratorIdle = () => {
+    if (inFlightIteratorOperations === 0) return Promise.resolve()
+    return new Promise<void>((resolve) => iteratorIdleWaiters.add(resolve))
+  }
+  const recordIteratorResult = (result: IteratorResult<unknown>) => {
+    if (result.done) {
+      iteratorDone = true
+      returnContinuationPending = false
+    }
+    return result
+  }
   const startIteratorCleanup = (reason?: unknown): Promise<void> => {
     if (iteratorCleanup) return iteratorCleanup
     if (!markFinished()) return Promise.resolve()
     cancellationSettled = false
     iteratorCleanup = (async () => {
       try {
-        cancellationResult = await iterator.return?.(reason)
+        if (consumerReturnPending) await waitForIteratorIdle()
+        if (iteratorDone) return
+        if (!returnContinuationPending) {
+          if (!iterator.return) return
+          const result = await runIteratorOperation(async () => {
+            const returned = recordIteratorResult(
+              await iterator.return!(reason),
+            )
+            returnContinuationPending = !returned.done
+            return returned
+          })
+          if (result.done) return
+        }
+        await waitForIteratorIdle()
+        if (iteratorDone) return
+        let result: IteratorResult<unknown>
+        do {
+          result = await runIteratorOperation(async () =>
+            recordIteratorResult(await iterator.next()),
+          )
+        } while (!result.done)
       } finally {
         cancellationSettled = true
         completeIfSafe()
@@ -460,6 +507,7 @@ function createLeasedMessagePortStream(
   const validateResult = async (
     result: IteratorResult<unknown>,
   ): Promise<IteratorResult<unknown>> => {
+    recordIteratorResult(result)
     if (result.done) {
       markFinished()
       return result
@@ -479,7 +527,9 @@ function createLeasedMessagePortStream(
       if (finished) return { done: true, value: undefined }
       inFlightOperations += 1
       try {
-        return await validateResult(await iterator.next())
+        return await validateResult(
+          await runIteratorOperation(() => iterator.next()),
+        )
       } catch (error) {
         if (finished) throw error
         return await closeAfterError(error)
@@ -489,20 +539,41 @@ function createLeasedMessagePortStream(
       }
     },
     async return(reason?: unknown) {
-      await cancel(reason)
-      return (
-        cancellationResult ?? {
-          done: true,
-          value: reason,
+      if (finished) return { done: true, value: reason }
+      inFlightOperations += 1
+      consumerReturnPending = true
+      try {
+        const result = iterator.return
+          ? await runIteratorOperation(async () => {
+              const returned = recordIteratorResult(
+                await iterator.return!(reason),
+              )
+              returnContinuationPending = !returned.done
+              return returned
+            })
+          : { done: true as const, value: reason }
+        if (result.done) {
+          recordIteratorResult(result)
+          markFinished()
         }
-      )
+        return result
+      } catch (error) {
+        markFinished()
+        throw error
+      } finally {
+        consumerReturnPending = false
+        inFlightOperations -= 1
+        completeIfSafe()
+      }
     },
     async throw(error?: unknown) {
       if (finished) throw error
       inFlightOperations += 1
       try {
         if (!iterator.throw) return await closeAfterError(error)
-        return await validateResult(await iterator.throw(error))
+        return await validateResult(
+          await runIteratorOperation(() => iterator.throw!(error)),
+        )
       } catch (caught) {
         if (finished) throw caught
         return await closeAfterError(caught)

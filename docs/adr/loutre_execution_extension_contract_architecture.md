@@ -407,9 +407,9 @@ complete
 
 complete時にsignalが未abortならexecution lifetime終了としてsignalをabortしてよい。
 
-server-streamを返すExecutionは、stream返却時にLeaseを完了せず、iteratorの正常終了、throw、consumerの`return()`、cancel、abortのいずれかまでownershipをstreamへ移す。完了処理はexactly-onceとし、Extensionの`drain()`は未完了streamへprotocol固有の停止要求を送る。
+server-streamを返すExecutionは、stream返却時にLeaseを完了せず、iteratorの正常終了、throw、consumerの`return()`による完了、cancel、abortのいずれかまでownershipをstreamへ移す。`return()`が`{ done: false }`を返した場合はiteratorが停止処理の途中にあるため、後続の`next()`で`done: true`へ到達するまでLeaseを完了しない。完了処理はexactly-onceとし、Extensionの`drain()`は未完了streamへprotocol固有の停止要求を送る。
 
-HTTP server-streamではExtension Runtimeが未完了streamのcontrolを保持する。`drain()`は新規requestを拒否した後、各Leaseをabortし、iteratorの`return()`とLeaseの`complete()`まで待機する。
+HTTP server-streamではExtension Runtimeが未完了streamのcontrolを保持する。`drain()`は新規requestを拒否した後、各Leaseをabortし、iteratorの`return()`が`done: false`を返す場合はiteratorを完了まで進めてからLeaseの`complete()`を待機する。
 
 ## 11. Shutdown order
 
@@ -446,7 +446,7 @@ WebSocket等のlong-lived executionでは、drainによるprotocol-specific grac
 
 `drain()`が失敗したfailure pathではactive executionが自然終了する保証を失うため、Kernelは残るLeaseをabortしてcooperative cancellationを要求する。`drain()`自体が永久pendingになる場合もfailure pathの外へ逃がさず、各Extensionの`drain()`を`forceShutdownTimeoutMs`（既定値5秒）で期限切れにし、`LUTRE_EXTENSION_DRAIN_TIMEOUT`としてdrain failureに扱う。その後もactive registryから強制削除せず、active executions == 0を安全境界として維持する。
 
-協調停止も`forceShutdownTimeoutMs`まで待機する。期限内にactive executions == 0へ到達すればExtension `close()`とProvider cleanupを続行し、drain errorまたはdrain timeoutを最後の`AggregateError`へ保持する。期限を超えた場合はExtension `close()`とProvider cleanupを実行せず、Applicationを`draining`に保ったまま`AggregateError`を返す。残存Executionが後で`complete()`した後はshutdownを再試行できる。このfailure pathでは「完了していないExecutionが利用中のProviderをcleanupしない」ことをtotal completionより優先する。
+active executions == 0の待機は、`drain()`の成否にかかわらず`forceShutdownTimeoutMs`で期限を設ける。`drain()`成功は停止要求の受付完了を表し、個々のExecutionの完了までは保証しないためである。期限内にactive executions == 0へ到達すればExtension `close()`とProvider cleanupを続行し、drain errorまたはdrain timeoutを最後の`AggregateError`へ保持する。期限を超えた場合はExtension `close()`とProvider cleanupを実行せず、Applicationを`draining`に保ったまま`AggregateError`を返す。残存Executionが後で`complete()`した後はshutdownを再試行できる。このfailure pathでは「完了していないExecutionが利用中のProviderをcleanupしない」ことをtotal completionより優先する。
 
 初期化rollbackでは、構築済みProvider instanceと初期化完了済みModuleを追跡する。未到達ModuleのLifecycle hookを実行せず、cleanup dependency解決を通じて未初期化Providerを新規constructしない。
 

@@ -4,6 +4,7 @@ import {
   bootstrapApplication,
   defineApplication,
   defineModule,
+  inject,
 } from '@loutrejs/loutre'
 import {
   basicAuth,
@@ -28,6 +29,80 @@ async function createHttpApplication<const TContract extends HttpContract>(
 }
 
 describe('HTTP Execution Extension regression', () => {
+  it('SSEのiterator.returnがdone falseなら完了まで進めてからProviderをcleanupする', async () => {
+    const events: string[] = []
+    let notifyStarted!: () => void
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve
+    })
+    const source = (async function* () {
+      try {
+        notifyStarted()
+        yield { sequence: 1 }
+      } finally {
+        events.push('generator.cleanup.begin')
+        yield { sequence: 2 }
+        events.push('generator.cleanup.end')
+      }
+    })()
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const contract = http.contract({
+      events: {
+        method: 'GET',
+        path: '/events',
+        interaction: 'server-stream',
+        responses: {
+          ok: {
+            status: 200,
+            stream: 'server',
+            body: z.object({ sequence: z.number() }),
+          },
+        },
+      },
+    })
+    const implementation = http.implementation({
+      contract,
+      factory: (resource = inject(Resource)) => ({
+        events: (context) => {
+          void resource
+          return context.response.ok({ body: source })
+        },
+      }),
+    })
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [implementation],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+      forceShutdownTimeoutMs: 20,
+    })
+    const response = await application.http.fetch(
+      new Request('http://fixture.test/events'),
+    )
+    if (!response.body) throw new Error('SSE response body is missing')
+    await started
+
+    await expect(
+      Promise.race([
+        application.close(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('shutdown hung')), 200),
+        ),
+      ]),
+    ).resolves.toBeUndefined()
+    expect(events).toEqual([
+      'generator.cleanup.begin',
+      'generator.cleanup.end',
+      'provider.destroy',
+    ])
+  })
+
   it('schema未宣言のqueryとheadersをplain recordで渡す', async () => {
     const contract = http.contract({
       inspect: {

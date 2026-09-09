@@ -314,9 +314,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         }
       }
       try {
-        await this.#waitForActiveExecutions(
-          drainFailed ? this.#forceShutdownTimeoutMs : undefined,
-        )
+        await this.#waitForActiveExecutions(this.#forceShutdownTimeoutMs)
       } catch (error) {
         errors.push(error)
         throw new AggregateError(

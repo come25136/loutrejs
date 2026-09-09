@@ -199,6 +199,81 @@ describe('Application Kernel regression', () => {
     await expect(application.close()).resolves.toBeUndefined()
   })
 
+  it('drain成功後もactive execution待機をforce shutdown timeoutで打ち切る', async () => {
+    const events: string[] = []
+    let activeLease: ExecutionLease | undefined
+    const extension = defineExecutionExtension<
+      any,
+      {},
+      'fixture',
+      { start(): void }
+    >({
+      kind: 'execution-extension',
+      abiVersion: '1',
+      name: '@fixture/successful-drain-with-active-execution',
+      compile: () => ({
+        kind: 'execution',
+        id: 'fixture.successful-drain-with-active-execution',
+        executionKind: 'fixture.successful-drain-with-active-execution',
+        dependencies: [],
+        capabilities: [],
+        compiled: {},
+      }),
+      createRuntime: ({ applicationRuntime }) => ({
+        start() {
+          activeLease = applicationRuntime.beginExecution()
+        },
+        drain() {
+          events.push('extension.drain')
+        },
+        close() {
+          events.push('extension.close')
+        },
+      }),
+      host: {
+        namespace: 'fixture',
+        create: ({ runtime }) => ({
+          start: () => (runtime as { start(): void }).start(),
+        }),
+      },
+    })
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [defineExecution(extension, {})],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      forceShutdownTimeoutMs: 5,
+    })
+    application.fixture.start()
+
+    await expect(
+      Promise.race([
+        application.close(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('shutdown hung')), 100),
+        ),
+      ]),
+    ).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
+    expect(activeLease?.signal.aborted).toBe(false)
+    expect(events).toEqual(['extension.drain'])
+
+    activeLease?.complete()
+    await expect(application.close()).resolves.toBeUndefined()
+    expect(events).toEqual([
+      'extension.drain',
+      'extension.close',
+      'provider.destroy',
+    ])
+  })
+
   it('drainが永久pendingならExtension closeとProvider cleanupの手前で停止する', async () => {
     const events: string[] = []
     let activeLease: ExecutionLease | undefined
