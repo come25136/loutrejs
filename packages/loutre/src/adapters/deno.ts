@@ -163,13 +163,17 @@ async function create<const TDefinition extends ApplicationDefinition>(
     if (serverClosingPromise) return serverClosingPromise
     if (!server) return Promise.resolve()
     const closingServer = server
-    try {
-      serverClosingPromise = closingServer.shutdown().then(() => {
-        if (server === closingServer) server = undefined
-      })
-    } catch (error) {
-      serverClosingPromise = Promise.reject(error)
-    }
+    serverClosingPromise = Promise.resolve()
+      .then(() => closingServer.shutdown())
+      .then(
+        () => {
+          if (server === closingServer) server = undefined
+        },
+        (error: unknown) => {
+          serverClosingPromise = undefined
+          throw error
+        },
+      )
     void serverClosingPromise.catch(() => undefined)
     return serverClosingPromise
   }

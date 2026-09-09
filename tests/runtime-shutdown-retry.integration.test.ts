@@ -48,6 +48,32 @@ describe('runtime shutdown retry', () => {
     await expect(application.close()).resolves.toBeUndefined()
   })
 
+  it('Node adapterはserver closeの一時失敗後にcloseを再試行する', async () => {
+    const application = await nodeRuntime.create({
+      application: httpOnlyDefinition(),
+    })
+    const listener = await application.serve({
+      port: 0,
+      shutdownHooks: false,
+    })
+    const closeServer = listener.server.close.bind(listener.server)
+    let closeAttempts = 0
+    listener.server.close = ((callback?: (error?: Error) => void) => {
+      closeAttempts += 1
+      if (closeAttempts === 1) {
+        callback?.(new Error('server close failed'))
+        return listener.server
+      }
+      return closeServer(callback)
+    }) as typeof listener.server.close
+
+    await expect(application.close()).rejects.toThrow(
+      'Node runtime shutdown failed',
+    )
+    await expect(application.close()).resolves.toBeUndefined()
+    expect(closeAttempts).toBe(2)
+  })
+
   it('Bun adapterはsafe boundary到達失敗後のcloseをKernelへ再試行する', async () => {
     vi.stubGlobal('Bun', { env: {}, version: 'test' })
     const fixture = retryableShutdownFixture()
@@ -104,7 +130,45 @@ describe('runtime shutdown retry', () => {
     ])
     await expect(application.close()).resolves.toBeUndefined()
   })
+
+  it('Deno adapterはserver shutdownの一時失敗後にcloseを再試行する', async () => {
+    const shutdown = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error('server shutdown failed'))
+      .mockResolvedValue(undefined)
+    vi.stubGlobal('Deno', {
+      env: { get: () => undefined, toObject: () => ({}) },
+      version: { deno: 'test' },
+      serve: () => ({ shutdown }),
+    })
+    const application = await denoRuntime.create({
+      application: httpOnlyDefinition(),
+    })
+    await application.serve({ port: 3000, shutdownHooks: false })
+
+    await expect(application.close()).rejects.toThrow(
+      'Deno runtime shutdown failed',
+    )
+    await expect(application.close()).resolves.toBeUndefined()
+    expect(shutdown).toHaveBeenCalledTimes(2)
+  })
 })
+
+function httpOnlyDefinition() {
+  const contract = http.contract({
+    health: {
+      method: 'GET',
+      path: '/health',
+      responses: { ok: { status: 204 } },
+    },
+  })
+  const controller = http.implementation({
+    contract,
+    factory: () => ({ health: (context) => context.response.ok({}) }),
+  })
+  const Module = defineModule(() => ({ executions: [controller] }))
+  return defineApplication({ modules: [Module()], logger: silentLogger })
+}
 
 function retryableShutdownFixture() {
   const events: string[] = []
