@@ -868,12 +868,24 @@ function matchesCronTrigger(
   const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(
     value('weekday'),
   )
+  const dayOfMonthMatches = matchesCronField(
+    dayOfMonth,
+    Number(value('day')),
+    1,
+    31,
+  )
+  const dayOfWeekMatches = matchesCronField(dayOfWeek, weekday, 0, 7, true)
+  const dayMatches =
+    dayOfMonth === '*'
+      ? dayOfWeekMatches
+      : dayOfWeek === '*'
+        ? dayOfMonthMatches
+        : dayOfMonthMatches || dayOfWeekMatches
   return (
     matchesCronField(minute, Number(value('minute')), 0, 59) &&
     matchesCronField(hour, Number(value('hour')), 0, 23) &&
-    matchesCronField(dayOfMonth, Number(value('day')), 1, 31) &&
     matchesCronField(month, Number(value('month')), 1, 12) &&
-    matchesCronField(dayOfWeek, weekday, 0, 7, true)
+    dayMatches
   )
 }
 
@@ -895,15 +907,18 @@ function matchesCronField(
       start = Number(startExpression)
       end = endExpression === undefined ? start : Number(endExpression)
     }
-    const normalized = sundayAlias && value === 0 && start === 7 ? 7 : value
+    const candidates = sundayAlias && value === 0 ? [0, 7] : [value]
     return (
       Number.isInteger(start) &&
       Number.isInteger(end) &&
       start >= minimum &&
       end <= maximum &&
-      normalized >= start &&
-      normalized <= end &&
-      (normalized - start) % step === 0
+      candidates.some(
+        (candidate) =>
+          candidate >= start &&
+          candidate <= end &&
+          (candidate - start) % step === 0,
+      )
     )
   })
 }

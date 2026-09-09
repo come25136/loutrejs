@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import {
   bootstrapApplication,
   defineApplication,
@@ -13,6 +13,7 @@ import {
 import {
   bindQueueDriver,
   consume,
+  cron,
   fixedDelay,
   queue,
   task,
@@ -257,6 +258,75 @@ describe('Task Execution Extension', () => {
 
     await expect(tasks.start()).rejects.toThrow('LUTRE_TASKS_STOPPED')
     await expect(tasks.stop()).resolves.toBeUndefined()
+  })
+
+  it('Cronのday-of-monthとday-of-weekを両方指定した場合はどちらかが一致すれば実行する', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-01T00:00:00.000Z'))
+    const executions: Date[] = []
+    const job = task({
+      name: 'cron-day-or-task',
+      factory: () => async () => {
+        executions.push(new Date())
+      },
+    })
+    const trigger = cron({
+      name: 'cron-day-or-trigger',
+      expression: '0 0 1 * 1',
+      timezone: 'UTC',
+      task: job,
+    })
+    const Module = defineModule(() => ({ executions: [trigger] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+
+    try {
+      await application.tasks.start()
+      await vi.advanceTimersByTimeAsync(0)
+      vi.setSystemTime(new Date('2026-09-07T00:00:00.000Z'))
+      await vi.advanceTimersByTimeAsync(1_000)
+
+      expect(executions).toEqual([
+        new Date('2026-09-01T00:00:00.000Z'),
+        new Date('2026-09-07T00:00:01.000Z'),
+      ])
+    } finally {
+      await application.close()
+      vi.useRealTimers()
+    }
+  })
+
+  it('Cronのday-of-week rangeに含まれる7をSundayとして実行する', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-06T00:00:00.000Z'))
+    let executions = 0
+    const job = task({
+      name: 'cron-sunday-range-task',
+      factory: () => async () => {
+        executions += 1
+      },
+    })
+    const trigger = cron({
+      name: 'cron-sunday-range-trigger',
+      expression: '0 0 * * 1-7',
+      timezone: 'UTC',
+      task: job,
+    })
+    const Module = defineModule(() => ({ executions: [trigger] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+
+    try {
+      await application.tasks.start()
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(executions).toBe(1)
+    } finally {
+      await application.close()
+      vi.useRealTimers()
+    }
   })
 
   it('Queue driver startup中のshutdownはProvider cleanupより先にstartupを回収する', async () => {
