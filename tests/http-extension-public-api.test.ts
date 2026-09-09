@@ -117,6 +117,29 @@ describe('HTTP Execution Extension public API surface', () => {
     await expect(captured?.json()).resolves.toEqual({ name: 'loutre' })
   })
 
+  it('fetch transportでbodyを持たない200応答をundefinedとして扱う', async () => {
+    const contract = http.contract({
+      health: {
+        method: 'GET',
+        path: '/health',
+        responses: { ok: { status: 200 } },
+      },
+    })
+    const client = createHttpClient(
+      contract,
+      fetchHttpTransport({
+        baseUrl: 'https://fixture.test',
+        fetch: async () => new Response(null, { status: 200 }),
+      }),
+    )
+
+    await expect(client.health()).resolves.toEqual({
+      status: 200,
+      body: undefined,
+      headers: {},
+    })
+  })
+
   it('route/response metadataをOpenAPIへ投影する', async () => {
     const contract = http.contract({
       getUser: {
@@ -277,6 +300,49 @@ describe('HTTP Execution Extension public API surface', () => {
     } finally {
       await application.close()
     }
+  })
+
+  it('chunk境界で分割されたSSEのCRLFを1つの改行としてdecodeする', async () => {
+    const contract = http.contract({
+      events: {
+        method: 'GET',
+        path: '/events',
+        interaction: 'server-stream',
+        responses: {
+          ok: {
+            status: 200,
+            stream: 'server',
+            body: z.object({ sequence: z.number() }),
+          },
+        },
+      },
+    })
+    const encoder = new TextEncoder()
+    const chunks = ['data:{"sequence":\r', '\ndata:1}\r', '\n\r\n'].map(
+      (chunk) => encoder.encode(chunk),
+    )
+    const client = createHttpClient(
+      contract,
+      fetchHttpTransport({
+        baseUrl: 'https://fixture.test',
+        fetch: async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                for (const chunk of chunks) controller.enqueue(chunk)
+                controller.close()
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      }),
+    )
+
+    const response = await client.events()
+    const events: { sequence: number }[] = []
+    for await (const event of response.body) events.push(event)
+
+    expect(events).toEqual([{ sequence: 1 }])
   })
 
   it('server-streamのitem validation失敗時にsource iteratorを終了する', async () => {

@@ -419,6 +419,7 @@ function encodeBody(body: unknown, contentType: string | undefined): BodyInit {
 
 async function decodeFetchBody(response: Response): Promise<unknown> {
   if (
+    response.body === null ||
     response.status === 204 ||
     response.status === 205 ||
     response.status === 304
@@ -452,16 +453,25 @@ async function* decodeServerSentEvents(
   const decoder = new TextDecoder()
   let buffer = ''
   let completed = false
+  let pendingCarriageReturn = false
+  const appendDecoded = (value: string, final: boolean): void => {
+    let decoded = pendingCarriageReturn ? `\r${value}` : value
+    pendingCarriageReturn = false
+    if (!final && decoded.endsWith('\r')) {
+      pendingCarriageReturn = true
+      decoded = decoded.slice(0, -1)
+    }
+    buffer += normalizeEventStreamNewlines(decoded)
+  }
   try {
     while (true) {
       const next = await reader.read()
       if (next.done) {
         completed = true
-        buffer += decoder.decode()
+        appendDecoded(decoder.decode(), true)
         break
       }
-      buffer += decoder.decode(next.value, { stream: true })
-      buffer = normalizeEventStreamNewlines(buffer)
+      appendDecoded(decoder.decode(next.value, { stream: true }), false)
       let boundary = buffer.indexOf('\n\n')
       while (boundary >= 0) {
         const event = buffer.slice(0, boundary)
@@ -475,7 +485,7 @@ async function* decodeServerSentEvents(
         boundary = buffer.indexOf('\n\n')
       }
     }
-    buffer = normalizeEventStreamNewlines(buffer).trim()
+    buffer = buffer.trim()
     if (buffer.length > 0) {
       const data = buffer
         .split('\n')
