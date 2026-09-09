@@ -289,6 +289,16 @@ export function buildApplicationModel(
   }
 
   if (options.arguments) {
+    const existingProvider = providerNodes.get(options.arguments)
+    if (existingProvider) {
+      diagnostics.push(
+        diagnostic(
+          'LUTRE_ARGS_001',
+          `Arguments ${tokenName(options.arguments)} is runtime-managed and cannot also be declared as a normal provider.`,
+          existingProvider.id,
+        ),
+      )
+    }
     const provider = snapshotProvider(argumentsProvider(options.arguments))
     const node: ProviderModelNode = {
       kind: 'provider',

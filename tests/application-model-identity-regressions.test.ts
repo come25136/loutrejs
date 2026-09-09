@@ -226,6 +226,25 @@ describe('Application Model identity regressions', () => {
     },
   )
 
+  it('Application Argumentsを通常Providerとして重複宣言したらModel build時に拒否する', async () => {
+    const Args = defineArgs(z.object({ mode: z.string() }))
+    const Module = defineModule(() => ({ providers: [Args] }))
+    const definition = defineApplication({
+      modules: [Module()],
+      arguments: Args,
+    })
+
+    expect(definition.model.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_ARGS_001' }),
+    )
+    await expect(
+      bootstrapApplication({
+        application: definition,
+        arguments: { mode: 'test' },
+      }),
+    ).rejects.toThrow('LUTRE_ARGS_001')
+  })
+
   it('Provider・conditional mapping・Lifecycle metadataをModel build時点でsnapshotする', async () => {
     const CLOCK = token<number>('snapshot.clock')
     const MESSAGE = token<string>('snapshot.message')
