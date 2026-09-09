@@ -742,13 +742,13 @@ function startCronTrigger(
   ) => Promise<unknown>,
 ): TriggerHandle {
   let stopped = false
-  let lastMinute: string | undefined
+  let lastMinute: number | undefined
   const active = new Set<Promise<unknown>>()
   const tick = () => {
     if (stopped) return
     const now = new Date()
     if (!matchesCronTrigger(trigger, now)) return
-    const minute = cronMinuteIdentity(trigger.timezone, now)
+    const minute = Math.floor(now.getTime() / 60_000)
     if (lastMinute === minute) return
     lastMinute = minute
     if (trigger.overlap === 'skip' && active.size > 0) return
@@ -886,12 +886,11 @@ function matchesCronTrigger(
     31,
   )
   const dayOfWeekMatches = matchesCronField(dayOfWeek, weekday, 0, 7, true)
-  const dayMatches =
-    dayOfMonth === '*'
-      ? dayOfWeekMatches
-      : dayOfWeek === '*'
-        ? dayOfMonthMatches
-        : dayOfMonthMatches || dayOfWeekMatches
+  const bothDaysRestricted =
+    !dayOfMonth.includes('*') && !dayOfWeek.includes('*')
+  const dayMatches = bothDaysRestricted
+    ? dayOfMonthMatches || dayOfWeekMatches
+    : dayOfMonthMatches && dayOfWeekMatches
   return (
     matchesCronField(minute, Number(value('minute')), 0, 59) &&
     matchesCronField(hour, Number(value('hour')), 0, 23) &&
@@ -932,18 +931,6 @@ function matchesCronField(
       )
     )
   })
-}
-
-function cronMinuteIdentity(timezone: string, instant: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).format(instant)
 }
 
 function isValidCronExpression(expression: string): boolean {

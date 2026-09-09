@@ -369,6 +369,77 @@ describe('Task Execution Extension', () => {
     }
   })
 
+  it('Cronのday-of-monthに*を含む場合はday-of-weekとのOR条件にしない', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-01T00:00:00.000Z'))
+    let executions = 0
+    const job = task({
+      name: 'cron-unrestricted-day-task',
+      factory: () => async () => {
+        executions += 1
+      },
+    })
+    const trigger = cron({
+      name: 'cron-unrestricted-day-trigger',
+      expression: '0 0 */2 * 1',
+      timezone: 'UTC',
+      task: job,
+    })
+    const Module = defineModule(() => ({ executions: [trigger] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+
+    try {
+      await application.tasks.start()
+      await vi.advanceTimersByTimeAsync(0)
+      vi.setSystemTime(new Date('2026-09-14T00:00:00.000Z'))
+      await vi.advanceTimersByTimeAsync(1_000)
+
+      expect(executions).toBe(0)
+    } finally {
+      await application.close()
+      vi.useRealTimers()
+    }
+  })
+
+  it('CronはDST fall-backで重複するローカル時刻を別の実時刻として実行する', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-01T05:30:00.000Z'))
+    const executions: Date[] = []
+    const job = task({
+      name: 'cron-fall-back-task',
+      factory: () => async () => {
+        executions.push(new Date())
+      },
+    })
+    const trigger = cron({
+      name: 'cron-fall-back-trigger',
+      expression: '30 1 * * *',
+      timezone: 'America/New_York',
+      task: job,
+    })
+    const Module = defineModule(() => ({ executions: [trigger] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+    })
+
+    try {
+      await application.tasks.start()
+      await vi.advanceTimersByTimeAsync(0)
+      vi.setSystemTime(new Date('2026-11-01T06:30:00.000Z'))
+      await vi.advanceTimersByTimeAsync(1_000)
+
+      expect(executions).toEqual([
+        new Date('2026-11-01T05:30:00.000Z'),
+        new Date('2026-11-01T06:30:01.000Z'),
+      ])
+    } finally {
+      await application.close()
+      vi.useRealTimers()
+    }
+  })
+
   it('Queue driver startup中のshutdownはProvider cleanupより先にstartupを回収する', async () => {
     const events: string[] = []
     let markStarted!: () => void
