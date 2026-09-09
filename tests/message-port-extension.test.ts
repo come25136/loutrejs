@@ -108,6 +108,53 @@ describe('MessagePort Execution Extension', () => {
         },
       },
       {
+        name: 'throw recovery',
+        source: async function* () {
+          try {
+            yield 1
+          } catch {
+            yield 2
+          }
+          yield 3
+        },
+        consume: async (value: unknown) => {
+          const iterator = (value as AsyncIterable<number>)[
+            Symbol.asyncIterator
+          ]()
+          await expect(iterator.next()).resolves.toEqual({
+            done: false,
+            value: 1,
+          })
+          await expect(iterator.throw?.(new Error('recover'))).resolves.toEqual(
+            { done: false, value: 2 },
+          )
+          await expect(iterator.next()).resolves.toEqual({
+            done: false,
+            value: 3,
+          })
+          await expect(iterator.next()).resolves.toMatchObject({ done: true })
+        },
+      },
+      {
+        name: 'throw recovery validation failure',
+        source: async function* () {
+          try {
+            yield 1
+          } catch {
+            yield 'invalid' as never
+          }
+          yield 3
+        },
+        consume: async (value: unknown) => {
+          const iterator = (value as AsyncIterable<number>)[
+            Symbol.asyncIterator
+          ]()
+          await iterator.next()
+          await expect(iterator.throw?.(new Error('recover'))).rejects.toThrow()
+          await expect(iterator.next()).resolves.toMatchObject({ done: true })
+        },
+      },
+      {
         name: 'return',
         source: async function* () {
           yield 1
@@ -192,7 +239,7 @@ describe('MessagePort Execution Extension', () => {
       await testCase.consume(result.value, () =>
         controller?.abort(new Error('aborted')),
       )
-      expect(completed).toBe(1)
+      expect(completed, testCase.name).toBe(1)
     }
   })
 

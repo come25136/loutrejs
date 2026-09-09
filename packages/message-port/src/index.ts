@@ -430,38 +430,50 @@ function createLeasedMessagePortStream(
   if (lease.signal.aborted) onAbort()
   else lease.signal.addEventListener('abort', onAbort, { once: true })
 
+  const closeAfterError = async (error: unknown): Promise<never> => {
+    let cleanupError: unknown
+    try {
+      await iterator.return?.(error)
+    } catch (caught) {
+      cleanupError = caught
+    } finally {
+      markFinished()
+    }
+    if (cleanupError !== undefined) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'MessagePort stream validation and cleanup failed.',
+        { cause: error },
+      )
+    }
+    throw error
+  }
+  const validateResult = async (
+    result: IteratorResult<unknown>,
+  ): Promise<IteratorResult<unknown>> => {
+    if (result.done) {
+      markFinished()
+      return result
+    }
+    try {
+      return {
+        done: false,
+        value: await validateSchema(schema, result.value),
+      }
+    } catch (error) {
+      return closeAfterError(error)
+    }
+  }
+
   const wrapped: AsyncIterator<unknown> = {
     async next() {
       if (finished) return { done: true, value: undefined }
       inFlightOperations += 1
       try {
-        const result = await iterator.next()
-        if (result.done) {
-          markFinished()
-          return result
-        }
-        return {
-          done: false,
-          value: await validateSchema(schema, result.value),
-        }
+        return await validateResult(await iterator.next())
       } catch (error) {
         if (finished) throw error
-        let cleanupError: unknown
-        try {
-          await iterator.return?.(error)
-        } catch (caught) {
-          cleanupError = caught
-        } finally {
-          markFinished()
-        }
-        if (cleanupError !== undefined) {
-          throw new AggregateError(
-            [error, cleanupError],
-            'MessagePort stream validation and cleanup failed.',
-            { cause: error },
-          )
-        }
-        throw error
+        return await closeAfterError(error)
       } finally {
         inFlightOperations -= 1
         completeIfSafe()
@@ -480,11 +492,12 @@ function createLeasedMessagePortStream(
       if (finished) throw error
       inFlightOperations += 1
       try {
-        if (iterator.throw) return await iterator.throw(error)
-        await iterator.return?.(error)
-        throw error
+        if (!iterator.throw) return await closeAfterError(error)
+        return await validateResult(await iterator.throw(error))
+      } catch (caught) {
+        if (finished) throw caught
+        return await closeAfterError(caught)
       } finally {
-        markFinished()
         inFlightOperations -= 1
         completeIfSafe()
       }
