@@ -40,6 +40,11 @@ interface ActiveExecution extends ExecutionLease {
   completed: boolean
 }
 
+interface ExtensionDrainOperation {
+  readonly result: Promise<void>
+  pending: boolean
+}
+
 export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   readonly model: ApplicationModel
   readonly container: Container
@@ -49,6 +54,10 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   readonly #initializedModuleIds = new Set<string>()
   readonly #activeExecutions = new Set<ActiveExecution>()
   readonly #idleWaiters = new Set<() => void>()
+  readonly #extensionDrainOperations = new Map<
+    symbol,
+    ExtensionDrainOperation
+  >()
   readonly #environmentSource: unknown
   readonly #argumentsSource: unknown
   readonly #forceShutdownTimeoutMs: number
@@ -269,28 +278,17 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     for (const { extension } of this.model.extensions) {
       const runtime = this.#extensionRuntimes.get(extension.identity)
       if (!runtime?.drain) continue
-      let pending = true
-      const operation = startOperation(() =>
-        runtime.drain!({ timeoutMs: this.#forceShutdownTimeoutMs }),
-      )
-      void operation.then(
-        () => {
-          pending = false
-        },
-        () => {
-          pending = false
-        },
-      )
+      const operation = this.#startExtensionDrain(extension, runtime)
       drainOperations.push({
         result: withTimeout(
-          () => operation,
+          () => operation.result,
           this.#forceShutdownTimeoutMs,
           () =>
             new ExtensionDrainTimeoutError(
               `LUTRE_EXTENSION_DRAIN_TIMEOUT: Extension ${extension.name} did not drain within ${this.#forceShutdownTimeoutMs}ms.`,
             ),
         ),
-        isPending: () => pending,
+        isPending: () => operation.pending,
       })
     }
     const drainResults = await Promise.allSettled(
@@ -342,11 +340,41 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       const runtime = this.#extensionRuntimes.get(extension.identity)
       if (runtime?.close) await collectError(() => runtime.close!(), errors)
     }
+    this.#extensionDrainOperations.clear()
     await this.#cleanupProviders(signal, errors)
     this.#state = 'stopped'
     if (errors.length > 0) {
       throw new AggregateError(errors, 'Application shutdown failed.')
     }
+  }
+
+  #startExtensionDrain(
+    extension: ExecutionExtension,
+    runtime: ExecutionExtensionRuntime,
+  ): ExtensionDrainOperation {
+    const existing = this.#extensionDrainOperations.get(extension.identity)
+    if (existing) return existing
+    const operation: ExtensionDrainOperation = {
+      result: startOperation(() =>
+        runtime.drain!({ timeoutMs: this.#forceShutdownTimeoutMs }),
+      ),
+      pending: true,
+    }
+    this.#extensionDrainOperations.set(extension.identity, operation)
+    void operation.result.then(
+      () => {
+        operation.pending = false
+      },
+      () => {
+        operation.pending = false
+        if (
+          this.#extensionDrainOperations.get(extension.identity) === operation
+        ) {
+          this.#extensionDrainOperations.delete(extension.identity)
+        }
+      },
+    )
+    return operation
   }
 
   async #cleanupProviders(signal: string | undefined, errors: unknown[]) {

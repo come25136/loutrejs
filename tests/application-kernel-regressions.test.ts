@@ -273,6 +273,72 @@ describe('Application Kernel regression', () => {
     expect(events).toEqual(['extension.drain'])
   })
 
+  it('shutdown retryはpending中のExtension drainへ再入しない', async () => {
+    const events: string[] = []
+    let resolveDrain!: () => void
+    const pendingDrain = new Promise<void>((resolve) => {
+      resolveDrain = resolve
+    })
+    let drainCalls = 0
+    const extension = defineExecutionExtension<
+      any,
+      {},
+      'pendingDrain',
+      Record<never, never>
+    >({
+      kind: 'execution-extension',
+      abiVersion: '1',
+      name: '@fixture/pending-drain-retry',
+      compile: () => ({
+        kind: 'execution',
+        id: 'fixture.pending-drain-retry',
+        executionKind: 'fixture.pending-drain-retry',
+        dependencies: [],
+        capabilities: [],
+        compiled: {},
+      }),
+      createRuntime: () => ({
+        drain() {
+          drainCalls += 1
+          return pendingDrain
+        },
+        close() {
+          events.push('extension.close')
+        },
+      }),
+      host: {
+        namespace: 'pendingDrain',
+        create: () => ({}),
+      },
+    })
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [defineExecution(extension, {})],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      forceShutdownTimeoutMs: 10,
+    })
+
+    await expect(application.close()).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
+    expect(drainCalls).toBe(1)
+
+    const retry = application.close()
+    expect(drainCalls).toBe(1)
+    resolveDrain()
+
+    await expect(retry).resolves.toBeUndefined()
+    expect(drainCalls).toBe(1)
+    expect(events).toEqual(['extension.close', 'provider.destroy'])
+  })
+
   it('drain失敗後もactive executionが残る間はProviderをcleanupしない', async () => {
     const events: string[] = []
     let activeLease: ExecutionLease | undefined
