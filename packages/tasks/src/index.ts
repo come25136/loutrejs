@@ -573,24 +573,34 @@ function createTasksRuntime(
   let triggerStop: Promise<void> | undefined
   let triggersStarted = false
   let state: 'running' | 'draining' | 'stopped' = 'running'
+  const activeInvocations = new Set<Promise<unknown>>()
 
-  const run = async (
+  const run = (
     taskExecutionId: symbol,
     taskName: string,
     ...arguments_: any[]
-  ) => {
-    if (state !== 'running')
-      throw new Error(`LUTRE_TASKS_${state.toUpperCase()}`)
+  ): Promise<unknown> => {
+    if (state !== 'running') {
+      return Promise.reject(new Error(`LUTRE_TASKS_${state.toUpperCase()}`))
+    }
     const runtime = runtimes.get(taskExecutionId)
     if (!runtime) {
-      throw new Error(`LUTRE_TASK_NOT_REGISTERED: ${taskName}`)
+      return Promise.reject(new Error(`LUTRE_TASK_NOT_REGISTERED: ${taskName}`))
     }
-    const lease = applicationRuntime.beginExecution()
-    try {
-      return await Reflect.apply(runtime, undefined, arguments_)
-    } finally {
-      lease.complete()
-    }
+    const invocation = (async () => {
+      const lease = applicationRuntime.beginExecution()
+      try {
+        return await Reflect.apply(runtime, undefined, arguments_)
+      } finally {
+        lease.complete()
+      }
+    })()
+    activeInvocations.add(invocation)
+    void invocation.then(
+      () => activeInvocations.delete(invocation),
+      () => activeInvocations.delete(invocation),
+    )
+    return invocation
   }
 
   const stopTriggers = (): Promise<void> => {
@@ -689,6 +699,7 @@ function createTasksRuntime(
       if (state === 'stopped') return
       state = 'draining'
       await stopTriggers()
+      await Promise.allSettled(activeInvocations)
     },
     async close() {
       if (state === 'stopped') return

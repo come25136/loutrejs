@@ -260,6 +260,46 @@ describe('Task Execution Extension', () => {
     await expect(tasks.stop()).resolves.toBeUndefined()
   })
 
+  it('永久pendingのdirect Task invocationはshutdown timeoutの安全境界で停止する', async () => {
+    const events: string[] = []
+    class Resource {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const job = task({
+      name: 'pending-direct-task',
+      factory:
+        (resource = inject(Resource)) =>
+        async () => {
+          void resource
+          return new Promise<never>(() => undefined)
+        },
+    })
+    const Module = defineModule(() => ({
+      providers: [Resource],
+      executions: [job],
+    }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      forceShutdownTimeoutMs: 10,
+    })
+    const invocation = application.tasks.run(job)
+
+    await expect(
+      Promise.race([
+        application.close(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('shutdown hung')), 100),
+        ),
+      ]),
+    ).rejects.toThrow(
+      'Application shutdown did not reach a safe cleanup boundary.',
+    )
+    expect(events).toEqual([])
+    void invocation
+  })
+
   it('Cronのday-of-monthとday-of-weekを両方指定した場合はどちらかが一致すれば実行する', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-01T00:00:00.000Z'))
