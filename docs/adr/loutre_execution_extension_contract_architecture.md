@@ -180,7 +180,7 @@ interface ExecutionContribution<TCompiled = unknown> {
   readonly executionKind: string
   readonly dependencies: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
-  readonly compiled: Readonly<TCompiled>
+  readonly compiled: TCompiled
 }
 ```
 
@@ -195,11 +195,11 @@ capabilities
 
 `compiled`はExtension-owned opaque valueである。
 
-### 5.1 immutable compiled snapshot
+### 5.1 compiled snapshotの信頼境界
 
-`compile()`はbuild時点のimmutableなsnapshotを`compiled`として返す。object型のtop-level valueは`Object.freeze()`済みでなければならず、CoreはModel build時に`Object.isFrozen()`で検査し、違反を`LUTRE_EXTENSION_COMPILED_NOT_FROZEN`として拒否する。primitive valueはそのまま利用できる。
+`compile()`は、Model semanticsを構成する値を元Definitionから分離したsnapshotとして`compiled`へ返す。これはExtensionの境界契約であり、Coreが実行時に証明するinvariantではない。
 
-Coreは`compiled`のshapeを知らないため、deep cloneやdeep freezeを行わない。schema、callback、class等のidentityを壊さずにどのpropertyがModel semanticsを構成するかを判断できるのはExtensionだけである。Extensionは元Definitionのmutableなobjectやarrayを意味の一部として保持する場合、必要な深さまで複製・固定する。実行対象としてidentityを維持するschema、callback、class等は複製せず保持してよい。
+Coreは`compiled`のshapeを知らないため、clone、freeze、immutability検査を行わない。top-levelの`Object.isFrozen()`はnested objectの変更を検知できず、`Object.freeze()`済みの`Map`や`Set`も内容を変更できる。再帰的な検査ではschema、callback、class等のlive identityとsnapshot対象を区別できない。このため、Extensionは元Definitionのmutableなobject、array、collectionをModel semanticsとして保持する場合、必要な範囲を複製し、外部から変更できない表現にする。実行対象としてidentityを維持するschema、callback、class等は複製せず保持してよい。
 
 Execution ownershipは`ExecutionContribution`や`ExecutionModelNode`へ重複保持しない。Coreは`ExecutionDefinition.extension`をdispatch keyとして`compile()`を呼び、Application Modelでは`ApplicationModelExtension { extension, executions }`だけをownerの正本とする。これによりowner不整合というinvalid stateを表現できなくする。
 

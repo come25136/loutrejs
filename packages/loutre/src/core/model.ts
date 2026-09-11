@@ -46,7 +46,7 @@ export interface ExecutionModelNode<TCompiled = unknown> {
   readonly moduleId: string
   readonly dependencies: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
-  readonly compiled: Readonly<TCompiled>
+  readonly compiled: TCompiled
 }
 
 export interface LifecycleModelNode {
@@ -606,16 +606,6 @@ export function buildApplicationModel(
         )
         continue
       }
-      if (isMutableCompiledObject(contribution.compiled)) {
-        diagnostics.push(
-          diagnostic(
-            'LUTRE_EXTENSION_COMPILED_NOT_FROZEN',
-            `Extension ${extension.name} must return an Object.freeze()'d compiled value.`,
-            path,
-          ),
-        )
-        continue
-      }
       if (executionIds.has(contribution.id)) {
         diagnostics.push(
           diagnostic(
@@ -972,14 +962,6 @@ function snapshotLifecycleHook(hook: LifecycleHook<any>): LifecycleHook<any> {
     inject: Object.freeze([...hook.inject]),
     run: hook.run,
   })
-}
-
-function isMutableCompiledObject(compiled: unknown): boolean {
-  return (
-    typeof compiled === 'object' &&
-    compiled !== null &&
-    !Object.isFrozen(compiled)
-  )
 }
 
 function snapshotExecutionExtension(

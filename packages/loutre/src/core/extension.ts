@@ -112,7 +112,7 @@ export interface ExecutionContribution<TCompiled = unknown> {
   readonly executionKind: string
   readonly dependencies: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
-  readonly compiled: Readonly<TCompiled>
+  readonly compiled: TCompiled
 }
 
 export interface ExecutionExtensionValidationContext<TCompiled = unknown> {

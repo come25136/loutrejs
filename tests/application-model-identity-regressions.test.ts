@@ -109,40 +109,79 @@ describe('Application Model identity regressions', () => {
     ).rejects.toThrow('LUTRE_EXTENSION_ABI_MISMATCH')
   })
 
-  it('mutableなobject型compiled contributionをModel build時に拒否する', async () => {
-    const compiled = { marker: 'before' }
-    const extension = defineExecutionExtension<
-      FixtureDefinition,
-      { readonly marker: string }
-    >({
-      kind: 'execution-extension',
-      name: '@fixture/mutable-compiled',
-      abiVersion: '1',
-      compile: (definition) => ({
-        kind: 'execution',
-        id: definition.id,
-        executionKind: 'fixture.mutable-compiled',
-        dependencies: [],
-        capabilities: [],
-        compiled,
-      }),
-      createRuntime: () => ({}),
-    })
-    const Module = defineModule(() => ({
-      executions: [defineExecution(extension, { id: 'fixture.mutable' })],
-    }))
-    const definition = defineApplication({ modules: [Module()] })
+  it.each([
+    {
+      name: 'nested object',
+      createCompiled: () => {
+        const nested = { marker: 'before' }
+        return {
+          compiled: Object.freeze({ nested }),
+          mutate: () => {
+            nested.marker = 'after'
+          },
+          read: (compiled: unknown) =>
+            (compiled as { nested: { marker: string } }).nested.marker,
+        }
+      },
+    },
+    {
+      name: 'Object.freeze済みMap',
+      createCompiled: () => {
+        const compiled = Object.freeze(new Map([['marker', 'before']]))
+        return {
+          compiled,
+          mutate: () => {
+            compiled.set('marker', 'after')
+          },
+          read: (value: unknown) =>
+            (value as ReadonlyMap<string, string>).get('marker'),
+        }
+      },
+    },
+    {
+      name: 'function',
+      createCompiled: () => {
+        let marker = 'before'
+        return {
+          compiled: () => marker,
+          mutate: () => {
+            marker = 'after'
+          },
+          read: (compiled: unknown) => (compiled as () => string)(),
+        }
+      },
+    },
+  ])(
+    'Coreはopaqueなcompiled（$name）をimmutability検査しない',
+    ({ createCompiled }) => {
+      const fixture = createCompiled()
+      const extension = defineExecutionExtension<FixtureDefinition, unknown>({
+        kind: 'execution-extension',
+        name: '@fixture/opaque-compiled',
+        abiVersion: '1',
+        compile: (definition) => ({
+          kind: 'execution',
+          id: definition.id,
+          executionKind: 'fixture.opaque-compiled',
+          dependencies: [],
+          capabilities: [],
+          compiled: fixture.compiled,
+        }),
+        createRuntime: () => ({}),
+      })
+      const Module = defineModule(() => ({
+        executions: [defineExecution(extension, { id: 'fixture.opaque' })],
+      }))
+      const model = buildApplicationModel({ modules: [Module()] })
+      const compiled = model.extensions.get(extension)?.executions[0]?.compiled
 
-    expect(definition.model.diagnostics).toContainEqual(
-      expect.objectContaining({
-        code: 'LUTRE_EXTENSION_COMPILED_NOT_FROZEN',
-      }),
-    )
-    expect(definition.model.executions).toEqual([])
-    await expect(
-      bootstrapApplication({ application: definition }),
-    ).rejects.toThrow('LUTRE_EXTENSION_COMPILED_NOT_FROZEN')
-  })
+      fixture.mutate()
+
+      expect(model.diagnostics).toEqual([])
+      expect(compiled).toBe(fixture.compiled)
+      expect(fixture.read(compiled)).toBe('after')
+    },
+  )
 
   it('custom Extensionが元descriptorからimmutable compiled snapshotを構築する', () => {
     interface SnapshotDefinition extends ExecutionDefinition {
