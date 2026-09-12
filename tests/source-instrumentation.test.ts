@@ -86,4 +86,99 @@ void Module
     expect(transformed).not.toContain('__loutreSource(AmbientOnlyType')
     expect(transformed).toContain('const Module = __loutreSource(defineModule')
   })
+
+  it('再代入可能factoryはhandler member sourceを推定しない', () => {
+    const source = `import { http } from '@loutrejs/loutre/http'
+const oldFactory = () => ({ create() {} })
+const realFactory = () => ({ create() {} })
+let factory = oldFactory
+factory = realFactory
+const Controller = http.implementation({ name: 'Controller', contract: {} as any, factory })
+void Controller
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).not.toContain('__loutreMemberSource(Controller.factory')
+  })
+
+  it('一意な直接object returnならhandler member sourceを保持する', () => {
+    const source = `import { http } from '@loutrejs/loutre/http'
+const Controller = http.implementation({
+  name: 'Controller',
+  contract: {} as any,
+  factory: () => {
+    return { create() {} }
+  },
+})
+void Controller
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('__loutreMemberSource(Controller.factory')
+  })
+
+  it('複数returnを持つfactoryはhandler member sourceを推定しない', () => {
+    const source = `import { http } from '@loutrejs/loutre/http'
+const useFirst = true
+const Controller = http.implementation({
+  name: 'Controller',
+  contract: {} as any,
+  factory: () => {
+    if (useFirst) return { create() {} }
+    return { create() {} }
+  },
+})
+void Controller
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).not.toContain('__loutreMemberSource(Controller.factory')
+  })
+
+  it('namespace importとconst provider builder bindingを認識する', () => {
+    const source = `import * as loutre from '@loutrejs/loutre'
+import * as httpApi from '@loutrejs/loutre/http'
+const TOKEN = loutre.token('value')
+const builder = loutre.provide(TOKEN)
+const provider = builder.useValue('value')
+const middleware = httpApi.defineHttpMiddleware({ name: 'audit', factory: () => async (_ctx, next) => next() })
+const Contract = httpApi.defineHttpContract({ get: { method: 'GET', path: '/', middlewares: [middleware], responses: { ok: { status: 200 } } } })
+const Controller = httpApi.defineHttpImplementation({ name: 'Controller', contract: Contract, factory: () => ({ get() {} }) })
+const Module = loutre.defineModule(() => ({ providers: [provider], executions: [Controller] }))
+void Module
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain(
+      'const provider = __loutreSource(builder.useValue',
+    )
+    expect(transformed).toContain(
+      'const middleware = __loutreSource(httpApi.defineHttpMiddleware',
+    )
+    expect(transformed).toContain(
+      'const Contract = __loutreSource(httpApi.defineHttpContract',
+    )
+    expect(transformed).toContain(
+      'const Controller = __loutreSource(httpApi.defineHttpImplementation',
+    )
+    expect(transformed).toContain(
+      'const Module = __loutreSource(loutre.defineModule',
+    )
+  })
 })

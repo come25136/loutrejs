@@ -492,6 +492,81 @@ describe('Loutre CLI', () => {
     )
   })
 
+  it('再代入factoryと複数return factoryはhandler sourceをControllerへfallbackする', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--entry',
+          'tests/fixtures/source-location-handler-safety-app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+
+    const graph = JSON.parse(output.stdout.join('\n'))
+    const node = (kind: string, label: string) =>
+      graph.nodes.find(
+        (candidate: { kind: string; label: string }) =>
+          candidate.kind === kind && candidate.label === label,
+      )
+
+    for (const name of ['ReassignedController', 'BranchController']) {
+      expect(node('handler', `${name}.create`)?.source).toEqual(
+        node('execution', name)?.source,
+      )
+    }
+  })
+
+  it('namespace importと分離したconst provider builderでもsource locationを保持する', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--entry',
+          'tests/fixtures/source-location-namespace-app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+
+    const graph = JSON.parse(output.stdout.join('\n'))
+    const node = (kind: string, label: string) =>
+      graph.nodes.find(
+        (candidate: { kind: string; label: string }) =>
+          candidate.kind === kind && candidate.label === label,
+      )
+    const source = (line: number) => ({
+      file: 'tests/fixtures/source-location-namespace-app.ts',
+      line,
+    })
+
+    expect(node('module', 'NamespaceModule')?.source).toMatchObject(source(34))
+    expect(
+      node('provider', 'source-location.namespace-value')?.source,
+    ).toMatchObject(source(6))
+    expect(node('execution', 'NamespaceController')?.source).toMatchObject(
+      source(24),
+    )
+    expect(node('entrypoint', 'GET /namespace')?.source).toMatchObject(
+      source(16),
+    )
+    expect(node('middleware', 'namespaceAudit')?.source).toMatchObject(
+      source(8),
+    )
+    expect(node('handler', 'NamespaceController.get')?.source).toMatchObject(
+      source(28),
+    )
+  })
+
   it('graph modules JSONでもsource locationを保持する', async () => {
     const output = io()
     expect(
