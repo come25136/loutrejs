@@ -480,21 +480,25 @@ function renderMermaidGraph(
   const moduleNames = new Map(
     graph.modules.map((module) => [module.id, module.name ?? module.id]),
   )
-  const grouped = new Map<string, GraphViewNode[]>()
-  const ungrouped: GraphViewNode[] = []
+  const moduleGroups = new Map<string, GraphViewNode[]>()
 
   for (const candidate of view.nodes) {
     const moduleId =
       candidate.kind === 'module' ? candidate.id : candidate.module
-    if (!moduleId || !moduleNames.has(moduleId)) {
-      ungrouped.push(candidate)
+    if (!moduleId || !moduleNames.has(moduleId)) continue
+    if (
+      candidate.kind === 'entrypoint' ||
+      candidate.kind === 'middleware' ||
+      candidate.kind === 'handler'
+    ) {
       continue
     }
-    const current = grouped.get(moduleId) ?? []
+    const current = moduleGroups.get(moduleId) ?? []
     current.push(candidate)
-    grouped.set(moduleId, current)
+    moduleGroups.set(moduleId, current)
   }
 
+  const endpointGroups = groupHttpEndpointNodes(view.nodes)
   const declared = new Set<string>()
   const declareNode = (candidate: GraphViewNode, indent: string) => {
     const id = ids.get(candidate.id)!
@@ -503,16 +507,26 @@ function renderMermaidGraph(
   }
 
   let subgraphIndex = 0
-  const subgraphs: string[] = []
-  for (const [moduleId, candidates] of grouped) {
-    if (candidates.length <= 1) continue
+  const moduleSubgraphs: string[] = []
+  const endpointSubgraphs: string[] = []
+
+  for (const [moduleId, candidates] of moduleGroups) {
     const subgraphId = `sg${subgraphIndex++}`
-    subgraphs.push(subgraphId)
+    moduleSubgraphs.push(subgraphId)
     lines.push(
-      `  subgraph ${subgraphId}["${mermaidText(moduleNames.get(moduleId)!)}"]`,
+      `  subgraph ${subgraphId}["Module: ${mermaidText(moduleNames.get(moduleId)!)}"]`,
     )
     lines.push('    direction LR')
     for (const candidate of candidates) declareNode(candidate, '    ')
+    lines.push('  end')
+  }
+
+  for (const group of endpointGroups.values()) {
+    const subgraphId = `sg${subgraphIndex++}`
+    endpointSubgraphs.push(subgraphId)
+    lines.push(`  subgraph ${subgraphId}["API: ${mermaidText(group.label)}"]`)
+    lines.push('    direction LR')
+    for (const candidate of group.nodes) declareNode(candidate, '    ')
     lines.push('  end')
   }
 
@@ -521,6 +535,7 @@ function renderMermaidGraph(
   }
 
   const byId = new Map(view.nodes.map((candidate) => [candidate.id, candidate]))
+  const edgeColors: string[] = []
   for (const relationship of view.edges) {
     const from = ids.get(relationship.from)
     const to = ids.get(relationship.to)
@@ -531,17 +546,19 @@ function renderMermaidGraph(
         ? `  ${from} --> ${to}`
         : `  ${from} -->|"${mermaidText(label)}"| ${to}`,
     )
+    const source = byId.get(relationship.from)
+    edgeColors.push(source ? mermaidNodeStrokeColor(source) : '#64748B')
   }
 
   lines.push(
-    '  classDef moduleNode fill:#E0E7FF,stroke:#4F46E5,color:#1E1B4B,stroke-width:2px',
-    '  classDef provider fill:#DCFCE7,stroke:#16A34A,color:#14532D',
-    '  classDef controller fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px',
-    '  classDef execution fill:#CFFAFE,stroke:#0891B2,color:#164E63',
-    '  classDef route fill:#FEF3C7,stroke:#D97706,color:#78350F',
-    '  classDef middleware fill:#F3E8FF,stroke:#9333EA,color:#581C87',
-    '  classDef handler fill:#FFEDD5,stroke:#EA580C,color:#7C2D12',
-    '  classDef runtimeCapability fill:#F3F4F6,stroke:#6B7280,color:#111827',
+    '  classDef moduleNode fill:#DDD6FE,stroke:#4F46E5,color:#1E1B4B,stroke-width:2px',
+    '  classDef provider fill:#BBF7D0,stroke:#16A34A,color:#14532D,stroke-width:2px',
+    '  classDef controller fill:#BFDBFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px',
+    '  classDef execution fill:#A5F3FC,stroke:#0891B2,color:#164E63,stroke-width:2px',
+    '  classDef route fill:#FDE68A,stroke:#D97706,color:#78350F,stroke-width:2px',
+    '  classDef middleware fill:#E9D5FF,stroke:#9333EA,color:#581C87,stroke-width:2px',
+    '  classDef handler fill:#FED7AA,stroke:#EA580C,color:#7C2D12,stroke-width:2px',
+    '  classDef runtimeCapability fill:#E5E7EB,stroke:#6B7280,color:#111827,stroke-width:2px',
   )
 
   const classes = new Map<string, string[]>()
@@ -554,13 +571,57 @@ function renderMermaidGraph(
   for (const [className, nodeIds] of classes) {
     lines.push(`  class ${nodeIds.join(',')} ${className}`)
   }
-  for (const subgraphId of subgraphs) {
+  for (const [index, color] of edgeColors.entries()) {
     lines.push(
-      `  style ${subgraphId} fill:#F8FAFC,stroke:#94A3B8,color:#0F172A,stroke-width:2px`,
+      `  linkStyle ${index} stroke:${color},color:${color},stroke-width:2px`,
+    )
+  }
+  for (const subgraphId of moduleSubgraphs) {
+    lines.push(
+      `  style ${subgraphId} fill:#F8FAFC,stroke:#4F46E5,color:#1E1B4B,stroke-width:2px`,
+    )
+  }
+  for (const subgraphId of endpointSubgraphs) {
+    lines.push(
+      `  style ${subgraphId} fill:#FFFBEB,stroke:#D97706,color:#78350F,stroke-width:2px`,
     )
   }
 
   return lines.join('\n')
+}
+
+interface MermaidEndpointGroup {
+  readonly label: string
+  readonly nodes: readonly GraphViewNode[]
+}
+
+function groupHttpEndpointNodes(
+  candidates: readonly GraphViewNode[],
+): ReadonlyMap<string, MermaidEndpointGroup> {
+  const routes = new Map<string, GraphViewNode>()
+  for (const candidate of candidates) {
+    if (
+      candidate.kind === 'entrypoint' &&
+      candidate.entrypointKind === 'http-route'
+    ) {
+      const routeName = candidate.attributes?.name
+      if (typeof routeName === 'string') routes.set(routeName, candidate)
+    }
+  }
+
+  const grouped = new Map<string, MermaidEndpointGroup>()
+  for (const [routeName, route] of routes) {
+    const nodes = [route]
+    nodes.push(
+      ...candidates.filter(
+        (candidate) =>
+          (candidate.kind === 'middleware' || candidate.kind === 'handler') &&
+          candidate.attributes?.route === routeName,
+      ),
+    )
+    grouped.set(routeName, { label: route.label, nodes })
+  }
+  return grouped
 }
 
 function renderExplanation(
@@ -1049,7 +1110,17 @@ function mermaidNodeLabel(node: GraphViewNode): string {
   return `${role}: ${node.label}`
 }
 
-function mermaidNodeClass(node: GraphViewNode): string {
+type MermaidNodeClass =
+  | 'moduleNode'
+  | 'provider'
+  | 'controller'
+  | 'execution'
+  | 'route'
+  | 'middleware'
+  | 'handler'
+  | 'runtimeCapability'
+
+function mermaidNodeClass(node: GraphViewNode): MermaidNodeClass {
   switch (node.kind) {
     case 'module':
       return 'moduleNode'
@@ -1067,6 +1138,27 @@ function mermaidNodeClass(node: GraphViewNode): string {
       return 'handler'
     case 'runtime-capability':
       return 'runtimeCapability'
+  }
+}
+
+function mermaidNodeStrokeColor(node: GraphViewNode): string {
+  switch (mermaidNodeClass(node)) {
+    case 'moduleNode':
+      return '#4F46E5'
+    case 'provider':
+      return '#16A34A'
+    case 'controller':
+      return '#2563EB'
+    case 'execution':
+      return '#0891B2'
+    case 'route':
+      return '#D97706'
+    case 'middleware':
+      return '#9333EA'
+    case 'handler':
+      return '#EA580C'
+    case 'runtimeCapability':
+      return '#6B7280'
   }
 }
 
