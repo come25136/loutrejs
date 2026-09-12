@@ -5,9 +5,8 @@ import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { ApplicationDefinition } from '@loutrejs/loutre'
 import {
-  assertValidCompilation,
-  compileApplication,
-  type ApplicationGraphIR,
+  projectApplicationModel,
+  type ApplicationModelGraphIR,
 } from '@loutrejs/loutre/graph'
 import { build as buildWithEsbuild } from 'esbuild'
 
@@ -62,22 +61,12 @@ async function importApplicationDefinition(
       'Application entry must export an ApplicationDefinition as default or as the named export application.',
     )
   }
+  if (!application.model || application.model.kind !== 'application-model') {
+    throw new Error(
+      'ApplicationDefinition must contain a compiled Application Model.',
+    )
+  }
   return application as ApplicationDefinition
-}
-
-function compileDefinition(
-  definition: ApplicationDefinition,
-): ApplicationGraphIR {
-  return assertValidCompilation(
-    compileApplication({
-      modules: definition.modules,
-      ...(definition.arguments === undefined
-        ? {}
-        : { arguments: definition.arguments }),
-      tasks: definition.tasks,
-      triggers: definition.triggers,
-    }),
-  )
 }
 
 export async function loadApplicationDefinition(
@@ -95,25 +84,7 @@ export async function loadApplicationDefinition(
 
 export async function loadApplicationGraph(
   entry: string,
-): Promise<ApplicationGraphIR> {
-  const directory = await mkdtemp(join(tmpdir(), 'loutre-graph-'))
-  const output = join(directory, 'application.mjs')
-  try {
-    await emitApplication(entry, output, { nodeCompatibility: true })
-    return compileDefinition(await importApplicationDefinition(output))
-  } catch (error) {
-    const graph = (error as { readonly graph?: unknown })?.graph
-    if (
-      graph &&
-      typeof graph === 'object' &&
-      'diagnostics' in graph &&
-      'nodes' in graph &&
-      'edges' in graph
-    ) {
-      return graph as ApplicationGraphIR
-    }
-    throw error
-  } finally {
-    await rm(directory, { recursive: true, force: true })
-  }
+): Promise<ApplicationModelGraphIR> {
+  const definition = await loadApplicationDefinition(entry)
+  return projectApplicationModel(definition.model)
 }

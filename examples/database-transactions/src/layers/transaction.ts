@@ -1,14 +1,14 @@
-import { type, layer, inject } from '@loutrejs/loutre'
+import { defineLayer, inject } from '@loutrejs/loutre'
 import { DATABASE, type InMemoryClient } from '../database/in-memory.js'
 
-export const transaction = layer({
+export const transaction = defineLayer<{
+  readonly transaction: InMemoryClient
+}>({
   name: 'database.transaction',
-  state: type<{ transaction: InMemoryClient }>(),
   factory:
     (database = inject(DATABASE)) =>
-    async (_ctx, next) => {
-      await database.transaction(async (client) => {
+    async (_context, next) =>
+      database.transaction(async (client) => {
         await next({ transaction: client })
-      })
-    },
+      }),
 })

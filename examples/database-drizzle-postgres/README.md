@@ -1,6 +1,6 @@
 # Drizzle PostgreSQL Database Example
 
-Pass Drizzle PostgreSQL's native transaction client and transaction configuration through typed Context without changing their types.
+Pass Drizzle PostgreSQL's native transaction client and transaction configuration through typed HTTP middleware state without changing their types.
 
 From this example directory, start PostgreSQL and the application with:
 
@@ -17,4 +17,4 @@ curl --request POST http://127.0.0.1:3002/users \
   --data '{"name":"Loutre"}'
 ```
 
-`DrizzleTransaction` and `DrizzleTransactionOptions` are inferred from `NodePgDatabase.transaction()`. The transaction client is available only inside the child Pipeline created by `transaction([http.controller])` and is passed explicitly to the Repository. The example does not use `any` or unsafe casts.
+`DrizzleTransaction` and `DrizzleTransactionOptions` are inferred from `NodePgDatabase.transaction()`. The transaction Layer contributes the native Drizzle transaction client with `next(...)`, and routes opt into that Layer through `middlewares`. The Controller receives the client through typed `ctx.state` and passes it explicitly to the Repository. The example does not use `any` or unsafe casts.

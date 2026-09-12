@@ -84,51 +84,42 @@ const mobileRuntimeConnectionPaths = [
   'M 300 0 C 300 30 550 34 550 96',
 ] as const
 
-const codeExample = `import {
-  contract,
-  defineApplication,
-  defineModule,
-  implementation,
-} from '@loutrejs/loutre'
-import { http, validate } from '@loutrejs/loutre/http'
+const codeExample = `import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
-const AppContract = contract([
-  http({
-    greet: {
-      method: 'GET',
-      path: '/{name}',
-      request: {
-        params: {
-          name: z.string().min(2),
-        },
+const AppContract = http.contract({
+  greet: {
+    method: 'GET',
+    path: '/{name}',
+    request: {
+      params: {
+        name: z.string().min(2),
       },
-      responses: {
-        ok: {
-          status: 200,
-          body: z.object({ message: z.string() }),
-        },
-      },
-      pipeline: [validate.params, http.controller],
     },
-  }),
-])
+    responses: {
+      ok: {
+        status: 200,
+        body: z.object({ message: z.string() }),
+      },
+    },
+  },
+})
 
-const AppController = implementation({
-  name: 'AppController',
+const AppHttp = http.implementation({
+  name: 'AppHttp',
   contract: AppContract,
-  protocol: http,
   factory: () => ({
     async greet(ctx) {
       return ctx.response.ok({
-        body: { message: "Hello, " + ctx.params.name + "!" },
+        body: { message: "Hello, " + ctx.input.params.name + "!" },
       })
     },
   }),
 })
 
 const AppModule = defineModule(() => ({
-  implementations: [AppController],
+  executions: [AppHttp],
 }))
 
 export default defineApplication({

@@ -1,6 +1,6 @@
 # Hello HTTP Example
 
-A minimal HTTP API built with Loutre. `GET /{name}` accepts a path parameter and validates it with `validate.params` before the request reaches the Controller.
+A minimal HTTP API built with Loutre. `GET /{name}` declares its path parameter schema in the HTTP Contract, so the HTTP Extension validates `name` before the Controller runs.
 
 From this example directory, start the application with:
 
@@ -24,7 +24,7 @@ curl http://127.0.0.1:3000/Loutre
 curl -i http://127.0.0.1:3000/x
 ```
 
-To validate only the Application Graph and types, run:
+To validate only the Application Model and types, run:
 
 ```sh
 npm run check

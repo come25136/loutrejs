@@ -6,14 +6,14 @@
 
 Loutre は、実行可能な HTTP Contract から OpenAPI 3.2.0 ドキュメントを生成する。
 
-どの HTTP Procedure が実行可能かは Application Graph が決定する。一方、method、path、request schema、response schema、Content-Type、streaming interaction といった HTTP wire-level の情報については、具体的な HTTP Contract を source of truth とする。実行時の schema object 自体は serializable な Graph IR には埋め込まない。
+どの HTTP Execution が実行可能かは canonical Application Model が決定する。一方、method、path、request schema、response schema、Content-Type、streaming interaction といった HTTP wire-level の情報は HTTP Extension が所有する compiled execution を source of truth とする。RuntimeやOpenAPI toolingが生のApplication Definitionを別経路で再解釈してはならない。実行時の schema object 自体は serializable な Graph IR には埋め込まない。
 
-公開 API は `@loutrejs/loutre/openapi` から提供する。
+公開APIは`@loutrejs/loutre/http/openapi`だけから提供する。
 
 ```ts
-import { generateOpenApi } from '@loutrejs/loutre/openapi'
+import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 
-const document = generateOpenApi(application, {
+const document = generateOpenApi(application.model, {
   info: {
     title: 'Example API',
     version: '1.0.0',
@@ -21,7 +21,7 @@ const document = generateOpenApi(application, {
 })
 ```
 
-CLI からも同じ projection を利用できる。
+CLI からも同じ HTTP-owned projection を利用し、loadしたApplicationの`application.model`だけを渡す。CLI自身はHTTP/OpenAPI toolingへ依存してよいが、CoreからHTTPへの依存は作らない。
 
 ```sh
 loutre openapi --entry src/application.ts

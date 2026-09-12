@@ -1,16 +1,17 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type {
-  ApplicationGraphIR,
-  DependencyEdgeIR,
-  DependencyNodeIR,
-  LayerIR,
+  ApplicationModelGraphIR,
+  GraphEdgeIR,
+  GraphNodeIR,
+  JsonValue,
 } from '@loutrejs/loutre/graph'
+import { hasErrorDiagnostics } from '@loutrejs/loutre'
 import {
-  checkCapabilities,
+  checkRuntimeSupport,
   detectRuntimeEngine,
-  nodeRuntimeCapabilities,
-  type RuntimeCapabilities,
+  nodeRuntimeSupport,
+  type RuntimeSupportProfile,
 } from '@loutrejs/loutre/runtime'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
@@ -25,8 +26,8 @@ export interface CliIO {
   readonly stderr: (value: string) => void
 }
 
-const runtimes: Readonly<Record<string, RuntimeCapabilities>> = {
-  node: nodeRuntimeCapabilities,
+const runtimes: Readonly<Record<string, RuntimeSupportProfile>> = {
+  node: nodeRuntimeSupport,
   deno: denoRuntime,
   bun: bunRuntime,
   'cloudflare-workers': cloudflareWorkersRuntime,
@@ -37,6 +38,7 @@ const runtimes: Readonly<Record<string, RuntimeCapabilities>> = {
 const runtimeNames = Object.keys(runtimes)
 const deploymentRuntimes = ['aws-lambda', 'cloudflare-workers', 'deno'] as const
 type DeploymentRuntime = (typeof deploymentRuntimes)[number]
+type GraphSubject = 'modules' | 'di' | 'http' | 'runtime' | 'executions'
 
 export async function runCli(
   args: readonly string[],
@@ -69,8 +71,9 @@ export async function runCli(
       const target = entry()
       if (!target) return 2
       const graph = await loadApplicationGraph(target)
-      if (graph.diagnostics.length === 0) {
-        io.stdout('Loutre Application Graph is valid.')
+      if (!hasErrorDiagnostics(graph.diagnostics)) {
+        if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
+        io.stdout('Loutre Application Model is valid.')
         return 0
       }
       writeDiagnostics(graph, io)
@@ -97,20 +100,20 @@ export async function runCli(
       if (!target) return 2
       const graph = await loadApplicationGraph(target)
       const required = requiredCapabilities(graph)
-      const check = checkCapabilities(required, runtime)
+      const check = checkRuntimeSupport(required, runtime)
       io.stdout(`Runtime: ${runtime.runtime}`)
       io.stdout(`Required: ${check.required.join(', ') || '(none)'}`)
       io.stdout(`Missing: ${check.missing.join(', ') || '(none)'}`)
       renderApplicationSummary(graph, io.stdout)
       renderCapabilityReasons(graph, check.missing, io.stdout)
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
-      return check.ok && graph.diagnostics.length === 0 ? 0 : 1
+      return check.ok && !hasErrorDiagnostics(graph.diagnostics) ? 0 : 1
     }
 
     case 'graph': {
       if (!isGraphSubject(subject)) {
         io.stderr(
-          'graph requires one of: modules, di, contracts, executions, runtime.',
+          'graph requires one of: modules, di, http, executions, runtime.',
         )
         return 2
       }
@@ -130,7 +133,7 @@ export async function runCli(
         renderTextGraph(graph, subject, io.stdout)
       }
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
-      return graph.diagnostics.length === 0 ? 0 : 1
+      return hasErrorDiagnostics(graph.diagnostics) ? 1 : 0
     }
 
     case 'explain': {
@@ -146,7 +149,7 @@ export async function runCli(
         return 1
       }
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
-      return graph.diagnostics.length === 0 ? 0 : 1
+      return hasErrorDiagnostics(graph.diagnostics) ? 1 : 0
     }
 
     case 'build': {
@@ -166,18 +169,19 @@ export async function runCli(
       }
       const applicationEntry = resolve(io.cwd, subject)
       const graph = await loadApplicationGraph(applicationEntry)
-      if (graph.diagnostics.length > 0) {
+      if (hasErrorDiagnostics(graph.diagnostics)) {
         writeDiagnostics(graph, io)
         return 1
       }
-      if (deploymentRuntime && !hasHttpExecution(graph)) {
+      if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
+      if (deploymentRuntime && !hasHostNamespace(graph, 'http')) {
         io.stderr(
           `Runtime ${deploymentRuntime} entry generation requires an HTTP-capable Application.`,
         )
         return 1
       }
       if (deploymentRuntime) {
-        const compatibility = checkCapabilities(
+        const compatibility = checkRuntimeSupport(
           requiredCapabilities(graph),
           runtimes[deploymentRuntime]!,
         )
@@ -220,8 +224,13 @@ function parseDeploymentRuntime(value: string): DeploymentRuntime | undefined {
   return deploymentRuntimes.find((runtime) => runtime === value)
 }
 
-function hasHttpExecution(graph: ApplicationGraphIR): boolean {
-  return graph.pipelines.some((pipeline) => pipeline.protocol === 'http')
+function hasHostNamespace(
+  graph: ApplicationModelGraphIR,
+  namespace: string,
+): boolean {
+  return graph.executions.some(
+    (execution) => execution.extension?.hostNamespace === namespace,
+  )
 }
 
 function renderDeploymentEntry(runtime: DeploymentRuntime): string {
@@ -253,33 +262,30 @@ function renderDeploymentEntry(runtime: DeploymentRuntime): string {
   }
 }
 
-function isGraphSubject(
-  value: string | undefined,
-): value is 'modules' | 'di' | 'contracts' | 'runtime' | 'executions' {
+function isGraphSubject(value: string | undefined): value is GraphSubject {
   return (
     value === 'modules' ||
     value === 'di' ||
-    value === 'contracts' ||
+    value === 'http' ||
     value === 'runtime' ||
     value === 'executions'
   )
 }
 
-function writeDiagnostics(graph: ApplicationGraphIR, io: CliIO): void {
+function writeDiagnostics(graph: ApplicationModelGraphIR, io: CliIO): void {
   for (const diagnostic of graph.diagnostics) {
     io.stderr(`${diagnostic.code} ${diagnostic.path}\n${diagnostic.message}`)
   }
 }
 
 function graphData(
-  graph: ApplicationGraphIR,
-  subject: 'modules' | 'di' | 'contracts' | 'runtime' | 'executions',
+  graph: ApplicationModelGraphIR,
+  subject: GraphSubject,
 ): unknown {
   switch (subject) {
     case 'modules':
       return {
-        modules: graph.modules,
-        arguments: graph.arguments,
+        modules: graph.modules.map((module) => moduleData(graph, module)),
         diagnostics: graph.diagnostics,
       }
     case 'di':
@@ -288,73 +294,65 @@ function graphData(
         edges: graph.edges,
         diagnostics: graph.diagnostics,
       }
-    case 'contracts':
+    case 'http':
       return {
-        contracts: graph.contracts,
-        pipelines: graph.pipelines,
-        implementations: graph.implementations,
+        executions: httpExecutions(graph),
+        routes: httpRoutes(graph),
         diagnostics: graph.diagnostics,
       }
     case 'runtime':
       return {
-        capabilities: graph.capabilities,
-        hostCapabilities: graph.hostCapabilities,
+        capabilities: requiredCapabilities(graph),
         diagnostics: graph.diagnostics,
       }
     case 'executions':
       return {
-        tasks: graph.tasks,
         executions: graph.executions,
-        queues: graph.queues,
         diagnostics: graph.diagnostics,
       }
   }
 }
 
 function renderTextGraph(
-  graph: ApplicationGraphIR,
-  subject: 'modules' | 'di' | 'contracts' | 'runtime' | 'executions',
+  graph: ApplicationModelGraphIR,
+  subject: GraphSubject,
   write: (value: string) => void,
 ): void {
   if (subject === 'modules') {
     for (const module of graph.modules) {
+      const data = moduleData(graph, module)
       write(
         module.name === undefined ? module.id : `${module.name} [${module.id}]`,
       )
-      if (module.description !== undefined)
-        write(`  description: ${module.description}`)
-      write(`  imports: ${module.imports.join(', ') || '(none)'}`)
-      write(`  environment: ${module.environment.join(', ') || '(none)'}`)
-      write(`  providers: ${module.providers.join(', ') || '(none)'}`)
-      write(`  exports: ${module.exports.join(', ') || '(none)'}`)
-      write(`  lifecycle: ${module.lifecycle.join(', ') || '(none)'}`)
-      write(`  requires: ${module.requires.join(', ') || '(none)'}`)
+      const description = stringAttribute(module, 'description')
+      if (description !== undefined) write(`  description: ${description}`)
+      write(`  imports: ${data.imports.join(', ') || '(none)'}`)
+      write(`  providers: ${data.providers.join(', ') || '(none)'}`)
+      write(`  executions: ${data.executions.join(', ') || '(none)'}`)
     }
-    if (graph.arguments) write(`Application Arguments: ${graph.arguments.name}`)
     return
   }
 
-  if (subject === 'contracts') {
-    for (const pipeline of graph.pipelines) {
-      write(`${pipeline.contract}.${pipeline.procedure} [${pipeline.protocol}]`)
-      renderLayerText(pipeline.layers, write)
+  if (subject === 'http') {
+    for (const route of httpRoutes(graph)) {
+      write(`${route.execution}.${route.name} [http]`)
+      write(`  ${route.method} ${route.path}`)
     }
+    if (httpRoutes(graph).length === 0) write('(no HTTP executions)')
     return
   }
 
   if (subject === 'runtime') {
     for (const capability of requiredCapabilities(graph)) write(capability)
-    for (const capability of graph.hostCapabilities) write(`host:${capability}`)
+    if (requiredCapabilities(graph).length === 0) write('(none)')
     return
   }
 
   if (subject === 'executions') {
-    for (const task of graph.tasks) {
-      write(`task: ${task.name}${task.public ? ' [public]' : ' [internal]'}`)
+    for (const execution of graph.executions) {
+      write(`${execution.executionKind}: ${execution.name ?? execution.id}`)
     }
-    for (const execution of graph.executions)
-      write(`${execution.kind}: ${execution.id}`)
-    for (const queue of graph.queues) write(`queue: ${queue.name}`)
+    if (graph.executions.length === 0) write('(no executions)')
     return
   }
 
@@ -362,36 +360,34 @@ function renderTextGraph(
 }
 
 function renderDiText(
-  graph: ApplicationGraphIR,
+  graph: ApplicationModelGraphIR,
   write: (value: string) => void,
 ): void {
-  const byId = new Map(graph.nodes.map((node) => [node.id, node]))
-  const outgoing = new Map<string, DependencyEdgeIR[]>()
-  const incoming = new Set(graph.edges.map((edge) => edge.to))
-  for (const edge of graph.edges) {
-    const current = outgoing.get(edge.from) ?? []
-    current.push(edge)
-    outgoing.set(edge.from, current)
-  }
+  const relevant = graph.nodes.filter(
+    (node) => node.kind === 'provider' || node.kind === 'execution',
+  )
+  const ids = new Set(relevant.map((node) => node.id))
+  const edges = graph.edges.filter(
+    (edge) => edge.kind === 'injects' && ids.has(edge.from) && ids.has(edge.to),
+  )
+  const byId = new Map(relevant.map((node) => [node.id, node]))
+  const outgoing = groupEdges(edges)
+  const incoming = new Set(edges.map((edge) => edge.to))
+  const roots = relevant.filter(
+    (node) =>
+      !incoming.has(node.id) && (outgoing.get(node.id)?.length ?? 0) > 0,
+  )
+  const rendered = new Set<string>()
 
-  const renderedRoots = new Set<string>()
   const render = (id: string, prefix: string, lineage: readonly string[]) => {
-    const edges = outgoing.get(id) ?? []
-    edges.forEach((edge, index) => {
+    for (const [index, edge] of (outgoing.get(id) ?? []).entries()) {
       const child = byId.get(edge.to)
-      if (!child) return
-      const last = index === edges.length - 1
+      if (!child) continue
+      const last = index === (outgoing.get(id)?.length ?? 0) - 1
       const cycle = lineage.includes(edge.to)
-      const condition = edge.condition
-        ? ` [${edge.condition.source}:${edge.condition.contract}.${edge.condition.key}=${String(edge.condition.equals)}]`
-        : ''
-      const unresolved = graph.diagnostics.some(
-        (diagnostic) =>
-          diagnostic.code === 'LUTRE_DI_UNRESOLVED' &&
-          diagnostic.message.includes(child.label),
-      )
+      rendered.add(child.id)
       write(
-        `${prefix}${last ? '└──' : '├──'}${condition} ${nodeLabel(child)}${cycle ? ' ↺ cycle' : unresolved ? ' ✗ UNRESOLVED' : ''}`,
+        `${prefix}${last ? '└──' : '├──'} ${nodeLabel(child)}${cycle ? ' ↺ cycle' : ''}`,
       )
       if (!cycle) {
         render(edge.to, `${prefix}${last ? '    ' : '│   '}`, [
@@ -399,38 +395,26 @@ function renderDiText(
           edge.to,
         ])
       }
-    })
+    }
   }
 
-  const roots = graph.nodes.filter(
-    (node) =>
-      !incoming.has(node.id) && (outgoing.get(node.id)?.length ?? 0) > 0,
-  )
   for (const root of roots) {
-    renderedRoots.add(root.id)
+    rendered.add(root.id)
     write(nodeLabel(root))
     render(root.id, '', [root.id])
   }
-  for (const node of graph.nodes) {
-    if (
-      renderedRoots.has(node.id) ||
-      (outgoing.get(node.id)?.length ?? 0) === 0
-    )
-      continue
+  for (const node of relevant) {
+    if (rendered.has(node.id)) continue
+    rendered.add(node.id)
     write(nodeLabel(node))
     render(node.id, '', [node.id])
   }
-  if (graph.nodes.length === 0) write('(no DI nodes)')
-}
-
-function nodeLabel(node: DependencyNodeIR): string {
-  const attributes = [node.kind, node.scope].filter(Boolean).join(', ')
-  return `${node.label}${attributes ? ` [${attributes}]` : ''}`
+  if (relevant.length === 0) write('(no DI nodes)')
 }
 
 function renderMermaidGraph(
-  graph: ApplicationGraphIR,
-  subject: 'modules' | 'di' | 'contracts' | 'runtime' | 'executions',
+  graph: ApplicationModelGraphIR,
+  subject: GraphSubject,
 ): string {
   const lines = ['flowchart LR']
   const node = (id: string, label: string) =>
@@ -438,133 +422,81 @@ function renderMermaidGraph(
   const edge = (from: string, to: string, label?: string) =>
     lines.push(`  ${from} -->${label ? `|"${mermaidText(label)}"|` : ''} ${to}`)
 
-  if (subject === 'di') {
-    const ids = new Map(
-      graph.nodes.map((candidate, index) => [candidate.id, `n${index}`]),
-    )
-    for (const candidate of graph.nodes)
-      node(ids.get(candidate.id)!, nodeLabel(candidate))
-    for (const dependency of graph.edges) {
-      const condition = dependency.condition
-        ? `${dependency.kind}: ${dependency.condition.source}:${dependency.condition.contract}.${dependency.condition.key}=${String(dependency.condition.equals)}`
-        : `${dependency.kind}/${dependency.source}`
-      edge(
-        ids.get(dependency.from) ?? mermaidId(dependency.from),
-        ids.get(dependency.to) ?? mermaidId(dependency.to),
-        condition,
-      )
-    }
-  } else if (subject === 'modules') {
-    const ids = new Map(
-      graph.modules.map((module, index) => [module.id, `m${index}`]),
-    )
-    for (const module of graph.modules) {
-      node(ids.get(module.id)!, module.name ?? module.description ?? module.id)
-      for (const imported of module.imports) {
-        edge(ids.get(module.id)!, ids.get(imported) ?? mermaidId(imported))
-      }
-    }
-    if (graph.arguments)
-      node('application_arguments', `Arguments: ${graph.arguments.name}`)
-  } else if (subject === 'contracts') {
-    graph.pipelines.forEach((pipeline, pipelineIndex) => {
-      const procedureId = `p${pipelineIndex}`
-      node(
-        procedureId,
-        `${pipeline.contract}.${pipeline.procedure} [${pipeline.protocol}]`,
-      )
-      renderLayerMermaid(
-        pipeline.layers,
-        `p${pipelineIndex}`,
-        procedureId,
-        node,
-        edge,
-      )
+  if (subject === 'http') {
+    httpRoutes(graph).forEach((route, index) => {
+      node(`r${index}`, `${route.method} ${route.path}`)
+      node(`e${index}`, route.execution)
+      edge(`e${index}`, `r${index}`, route.name)
     })
-  } else if (subject === 'executions') {
-    for (const queue of graph.queues) node(mermaidId(queue.id), queue.name)
-    for (const task of graph.tasks) node(mermaidId(task.id), task.name)
-    for (const execution of graph.executions) {
-      const id = mermaidId(execution.id)
-      node(
-        id,
-        `${execution.kind}: ${'name' in execution ? execution.name : execution.procedure}`,
-      )
-      if (execution.kind === 'trigger') {
-        if (execution.trigger === 'queue-consumer') {
-          edge(mermaidId(`queue:${execution.queue}`), id, 'consume')
-        }
-        edge(id, mermaidId(`task:${execution.task}`), 'trigger')
-      }
-    }
-  } else {
-    node('application', 'Application')
-    requiredCapabilities(graph).forEach((capability, index) => {
-      const capabilityId = `capability${index}`
-      node(capabilityId, capability)
-      edge('application', capabilityId)
-    })
+    return lines.join('\n')
   }
 
+  const selected = selectNodes(graph, subject)
+  const selectedIds = new Set(selected.map((candidate) => candidate.id))
+  const ids = new Map(
+    selected.map((candidate, index) => [candidate.id, `n${index}`]),
+  )
+  for (const candidate of selected) {
+    node(ids.get(candidate.id)!, nodeLabel(candidate))
+  }
+  for (const dependency of graph.edges) {
+    if (!selectedIds.has(dependency.from) || !selectedIds.has(dependency.to)) {
+      continue
+    }
+    edge(ids.get(dependency.from)!, ids.get(dependency.to)!, dependency.kind)
+  }
   return lines.join('\n')
 }
 
 function renderExplanation(
-  graph: ApplicationGraphIR,
+  graph: ApplicationModelGraphIR,
   subject: string,
   write: (value: string) => void,
 ): boolean {
   const node = graph.nodes.find(
-    (candidate) => candidate.label === subject || candidate.id === subject,
+    (candidate) => candidate.name === subject || candidate.id === subject,
   )
-  const pipelines = graph.pipelines.filter(
-    (pipeline) =>
-      `${pipeline.contract}.${pipeline.procedure}` === subject ||
-      pipeline.contract === subject,
-  )
-  if (!node && pipelines.length === 0) return false
+  if (!node) return false
 
-  for (const pipeline of pipelines) {
-    write(`${pipeline.contract}.${pipeline.procedure} [${pipeline.protocol}]`)
-    renderLayerText(pipeline.layers, write, '')
-  }
-
-  if (node) {
-    write(node.label)
-    write(`kind: ${node.kind}`)
-    if (node.scope) write(`scope: ${node.scope}`)
-    if (node.module) write(`managed by: ${node.module}`)
-    if (node.visibility) write(`visibility: ${node.visibility}`)
-    const edges = graph.edges.filter((edge) => edge.from === node.id)
-    write('dependencies:')
-    if (edges.length === 0) write('  (none)')
-    for (const edge of edges) {
-      const dependency = graph.nodes.find(
-        (candidate) => candidate.id === edge.to,
-      )
-      if (!dependency) continue
-      write(`  ${dependency.label}`)
-      write(`    source: ${edge.kind}/${edge.source}`)
-      if (dependency.scope) write(`    scope: ${dependency.scope}`)
-      if (dependency.module) write(`    provided by: ${dependency.module}`)
-      if (dependency.visibility)
-        write(`    visibility: ${dependency.visibility}`)
+  write(nodeLabel(node))
+  write(`kind: ${node.kind}`)
+  if (node.module) write(`managed by: ${node.module}`)
+  if (node.executionKind) write(`execution: ${node.executionKind}`)
+  if (node.extension) write(`extension: ${node.extension.name}`)
+  for (const [key, value] of Object.entries(node.attributes ?? {})) {
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    ) {
+      write(`${key}: ${String(value)}`)
     }
-    write('dependency graph:')
-    renderDependencyTree(graph, node.id, write, '  ', new Set([node.id]))
   }
-
+  const edges = graph.edges.filter((edge) => edge.from === node.id)
+  write('dependencies:')
+  const dependencies = edges.filter((edge) => edge.kind === 'injects')
+  if (dependencies.length === 0) write('  (none)')
+  for (const dependency of dependencies) {
+    const target = graph.nodes.find(
+      (candidate) => candidate.id === dependency.to,
+    )
+    if (target) write(`  ${nodeLabel(target)}`)
+  }
+  write('dependency graph:')
+  renderDependencyTree(graph, node.id, write, '  ', new Set([node.id]))
   return true
 }
 
 function renderDependencyTree(
-  graph: ApplicationGraphIR,
+  graph: ApplicationModelGraphIR,
   nodeId: string,
   write: (value: string) => void,
   indent: string,
   lineage: ReadonlySet<string>,
 ): void {
-  const edges = graph.edges.filter((edge) => edge.from === nodeId)
+  const edges = graph.edges.filter(
+    (edge) => edge.from === nodeId && edge.kind === 'injects',
+  )
   if (edges.length === 0) {
     write(`${indent}(none)`)
     return
@@ -573,7 +505,7 @@ function renderDependencyTree(
     const dependency = graph.nodes.find((candidate) => candidate.id === edge.to)
     if (!dependency) continue
     const cycle = lineage.has(dependency.id)
-    write(`${indent}${dependency.label}${cycle ? ' (cycle)' : ''}`)
+    write(`${indent}${nodeLabel(dependency)}${cycle ? ' (cycle)' : ''}`)
     if (cycle) continue
     renderDependencyTree(
       graph,
@@ -586,85 +518,153 @@ function renderDependencyTree(
 }
 
 function renderApplicationSummary(
-  graph: ApplicationGraphIR,
+  graph: ApplicationModelGraphIR,
   write: (value: string) => void,
   target?: string,
 ): void {
   write('Application:')
   if (target) write(`  Target: ${target}`)
-  write(`  Graph: ${graph.diagnostics.length === 0 ? 'valid' : 'invalid'}`)
+  write(
+    `  Graph: ${hasErrorDiagnostics(graph.diagnostics) ? 'invalid' : 'valid'}`,
+  )
   write(`  Modules: ${graph.modules.length}`)
   write(`  Providers: ${graph.providers.length}`)
-  write(`  Implementations: ${graph.implementations.length}`)
   write(`  Executions: ${graph.executions.length}`)
-  write(`  Tasks: ${graph.tasks.length}`)
-  write(`  Queues: ${graph.queues.length}`)
   write(`  Diagnostics: ${graph.diagnostics.length}`)
 }
 
 function renderCapabilityReasons(
-  graph: ApplicationGraphIR,
+  graph: ApplicationModelGraphIR,
   capabilities: readonly string[],
   write: (value: string) => void,
 ): void {
   if (capabilities.length === 0) return
   write('Capability reasons:')
   for (const capability of capabilities) {
-    const requiredBy = [
-      ...new Set(
-        graph.capabilities
-          .filter((candidate) => candidate.name === capability)
-          .map((candidate) => candidate.requiredBy),
-      ),
-    ]
+    const requiredBy = graph.executions
+      .filter((execution) => execution.capabilities?.includes(capability))
+      .map((execution) => execution.name ?? execution.id)
     write(`  ${capability}: ${requiredBy.join(', ') || '(unknown)'}`)
   }
 }
 
-function renderLayerText(
-  layers: readonly LayerIR[],
-  write: (value: string) => void,
-  indent = '  ',
-): void {
-  for (const current of layers) {
-    write(`${indent}${current.index + 1} ${current.name} ${current.kind}`)
-    if (current.pipeline)
-      renderLayerText(current.pipeline, write, `${indent}  `)
+function moduleData(graph: ApplicationModelGraphIR, module: GraphNodeIR) {
+  const owned = graph.edges.filter(
+    (edge) => edge.from === module.id && edge.kind === 'owns',
+  )
+  const byId = new Map(graph.nodes.map((node) => [node.id, node]))
+  return {
+    id: module.id,
+    name: module.name,
+    description: stringAttribute(module, 'description'),
+    imports: graph.edges
+      .filter((edge) => edge.from === module.id && edge.kind === 'imports')
+      .map((edge) => byId.get(edge.to)?.name ?? edge.to),
+    providers: owned
+      .map((edge) => byId.get(edge.to))
+      .filter((node): node is GraphNodeIR => node?.kind === 'provider')
+      .map(nodeLabel),
+    executions: owned
+      .map((edge) => byId.get(edge.to))
+      .filter((node): node is GraphNodeIR => node?.kind === 'execution')
+      .map(nodeLabel),
   }
 }
 
-function renderLayerMermaid(
-  layers: readonly LayerIR[],
-  idPrefix: string,
-  parentId: string,
-  node: (id: string, label: string) => void,
-  edge: (from: string, to: string, label?: string) => void,
-): string {
-  let previous = parentId
-  for (const current of layers) {
-    const currentId = `${idPrefix}l${current.index}`
-    node(currentId, `${current.index + 1} ${current.name}`)
-    edge(previous, currentId)
-    if (current.pipeline) {
-      renderLayerMermaid(
-        current.pipeline,
-        `${currentId}c`,
-        currentId,
-        node,
-        edge,
+interface HttpRouteProjection {
+  readonly execution: string
+  readonly name: string
+  readonly method: string
+  readonly path: string
+  readonly responses?: JsonValue
+}
+
+function httpExecutions(
+  graph: ApplicationModelGraphIR,
+): readonly GraphNodeIR[] {
+  return graph.executions.filter(
+    (execution) => execution.extension?.hostNamespace === 'http',
+  )
+}
+
+function httpRoutes(graph: ApplicationModelGraphIR): HttpRouteProjection[] {
+  return httpExecutions(graph).flatMap((execution) => {
+    const metadata: unknown = execution.extension?.metadata
+    if (!isRecord(metadata)) return []
+    const routes: unknown = metadata.routes
+    if (!Array.isArray(routes)) return []
+    return routes.flatMap((route: unknown) => {
+      if (!isRecord(route)) return []
+      const name = typeof route.name === 'string' ? route.name : undefined
+      const method = typeof route.method === 'string' ? route.method : undefined
+      const path = typeof route.path === 'string' ? route.path : undefined
+      if (!name || !method || !path) return []
+      return [
+        {
+          execution: execution.name ?? execution.id,
+          name,
+          method,
+          path,
+          ...(route.responses === undefined
+            ? {}
+            : { responses: route.responses }),
+        },
+      ]
+    })
+  })
+}
+
+function selectNodes(
+  graph: ApplicationModelGraphIR,
+  subject: Exclude<GraphSubject, 'http'>,
+): readonly GraphNodeIR[] {
+  switch (subject) {
+    case 'modules':
+      return graph.modules
+    case 'di':
+      return graph.nodes.filter(
+        (node) => node.kind === 'provider' || node.kind === 'execution',
       )
-    }
-    previous = currentId
+    case 'executions':
+      return graph.executions
+    case 'runtime':
+      return graph.nodes.filter(
+        (node) =>
+          node.kind === 'framework' &&
+          node.attributes?.frameworkKind === 'runtime-capability',
+      )
   }
-  return previous
 }
 
-function requiredCapabilities(graph: ApplicationGraphIR): string[] {
-  return [...new Set(graph.capabilities.map(({ name }) => name))]
+function groupEdges(edges: readonly GraphEdgeIR[]): Map<string, GraphEdgeIR[]> {
+  const grouped = new Map<string, GraphEdgeIR[]>()
+  for (const edge of edges) {
+    const current = grouped.get(edge.from) ?? []
+    current.push(edge)
+    grouped.set(edge.from, current)
+  }
+  return grouped
 }
 
-function mermaidId(value: string): string {
-  return `generated_${value.replace(/[^A-Za-z0-9_]/gu, '_')}`
+function nodeLabel(node: GraphNodeIR): string {
+  return node.name ?? node.id
+}
+
+function stringAttribute(node: GraphNodeIR, name: string): string | undefined {
+  const value = node.attributes?.[name]
+  return typeof value === 'string' ? value : undefined
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function requiredCapabilities(graph: ApplicationModelGraphIR): string[] {
+  return [
+    ...new Set(
+      graph.executions.flatMap((execution) => execution.capabilities ?? []),
+    ),
+  ]
 }
 
 function mermaidText(value: string): string {
@@ -700,7 +700,7 @@ function helpText(): string {
     'Loutre CLI',
     '  loutre check --entry <entry>',
     '  loutre doctor [--runtime node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
-    '  loutre graph modules|di|contracts|executions|runtime --entry <entry> [--format text|json|mermaid]',
+    '  loutre graph modules|di|http|executions|runtime --entry <entry> [--format text|json|mermaid]',
     '  loutre explain <target> --entry <entry>',
     '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',
     '',

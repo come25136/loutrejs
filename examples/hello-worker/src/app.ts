@@ -1,7 +1,8 @@
-import { defineApplication } from '@loutrejs/loutre'
+import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { heartbeat } from './worker/heartbeat.js'
 
-export default defineApplication({
-  modules: [],
-  triggers: [heartbeat],
-})
+const WorkerModule = defineModule(() => ({
+  executions: [heartbeat],
+}))
+
+export default defineApplication({ modules: [WorkerModule()] })

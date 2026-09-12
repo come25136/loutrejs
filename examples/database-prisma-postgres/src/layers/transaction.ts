@@ -1,14 +1,15 @@
-import { type, layer, inject } from '@loutrejs/loutre'
+import { defineLayer, inject } from '@loutrejs/loutre'
 import { Prisma } from '../generated/prisma/client.js'
 import { PrismaDatabase, type PrismaTransaction } from '../database/prisma.js'
 
-export const transaction = layer({
+export const transaction = defineLayer<{
+  readonly transaction: PrismaTransaction
+}>({
   name: 'database.transaction',
-  state: type<{ transaction: PrismaTransaction }>(),
   factory:
     (database = inject(PrismaDatabase)) =>
-    async (_ctx, next) => {
-      await database.transaction(
+    async (_context, next) =>
+      database.transaction(
         async (client) => {
           await next({ transaction: client })
         },
@@ -17,6 +18,5 @@ export const transaction = layer({
           maxWait: 5000,
           timeout: 10000,
         },
-      )
-    },
+      ),
 })

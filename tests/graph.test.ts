@@ -1,4 +1,7 @@
 import {
+  bootstrapApplication,
+  buildApplicationModel,
+  defineApplication,
   defineEnv,
   defineModule,
   hook,
@@ -6,31 +9,32 @@ import {
   provide,
   token,
 } from '@loutrejs/loutre'
-import { compileApplication } from '@loutrejs/loutre/graph'
 import { z } from 'zod'
 
-describe('Runtime Application Graph', () => {
-  it('managed classのinject edgeとscopeをGraph Probeで取得する', () => {
+describe('Application Model graph', () => {
+  it('managed classのinject edgeとscopeをModelに保持する', () => {
     class Repository {}
     class Service {
       constructor(readonly repository = inject(Repository)) {}
     }
     const Module = defineModule(() => ({ providers: [Repository, Service] }))
+    const model = buildApplicationModel({ modules: [Module()] })
+    const service = model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === Service,
+    )
+    const repository = model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === Repository,
+    )
 
-    const { graph, diagnostics } = compileApplication({ modules: [Module()] })
-    expect(diagnostics).toEqual([])
-    const service = graph.nodes.find(({ label }) => label === 'Service')
-    const repository = graph.nodes.find(({ label }) => label === 'Repository')
-    expect(service).toEqual(expect.objectContaining({ scope: 'application' }))
-    expect(graph.edges).toContainEqual({
+    expect(service).toMatchObject({ provider: { scope: 'application' } })
+    expect(model.edges).toContainEqual({
       from: service?.id,
       to: repository?.id,
-      kind: 'inject',
-      source: 'probed',
+      kind: 'injects',
     })
   })
 
-  it('conditional全候補をprobeし未選択branchのbroken dependencyを診断する', () => {
+  it('conditional全候補のdependencyを収集し未解決を診断する', () => {
     const MISSING = token<unknown>('graph.missing')
     const STORAGE = token<unknown>('graph.storage')
     class Env extends defineEnv(
@@ -41,48 +45,26 @@ describe('Runtime Application Graph', () => {
       constructor(readonly missing = inject(MISSING)) {}
     }
     const Module = defineModule(() => ({
+      environment: [Env],
       providers: [
-        provide(Env).useValue(new Env({ DRIVER: 'memory' })),
         provide(STORAGE).select(Env.key('DRIVER'), {
           memory: MemoryStorage,
           broken: BrokenStorage,
         }),
       ],
     }))
-
-    const { graph, diagnostics } = compileApplication({ modules: [Module()] })
-    expect(graph.edges).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'conditional',
-          condition: {
-            source: 'environment',
-            contract: 'Env',
-            key: 'DRIVER',
-            equals: 'memory',
-          },
-        }),
-        expect.objectContaining({
-          kind: 'conditional',
-          condition: {
-            source: 'environment',
-            contract: 'Env',
-            key: 'DRIVER',
-            equals: 'broken',
-          },
-        }),
-        expect.objectContaining({ kind: 'inject', source: 'probed' }),
-      ]),
+    const model = buildApplicationModel({ modules: [Module()] })
+    const storage = model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === STORAGE,
     )
-    expect(diagnostics).toContainEqual(
-      expect.objectContaining({
-        code: 'LUTRE_DI_UNRESOLVED',
-        path: 'BrokenStorage',
-      }),
+
+    expect(storage).toMatchObject({ dependencies: [MISSING] })
+    expect(model.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_PROVIDER_DEPENDENCY_MISSING' }),
     )
   })
 
-  it('Probeではlifecycleを実行せずdeclared edgeだけを記録する', () => {
+  it('Model構築ではlifecycleを実行せずdeclared dependency edgeだけを記録する', () => {
     const VALUE = token<string>('graph.lifecycle.value')
     let executions = 0
     const Module = defineModule(() => ({
@@ -96,68 +78,42 @@ describe('Runtime Application Graph', () => {
         }),
       },
     }))
+    const model = buildApplicationModel({ modules: [Module()] })
 
-    const { graph } = compileApplication({ modules: [Module()] })
     expect(executions).toBe(0)
-    expect(graph.edges).toContainEqual(
-      expect.objectContaining({
-        kind: 'lifecycle',
-        source: 'declared',
-      }),
+    expect(model.edges).toContainEqual(
+      expect.objectContaining({ kind: 'injects' }),
     )
   })
 
-  it('factory dependencyとDI cycleをfirst-class edge/diagnosticで表す', () => {
+  it('DI cycleとasync factoryはKernel初期化で拒否する', async () => {
     const A_TOKEN = token<unknown>('graph.cycle.a')
     const B_TOKEN = token<unknown>('graph.cycle.b')
-    const FACTORY = token<unknown>('graph.factory')
+    const ASYNC = token<unknown>('graph.factory.async')
     class A {
       constructor(readonly b = inject(B_TOKEN)) {}
     }
     class B {
       constructor(readonly a = inject(A_TOKEN)) {}
     }
-    const Module = defineModule(() => ({
-      providers: [
-        provide(A_TOKEN).useClass(A),
-        provide(B_TOKEN).useClass(B),
-        provide(FACTORY).useFactory({
-          inject: [A_TOKEN],
-          use: (value) => value,
-        }),
-      ],
+    const CycleModule = defineModule(() => ({
+      providers: [provide(A_TOKEN).useClass(A), provide(B_TOKEN).useClass(B)],
     }))
-
-    const { graph, diagnostics } = compileApplication({ modules: [Module()] })
-    expect(graph.edges).toContainEqual(
-      expect.objectContaining({
-        kind: 'factory',
-        source: 'declared',
+    await expect(
+      bootstrapApplication({
+        application: defineApplication({ modules: [CycleModule()] }),
       }),
-    )
-    expect(diagnostics).toContainEqual(
-      expect.objectContaining({ code: 'LUTRE_DI_CYCLE' }),
-    )
-  })
+    ).rejects.toThrow('LUTRE_DI_CYCLE')
 
-  it('未解決のdeclared dependencyとasync factoryをGraph validationで拒否する', () => {
-    const MISSING = token<unknown>('graph.factory.missing')
-    const VALUE = token<unknown>('graph.factory.async')
-    const Module = defineModule(() => ({
+    const AsyncModule = defineModule(() => ({
       providers: [
-        provide(VALUE).useFactory({
-          inject: [MISSING],
-          use: (async () => ({})) as never,
-        }),
+        provide(ASYNC).useFactory({ use: async () => ({}) as unknown }),
       ],
     }))
-
-    const { diagnostics } = compileApplication({ modules: [Module()] })
-    expect(diagnostics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ code: 'LUTRE_DI_UNRESOLVED' }),
-        expect.objectContaining({ code: 'LUTRE_DI_ASYNC_FACTORY' }),
-      ]),
-    )
+    await expect(
+      bootstrapApplication({
+        application: defineApplication({ modules: [AsyncModule()] }),
+      }),
+    ).rejects.toThrow('LUTRE_DI_ASYNC_FACTORY')
   })
 })

@@ -1,15 +1,13 @@
-import { type, layer, inject } from '@loutrejs/loutre'
+import { defineLayer, inject } from '@loutrejs/loutre'
 import type { PoolClient } from 'pg'
 import { PostgresDatabase } from '../database/postgres.js'
 
-export const transaction = layer({
+export const transaction = defineLayer<{ readonly transaction: PoolClient }>({
   name: 'database.transaction',
-  state: type<{ transaction: PoolClient }>(),
   factory:
     (database = inject(PostgresDatabase)) =>
-    async (_ctx, next) => {
-      await database.transaction(async (client) => {
+    async (_context, next) =>
+      database.transaction(async (client) => {
         await next({ transaction: client })
-      })
-    },
+      }),
 })

@@ -1,4 +1,5 @@
-import { inject, task } from '@loutrejs/loutre'
+import { inject } from '@loutrejs/loutre'
+import { task } from '@loutrejs/tasks'
 import { AppArgs } from '../config/args.js'
 
 export const hello = task<void, string>({

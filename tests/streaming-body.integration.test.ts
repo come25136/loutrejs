@@ -1,16 +1,15 @@
-import { bootstrap } from '@loutrejs/loutre/host'
-import { defineApplication } from '@loutrejs/loutre'
 import {
-  contract,
+  bootstrapApplication,
+  defineApplication,
   defineModule,
-  implementation,
   type StandardSchemaV1,
 } from '@loutrejs/loutre'
-import { http, validate } from '@loutrejs/loutre/http'
+import { bindHttpServer, http, validate } from '@loutrejs/loutre/http'
 import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
 import { silentLogger } from './helpers/silent-logger.js'
 import { reserveHttpPort } from './helpers/http-server.js'
+
 const BodyStreamSchema: StandardSchemaV1<
   unknown,
   ReadableStream<Uint8Array>
@@ -24,34 +23,31 @@ const BodyStreamSchema: StandardSchemaV1<
         : { issues: [{ message: 'ReadableStreamが必要です' }] },
   },
 }
+
 describe('streaming validate.body', () => {
   it('binary bodyをbufferせずStandard SchemaからControllerへ1回だけ渡す', async () => {
-    const Contract = contract([
-      http({
-        upload: {
-          method: 'POST',
-          path: '/upload',
-          request: {
-            headers: z.object({
-              'content-type': z.literal('application/octet-stream'),
-            }),
-            body: BodyStreamSchema,
-          },
-          responses: {
-            accepted: {
-              status: 202,
-              body: z.object({ bytes: z.number() }),
-            },
-          },
-          pipeline: [validate.headers, validate.body, http.controller],
+    const Contract = http.contract({
+      upload: {
+        method: 'POST',
+        path: '/upload',
+        request: {
+          headers: z.object({
+            'content-type': z.literal('application/octet-stream'),
+          }),
+          body: BodyStreamSchema,
         },
-      }),
-    ])
-    const Implementation = implementation({
+        middlewares: [validate.body],
+        responses: {
+          accepted: {
+            status: 202,
+            body: z.object({ bytes: z.number() }),
+          },
+        },
+      },
+    })
+    const Implementation = http.implementation({
       name: 'Implementation',
       contract: Contract,
-      protocol: http,
-
       factory: () => ({
         async upload(ctx) {
           const reader = ctx.input.body.getReader()
@@ -66,23 +62,31 @@ describe('streaming validate.body', () => {
       }),
     })
     const Module = defineModule(() => ({
-      implementations: [Implementation],
+      executions: [Implementation],
     }))
     const definition = defineApplication({
       modules: [Module()],
       logger: silentLogger,
     })
-    const application = bootstrap({ application: definition })
-    const response = await application.fetch(
-      new Request('https://fixture.test/upload', {
-        method: 'POST',
-        headers: { 'content-type': 'application/octet-stream' },
-        body: new Uint8Array([1, 2, 3, 4]),
-      }),
-    )
-    expect(response.status).toBe(202)
-    expect(await response.json()).toEqual({ bytes: 4 })
-    await application.close()
+
+    const application = await bootstrapApplication({
+      application: definition,
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+    try {
+      const response = await application.http.fetch(
+        new Request('https://fixture.test/upload', {
+          method: 'POST',
+          headers: { 'content-type': 'application/octet-stream' },
+          body: new Uint8Array([1, 2, 3, 4]),
+        }),
+      )
+      expect(response.status).toBe(202)
+      expect(await response.json()).toEqual({ bytes: 4 })
+    } finally {
+      await application.close()
+    }
+
     const port = await reserveHttpPort()
     const app = await nodeRuntime.create({ application: definition })
     await app.serve({

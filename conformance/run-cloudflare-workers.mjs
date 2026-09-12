@@ -67,6 +67,8 @@ try {
   console.log('Cloudflare Workers (workerd 2026-08-24) conformance: passed')
 } finally {
   await terminateChild(child)
+  child.stdout.destroy()
+  child.stderr.destroy()
 }
 
 async function terminateChild(process) {

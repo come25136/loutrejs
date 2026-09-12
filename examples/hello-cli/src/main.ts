@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util'
-import { bootstrap } from '@loutrejs/loutre/host'
+import { bootstrapApplication } from '@loutrejs/loutre'
 import application from './app.js'
 import { hello } from './hello/task.js'
 
@@ -13,11 +13,11 @@ const { values } = parseArgs({
   },
 })
 
-await using app = bootstrap({
+await using app = await bootstrapApplication({
   application,
   arguments: {
     name: values.name,
   },
 })
 
-console.log(await app.run(hello))
+console.log(await app.tasks.run(hello))

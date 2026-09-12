@@ -1,19 +1,25 @@
 import {
-  binding,
+  createKernelApplication,
   type ApplicationDefinition,
+  type ApplicationExtensionHostApis,
   type BootstrapArguments,
-  type HasHttp,
-  type InvocationBindingOptions,
 } from '../application/index.js'
-import type { HttpProtocolExecution } from '../http/index.js'
+import type { RuntimeCapabilityBinding } from '../core/index.js'
+import {
+  applicationHasHost,
+  bindApplicationCapability,
+} from '../application/kernel-internal.js'
 import { assertRuntimeEngine } from '../runtime/engine.js'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
+type HasHttpExecutionExtension<TDefinition extends ApplicationDefinition> =
+  'http' extends keyof ApplicationExtensionHostApis<TDefinition> ? true : false
+
 type HttpApplication<TDefinition extends ApplicationDefinition> =
   IsAny<TDefinition> extends true
     ? TDefinition
-    : HasHttp<TDefinition> extends true
+    : HasHttpExecutionExtension<TDefinition> extends true
       ? TDefinition
       : never
 
@@ -22,6 +28,7 @@ export type AwsLambdaBindBaseOptions<
 > = {
   readonly application: HttpApplication<TDefinition>
   readonly environment?: unknown
+  readonly capabilities?: readonly RuntimeCapabilityBinding[]
 } & BootstrapArguments<TDefinition>
 
 export type AwsLambdaBindOptions<TDefinition extends ApplicationDefinition> =
@@ -100,20 +107,33 @@ function bind<const TDefinition extends ApplicationDefinition>(
     | AwsLambdaStreamingBindOptions<TDefinition>,
 ): AwsLambdaHttpHandler | AwsLambdaStreamingHttpHandler {
   assertRuntimeEngine('aws-lambda')
-  const invocation = binding.invocation({
-    application: options.application,
-    environment: 'environment' in options ? options.environment : process.env,
-    ...('arguments' in options ? { arguments: options.arguments } : {}),
-  } as unknown as InvocationBindingOptions<TDefinition>)
-  const http =
-    'http' in invocation
-      ? (invocation.http as HttpProtocolExecution)
-      : undefined
-  if (!http) {
-    void invocation.application.close()
+  if (!applicationHasHost(options.application.model, 'http')) {
     throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: awsLambdaRuntime.bind() requires an HTTP-capable Application.',
+      'LUTRE_RUNTIME_HTTP_REQUIRED: awsLambdaRuntime.bind() requires the HTTP Execution Extension.',
     )
+  }
+
+  const application = createKernelApplication<TDefinition>({
+    ...options,
+    application: options.application,
+    capabilities: [
+      bindApplicationCapability(options.application.model, 'http.server', {
+        runtime: 'aws-lambda',
+      }),
+      ...(options.capabilities ?? []),
+    ],
+    environment: 'environment' in options ? options.environment : process.env,
+  })
+  const http: AwsLambdaHttpRequestHandler = {
+    initialize: async () => {
+      await application.init()
+    },
+    fetch: (request) =>
+      (
+        application as unknown as {
+          readonly http: AwsLambdaHttpRequestHandler
+        }
+      ).http.fetch(request),
   }
 
   if (options.response === 'streaming') {
@@ -124,14 +144,19 @@ function bind<const TDefinition extends ApplicationDefinition>(
   return createAwsLambdaHttpDriver(http)
 }
 
+interface AwsLambdaHttpRequestHandler {
+  initialize?(): Promise<void>
+  fetch(request: Request): Promise<Response>
+}
+
 function createAwsLambdaHttpDriver(
-  application: HttpProtocolExecution,
+  application: AwsLambdaHttpRequestHandler,
 ): AwsLambdaHttpHandler {
   let initialization: Promise<void> | undefined
   return async (event) => {
-    initialization ??= application.initialize()
+    initialization ??= application.initialize?.() ?? Promise.resolve()
     await initialization
-    const response = await application.handle(toRequest(event))
+    const response = await application.fetch(toRequest(event))
     const metadata = responseMetadata(response)
     return {
       statusCode: response.status,
@@ -143,13 +168,13 @@ function createAwsLambdaHttpDriver(
 }
 
 function createAwsLambdaStreamingHttpDriver(
-  application: HttpProtocolExecution,
+  application: AwsLambdaHttpRequestHandler,
 ): AwsLambdaStreamingHttpHandler {
   let initialization: Promise<void> | undefined
   return async (event, output) => {
-    initialization ??= application.initialize()
+    initialization ??= application.initialize?.() ?? Promise.resolve()
     await initialization
-    const response = await application.handle(toRequest(event))
+    const response = await application.fetch(toRequest(event))
     const metadata = responseMetadata(response)
     const aws = awsLambdaGlobal()
     const outputMetadata = {
@@ -169,14 +194,30 @@ function createAwsLambdaStreamingHttpDriver(
       })
     }
     const reader = response.body?.getReader()
-    if (reader) {
-      while (true) {
-        const chunk = await reader.read()
-        if (chunk.done) break
-        if (!stream.write(chunk.value) && stream.once) {
-          await new Promise<void>((resolve) => {
-            stream.once?.('drain', resolve)
-          })
+    let completed = false
+    let failure: unknown
+    try {
+      if (reader) {
+        while (true) {
+          const chunk = await reader.read()
+          if (chunk.done) break
+          if (!stream.write(chunk.value) && stream.once) {
+            await new Promise<void>((resolve) => {
+              stream.once?.('drain', resolve)
+            })
+          }
+        }
+      }
+      completed = true
+    } catch (error) {
+      failure = error
+      throw error
+    } finally {
+      if (reader && !completed) {
+        try {
+          await reader.cancel(failure)
+        } catch {
+          // cancel失敗でresponse pumpの元errorを上書きしない。
         }
       }
     }

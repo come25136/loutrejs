@@ -1,27 +1,19 @@
 import {
   SchemaValidationError,
-  type ContractBinding,
-  type ContractDefinition,
-  type ContractOfBinding,
-  type ProcedureDefinition,
+  validateSchema,
   type SchemaInput,
   type SchemaOutput,
   type StandardSchemaV1,
-  validateSchema,
 } from '../core/index.js'
-import { contractOfBinding } from '../core/contract-internal.js'
 import type {
+  HttpContract,
+  HttpExecutionResponseDefinition,
+  HttpExecutionRouteDefinition,
   HttpHeaders,
-  HttpParamsSchemas,
-  HttpProtocol,
-  HttpProtocolDefinition,
-  HttpResponseDefinition,
-} from './definitions.js'
-import {
-  parseHttpPath,
-  type PathParamNames,
-  type RawPathParams,
-} from './path.js'
+  HttpResponseHeadersDefinition,
+  HttpResponseHeadersWithDefaults,
+} from './extension.js'
+import { parseHttpPath, type PathParamNames } from './path.js'
 
 export interface HttpClientTransportRequest {
   readonly method: string
@@ -41,39 +33,23 @@ export type HttpClientTransport = (
   request: HttpClientTransportRequest,
 ) => Promise<HttpClientTransportResponse>
 
-type HttpProtocolOf<TProcedure extends ProcedureDefinition> =
-  TProcedure['protocols'] extends { readonly http: infer TProtocol }
-    ? TProtocol extends HttpProtocol<infer TDefinition>
-      ? HttpProtocol<TDefinition>
-      : never
-    : never
-
-type HttpProcedureNames<TContract extends ContractDefinition> = {
-  [TProcedure in keyof TContract['procedures'] & string]: HttpProtocolOf<
-    TContract['procedures'][TProcedure]
-  > extends never
-    ? never
-    : TProcedure
-}[keyof TContract['procedures'] & string]
-
-type HttpDefinitionOf<
-  TContract extends ContractDefinition,
-  TProcedure extends HttpProcedureNames<TContract>,
-> = HttpProtocolOf<TContract['procedures'][TProcedure]>['definition']
-
-type PathParamsInput<TDefinition extends HttpProtocolDefinition> =
+type PathParamsInput<TDefinition extends HttpExecutionRouteDefinition> =
   PathParamNames<TDefinition['path']> extends never
     ? never
     : TDefinition['request'] extends {
-          readonly params: infer TSchemas extends HttpParamsSchemas
+          readonly params: infer TSchemas extends Readonly<
+            Record<string, StandardSchemaV1>
+          >
         }
       ? Readonly<{
           [TName in keyof TSchemas]: SchemaInput<TSchemas[TName]>
         }>
-      : RawPathParams<TDefinition['path']>
+      : Readonly<{
+          [TName in PathParamNames<TDefinition['path']>]: string
+        }>
 
 type RequestPartInput<
-  TDefinition extends HttpProtocolDefinition,
+  TDefinition extends HttpExecutionRouteDefinition,
   TPart extends 'query' | 'headers',
 > = TDefinition['request'] extends infer TRequest
   ? TRequest extends Record<TPart, infer TSchema extends StandardSchemaV1>
@@ -81,7 +57,7 @@ type RequestPartInput<
     : never
   : never
 
-type RequestBodyInput<TDefinition extends HttpProtocolDefinition> =
+type RequestBodyInput<TDefinition extends HttpExecutionRouteDefinition> =
   TDefinition['request'] extends {
     readonly body: infer TBody extends StandardSchemaV1
   }
@@ -94,28 +70,50 @@ type RequestField<TName extends string, TValue> = [TValue] extends [never]
     ? { readonly [TKey in TName]?: Exclude<TValue, undefined> }
     : { readonly [TKey in TName]: TValue }
 
-export type HttpClientRequest<TDefinition extends HttpProtocolDefinition> =
-  RequestField<'params', PathParamsInput<TDefinition>> &
-    RequestField<'query', RequestPartInput<TDefinition, 'query'>> &
-    RequestField<'headers', RequestPartInput<TDefinition, 'headers'>> &
-    RequestField<'body', RequestBodyInput<TDefinition>>
+export type HttpClientRequest<
+  TDefinition extends HttpExecutionRouteDefinition,
+> = RequestField<'params', PathParamsInput<TDefinition>> &
+  RequestField<'query', RequestPartInput<TDefinition, 'query'>> &
+  RequestField<'headers', RequestPartInput<TDefinition, 'headers'>> &
+  RequestField<'body', RequestBodyInput<TDefinition>>
 
-type ResponseBodyOutput<TResponse extends HttpResponseDefinition> =
-  TResponse extends { readonly stream: 'server' }
-    ? AsyncIterable<SchemaOutput<TResponse['body']>>
-    : SchemaOutput<TResponse['body']>
-
-type ResponseHeadersOutput<TResponse extends HttpResponseDefinition> =
+type ResponseBodyOutput<TResponse extends HttpExecutionResponseDefinition> =
   TResponse extends {
-    readonly headers: infer THeaders extends StandardSchemaV1
+    readonly stream: 'server'
+    readonly body: infer TBody extends StandardSchemaV1
   }
-    ? SchemaOutput<THeaders>
+    ? AsyncIterable<SchemaOutput<TBody>>
+    : TResponse['body'] extends StandardSchemaV1
+      ? SchemaOutput<TResponse['body']>
+      : undefined
+
+type ResponseHeadersSchema<TResponse extends HttpExecutionResponseDefinition> =
+  TResponse extends { readonly headers: infer THeaders }
+    ? THeaders extends StandardSchemaV1
+      ? THeaders
+      : THeaders extends {
+            readonly schema: infer TSchema extends StandardSchemaV1
+          }
+        ? TSchema
+        : never
+    : never
+
+type ResponseHeadersOutput<TResponse extends HttpExecutionResponseDefinition> =
+  ResponseHeadersSchema<TResponse> extends infer TSchema
+    ? [TSchema] extends [never]
+      ? HttpHeaders
+      : TSchema extends StandardSchemaV1
+        ? SchemaOutput<TSchema>
+        : HttpHeaders
     : HttpHeaders
 
-export type HttpClientResponse<TDefinition extends HttpProtocolDefinition> = {
-  [TVariant in keyof TDefinition['responses'] & string]: NonNullable<
-    TDefinition['responses'][TVariant]
-  > extends infer TResponse extends HttpResponseDefinition
+export type HttpClientResponse<
+  TDefinition extends HttpExecutionRouteDefinition,
+> = {
+  [
+    TVariant in keyof TDefinition['responses'] & string
+  ]: TDefinition['responses'][TVariant] extends infer TResponse extends
+    HttpExecutionResponseDefinition
     ? {
         readonly status: TResponse['status']
         readonly body: ResponseBodyOutput<TResponse>
@@ -124,17 +122,17 @@ export type HttpClientResponse<TDefinition extends HttpProtocolDefinition> = {
     : never
 }[keyof TDefinition['responses'] & string]
 
-type HttpClientMethod<TDefinition extends HttpProtocolDefinition> =
+type HttpClientMethod<TDefinition extends HttpExecutionRouteDefinition> =
   keyof HttpClientRequest<TDefinition> extends never
     ? () => Promise<HttpClientResponse<TDefinition>>
     : (
         request: HttpClientRequest<TDefinition>,
       ) => Promise<HttpClientResponse<TDefinition>>
 
-export type HttpClient<TBinding extends ContractBinding> = {
-  readonly [
-    TProcedure in HttpProcedureNames<ContractOfBinding<TBinding>>
-  ]: HttpClientMethod<HttpDefinitionOf<ContractOfBinding<TBinding>, TProcedure>>
+export type HttpClient<TContract extends HttpContract> = {
+  readonly [TName in keyof TContract['routes']]: HttpClientMethod<
+    TContract['routes'][TName]
+  >
 }
 
 export class HttpClientResponseError extends Error {
@@ -151,22 +149,16 @@ export class HttpClientResponseError extends Error {
   }
 }
 
-export function createHttpClient<const TBinding extends ContractBinding>(
-  binding: TBinding,
+export function createHttpClient<const TContract extends HttpContract>(
+  contract: TContract,
   transport: HttpClientTransport,
-): HttpClient<TBinding> {
-  const contract = contractOfBinding(binding)
+): HttpClient<TContract> {
   const client: Record<
     string,
     (request?: Record<string, unknown>) => Promise<unknown>
   > = {}
 
-  for (const [procedureName, procedure] of Object.entries(
-    contract.procedures,
-  )) {
-    const definition = httpDefinitionOf(procedure)
-    if (!definition) continue
-
+  for (const [procedureName, definition] of Object.entries(contract.routes)) {
     client[procedureName] = async (request = {}) => {
       const response = await transport({
         method: definition.method,
@@ -178,26 +170,11 @@ export function createHttpClient<const TBinding extends ContractBinding>(
         ...(request.headers === undefined ? {} : { headers: request.headers }),
         ...(request.body === undefined ? {} : { body: request.body }),
       })
-
       return decodeResponse(procedureName, definition, response)
     }
   }
 
-  return Object.freeze(client) as HttpClient<TBinding>
-}
-
-function httpDefinitionOf(
-  procedure: ProcedureDefinition,
-): HttpProtocolDefinition | undefined {
-  const protocol = procedure.protocols.http
-  if (
-    !protocol ||
-    protocol.protocol !== 'http' ||
-    !('definition' in protocol)
-  ) {
-    return undefined
-  }
-  return protocol.definition as HttpProtocolDefinition
+  return Object.freeze(client) as HttpClient<TContract>
 }
 
 function interpolatePath(
@@ -220,7 +197,7 @@ function interpolatePath(
 
 async function decodeResponse(
   procedure: string,
-  definition: HttpProtocolDefinition,
+  definition: HttpExecutionRouteDefinition,
   response: HttpClientTransportResponse,
 ): Promise<unknown> {
   const target = describeHttpTarget(definition, procedure)
@@ -240,17 +217,25 @@ async function decodeResponse(
   let lastValidationError: SchemaValidationError | undefined
   for (const candidate of candidates) {
     try {
-      const body = candidate.stream
-        ? validatedResponseStream(
-            candidate.body,
-            response.body,
-            procedure,
-            definition,
-            response.status,
-          )
-        : await validateSchema(candidate.body, response.body)
-      const headers = candidate.headers
-        ? await validateSchema(candidate.headers, response.headers ?? {})
+      let body: unknown
+      if (candidate.stream === 'server') {
+        if (!candidate.body) continue
+        body = validatedResponseStream(
+          candidate.body,
+          response.body,
+          procedure,
+          definition,
+          response.status,
+        )
+      } else if (candidate.body) {
+        body = await validateSchema(candidate.body, response.body)
+      } else {
+        if (response.body !== undefined && response.body !== null) continue
+        body = undefined
+      }
+      const headerSchema = responseHeadersSchema(candidate.headers)
+      const headers = headerSchema
+        ? await validateSchema(headerSchema, response.headers ?? {})
         : (response.headers ?? {})
       return Object.freeze({ status: response.status, body, headers })
     } catch (error) {
@@ -269,11 +254,34 @@ async function decodeResponse(
   )
 }
 
+function responseHeadersSchema(
+  headers: HttpResponseHeadersDefinition | undefined,
+): StandardSchemaV1 | undefined {
+  if (isStandardSchema(headers)) return headers
+  if (isResponseHeadersWithDefaults(headers)) return headers.schema
+  return undefined
+}
+
+function isStandardSchema(value: unknown): value is StandardSchemaV1 {
+  return typeof value === 'object' && value !== null && '~standard' in value
+}
+
+function isResponseHeadersWithDefaults(
+  value: unknown,
+): value is HttpResponseHeadersWithDefaults {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'schema' in value &&
+    isStandardSchema(value.schema)
+  )
+}
+
 function validatedResponseStream(
   schema: StandardSchemaV1,
   value: unknown,
   procedure: string,
-  definition: HttpProtocolDefinition,
+  definition: HttpExecutionRouteDefinition,
   status: number,
 ): AsyncIterable<unknown> {
   const target = describeHttpTarget(definition, procedure)
@@ -305,7 +313,7 @@ function validatedResponseStream(
 }
 
 function describeHttpTarget(
-  definition: HttpProtocolDefinition,
+  definition: HttpExecutionRouteDefinition,
   procedure: string,
 ): string {
   return `${definition.method.toUpperCase()} ${definition.path} (${procedure})`
@@ -411,6 +419,7 @@ function encodeBody(body: unknown, contentType: string | undefined): BodyInit {
 
 async function decodeFetchBody(response: Response): Promise<unknown> {
   if (
+    response.body === null ||
     response.status === 204 ||
     response.status === 205 ||
     response.status === 304
@@ -444,16 +453,25 @@ async function* decodeServerSentEvents(
   const decoder = new TextDecoder()
   let buffer = ''
   let completed = false
+  let pendingCarriageReturn = false
+  const appendDecoded = (value: string, final: boolean): void => {
+    let decoded = pendingCarriageReturn ? `\r${value}` : value
+    pendingCarriageReturn = false
+    if (!final && decoded.endsWith('\r')) {
+      pendingCarriageReturn = true
+      decoded = decoded.slice(0, -1)
+    }
+    buffer += normalizeEventStreamNewlines(decoded)
+  }
   try {
     while (true) {
       const next = await reader.read()
       if (next.done) {
         completed = true
-        buffer += decoder.decode()
+        appendDecoded(decoder.decode(), true)
         break
       }
-      buffer += decoder.decode(next.value, { stream: true })
-      buffer = normalizeEventStreamNewlines(buffer)
+      appendDecoded(decoder.decode(next.value, { stream: true }), false)
       let boundary = buffer.indexOf('\n\n')
       while (boundary >= 0) {
         const event = buffer.slice(0, boundary)
@@ -466,15 +484,6 @@ async function* decodeServerSentEvents(
         if (data.length > 0) yield JSON.parse(data)
         boundary = buffer.indexOf('\n\n')
       }
-    }
-    buffer = normalizeEventStreamNewlines(buffer).trim()
-    if (buffer.length > 0) {
-      const data = buffer
-        .split('\n')
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice('data:'.length).trimStart())
-        .join('\n')
-      if (data.length > 0) yield JSON.parse(data)
     }
   } finally {
     if (!completed) await reader.cancel()

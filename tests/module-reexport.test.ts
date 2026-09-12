@@ -1,5 +1,4 @@
-import { defineModule, inject } from '@loutrejs/loutre'
-import { compileApplication } from '@loutrejs/loutre/graph'
+import { buildApplicationModel, defineModule, inject } from '@loutrejs/loutre'
 
 describe('Module re-export', () => {
   it('importしたexportを明示的にre-exportできる', () => {
@@ -23,11 +22,9 @@ describe('Module re-export', () => {
       providers: [Service],
     }))()
 
-    const { diagnostics } = compileApplication({
-      modules: [applicationModule],
-    })
-
-    expect(diagnostics).toEqual([])
+    expect(
+      buildApplicationModel({ modules: [applicationModule] }).diagnostics,
+    ).toEqual([])
   })
 
   it('宣言もimportもしていないtokenのexportを拒否する', () => {
@@ -37,13 +34,10 @@ describe('Module re-export', () => {
       exports: [Repository],
     }))()
 
-    const { diagnostics } = compileApplication({ modules: [module] })
-
-    expect(diagnostics).toContainEqual(
-      expect.objectContaining({
-        code: 'LUTRE_MODULE_EXPORT_UNRESOLVED',
-        path: 'module:1.exports.Repository',
-      }),
+    expect(
+      buildApplicationModel({ modules: [module] }).diagnostics,
+    ).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_MODULE_EXPORT_UNRESOLVED' }),
     )
   })
 })

@@ -2,7 +2,7 @@ import {
   Container,
   Logger,
   SilentLogger,
-  checkCapabilities,
+  checkRuntimeSupport,
   type LogRecord,
   type LoggerBackend,
 } from '@loutrejs/loutre/runtime'
@@ -10,7 +10,7 @@ import { inject, normalizeProvider } from '@loutrejs/loutre'
 
 describe('CapabilityとLogger', () => {
   it('Application requirementとRuntime capabilityの差分を返す', () => {
-    const result = checkCapabilities(['http.server', 'stream.readable'], {
+    const result = checkRuntimeSupport(['http.server', 'stream.readable'], {
       runtime: 'fixture',
       capabilities: new Set(['http.server']),
     })

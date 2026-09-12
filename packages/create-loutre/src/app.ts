@@ -1,6 +1,7 @@
 import { readdir } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
-import { defineApplication, defineModule, inject, task } from '@loutrejs/loutre'
+import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
+import { task } from '@loutrejs/tasks'
 import type { PackageManager, ProjectTarget } from './options.js'
 import { writeStarter } from './starter.js'
 
@@ -43,12 +44,10 @@ export const createProject = task<CreateProjectInput, CreateProjectResult>({
 const CreateLoutreModule = defineModule(() => ({
   name: 'CreateLoutreModule',
   providers: [ProjectScaffolder],
+  executions: [createProject],
 }))
 
-export default defineApplication({
-  modules: [CreateLoutreModule()],
-  tasks: [createProject],
-})
+export default defineApplication({ modules: [CreateLoutreModule()] })
 
 async function assertTargetIsEmpty(targetDirectory: string): Promise<void> {
   try {

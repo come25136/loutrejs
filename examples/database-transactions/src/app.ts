@@ -8,7 +8,7 @@ const AppModule = defineModule(() => ({
   environment: [AppEnv],
   name: 'DatabaseTransactionsExample',
   providers: [provide(DATABASE).useClass(InMemoryDatabase), UserRepository],
-  implementations: [UsersController],
+  executions: [UsersController],
 }))
 
 export default defineApplication({ modules: [AppModule()] })

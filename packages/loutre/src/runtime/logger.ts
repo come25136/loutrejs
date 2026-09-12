@@ -1,3 +1,5 @@
+import { frameworkProvidedTokenBrand } from '../core/token-internal.js'
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 export interface LogRecord {
@@ -44,6 +46,8 @@ class SilentLoggerBackend implements LoggerBackend {
 }
 
 export class Logger {
+  static readonly [frameworkProvidedTokenBrand] = true
+
   constructor(
     readonly backend: LoggerBackend = new ConsoleLoggerBackend(),
     readonly context: Readonly<Record<string, unknown>> = {},

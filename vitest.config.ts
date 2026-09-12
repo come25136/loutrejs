@@ -4,14 +4,11 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   resolve: {
     alias: {
-      '@loutrejs/loutre/host': resolve(
-        'packages/loutre/src/application/host.ts',
-      ),
-      '@loutrejs/loutre/binding': resolve(
-        'packages/loutre/src/application/binding.ts',
-      ),
-      '@loutrejs/loutre/openapi': resolve(
-        'packages/loutre/src/application/openapi.ts',
+      '@loutrejs/message-port': resolve('packages/message-port/src/index.ts'),
+      '@loutrejs/tasks': resolve('packages/tasks/src/index.ts'),
+      '@loutrejs/websocket': resolve('packages/websocket/src/index.ts'),
+      '@loutrejs/loutre/http/openapi': resolve(
+        'packages/loutre/src/http/openapi.ts',
       ),
       '@loutrejs/loutre/presentation': resolve(
         'packages/loutre/src/presentation.ts',
@@ -34,12 +31,6 @@ export default defineConfig({
       ),
       '@loutrejs/loutre/runtime': resolve(
         'packages/loutre/src/runtime/index.ts',
-      ),
-      '@loutrejs/loutre/message-port/environment': resolve(
-        'packages/loutre/src/message-port/environment.ts',
-      ),
-      '@loutrejs/loutre/message-port': resolve(
-        'packages/loutre/src/message-port/index.ts',
       ),
       '@loutrejs/loutre/http': resolve('packages/loutre/src/http/index.ts'),
       '@loutrejs/loutre': resolve('packages/loutre/src/index.ts'),

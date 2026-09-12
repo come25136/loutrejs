@@ -4,7 +4,7 @@ import { AppController } from './hello/controller.js'
 
 const AppModule = defineModule(() => ({
   environment: [AppEnv],
-  implementations: [AppController],
+  executions: [AppController],
 }))
 
 export default defineApplication({

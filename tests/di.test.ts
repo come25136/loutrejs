@@ -3,14 +3,11 @@ import {
   inject,
   InjectionContextError,
   provide,
+  normalizeProvider,
   token,
   type ProviderDeclaration,
 } from '@loutrejs/loutre'
-import {
-  collectRuntimeModuleGraph,
-  Container,
-  DependencyResolutionError,
-} from '@loutrejs/loutre/runtime'
+import { Container, DependencyResolutionError } from '@loutrejs/loutre/runtime'
 
 interface Clock {
   readonly id: number
@@ -25,7 +22,9 @@ class ClockReader {
 
 function containerFor(providers: readonly ProviderDeclaration[]): Container {
   const Module = defineModule(() => ({ providers }))
-  return new Container(collectRuntimeModuleGraph([Module()]).providers)
+  return new Container(
+    (Module().definition.providers ?? []).map(normalizeProvider),
+  )
 }
 
 describe('同期DI Container', () => {
@@ -61,32 +60,14 @@ describe('同期DI Container', () => {
         this.after = inject(CLOCK)
       }
     }
-    const edges: string[] = []
     const module = defineModule(() => ({
       providers: [provide(CLOCK).useValue({ id: 1 }), Nested, Consumer],
     }))()
     const container = new Container(
-      collectRuntimeModuleGraph([module]).providers,
-      {
-        recorder: {
-          record: (consumer, dependency) => {
-            const from =
-              typeof consumer === 'function' ? consumer.name : consumer.id
-            const to =
-              typeof dependency === 'function' ? dependency.name : dependency.id
-            edges.push(`${from}->${to}`)
-          },
-        },
-      },
+      (module.definition.providers ?? []).map(normalizeProvider),
     )
 
     expect(container.resolve(Consumer).after.id).toBe(1)
-    expect(edges).toEqual([
-      'Consumer->clock',
-      'Consumer->Nested',
-      'Nested->clock',
-      'Consumer->clock',
-    ])
   })
 
   it('constructor例外時もInjection Contextを復元する', () => {

@@ -1,11 +1,11 @@
 # @loutrejs/bullmq
 
-Loutre QueueをBullMQ Workerへ接続するbinding packageです。Queue descriptorとQueue Consumer TriggerをLoutre Application modelに保ったまま、実際のmessage consumptionをBullMQへ接続できます。
+`@loutrejs/tasks`のQueue Consumer executionをBullMQ Workerへ接続するDriver packageです。
 
 ## Install
 
 ```sh
-npm install @loutrejs/loutre @loutrejs/bullmq bullmq
+npm install @loutrejs/loutre @loutrejs/tasks @loutrejs/bullmq bullmq
 ```
 
 `bullmq`はpeer dependencyです。
@@ -13,13 +13,8 @@ npm install @loutrejs/loutre @loutrejs/bullmq bullmq
 ## Usage
 
 ```ts
-import {
-  consume,
-  defineApplication,
-  defineModule,
-  queue,
-  task,
-} from '@loutrejs/loutre'
+import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { consume, queue, task } from '@loutrejs/tasks'
 import { bindBullMqQueue } from '@loutrejs/bullmq'
 import { z } from 'zod'
 
@@ -49,12 +44,17 @@ const QueueModule = defineModule(() => ({
       connection: { host: '127.0.0.1', port: 6379 },
     }),
   ],
+  executions: [orderConsumer],
 }))
 
-export default defineApplication({
-  modules: [QueueModule()],
-  triggers: [orderConsumer],
-})
+export default defineApplication({ modules: [QueueModule()] })
+```
+
+Trigger execution is started through the Tasks Extension Host API:
+
+```ts
+const app = await bootstrapApplication({ application })
+await app.tasks.start()
 ```
 
 ## Options

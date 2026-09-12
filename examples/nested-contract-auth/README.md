@@ -1,34 +1,50 @@
 # Nested Contract Auth Example
 
-This example shows HTTP Contract composition where authentication belongs to a parent branch instead of each child route.
+この例では、feature単位のHTTP ContractをApplicationのContract treeへネストし、親branchの認証を子routeへ継承します。
 
-`ProfileContract` defines only the profile endpoint. `AppContract` mounts it below `/api/me`, adds the authentication Layer to that parent branch, and declares the inherited `unauthorized` response there.
-
-The Controller binds to the resolved leaf:
+`ProfileContract`はprofile endpointだけを定義します。`AppContract`はそのContractを`/api/me`配下へmountし、親branchで認証middlewareと`unauthorized` responseを宣言します。
 
 ```ts
-contract: AppContract.http.api.me.profile
+export const AppContract = http.contract({
+  api: {
+    path: '/api',
+    routes: {
+      me: {
+        path: '/me',
+        responses: {
+          unauthorized: {
+            status: 401,
+            body: z.object({ error: z.string() }),
+            headers: z.object({ 'www-authenticate': z.string() }),
+          },
+        },
+        middlewares: [authentication],
+        routes: ProfileContract.routes,
+      },
+    },
+  },
+})
 ```
 
-Because that resolved leaf includes the ancestor pipeline, `ctx.state.currentUser` is inferred from the state contributed by the parent authentication Layer. The example keeps an explicit assignment in the Controller so TypeScript verifies that relationship:
+Controllerは解決済みの`AppContract`へbindします。親branchの認証middlewareが提供する`ctx.state.currentUser`は子routeのContextへ型付きで継承されます。この関係をTypeScriptで検証できるよう、Controllerでは明示的な代入を残しています。
 
 ```ts
 const currentUser: User = ctx.state.currentUser
 ```
 
-From this example directory, start the application with:
+このexample directoryからApplicationを起動します。
 
 ```sh
 npm run dev
 ```
 
-A request without credentials is rejected by the parent branch:
+認証情報のないrequestは親branchの認証middlewareに拒否されます。
 
 ```sh
 curl -i http://127.0.0.1:3003/api/me/profile
 ```
 
-Use the example credentials to reach the child Controller:
+example用の認証情報を渡すと子Controllerへ到達します。
 
 ```sh
 curl -i -u loutre:otter http://127.0.0.1:3003/api/me/profile
@@ -38,9 +54,9 @@ curl -i -u loutre:otter http://127.0.0.1:3003/api/me/profile
 { "id": "user-1", "name": "Loutre User" }
 ```
 
-These credentials are for demonstration only.
+この認証情報はexample専用です。
 
-To validate the Application Graph, types, and behavior, run:
+Application Model、型、動作を検証します。
 
 ```sh
 npm run check

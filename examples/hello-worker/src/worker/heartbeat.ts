@@ -1,6 +1,6 @@
-import { fixedDelay, task } from '@loutrejs/loutre'
+import { fixedDelay, task } from '@loutrejs/tasks'
 
-const hello = task<void, void>({
+export const hello = task<void, void>({
   name: 'hello-worker.tick',
   factory: () => () => {
     console.log('Hello from worker!')

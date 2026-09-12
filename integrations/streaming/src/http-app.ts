@@ -1,3 +1,6 @@
-import { createEventsDefinition } from './index.js'
+import type { ApplicationDefinition } from '@loutrejs/loutre'
+import { createEventsHttpDefinition } from './index.js'
 
-export default createEventsDefinition()
+const application: ApplicationDefinition = createEventsHttpDefinition()
+
+export default application

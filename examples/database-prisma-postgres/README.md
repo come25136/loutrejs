@@ -1,6 +1,6 @@
 # Prisma PostgreSQL Database Example
 
-Use Prisma 7's generated client and interactive `$transaction()` directly from a recursive Pipeline.
+Use Prisma 7's generated client and interactive `$transaction()` directly from an Application-defined transaction Layer.
 
 From this example directory, generate the Prisma client, start PostgreSQL, and start the application with:
 

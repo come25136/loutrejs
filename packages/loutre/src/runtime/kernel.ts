@@ -1,0 +1,574 @@
+import {
+  assertValidApplicationModel,
+  loadArgs,
+  loadEnv,
+  RuntimeCapabilityRegistry,
+  type ApplicationModel,
+  type ExecutionExtension,
+  type ExecutionExtensionRuntime,
+  type ExecutionKernelRuntime,
+  type ExecutionLease,
+  type LifecycleHook,
+  type LifecycleModelNode,
+  type ModuleModelNode,
+  type ProviderModelNode,
+  type RuntimeCapabilityBinding,
+  type TokenLike,
+} from '../core/index.js'
+import { Container } from './di.js'
+import { Logger } from './logger.js'
+
+export interface ApplicationKernelRuntimeOptions {
+  readonly capabilities?: readonly RuntimeCapabilityBinding[]
+  readonly logger?: Logger
+  readonly environmentSource?: unknown
+  readonly argumentsSource?: unknown
+  readonly forceShutdownTimeoutMs?: number
+}
+
+const defaultForceShutdownTimeoutMs = 5_000
+
+type RuntimeState =
+  | 'created'
+  | 'initializing'
+  | 'running'
+  | 'draining'
+  | 'stopped'
+
+interface ActiveExecution extends ExecutionLease {
+  readonly controller: AbortController
+  completed: boolean
+}
+
+interface ExtensionDrainOperation {
+  readonly result: Promise<void>
+  pending: boolean
+}
+
+export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
+  readonly model: ApplicationModel
+  readonly container: Container
+  readonly capabilities: RuntimeCapabilityRegistry
+  readonly #extensionRuntimes = new Map<symbol, ExecutionExtensionRuntime>()
+  readonly #providerInstances = new Map<string, unknown[]>()
+  readonly #initializedModuleIds = new Set<string>()
+  readonly #activeExecutions = new Set<ActiveExecution>()
+  readonly #idleWaiters = new Set<() => void>()
+  readonly #extensionDrainOperations = new Map<
+    symbol,
+    ExtensionDrainOperation
+  >()
+  readonly #environmentSource: unknown
+  readonly #argumentsSource: unknown
+  readonly #forceShutdownTimeoutMs: number
+  #state: RuntimeState = 'created'
+  #initialization: Promise<void> | undefined
+  #shutdown: Promise<void> | undefined
+
+  constructor(
+    model: ApplicationModel,
+    options: ApplicationKernelRuntimeOptions = {},
+  ) {
+    this.model = assertValidApplicationModel(model)
+    this.capabilities = new RuntimeCapabilityRegistry(
+      options.capabilities ?? [],
+    )
+    this.#environmentSource = options.environmentSource
+    this.#argumentsSource =
+      'argumentsSource' in options ? options.argumentsSource : Object.freeze({})
+    this.#forceShutdownTimeoutMs =
+      options.forceShutdownTimeoutMs ?? defaultForceShutdownTimeoutMs
+    if (
+      !Number.isFinite(this.#forceShutdownTimeoutMs) ||
+      this.#forceShutdownTimeoutMs < 0
+    ) {
+      throw new TypeError(
+        'LUTRE_FORCE_SHUTDOWN_TIMEOUT: forceShutdownTimeoutMs must be a non-negative finite number.',
+      )
+    }
+    this.container = new Container(model.providers, {
+      logger: options.logger ?? new Logger(),
+    })
+  }
+
+  initialize(): Promise<void> {
+    if (this.#state === 'running') return Promise.resolve()
+    if (this.#initialization) return this.#initialization
+    if (this.#state === 'draining' || this.#state === 'stopped') {
+      return Promise.reject(applicationStateError(this.#state))
+    }
+    const initialization = this.#initialize().finally(() => {
+      if (this.#initialization === initialization) {
+        this.#initialization = undefined
+      }
+    })
+    this.#initialization = initialization
+    return initialization
+  }
+
+  async #initialize(): Promise<void> {
+    this.#state = 'initializing'
+    try {
+      this.#validateCapabilities()
+      await this.#bindRuntimeInputs()
+      await this.#initializeProviders()
+      for (const modelExtension of this.model.extensions) {
+        const runtime = await modelExtension.extension.createRuntime({
+          executions: modelExtension.executions,
+          capabilities: this.capabilities,
+          applicationRuntime: this,
+        })
+        this.#extensionRuntimes.set(modelExtension.extension.identity, runtime)
+      }
+      this.#state = 'running'
+    } catch (error) {
+      const cleanupErrors = await this.#rollbackInitialization()
+      this.#state = 'stopped'
+      if (cleanupErrors.length > 0) {
+        throw new AggregateError(
+          [error, ...cleanupErrors],
+          'Application initialization failed and cleanup also failed.',
+          { cause: error },
+        )
+      }
+      throw error
+    }
+  }
+
+  #validateCapabilities(): void {
+    const missing = new Map<string, string[]>()
+    for (const execution of this.model.executions) {
+      for (const capability of execution.capabilities) {
+        if (this.capabilities.has(capability)) continue
+        const consumers = missing.get(capability.id) ?? []
+        consumers.push(execution.id)
+        missing.set(capability.id, consumers)
+      }
+    }
+    if (missing.size === 0) return
+    const details = [...missing]
+      .map(([id, consumers]) => `${id} (${consumers.join(', ')})`)
+      .join(', ')
+    throw new Error(`LUTRE_CAPABILITY_MISSING: ${details}`)
+  }
+
+  async #bindRuntimeInputs(): Promise<void> {
+    for (const provider of this.model.providers) {
+      if (provider.kind !== 'environment') continue
+      if (this.#environmentSource === undefined) {
+        throw new Error(
+          `LUTRE_ENV_SOURCE_MISSING: ${provider.provide.name} requires an Environment source.`,
+        )
+      }
+      this.container.bindEnvironment(
+        provider.provide,
+        await loadEnv(provider.provide, this.#environmentSource),
+      )
+    }
+    if (this.model.arguments) {
+      this.container.bindArguments(
+        this.model.arguments,
+        await loadArgs(this.model.arguments, this.#argumentsSource),
+      )
+    }
+  }
+
+  async #initializeProviders(): Promise<void> {
+    for (const module of moduleNodes(this.model)) {
+      const instances: unknown[] = []
+      this.#providerInstances.set(module.id, instances)
+      for (const providerNode of providerNodesOfModule(this.model, module.id)) {
+        const provider = providerNode.provider
+        if (
+          provider.scope !== 'application' ||
+          provider.kind === 'environment' ||
+          provider.kind === 'arguments'
+        ) {
+          continue
+        }
+        const instance = this.container.resolve(provider.provide)
+        instances.push(instance)
+        await callLifecycle(instance, 'onModuleInit')
+      }
+      this.#initializedModuleIds.add(module.id)
+      await this.#runHook(
+        lifecycleHookOf(this.model, module.id, 'onModuleInit'),
+      )
+    }
+    for (const module of moduleNodes(this.model)) {
+      for (const instance of this.#providerInstances.get(module.id) ?? []) {
+        await callLifecycle(instance, 'onApplicationBootstrap')
+      }
+      await this.#runHook(
+        lifecycleHookOf(this.model, module.id, 'onApplicationBootstrap'),
+      )
+    }
+  }
+
+  resolve<TValue>(token: TokenLike<TValue>, source?: string): TValue {
+    if (this.#state === 'created' || this.#state === 'stopped') {
+      throw applicationStateError(this.#state)
+    }
+    return this.container.resolve(token, source)
+  }
+
+  get<TValue>(token: TokenLike<TValue>): TValue {
+    if (this.#state !== 'running') throw applicationStateError(this.#state)
+    return this.container.get(token)
+  }
+
+  extensionRuntime<TRuntime extends ExecutionExtensionRuntime>(
+    extension: ExecutionExtension<any, any, any, any, TRuntime>,
+  ): TRuntime {
+    const runtime = this.#extensionRuntimes.get(extension.identity)
+    if (!runtime) {
+      throw new Error(
+        `LUTRE_EXTENSION_RUNTIME_MISSING: ${extension.name} is not initialized.`,
+      )
+    }
+    return runtime as TRuntime
+  }
+
+  beginExecution(): ExecutionLease {
+    if (this.#state !== 'running') throw applicationStateError(this.#state)
+    const controller = new AbortController()
+    const lease: ActiveExecution = {
+      controller,
+      signal: controller.signal,
+      completed: false,
+      abort: (reason?: unknown) => controller.abort(reason),
+      complete: () => {
+        if (lease.completed) return
+        lease.completed = true
+        if (!controller.signal.aborted) controller.abort()
+        this.#activeExecutions.delete(lease)
+        if (this.#activeExecutions.size === 0) {
+          for (const resolve of this.#idleWaiters) resolve()
+          this.#idleWaiters.clear()
+        }
+      },
+    }
+    this.#activeExecutions.add(lease)
+    return lease
+  }
+
+  shutdown(signal?: string): Promise<void> {
+    if (this.#state === 'stopped') return Promise.resolve()
+    if (this.#shutdown) return this.#shutdown
+    const shutdown = this.#shutdownApplication(signal).finally(() => {
+      if (this.#shutdown === shutdown) this.#shutdown = undefined
+    })
+    this.#shutdown = shutdown
+    return shutdown
+  }
+
+  async #shutdownApplication(signal?: string): Promise<void> {
+    if (this.#initialization) await this.#initialization.catch(() => undefined)
+    if (this.#state === 'created') {
+      this.#state = 'stopped'
+      return
+    }
+    if (this.#state === 'stopped') return
+    this.#state = 'draining'
+    const errors: unknown[] = []
+    const drainOperations: {
+      readonly result: Promise<void>
+      readonly isPending: () => boolean
+    }[] = []
+    for (const { extension } of this.model.extensions) {
+      const runtime = this.#extensionRuntimes.get(extension.identity)
+      if (!runtime?.drain) continue
+      const operation = this.#startExtensionDrain(extension, runtime)
+      drainOperations.push({
+        result: withTimeout(
+          () => operation.result,
+          this.#forceShutdownTimeoutMs,
+          () =>
+            new ExtensionDrainTimeoutError(
+              `LUTRE_EXTENSION_DRAIN_TIMEOUT: Extension ${extension.name} did not drain within ${this.#forceShutdownTimeoutMs}ms.`,
+            ),
+        ),
+        isPending: () => operation.pending,
+      })
+    }
+    const drainResults = await Promise.allSettled(
+      drainOperations.map(({ result }) => result),
+    )
+    let drainFailed = false
+    const timedOutDrains: (typeof drainOperations)[number][] = []
+    for (const [index, result] of drainResults.entries()) {
+      if (result.status === 'fulfilled') continue
+      drainFailed = true
+      if (result.reason instanceof ExtensionDrainTimeoutError) {
+        timedOutDrains.push(drainOperations[index]!)
+      }
+      errors.push(result.reason)
+    }
+    if (this.#activeExecutions.size > 0) {
+      if (drainFailed) {
+        const reason = new Error(
+          'LUTRE_APPLICATION_FORCE_SHUTDOWN: Extension drain failed.',
+        )
+        for (const execution of this.#activeExecutions) {
+          execution.abort(reason)
+        }
+      }
+      try {
+        await this.#waitForActiveExecutions(this.#forceShutdownTimeoutMs)
+      } catch (error) {
+        errors.push(error)
+        throw new AggregateError(
+          errors,
+          'Application shutdown did not reach a safe cleanup boundary.',
+          { cause: error },
+        )
+      }
+    }
+    if (timedOutDrains.some(({ isPending }) => isPending())) {
+      const cause = errors.find(
+        (error) => error instanceof ExtensionDrainTimeoutError,
+      )
+      throw new AggregateError(
+        errors,
+        'Application shutdown did not reach a safe cleanup boundary.',
+        { cause },
+      )
+    }
+    for (const { extension } of [...this.model.extensions].toReversed()) {
+      const runtime = this.#extensionRuntimes.get(extension.identity)
+      if (runtime?.close) await collectError(() => runtime.close!(), errors)
+    }
+    this.#extensionDrainOperations.clear()
+    await this.#cleanupProviders(signal, errors)
+    this.#state = 'stopped'
+    if (errors.length > 0) {
+      throw new AggregateError(errors, 'Application shutdown failed.')
+    }
+  }
+
+  #startExtensionDrain(
+    extension: ExecutionExtension,
+    runtime: ExecutionExtensionRuntime,
+  ): ExtensionDrainOperation {
+    const existing = this.#extensionDrainOperations.get(extension.identity)
+    if (existing) return existing
+    const operation: ExtensionDrainOperation = {
+      result: startOperation(() =>
+        runtime.drain!({ timeoutMs: this.#forceShutdownTimeoutMs }),
+      ),
+      pending: true,
+    }
+    this.#extensionDrainOperations.set(extension.identity, operation)
+    void operation.result.then(
+      () => {
+        operation.pending = false
+      },
+      () => {
+        operation.pending = false
+        if (
+          this.#extensionDrainOperations.get(extension.identity) === operation
+        ) {
+          this.#extensionDrainOperations.delete(extension.identity)
+        }
+      },
+    )
+    return operation
+  }
+
+  async #cleanupProviders(signal: string | undefined, errors: unknown[]) {
+    const modules = moduleNodes(this.model).toReversed()
+    for (const module of modules) {
+      for (const instance of (
+        this.#providerInstances.get(module.id) ?? []
+      ).toReversed()) {
+        await collectError(
+          () => callLifecycle(instance, 'onModuleDestroy'),
+          errors,
+        )
+      }
+      await collectError(
+        () => this.#runCleanupHook(module.id, 'onModuleDestroy'),
+        errors,
+      )
+    }
+    for (const module of modules) {
+      for (const instance of (
+        this.#providerInstances.get(module.id) ?? []
+      ).toReversed()) {
+        await collectError(
+          () => callLifecycle(instance, 'beforeApplicationShutdown', signal),
+          errors,
+        )
+      }
+      await collectError(
+        () => this.#runCleanupHook(module.id, 'beforeApplicationShutdown'),
+        errors,
+      )
+    }
+    for (const module of modules) {
+      for (const instance of (
+        this.#providerInstances.get(module.id) ?? []
+      ).toReversed()) {
+        await collectError(
+          () => callLifecycle(instance, 'onApplicationShutdown', signal),
+          errors,
+        )
+      }
+      await collectError(
+        () => this.#runCleanupHook(module.id, 'onApplicationShutdown'),
+        errors,
+      )
+    }
+  }
+
+  #waitForActiveExecutions(timeoutMs?: number): Promise<void> {
+    if (this.#activeExecutions.size === 0) return Promise.resolve()
+    return new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const resolveWhenIdle = () => {
+        if (timer !== undefined) clearTimeout(timer)
+        resolve()
+      }
+      this.#idleWaiters.add(resolveWhenIdle)
+      if (timeoutMs === undefined) return
+      timer = setTimeout(() => {
+        this.#idleWaiters.delete(resolveWhenIdle)
+        reject(
+          new Error(
+            `LUTRE_APPLICATION_FORCE_SHUTDOWN_TIMEOUT: ${this.#activeExecutions.size} active execution(s) did not complete within ${timeoutMs}ms.`,
+          ),
+        )
+      }, timeoutMs)
+    })
+  }
+
+  async #rollbackInitialization(): Promise<unknown[]> {
+    const errors: unknown[] = []
+    for (const runtime of [...this.#extensionRuntimes.values()].toReversed()) {
+      if (runtime.close) await collectError(() => runtime.close!(), errors)
+    }
+    for (const module of moduleNodes(this.model).toReversed()) {
+      await collectError(
+        () => this.#runCleanupHook(module.id, 'onModuleDestroy'),
+        errors,
+      )
+      for (const instance of (
+        this.#providerInstances.get(module.id) ?? []
+      ).toReversed()) {
+        await collectError(
+          () => callLifecycle(instance, 'onModuleDestroy'),
+          errors,
+        )
+      }
+    }
+    return errors
+  }
+
+  async #runHook(hook: LifecycleHook<any> | undefined): Promise<void> {
+    if (!hook) return
+    const dependencies = hook.inject.map((token: TokenLike) =>
+      this.container.resolve(token),
+    )
+    await hook.run(...dependencies)
+  }
+
+  async #runCleanupHook(moduleId: string, phase: string): Promise<void> {
+    if (!this.#initializedModuleIds.has(moduleId)) return
+    await this.#runHook(lifecycleHookOf(this.model, moduleId, phase))
+  }
+}
+
+function moduleNodes(model: ApplicationModel): readonly ModuleModelNode[] {
+  return model.nodes.filter(
+    (node): node is ModuleModelNode => node.kind === 'module',
+  )
+}
+
+function providerNodesOfModule(
+  model: ApplicationModel,
+  moduleId: string,
+): readonly ProviderModelNode[] {
+  return model.nodes.filter(
+    (node): node is ProviderModelNode =>
+      node.kind === 'provider' && node.moduleId === moduleId,
+  )
+}
+
+function lifecycleHookOf(
+  model: ApplicationModel,
+  moduleId: string,
+  phase: string,
+): LifecycleHook<any> | undefined {
+  return model.nodes.find(
+    (node): node is LifecycleModelNode =>
+      node.kind === 'lifecycle' &&
+      node.moduleId === moduleId &&
+      node.phase === phase,
+  )?.hook
+}
+
+async function withTimeout<T>(
+  operation: () => T | Promise<T>,
+  timeoutMs: number,
+  createTimeoutError: () => Error,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      Promise.resolve(operation()),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(createTimeoutError()), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
+function startOperation<T>(operation: () => T | Promise<T>): Promise<T> {
+  try {
+    return Promise.resolve(operation())
+  } catch (error) {
+    return Promise.reject(error)
+  }
+}
+
+class ExtensionDrainTimeoutError extends Error {}
+
+async function collectError(
+  operation: () => void | Promise<void>,
+  errors: unknown[],
+): Promise<void> {
+  try {
+    await operation()
+  } catch (error) {
+    errors.push(error)
+  }
+}
+
+async function callLifecycle(
+  instance: unknown,
+  method:
+    | 'onModuleInit'
+    | 'onApplicationBootstrap'
+    | 'onModuleDestroy'
+    | 'beforeApplicationShutdown'
+    | 'onApplicationShutdown',
+  signal?: string,
+): Promise<void> {
+  if (
+    !instance ||
+    (typeof instance !== 'object' && typeof instance !== 'function')
+  ) {
+    return
+  }
+  const candidate = (instance as Record<string, unknown>)[method]
+  if (typeof candidate !== 'function') return
+  await Reflect.apply(candidate, instance, signal === undefined ? [] : [signal])
+}
+
+function applicationStateError(state: RuntimeState): Error {
+  return new Error(
+    `LUTRE_APPLICATION_STATE: Application is ${state} and cannot perform this operation.`,
+  )
+}

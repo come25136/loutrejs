@@ -8,7 +8,7 @@ const AppModule = defineModule(() => ({
   name: 'DatabaseDrizzlePostgresExample',
   environment: [AppEnv],
   providers: [DrizzleDatabase, UserRepository],
-  implementations: [UsersController],
+  executions: [UsersController],
 }))
 
 export default defineApplication({ modules: [AppModule()] })

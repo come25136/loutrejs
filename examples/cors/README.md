@@ -1,41 +1,45 @@
 # CORS Example
 
-Add `validate.cors()` to Loutre's HTTP Pipeline to serve an API that can be called from a different browser origin.
+Add `cors()` to an HTTP route's `middlewares` to serve an API that can be called from a different browser origin.
 
-Declare CORS before request body, query, header, and other validation Layers. There is no need to wrap it in a child Pipeline.
-
-You also do not need to define a separate `OPTIONS` procedure. Preflight requests are handled at the HTTP application boundary using the target route's CORS policy, before they reach the Controller.
+The CORS policy is part of the HTTP Contract. A separate `OPTIONS` route is not required: browser preflight requests are handled by the HTTP Extension from the target route's CORS middleware before the Controller runs.
 
 ```ts
-http.route({
-  method: 'POST',
-  path: '/messages',
-  request: {
-    body: CreateMessageBody,
-  },
-  responses: {
-    created: {
-      status: 201,
-      body: Message,
+const corsMiddleware = cors({
+  origin: ['http://localhost:5173'],
+  allowMethods: ['POST'],
+  allowHeaders: ['content-type'],
+  exposeHeaders: ['x-request-id'],
+  maxAge: 600,
+})
+
+export const MessageContract = http.contract({
+  create: {
+    method: 'POST',
+    path: '/messages',
+    request: {
+      headers: z.object({
+        'content-type': z.literal('application/json'),
+      }),
+      body: CreateMessageBody,
     },
+    responses: {
+      created: {
+        status: 201,
+        body: Message,
+        headers: {
+          'x-request-id': 'cors-example',
+        },
+      },
+    },
+    middlewares: [corsMiddleware],
   },
-  pipeline: [
-    validate.cors({
-      origin: ['http://localhost:5173'],
-      allowMethods: ['POST'],
-      allowHeaders: ['content-type'],
-      exposeHeaders: ['x-request-id'],
-      maxAge: 600,
-    }),
-    validate.body,
-    http.controller,
-  ],
 })
 ```
 
-If every origin is allowed without additional restrictions, `validate.cors()` is enough.
+If every origin is allowed without additional restrictions, `cors()` with no options is enough.
 
-To apply the same CORS policy to every route, create and reuse a shared Pipeline helper in your application instead of adding global CORS configuration to the framework.
+To apply the same CORS policy to multiple routes, create one middleware and reuse it in each route's `middlewares`.
 
 ## Run
 
@@ -97,7 +101,7 @@ const response = await fetch('http://127.0.0.1:3000/messages', {
 console.log(await response.json())
 ```
 
-To validate only the Application Graph and types, run:
+To validate only the Application Model and types, run:
 
 ```sh
 npm run check

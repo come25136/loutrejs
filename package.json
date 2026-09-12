@@ -13,6 +13,8 @@
     "website"
   ],
   "scripts": {
+    "generate:prisma-example": "npm run generate --workspace @loutrejs/example-database-prisma-postgres",
+    "prebuild": "npm run generate:prisma-example",
     "build": "node scripts/generate-version.mjs && node scripts/clean-dist.mjs && tsc -b && node scripts/prepare-packages.mjs",
     "build:website": "npm run build --workspace website",
     "benchmark:http": "npm run build && node benchmarks/run.mjs",
@@ -20,6 +22,7 @@
     "format:check": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
+    "precheck": "npm run generate:prisma-example",
     "check": "tsc --noEmit --pretty false",
     "test": "npm run test:unit && npm run test:integration",
     "test:types": "tsc -p tests/types/tsconfig.json --pretty false",
@@ -33,18 +36,21 @@
     "test:aws-lambda": "npm run build:conformance-apps && node conformance/aws-lambda.mjs",
     "test:node": "node -e \"const major = Number(process.versions.node.split('.')[0]); if (major < 22) process.exit(1); console.log('Node.js ' + process.versions.node + ' conformance: passed')\" && vitest run tests/http-crud.integration.test.ts tests/http-stream.integration.test.ts tests/runtime-conformance.integration.test.ts",
     "test:conformance": "npm run test:node && npm run test:deno && npm run test:bun && npm run test:cloudflare-workers && npm run test:electron && npm run test:aws-lambda",
-    "verify": "npm run format:check && npm run lint && npm run check && npm run test:types && npm test && npm run build && npm run test:e2e && npm run test:conformance",
+    "verify": "npm run format:check && npm run lint && npm run check:dependencies && npm run check && npm run test:types && npm test && npm run build && npm run test:e2e && npm run test:conformance",
     "release:check": "npm run build && node scripts/verify-release-version.mjs && node scripts/verify-packages.mjs",
     "changeset": "changeset",
     "release:version": "changeset version && node scripts/sync-release-version.mjs && npm install --package-lock-only --ignore-scripts --no-audit --no-fund && npm run release:check",
     "release:publish": "npm run release:check && changeset publish",
     "test:unit": "vitest run --exclude '**/*.integration.test.ts' --exclude '**/*.e2e.test.ts'",
     "test:integration": "vitest run integration",
-    "test:e2e": "vitest run e2e --testTimeout 60000"
+    "test:e2e": "vitest run e2e --testTimeout 60000",
+    "check:dependencies": "depcruise --config .dependency-cruiser.cjs packages/loutre/src"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.1",
+    "@swc/core": "^1.16.0",
     "@types/node": "^26.2.0",
+    "dependency-cruiser": "^18.2.0",
     "electron": "^43.4.1",
     "esbuild": "^0.28.2",
     "oxfmt": "^0.64.0",

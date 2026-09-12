@@ -12,18 +12,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./host": {
-      "types": "./dist/application/host.d.ts",
-      "import": "./dist/application/host.js"
-    },
-    "./binding": {
-      "types": "./dist/application/binding.d.ts",
-      "import": "./dist/application/binding.js"
-    },
-    "./openapi": {
-      "types": "./dist/application/openapi.d.ts",
-      "import": "./dist/application/openapi.js"
-    },
     "./presentation": {
       "types": "./dist/presentation.d.ts",
       "import": "./dist/presentation.js"
@@ -39,14 +27,6 @@
     "./http": {
       "types": "./dist/http/index.d.ts",
       "import": "./dist/http/index.js"
-    },
-    "./message-port": {
-      "types": "./dist/message-port/index.d.ts",
-      "import": "./dist/message-port/index.js"
-    },
-    "./message-port/environment": {
-      "types": "./dist/message-port/environment.d.ts",
-      "import": "./dist/message-port/environment.js"
     },
     "./runtime/bun": {
       "types": "./dist/adapters/bun.d.ts",
@@ -67,6 +47,10 @@
     "./runtime/electron": {
       "types": "./dist/adapters/electron.d.ts",
       "import": "./dist/adapters/electron.js"
+    },
+    "./http/openapi": {
+      "types": "./dist/http/openapi.d.ts",
+      "import": "./dist/http/openapi.js"
     }
   },
   "sideEffects": false,

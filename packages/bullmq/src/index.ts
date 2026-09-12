@@ -1,5 +1,9 @@
-import { binding, type QueueConsumerDriver } from '@loutrejs/loutre'
-import type { ProviderDescriptor, QueueDescriptor } from '@loutrejs/loutre'
+import type { ProviderDescriptor } from '@loutrejs/loutre'
+import {
+  bindQueueDriver,
+  type QueueConsumerDriver,
+  type QueueDescriptor,
+} from '@loutrejs/tasks'
 
 export interface BullMqQueueDriverOptions {
   readonly connection: unknown
@@ -68,7 +72,7 @@ export function bindBullMqQueue(
   queue: QueueDescriptor,
   options: BullMqQueueDriverOptions,
 ): ProviderDescriptor {
-  return binding.queue(queue, createBullMqQueueDriver(queue, options))
+  return bindQueueDriver(queue, createBullMqQueueDriver(queue, options))
 }
 
 async function loadBullMq(): Promise<BullMqModuleLike> {

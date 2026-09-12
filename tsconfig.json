@@ -17,25 +17,15 @@
     "skipLibCheck": true,
     "paths": {
       "@loutrejs/loutre": ["./packages/loutre/src/index.ts"],
-      "@loutrejs/loutre/host": ["./packages/loutre/src/application/host.ts"],
-      "@loutrejs/loutre/binding": [
-        "./packages/loutre/src/application/binding.ts"
-      ],
-      "@loutrejs/loutre/openapi": [
-        "./packages/loutre/src/application/openapi.ts"
-      ],
       "@loutrejs/loutre/presentation": [
         "./packages/loutre/src/presentation.ts"
       ],
       "@loutrejs/loutre/graph": ["./packages/loutre/src/graph/index.ts"],
       "@loutrejs/loutre/runtime": ["./packages/loutre/src/runtime/index.ts"],
       "@loutrejs/loutre/http": ["./packages/loutre/src/http/index.ts"],
-      "@loutrejs/loutre/message-port": [
-        "./packages/loutre/src/message-port/index.ts"
-      ],
-      "@loutrejs/loutre/message-port/environment": [
-        "./packages/loutre/src/message-port/environment.ts"
-      ],
+      "@loutrejs/websocket": ["./packages/websocket/src/index.ts"],
+      "@loutrejs/tasks": ["./packages/tasks/src/index.ts"],
+      "@loutrejs/message-port": ["./packages/message-port/src/index.ts"],
       "@loutrejs/loutre/runtime/bun": ["./packages/loutre/src/adapters/bun.ts"],
       "@loutrejs/loutre/runtime/deno": [
         "./packages/loutre/src/adapters/deno.ts"
@@ -51,7 +41,8 @@
       ],
       "@loutrejs/node": ["./packages/node/src/index.ts"],
       "@loutrejs/bullmq": ["./packages/bullmq/src/index.ts"],
-      "@loutrejs/cli": ["./packages/cli/src/index.ts"]
+      "@loutrejs/cli": ["./packages/cli/src/index.ts"],
+      "@loutrejs/loutre/http/openapi": ["./packages/loutre/src/http/openapi.ts"]
     },
     "types": ["node", "vitest/globals"]
   },

@@ -2,14 +2,18 @@ import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import { Readable } from 'node:stream'
 import {
-  binding,
+  createKernelApplication,
   type ApplicationDefinition,
+  type ApplicationExtensions,
   type BootstrapArguments,
-  type HasHttp,
-  type HostBindingApplication,
-  type InvocationBindingOptions,
+  type KernelHostedApplication,
+  type RuntimeCapabilityBinding,
 } from '@loutrejs/loutre'
-import { type HttpProtocolExecution } from '@loutrejs/loutre/http'
+import {
+  bindHttpServer,
+  httpExecutionExtension,
+  type HttpHostApi,
+} from '@loutrejs/loutre/http'
 import {
   LOUTRE_VERSION,
   detectPresentationTerminal,
@@ -17,22 +21,32 @@ import {
 } from '@loutrejs/loutre/presentation'
 import {
   assertRuntimeEngine,
-  nodeRuntimeCapabilities,
+  nodeRuntimeSupport,
   serverUrl,
 } from '@loutrejs/loutre/runtime'
 
 type IsAny<TValue> = 0 extends 1 & TValue ? true : false
 
+type HasHttpExecutionExtension<TDefinition extends ApplicationDefinition> =
+  Extract<
+    ApplicationExtensions<TDefinition>,
+    typeof httpExecutionExtension
+  > extends never
+    ? false
+    : true
+
 type HttpApplication<TDefinition extends ApplicationDefinition> =
   IsAny<TDefinition> extends true
     ? TDefinition
-    : HasHttp<TDefinition> extends true
+    : HasHttpExecutionExtension<TDefinition> extends true
       ? TDefinition
       : never
 
 export type NodeCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
   readonly environment?: unknown
+  readonly capabilities?: readonly RuntimeCapabilityBinding[]
+  readonly forceShutdownTimeoutMs?: number
 } & BootstrapArguments<TDefinition>
 
 export interface NodeServeOptions {
@@ -48,12 +62,12 @@ export interface NodeListenerHandle {
 
 export type NodeRuntimeApplication<
   TDefinition extends ApplicationDefinition = ApplicationDefinition,
-> = HostBindingApplication<TDefinition> & {
+> = KernelHostedApplication<TDefinition> & {
   serve(options?: NodeServeOptions): Promise<NodeListenerHandle>
 }
 
 export const nodeRuntime = {
-  ...nodeRuntimeCapabilities,
+  ...nodeRuntimeSupport,
   create,
 } as const
 
@@ -69,48 +83,85 @@ async function create<const TDefinition extends ApplicationDefinition>(
       write: (value) => console.log(value),
     },
   )
-  const host = binding.host({
-    application: options.application,
-    environment: 'environment' in options ? options.environment : process.env,
-    ...('arguments' in options ? { arguments: options.arguments } : {}),
-  } as unknown as InvocationBindingOptions<TDefinition>)
-  const http = 'http' in host ? (host.http as HttpProtocolExecution) : undefined
-  if (!http) {
-    await host.application.close()
+
+  if (
+    options.application.model.extensions.get(httpExecutionExtension) ===
+    undefined
+  ) {
     throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: nodeRuntime.create() requires an HTTP-capable Application.',
+      'LUTRE_RUNTIME_HTTP_REQUIRED: nodeRuntime.create() requires the HTTP Execution Extension.',
     )
   }
 
-  await host.application.init()
+  const hosted = createKernelApplication<TDefinition>({
+    ...options,
+    application: options.application,
+    capabilities: [
+      bindHttpServer({ runtime: 'node' }),
+      ...(options.capabilities ?? []),
+    ],
+    environment: 'environment' in options ? options.environment : process.env,
+  })
+  await hosted.init()
+  const application = hosted as NodeRuntimeApplication<TDefinition>
+  const http = (hosted as unknown as { readonly http: HttpHostApi }).http
 
-  const application = host.application as NodeRuntimeApplication<TDefinition>
-  const closeApplication = host.application.close.bind(host.application)
+  const closeApplication = application.close.bind(application)
   let server: Server | undefined
   let removeShutdownHooks: (() => void) | undefined
   let serving = false
   let closed = false
+  let closingPromise: Promise<void> | undefined
+  let serverClosingPromise: Promise<void> | undefined
 
-  const close = async (signal?: string): Promise<void> => {
-    if (closed) return
-    closed = true
-    removeShutdownHooks?.()
-    removeShutdownHooks = undefined
-    const errors: unknown[] = []
-    if (server?.listening) {
+  const beginServerClose = (): Promise<void> => {
+    if (serverClosingPromise) return serverClosingPromise
+    if (!server?.listening) return Promise.resolve()
+    const closingServer = server
+    serverClosingPromise = closeServer(closingServer).then(
+      () => {
+        if (server === closingServer) server = undefined
+      },
+      (error: unknown) => {
+        serverClosingPromise = undefined
+        throw error
+      },
+    )
+    void serverClosingPromise.catch(() => undefined)
+    return serverClosingPromise
+  }
+
+  const close = (signal?: string): Promise<void> => {
+    if (closed) return Promise.resolve()
+    if (closingPromise) return closingPromise
+
+    closingPromise = (async () => {
+      removeShutdownHooks?.()
+      removeShutdownHooks = undefined
+      const errors: unknown[] = []
+      const serverClosing = beginServerClose()
       try {
-        await closeServer(server)
+        await closeApplication(signal)
       } catch (error) {
         errors.push(error)
       }
-    }
-    try {
-      await closeApplication(signal)
-    } catch (error) {
-      errors.push(error)
-    }
-    if (errors.length > 0)
-      throw new AggregateError(errors, 'Node runtime shutdown failed')
+      if (errors.length === 0) {
+        try {
+          await serverClosing
+        } catch (error) {
+          errors.push(error)
+        }
+      }
+      if (errors.length > 0) {
+        throw new AggregateError(errors, 'Node runtime shutdown failed')
+      }
+      closed = true
+    })().catch((error: unknown) => {
+      closingPromise = undefined
+      throw error
+    })
+
+    return closingPromise
   }
 
   const serve = async (
@@ -126,8 +177,6 @@ async function create<const TDefinition extends ApplicationDefinition>(
     }
     serving = true
     try {
-      if ('triggers' in application) await application.triggers.start()
-
       server = createNodeHttpServerDriver(http)
       const requestedPort = serveOptions.port
       let port = requestedPort ?? 3000
@@ -184,15 +233,21 @@ function registerNodeShutdownHooks(
   return remove
 }
 
+interface NodeHttpRequestHandler {
+  initialize?(): Promise<void>
+  fetch(request: Request): Promise<Response>
+  onServerListening?(url: string): void
+}
+
 interface NodeHttpServerDriverOptions {
   readonly onListening?: (url: string) => void
 }
 
 function createNodeHttpServerDriver(
-  application: HttpProtocolExecution,
+  application: NodeHttpRequestHandler,
   options: NodeHttpServerDriverOptions = {},
 ): Server {
-  const initialization = application.initialize()
+  const initialization = application.initialize?.() ?? Promise.resolve()
   void initialization.catch(() => undefined)
 
   const server = createServer(async (incoming, outgoing) => {
@@ -230,7 +285,7 @@ function createNodeHttpServerDriver(
           : {}),
       }
       const request = new Request(new URL(incoming.url ?? '/', origin), init)
-      const response = await application.handle(request)
+      const response = await application.fetch(request)
       outgoing.statusCode = response.status
       response.headers.forEach((value: string, name: string) => {
         if (name !== 'set-cookie') outgoing.setHeader(name, value)
@@ -251,6 +306,10 @@ function createNodeHttpServerDriver(
       }
       outgoing.end()
     } catch {
+      if (outgoing.headersSent) {
+        outgoing.destroy()
+        return
+      }
       outgoing.statusCode = 500
       outgoing.setHeader('content-type', 'application/json; charset=utf-8')
       outgoing.end(JSON.stringify({ error: 'Internal Server Error' }))
@@ -263,7 +322,7 @@ function createNodeHttpServerDriver(
       address.family === 'IPv6' ? `[${address.address}]` : address.address
     const url = `http://${host}:${address.port}`
     options.onListening?.(url)
-    application.onServerListening(url)
+    application.onServerListening?.(url)
   })
   return server
 }

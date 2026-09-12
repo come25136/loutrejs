@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { relative } from 'node:path'
 import { isCancel, select, text } from '@clack/prompts'
 import { Command, CommanderError, Option } from 'commander'
-import { bootstrap } from '@loutrejs/loutre/host'
+import { bootstrapApplication } from '@loutrejs/loutre'
 import {
   detectPresentationTerminal,
   renderLoutreBrand,
@@ -75,9 +75,9 @@ export async function runCreateLoutre(
   )
   if (!packageManager) return 2
 
-  const app = bootstrap({ application })
+  const app = await bootstrapApplication({ application })
   try {
-    const result = await app.run(createProject, {
+    const result = await app.tasks.run(createProject, {
       cwd: io.cwd,
       directory,
       packageManager,

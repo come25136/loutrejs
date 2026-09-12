@@ -1,19 +1,22 @@
-import { defineApplication } from '@loutrejs/loutre'
-import { checkCapabilities } from '@loutrejs/loutre/runtime'
+import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { checkRuntimeSupport } from '@loutrejs/loutre/runtime'
+import { http } from '@loutrejs/loutre/http'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { nodeRuntime } from '@loutrejs/node'
 import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
+import { messagePort } from '@loutrejs/message-port'
+import { z } from 'zod'
 import { UsersModule } from '../integrations/http-crud/src/index.js'
-import { EventsModule } from '../integrations/streaming/src/index.js'
+import { EventsHttpModule } from '../integrations/streaming/src/index.js'
 import { silentLogger } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>
   defineApplication({ modules: [UsersModule()], logger: silentLogger })
 const eventsDefinition = () =>
-  defineApplication({ modules: [EventsModule()], logger: silentLogger })
+  defineApplication({ modules: [EventsHttpModule()], logger: silentLogger })
 
 describe('Runtime conformance harness', () => {
   afterEach(() => {
@@ -103,6 +106,120 @@ describe('Runtime conformance harness', () => {
     )
   })
 
+  it('AWS Lambda streamingのoutput書き込み失敗時にResponse bodyをcancelする', async () => {
+    vi.stubEnv('AWS_EXECUTION_ENV', 'AWS_Lambda_nodejs24.x')
+    let returned = 0
+    const source: AsyncIterable<{ sequence: number }> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            return { done: false, value: { sequence: 1 } }
+          },
+          async return() {
+            returned += 1
+            return { done: true, value: undefined }
+          },
+        }
+      },
+    }
+    const contract = http.contract({
+      events: {
+        method: 'GET',
+        path: '/events',
+        interaction: 'server-stream',
+        responses: {
+          ok: {
+            status: 200,
+            stream: 'server',
+            body: z.object({ sequence: z.number() }),
+          },
+        },
+      },
+    })
+    const implementation = http.implementation({
+      contract,
+      factory: () => ({
+        events: (context) => context.response.ok({ body: source }),
+      }),
+    })
+    const Module = defineModule(() => ({ executions: [implementation] }))
+    const handler = awsLambdaRuntime.bind({
+      application: defineApplication({ modules: [Module()] }),
+      response: 'streaming',
+    })
+
+    await expect(
+      handler(
+        {
+          rawPath: '/events',
+          requestContext: { http: { method: 'GET' } },
+        },
+        {
+          write() {
+            throw new Error('output failed')
+          },
+          end() {},
+        },
+      ),
+    ).rejects.toThrow('output failed')
+    expect(returned).toBe(1)
+  })
+
+  it('Electron attachが新MessagePort ExtensionをKernel経由で実行する', async () => {
+    Object.defineProperty(process.versions, 'electron', {
+      configurable: true,
+      value: '43.0.0',
+    })
+    try {
+      const contract = messagePort.contract({
+        greet: {
+          input: z.object({ name: z.string() }),
+          responses: { ok: z.object({ message: z.string() }) },
+        },
+      })
+      const handler = messagePort.implementation({
+        name: 'ElectronGreetHandler',
+        contract,
+        factory: () => ({
+          greet: (context) =>
+            context.response.ok({ message: `Hello, ${context.input.name}` }),
+        }),
+      })
+      const Module = defineModule(() => ({ executions: [handler] }))
+      let onMessage: ((event: { readonly data: unknown }) => void) | undefined
+      const posted: unknown[] = []
+      const attachment = electronRuntime.attach({
+        application: defineApplication({ modules: [Module()] }),
+        port: {
+          postMessage: (value) => posted.push(value),
+          on: (_type, listener) => {
+            onMessage = listener
+          },
+          start: () => undefined,
+        },
+      })
+
+      onMessage?.({
+        data: {
+          id: 'request-1',
+          procedure: 'greet',
+          input: { name: 'Loutre' },
+        },
+      })
+      await vi.waitFor(() => {
+        expect(posted).toContainEqual({
+          id: 'request-1',
+          response: 'ok',
+          value: { message: 'Hello, Loutre' },
+          done: true,
+        })
+      })
+      await attachment.close()
+    } finally {
+      delete (process.versions as Record<string, string | undefined>).electron
+    }
+  })
+
   it('runtime identityはversionから独立している', () => {
     expect(nodeRuntime.runtime).toBe('node')
     expect(bunRuntime.runtime).toBe('bun')
@@ -133,10 +250,10 @@ describe('Runtime conformance harness', () => {
       cloudflareWorkersRuntime,
       awsLambdaRuntime,
     ]) {
-      expect(checkCapabilities(['http.server'], runtime).ok).toBe(true)
+      expect(checkRuntimeSupport(['http.server'], runtime).ok).toBe(true)
     }
     expect(
-      checkCapabilities(
+      checkRuntimeSupport(
         ['messagePort.send', 'messagePort.receive'],
         electronRuntime,
       ).ok,

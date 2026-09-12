@@ -10,12 +10,11 @@ import {
 
 describe('database modules integration', () => {
   it('同じParameterized Moduleの2 instanceを別tokenで解決する', async () => {
-    const { runtime, events, env } = await createDatabaseIntegration('memory')
-    await runtime.initialize()
-
-    const primary = await runtime.container.resolve(PRIMARY_DB)
-    const analytics = await runtime.container.resolve(ANALYTICS_DB)
-    const storage = await runtime.container.resolve(STORAGE)
+    const { runtime, events, env, model } =
+      await createDatabaseIntegration('memory')
+    const primary = runtime.get(PRIMARY_DB)
+    const analytics = runtime.get(ANALYTICS_DB)
+    const storage = runtime.get(STORAGE)
 
     expect(primary).not.toBe(analytics)
     expect(primary.url).toBe('primary://example')
@@ -30,13 +29,16 @@ describe('database modules integration', () => {
       'primary.bootstrap',
       'analytics.bootstrap',
     ])
+    const primaryProvider = model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === PRIMARY_DB,
+    )
     expect(
-      runtime.graph.modules.filter(({ definition }) =>
-        definition.exports?.includes(PRIMARY_DB),
+      model.edges.filter(
+        (edge) => edge.kind === 'exports' && edge.to === primaryProvider?.id,
       ),
     ).toHaveLength(1)
 
-    await runtime.shutdown('test')
+    await runtime.close('test')
     expect(events.slice(-6)).toEqual([
       'analytics.close',
       'primary.close',
@@ -49,9 +51,8 @@ describe('database modules integration', () => {
 
   it('finite Env branchからconditional Providerを選ぶ', async () => {
     const { runtime } = await createDatabaseIntegration('s3')
-    await runtime.initialize()
-    expect(await runtime.container.resolve(STORAGE)).toBeInstanceOf(S3Storage)
-    await runtime.shutdown()
+    expect(runtime.get(STORAGE)).toBeInstanceOf(S3Storage)
+    await runtime.close()
   })
 
   it('Env keyは値を含まないsymbolic referenceである', () => {
