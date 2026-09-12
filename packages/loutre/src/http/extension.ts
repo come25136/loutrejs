@@ -631,6 +631,12 @@ export const httpExecutionExtension = defineExecutionExtension<
       name: route.name,
       method: route.method,
       path: route.path,
+      middlewares: route.middlewares.map((middleware) => ({
+        name: middleware.name,
+        capabilities: middleware.capabilities.map(
+          (capability) => capability.id,
+        ),
+      })),
       responses: Object.fromEntries(
         Object.entries(route.definition.responses).map(([name, response]) => [
           name,
