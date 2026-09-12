@@ -58,9 +58,53 @@ const BranchController = http.implementation({
   },
 })
 
+const MutatedContract = http.contract({
+  create: {
+    method: 'POST',
+    path: '/mutated-implementation',
+    responses: { ok: { status: 200 } },
+  },
+})
+
+const implementation = {
+  name: 'MutatedController',
+  contract: MutatedContract,
+  factory: oldFactory,
+}
+implementation.factory = realFactory
+const MutatedController = http.implementation(implementation)
+
+const SpreadContract = http.contract({
+  create: {
+    method: 'POST',
+    path: '/spread-handler',
+    responses: { ok: { status: 200 } },
+  },
+})
+const actualHandlers: Record<string, (...args: any[]) => unknown> = {
+  create(ctx: any) {
+    return ctx.response.ok({})
+  },
+}
+const SpreadController = http.implementation({
+  name: 'SpreadController',
+  contract: SpreadContract,
+  factory: () => ({
+    create() {
+      throw new Error('decoy handler must never provide source metadata')
+    },
+    ...actualHandlers,
+  }),
+})
+
 const Module = defineModule(() => ({
   name: 'HandlerSafetyModule',
-  executions: [ReassignedController, BranchController],
+  executions: [
+    ReassignedController,
+    BranchController,
+    MutatedController,
+    SpreadController,
+  ],
 }))
 
 export default defineApplication({ modules: [Module()] })

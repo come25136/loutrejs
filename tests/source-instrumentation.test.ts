@@ -147,6 +147,65 @@ void Controller
     expect(transformed).not.toContain('__loutreMemberSource(Controller.factory')
   })
 
+  it('変数化したimplementation objectはhandler member sourceを推定しない', () => {
+    const source = `import { http } from '@loutrejs/loutre/http'
+const oldFactory = () => ({ create() {} })
+const realFactory = () => ({ create() {} })
+const implementation = { name: 'Controller', contract: {} as any, factory: oldFactory }
+implementation.factory = realFactory
+const Controller = http.implementation(implementation)
+void Controller
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).not.toContain('__loutreMemberSource(Controller.factory')
+  })
+
+  it('spreadまたはcomputed propertyを含むhandler objectはmember sourceを推定しない', () => {
+    const source = `import { http } from '@loutrejs/loutre/http'
+const actual = { create() {} }
+const dynamicKey = 'create'
+const SpreadController = http.implementation({
+  name: 'SpreadController',
+  contract: {} as any,
+  factory: () => ({ create() {}, ...actual }),
+})
+const ComputedController = http.implementation({
+  name: 'ComputedController',
+  contract: {} as any,
+  factory: () => ({ create() {}, [dynamicKey]() {} }),
+})
+void SpreadController
+void ComputedController
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).not.toContain(
+      '__loutreMemberSource(SpreadController.factory',
+    )
+    expect(transformed).not.toContain(
+      '__loutreMemberSource(ComputedController.factory',
+    )
+  })
+
+  it('Windows drive形式のproject-relative結果はinstrumentation対象外にする', () => {
+    const source = `import { defineModule } from '@loutrejs/loutre'
+const Module = defineModule(() => ({ name: 'App' }))
+void Module
+`
+    expect(
+      instrumentSourceLocations(source, '/repo/D:\\external\\app.ts', '/repo'),
+    ).toBe(source)
+  })
+
   it('namespace importとconst provider builder bindingを認識する', () => {
     const source = `import * as loutre from '@loutrejs/loutre'
 import * as httpApi from '@loutrejs/loutre/http'

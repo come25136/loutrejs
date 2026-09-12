@@ -1,4 +1,4 @@
-import { relative, sep } from 'node:path'
+import { isAbsolute, relative, sep, win32 } from 'node:path'
 import { parseSync } from 'oxc-parser'
 
 type AstNode = {
@@ -101,17 +101,21 @@ export function instrumentSourceLocations(
     variableName?: string,
     annotationPosition = call.end,
   ) => {
-    const definition = resolveStaticExpression(
-      call.arguments?.[0],
-      initializers,
-    )
+    const definition = unwrapExpression(call.arguments?.[0])
     if (!definition || definition.type !== 'ObjectExpression') return
     const factory = resolveStaticExpression(
       objectPropertyValue(definition, 'factory'),
       initializers,
     )
     const handlers = factory ? returnedHandlerObject(factory) : undefined
-    if (!factory || !handlers || !variableName) return
+    if (
+      !factory ||
+      !handlers ||
+      !isSafeHandlerObject(handlers) ||
+      !variableName
+    ) {
+      return
+    }
     for (const property of objectProperties(handlers)) {
       const name = propertyName(property)
       if (!name) continue
@@ -578,6 +582,18 @@ function returnedObject(
   return undefined
 }
 
+function isSafeHandlerObject(value: AstNode): boolean {
+  if (value.type !== 'ObjectExpression') return false
+  const names = new Set<string>()
+  for (const property of value.properties ?? []) {
+    if (property.type !== 'Property' || property.computed === true) return false
+    const name = propertyName(property)
+    if (!name || names.has(name)) return false
+    names.add(name)
+  }
+  return true
+}
+
 function objectProperties(value: AstNode): readonly AstNode[] {
   if (value.type !== 'ObjectExpression') return []
   return (value.properties ?? []).filter(
@@ -666,8 +682,15 @@ function projectRelativeFile(
   projectRoot: string,
 ): string | undefined {
   const path = relative(projectRoot, file)
-  if (path === '' || path === '..' || path.startsWith(`..${sep}`))
+  if (
+    path === '' ||
+    path === '..' ||
+    path.startsWith(`..${sep}`) ||
+    isAbsolute(path) ||
+    win32.isAbsolute(path)
+  ) {
     return undefined
+  }
   if (path.split(sep).includes('node_modules')) return undefined
   return path.split(sep).join('/')
 }

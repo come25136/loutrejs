@@ -492,7 +492,7 @@ describe('Loutre CLI', () => {
     )
   })
 
-  it('再代入factoryと複数return factoryはhandler sourceをControllerへfallbackする', async () => {
+  it('曖昧なhandler factory/objectはhandler sourceをControllerへfallbackする', async () => {
     const output = io()
     expect(
       await runCli(
@@ -515,7 +515,12 @@ describe('Loutre CLI', () => {
           candidate.kind === kind && candidate.label === label,
       )
 
-    for (const name of ['ReassignedController', 'BranchController']) {
+    for (const name of [
+      'ReassignedController',
+      'BranchController',
+      'MutatedController',
+      'SpreadController',
+    ]) {
       expect(node('handler', `${name}.create`)?.source).toEqual(
         node('execution', name)?.source,
       )
