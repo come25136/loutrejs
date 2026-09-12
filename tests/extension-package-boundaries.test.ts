@@ -79,4 +79,15 @@ describe('npm package境界', () => {
       'loutre:websocket',
     ])
   })
+
+  it('package consumer CIがmain packageのsubpathだけを検証する', async () => {
+    const workflow = await readFile(
+      resolve(repository, '.github/workflows/ci.yml'),
+      'utf8',
+    )
+
+    expect(workflow).not.toMatch(/loutrejs-(?:tasks|message-port|websocket)-/u)
+    expect(workflow).not.toMatch(/@loutrejs\/(?:tasks|message-port|websocket)/u)
+    expect(workflow).toContain('@loutrejs/loutre/tasks')
+  })
 })
