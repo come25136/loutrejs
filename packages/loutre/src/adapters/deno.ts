@@ -1,9 +1,9 @@
 import {
   createKernelApplication,
   type ApplicationDefinition,
-  type ApplicationExtensionHostApis,
   type BootstrapArguments,
   type KernelHostedApplication,
+  type RequireApplicationHost,
 } from '../application/index.js'
 import type { RuntimeCapabilityBinding } from '../core/index.js'
 import {
@@ -13,18 +13,13 @@ import {
 import { LOUTRE_VERSION, startStartupPresentation } from '../presentation.js'
 import { assertRuntimeEngine } from '../runtime/engine.js'
 import { serverUrl } from '../runtime/server-url.js'
-
-type IsAny<TValue> = 0 extends 1 & TValue ? true : false
-
-type HasHttpExecutionExtension<TDefinition extends ApplicationDefinition> =
-  'http' extends keyof ApplicationExtensionHostApis<TDefinition> ? true : false
+import {
+  canRetryOnNextPort,
+  initialServerPort,
+} from '../runtime/server-port.js'
 
 type HttpApplication<TDefinition extends ApplicationDefinition> =
-  IsAny<TDefinition> extends true
-    ? TDefinition
-    : HasHttpExecutionExtension<TDefinition> extends true
-      ? TDefinition
-      : never
+  RequireApplicationHost<TDefinition, 'http'>
 
 type DenoServer = { shutdown(): Promise<void> }
 
@@ -229,7 +224,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
     serving = true
     try {
       const requestedPort = serveOptions.port
-      let port = requestedPort ?? 3000
+      let port = initialServerPort(requestedPort)
       while (true) {
         try {
           server = deno.serve(
@@ -298,19 +293,6 @@ function registerDenoShutdownHooks(
     deno.addSignalListener(signal, handler)
   }
   return remove
-}
-
-function canRetryOnNextPort(error: unknown, port: number): boolean {
-  return port < 65_535 && isAddressInUseError(error)
-}
-
-function isAddressInUseError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'EADDRINUSE'
-  )
 }
 
 interface DenoHttpRequestHandler {

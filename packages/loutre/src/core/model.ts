@@ -8,20 +8,22 @@ import {
   type ExecutionExtension,
   type RuntimeCapability,
 } from './extension.js'
-import {
-  asModuleInstance,
-  type ModuleInstance,
-  type ModuleTemplate,
-} from './module.js'
-import {
-  argumentsProvider,
-  normalizeProvider,
-  type ProviderDescriptor,
-} from './provider.js'
-import { collectInjectedDependencies } from './injection.js'
+import type { ModuleInstance, ModuleTemplate } from './module.js'
+import type { ProviderDescriptor } from './provider.js'
 import type { LifecycleHook } from './lifecycle.js'
 import { isFrameworkProvidedToken } from './token-internal.js'
 import { tokenName, type TokenLike } from './token.js'
+import { createModelBuildContext } from './model/context.js'
+import { resolveLifecycleDependencies } from './model/lifecycle.js'
+import { collectModuleDeclarations } from './model/modules.js'
+import {
+  compileArgumentsProvider,
+  resolveModuleExports,
+  resolveProviderDependencies,
+} from './model/providers.js'
+import { snapshotExecutionExtension } from './model/snapshot.js'
+import { validateHostNamespaces, validateNodeIds } from './model/validation.js'
+import { isTokenVisible, moduleDeclaresToken } from './model/visibility.js'
 
 export interface ModuleModelNode {
   readonly kind: 'module'
@@ -172,225 +174,23 @@ export function assertValidApplicationModel(
 export function buildApplicationModel(
   options: ApplicationModelBuildOptions,
 ): ApplicationModel {
-  const modules = collectModules(options.modules)
-  const moduleIds = new Map(
-    modules.map((module, index) => [module, `module:${index + 1}`]),
-  )
-  const nodes: ApplicationModelNode[] = []
-  const edges: ApplicationModelEdge[] = []
-  const diagnostics: Diagnostic[] = []
-  const providers: ProviderDescriptor[] = []
-  const executions: ExecutionModelNode[] = []
-  const providerNodes = new Map<TokenLike, ProviderModelNode>()
-  const moduleNames = new Set<string>()
-  let providerOrdinal = 0
+  const context = createModelBuildContext(options)
+  collectModuleDeclarations(context)
+  resolveModuleExports(context)
+  compileArgumentsProvider(context)
+  resolveProviderDependencies(context)
+  resolveLifecycleDependencies(context)
 
-  for (const module of modules) {
-    const moduleId = moduleIds.get(module)!
-    if (module.definition.name) {
-      if (moduleNames.has(module.definition.name)) {
-        diagnostics.push(
-          diagnostic(
-            'LUTRE_MODULE_NAME_COLLISION',
-            `Module name ${module.definition.name} is already registered.`,
-            moduleId,
-          ),
-        )
-      }
-      moduleNames.add(module.definition.name)
-    }
-    nodes.push({
-      kind: 'module',
-      id: moduleId,
-      ...(module.definition.name === undefined
-        ? {}
-        : { name: module.definition.name }),
-      ...(module.definition.description === undefined
-        ? {}
-        : { description: module.definition.description }),
-    })
-    for (const imported of module.definition.imports ?? []) {
-      const target = moduleIds.get(asModuleInstance(imported))
-      if (target) edges.push({ from: moduleId, to: target, kind: 'imports' })
-    }
-    for (const declaration of module.definition.providers ?? []) {
-      const provider = snapshotProvider(normalizeProvider(declaration))
-      const providerId = `provider:${++providerOrdinal}`
-      const existingProvider = providerNodes.get(provider.provide)
-      if (
-        existingProvider?.provider.kind === 'environment' &&
-        provider.kind === 'environment'
-      ) {
-        edges.push({ from: moduleId, to: existingProvider.id, kind: 'owns' })
-        if (module.definition.exports?.includes(provider.provide)) {
-          edges.push({
-            from: moduleId,
-            to: existingProvider.id,
-            kind: 'exports',
-          })
-        }
-        continue
-      }
-      if (existingProvider) {
-        diagnostics.push(
-          diagnostic(
-            'LUTRE_PROVIDER_DUPLICATE',
-            `Provider ${tokenName(provider.provide)} is declared more than once.`,
-            providerId,
-          ),
-        )
-        continue
-      }
-      const node: ProviderModelNode = {
-        kind: 'provider',
-        id: providerId,
-        token: provider.provide,
-        provider,
-        moduleId,
-        dependencies: collectProviderDependencies(provider),
-      }
-      providers.push(provider)
-      providerNodes.set(provider.provide, node)
-      nodes.push(node)
-      edges.push({ from: moduleId, to: providerId, kind: 'owns' })
-      if (module.definition.exports?.includes(provider.provide)) {
-        edges.push({ from: moduleId, to: providerId, kind: 'exports' })
-      }
-    }
-    appendLifecycleNodes(module, moduleId, nodes, edges)
-  }
-
-  for (const module of modules) {
-    const moduleId = moduleIds.get(module)!
-    for (const exported of module.definition.exports ?? []) {
-      if (moduleDeclaresToken(module, exported as TokenLike)) continue
-      const provider = providerNodes.get(exported as TokenLike)
-      const providerModule = provider
-        ? modules.find(
-            (candidate) => moduleIds.get(candidate) === provider.moduleId,
-          )
-        : undefined
-      if (
-        provider &&
-        providerModule &&
-        isTokenVisible(module, providerModule, exported as TokenLike)
-      ) {
-        edges.push({ from: moduleId, to: provider.id, kind: 'exports' })
-        continue
-      }
-      diagnostics.push(
-        diagnostic(
-          'LUTRE_MODULE_EXPORT_UNRESOLVED',
-          `Module export ${tokenName(exported as TokenLike)} is neither declared by the Module nor re-exported from an imported Module.`,
-          `${moduleId}.exports.${tokenName(exported as TokenLike)}`,
-        ),
-      )
-    }
-  }
-
-  if (options.arguments) {
-    const existingProvider = providerNodes.get(options.arguments)
-    if (existingProvider) {
-      diagnostics.push(
-        diagnostic(
-          'LUTRE_ARGS_001',
-          `Arguments ${tokenName(options.arguments)} is runtime-managed and cannot also be declared as a normal provider.`,
-          existingProvider.id,
-        ),
-      )
-    }
-    const provider = snapshotProvider(argumentsProvider(options.arguments))
-    const node: ProviderModelNode = {
-      kind: 'provider',
-      id: `provider:${++providerOrdinal}`,
-      token: options.arguments,
-      provider,
-      moduleId: 'application',
-      dependencies: Object.freeze([]),
-    }
-    providers.push(provider)
-    providerNodes.set(options.arguments, node)
-    nodes.push(node)
-  }
-
-  for (const provider of providerNodes.values()) {
-    if (provider.moduleId === 'application') continue
-    const sourceModule = modules.find(
-      (candidate) => moduleIds.get(candidate) === provider.moduleId,
-    )
-    if (!sourceModule) continue
-    for (const dependency of provider.dependencies) {
-      const target = providerNodes.get(dependency)
-      if (target) {
-        edges.push({ from: provider.id, to: target.id, kind: 'injects' })
-        const targetModule = modules.find(
-          (candidate) => moduleIds.get(candidate) === target.moduleId,
-        )
-        if (
-          targetModule &&
-          target.moduleId !== provider.moduleId &&
-          !moduleDeclaresToken(sourceModule, dependency) &&
-          !isTokenVisible(sourceModule, targetModule, dependency)
-        ) {
-          diagnostics.push(
-            diagnostic(
-              'LUTRE_MODULE_VISIBILITY',
-              `Provider ${tokenName(provider.token)} depends on private ${tokenName(dependency)} from another Module.`,
-              provider.id,
-            ),
-          )
-        }
-      } else if (!isFrameworkProvidedToken(dependency)) {
-        diagnostics.push(
-          diagnostic(
-            'LUTRE_PROVIDER_DEPENDENCY_MISSING',
-            `Provider ${tokenName(provider.token)} requires ${tokenName(dependency)}, but no provider is declared.`,
-            provider.id,
-          ),
-        )
-      }
-    }
-  }
-
-  for (const lifecycle of nodes.filter(
-    (node): node is LifecycleModelNode => node.kind === 'lifecycle',
-  )) {
-    for (const dependency of lifecycle.hook.inject) {
-      const provider = providerNodes.get(dependency)
-      if (provider) {
-        edges.push({ from: lifecycle.id, to: provider.id, kind: 'injects' })
-        const sourceModule = modules.find(
-          (candidate) => moduleIds.get(candidate) === lifecycle.moduleId,
-        )
-        const providerModule = modules.find(
-          (candidate) => moduleIds.get(candidate) === provider.moduleId,
-        )
-        if (
-          sourceModule &&
-          providerModule &&
-          provider.moduleId !== lifecycle.moduleId &&
-          !moduleDeclaresToken(sourceModule, dependency) &&
-          !isTokenVisible(sourceModule, providerModule, dependency)
-        ) {
-          diagnostics.push(
-            diagnostic(
-              'LUTRE_MODULE_VISIBILITY',
-              `Lifecycle ${lifecycle.phase} depends on private ${tokenName(dependency)} from another Module.`,
-              lifecycle.id,
-            ),
-          )
-        }
-      } else if (!isFrameworkProvidedToken(dependency)) {
-        diagnostics.push(
-          diagnostic(
-            'LUTRE_LIFECYCLE_DEPENDENCY_MISSING',
-            `Lifecycle ${lifecycle.phase} requires ${tokenName(dependency)}, but no provider is declared.`,
-            lifecycle.id,
-          ),
-        )
-      }
-    }
-  }
+  const {
+    modules,
+    moduleIds,
+    nodes,
+    edges,
+    diagnostics,
+    providers,
+    executions,
+    providerNodes,
+  } = context
 
   const extensionExecutions = new Map<
     symbol,
@@ -801,206 +601,6 @@ export function buildApplicationModel(
   })
 }
 
-function collectProviderDependencies(
-  provider: ProviderDescriptor,
-): readonly TokenLike[] {
-  switch (provider.kind) {
-    case 'class':
-      return Object.freeze(
-        collectInjectedDependencies(provider.provide, () =>
-          Reflect.construct(provider.useClass, []),
-        ),
-      )
-    case 'factory':
-      return Object.freeze([...provider.inject])
-    case 'conditional': {
-      const dependencies = new Set<TokenLike>()
-      for (const implementation of Object.values(provider.mapping)) {
-        for (const dependency of collectInjectedDependencies(
-          provider.provide,
-          () => Reflect.construct(implementation, []),
-        )) {
-          dependencies.add(dependency)
-        }
-      }
-      return Object.freeze([...dependencies])
-    }
-    case 'value':
-    case 'environment':
-    case 'arguments':
-      return Object.freeze([])
-  }
-}
-
-function collectModules(
-  roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
-): ModuleInstance[] {
-  const result: ModuleInstance[] = []
-  const seen = new Set<ModuleInstance>()
-  const visit = (candidate: ModuleInstance | ModuleTemplate<void>) => {
-    const module = asModuleInstance(candidate)
-    if (seen.has(module)) return
-    seen.add(module)
-    for (const imported of module.definition.imports ?? []) visit(imported)
-    result.push(module)
-  }
-  for (const root of roots) visit(root)
-  return result
-}
-
-function appendLifecycleNodes(
-  module: ModuleInstance,
-  moduleId: string,
-  nodes: ApplicationModelNode[],
-  edges: ApplicationModelEdge[],
-): void {
-  const lifecycle = module.definition.lifecycle
-  if (!lifecycle) return
-  for (const [phase, hook] of Object.entries(lifecycle)) {
-    const id = `lifecycle:${moduleId}:${phase}`
-    nodes.push({
-      kind: 'lifecycle',
-      id,
-      moduleId,
-      phase,
-      hook: snapshotLifecycleHook(hook),
-    })
-    edges.push({ from: moduleId, to: id, kind: 'owns' })
-  }
-}
-
-function validateHostNamespaces(
-  extensions: readonly ApplicationModelExtension[],
-  diagnostics: Diagnostic[],
-): void {
-  const reserved = new Set([
-    'graph',
-    'init',
-    'get',
-    'close',
-    'serve',
-    'then',
-    '__proto__',
-    'prototype',
-    'constructor',
-  ])
-  const owners = new Map<string, ExecutionExtension>()
-  for (const { extension } of extensions) {
-    const namespace = extension.host?.namespace
-    if (!namespace) continue
-    if (reserved.has(namespace)) {
-      diagnostics.push(
-        diagnostic(
-          'LUTRE_HOST_NAMESPACE_RESERVED',
-          `Host namespace ${namespace} is reserved by the Application or runtime adapter API.`,
-          `host.${namespace}`,
-        ),
-      )
-      continue
-    }
-    const owner = owners.get(namespace)
-    if (owner && owner.identity !== extension.identity) {
-      diagnostics.push(
-        diagnostic(
-          'LUTRE_HOST_NAMESPACE_COLLISION',
-          `Host namespace ${namespace} is contributed by both ${owner.name} and ${extension.name}.`,
-          `host.${namespace}`,
-        ),
-      )
-      continue
-    }
-    owners.set(namespace, extension)
-  }
-}
-
-function validateNodeIds(
-  nodes: readonly ApplicationModelNode[],
-  diagnostics: Diagnostic[],
-): void {
-  const seen = new Set<string>()
-  for (const node of nodes) {
-    if (!seen.has(node.id)) {
-      seen.add(node.id)
-      continue
-    }
-    diagnostics.push(
-      diagnostic(
-        'LUTRE_APPLICATION_NODE_ID_COLLISION',
-        `Application Model node id ${node.id} is not globally unique.`,
-        node.id,
-      ),
-    )
-  }
-}
-
-function snapshotProvider(provider: ProviderDescriptor): ProviderDescriptor {
-  switch (provider.kind) {
-    case 'class':
-      return Object.freeze({ ...provider })
-    case 'value':
-      return Object.freeze({ ...provider })
-    case 'factory':
-      return Object.freeze({
-        ...provider,
-        inject: Object.freeze([...provider.inject]),
-      })
-    case 'conditional':
-      return Object.freeze({
-        ...provider,
-        select: Object.freeze({ ...provider.select }),
-        mapping: Object.freeze({ ...provider.mapping }),
-      })
-    case 'environment':
-    case 'arguments':
-      return Object.freeze({ ...provider })
-  }
-}
-
-function snapshotLifecycleHook(hook: LifecycleHook<any>): LifecycleHook<any> {
-  return Object.freeze({
-    kind: 'lifecycle-hook',
-    inject: Object.freeze([...hook.inject]),
-    run: hook.run,
-  })
-}
-
-function snapshotExecutionExtension(
-  extension: ExecutionExtension,
-): ExecutionExtension {
-  return Object.freeze({
-    ...extension,
-    ...(extension.host === undefined
-      ? {}
-      : { host: Object.freeze({ ...extension.host }) }),
-  })
-}
-
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-function moduleDeclaresToken(
-  module: ModuleInstance,
-  token: TokenLike,
-): boolean {
-  return (module.definition.providers ?? []).some(
-    (provider) => normalizeProvider(provider).provide === token,
-  )
-}
-
-function isTokenVisible(
-  source: ModuleInstance,
-  target: ModuleInstance,
-  token: TokenLike,
-  visited = new Set<ModuleInstance>(),
-): boolean {
-  if (visited.has(source)) return false
-  visited.add(source)
-  for (const importedValue of source.definition.imports ?? []) {
-    const imported = asModuleInstance(importedValue)
-    if (!imported.definition.exports?.includes(token)) continue
-    if (imported === target) return true
-    if (isTokenVisible(imported, target, token, new Set(visited))) return true
-  }
-  return false
 }

@@ -16,6 +16,7 @@ import {
   type TokenLike,
 } from '../core/index.js'
 import { Container } from './di.js'
+import { ExecutionTracker } from './execution-tracker.js'
 import { Logger } from './logger.js'
 
 export interface ApplicationKernelRuntimeOptions {
@@ -35,11 +36,6 @@ type RuntimeState =
   | 'draining'
   | 'stopped'
 
-interface ActiveExecution extends ExecutionLease {
-  readonly controller: AbortController
-  completed: boolean
-}
-
 interface ExtensionDrainOperation {
   readonly result: Promise<void>
   pending: boolean
@@ -52,8 +48,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   readonly #extensionRuntimes = new Map<symbol, ExecutionExtensionRuntime>()
   readonly #providerInstances = new Map<string, unknown[]>()
   readonly #initializedModuleIds = new Set<string>()
-  readonly #activeExecutions = new Set<ActiveExecution>()
-  readonly #idleWaiters = new Set<() => void>()
+  readonly #executions = new ExecutionTracker()
   readonly #extensionDrainOperations = new Map<
     symbol,
     ExtensionDrainOperation
@@ -231,25 +226,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
 
   beginExecution(): ExecutionLease {
     if (this.#state !== 'running') throw applicationStateError(this.#state)
-    const controller = new AbortController()
-    const lease: ActiveExecution = {
-      controller,
-      signal: controller.signal,
-      completed: false,
-      abort: (reason?: unknown) => controller.abort(reason),
-      complete: () => {
-        if (lease.completed) return
-        lease.completed = true
-        if (!controller.signal.aborted) controller.abort()
-        this.#activeExecutions.delete(lease)
-        if (this.#activeExecutions.size === 0) {
-          for (const resolve of this.#idleWaiters) resolve()
-          this.#idleWaiters.clear()
-        }
-      },
-    }
-    this.#activeExecutions.add(lease)
-    return lease
+    return this.#executions.begin()
   }
 
   shutdown(signal?: string): Promise<void> {
@@ -304,17 +281,15 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       }
       errors.push(result.reason)
     }
-    if (this.#activeExecutions.size > 0) {
+    if (this.#executions.size > 0) {
       if (drainFailed) {
         const reason = new Error(
           'LUTRE_APPLICATION_FORCE_SHUTDOWN: Extension drain failed.',
         )
-        for (const execution of this.#activeExecutions) {
-          execution.abort(reason)
-        }
+        this.#executions.abortAll(reason)
       }
       try {
-        await this.#waitForActiveExecutions(this.#forceShutdownTimeoutMs)
+        await this.#executions.waitForIdle(this.#forceShutdownTimeoutMs)
       } catch (error) {
         errors.push(error)
         throw new AggregateError(
@@ -419,27 +394,6 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         errors,
       )
     }
-  }
-
-  #waitForActiveExecutions(timeoutMs?: number): Promise<void> {
-    if (this.#activeExecutions.size === 0) return Promise.resolve()
-    return new Promise<void>((resolve, reject) => {
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const resolveWhenIdle = () => {
-        if (timer !== undefined) clearTimeout(timer)
-        resolve()
-      }
-      this.#idleWaiters.add(resolveWhenIdle)
-      if (timeoutMs === undefined) return
-      timer = setTimeout(() => {
-        this.#idleWaiters.delete(resolveWhenIdle)
-        reject(
-          new Error(
-            `LUTRE_APPLICATION_FORCE_SHUTDOWN_TIMEOUT: ${this.#activeExecutions.size} active execution(s) did not complete within ${timeoutMs}ms.`,
-          ),
-        )
-      }, timeoutMs)
-    })
   }
 
   async #rollbackInitialization(): Promise<unknown[]> {
