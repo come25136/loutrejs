@@ -5,7 +5,8 @@ on:
     branches: [main, develop]
   pull_request:
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -15,8 +16,6 @@ jobs:
   changeset-policy:
     name: Changeset Policy
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
