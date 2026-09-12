@@ -15,7 +15,6 @@ concurrency:
 jobs:
   changeset-policy:
     name: Changeset Policy
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,6 +23,7 @@ jobs:
           fetch-depth: 0
 
       - name: Reject Changesets outside release PRs
+        if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -235,7 +235,7 @@ jobs:
           DENO_BIN="$(command -v deno)"
           "$DENO_BIN" run -A scripts/clean-dist.mjs
           "$DENO_BIN" run -A npm:typescript@7.0.2/tsc -p tsconfig.packages.json --pretty false
-          "$DENO_BIN" run -A scripts/prepare-packages.mjs
+          "$DENO_BIN" scripts/prepare-packages.mjs
 
       - name: Run Deno CLI conformance
         run: |
@@ -566,6 +566,7 @@ jobs:
     name: CI
     if: ${{ always() }}
     needs:
+      - changeset-policy
       - quality-checks
       - minimum-node-types
       - node-tests
