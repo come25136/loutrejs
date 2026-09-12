@@ -6,6 +6,7 @@ export type {
   ApplicationExtensionHostApis,
   ApplicationExtensions,
   BootstrapArguments,
+  RequireApplicationExtension,
   RequireApplicationHost,
 } from './definition.js'
 export { bootstrapApplication, createKernelApplication } from './kernel.js'

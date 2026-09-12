@@ -9,6 +9,7 @@ import {
   SchemaValidationError,
   validateSchema,
   type ExecutionDefinition,
+  type ExecutionExtension,
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
   type GenericLayer,
@@ -538,6 +539,8 @@ export interface HttpHostApi {
   fetch(request: Request): Promise<Response>
 }
 
+declare const httpExecutionExtensionIdentity: unique symbol
+
 export const httpExecutionExtension = defineExecutionExtension<
   HttpImplementationDefinition & ExecutionDefinition,
   CompiledHttpExecution,
@@ -640,7 +643,13 @@ export const httpExecutionExtension = defineExecutionExtension<
     namespace: 'http',
     create: ({ runtime }) => ({ fetch: (request) => runtime.fetch(request) }),
   },
-})
+}) as ExecutionExtension<
+  HttpImplementationDefinition & ExecutionDefinition,
+  CompiledHttpExecution,
+  'http',
+  HttpHostApi,
+  HttpExtensionRuntime
+> & { readonly [httpExecutionExtensionIdentity]: true }
 
 export type HttpExecutionDefinition<
   TContract extends HttpContract = HttpContract,

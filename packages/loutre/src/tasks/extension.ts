@@ -13,7 +13,7 @@ import {
   type SchemaOutput,
   type StandardSchemaV1,
   type Token,
-} from '@loutrejs/loutre'
+} from '../core/index.js'
 import { isValidCronExpression, matchesCronTrigger } from './runtime/cron.js'
 
 export type TaskRuntime<TInput, TOutput> = [TInput] extends [void]

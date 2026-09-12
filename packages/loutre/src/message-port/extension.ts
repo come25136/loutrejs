@@ -9,7 +9,7 @@ import {
   type ExecutionKernelRuntime,
   type SchemaOutput,
   type StandardSchemaV1,
-} from '@loutrejs/loutre'
+} from '../core/index.js'
 import { IngressGate } from '../runtime/ingress-gate.js'
 import {
   AsyncIteratorCleanupDeadlineError,

@@ -2,6 +2,14 @@
 module.exports = {
   forbidden: [
     {
+      name: '解決できない依存を禁止する',
+      severity: 'error',
+      comment:
+        'aliasを未解決のまま扱うとarchitecture ruleを迂回できるため、すべてのimportを解決可能にする。',
+      from: {},
+      to: { couldNotResolve: true },
+    },
+    {
       name: '循環依存を禁止する',
       severity: 'error',
       from: {},
@@ -57,5 +65,6 @@ module.exports = {
   options: {
     parser: 'swc',
     doNotFollow: { path: 'node_modules' },
+    tsConfig: { fileName: 'tsconfig.json' },
   },
 }

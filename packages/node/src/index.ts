@@ -6,7 +6,7 @@ import {
   type ApplicationDefinition,
   type BootstrapArguments,
   type KernelHostedApplication,
-  type RequireApplicationHost,
+  type RequireApplicationExtension,
   type RuntimeCapabilityBinding,
 } from '@loutrejs/loutre'
 import {
@@ -28,7 +28,7 @@ import {
 } from '@loutrejs/loutre/runtime'
 
 type HttpApplication<TDefinition extends ApplicationDefinition> =
-  RequireApplicationHost<TDefinition, 'http'>
+  RequireApplicationExtension<TDefinition, typeof httpExecutionExtension>
 
 export type NodeCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>

@@ -11,11 +11,11 @@ import {
   type RuntimeCapabilityBinding,
   type SchemaOutput,
   type StandardSchemaV1,
-} from '@loutrejs/loutre'
+} from '../core/index.js'
 import type {
   HttpExecutionRequestDefinition,
   HttpExecutionResponseDefinition,
-} from '@loutrejs/loutre/http'
+} from '../http/index.js'
 import { IngressGate } from '../runtime/ingress-gate.js'
 import {
   WebSocketConnectionNotOpenError,
@@ -29,7 +29,7 @@ import {
   normalizeHttpPath,
   parseHttpPath,
   type HttpPathSegment,
-} from '@loutrejs/loutre/http'
+} from '../http/index.js'
 
 export type WebSocketDataMessage =
   | { readonly type: 'text'; readonly data: string }

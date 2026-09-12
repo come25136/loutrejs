@@ -3,6 +3,7 @@
 import type {
   ArgsClass,
   ApplicationModel,
+  ExecutionExtension,
   HostApiOfExtension,
   ModuleExtensions,
   ModuleInstance,
@@ -89,3 +90,13 @@ export type RequireApplicationHost<
     : TNamespace extends keyof ApplicationExtensionHostApis<TDefinition>
       ? TDefinition
       : never
+
+export type RequireApplicationExtension<
+  TDefinition extends ApplicationDefinition,
+  TExtension extends ExecutionExtension,
+> =
+  IsAny<TDefinition> extends true
+    ? TDefinition
+    : [Extract<ApplicationExtensions<TDefinition>, TExtension>] extends [never]
+      ? never
+      : TDefinition
