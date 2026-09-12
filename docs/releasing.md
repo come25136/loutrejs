@@ -8,9 +8,15 @@ LoutreはChangesetsでreleaseを管理します。
 2. PRを`main`へmergeします。
 3. Release workflowがChangesetをまとめた`Version Packages` PRを作成または更新します。
 4. releaseするタイミングで`Version Packages` PRをmergeします。
-5. Release workflowが公開packageをnpmへpublishし、同じversionの`vX.Y.Z` tagとGitHub Releaseを作成します。
+5. Release workflowが変更対象のpackageをnpmへpublishします。`@loutrejs/loutre`のversionが更新されたreleaseでは、そのCore versionに対応する`vX.Y.Z` tagとGitHub Releaseも作成します。
 
-`@loutrejs/loutre`、`@loutrejs/node`、`@loutrejs/bullmq`、`@loutrejs/cli`、`create-loutre`はfixed groupのため、常に同じversionでreleaseされます。
+## Version policy
+
+`@loutrejs/loutre`、`@loutrejs/node`、`@loutrejs/bullmq`はliveなCore型・runtime identityを共有するためfixed groupに含め、release operation上は同じversionへ揃えます。
+
+`@loutrejs/cli`と`create-loutre`は独立したtooling lifecycleを持つためfixed groupへ含めません。Coreの変更に追従する必要がある場合はChangesetsがdependency rangeを更新して必要なreleaseを行い、toolingだけの変更ではCore packageを不要にpublishしません。
+
+GitHubの`vX.Y.Z` tagは`@loutrejs/loutre`のversionを表します。CLIまたはinitializerだけのreleaseでは新しいCore tag / GitHub Releaseを作成せず、npm package releaseだけを行います。
 
 ## npm認証
 

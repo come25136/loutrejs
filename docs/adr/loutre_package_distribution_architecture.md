@@ -53,9 +53,11 @@ Tasks、MessagePort、WebSocketは内部では独立したExecution Extensionと
 - `0.x`ではminor versionをbreaking boundaryとして扱い、同じminor lineだけを互換とする。例えば`0.5.x` packageは`@loutrejs/loutre: ^0.5.0`を要求し、`0.6.x`との互換性は保証しない。
 - `1.0.0`以降はmajor versionをbreaking boundaryとして扱い、同じmajor lineのpublic package間互換性を維持する。例えば`@loutrejs/node@1.2.x`と`@loutrejs/loutre@1.8.x`は相互運用可能でなければならず、これを壊す変更はmajor versionを上げる。
 
-Changesetsのfixed release groupはrelease operation上package versionを揃えるための仕組みであり、利用時にexact version一致を要求するcompatibility contractではない。
+Changesetsのfixed release groupには`@loutrejs/loutre`、`@loutrejs/node`、`@loutrejs/bullmq`だけを含める。この3packageはliveなCore identityを共有するruntime compatibility setであり、release operation上も同じversionへ揃える。ただし利用時のcompatibility contractはexact version一致ではなく、上記のSemVer rangeである。
 
-`@loutrejs/cli`はApplication objectをlibrary APIとして受け取らず、entry pathをbundleしてApplication Modelを読み取るdeveloper toolである。`create-loutre`もinitializer自身の内部実装としてLoutreを利用する。この2packageは利用者とliveなCore instanceを共有する境界ではないため、`@loutrejs/loutre`を通常のdependencyとして保持する。
+`@loutrejs/cli`はApplication objectをlibrary APIとして受け取らず、entry pathをbundleしてApplication Modelを読み取るdeveloper toolである。`create-loutre`もinitializer自身の内部実装としてLoutreを利用する。この2packageは利用者とliveなCore instanceを共有する境界ではないため、`@loutrejs/loutre`を通常のdependencyとして保持し、package自身のversion lifecycleはCoreから独立させる。Coreとのdependency rangeは同じcompatibility boundaryへ揃える。
+
+repository rootのversionとGitHubの`vX.Y.Z` tagは`@loutrejs/loutre`のversionを表す。CLIまたはinitializerだけのreleaseではCore versionを変更せず、新しいCore tagも作成しない。
 
 このpackage-levelのpeer contractと、Execution Extensionのbundle-safe runtime identityは別の責務を持つ。peer dependencyはpublic型とlive Core instanceを共有し、Extension identityはbundle/import境界でdescriptor objectが複製された場合にも同じ論理ABIを解決する。
 
@@ -79,6 +81,6 @@ Execution Extensionであること、source directoryを分けること、外部
 
 ## Consequences
 
-release、Changesets、tarball検証は5packageだけを対象とする。protocolごとのsource facadeと`package.json`のsubpath exportsを一致させ、public API boundaryを明示する。
+release、Changesets、tarball検証は5packageだけを対象とする。runtime compatibility setの3packageは同じrelease versionへ揃え、CLIとinitializerは独立versionで管理する。protocolごとのsource facadeと`package.json`のsubpath exportsを一致させ、public API boundaryを明示する。
 
 旧配布名`@loutrejs/tasks`、`@loutrejs/message-port`、`@loutrejs/websocket`は公開対象にせず、新しいcompatibility wrapperも設けない。

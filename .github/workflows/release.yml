@@ -109,17 +109,20 @@ jobs:
         id: release
         shell: bash
         run: |
-          version="$(node -p 'require("./packages/loutre/package.json").version')"
+          core_version="$(node -p 'require("./packages/loutre/package.json").version')"
           packages=(
-            '@loutrejs/loutre'
-            '@loutrejs/node'
-            '@loutrejs/bullmq'
-            '@loutrejs/cli'
-            'create-loutre'
+            '@loutrejs/loutre|packages/loutre/package.json'
+            '@loutrejs/node|packages/node/package.json'
+            '@loutrejs/bullmq|packages/bullmq/package.json'
+            '@loutrejs/cli|packages/cli/package.json'
+            'create-loutre|packages/create-loutre/package.json'
           )
           max_attempts=12
           retry_delay_seconds=5
-          for package in "${packages[@]}"; do
+          for entry in "${packages[@]}"; do
+            package="${entry%%|*}"
+            manifest="${entry#*|}"
+            version="$(node -p "require('./${manifest}').version")"
             for attempt in $(seq 1 "$max_attempts"); do
               published="$(npm view "${package}@${version}" version 2>/dev/null || true)"
               if test "$published" = "$version"; then
@@ -133,7 +136,7 @@ jobs:
               sleep "$retry_delay_seconds"
             done
           done
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "version=$core_version" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
         env:

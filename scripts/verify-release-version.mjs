@@ -7,7 +7,7 @@ const packagesDirectory = resolve(repository, 'packages')
 const rootManifest = JSON.parse(
   await readFile(resolve(repository, 'package.json'), 'utf8'),
 )
-const publicPackages = []
+const publicPackages = new Map()
 
 for (const directory of await readdir(packagesDirectory)) {
   const manifest = JSON.parse(
@@ -17,22 +17,29 @@ for (const directory of await readdir(packagesDirectory)) {
     ),
   )
   if (manifest.private === true) continue
-  publicPackages.push(manifest)
+  publicPackages.set(manifest.name, manifest)
 }
 
-const versions = new Set(publicPackages.map(({ version }) => version))
-if (versions.size !== 1) {
-  throw new Error(
-    `Published package versions do not match: ${publicPackages
-      .map(({ name, version }) => `${name}@${version}`)
-      .join(', ')}`,
-  )
+const core = requirePublicPackage('@loutrejs/loutre')
+const coreVersion = core.version
+const synchronizedPackages = [
+  '@loutrejs/loutre',
+  '@loutrejs/node',
+  '@loutrejs/bullmq',
+]
+
+for (const packageName of synchronizedPackages) {
+  const manifest = requirePublicPackage(packageName)
+  if (manifest.version !== coreVersion) {
+    throw new Error(
+      `${packageName}@${manifest.version} must match @loutrejs/loutre@${coreVersion}`,
+    )
+  }
 }
 
-const [version] = versions
-if (rootManifest.version !== version) {
+if (rootManifest.version !== coreVersion) {
   throw new Error(
-    `Root version ${rootManifest.version} does not match published package version ${version}`,
+    `Root version ${rootManifest.version} does not match @loutrejs/loutre@${coreVersion}`,
   )
 }
 
@@ -40,25 +47,44 @@ const presentation = await import(
   pathToFileURL(resolve(packagesDirectory, 'loutre', 'dist', 'presentation.js'))
     .href
 )
-if (presentation.LOUTRE_VERSION !== version) {
+if (presentation.LOUTRE_VERSION !== coreVersion) {
   throw new Error(
-    `Published LOUTRE_VERSION ${presentation.LOUTRE_VERSION} does not match release version ${version}`,
+    `Published LOUTRE_VERSION ${presentation.LOUTRE_VERSION} does not match @loutrejs/loutre@${coreVersion}`,
   )
 }
 
-for (const manifest of publicPackages) {
-  const dependencyGroups = [manifest.dependencies, manifest.devDependencies]
-  for (const dependencies of dependencyGroups) {
-    if (!dependencies) continue
-    for (const [name, range] of Object.entries(dependencies)) {
-      if (!name.startsWith('@loutrejs/')) continue
-      if (range !== `^${version}`) {
-        throw new Error(
-          `${manifest.name} ${name} dependency ${range} does not match release version ^${version}`,
-        )
-      }
-    }
+const expectedCoreRange = compatibilityRange(coreVersion)
+const coreConsumers = [
+  ['@loutrejs/node', 'peerDependencies'],
+  ['@loutrejs/bullmq', 'peerDependencies'],
+  ['@loutrejs/cli', 'dependencies'],
+  ['create-loutre', 'dependencies'],
+]
+
+for (const [packageName, dependencyGroup] of coreConsumers) {
+  const manifest = requirePublicPackage(packageName)
+  const range = manifest[dependencyGroup]?.['@loutrejs/loutre']
+  if (range !== expectedCoreRange) {
+    throw new Error(
+      `${packageName} @loutrejs/loutre ${dependencyGroup} range ${range ?? '<missing>'} must be ${expectedCoreRange}`,
+    )
   }
 }
 
-console.log(`release version ${version}: matched`)
+console.log(
+  `release compatibility: core ${coreVersion}, tooling versions ${requirePublicPackage('@loutrejs/cli').version} / ${requirePublicPackage('create-loutre').version}`,
+)
+
+function requirePublicPackage(name) {
+  const manifest = publicPackages.get(name)
+  if (!manifest) throw new Error(`Missing public package ${name}`)
+  return manifest
+}
+
+function compatibilityRange(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version)
+  if (!match) throw new Error(`Unsupported release version ${version}`)
+  const major = Number(match[1])
+  const minor = Number(match[2])
+  return major === 0 ? `^0.${minor}.0` : `^${major}.0.0`
+}

@@ -6,9 +6,7 @@
     [
       "@loutrejs/loutre",
       "@loutrejs/node",
-      "@loutrejs/bullmq",
-      "@loutrejs/cli",
-      "create-loutre"
+      "@loutrejs/bullmq"
     ]
   ],
   "linked": [],
