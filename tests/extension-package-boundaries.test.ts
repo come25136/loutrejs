@@ -11,6 +11,13 @@ const publicPackageNames = [
   'create-loutre',
 ]
 
+type PackageManifest = {
+  readonly name: string
+  readonly version: string
+  readonly dependencies?: Readonly<Record<string, string>>
+  readonly peerDependencies?: Readonly<Record<string, string>>
+}
+
 describe('npm package境界', () => {
   it('公開対象を5packageに限定する', async () => {
     const packageDirectories = await readdir(resolve(repository, 'packages'))
@@ -60,6 +67,26 @@ describe('npm package境界', () => {
     expect(manifest.engines?.node).toBe('>=22')
   })
 
+  it('Core値を共有するlibrary packageだけがmain packageをpeerとして要求する', async () => {
+    const loutre = await readPackageManifest('loutre')
+    const compatibleRange = loutreCompatibilityRange(loutre.version)
+    const node = await readPackageManifest('node')
+    const bullmq = await readPackageManifest('bullmq')
+
+    for (const manifest of [node, bullmq]) {
+      expect(manifest.dependencies?.['@loutrejs/loutre']).toBeUndefined()
+      expect(manifest.peerDependencies?.['@loutrejs/loutre']).toBe(
+        compatibleRange,
+      )
+    }
+
+    for (const directory of ['cli', 'create-loutre']) {
+      const manifest = await readPackageManifest(directory)
+      expect(manifest.dependencies?.['@loutrejs/loutre']).toBeDefined()
+      expect(manifest.peerDependencies?.['@loutrejs/loutre']).toBeUndefined()
+    }
+  })
+
   it('protocol extensionのruntime identityをnpm package名から独立させる', async () => {
     const identities = await Promise.all(
       ['http', 'tasks', 'message-port', 'websocket'].map(async (name) => {
@@ -91,3 +118,22 @@ describe('npm package境界', () => {
     expect(workflow).toContain('@loutrejs/loutre/tasks')
   })
 })
+
+async function readPackageManifest(directory: string): Promise<PackageManifest> {
+  return JSON.parse(
+    await readFile(
+      resolve(repository, 'packages', directory, 'package.json'),
+      'utf8',
+    ),
+  ) as PackageManifest
+}
+
+function loutreCompatibilityRange(version: string): string {
+  const [majorText, minorText] = version.split('.')
+  const major = Number(majorText)
+  const minor = Number(minorText)
+  if (!Number.isInteger(major) || !Number.isInteger(minor)) {
+    throw new Error(`Invalid Loutre version: ${version}`)
+  }
+  return major === 0 ? `^0.${minor}.0` : `^${major}.0.0`
+}

@@ -44,6 +44,21 @@ Tasks、MessagePort、WebSocketは内部では独立したExecution Extensionと
 
 `create-loutre`はinitializer binaryとして独立したuser-facing lifecycleを持つため維持する。生成projectはExecution Extensionのsubpathを利用し、独立Extension packageを追加しない。
 
+## Package compatibility
+
+利用者のApplication、Execution Extension、Token、ProviderなどのliveなCore値やpublic型を`@loutrejs/loutre`とのpackage境界を越えて受け渡すpackageは、`@loutrejs/loutre`を通常の`dependencies`ではなくrequired `peerDependencies`として宣言する。現在この契約を持つのは`@loutrejs/node`と`@loutrejs/bullmq`である。これにより利用者とadapter/integrationが同じCore type universeとruntime instanceを共有し、package managerがprivateなLoutre copyをpackage配下へ導入することを避ける。
+
+互換rangeはSemantic Versioningのbreaking boundaryと一致させる。
+
+- `0.x`ではminor versionをbreaking boundaryとして扱い、同じminor lineだけを互換とする。例えば`0.5.x` packageは`@loutrejs/loutre: ^0.5.0`を要求し、`0.6.x`との互換性は保証しない。
+- `1.0.0`以降はmajor versionをbreaking boundaryとして扱い、同じmajor lineのpublic package間互換性を維持する。例えば`@loutrejs/node@1.2.x`と`@loutrejs/loutre@1.8.x`は相互運用可能でなければならず、これを壊す変更はmajor versionを上げる。
+
+Changesetsのfixed release groupはrelease operation上package versionを揃えるための仕組みであり、利用時にexact version一致を要求するcompatibility contractではない。
+
+`@loutrejs/cli`はApplication objectをlibrary APIとして受け取らず、entry pathをbundleしてApplication Modelを読み取るdeveloper toolである。`create-loutre`もinitializer自身の内部実装としてLoutreを利用する。この2packageは利用者とliveなCore instanceを共有する境界ではないため、`@loutrejs/loutre`を通常のdependencyとして保持する。
+
+このpackage-levelのpeer contractと、Execution Extensionのbundle-safe runtime identityは別の責務を持つ。peer dependencyはpublic型とlive Core instanceを共有し、Extension identityはbundle/import境界でdescriptor objectが複製された場合にも同じ論理ABIを解決する。
+
 ## Execution Extension identity
 
 Execution Extensionのidentityはnpm distribution identityから独立させ、`loutre:http`、`loutre:tasks`、`loutre:message-port`、`loutre:websocket`のframework-owned nameを使う。
