@@ -18,7 +18,7 @@ import {
   queue,
   task,
   type TasksHostApi,
-} from '@loutrejs/tasks'
+} from '@loutrejs/loutre/tasks'
 import { z } from 'zod'
 
 describe('Task Execution Extension', () => {

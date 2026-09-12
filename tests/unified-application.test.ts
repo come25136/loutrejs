@@ -12,7 +12,7 @@ import {
   fixedDelay,
   queue,
   task,
-} from '@loutrejs/tasks'
+} from '@loutrejs/loutre/tasks'
 import { z } from 'zod'
 
 describe('Task/Trigger Application', () => {

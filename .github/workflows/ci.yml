@@ -65,7 +65,6 @@ jobs:
           name: create-loutre-build
           path: |
             packages/loutre/dist
-            packages/tasks/dist
             packages/create-loutre/dist
           if-no-files-found: error
 

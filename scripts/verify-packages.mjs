@@ -6,6 +6,14 @@ const repository = resolve(import.meta.dirname, '..')
 const packagesDirectory = resolve(repository, 'packages')
 const failures = []
 const repositoryUrl = 'https://github.com/come25136/loutrejs'
+const expectedPublicPackages = new Set([
+  '@loutrejs/loutre',
+  '@loutrejs/node',
+  '@loutrejs/bullmq',
+  '@loutrejs/cli',
+  'create-loutre',
+])
+const publicPackages = new Set()
 
 for (const directory of await readdir(packagesDirectory)) {
   const packageDirectory = resolve(packagesDirectory, directory)
@@ -13,6 +21,7 @@ for (const directory of await readdir(packagesDirectory)) {
     await readFile(resolve(packageDirectory, 'package.json'), 'utf8'),
   )
   if (manifest.private === true) continue
+  publicPackages.add(manifest.name)
   if (manifest.repository?.url !== repositoryUrl) {
     failures.push(`${manifest.name}: repository.url must be ${repositoryUrl}`)
   }
@@ -44,6 +53,17 @@ for (const directory of await readdir(packagesDirectory)) {
     ) {
       failures.push(`${manifest.name}: contains unpublished file ${file}`)
     }
+  }
+}
+
+for (const packageName of expectedPublicPackages) {
+  if (!publicPackages.has(packageName)) {
+    failures.push(`公開対象に必要なpackageがありません: ${packageName}`)
+  }
+}
+for (const packageName of publicPackages) {
+  if (!expectedPublicPackages.has(packageName)) {
+    failures.push(`意図しないpackageが公開対象です: ${packageName}`)
   }
 }
 

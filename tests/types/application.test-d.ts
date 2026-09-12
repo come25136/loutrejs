@@ -9,7 +9,7 @@ import { http } from '@loutrejs/loutre/http'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { nodeRuntime } from '@loutrejs/node'
-import { consume, cron, fixedDelay, queue, task } from '@loutrejs/tasks'
+import { consume, cron, fixedDelay, queue, task } from '@loutrejs/loutre/tasks'
 import { z } from 'zod'
 
 class AppEnv extends defineEnv(

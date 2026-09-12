@@ -1,6 +1,6 @@
 import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
-import { messagePort } from '@loutrejs/message-port'
+import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
 
 export interface DomainEvent {

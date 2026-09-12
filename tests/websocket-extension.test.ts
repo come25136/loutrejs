@@ -14,7 +14,7 @@ import {
   type WebSocketHandlerContext,
   type WebSocketHostApi,
   type WebSocketServerDriver,
-} from '@loutrejs/websocket'
+} from '@loutrejs/loutre/websocket'
 
 interface Deferred<T> {
   readonly promise: Promise<T>
@@ -235,7 +235,7 @@ describe('WebSocket Execution Extension', () => {
     >()
     expect(
       [...definition.model.extensions].map(({ extension }) => extension.name),
-    ).toEqual(['@loutrejs/websocket'])
+    ).toEqual(['loutre:websocket'])
 
     const response = await application.websocket.upgrade(
       new Request('http://fixture.test/rooms/room-1/chat'),

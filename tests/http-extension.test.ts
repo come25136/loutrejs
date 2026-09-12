@@ -401,7 +401,7 @@ describe('HTTP Execution Extension', () => {
       expect.objectContaining({
         id: 'users.http',
         executionKind: 'http.request',
-        extension: expect.objectContaining({ name: '@loutrejs/loutre/http' }),
+        extension: expect.objectContaining({ name: 'loutre:http' }),
       }),
     )
     await application.close()

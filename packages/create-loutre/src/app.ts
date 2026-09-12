@@ -1,7 +1,7 @@
 import { readdir } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
-import { task } from '@loutrejs/tasks'
+import { task } from '@loutrejs/loutre/tasks'
 import type { PackageManager, ProjectTarget } from './options.js'
 import { writeStarter } from './starter.js'
 

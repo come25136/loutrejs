@@ -3,7 +3,7 @@ import {
   bindQueueDriver,
   type QueueConsumerDriver,
   type QueueDescriptor,
-} from '@loutrejs/tasks'
+} from '@loutrejs/loutre/tasks'
 
 export interface BullMqQueueDriverOptions {
   readonly connection: unknown

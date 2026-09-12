@@ -16,6 +16,12 @@ import type {
   HttpExecutionRequestDefinition,
   HttpExecutionResponseDefinition,
 } from '@loutrejs/loutre/http'
+import { IngressGate } from '../runtime/ingress-gate.js'
+import {
+  WebSocketConnectionNotOpenError,
+  WebSocketMessageDecodeError,
+  WebSocketMessageEncodeError,
+} from './errors.js'
 import {
   compareHttpPathSpecificity,
   HttpPathDecodeError,
@@ -231,7 +237,7 @@ export const websocketExtension = defineExecutionExtension<
 >({
   kind: 'execution-extension',
   abiVersion: '1',
-  name: '@loutrejs/websocket',
+  name: 'loutre:websocket',
   compile(definition, context) {
     return {
       kind: 'execution',
@@ -535,24 +541,7 @@ function createWebSocketRuntime(
   >()
   const sessions = new Set<ActiveSession>()
   let state: 'running' | 'draining' | 'stopped' = 'running'
-  let pendingIngresses = 0
-  const pendingIngressWaiters = new Set<() => void>()
-  const trackPendingIngress = () => {
-    pendingIngresses += 1
-    let completed = false
-    return () => {
-      if (completed) return
-      completed = true
-      pendingIngresses -= 1
-      if (pendingIngresses !== 0) return
-      for (const resolve of pendingIngressWaiters) resolve()
-      pendingIngressWaiters.clear()
-    }
-  }
-  const waitForPendingIngresses = () =>
-    pendingIngresses === 0
-      ? Promise.resolve()
-      : new Promise<void>((resolve) => pendingIngressWaiters.add(resolve))
+  const ingress = new IngressGate()
   for (const execution of executions) {
     handlers.set(
       execution.id,
@@ -605,8 +594,17 @@ function createWebSocketRuntime(
       if (state !== 'running') {
         return Response.json({ error: 'Service Unavailable' }, { status: 503 })
       }
-      const lease = applicationRuntime.beginExecution()
-      const completePendingIngress = trackPendingIngress()
+      const completePendingIngress = ingress.enter()
+      if (!completePendingIngress) {
+        return Response.json({ error: 'Service Unavailable' }, { status: 503 })
+      }
+      let lease: ReturnType<ExecutionKernelRuntime['beginExecution']>
+      try {
+        lease = applicationRuntime.beginExecution()
+      } catch (error) {
+        completePendingIngress()
+        throw error
+      }
       let upgraded: WebSocketUpgradeResult
       try {
         upgraded = await driver.upgrade(request)
@@ -637,7 +635,8 @@ function createWebSocketRuntime(
     async drain({ timeoutMs }) {
       if (state === 'stopped') return
       state = 'draining'
-      await waitForPendingIngresses()
+      ingress.stopAccepting()
+      await ingress.waitForIdle()
       const gracefulTimeoutMs = webSocketGracefulShutdownBudget(timeoutMs)
       const results = await Promise.allSettled(
         [...sessions].map(async (session) => {
@@ -934,25 +933,4 @@ function webSocketGracefulShutdownBudget(timeoutMs: number): number {
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds))
-}
-
-export class WebSocketMessageDecodeError extends Error {
-  constructor(cause?: unknown) {
-    super('WebSocket message could not be decoded.', { cause })
-    this.name = 'WebSocketMessageDecodeError'
-  }
-}
-
-export class WebSocketMessageEncodeError extends Error {
-  constructor(cause?: unknown) {
-    super('WebSocket message could not be encoded.', { cause })
-    this.name = 'WebSocketMessageEncodeError'
-  }
-}
-
-export class WebSocketConnectionNotOpenError extends Error {
-  constructor(cause?: unknown) {
-    super('WebSocket connection is not open.', { cause })
-    this.name = 'WebSocketConnectionNotOpenError'
-  }
 }

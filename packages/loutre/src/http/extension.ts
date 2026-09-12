@@ -32,6 +32,31 @@ import {
   type HttpPathSegment,
   type PathParamNames,
 } from './path.js'
+import { IngressGate } from '../runtime/ingress-gate.js'
+import {
+  AsyncIteratorCleanupDeadlineError,
+  AsyncIteratorLifecycle,
+} from '../runtime/async-iterator-lifecycle.js'
+import {
+  decodeBody,
+  decodeQuery,
+  HttpInputDecodeError,
+  HttpInputValidationError,
+  HttpUnsupportedMediaTypeError,
+  validatedContentType,
+  validateRequestHeaders,
+} from './runtime/request.js'
+import {
+  applyFrameworkHeadersToResponse,
+  applyFrameworkResponseHeaders,
+  applyResponseHeaders,
+  isResponseHeadersWithDefaults,
+  isStandardSchema,
+  mergeResponseHeaders,
+  responseHeadersDefaults,
+  responseHeadersSchema,
+  validateResponseHeaders,
+} from './runtime/response.js'
 
 export interface HttpServerDriver {
   readonly runtime: string
@@ -522,7 +547,7 @@ export const httpExecutionExtension = defineExecutionExtension<
 >({
   kind: 'execution-extension',
   abiVersion: '1',
-  name: '@loutrejs/loutre/http',
+  name: 'loutre:http',
   compile(definition, context) {
     const routes = Object.entries(definition.contract.routes).map(
       ([name, route]) => compileHttpRoute(name, route),
@@ -1261,26 +1286,8 @@ function createHttpExtensionRuntime(
   }[],
   applicationRuntime: ExecutionKernelRuntime,
 ): HttpExtensionRuntime {
-  let accepting = true
+  const ingress = new IngressGate()
   const activeResponseStreams = new Set<ActiveHttpResponseStream>()
-  let pendingIngresses = 0
-  const pendingIngressWaiters = new Set<() => void>()
-  const trackPendingIngress = () => {
-    pendingIngresses += 1
-    let completed = false
-    return () => {
-      if (completed) return
-      completed = true
-      pendingIngresses -= 1
-      if (pendingIngresses !== 0) return
-      for (const resolve of pendingIngressWaiters) resolve()
-      pendingIngressWaiters.clear()
-    }
-  }
-  const waitForPendingIngresses = () =>
-    pendingIngresses === 0
-      ? Promise.resolve()
-      : new Promise<void>((resolve) => pendingIngressWaiters.add(resolve))
   const handlers = new Map<
     string,
     ReturnType<CompiledHttpExecution['factory']>
@@ -1314,9 +1321,9 @@ function createHttpExtensionRuntime(
 
   return {
     async drain({ timeoutMs }) {
-      accepting = false
+      ingress.stopAccepting()
       const deadline = Date.now() + timeoutMs
-      await waitForPendingIngresses()
+      await ingress.waitForIdle()
       const reason = new Error(
         'LUTRE_HTTP_SERVER_STREAM_DRAIN: Application is shutting down.',
       )
@@ -1333,7 +1340,7 @@ function createHttpExtensionRuntime(
       }
     },
     async fetch(request) {
-      if (!accepting) {
+      if (!ingress.isAccepting) {
         return Response.json({ error: 'Service Unavailable' }, { status: 503 })
       }
       const url = new URL(request.url)
@@ -1350,8 +1357,20 @@ function createHttpExtensionRuntime(
             url.pathname,
           )
           if (match) {
-            const lease = applicationRuntime.beginExecution()
-            const completePendingIngress = trackPendingIngress()
+            const completePendingIngress = ingress.enter()
+            if (!completePendingIngress) {
+              return Response.json(
+                { error: 'Service Unavailable' },
+                { status: 503 },
+              )
+            }
+            let lease: ReturnType<ExecutionKernelRuntime['beginExecution']>
+            try {
+              lease = applicationRuntime.beginExecution()
+            } catch (error) {
+              completePendingIngress()
+              throw error
+            }
             try {
               const headers = await createCorsPreflightResponseHeaders(
                 match.route.middlewares,
@@ -1393,8 +1412,17 @@ function createHttpExtensionRuntime(
         return Response.json({ error: 'Not Found' }, { status: 404 })
       }
 
-      const lease = applicationRuntime.beginExecution()
-      const completePendingIngress = trackPendingIngress()
+      const completePendingIngress = ingress.enter()
+      if (!completePendingIngress) {
+        return Response.json({ error: 'Service Unavailable' }, { status: 503 })
+      }
+      let lease: ReturnType<ExecutionKernelRuntime['beginExecution']>
+      try {
+        lease = applicationRuntime.beginExecution()
+      } catch (error) {
+        completePendingIngress()
+        throw error
+      }
       const abortRequest = () => lease.abort(request.signal.reason)
       let executionOwnedByStream = false
       let executionFinished = false
@@ -1589,7 +1617,11 @@ async function createHttpContext(
     ? await validateSchema(definition.query, rawQuery)
     : rawQuery
   const headers = definition?.headers
-    ? await validateRequestHeaders(definition, request.headers)
+    ? await validateRequestHeaders(
+        definition.headers,
+        definition.body !== undefined,
+        request.headers,
+      )
     : Object.fromEntries(request.headers.entries())
   const body = definition?.body ? request.body : undefined
   const response = Object.fromEntries(
@@ -1611,131 +1643,6 @@ async function createHttpContext(
     response,
     signal,
   } as unknown as HttpExecutionContext
-}
-
-function decodeQuery(
-  searchParams: URLSearchParams,
-): Readonly<Record<string, string | string[]>> {
-  const query: Record<string, string | string[]> = {}
-  for (const [key, value] of searchParams) {
-    const current = query[key]
-    query[key] =
-      current === undefined
-        ? value
-        : Array.isArray(current)
-          ? [...current, value]
-          : [current, value]
-  }
-  return query
-}
-
-async function validateRequestHeaders(
-  definition: HttpExecutionRequestDefinition,
-  headers: Headers,
-): Promise<unknown> {
-  const schema = definition.headers!
-  try {
-    return await validateSchema(schema, requestHeadersForValidation(headers))
-  } catch (error) {
-    if (
-      definition.body &&
-      error instanceof SchemaValidationError &&
-      hasContentTypeIssue(error)
-    ) {
-      throw new HttpUnsupportedMediaTypeError(
-        normalizeMediaType(headers.get('content-type')),
-      )
-    }
-    throw error
-  }
-}
-
-function requestHeadersForValidation(headers: Headers): Record<string, string> {
-  const decoded = Object.fromEntries(headers.entries())
-  const contentType = normalizeMediaType(headers.get('content-type'))
-  if (contentType) decoded['content-type'] = contentType
-  return decoded
-}
-
-function validatedContentType(headers: unknown): string {
-  if (typeof headers !== 'object' || headers === null) {
-    throw new TypeError('HTTP body requires validated request headers')
-  }
-  const contentType = (headers as Record<string, unknown>)['content-type']
-  if (typeof contentType !== 'string' || contentType.length === 0) {
-    throw new TypeError(
-      'HTTP body requires request.headers content-type to resolve to a string',
-    )
-  }
-  return contentType
-}
-
-function hasContentTypeIssue(error: SchemaValidationError): boolean {
-  return error.issues.some((issue) => {
-    const first = issue.path?.[0]
-    const key =
-      typeof first === 'object' && first !== null && 'key' in first
-        ? first.key
-        : first
-    return key === 'content-type'
-  })
-}
-
-async function decodeBody(
-  request: Request,
-  contentType: string,
-): Promise<unknown> {
-  const mediaType = normalizeMediaType(contentType)!
-  if (mediaType === 'application/json' || mediaType.endsWith('+json')) {
-    try {
-      return await request.json()
-    } catch (error) {
-      throw new HttpInputDecodeError(error)
-    }
-  }
-  if (mediaType === 'multipart/form-data') {
-    try {
-      return await request.formData()
-    } catch (error) {
-      throw new HttpInputDecodeError(error)
-    }
-  }
-  if (mediaType.startsWith('text/')) {
-    try {
-      return await request.text()
-    } catch (error) {
-      throw new HttpInputDecodeError(error)
-    }
-  }
-  return request.body
-}
-
-function normalizeMediaType(
-  value: string | null | undefined,
-): string | undefined {
-  const normalized = value?.split(';', 1)[0]?.trim().toLowerCase()
-  return normalized ? normalized : undefined
-}
-
-class HttpInputDecodeError extends Error {
-  constructor(readonly cause: unknown) {
-    super('HTTP request body decode failed', { cause })
-    this.name = 'HttpInputDecodeError'
-  }
-}
-
-class HttpInputValidationError extends Error {
-  constructor(readonly cause: unknown) {
-    super('HTTP request body validation failed', { cause })
-    this.name = 'HttpInputValidationError'
-  }
-}
-
-class HttpUnsupportedMediaTypeError extends Error {
-  constructor(readonly mediaType: string | undefined) {
-    super('HTTP request content type is unsupported by the Contract')
-    this.name = 'HttpUnsupportedMediaTypeError'
-  }
 }
 
 interface FinalizedHttpResult {
@@ -1959,19 +1866,15 @@ function createServerSentEventStream(
   completeExecution: () => void,
 ): ServerSentEventStreamControl {
   const encoder = new TextEncoder()
-  const iterator = source[Symbol.asyncIterator]()
+  const iterator = new AsyncIteratorLifecycle(source[Symbol.asyncIterator]())
   let finished = false
   let completed = false
   let inFlightOperations = 0
-  let inFlightIteratorOperations = 0
-  let iteratorDone = false
   let cleanupComplete = false
   let cleanupSettled = true
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined
   let cleanupAttempt: Promise<void> | undefined
   let cleanupDeadline: number | undefined
-  let returnContinuationPending = false
-  const iteratorIdleWaiters = new Set<() => void>()
   let resolveFinished!: () => void
   const finishedPromise = new Promise<void>((resolve) => {
     resolveFinished = resolve
@@ -1994,26 +1897,6 @@ function createServerSentEventStream(
       resolveFinished()
     }
   }
-  const runIteratorOperation = async <T>(operation: () => Promise<T>) => {
-    inFlightIteratorOperations += 1
-    try {
-      return await operation()
-    } finally {
-      inFlightIteratorOperations -= 1
-      if (inFlightIteratorOperations === 0) {
-        for (const resolve of iteratorIdleWaiters) resolve()
-        iteratorIdleWaiters.clear()
-      }
-    }
-  }
-  const waitForIteratorIdle = () => {
-    if (inFlightIteratorOperations === 0) return Promise.resolve()
-    return new Promise<void>((resolve) => iteratorIdleWaiters.add(resolve))
-  }
-  const recordIteratorResult = (result: IteratorResult<unknown>) => {
-    if (result.done) iteratorDone = true
-    return result
-  }
   const stop = (
     reason: unknown,
     errorStream: boolean,
@@ -2032,39 +1915,16 @@ function createServerSentEventStream(
     const operation = (async () => {
       let cleanupError: unknown
       try {
-        if (!returnContinuationPending) {
-          if (!iterator.return) {
-            iteratorDone = true
-            cleanupComplete = true
-            return
-          }
-          const result = await runIteratorOperation(async () =>
-            recordIteratorResult(await iterator.return!(reason)),
-          )
-          returnContinuationPending = !result.done
-          if (result.done) return
-        }
-        await waitForIteratorIdle()
-        let continuationSteps = 0
-        for (;;) {
-          if (iteratorDone) break
-          if (cleanupDeadline !== undefined && Date.now() >= cleanupDeadline) {
-            throw new IteratorCleanupDeadlineError()
-          }
-          const result = await runIteratorOperation(async () =>
-            recordIteratorResult(await iterator.next()),
-          )
-          if (result.done) break
-          continuationSteps += 1
-          if (continuationSteps % iteratorCleanupYieldInterval === 0) {
-            await yieldToEventLoop()
-          }
-        }
+        await iterator.drain(
+          reason,
+          () => cleanupDeadline,
+          'HTTP iterator cleanup exceeded the drain deadline.',
+        )
       } catch (error) {
-        if (error instanceof IteratorCleanupDeadlineError) throw error
+        if (error instanceof AsyncIteratorCleanupDeadlineError) throw error
         cleanupError = error
       } finally {
-        if (iteratorDone || cleanupError !== undefined) {
+        if (iterator.done || cleanupError !== undefined) {
           cleanupComplete = true
           cleanupSettled = true
           if (errorStream) {
@@ -2104,9 +1964,7 @@ function createServerSentEventStream(
       inFlightOperations += 1
       let stopPromise: Promise<void> | undefined
       try {
-        const next = await runIteratorOperation(async () =>
-          recordIteratorResult(await iterator.next()),
-        )
+        const next = await iterator.next()
         if (finished) return
         if (next.done) {
           if (markFinished()) value.close()
@@ -2135,19 +1993,6 @@ function createServerSentEventStream(
     },
     abort: (reason, deadline) => stop(reason, true, deadline),
   }
-}
-
-const iteratorCleanupYieldInterval = 32
-
-class IteratorCleanupDeadlineError extends Error {
-  constructor() {
-    super('HTTP iterator cleanup exceeded the drain deadline.')
-    this.name = 'IteratorCleanupDeadlineError'
-  }
-}
-
-function yieldToEventLoop(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
 async function mapDeclaredError(
@@ -2180,136 +2025,4 @@ function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
     Symbol.asyncIterator in value &&
     typeof value[Symbol.asyncIterator] === 'function'
   )
-}
-
-async function validateResponseHeaders(
-  schema: StandardSchemaV1 | undefined,
-  headers: HttpHeaders | undefined,
-): Promise<HttpHeaders | undefined> {
-  if (!schema) {
-    if (headers !== undefined) {
-      throw new Error('Undeclared HTTP response header was returned')
-    }
-    return undefined
-  }
-  const validated = await validateSchema(schema, headers)
-  if (validated === undefined) return undefined
-  if (!isHttpHeaders(validated)) {
-    throw new Error('HTTP response header schema produced an invalid value')
-  }
-  return validated
-}
-
-function responseHeadersSchema(
-  headers: HttpResponseHeadersDefinition | undefined,
-): StandardSchemaV1 | undefined {
-  if (isStandardSchema(headers)) return headers
-  if (isResponseHeadersWithDefaults(headers)) return headers.schema
-  return undefined
-}
-
-function responseHeadersDefaults(
-  headers: HttpResponseHeadersDefinition | undefined,
-): HttpHeaders | undefined {
-  if (headers === undefined || isStandardSchema(headers)) return undefined
-  if (isResponseHeadersWithDefaults(headers)) return headers.defaults
-  return headers
-}
-
-function isStandardSchema(value: unknown): value is StandardSchemaV1 {
-  return typeof value === 'object' && value !== null && '~standard' in value
-}
-
-function isResponseHeadersWithDefaults(
-  value: unknown,
-): value is HttpResponseHeadersWithDefaults {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'schema' in value &&
-    isStandardSchema(value.schema)
-  )
-}
-
-function isHttpHeaders(value: unknown): value is HttpHeaders {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false
-  }
-  return Object.values(value).every(
-    (header) =>
-      header === undefined ||
-      typeof header === 'string' ||
-      (Array.isArray(header) &&
-        header.every((item) => typeof item === 'string')),
-  )
-}
-
-function mergeResponseHeaders(
-  defaults: HttpHeaders | undefined,
-  dynamic: HttpHeaders | undefined,
-): Headers {
-  const headers = new Headers()
-  applyResponseHeaders(headers, defaults)
-  applyResponseHeaders(headers, dynamic)
-  return headers
-}
-
-function applyResponseHeaders(
-  headers: Headers,
-  source: HttpHeaders | undefined,
-): void {
-  if (!source) return
-  for (const [name, value] of Object.entries(source)) {
-    if (value === undefined) continue
-    headers.delete(name)
-    if (typeof value === 'string') {
-      headers.set(name, value)
-      continue
-    }
-    for (const item of value) headers.append(name, item)
-  }
-}
-
-function applyFrameworkHeadersToResponse(
-  response: Response,
-  source: Headers | undefined,
-): Response {
-  if (!source) return response
-  const headers = new Headers(response.headers)
-  applyFrameworkResponseHeaders(headers, Object.fromEntries(source.entries()))
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  })
-}
-
-function applyFrameworkResponseHeaders(
-  headers: Headers,
-  source: HttpHeaders | undefined,
-): void {
-  if (!source) return
-  for (const [name, value] of Object.entries(source)) {
-    if (value === undefined) continue
-    if (name.toLowerCase() === 'vary') {
-      const values = typeof value === 'string' ? [value] : value
-      for (const item of values.flatMap((header) => header.split(','))) {
-        appendVary(headers, item.trim())
-      }
-      continue
-    }
-    applyResponseHeaders(headers, { [name]: value })
-  }
-}
-
-function appendVary(headers: Headers, value: string): void {
-  if (value.length === 0) return
-  const values = (headers.get('vary') ?? '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-  if (!values.some((item) => item.toLowerCase() === value.toLowerCase())) {
-    values.push(value)
-  }
-  headers.set('vary', values.join(', '))
 }
