@@ -19,6 +19,7 @@ import {
 } from './model/providers.js'
 import { snapshotExecutionExtension } from './model/snapshot.js'
 import { validateHostNamespaces, validateNodeIds } from './model/validation.js'
+import { getSourceLocation } from './source-location.js'
 import { isTokenVisible, moduleDeclaresToken } from './model/visibility.js'
 
 import type {
@@ -339,11 +340,13 @@ export function buildApplicationModel(
         continue
       }
       executionIds.add(contribution.id)
+      const executionSource = getSourceLocation(value)
       const execution: ExecutionModelNode = Object.freeze({
         ...contribution,
         dependencies: Object.freeze([...contribution.dependencies]),
         capabilities: Object.freeze([...contribution.capabilities]),
         moduleId,
+        ...(executionSource === undefined ? {} : { source: executionSource }),
       })
       compiledDefinitions.set(value, execution)
       executions.push(execution)

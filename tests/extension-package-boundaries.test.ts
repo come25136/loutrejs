@@ -59,12 +59,16 @@ describe('npm package境界', () => {
     })
   })
 
-  it('Node adapterだけがNode minimumをpackage metadataで宣言する', async () => {
-    const manifest = JSON.parse(
+  it('Node adapterとCLI hostがそれぞれのNode minimumを宣言する', async () => {
+    const node = JSON.parse(
       await readFile(resolve(repository, 'packages/node/package.json'), 'utf8'),
     ) as { readonly engines?: Readonly<Record<string, string>> }
+    const cli = JSON.parse(
+      await readFile(resolve(repository, 'packages/cli/package.json'), 'utf8'),
+    ) as { readonly engines?: Readonly<Record<string, string>> }
 
-    expect(manifest.engines?.node).toBe('>=22')
+    expect(node.engines?.node).toBe('>=22')
+    expect(cli.engines?.node).toBe('>=22.12.0')
   })
 
   it('Core値を共有するlibrary packageだけがmain packageをpeerとして要求する', async () => {

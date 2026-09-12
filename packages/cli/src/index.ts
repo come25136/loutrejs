@@ -116,6 +116,7 @@ interface GraphViewNode {
     | 'message-port-method'
     | 'websocket-route'
   readonly attributes?: Readonly<Record<string, JsonValue>>
+  readonly source?: GraphNodeIR['source']
 }
 
 interface GraphViewEdge {
@@ -160,7 +161,7 @@ export async function runCli(
     case 'check': {
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, { projectRoot: io.cwd })
       if (!hasErrorDiagnostics(graph.diagnostics)) {
         if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
         io.stdout('Loutre Application Model is valid.')
@@ -188,7 +189,7 @@ export async function runCli(
       }
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, { projectRoot: io.cwd })
       const required = requiredCapabilities(graph)
       const check = checkRuntimeSupport(required, runtime)
       io.stdout(`Runtime: ${runtime.runtime}`)
@@ -212,7 +213,10 @@ export async function runCli(
       }
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, {
+        projectRoot: io.cwd,
+        sourceLocations: true,
+      })
       const format = readOption(args, '--format') ?? 'text'
       if (!['text', 'json', 'mermaid'].includes(format)) {
         io.stderr('graph --format must be one of: text, json, mermaid.')
@@ -249,7 +253,10 @@ export async function runCli(
       }
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, {
+        projectRoot: io.cwd,
+        sourceLocations: true,
+      })
       if (!renderExplanation(graph, subject, io.stdout)) {
         io.stderr(`Target not found: ${subject}`)
         return 1
@@ -274,7 +281,9 @@ export async function runCli(
         return 2
       }
       const applicationEntry = resolve(io.cwd, subject)
-      const graph = await loadApplicationGraph(applicationEntry)
+      const graph = await loadApplicationGraph(applicationEntry, {
+        projectRoot: io.cwd,
+      })
       if (hasErrorDiagnostics(graph.diagnostics)) {
         writeDiagnostics(graph, io)
         return 1
@@ -306,7 +315,10 @@ export async function runCli(
       )
       await mkdir(outputDirectory, { recursive: true })
       const applicationOutput = join(outputDirectory, 'application.mjs')
-      await emitApplication(applicationEntry, applicationOutput)
+      await emitApplication(applicationEntry, applicationOutput, {
+        projectRoot: io.cwd,
+        sourceLocations: false,
+      })
       io.stdout(`Wrote Application: ${applicationOutput}`)
       if (deploymentRuntime) {
         const deploymentOutput = join(outputDirectory, 'entry.mjs')
@@ -444,6 +456,8 @@ function renderTextGraph(
       write(
         module.name === undefined ? module.id : `${module.name} [${module.id}]`,
       )
+      if (module.source)
+        write(`  source: ${formatSourceLocation(module.source)}`)
       const description = stringAttribute(module, 'description')
       if (description !== undefined) write(`  description: ${description}`)
       write(`  imports: ${data.imports.join(', ') || '(none)'}`)
@@ -454,9 +468,32 @@ function renderTextGraph(
   }
 
   if (subject === 'http') {
+    const executions = new Map(
+      httpExecutions(graph).map((execution) => [
+        execution.name ?? execution.id,
+        execution,
+      ]),
+    )
     for (const route of httpRoutes(graph)) {
       write(`${route.execution}.${route.name} [http]`)
+      const execution = executions.get(route.execution)
+      if (execution?.source) {
+        write(`  controller source: ${formatSourceLocation(execution.source)}`)
+      }
+      if (route.source) {
+        write(`  route source: ${formatSourceLocation(route.source)}`)
+      }
       write(`  ${route.method} ${route.path}`)
+      for (const middleware of route.middlewares) {
+        if (middleware.source) {
+          write(
+            `  middleware ${middleware.name} source: ${formatSourceLocation(middleware.source)}`,
+          )
+        }
+      }
+      if (route.handlerSource) {
+        write(`  handler source: ${formatSourceLocation(route.handlerSource)}`)
+      }
       write(
         `  flow: ${[...route.middlewares.map((middleware) => middleware.name), 'handler'].join(' -> ')}`,
       )
@@ -474,6 +511,9 @@ function renderTextGraph(
   if (subject === 'executions') {
     for (const execution of graph.executions) {
       write(`${execution.executionKind}: ${execution.name ?? execution.id}`)
+      if (execution.source) {
+        write(`  source: ${formatSourceLocation(execution.source)}`)
+      }
     }
     if (graph.executions.length === 0) write('(no executions)')
     return
@@ -510,7 +550,7 @@ function renderDiText(
       const cycle = lineage.includes(edge.to)
       rendered.add(child.id)
       write(
-        `${prefix}${last ? '└──' : '├──'} ${nodeLabel(child)}${cycle ? ' ↺ cycle' : ''}`,
+        `${prefix}${last ? '└──' : '├──'} ${textNodeLabel(child)}${cycle ? ' ↺ cycle' : ''}`,
       )
       if (!cycle) {
         render(edge.to, `${prefix}${last ? '    ' : '│   '}`, [
@@ -523,13 +563,13 @@ function renderDiText(
 
   for (const root of roots) {
     rendered.add(root.id)
-    write(nodeLabel(root))
+    write(textNodeLabel(root))
     render(root.id, '', [root.id])
   }
   for (const node of relevant) {
     if (rendered.has(node.id)) continue
     rendered.add(node.id)
-    write(nodeLabel(node))
+    write(textNodeLabel(node))
     render(node.id, '', [node.id])
   }
   if (relevant.length === 0) write('(no DI nodes)')
@@ -544,6 +584,7 @@ function renderMermaidGraph(
   const lines = [
     `%%{init: ${JSON.stringify({
       theme: 'base',
+      markdownAutoWrap: false,
       themeVariables: {
         background: theme.canvasBackground,
         primaryTextColor: theme.foreground,
@@ -634,7 +675,7 @@ function renderMermaidGraph(
 
   for (const [className, style] of Object.entries(theme.nodes)) {
     lines.push(
-      `  classDef ${className} fill:${style.fill},stroke:${style.stroke},color:${style.text},stroke-width:2px`,
+      `  classDef ${className} fill:${style.fill},stroke:${style.stroke},color:${style.text},stroke-width:2px,white-space:nowrap`,
     )
   }
 
@@ -716,6 +757,7 @@ function renderExplanation(
   if (node.module) write(`managed by: ${node.module}`)
   if (node.executionKind) write(`execution: ${node.executionKind}`)
   if (node.extension) write(`extension: ${node.extension.name}`)
+  if (node.source) write(`source: ${formatSourceLocation(node.source)}`)
   for (const [key, value] of Object.entries(node.attributes ?? {})) {
     if (
       typeof value === 'string' ||
@@ -809,6 +851,7 @@ function moduleData(graph: ApplicationModelGraphIR, module: GraphNodeIR) {
   return {
     id: module.id,
     name: module.name,
+    ...(module.source === undefined ? {} : { source: module.source }),
     description: stringAttribute(module, 'description'),
     imports: graph.edges
       .filter((edge) => edge.from === module.id && edge.kind === 'imports')
@@ -827,6 +870,7 @@ function moduleData(graph: ApplicationModelGraphIR, module: GraphNodeIR) {
 interface HttpMiddlewareProjection {
   readonly name: string
   readonly capabilities: readonly string[]
+  readonly source?: GraphNodeIR['source']
 }
 
 interface HttpRouteProjection {
@@ -836,6 +880,8 @@ interface HttpRouteProjection {
   readonly path: string
   readonly middlewares: readonly HttpMiddlewareProjection[]
   readonly responses?: JsonValue
+  readonly source?: GraphNodeIR['source']
+  readonly handlerSource?: GraphNodeIR['source']
 }
 
 function httpExecutions(
@@ -872,6 +918,9 @@ function httpRoutes(graph: ApplicationModelGraphIR): HttpRouteProjection[] {
                           typeof capability === 'string',
                       )
                     : [],
+                  ...(sourceLocation(middleware.source) === undefined
+                    ? {}
+                    : { source: sourceLocation(middleware.source) }),
                 },
               ]
             },
@@ -884,6 +933,12 @@ function httpRoutes(graph: ApplicationModelGraphIR): HttpRouteProjection[] {
           method,
           path,
           middlewares,
+          ...(sourceLocation(route.source) === undefined
+            ? {}
+            : { source: sourceLocation(route.source) }),
+          ...(sourceLocation(route.handlerSource) === undefined
+            ? {}
+            : { handlerSource: sourceLocation(route.handlerSource) }),
           ...(route.responses === undefined
             ? {}
             : { responses: route.responses }),
@@ -899,6 +954,7 @@ function renderGraphViewText(
 ): void {
   for (const node of view.nodes) {
     write(`${node.kind}: ${node.label} [${node.id}]`)
+    if (node.source) write(`  source: ${formatSourceLocation(node.source)}`)
   }
   if (view.nodes.length === 0) write('(no graph nodes)')
   write('edges:')
@@ -981,6 +1037,7 @@ function projectGraphViewNode(node: GraphNodeIR): GraphViewNode {
       : { capabilities: node.capabilities }),
     ...(node.extension === undefined ? {} : { extension: node.extension }),
     ...(node.attributes === undefined ? {} : { attributes: node.attributes }),
+    ...(node.source === undefined ? {} : { source: node.source }),
   }
 }
 
@@ -1014,12 +1071,14 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
       const path = typeof route.path === 'string' ? route.path : undefined
       if (!name || !method || !path) continue
       const routeId = entrypointId('http', execution.id, name)
+      const routeSource = sourceLocation(route.source)
       nodes.push({
         id: routeId,
         kind: 'entrypoint',
         entrypointKind: 'http-route',
         label: `${method} ${path}`,
         ...(execution.module === undefined ? {} : { module: execution.module }),
+        ...(routeSource === undefined ? {} : { source: routeSource }),
         attributes: { name, method, path },
       })
       edges.push({
@@ -1043,6 +1102,7 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
                 typeof capability === 'string',
             )
           : []
+        const middlewareSource = sourceLocation(middleware.source)
         nodes.push({
           id: middlewareId,
           kind: 'middleware',
@@ -1051,6 +1111,9 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
             ? {}
             : { module: execution.module }),
           ...(capabilities.length === 0 ? {} : { capabilities }),
+          ...(middlewareSource === undefined
+            ? {}
+            : { source: middlewareSource }),
           attributes: { route: name, index },
         })
         edges.push({ from: previousId, to: middlewareId, kind: 'flows-to' })
@@ -1065,11 +1128,14 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
       }
 
       const handlerId = httpHandlerId(execution.id, name)
+      const handlerSource =
+        sourceLocation(route.handlerSource) ?? execution.source
       nodes.push({
         id: handlerId,
         kind: 'handler',
         label: `${execution.name ?? execution.id}.${name}`,
         ...(execution.module === undefined ? {} : { module: execution.module }),
+        ...(handlerSource === undefined ? {} : { source: handlerSource }),
         attributes: { route: name },
       })
       edges.push({ from: previousId, to: handlerId, kind: 'flows-to' })
@@ -1184,7 +1250,10 @@ function mermaidNodeLabel(node: GraphViewNode): string {
         return 'Runtime Capability'
     }
   })()
-  return `${role}: ${node.label}`
+  const label = `${role}: ${node.label}`
+  return node.source === undefined
+    ? label
+    : `\`**${label}**\n*↳ ${formatMermaidSourceLocation(node.source)}*\``
 }
 
 type MermaidNodeClass =
@@ -1259,6 +1328,13 @@ function nodeLabel(node: GraphNodeIR): string {
   return node.name ?? node.id
 }
 
+function textNodeLabel(node: GraphNodeIR): string {
+  const label = nodeLabel(node)
+  return node.source === undefined
+    ? label
+    : `${label} [source: ${formatSourceLocation(node.source)}]`
+}
+
 function stringAttribute(node: GraphNodeIR, name: string): string | undefined {
   const value = node.attributes?.[name]
   return typeof value === 'string' ? value : undefined
@@ -1266,6 +1342,37 @@ function stringAttribute(node: GraphNodeIR, name: string): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function sourceLocation(value: unknown): GraphNodeIR['source'] | undefined {
+  if (!isRecord(value) || typeof value.file !== 'string') return undefined
+  const line = typeof value.line === 'number' ? value.line : undefined
+  const column = typeof value.column === 'number' ? value.column : undefined
+  return {
+    file: value.file,
+    ...(line === undefined ? {} : { line }),
+    ...(column === undefined ? {} : { column }),
+  }
+}
+
+function formatSourceLocation(
+  source: NonNullable<GraphNodeIR['source']>,
+): string {
+  if (source.line === undefined) return source.file
+  if (source.column === undefined) return `${source.file}:${source.line}`
+  return `${source.file}:${source.line}:${source.column}`
+}
+
+function formatMermaidSourceLocation(
+  source: NonNullable<GraphNodeIR['source']>,
+): string {
+  const path = source.file.replaceAll('\\', '/')
+  const segments = path.split('/')
+  const compactPath =
+    segments.length <= 3 ? path : `…/${segments.slice(-3).join('/')}`
+  return source.line === undefined
+    ? compactPath
+    : `${compactPath}:${source.line}`
 }
 
 function requiredCapabilities(graph: ApplicationModelGraphIR): string[] {
@@ -1282,6 +1389,7 @@ function mermaidText(value: string): string {
     .replaceAll('"', '&quot;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
+    .replaceAll('\n', '<br/>')
 }
 
 const valueOptions = new Set([

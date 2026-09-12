@@ -295,7 +295,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [22.x, 24.x]
+        version: [22.12.0, 24.x]
     runs-on: ubuntu-latest
     steps:
       - name: Setup Node.js ${{ matrix.version }}

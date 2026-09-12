@@ -1,5 +1,8 @@
 import {
   collectInjectedDependencies,
+  getSourceLocation,
+  getSourceMemberLocation,
+  inheritSourceLocation,
   composeLayers,
   defineExecution,
   defineExecutionExtension,
@@ -17,6 +20,7 @@ import {
   type SchemaInput,
   type SchemaOutput,
   type StandardSchemaV1,
+  type SourceLocation,
   type Type,
 } from '../core/index.js'
 import {
@@ -513,6 +517,8 @@ interface CompiledHttpRoute {
   readonly dispatch: string
   readonly definition: HttpExecutionRouteDefinition
   readonly middlewares: readonly AnyHttpMiddleware[]
+  readonly source?: SourceLocation
+  readonly handlerSource?: SourceLocation
 }
 
 interface CompiledHttpExecution {
@@ -553,7 +559,13 @@ export const httpExecutionExtension = defineExecutionExtension<
   name: 'loutre:http',
   compile(definition, context) {
     const routes = Object.entries(definition.contract.routes).map(
-      ([name, route]) => compileHttpRoute(name, route),
+      ([name, route]) =>
+        compileHttpRoute(
+          name,
+          route,
+          getSourceMemberLocation(definition.factory, name) ??
+            getSourceLocation(definition),
+        ),
     )
     const id =
       definition.name || `${context.moduleId}.http.${context.definitionIndex}`
@@ -631,11 +643,18 @@ export const httpExecutionExtension = defineExecutionExtension<
       name: route.name,
       method: route.method,
       path: route.path,
+      ...(route.source === undefined ? {} : { source: route.source }),
+      ...(route.handlerSource === undefined
+        ? {}
+        : { handlerSource: route.handlerSource }),
       middlewares: route.middlewares.map((middleware) => ({
         name: middleware.name,
         capabilities: middleware.capabilities.map(
           (capability) => capability.id,
         ),
+        ...(getSourceLocation(middleware) === undefined
+          ? {}
+          : { source: getSourceLocation(middleware) }),
       })),
       responses: Object.fromEntries(
         Object.entries(route.definition.responses).map(([name, response]) => [
@@ -931,19 +950,22 @@ function resolveHttpContractRoutes(
           inheritedResponses,
           node.responses,
         )
-        resolved[name] = {
-          ...node,
-          path: joinHttpPath(pathPrefix, node.path),
-          responses: { ...inheritedResponses, ...node.responses },
-          ...(inheritedMiddlewares.length === 0 && !node.middlewares
-            ? {}
-            : {
-                middlewares: [
-                  ...inheritedMiddlewares,
-                  ...(node.middlewares ?? []),
-                ],
-              }),
-        }
+        resolved[name] = inheritSourceLocation(
+          {
+            ...node,
+            path: joinHttpPath(pathPrefix, node.path),
+            responses: { ...inheritedResponses, ...node.responses },
+            ...(inheritedMiddlewares.length === 0 && !node.middlewares
+              ? {}
+              : {
+                  middlewares: [
+                    ...inheritedMiddlewares,
+                    ...(node.middlewares ?? []),
+                  ],
+                }),
+          },
+          node,
+        )
         continue
       }
       if (!('routes' in node)) {
@@ -1066,11 +1088,13 @@ export function withHttpFrameworkHeaders(
 function compileHttpRoute(
   name: string,
   route: HttpExecutionRouteDefinition,
+  handlerSource?: SourceLocation,
 ): CompiledHttpRoute {
   assertValidHttpMethod(route.method)
   const segments = parseHttpPath(route.path)
   assertValidHttpRouteDefinition(route, segments)
   const definition = snapshotHttpRouteDefinition(route)
+  const routeSource = getSourceLocation(route)
   return Object.freeze({
     name,
     method: route.method.toUpperCase(),
@@ -1079,6 +1103,8 @@ function compileHttpRoute(
     dispatch: createHttpDispatchKey(route.method, segments),
     definition,
     middlewares: compileHttpMiddlewares(definition),
+    ...(routeSource === undefined ? {} : { source: routeSource }),
+    ...(handlerSource === undefined ? {} : { handlerSource }),
   })
 }
 
@@ -1109,17 +1135,20 @@ function snapshotHttpRouteDefinition(
       ]),
     ),
   )
-  return Object.freeze({
-    ...route,
-    ...(route.tags === undefined
-      ? {}
-      : { tags: Object.freeze([...route.tags]) }),
-    ...(request === undefined ? {} : { request }),
-    responses,
-    ...(route.middlewares === undefined
-      ? {}
-      : { middlewares: Object.freeze([...route.middlewares]) }),
-  })
+  return inheritSourceLocation(
+    Object.freeze({
+      ...route,
+      ...(route.tags === undefined
+        ? {}
+        : { tags: Object.freeze([...route.tags]) }),
+      ...(request === undefined ? {} : { request }),
+      responses,
+      ...(route.middlewares === undefined
+        ? {}
+        : { middlewares: Object.freeze([...route.middlewares]) }),
+    }),
+    route,
+  )
 }
 
 function snapshotHttpResponseHeaders(
