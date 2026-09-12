@@ -455,6 +455,43 @@ describe('Loutre CLI', () => {
     expect(node('provider', 'EventEmitter')?.source).toBeUndefined()
   })
 
+  it('ambient classと外部call aliasを安全に扱いshadowed handlerはControllerへfallbackする', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--entry',
+          'tests/fixtures/source-location-safety-app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+
+    const graph = JSON.parse(output.stdout.join('\n'))
+    const node = (kind: string, label: string) =>
+      graph.nodes.find(
+        (candidate: { kind: string; label: string }) =>
+          candidate.kind === kind && candidate.label === label,
+      )
+    const controllerSource = {
+      file: 'tests/fixtures/source-location-safety-app.ts',
+      line: 35,
+      column: 20,
+    }
+
+    expect(node('provider', 'EventEmitter')?.source).toBeUndefined()
+    expect(node('execution', 'SafetyController')?.source).toEqual(
+      controllerSource,
+    )
+    expect(node('handler', 'SafetyController.create')?.source).toEqual(
+      controllerSource,
+    )
+  })
+
   it('graph modules JSONでもsource locationを保持する', async () => {
     const output = io()
     expect(

@@ -10,10 +10,13 @@ type AstNode = {
 
 interface ImportedApis {
   readonly defineModule: Set<string>
+  readonly providerBuilders: Set<string>
+  readonly providerFactories: Set<string>
   readonly httpObjects: Set<string>
   readonly httpContract: Set<string>
   readonly httpImplementation: Set<string>
   readonly httpMiddleware: Set<string>
+  readonly httpMiddlewareFactories: Set<string>
 }
 
 interface SourcePoint {
@@ -66,7 +69,6 @@ export function instrumentSourceLocations(
 
   const inspectRouteObject = (route: AstNode, definitionOffset: number) => {
     wrapSource(route, definitionOffset)
-    instrumentMiddlewareArray(route, wrapSource, initializers)
   }
 
   const inspectRouteTree = (tree: AstNode) => {
@@ -83,7 +85,6 @@ export function instrumentSourceLocations(
         )
         continue
       }
-      instrumentMiddlewareArray(value, wrapSource, initializers)
       const routes = objectPropertyValue(value, 'routes')
       if (routes) inspectRouteTree(routes)
     }
@@ -103,7 +104,7 @@ export function instrumentSourceLocations(
       objectPropertyValue(definition, 'factory'),
       initializers,
     )
-    const handlers = factory ? returnedObject(factory, initializers) : undefined
+    const handlers = factory ? returnedHandlerObject(factory) : undefined
     if (!factory || !handlers || !variableName) return
     for (const property of objectProperties(handlers)) {
       const name = propertyName(property)
@@ -139,6 +140,15 @@ export function instrumentSourceLocations(
     if (isHttpCall(call, apis.httpMiddleware, apis.httpObjects, 'middleware')) {
       wrapSource(call)
     }
+    if (isDirectCall(call, apis.httpMiddlewareFactories)) {
+      wrapSource(call)
+    }
+    if (
+      isDirectCall(call, apis.providerFactories) ||
+      isProviderBuilderCall(call, apis.providerBuilders)
+    ) {
+      wrapSource(call)
+    }
     if (isDefineModuleCall(call, apis.defineModule)) {
       wrapSource(call)
       const factory = resolveStaticExpression(call.arguments?.[0], initializers)
@@ -154,11 +164,7 @@ export function instrumentSourceLocations(
       if (providers?.type === 'ArrayExpression') {
         for (const element of providers.elements ?? []) {
           const provider = resolveStaticExpression(element, initializers)
-          if (
-            provider &&
-            (provider.type === 'CallExpression' ||
-              provider.type === 'ObjectExpression')
-          ) {
+          if (provider?.type === 'ObjectExpression') {
             wrapSource(provider)
           }
         }
@@ -179,6 +185,7 @@ export function instrumentSourceLocations(
     if (!declaration) continue
 
     if (declaration.type === 'ClassDeclaration') {
+      if (declaration.declare === true) continue
       if (declaration.id?.name) {
         add(
           statement.end,
@@ -197,10 +204,6 @@ export function instrumentSourceLocations(
       const init = unwrapExpression(declarator.init as AstNode)
       if (init?.type === 'CallExpression') {
         inspectKnownCall(init, name, statement.end)
-        add(
-          statement.end,
-          `;${sourceHelper}(${name},${sourceLiteral(init.start)})`,
-        )
       }
     }
   }
@@ -290,10 +293,13 @@ function sourceImportPosition(program: AstNode): number {
 function collectImportedApis(program: AstNode): ImportedApis {
   const apis: ImportedApis = {
     defineModule: new Set(),
+    providerBuilders: new Set(),
+    providerFactories: new Set(),
     httpObjects: new Set(),
     httpContract: new Set(),
     httpImplementation: new Set(),
     httpMiddleware: new Set(),
+    httpMiddlewareFactories: new Set(),
   }
   for (const statement of program.body ?? []) {
     if (statement.type !== 'ImportDeclaration') continue
@@ -306,8 +312,15 @@ function collectImportedApis(program: AstNode): ImportedApis {
       const imported = specifier.imported?.name ?? specifier.imported?.value
       const local = specifier.local?.name
       if (typeof imported !== 'string' || typeof local !== 'string') continue
-      if (source === '@loutrejs/loutre' && imported === 'defineModule') {
-        apis.defineModule.add(local)
+      if (source === '@loutrejs/loutre') {
+        if (imported === 'defineModule') apis.defineModule.add(local)
+        if (imported === 'provide') apis.providerBuilders.add(local)
+        if (
+          imported === 'environmentProvider' ||
+          imported === 'argumentsProvider'
+        ) {
+          apis.providerFactories.add(local)
+        }
       }
       if (source === '@loutrejs/loutre/http') {
         if (imported === 'http') apis.httpObjects.add(local)
@@ -316,6 +329,13 @@ function collectImportedApis(program: AstNode): ImportedApis {
           apis.httpImplementation.add(local)
         }
         if (imported === 'defineHttpMiddleware') apis.httpMiddleware.add(local)
+        if (
+          imported === 'basicAuth' ||
+          imported === 'bearerAuth' ||
+          imported === 'cors'
+        ) {
+          apis.httpMiddlewareFactories.add(local)
+        }
       }
     }
   }
@@ -328,6 +348,29 @@ function isDefineModuleCall(
 ): boolean {
   const callee = unwrapExpression(call.callee as AstNode | undefined)
   return callee?.type === 'Identifier' && names.has(callee.name)
+}
+
+function isDirectCall(call: AstNode, names: ReadonlySet<string>): boolean {
+  const callee = unwrapExpression(call.callee as AstNode | undefined)
+  return callee?.type === 'Identifier' && names.has(callee.name)
+}
+
+function isProviderBuilderCall(
+  call: AstNode,
+  builders: ReadonlySet<string>,
+): boolean {
+  const callee = unwrapExpression(call.callee as AstNode | undefined)
+  if (
+    callee?.type !== 'MemberExpression' ||
+    callee.computed === true ||
+    !['useClass', 'useValue', 'useFactory', 'select'].includes(
+      callee.property?.name,
+    )
+  ) {
+    return false
+  }
+  const builder = unwrapExpression(callee.object as AstNode | undefined)
+  return builder?.type === 'CallExpression' && isDirectCall(builder, builders)
 }
 
 function isHttpCall(
@@ -345,6 +388,18 @@ function isHttpCall(
     objectNames.has(callee.object.name) &&
     callee.property?.name === member
   )
+}
+
+function returnedHandlerObject(factory: AstNode): AstNode | undefined {
+  const body = unwrapExpression(factory.body as AstNode | undefined)
+  if (body?.type === 'ObjectExpression') return body
+  if (body?.type !== 'BlockStatement') return undefined
+  for (const statement of body.body ?? []) {
+    if (statement.type !== 'ReturnStatement') continue
+    const returned = unwrapExpression(statement.argument as AstNode | undefined)
+    if (returned?.type === 'ObjectExpression') return returned
+  }
+  return undefined
 }
 
 function returnedObject(
@@ -366,22 +421,6 @@ function returnedObject(
     if (returned?.type === 'ObjectExpression') return returned
   }
   return undefined
-}
-
-function instrumentMiddlewareArray(
-  definition: AstNode,
-  wrapSource: (node: AstNode, offset?: number) => void,
-  initializers: ReadonlyMap<string, AstNode>,
-): void {
-  const middlewares = resolveStaticExpression(
-    objectPropertyValue(definition, 'middlewares'),
-    initializers,
-  )
-  if (middlewares?.type !== 'ArrayExpression') return
-  for (const element of middlewares.elements ?? []) {
-    const middleware = resolveStaticExpression(element, initializers)
-    if (middleware?.type === 'CallExpression') wrapSource(middleware)
-  }
 }
 
 function objectProperties(value: AstNode): readonly AstNode[] {

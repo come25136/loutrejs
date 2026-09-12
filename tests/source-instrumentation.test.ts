@@ -29,7 +29,7 @@ void Module
     )
     expect(transformed).toContain('__loutreSource$1(RealService')
   })
-  it('CallExpression initializerはローカル生成地点をsource registrationする', () => {
+  it('既知HTTP middleware factoryはローカル生成地点をsource registrationする', () => {
     const source = `import { basicAuth } from '@loutrejs/loutre/http'
 const basicAuthentication = basicAuth({ name: 'basicAuthentication' })
 void basicAuthentication
@@ -40,7 +40,9 @@ void basicAuthentication
       '/repo',
     )
 
-    expect(transformed).toContain('__loutreSource(basicAuthentication')
+    expect(transformed).toContain(
+      'const basicAuthentication = __loutreSource(basicAuth',
+    )
     expect(transformed).toContain('"file":"src/authentication.ts"')
     expect(transformed).toContain('"line":2')
   })
@@ -51,7 +53,9 @@ import * as events from 'node:events'
 import { defineModule } from '@loutrejs/loutre'
 const ImportedAlias = EventEmitter
 const MemberAlias = events.EventEmitter
-const Module = defineModule(() => ({ providers: [ImportedAlias] }))
+function externalClass() { return EventEmitter }
+const CallAlias = externalClass()
+const Module = defineModule(() => ({ providers: [ImportedAlias, CallAlias] }))
 void MemberAlias
 void Module
 `
@@ -63,6 +67,23 @@ void Module
 
     expect(transformed).not.toContain('__loutreSource(ImportedAlias')
     expect(transformed).not.toContain('__loutreSource(MemberAlias')
+    expect(transformed).not.toContain('__loutreSource(CallAlias')
+    expect(transformed).not.toContain('__loutreSource(externalClass()')
+    expect(transformed).toContain('const Module = __loutreSource(defineModule')
+  })
+  it('declare classはruntime source instrumentation対象にしない', () => {
+    const source = `import { defineModule } from '@loutrejs/loutre'
+declare class AmbientOnlyType {}
+const Module = defineModule(() => ({ name: 'App' }))
+void Module
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).not.toContain('__loutreSource(AmbientOnlyType')
     expect(transformed).toContain('const Module = __loutreSource(defineModule')
   })
 })
