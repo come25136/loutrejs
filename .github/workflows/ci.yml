@@ -65,7 +65,6 @@ jobs:
           name: create-loutre-build
           path: |
             packages/loutre/dist
-            packages/tasks/dist
             packages/create-loutre/dist
           if-no-files-found: error
 
@@ -361,7 +360,6 @@ jobs:
           cd "$consumer"
 
           loutre="$(realpath "$tarballs"/loutrejs-loutre-*.tgz)"
-          tasks="$(realpath "$tarballs"/loutrejs-tasks-*.tgz)"
           cli="$(realpath "$tarballs"/loutrejs-cli-*.tgz)"
           create="$(realpath "$tarballs"/create-loutre-*.tgz)"
           cat > package.json <<JSON
@@ -371,13 +369,11 @@ jobs:
             "type": "module",
             "dependencies": {
               "@loutrejs/loutre": "file:$loutre",
-              "@loutrejs/tasks": "file:$tasks",
               "@loutrejs/cli": "file:$cli",
               "create-loutre": "file:$create"
             },
             "overrides": {
-              "@loutrejs/loutre": "file:$loutre",
-              "@loutrejs/tasks": "file:$tasks"
+              "@loutrejs/loutre": "file:$loutre"
             }
           }
           JSON
@@ -385,6 +381,7 @@ jobs:
           bun install
           bun --eval "import { bunRuntime } from '@loutrejs/loutre/runtime/bun'; if (bunRuntime.runtime !== 'bun') throw new Error('Bun runtime import failed')"
           bun --eval "import { http } from '@loutrejs/loutre/http'; if (!http) throw new Error('HTTP subpath import failed')"
+          bun --eval "import { tasksExtension } from '@loutrejs/loutre/tasks'; if (!tasksExtension) throw new Error('Tasks subpath import failed')"
           bun node_modules/@loutrejs/cli/bin/loutre.js --help | grep -q '^Loutre CLI$'
           bun node_modules/create-loutre/bin/create-loutre.js bun-app --yes --no-install --target bun
           grep -q 'bunRuntime' bun-app/src/main.ts
@@ -424,7 +421,6 @@ jobs:
             tar -xzf "$archive" -C "$consumer/packages/$destination" --strip-components=1
           }
           extract_package "$tarballs"/loutrejs-loutre-*.tgz loutre
-          extract_package "$tarballs"/loutrejs-tasks-*.tgz tasks
           extract_package "$tarballs"/loutrejs-cli-*.tgz cli
           extract_package "$tarballs"/create-loutre-*.tgz create-loutre
 
@@ -437,7 +433,6 @@ jobs:
             "workspaces": ["packages/*"],
             "dependencies": {
               "@loutrejs/loutre": "workspace:*",
-              "@loutrejs/tasks": "workspace:*",
               "@loutrejs/cli": "workspace:*",
               "create-loutre": "workspace:*"
             }
@@ -452,6 +447,7 @@ jobs:
           deno install
           deno eval "import { denoRuntime } from '@loutrejs/loutre/runtime/deno'; if (denoRuntime.runtime !== 'deno') throw new Error('Deno runtime import failed')"
           deno eval "import { http } from '@loutrejs/loutre/http'; if (!http) throw new Error('HTTP subpath import failed')"
+          deno eval "import { tasksExtension } from '@loutrejs/loutre/tasks'; if (!tasksExtension) throw new Error('Tasks subpath import failed')"
           deno run -A node_modules/@loutrejs/cli/bin/loutre.js --help | grep -q '^Loutre CLI$'
           deno run -A node_modules/create-loutre/bin/create-loutre.js deno-app --yes --no-install --target deno
           grep -q 'denoRuntime' deno-app/src/main.ts

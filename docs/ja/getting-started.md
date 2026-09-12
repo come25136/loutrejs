@@ -169,11 +169,11 @@ await app.serve({ port: app.get(AppEnv).PORT })
 
 ## TaskとTriggerを追加する
 
-Task semanticsは`@loutrejs/tasks`が提供します。
+Task semanticsは`@loutrejs/loutre/tasks`が提供します。
 
 ```ts
 import { defineApplication, defineModule } from '@loutrejs/loutre'
-import { fixedDelay, task } from '@loutrejs/tasks'
+import { fixedDelay, task } from '@loutrejs/loutre/tasks'
 
 export const cleanup = task<void, void>({
   name: 'cleanup',
@@ -211,11 +211,11 @@ await app.tasks.start()
 
 ## Queue consumer
 
-Queue descriptorとconsumerも`@loutrejs/tasks`から提供されます。BullMQのようなdriverは同じModuleのProviderとして宣言します。
+Queue descriptorとconsumerも`@loutrejs/loutre/tasks`から提供されます。BullMQのようなdriverは同じModuleのProviderとして宣言します。
 
 ```ts
 import { defineModule } from '@loutrejs/loutre'
-import { consume, queue, task } from '@loutrejs/tasks'
+import { consume, queue, task } from '@loutrejs/loutre/tasks'
 import { bindBullMqQueue } from '@loutrejs/bullmq'
 import { z } from 'zod'
 

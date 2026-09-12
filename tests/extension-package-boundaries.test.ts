@@ -3,157 +3,139 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const repository = resolve(import.meta.dirname, '..')
-const externalExtensionPackages = [
-  'websocket',
-  'tasks',
-  'message-port',
-] as const
-const externalExtensionPackageNames = externalExtensionPackages.map(
-  (name) => `@loutrejs/${name}`,
-)
+const publicPackageNames = [
+  '@loutrejs/loutre',
+  '@loutrejs/node',
+  '@loutrejs/bullmq',
+  '@loutrejs/cli',
+  'create-loutre',
+]
 
-function packageImportPattern(specifier: string): RegExp {
-  const escaped = specifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(
-    `(?:from\\s*|import\\s*(?:\\(\\s*)?|require\\s*\\(\\s*)['"]${escaped}`,
-    'u',
-  )
+type PackageManifest = {
+  readonly name: string
+  readonly version: string
+  readonly dependencies?: Readonly<Record<string, string>>
+  readonly peerDependencies?: Readonly<Record<string, string>>
 }
 
-describe('Execution Extension package境界', () => {
-  it('HTTPは独立packageを作らず@loutrejs/loutre/http subpathとして公開する', async () => {
-    const packages = await readdir(resolve(repository, 'packages'))
-    expect(packages).not.toContain('http')
+describe('npm package境界', () => {
+  it('公開対象を5packageに限定する', async () => {
+    const packageDirectories = await readdir(resolve(repository, 'packages'))
+    const manifests = await Promise.all(
+      packageDirectories.map(async (directory) =>
+        JSON.parse(
+          await readFile(
+            resolve(repository, 'packages', directory, 'package.json'),
+            'utf8',
+          ),
+        ),
+      ),
+    )
 
+    expect(
+      manifests
+        .filter((manifest) => manifest.private !== true)
+        .map((manifest) => manifest.name)
+        .toSorted(),
+    ).toEqual(publicPackageNames.toSorted())
+  })
+
+  it('protocol extensionをmain packageのsubpathとして公開する', async () => {
     const manifest = JSON.parse(
       await readFile(
         resolve(repository, 'packages/loutre/package.json'),
         'utf8',
       ),
     ) as {
+      readonly engines?: Readonly<Record<string, string>>
       readonly exports?: Readonly<Record<string, unknown>>
     }
-    expect(Object.keys(manifest.exports ?? {}).toSorted()).toEqual(
-      [
-        '.',
-        './graph',
-        './http',
-        './http/openapi',
-        './presentation',
-        './runtime',
-        './runtime/aws-lambda',
-        './runtime/bun',
-        './runtime/cloudflare-workers',
-        './runtime/deno',
-        './runtime/electron',
-      ].toSorted(),
-    )
+
+    expect(manifest.engines).toBeUndefined()
+    expect(manifest.exports).toMatchObject({
+      './tasks': expect.any(Object),
+      './message-port': expect.any(Object),
+      './websocket': expect.any(Object),
+    })
   })
 
-  it.each(['tasks', 'message-port'] as const)(
-    '@loutrejs/%sはCoreの公開rootだけに依存する',
-    async (packageName) => {
-      const sources = await readTypeScriptSources(
-        resolve(repository, 'packages', packageName, 'src'),
-      )
-      const forbidden = packageImportPattern('@loutrejs/loutre/')
+  it('Node adapterだけがNode minimumをpackage metadataで宣言する', async () => {
+    const manifest = JSON.parse(
+      await readFile(resolve(repository, 'packages/node/package.json'), 'utf8'),
+    ) as { readonly engines?: Readonly<Record<string, string>> }
 
-      for (const [path, source] of sources) {
-        expect(source, path).not.toMatch(forbidden)
-      }
-    },
-  )
+    expect(manifest.engines?.node).toBe('>=22')
+  })
 
-  it('@loutrejs/websocketはHTTP integration以外のCore subpathへ依存しない', async () => {
-    const sources = await readTypeScriptSources(
-      resolve(repository, 'packages/websocket/src'),
-    )
-    const subpathImport =
-      /(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)['"](@loutrejs\/loutre\/[^'"]+)/gu
+  it('Core値を共有するlibrary packageだけがmain packageをpeerとして要求する', async () => {
+    const loutre = await readPackageManifest('loutre')
+    const compatibleRange = loutreCompatibilityRange(loutre.version)
+    const node = await readPackageManifest('node')
+    const bullmq = await readPackageManifest('bullmq')
 
-    for (const [path, source] of sources) {
-      const imports = [...source.matchAll(subpathImport)].map(
-        (match) => match[1],
+    for (const manifest of [node, bullmq]) {
+      expect(manifest.dependencies?.['@loutrejs/loutre']).toBeUndefined()
+      expect(manifest.peerDependencies?.['@loutrejs/loutre']).toBe(
+        compatibleRange,
       )
-      expect(imports, path).toEqual(
-        imports.filter((specifier) => specifier === '@loutrejs/loutre/http'),
-      )
+    }
+
+    for (const directory of ['cli', 'create-loutre']) {
+      const manifest = await readPackageManifest(directory)
+      expect(manifest.dependencies?.['@loutrejs/loutre']).toBeDefined()
+      expect(manifest.peerDependencies?.['@loutrejs/loutre']).toBeUndefined()
     }
   })
 
-  it.each(externalExtensionPackages)(
-    '@loutrejs/%sは他の独立Execution Extension packageへ依存しない',
-    async (packageName) => {
-      const sources = await readTypeScriptSources(
-        resolve(repository, 'packages', packageName, 'src'),
-      )
-      for (const dependency of externalExtensionPackages) {
-        if (dependency === packageName) continue
-        const forbidden = packageImportPattern(`@loutrejs/${dependency}`)
-        for (const [path, source] of sources) {
-          expect(source, path).not.toMatch(forbidden)
-        }
-      }
-    },
-  )
+  it('protocol extensionのruntime identityをnpm package名から独立させる', async () => {
+    const identities = await Promise.all(
+      ['http', 'tasks', 'message-port', 'websocket'].map(async (name) => {
+        const path =
+          name === 'http'
+            ? resolve(repository, 'packages/loutre/src/http/extension.ts')
+            : resolve(repository, 'packages/loutre/src', name, 'extension.ts')
+        const source = await readFile(path, 'utf8')
+        return source.match(/name: '(loutre:[^']+)'/u)?.[1]
+      }),
+    )
 
-  it('@loutrejs/nodeは新HTTP subpathをruntime bindingとして利用する', async () => {
-    const source = await readFile(
-      resolve(repository, 'packages/node/src/index.ts'),
+    expect(identities).toEqual([
+      'loutre:http',
+      'loutre:tasks',
+      'loutre:message-port',
+      'loutre:websocket',
+    ])
+  })
+
+  it('package consumer CIがmain packageのsubpathだけを検証する', async () => {
+    const workflow = await readFile(
+      resolve(repository, '.github/workflows/ci.yml'),
       'utf8',
     )
-    expect(source).toMatch(packageImportPattern('@loutrejs/loutre/http'))
-    expect(source).not.toMatch(packageImportPattern('@loutrejs/http'))
-  })
 
-  it('examplesはHTTPをmain package subpathから利用する', async () => {
-    const sources = await readTypeScriptSources(resolve(repository, 'examples'))
-    const standaloneHttp = packageImportPattern('@loutrejs/http')
-
-    for (const [path, source] of sources) {
-      expect(source, path).not.toMatch(standaloneHttp)
-    }
-  })
-
-  it('Core package manifestは独立Execution Extension packageへ依存しない', async () => {
-    const manifest = JSON.parse(
-      await readFile(
-        resolve(repository, 'packages/loutre/package.json'),
-        'utf8',
-      ),
-    ) as {
-      readonly dependencies?: Readonly<Record<string, string>>
-      readonly peerDependencies?: Readonly<Record<string, string>>
-      readonly devDependencies?: Readonly<Record<string, string>>
-    }
-    const dependencies = {
-      ...manifest.dependencies,
-      ...manifest.peerDependencies,
-      ...manifest.devDependencies,
-    }
-
-    expect(dependencies).not.toHaveProperty('@loutrejs/http')
-    for (const packageName of externalExtensionPackageNames) {
-      expect(dependencies, packageName).not.toHaveProperty(packageName)
-    }
+    expect(workflow).not.toMatch(/loutrejs-(?:tasks|message-port|websocket)-/u)
+    expect(workflow).not.toMatch(/@loutrejs\/(?:tasks|message-port|websocket)/u)
+    expect(workflow).toContain('@loutrejs/loutre/tasks')
   })
 })
 
-async function readTypeScriptSources(
+async function readPackageManifest(
   directory: string,
-): Promise<ReadonlyMap<string, string>> {
-  const sources = new Map<string, string>()
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = resolve(directory, entry.name)
-    if (entry.isDirectory()) {
-      for (const [childPath, source] of await readTypeScriptSources(path)) {
-        sources.set(childPath, source)
-      }
-      continue
-    }
-    if (entry.name.endsWith('.ts')) {
-      sources.set(path, await readFile(path, 'utf8'))
-    }
+): Promise<PackageManifest> {
+  return JSON.parse(
+    await readFile(
+      resolve(repository, 'packages', directory, 'package.json'),
+      'utf8',
+    ),
+  ) as PackageManifest
+}
+
+function loutreCompatibilityRange(version: string): string {
+  const [majorText, minorText] = version.split('.')
+  const major = Number(majorText)
+  const minor = Number(minorText)
+  if (!Number.isInteger(major) || !Number.isInteger(minor)) {
+    throw new Error(`Invalid Loutre version: ${version}`)
   }
-  return sources
+  return major === 0 ? `^0.${minor}.0` : `^${major}.0.0`
 }

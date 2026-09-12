@@ -4,9 +4,9 @@ import { Readable } from 'node:stream'
 import {
   createKernelApplication,
   type ApplicationDefinition,
-  type ApplicationExtensions,
   type BootstrapArguments,
   type KernelHostedApplication,
+  type RequireApplicationExtension,
   type RuntimeCapabilityBinding,
 } from '@loutrejs/loutre'
 import {
@@ -21,26 +21,14 @@ import {
 } from '@loutrejs/loutre/presentation'
 import {
   assertRuntimeEngine,
+  canRetryOnNextPort,
+  initialServerPort,
   nodeRuntimeSupport,
   serverUrl,
 } from '@loutrejs/loutre/runtime'
 
-type IsAny<TValue> = 0 extends 1 & TValue ? true : false
-
-type HasHttpExecutionExtension<TDefinition extends ApplicationDefinition> =
-  Extract<
-    ApplicationExtensions<TDefinition>,
-    typeof httpExecutionExtension
-  > extends never
-    ? false
-    : true
-
 type HttpApplication<TDefinition extends ApplicationDefinition> =
-  IsAny<TDefinition> extends true
-    ? TDefinition
-    : HasHttpExecutionExtension<TDefinition> extends true
-      ? TDefinition
-      : never
+  RequireApplicationExtension<TDefinition, typeof httpExecutionExtension>
 
 export type NodeCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: HttpApplication<TDefinition>
@@ -179,7 +167,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
     try {
       server = createNodeHttpServerDriver(http)
       const requestedPort = serveOptions.port
-      let port = requestedPort ?? 3000
+      let port = initialServerPort(requestedPort)
       while (true) {
         try {
           await listenServer(server, port, serveOptions.hostname)
@@ -345,19 +333,6 @@ function listenServer(
     server.once('listening', onListening)
     server.listen(port, hostname)
   })
-}
-
-function canRetryOnNextPort(error: unknown, port: number): boolean {
-  return port < 65_535 && isAddressInUseError(error)
-}
-
-function isAddressInUseError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'EADDRINUSE'
-  )
 }
 
 function closeServer(server: Server): Promise<void> {

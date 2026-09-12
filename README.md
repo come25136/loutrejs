@@ -121,16 +121,15 @@ Runtimeごとの役割と対応範囲は[Getting Started](./docs/getting-started
 
 ## Packages
 
-| Package                                                                          | Role                                    |
-| -------------------------------------------------------------------------------- | --------------------------------------- |
-| [`@loutrejs/loutre`](https://www.npmjs.com/package/@loutrejs/loutre)             | Application Graph Kernel / HTTP subpath |
-| [`@loutrejs/node`](https://www.npmjs.com/package/@loutrejs/node)                 | Node.js HTTP Runtime Adapter            |
-| [`@loutrejs/tasks`](https://www.npmjs.com/package/@loutrejs/tasks)               | Task / Trigger / Queue Extension        |
-| [`@loutrejs/message-port`](https://www.npmjs.com/package/@loutrejs/message-port) | MessagePort Extension                   |
-| [`@loutrejs/websocket`](https://www.npmjs.com/package/@loutrejs/websocket)       | WebSocket Extension                     |
-| [`@loutrejs/bullmq`](https://www.npmjs.com/package/@loutrejs/bullmq)             | BullMQ Queue Driver                     |
-| [`@loutrejs/cli`](https://www.npmjs.com/package/@loutrejs/cli)                   | Graph / build / OpenAPI tooling         |
-| [`create-loutre`](https://www.npmjs.com/package/create-loutre)                   | Project initializer                     |
+| Package                                                              | Role                                            |
+| -------------------------------------------------------------------- | ----------------------------------------------- |
+| [`@loutrejs/loutre`](https://www.npmjs.com/package/@loutrejs/loutre) | Kernel / HTTP / Tasks / MessagePort / WebSocket |
+| [`@loutrejs/node`](https://www.npmjs.com/package/@loutrejs/node)     | Node.js HTTP Runtime Adapter                    |
+| [`@loutrejs/bullmq`](https://www.npmjs.com/package/@loutrejs/bullmq) | BullMQ Queue Driver                             |
+| [`@loutrejs/cli`](https://www.npmjs.com/package/@loutrejs/cli)       | Graph / build / OpenAPI tooling                 |
+| [`create-loutre`](https://www.npmjs.com/package/create-loutre)       | Project initializer                             |
+
+Tasks、MessagePort、WebSocketは独立packageではなく、`@loutrejs/loutre/tasks`、`@loutrejs/loutre/message-port`、`@loutrejs/loutre/websocket`からimportします。
 
 ## Project Status
 

@@ -1,27 +1,16 @@
 import {
   createKernelApplication,
   type ApplicationDefinition,
-  type ApplicationExtensionHostApis,
   type BootstrapArguments,
+  type RequireApplicationExtension,
 } from '../application/index.js'
 import type { RuntimeCapabilityBinding } from '../core/index.js'
-import {
-  applicationHasHost,
-  bindApplicationCapability,
-} from '../application/kernel-internal.js'
+import { bindApplicationCapability } from '../application/kernel-internal.js'
+import { httpExecutionExtension } from '../http/index.js'
 import { assertRuntimeEngine } from '../runtime/engine.js'
 
-type IsAny<TValue> = 0 extends 1 & TValue ? true : false
-
-type HasHttpExecutionExtension<TDefinition extends ApplicationDefinition> =
-  'http' extends keyof ApplicationExtensionHostApis<TDefinition> ? true : false
-
 type HttpApplication<TDefinition extends ApplicationDefinition> =
-  IsAny<TDefinition> extends true
-    ? TDefinition
-    : HasHttpExecutionExtension<TDefinition> extends true
-      ? TDefinition
-      : never
+  RequireApplicationExtension<TDefinition, typeof httpExecutionExtension>
 
 export type AwsLambdaBindBaseOptions<
   TDefinition extends ApplicationDefinition,
@@ -107,7 +96,10 @@ function bind<const TDefinition extends ApplicationDefinition>(
     | AwsLambdaStreamingBindOptions<TDefinition>,
 ): AwsLambdaHttpHandler | AwsLambdaStreamingHttpHandler {
   assertRuntimeEngine('aws-lambda')
-  if (!applicationHasHost(options.application.model, 'http')) {
+  if (
+    options.application.model.extensions.get(httpExecutionExtension) ===
+    undefined
+  ) {
     throw new Error(
       'LUTRE_RUNTIME_HTTP_REQUIRED: awsLambdaRuntime.bind() requires the HTTP Execution Extension.',
     )

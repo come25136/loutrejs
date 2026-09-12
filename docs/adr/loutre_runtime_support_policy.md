@@ -39,6 +39,8 @@ versionはsupport policyとCI matrixが管理する。`node-26`、`bun-1.4-stabl
 
 ## 2. Node.js
 
+Node.js固有のminimum versionは独立した`@loutrejs/node`の`engines.node`で表現する。portableな`@loutrejs/loutre`にはNode.js engine constraintを設定しない。このpackage boundaryの理由は[package配布architecture](./loutre_package_distribution_architecture.md)を正本とする。
+
 Node.jsはupstreamでsupport中のLTS majorをLoutreのsupport対象とする。
 
 - minimum support: support中LTSの最古major

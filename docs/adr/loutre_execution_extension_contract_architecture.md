@@ -499,7 +499,7 @@ Execution Extensionのarchitecture境界はnpm package分割を必須としな�
 
 別packageとして配布するExtensionはCore公開rootだけへ依存し、internal sourceへ依存しない。境界テストはstatic import、side-effect import、dynamic import、require、package dependencies、peerDependencies、devDependencies、source reverse dependencyを確認する。
 
-これらのsource boundaryはdependency-cruiserでCI enforcementする。Extension間依存は明示allowlist制とし、現在はWebSocket handshake integrationのため`@loutrejs/websocket -> @loutrejs/loutre/http`を許可する。
+これらのsource boundaryはdependency-cruiserでCI enforcementする。Extension間依存は明示allowlist制とし、現在はWebSocket handshake integrationのため`@loutrejs/loutre/websocket -> @loutrejs/loutre/http`を許可する。
 
 ## 15. Migration completion
 

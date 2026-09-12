@@ -5,11 +5,17 @@ import {
   runInInjectionContext,
   validateSchema,
   type ExecutionDefinition,
+  type ExecutionExtension,
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
   type SchemaOutput,
   type StandardSchemaV1,
-} from '@loutrejs/loutre'
+} from '../core/index.js'
+import { IngressGate } from '../runtime/ingress-gate.js'
+import {
+  AsyncIteratorCleanupDeadlineError,
+  AsyncIteratorLifecycle,
+} from '../runtime/async-iterator-lifecycle.js'
 
 export interface MessagePortServerStreamResponseDefinition {
   readonly body: StandardSchemaV1
@@ -103,6 +109,8 @@ export interface MessagePortHostApi {
   invoke(method: string, input?: unknown): Promise<MessagePortResult>
 }
 
+declare const messagePortExecutionExtensionIdentity: unique symbol
+
 export const messagePortExtension = defineExecutionExtension<
   MessagePortImplementationData & ExecutionDefinition,
   CompiledMessagePortExecution,
@@ -112,7 +120,7 @@ export const messagePortExtension = defineExecutionExtension<
 >({
   kind: 'execution-extension',
   abiVersion: '1',
-  name: '@loutrejs/message-port',
+  name: 'loutre:message-port',
   compile(definition, context) {
     return {
       kind: 'execution',
@@ -167,7 +175,13 @@ export const messagePortExtension = defineExecutionExtension<
       invoke: (method, input) => runtime.invoke(method, input),
     }),
   },
-})
+}) as ExecutionExtension<
+  MessagePortImplementationData & ExecutionDefinition,
+  CompiledMessagePortExecution,
+  'messagePort',
+  MessagePortHostApi,
+  MessagePortExtensionRuntime
+> & { readonly [messagePortExecutionExtensionIdentity]: true }
 
 export type MessagePortExecutionDefinition<
   TContract extends MessagePortContract = MessagePortContract,
@@ -241,28 +255,10 @@ function createMessagePortRuntime(
       ) => MessagePortResult | Promise<MessagePortResult>
     }
   >()
-  let accepting = true
+  const ingress = new IngressGate()
   const activeStreams = new Set<{
     abort(reason: unknown, deadline: number): Promise<void>
   }>()
-  let pendingIngresses = 0
-  const pendingIngressWaiters = new Set<() => void>()
-  const trackPendingIngress = () => {
-    pendingIngresses += 1
-    let completed = false
-    return () => {
-      if (completed) return
-      completed = true
-      pendingIngresses -= 1
-      if (pendingIngresses !== 0) return
-      for (const resolve of pendingIngressWaiters) resolve()
-      pendingIngressWaiters.clear()
-    }
-  }
-  const waitForPendingIngresses = () =>
-    pendingIngresses === 0
-      ? Promise.resolve()
-      : new Promise<void>((resolve) => pendingIngressWaiters.add(resolve))
   for (const execution of executions) {
     const handlers = runInInjectionContext(
       {
@@ -284,13 +280,22 @@ function createMessagePortRuntime(
   }
   return {
     async invoke(method, input) {
-      if (!accepting) throw new Error('LUTRE_MESSAGE_PORT_DRAINING')
+      const completePendingIngress = ingress.enter()
+      if (!completePendingIngress) {
+        throw new Error('LUTRE_MESSAGE_PORT_DRAINING')
+      }
       const route = routes.get(method)
       if (!route) {
+        completePendingIngress()
         throw new Error(`LUTRE_MESSAGE_PORT_METHOD_NOT_FOUND: ${method}`)
       }
-      const lease = applicationRuntime.beginExecution()
-      const completePendingIngress = trackPendingIngress()
+      let lease: ReturnType<ExecutionKernelRuntime['beginExecution']>
+      try {
+        lease = applicationRuntime.beginExecution()
+      } catch (error) {
+        completePendingIngress()
+        throw error
+      }
       let executionOwnedByStream = false
       try {
         const value = route.route.input
@@ -340,9 +345,9 @@ function createMessagePortRuntime(
       }
     },
     async drain({ timeoutMs }) {
-      accepting = false
+      ingress.stopAccepting()
       const deadline = Date.now() + timeoutMs
-      await waitForPendingIngresses()
+      await ingress.waitForIdle()
       const reason = new Error('LUTRE_MESSAGE_PORT_DRAINING')
       const results = await Promise.allSettled(
         [...activeStreams].map((stream) => stream.abort(reason, deadline)),
@@ -365,20 +370,15 @@ function createLeasedMessagePortStream(
     abort(reason: unknown, deadline: number): Promise<void>
   }>,
 ): AsyncIterable<unknown> & { cancel(reason?: unknown): Promise<void> } {
-  const iterator = source[Symbol.asyncIterator]()
+  const iterator = new AsyncIteratorLifecycle(source[Symbol.asyncIterator]())
   let finished = false
   let completed = false
   let inFlightOperations = 0
-  let inFlightIteratorOperations = 0
   let cancellationSettled = true
   let cancellation: Promise<void> | undefined
   let iteratorCleanup: Promise<void> | undefined
   let iteratorCleanupDeadline: number | undefined
-  let consumerReturnPending = false
-  let returnContinuationPending = false
-  let iteratorDone = false
   let iteratorCleanupComplete = false
-  const iteratorIdleWaiters = new Set<() => void>()
   let resolveCompleted!: () => void
   const completedPromise = new Promise<void>((resolve) => {
     resolveCompleted = resolve
@@ -410,29 +410,6 @@ function createLeasedMessagePortStream(
       resolveCompleted()
     }
   }
-  const runIteratorOperation = async <T>(operation: () => Promise<T>) => {
-    inFlightIteratorOperations += 1
-    try {
-      return await operation()
-    } finally {
-      inFlightIteratorOperations -= 1
-      if (inFlightIteratorOperations === 0) {
-        for (const resolve of iteratorIdleWaiters) resolve()
-        iteratorIdleWaiters.clear()
-      }
-    }
-  }
-  const waitForIteratorIdle = () => {
-    if (inFlightIteratorOperations === 0) return Promise.resolve()
-    return new Promise<void>((resolve) => iteratorIdleWaiters.add(resolve))
-  }
-  const recordIteratorResult = (result: IteratorResult<unknown>) => {
-    if (result.done) {
-      iteratorDone = true
-      returnContinuationPending = false
-    }
-    return result
-  }
   const startIteratorCleanup = (
     reason?: unknown,
     deadline?: number,
@@ -452,49 +429,18 @@ function createLeasedMessagePortStream(
     cancellationSettled = false
     const operation = (async () => {
       try {
-        if (consumerReturnPending) await waitForIteratorIdle()
-        if (iteratorDone) return
-        if (!returnContinuationPending) {
-          if (!iterator.return) {
-            iteratorCleanupComplete = true
-            return
-          }
-          const result = await runIteratorOperation(async () => {
-            const returned = recordIteratorResult(
-              await iterator.return!(reason),
-            )
-            returnContinuationPending = !returned.done
-            return returned
-          })
-          if (result.done) return
-        }
-        await waitForIteratorIdle()
-        if (iteratorDone) return
-        let continuationSteps = 0
-        for (;;) {
-          if (iteratorDone) break
-          if (
-            iteratorCleanupDeadline !== undefined &&
-            Date.now() >= iteratorCleanupDeadline
-          ) {
-            throw new IteratorCleanupDeadlineError()
-          }
-          const result = await runIteratorOperation(async () =>
-            recordIteratorResult(await iterator.next()),
-          )
-          if (result.done) break
-          continuationSteps += 1
-          if (continuationSteps % iteratorCleanupYieldInterval === 0) {
-            await yieldToEventLoop()
-          }
-        }
+        await iterator.drain(
+          reason,
+          () => iteratorCleanupDeadline,
+          'MessagePort iterator cleanup exceeded the drain deadline.',
+        )
       } catch (error) {
-        if (error instanceof IteratorCleanupDeadlineError) throw error
+        if (error instanceof AsyncIteratorCleanupDeadlineError) throw error
         iteratorCleanupComplete = true
         cancellationSettled = true
         throw error
       } finally {
-        if (iteratorDone) iteratorCleanupComplete = true
+        if (iterator.done) iteratorCleanupComplete = true
         if (iteratorCleanupComplete) cancellationSettled = true
         completeIfSafe()
       }
@@ -560,7 +506,6 @@ function createLeasedMessagePortStream(
   const validateResult = async (
     result: IteratorResult<unknown>,
   ): Promise<IteratorResult<unknown>> => {
-    recordIteratorResult(result)
     if (result.done) {
       markFinished()
       return result
@@ -580,9 +525,7 @@ function createLeasedMessagePortStream(
       if (finished) return { done: true, value: undefined }
       inFlightOperations += 1
       try {
-        return await validateResult(
-          await runIteratorOperation(() => iterator.next()),
-        )
+        return await validateResult(await iterator.next())
       } catch (error) {
         if (finished) throw error
         return await closeAfterError(error)
@@ -594,19 +537,9 @@ function createLeasedMessagePortStream(
     async return(reason?: unknown) {
       if (finished) return { done: true, value: reason }
       inFlightOperations += 1
-      consumerReturnPending = true
       try {
-        const result = iterator.return
-          ? await runIteratorOperation(async () => {
-              const returned = recordIteratorResult(
-                await iterator.return!(reason),
-              )
-              returnContinuationPending = !returned.done
-              return returned
-            })
-          : { done: true as const, value: reason }
+        const result = await iterator.return(reason)
         if (result.done) {
-          recordIteratorResult(result)
           markFinished()
         }
         return result
@@ -614,7 +547,6 @@ function createLeasedMessagePortStream(
         markFinished()
         throw error
       } finally {
-        consumerReturnPending = false
         inFlightOperations -= 1
         completeIfSafe()
       }
@@ -623,10 +555,7 @@ function createLeasedMessagePortStream(
       if (finished) throw error
       inFlightOperations += 1
       try {
-        if (!iterator.throw) return await closeAfterError(error)
-        return await validateResult(
-          await runIteratorOperation(() => iterator.throw!(error)),
-        )
+        return await validateResult(await iterator.throw(error))
       } catch (caught) {
         if (finished) throw caught
         return await closeAfterError(caught)
@@ -664,67 +593,4 @@ function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
     Symbol.asyncIterator in value &&
     typeof value[Symbol.asyncIterator] === 'function'
   )
-}
-
-const iteratorCleanupYieldInterval = 32
-
-class IteratorCleanupDeadlineError extends Error {
-  constructor() {
-    super('MessagePort iterator cleanup exceeded the drain deadline.')
-    this.name = 'IteratorCleanupDeadlineError'
-  }
-}
-
-function yieldToEventLoop(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0))
-}
-
-export type MessagePortLike = {
-  postMessage(value: unknown): void
-  start?(): void
-} & Pick<EventTarget, 'addEventListener'>
-
-export function attachMessagePort(
-  host: MessagePortHostApi,
-  port: MessagePortLike,
-): void {
-  port.addEventListener('message', async (event) => {
-    const request = (event as MessageEvent<unknown>).data as {
-      readonly id: string
-      readonly procedure: string
-      readonly input?: unknown
-    }
-    try {
-      const result = await host.invoke(request.procedure, request.input)
-      if (isAsyncIterable(result.value)) {
-        for await (const value of result.value) {
-          port.postMessage({
-            id: request.id,
-            response: result.response,
-            value,
-            done: false,
-          })
-        }
-        port.postMessage({
-          id: request.id,
-          response: result.response,
-          done: true,
-        })
-      } else {
-        port.postMessage({
-          id: request.id,
-          response: result.response,
-          value: result.value,
-          done: true,
-        })
-      }
-    } catch (error) {
-      port.postMessage({
-        id: request.id,
-        error: error instanceof Error ? error.message : String(error),
-        done: true,
-      })
-    }
-  })
-  port.start?.()
 }

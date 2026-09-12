@@ -58,7 +58,7 @@ describe('Graph-driven CLI diagnostics', () => {
 
     const stdout = output.stdout.join('\n')
     expect(stdout).toContain('managed by: module:1')
-    expect(stdout).toContain('extension: @loutrejs/loutre/http')
+    expect(stdout).toContain('extension: loutre:http')
     expect(stdout).toContain('dependency graph:')
     expect(stdout).toContain('UsersService')
   })

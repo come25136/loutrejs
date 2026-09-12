@@ -28,6 +28,18 @@
       "types": "./dist/http/index.d.ts",
       "import": "./dist/http/index.js"
     },
+    "./tasks": {
+      "types": "./dist/tasks/index.d.ts",
+      "import": "./dist/tasks/index.js"
+    },
+    "./message-port": {
+      "types": "./dist/message-port/index.d.ts",
+      "import": "./dist/message-port/index.js"
+    },
+    "./websocket": {
+      "types": "./dist/websocket/index.d.ts",
+      "import": "./dist/websocket/index.js"
+    },
     "./runtime/bun": {
       "types": "./dist/adapters/bun.d.ts",
       "import": "./dist/adapters/bun.js"

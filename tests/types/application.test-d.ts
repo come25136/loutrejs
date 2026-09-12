@@ -3,13 +3,20 @@ import {
   defineApplication,
   defineArgs,
   defineEnv,
+  defineExecution,
+  defineExecutionExtension,
   defineModule,
+  type ExecutionDefinition,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
+import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
+import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
+import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { nodeRuntime } from '@loutrejs/node'
-import { consume, cron, fixedDelay, queue, task } from '@loutrejs/tasks'
+import type { MessagePortHostApi } from '@loutrejs/loutre/message-port'
+import { consume, cron, fixedDelay, queue, task } from '@loutrejs/loutre/tasks'
 import { z } from 'zod'
 
 class AppEnv extends defineEnv(
@@ -124,6 +131,108 @@ nodeRuntime.create({ application: httpDefinition }).then((app) => {
     // @ts-expect-error startup presentationはFrameworkが所有する
     presentation: { version: '0.1.0' },
   })
+})
+
+interface CustomHttpHostApi {
+  fetch(request: Request): Promise<Response>
+}
+const customHttpExtension = defineExecutionExtension<
+  ExecutionDefinition,
+  unknown,
+  'http',
+  CustomHttpHostApi
+>({
+  kind: 'execution-extension',
+  name: 'custom:http',
+  abiVersion: '1',
+  compile: (_definition, context) => ({
+    kind: 'execution',
+    id: `custom-http:${context.definitionIndex}`,
+    executionKind: 'custom-http',
+    dependencies: [],
+    capabilities: [],
+    compiled: undefined,
+  }),
+  createRuntime: () => ({}),
+  host: {
+    namespace: 'http',
+    create: () => ({ fetch: async () => new Response() }),
+  },
+})
+const customHttpExecution = defineExecution(customHttpExtension, {})
+const customHttpModule = defineModule(() => ({
+  executions: [customHttpExecution],
+}))
+const customHttpDefinition = defineApplication({
+  modules: [customHttpModule()],
+})
+nodeRuntime.create({
+  // @ts-expect-error Node runtimeはnamespaceだけが同じcustom extensionを受け付けない
+  application: customHttpDefinition,
+})
+bunRuntime.create({
+  // @ts-expect-error Bun runtimeもHTTP Extension identityを要求する
+  application: customHttpDefinition,
+})
+denoRuntime.create({
+  // @ts-expect-error Deno runtimeもHTTP Extension identityを要求する
+  application: customHttpDefinition,
+})
+cloudflareWorkersRuntime.bind({
+  // @ts-expect-error Cloudflare Workers runtimeもHTTP Extension identityを要求する
+  application: customHttpDefinition,
+})
+awsLambdaRuntime.bind({
+  // @ts-expect-error AWS Lambda runtimeもHTTP Extension identityを要求する
+  application: customHttpDefinition,
+})
+
+const customMessagePortExtension = defineExecutionExtension<
+  ExecutionDefinition,
+  unknown,
+  'messagePort',
+  MessagePortHostApi
+>({
+  kind: 'execution-extension',
+  name: 'custom:message-port',
+  abiVersion: '1',
+  compile: (_definition, context) => ({
+    kind: 'execution',
+    id: `custom-message-port:${context.definitionIndex}`,
+    executionKind: 'custom-message-port',
+    dependencies: [],
+    capabilities: [],
+    compiled: undefined,
+  }),
+  createRuntime: () => ({}),
+  host: {
+    namespace: 'messagePort',
+    create: () => ({
+      invoke: async () => ({
+        kind: 'message-port-result',
+        response: 'ok',
+        value: undefined,
+      }),
+    }),
+  },
+})
+const customMessagePortExecution = defineExecution(
+  customMessagePortExtension,
+  {},
+)
+const customMessagePortModule = defineModule(() => ({
+  executions: [customMessagePortExecution],
+}))
+const customMessagePortDefinition = defineApplication({
+  modules: [customMessagePortModule()],
+})
+electronRuntime.attach({
+  // @ts-expect-error Electron runtimeはnamespaceだけが同じcustom extensionを受け付けない
+  application: customMessagePortDefinition,
+  port: {
+    postMessage: () => undefined,
+    addEventListener: () => undefined,
+  },
 })
 bunRuntime.create({ application: httpDefinition }).then((app) => {
   app.serve({ shutdownHooks: false })

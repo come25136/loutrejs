@@ -44,7 +44,7 @@
     "test:unit": "vitest run --exclude '**/*.integration.test.ts' --exclude '**/*.e2e.test.ts'",
     "test:integration": "vitest run integration",
     "test:e2e": "vitest run e2e --testTimeout 60000",
-    "check:dependencies": "depcruise --config .dependency-cruiser.cjs packages/loutre/src"
+    "check:dependencies": "depcruise --config .dependency-cruiser.cjs packages/loutre/src packages/node/src packages/bullmq/src packages/cli/src packages/create-loutre/src"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.1",

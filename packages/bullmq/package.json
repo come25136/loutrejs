@@ -18,11 +18,8 @@
     "access": "public",
     "provenance": true
   },
-  "dependencies": {
-    "@loutrejs/loutre": "^0.5.0",
-    "@loutrejs/tasks": "^0.5.0"
-  },
   "peerDependencies": {
+    "@loutrejs/loutre": "^0.5.0",
     "bullmq": "^6.2.0"
   },
   "peerDependenciesMeta": {

@@ -13,7 +13,7 @@ import {
   messagePort,
   messagePortExtension,
   type MessagePortHostApi,
-} from '@loutrejs/message-port'
+} from '@loutrejs/loutre/message-port'
 
 describe('MessagePort Execution Extension', () => {
   it('methodごとのinputとoutputを検証してinvokeする', async () => {

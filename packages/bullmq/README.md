@@ -1,11 +1,11 @@
 # @loutrejs/bullmq
 
-`@loutrejs/tasks`のQueue Consumer executionをBullMQ Workerへ接続するDriver packageです。
+`@loutrejs/loutre/tasks`のQueue Consumer executionをBullMQ Workerへ接続するDriver packageです。
 
 ## Install
 
 ```sh
-npm install @loutrejs/loutre @loutrejs/tasks @loutrejs/bullmq bullmq
+npm install @loutrejs/loutre @loutrejs/bullmq bullmq
 ```
 
 `bullmq`はpeer dependencyです。
@@ -14,7 +14,7 @@ npm install @loutrejs/loutre @loutrejs/tasks @loutrejs/bullmq bullmq
 
 ```ts
 import { defineApplication, defineModule } from '@loutrejs/loutre'
-import { consume, queue, task } from '@loutrejs/tasks'
+import { consume, queue, task } from '@loutrejs/loutre/tasks'
 import { bindBullMqQueue } from '@loutrejs/bullmq'
 import { z } from 'zod'
 

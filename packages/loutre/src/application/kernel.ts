@@ -14,7 +14,7 @@ import type {
   ApplicationDefinition,
   ApplicationExtensionHostApis,
   BootstrapArguments,
-} from './index.js'
+} from './definition.js'
 
 export interface KernelApplicationBase extends AsyncDisposable {
   readonly graph: ApplicationModelGraphIR

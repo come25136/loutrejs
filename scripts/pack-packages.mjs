@@ -17,7 +17,7 @@ for (const directory of await readdir(packagesDirectory)) {
   )
   if (manifest.private === true) continue
 
-  const result = JSON.parse(
+  const packedResult = JSON.parse(
     execFileSync(
       'npm',
       [
@@ -29,7 +29,13 @@ for (const directory of await readdir(packagesDirectory)) {
       ],
       { cwd: repository, encoding: 'utf8' },
     ),
-  )[0]
+  )
+  const result = Array.isArray(packedResult)
+    ? packedResult[0]
+    : Object.values(packedResult)[0]
+  if (!result?.filename) {
+    throw new Error(`${manifest.name}: npm pack did not return a filename`)
+  }
   packed.push(`${manifest.name} -> ${result.filename}`)
 }
 

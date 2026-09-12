@@ -42,23 +42,25 @@ HTTP, Tasks, MessagePort, WebSocket, Queue consumers, and similar execution sema
 
 ## Packages
 
-| Package                  | Role                                                          |
-| ------------------------ | ------------------------------------------------------------- |
-| `@loutrejs/loutre`       | Application Graph Kernel, DI, lifecycle, runtime abstractions |
-| `@loutrejs/loutre/http`  | HTTP Execution Extension and OpenAPI integration              |
-| `@loutrejs/tasks`        | Task / Trigger / Queue Consumer Execution Extension           |
-| `@loutrejs/message-port` | MessagePort Execution Extension                               |
-| `@loutrejs/websocket`    | WebSocket Execution Extension                                 |
-| `@loutrejs/node`         | Node.js HTTP Runtime Adapter                                  |
-| `@loutrejs/bullmq`       | BullMQ Queue Consumer Driver                                  |
-| `@loutrejs/cli`          | Graph inspection, validation, build, deployment tooling       |
+| Public package     | Role                                                          |
+| ------------------ | ------------------------------------------------------------- |
+| `@loutrejs/loutre` | Application Graph Kernel, DI, lifecycle, runtime abstractions |
+| `@loutrejs/node`   | Node.js HTTP Runtime Adapter                                  |
+| `@loutrejs/bullmq` | BullMQ Queue Consumer Driver                                  |
+| `@loutrejs/cli`    | Graph inspection, validation, build, deployment tooling       |
+| `create-loutre`    | Project initializer                                           |
 
 The main package exposes these important subpaths:
+
+公開packageとsubpathを分ける判断理由は[package配布architecture ADR](./adr/loutre_package_distribution_architecture.md)を参照してください。
 
 | Subpath                         | Role                                                 |
 | ------------------------------- | ---------------------------------------------------- |
 | `@loutrejs/loutre`              | Application, Module, DI, lifecycle, Kernel bootstrap |
 | `@loutrejs/loutre/http`         | HTTP Extension                                       |
+| `@loutrejs/loutre/tasks`        | Tasks Extension                                      |
+| `@loutrejs/loutre/message-port` | MessagePort Extension                                |
+| `@loutrejs/loutre/websocket`    | WebSocket Extension                                  |
 | `@loutrejs/loutre/graph`        | Application Model graph projection                   |
 | `@loutrejs/loutre/runtime`      | Runtime capability and Kernel runtime primitives     |
 | `@loutrejs/loutre/http/openapi` | OpenAPI projection                                   |
@@ -131,10 +133,10 @@ HTTP owns route compilation, request decoding, response finalization, middleware
 
 ## Tasks Extension
 
-Task, Trigger, and Queue Consumer semantics live in `@loutrejs/tasks`.
+Task, Trigger, and Queue Consumer semantics live in `@loutrejs/loutre/tasks`.
 
 ```ts
-import { fixedDelay, task } from '@loutrejs/tasks'
+import { fixedDelay, task } from '@loutrejs/loutre/tasks'
 
 export const cleanup = task<void, void>({
   name: 'cleanup',
@@ -165,7 +167,7 @@ await app.tasks.start()
 
 ## MessagePort and WebSocket
 
-MessagePort is provided by `@loutrejs/message-port`; WebSocket is provided by `@loutrejs/websocket`. Both own their execution model, runtime, host API, and graph projection. WebSocket additionally depends on the public HTTP extension surface for its HTTP upgrade handshake; Core remains transport-agnostic.
+MessagePort is provided by `@loutrejs/loutre/message-port`; WebSocket is provided by `@loutrejs/loutre/websocket`. Both own their execution model, runtime, host API, and graph projection. WebSocket additionally depends on the public HTTP extension surface for its HTTP upgrade handshake; Core remains transport-agnostic.
 
 This keeps transport semantics outside Core while preserving one Application Model.
 

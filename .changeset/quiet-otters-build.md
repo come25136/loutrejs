@@ -1,16 +1,13 @@
 ---
 '@loutrejs/loutre': minor
 '@loutrejs/cli': minor
-'@loutrejs/websocket': minor
-'@loutrejs/tasks': minor
-'@loutrejs/message-port': minor
 ---
 
 Application Modelを唯一の正本とするExecution Extension architectureへ移行します。
 
 CoreはApplication Definition / Model、Module、DI、Lifecycle、active execution lifetime、Runtime Capability、generic Layer、Graph projectionだけを所有します。HTTP、Task、MessagePort、WebSocketのexecution semanticsは各Extensionがcompile / validate / runtime / Host API / Graph projectionを所有します。
 
-HTTPは`@loutrejs/loutre/http`、Task / Trigger / Queue Consumerは`@loutrejs/tasks`、MessagePortは`@loutrejs/message-port`、WebSocketは`@loutrejs/websocket`から提供します。
+HTTPは`@loutrejs/loutre/http`、Task / Trigger / Queue Consumerは`@loutrejs/loutre/tasks`、MessagePortは`@loutrejs/loutre/message-port`、WebSocketは`@loutrejs/loutre/websocket`から提供します。4つのExecution Extensionはsource moduleとして分離し、npmではmain packageのsubpathとして配布します。
 
 ModuleはExtensionが生成したExecution Definitionを`executions`へ登録します。Runtime adapter、CLI、build、OpenAPIは同じcompile済みApplication Modelを参照し、並行するApplication representationを持ちません。
 

@@ -5,15 +5,6 @@ import {
   type RuntimeCapabilityBinding,
 } from '../core/index.js'
 
-export function applicationHasHost(
-  model: ApplicationModel,
-  namespace: string,
-): boolean {
-  return model.extensions
-    .values()
-    .some((group) => group.extension.host?.namespace === namespace)
-}
-
 export function bindApplicationCapability<TValue>(
   model: ApplicationModel,
   id: string,

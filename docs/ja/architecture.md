@@ -42,23 +42,25 @@ HTTP、Task、MessagePort、WebSocket、Queue consumerなどのexecution semanti
 
 ## Packages
 
-| Package                  | Role                                                         |
-| ------------------------ | ------------------------------------------------------------ |
-| `@loutrejs/loutre`       | Application Graph Kernel、DI、Lifecycle、Runtime abstraction |
-| `@loutrejs/loutre/http`  | HTTP Execution ExtensionとOpenAPI integration                |
-| `@loutrejs/tasks`        | Task / Trigger / Queue Consumer Execution Extension          |
-| `@loutrejs/message-port` | MessagePort Execution Extension                              |
-| `@loutrejs/websocket`    | WebSocket Execution Extension                                |
-| `@loutrejs/node`         | Node.js HTTP Runtime Adapter                                 |
-| `@loutrejs/bullmq`       | BullMQ Queue Consumer Driver                                 |
-| `@loutrejs/cli`          | Graph inspection、validation、build、deployment tooling      |
+| 公開package        | Role                                                         |
+| ------------------ | ------------------------------------------------------------ |
+| `@loutrejs/loutre` | Application Graph Kernel、DI、Lifecycle、Runtime abstraction |
+| `@loutrejs/node`   | Node.js HTTP Runtime Adapter                                 |
+| `@loutrejs/bullmq` | BullMQ Queue Consumer Driver                                 |
+| `@loutrejs/cli`    | Graph inspection、validation、build、deployment tooling      |
+| `create-loutre`    | project initializer                                          |
 
 main packageの主要subpathは次の通りです。
+
+公開packageとsubpathを分ける判断理由は[package配布architecture ADR](../adr/loutre_package_distribution_architecture.md)を参照してください。
 
 | Subpath                         | Role                                                 |
 | ------------------------------- | ---------------------------------------------------- |
 | `@loutrejs/loutre`              | Application、Module、DI、Lifecycle、Kernel bootstrap |
 | `@loutrejs/loutre/http`         | HTTP Extension                                       |
+| `@loutrejs/loutre/tasks`        | Tasks Extension                                      |
+| `@loutrejs/loutre/message-port` | MessagePort Extension                                |
+| `@loutrejs/loutre/websocket`    | WebSocket Extension                                  |
 | `@loutrejs/loutre/graph`        | Application ModelのGraph projection                  |
 | `@loutrejs/loutre/runtime`      | Runtime CapabilityとKernel runtime primitive         |
 | `@loutrejs/loutre/http/openapi` | OpenAPI projection                                   |
@@ -131,10 +133,10 @@ routing、request decode、response finalization、middleware、authentication h
 
 ## Tasks Extension
 
-Task、Trigger、Queue Consumerは`@loutrejs/tasks`が所有します。
+Task、Trigger、Queue Consumerは`@loutrejs/loutre/tasks`が所有します。
 
 ```ts
-import { fixedDelay, task } from '@loutrejs/tasks'
+import { fixedDelay, task } from '@loutrejs/loutre/tasks'
 
 export const cleanup = task<void, void>({
   name: 'cleanup',
@@ -165,7 +167,7 @@ await app.tasks.start()
 
 ## MessagePortとWebSocket
 
-MessagePortは`@loutrejs/message-port`、WebSocketは`@loutrejs/websocket`が提供し、それぞれのexecution model、runtime、Host API、Graph projectionを所有します。WebSocketはHTTP upgrade handshakeのためpublicなHTTP Extension surfaceにも依存しますが、Coreはtransport非依存のままです。
+MessagePortは`@loutrejs/loutre/message-port`、WebSocketは`@loutrejs/loutre/websocket`が提供し、それぞれのexecution model、runtime、Host API、Graph projectionを所有します。WebSocketはHTTP upgrade handshakeのためpublicなHTTP Extension surfaceにも依存しますが、Coreはtransport非依存のままです。
 
 ## DIとModule visibility
 

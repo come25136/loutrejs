@@ -23,9 +23,13 @@
       "@loutrejs/loutre/graph": ["./packages/loutre/src/graph/index.ts"],
       "@loutrejs/loutre/runtime": ["./packages/loutre/src/runtime/index.ts"],
       "@loutrejs/loutre/http": ["./packages/loutre/src/http/index.ts"],
-      "@loutrejs/websocket": ["./packages/websocket/src/index.ts"],
-      "@loutrejs/tasks": ["./packages/tasks/src/index.ts"],
-      "@loutrejs/message-port": ["./packages/message-port/src/index.ts"],
+      "@loutrejs/loutre/websocket": [
+        "./packages/loutre/src/websocket/index.ts"
+      ],
+      "@loutrejs/loutre/tasks": ["./packages/loutre/src/tasks/index.ts"],
+      "@loutrejs/loutre/message-port": [
+        "./packages/loutre/src/message-port/index.ts"
+      ],
       "@loutrejs/loutre/runtime/bun": ["./packages/loutre/src/adapters/bun.ts"],
       "@loutrejs/loutre/runtime/deno": [
         "./packages/loutre/src/adapters/deno.ts"
