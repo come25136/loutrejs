@@ -477,11 +477,49 @@ function renderMermaidGraph(
   const ids = new Map(
     view.nodes.map((candidate, index) => [candidate.id, `n${index}`]),
   )
+  const moduleNames = new Map(
+    graph.modules.map((module) => [module.id, module.name ?? module.id]),
+  )
+  const grouped = new Map<string, GraphViewNode[]>()
+  const ungrouped: GraphViewNode[] = []
+
   for (const candidate of view.nodes) {
-    lines.push(
-      `  ${ids.get(candidate.id)!}["${mermaidText(mermaidNodeLabel(candidate))}"]`,
-    )
+    const moduleId =
+      candidate.kind === 'module' ? candidate.id : candidate.module
+    if (!moduleId || !moduleNames.has(moduleId)) {
+      ungrouped.push(candidate)
+      continue
+    }
+    const current = grouped.get(moduleId) ?? []
+    current.push(candidate)
+    grouped.set(moduleId, current)
   }
+
+  const declared = new Set<string>()
+  const declareNode = (candidate: GraphViewNode, indent: string) => {
+    const id = ids.get(candidate.id)!
+    lines.push(`${indent}${id}["${mermaidText(mermaidNodeLabel(candidate))}"]`)
+    declared.add(candidate.id)
+  }
+
+  let subgraphIndex = 0
+  const subgraphs: string[] = []
+  for (const [moduleId, candidates] of grouped) {
+    if (candidates.length <= 1) continue
+    const subgraphId = `sg${subgraphIndex++}`
+    subgraphs.push(subgraphId)
+    lines.push(
+      `  subgraph ${subgraphId}["${mermaidText(moduleNames.get(moduleId)!)}"]`,
+    )
+    lines.push('    direction LR')
+    for (const candidate of candidates) declareNode(candidate, '    ')
+    lines.push('  end')
+  }
+
+  for (const candidate of view.nodes) {
+    if (!declared.has(candidate.id)) declareNode(candidate, '  ')
+  }
+
   const byId = new Map(view.nodes.map((candidate) => [candidate.id, candidate]))
   for (const relationship of view.edges) {
     const from = ids.get(relationship.from)
@@ -494,6 +532,34 @@ function renderMermaidGraph(
         : `  ${from} -->|"${mermaidText(label)}"| ${to}`,
     )
   }
+
+  lines.push(
+    '  classDef moduleNode fill:#E0E7FF,stroke:#4F46E5,color:#1E1B4B,stroke-width:2px',
+    '  classDef provider fill:#DCFCE7,stroke:#16A34A,color:#14532D',
+    '  classDef controller fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px',
+    '  classDef execution fill:#CFFAFE,stroke:#0891B2,color:#164E63',
+    '  classDef route fill:#FEF3C7,stroke:#D97706,color:#78350F',
+    '  classDef middleware fill:#F3E8FF,stroke:#9333EA,color:#581C87',
+    '  classDef handler fill:#FFEDD5,stroke:#EA580C,color:#7C2D12',
+    '  classDef runtimeCapability fill:#F3F4F6,stroke:#6B7280,color:#111827',
+  )
+
+  const classes = new Map<string, string[]>()
+  for (const candidate of view.nodes) {
+    const className = mermaidNodeClass(candidate)
+    const current = classes.get(className) ?? []
+    current.push(ids.get(candidate.id)!)
+    classes.set(className, current)
+  }
+  for (const [className, nodeIds] of classes) {
+    lines.push(`  class ${nodeIds.join(',')} ${className}`)
+  }
+  for (const subgraphId of subgraphs) {
+    lines.push(
+      `  style ${subgraphId} fill:#F8FAFC,stroke:#94A3B8,color:#0F172A,stroke-width:2px`,
+    )
+  }
+
   return lines.join('\n')
 }
 
@@ -815,6 +881,7 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
         kind: 'entrypoint',
         entrypointKind: 'http-route',
         label: `${method} ${path}`,
+        ...(execution.module === undefined ? {} : { module: execution.module }),
         attributes: { name, method, path },
       })
       edges.push({
@@ -842,6 +909,9 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
           id: middlewareId,
           kind: 'middleware',
           label: middleware.name,
+          ...(execution.module === undefined
+            ? {}
+            : { module: execution.module }),
           ...(capabilities.length === 0 ? {} : { capabilities }),
           attributes: { route: name, index },
         })
@@ -861,6 +931,7 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
         id: handlerId,
         kind: 'handler',
         label: `${execution.name ?? execution.id}.${name}`,
+        ...(execution.module === undefined ? {} : { module: execution.module }),
         attributes: { route: name },
       })
       edges.push({ from: previousId, to: handlerId, kind: 'flows-to' })
@@ -886,6 +957,7 @@ function projectMessagePortEntrypoints(
         kind: 'entrypoint',
         entrypointKind: 'message-port-method',
         label: `MessagePort ${method}`,
+        ...(execution.module === undefined ? {} : { module: execution.module }),
         attributes: { method },
       })
       edges.push({
@@ -919,6 +991,7 @@ function projectWebSocketEntrypoints(
         kind: 'entrypoint',
         entrypointKind: 'websocket-route',
         label: `WebSocket ${path}`,
+        ...(execution.module === undefined ? {} : { module: execution.module }),
         attributes: { name, path },
       })
       edges.push({
@@ -974,6 +1047,27 @@ function mermaidNodeLabel(node: GraphViewNode): string {
     }
   })()
   return `${role}: ${node.label}`
+}
+
+function mermaidNodeClass(node: GraphViewNode): string {
+  switch (node.kind) {
+    case 'module':
+      return 'moduleNode'
+    case 'provider':
+      return 'provider'
+    case 'execution':
+      return node.extension?.hostNamespace === 'http'
+        ? 'controller'
+        : 'execution'
+    case 'entrypoint':
+      return 'route'
+    case 'middleware':
+      return 'middleware'
+    case 'handler':
+      return 'handler'
+    case 'runtime-capability':
+      return 'runtimeCapability'
+  }
 }
 
 function mermaidEdgeLabel(

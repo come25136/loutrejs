@@ -22,6 +22,15 @@ describe('Loutre CLI', () => {
     }
   }
 
+  function graphLine(output: ReturnType<typeof io>, fragment: string): string {
+    return (
+      output.stdout
+        .join('\n')
+        .split('\n')
+        .find((line) => line.includes(fragment)) ?? ''
+    )
+  }
+
   it('HTTP Execution Graphを表示する', async () => {
     const output = io()
     expect(
@@ -366,6 +375,13 @@ describe('Loutre CLI', () => {
     ).toHaveLength(1)
     expect(lines.some((line) => line.includes('|"get"|'))).toBe(true)
     expect(lines.some((line) => line.includes('|"create"|'))).toBe(true)
+    expect(lines).toContain('  subgraph sg0["UsersModule"]')
+    expect(graphLine(output, 'classDef provider')).toContain('fill:#DCFCE7')
+    expect(graphLine(output, 'classDef controller')).toContain('fill:#DBEAFE')
+    expect(graphLine(output, 'classDef middleware')).toContain('fill:#F3E8FF')
+    expect(lines).toContain('  class n1 provider')
+    expect(lines).toContain('  class n2 controller')
+    expect(lines).toContain('  class n7 middleware')
   })
 
   it('HTTP Mermaidも同一Controllerを1nodeにdedupeする', async () => {
