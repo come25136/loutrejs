@@ -45,6 +45,8 @@ type GraphViewNodeKind =
   | 'provider'
   | 'execution'
   | 'entrypoint'
+  | 'middleware'
+  | 'handler'
   | 'runtime-capability'
 
 interface GraphViewNode {
@@ -65,7 +67,7 @@ interface GraphViewNode {
 interface GraphViewEdge {
   readonly from: string
   readonly to: string
-  readonly kind: GraphEdgeIR['kind'] | 'handles'
+  readonly kind: GraphEdgeIR['kind'] | 'handles' | 'flows-to'
   readonly label?: string
 }
 
@@ -388,6 +390,9 @@ function renderTextGraph(
     for (const route of httpRoutes(graph)) {
       write(`${route.execution}.${route.name} [http]`)
       write(`  ${route.method} ${route.path}`)
+      write(
+        `  flow: ${[...route.middlewares.map((middleware) => middleware.name), 'handler'].join(' -> ')}`,
+      )
     }
     if (httpRoutes(graph).length === 0) write('(no HTTP executions)')
     return
@@ -473,14 +478,21 @@ function renderMermaidGraph(
     view.nodes.map((candidate, index) => [candidate.id, `n${index}`]),
   )
   for (const candidate of view.nodes) {
-    lines.push(`  ${ids.get(candidate.id)!}["${mermaidText(candidate.label)}"]`)
+    lines.push(
+      `  ${ids.get(candidate.id)!}["${mermaidText(mermaidNodeLabel(candidate))}"]`,
+    )
   }
+  const byId = new Map(view.nodes.map((candidate) => [candidate.id, candidate]))
   for (const relationship of view.edges) {
     const from = ids.get(relationship.from)
     const to = ids.get(relationship.to)
     if (!from || !to) continue
-    const label = relationship.label ?? relationship.kind
-    lines.push(`  ${from} -->|"${mermaidText(label)}"| ${to}`)
+    const label = mermaidEdgeLabel(relationship, byId)
+    lines.push(
+      label === undefined
+        ? `  ${from} --> ${to}`
+        : `  ${from} -->|"${mermaidText(label)}"| ${to}`,
+    )
   }
   return lines.join('\n')
 }
@@ -608,11 +620,17 @@ function moduleData(graph: ApplicationModelGraphIR, module: GraphNodeIR) {
   }
 }
 
+interface HttpMiddlewareProjection {
+  readonly name: string
+  readonly capabilities: readonly string[]
+}
+
 interface HttpRouteProjection {
   readonly execution: string
   readonly name: string
   readonly method: string
   readonly path: string
+  readonly middlewares: readonly HttpMiddlewareProjection[]
   readonly responses?: JsonValue
 }
 
@@ -636,12 +654,32 @@ function httpRoutes(graph: ApplicationModelGraphIR): HttpRouteProjection[] {
       const method = typeof route.method === 'string' ? route.method : undefined
       const path = typeof route.path === 'string' ? route.path : undefined
       if (!name || !method || !path) return []
+      const middlewares = Array.isArray(route.middlewares)
+        ? route.middlewares.flatMap(
+            (middleware): HttpMiddlewareProjection[] => {
+              if (!isRecord(middleware) || typeof middleware.name !== 'string')
+                return []
+              return [
+                {
+                  name: middleware.name,
+                  capabilities: Array.isArray(middleware.capabilities)
+                    ? middleware.capabilities.filter(
+                        (capability): capability is string =>
+                          typeof capability === 'string',
+                      )
+                    : [],
+                },
+              ]
+            },
+          )
+        : []
       return [
         {
           execution: execution.name ?? execution.id,
           name,
           method,
           path,
+          middlewares,
           ...(route.responses === undefined
             ? {}
             : { responses: route.responses }),
@@ -771,9 +809,9 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
       const method = typeof route.method === 'string' ? route.method : undefined
       const path = typeof route.path === 'string' ? route.path : undefined
       if (!name || !method || !path) continue
-      const id = entrypointId('http', execution.id, name)
+      const routeId = entrypointId('http', execution.id, name)
       nodes.push({
-        id,
+        id: routeId,
         kind: 'entrypoint',
         entrypointKind: 'http-route',
         label: `${method} ${path}`,
@@ -781,10 +819,51 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
       })
       edges.push({
         from: execution.id,
-        to: id,
+        to: routeId,
         kind: 'handles',
         label: name,
       })
+
+      let previousId = routeId
+      const middlewares = Array.isArray(route.middlewares)
+        ? route.middlewares
+        : []
+      for (const [index, middleware] of middlewares.entries()) {
+        if (!isRecord(middleware) || typeof middleware.name !== 'string')
+          continue
+        const middlewareId = httpMiddlewareStepId(execution.id, name, index)
+        const capabilities = Array.isArray(middleware.capabilities)
+          ? middleware.capabilities.filter(
+              (capability): capability is string =>
+                typeof capability === 'string',
+            )
+          : []
+        nodes.push({
+          id: middlewareId,
+          kind: 'middleware',
+          label: middleware.name,
+          ...(capabilities.length === 0 ? {} : { capabilities }),
+          attributes: { route: name, index },
+        })
+        edges.push({ from: previousId, to: middlewareId, kind: 'flows-to' })
+        for (const capability of capabilities) {
+          edges.push({
+            from: middlewareId,
+            to: `capability:${capability}`,
+            kind: 'requires',
+          })
+        }
+        previousId = middlewareId
+      }
+
+      const handlerId = httpHandlerId(execution.id, name)
+      nodes.push({
+        id: handlerId,
+        kind: 'handler',
+        label: `${execution.name ?? execution.id}.${name}`,
+        attributes: { route: name },
+      })
+      edges.push({ from: previousId, to: handlerId, kind: 'flows-to' })
     }
   }
   return { nodes, edges }
@@ -859,6 +938,62 @@ function entrypointId(
   localId: string,
 ): string {
   return `entrypoint:${namespace}:${encodeURIComponent(executionId)}:${encodeURIComponent(localId)}`
+}
+
+function httpMiddlewareStepId(
+  executionId: string,
+  routeName: string,
+  index: number,
+): string {
+  return `middleware:http:${encodeURIComponent(executionId)}:${encodeURIComponent(routeName)}:${index}`
+}
+
+function httpHandlerId(executionId: string, routeName: string): string {
+  return `handler:http:${encodeURIComponent(executionId)}:${encodeURIComponent(routeName)}`
+}
+
+function mermaidNodeLabel(node: GraphViewNode): string {
+  const role = (() => {
+    switch (node.kind) {
+      case 'module':
+        return 'Module'
+      case 'provider':
+        return 'Provider'
+      case 'execution':
+        return node.extension?.hostNamespace === 'http'
+          ? 'HTTP Controller'
+          : 'Execution'
+      case 'entrypoint':
+        return 'Route'
+      case 'middleware':
+        return 'Middleware'
+      case 'handler':
+        return 'Handler'
+      case 'runtime-capability':
+        return 'Runtime Capability'
+    }
+  })()
+  return `${role}: ${node.label}`
+}
+
+function mermaidEdgeLabel(
+  edge: GraphViewEdge,
+  byId: ReadonlyMap<string, GraphViewNode>,
+): string | undefined {
+  if (edge.kind === 'flows-to') return undefined
+  if (edge.kind !== 'owns') return edge.label ?? edge.kind
+  const target = byId.get(edge.to)
+  if (!target) return edge.kind
+  switch (target.kind) {
+    case 'provider':
+      return 'provider'
+    case 'execution':
+      return target.extension?.hostNamespace === 'http'
+        ? 'controller'
+        : 'execution'
+    default:
+      return edge.kind
+  }
 }
 
 function groupEdges(edges: readonly GraphEdgeIR[]): Map<string, GraphEdgeIR[]> {

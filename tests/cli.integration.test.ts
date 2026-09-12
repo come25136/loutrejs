@@ -155,6 +155,14 @@ describe('Loutre CLI', () => {
         name: 'get',
         method: 'GET',
         path: '/users/{id}',
+        middlewares: [],
+      }),
+    )
+    expect(graph.routes).toContainEqual(
+      expect.objectContaining({
+        execution: 'UsersController',
+        name: 'create',
+        middlewares: [{ name: 'validate.body', capabilities: [] }],
       }),
     )
   })
@@ -207,7 +215,7 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(0)
-    expect(output.stdout.join('\n')).toContain('n0["UsersModule"]')
+    expect(output.stdout.join('\n')).toContain('n0["Module: UsersModule"]')
   })
 
   it('graph allはApplication Model全体を意味的に接続したJSONを返す', async () => {
@@ -238,6 +246,9 @@ describe('Loutre CLI', () => {
     const capability = node('runtime-capability', 'http.server')
     const getRoute = node('entrypoint', 'GET /users/{id}')
     const createRoute = node('entrypoint', 'POST /users')
+    const bodyValidation = node('middleware', 'validate.body')
+    const getHandler = node('handler', 'UsersController.get')
+    const createHandler = node('handler', 'UsersController.create')
 
     expect(module).toBeDefined()
     expect(service).toBeDefined()
@@ -249,6 +260,11 @@ describe('Loutre CLI', () => {
     expect(capability).toBeDefined()
     expect(getRoute).toMatchObject({ entrypointKind: 'http-route' })
     expect(createRoute).toMatchObject({ entrypointKind: 'http-route' })
+    expect(bodyValidation).toMatchObject({
+      attributes: { route: 'create', index: 0 },
+    })
+    expect(getHandler).toBeDefined()
+    expect(createHandler).toBeDefined()
     expect(
       graph.nodes.filter(
         (candidate: { kind: string; label: string }) =>
@@ -288,6 +304,21 @@ describe('Loutre CLI', () => {
       to: createRoute.id,
       kind: 'handles',
       label: 'create',
+    })
+    expect(graph.edges).toContainEqual({
+      from: getRoute.id,
+      to: getHandler.id,
+      kind: 'flows-to',
+    })
+    expect(graph.edges).toContainEqual({
+      from: createRoute.id,
+      to: bodyValidation.id,
+      kind: 'flows-to',
+    })
+    expect(graph.edges).toContainEqual({
+      from: bodyValidation.id,
+      to: createHandler.id,
+      kind: 'flows-to',
     })
   })
 
@@ -329,7 +360,9 @@ describe('Loutre CLI', () => {
     ).toBe(0)
     const lines = output.stdout.join('\n').split('\n')
     expect(
-      lines.filter((line) => line.includes('["UsersController"]')),
+      lines.filter((line) =>
+        line.includes('["HTTP Controller: UsersController"]'),
+      ),
     ).toHaveLength(1)
     expect(lines.some((line) => line.includes('|"get"|'))).toBe(true)
     expect(lines.some((line) => line.includes('|"create"|'))).toBe(true)
@@ -352,8 +385,75 @@ describe('Loutre CLI', () => {
     ).toBe(0)
     const lines = output.stdout.join('\n').split('\n')
     expect(
-      lines.filter((line) => line.includes('["UsersController"]')),
+      lines.filter((line) =>
+        line.includes('["HTTP Controller: UsersController"]'),
+      ),
     ).toHaveLength(1)
+  })
+
+  it('HTTP middlewareの実行順をgraph httpとgraph allの両方へ出す', async () => {
+    const allOutput = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--entry',
+          'integrations/http-auth/src/app.ts',
+        ],
+        allOutput.value,
+      ),
+    ).toBe(0)
+
+    const graph = JSON.parse(allOutput.stdout.join('\n'))
+    const node = (kind: string, label: string) =>
+      graph.nodes.find(
+        (candidate: { kind: string; label: string }) =>
+          candidate.kind === kind && candidate.label === label,
+      )
+    const route = node('entrypoint', 'GET /account')
+    const bearer = node('middleware', 'bearerAuthentication')
+    const authenticated = node('middleware', 'authenticated')
+    const tenant = node('middleware', 'tenantAccess')
+    const handler = node('handler', 'AccountController.get')
+
+    expect(route).toBeDefined()
+    expect(bearer).toMatchObject({ attributes: { route: 'get', index: 0 } })
+    expect(authenticated).toMatchObject({
+      attributes: { route: 'get', index: 1 },
+    })
+    expect(tenant).toMatchObject({ attributes: { route: 'get', index: 2 } })
+    expect(handler).toBeDefined()
+    expect(graph.edges).toEqual(
+      expect.arrayContaining([
+        { from: route.id, to: bearer.id, kind: 'flows-to' },
+        { from: bearer.id, to: authenticated.id, kind: 'flows-to' },
+        { from: authenticated.id, to: tenant.id, kind: 'flows-to' },
+        { from: tenant.id, to: handler.id, kind: 'flows-to' },
+      ]),
+    )
+
+    const httpOutput = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'http',
+          '--format',
+          'mermaid',
+          '--entry',
+          'integrations/http-auth/src/app.ts',
+        ],
+        httpOutput.value,
+      ),
+    ).toBe(0)
+    const mermaid = httpOutput.stdout.join('\n')
+    expect(mermaid).toContain('Middleware: bearerAuthentication')
+    expect(mermaid).toContain('Middleware: authenticated')
+    expect(mermaid).toContain('Middleware: tenantAccess')
+    expect(mermaid).toContain('Handler: AccountController.get')
   })
 
   it('graphはsubject省略をusage付きでrejectする', async () => {
