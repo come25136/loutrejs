@@ -235,7 +235,7 @@ jobs:
           DENO_BIN="$(command -v deno)"
           "$DENO_BIN" run -A scripts/clean-dist.mjs
           "$DENO_BIN" run -A npm:typescript@7.0.2/tsc -p tsconfig.packages.json --pretty false
-          "$DENO_BIN" scripts/prepare-packages.mjs
+          "$DENO_BIN" run -A scripts/prepare-packages.mjs
 
       - name: Run Deno CLI conformance
         run: |
@@ -464,7 +464,8 @@ jobs:
             "type": "module",
             "workspaces": ["packages/*"],
             "dependencies": {
-              "@loutrejs/loutre": "workspace:*",
+              "@loutrejs/loutre": "workspace:*"," +
+              "
               "@loutrejs/cli": "workspace:*",
               "create-loutre": "workspace:*"
             }
