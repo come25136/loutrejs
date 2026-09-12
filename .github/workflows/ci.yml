@@ -5,8 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -16,6 +15,8 @@ jobs:
   changeset-policy:
     name: Changeset Policy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -464,8 +465,7 @@ jobs:
             "type": "module",
             "workspaces": ["packages/*"],
             "dependencies": {
-              "@loutrejs/loutre": "workspace:*"," +
-              "
+              "@loutrejs/loutre": "workspace:*",
               "@loutrejs/cli": "workspace:*",
               "create-loutre": "workspace:*"
             }
