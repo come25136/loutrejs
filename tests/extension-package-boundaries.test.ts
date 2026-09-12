@@ -64,7 +64,7 @@ describe('npm package境界', () => {
       await readFile(resolve(repository, 'packages/node/package.json'), 'utf8'),
     ) as { readonly engines?: Readonly<Record<string, string>> }
 
-    expect(manifest.engines?.node).toBe('>=22')
+    expect(manifest.engines?.node).toBe('>=22.12.0')
   })
 
   it('Core値を共有するlibrary packageだけがmain packageをpeerとして要求する', async () => {

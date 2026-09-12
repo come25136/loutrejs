@@ -22,9 +22,6 @@ interface SourcePoint {
   readonly column: number
 }
 
-const sourceImport =
-  'import{registerSourceLocation as __loutreSource,registerSourceMemberLocation as __loutreMemberSource}from"@loutrejs/loutre";'
-
 export function instrumentSourceLocations(
   code: string,
   file: string,
@@ -38,6 +35,14 @@ export function instrumentSourceLocations(
 
   const program = parsed.program as unknown as AstNode
   const apis = collectImportedApis(program)
+  const initializers = collectTopLevelInitializers(program)
+  const usedIdentifiers = collectIdentifierNames(program)
+  const sourceHelper = uniqueHelperName('__loutreSource', usedIdentifiers)
+  usedIdentifiers.add(sourceHelper)
+  const memberSourceHelper = uniqueHelperName(
+    '__loutreMemberSource',
+    usedIdentifiers,
+  )
   const insertions = new Map<number, string[]>()
   const wrapped = new Set<string>()
 
@@ -55,27 +60,32 @@ export function instrumentSourceLocations(
     const key = `${node.start}:${node.end}`
     if (wrapped.has(key)) return
     wrapped.add(key)
-    add(node.start, '__loutreSource(')
+    add(node.start, `${sourceHelper}(`)
     add(node.end, `,${sourceLiteral(offset)})`)
   }
 
   const inspectRouteObject = (route: AstNode, definitionOffset: number) => {
     wrapSource(route, definitionOffset)
-    instrumentMiddlewareArray(route, wrapSource)
+    instrumentMiddlewareArray(route, wrapSource, initializers)
   }
 
   const inspectRouteTree = (tree: AstNode) => {
-    for (const property of objectProperties(tree)) {
-      const value = unwrapExpression(property.value)
+    const routeTree = resolveStaticExpression(tree, initializers)
+    if (routeTree?.type !== 'ObjectExpression') return
+    for (const property of objectProperties(routeTree)) {
+      const rawValue = unwrapExpression(property.value)
+      const value = resolveStaticExpression(rawValue, initializers)
       if (!value || value.type !== 'ObjectExpression') continue
       if (hasObjectProperty(value, 'method')) {
-        inspectRouteObject(value, property.start)
+        inspectRouteObject(
+          value,
+          rawValue === value ? property.start : value.start,
+        )
         continue
       }
-      instrumentMiddlewareArray(value, wrapSource)
+      instrumentMiddlewareArray(value, wrapSource, initializers)
       const routes = objectPropertyValue(value, 'routes')
-      const routeTree = routes ? unwrapExpression(routes) : undefined
-      if (routeTree?.type === 'ObjectExpression') inspectRouteTree(routeTree)
+      if (routes) inspectRouteTree(routes)
     }
   }
 
@@ -84,17 +94,23 @@ export function instrumentSourceLocations(
     variableName?: string,
     annotationPosition = call.end,
   ) => {
-    const definition = unwrapExpression(call.arguments?.[0])
+    const definition = resolveStaticExpression(
+      call.arguments?.[0],
+      initializers,
+    )
     if (!definition || definition.type !== 'ObjectExpression') return
-    const factory = unwrapExpression(objectPropertyValue(definition, 'factory'))
-    const handlers = factory ? returnedObject(factory) : undefined
+    const factory = resolveStaticExpression(
+      objectPropertyValue(definition, 'factory'),
+      initializers,
+    )
+    const handlers = factory ? returnedObject(factory, initializers) : undefined
     if (!factory || !handlers || !variableName) return
     for (const property of objectProperties(handlers)) {
       const name = propertyName(property)
       if (!name) continue
       add(
         annotationPosition,
-        `;__loutreMemberSource(${variableName}.factory,${JSON.stringify(name)},${sourceLiteral(property.start)})`,
+        `;${memberSourceHelper}(${variableName}.factory,${JSON.stringify(name)},${sourceLiteral(property.start)})`,
       )
     }
   }
@@ -106,7 +122,7 @@ export function instrumentSourceLocations(
   ) => {
     if (isHttpCall(call, apis.httpContract, apis.httpObjects, 'contract')) {
       wrapSource(call)
-      const tree = unwrapExpression(call.arguments?.[0])
+      const tree = resolveStaticExpression(call.arguments?.[0], initializers)
       if (tree?.type === 'ObjectExpression') inspectRouteTree(tree)
     }
     if (
@@ -125,14 +141,19 @@ export function instrumentSourceLocations(
     }
     if (isDefineModuleCall(call, apis.defineModule)) {
       wrapSource(call)
-      const factory = unwrapExpression(call.arguments?.[0])
-      const definition = factory ? returnedObject(factory) : undefined
+      const factory = resolveStaticExpression(call.arguments?.[0], initializers)
+      const definition = factory
+        ? returnedObject(factory, initializers)
+        : undefined
       const providers = definition
-        ? unwrapExpression(objectPropertyValue(definition, 'providers'))
+        ? resolveStaticExpression(
+            objectPropertyValue(definition, 'providers'),
+            initializers,
+          )
         : undefined
       if (providers?.type === 'ArrayExpression') {
         for (const element of providers.elements ?? []) {
-          const provider = unwrapExpression(element)
+          const provider = resolveStaticExpression(element, initializers)
           if (
             provider &&
             (provider.type === 'CallExpression' ||
@@ -161,7 +182,7 @@ export function instrumentSourceLocations(
       if (declaration.id?.name) {
         add(
           statement.end,
-          `;__loutreSource(${declaration.id.name},${sourceLiteral(declaration.start)})`,
+          `;${sourceHelper}(${declaration.id.name},${sourceLiteral(declaration.start)})`,
         )
       } else if (statement.type === 'ExportDefaultDeclaration') {
         wrapSource(declaration)
@@ -176,7 +197,7 @@ export function instrumentSourceLocations(
       const name = declarator.id.name as string
       const init = unwrapExpression(declarator.init as AstNode)
       if (!init) continue
-      annotations.push(`__loutreSource(${name},${sourceLiteral(init.start)})`)
+      annotations.push(`${sourceHelper}(${name},${sourceLiteral(init.start)})`)
       if (init.type === 'CallExpression')
         inspectKnownCall(init, name, statement.end)
     }
@@ -184,13 +205,85 @@ export function instrumentSourceLocations(
   }
 
   if (insertions.size === 0) return code
-  add(0, sourceImport)
+  const importPosition = sourceImportPosition(program)
+  add(
+    importPosition,
+    `${importPosition === program.start ? '' : ';'}import{registerSourceLocation as ${sourceHelper},registerSourceMemberLocation as ${memberSourceHelper}}from"@loutrejs/loutre";`,
+  )
 
   let output = code
   for (const position of [...insertions.keys()].toSorted((a, b) => b - a)) {
     output = `${output.slice(0, position)}${insertions.get(position)!.join('')}${output.slice(position)}`
   }
   return output
+}
+
+function collectTopLevelInitializers(program: AstNode): Map<string, AstNode> {
+  const initializers = new Map<string, AstNode>()
+  for (const statement of program.body ?? []) {
+    const declaration =
+      statement.type === 'ExportNamedDeclaration' ||
+      statement.type === 'ExportDefaultDeclaration'
+        ? (statement.declaration as AstNode | undefined)
+        : statement
+    if (declaration?.type !== 'VariableDeclaration') continue
+    for (const declarator of declaration.declarations ?? []) {
+      if (
+        declarator.id?.type === 'Identifier' &&
+        declarator.init !== undefined
+      ) {
+        initializers.set(declarator.id.name, declarator.init as AstNode)
+      }
+    }
+  }
+  return initializers
+}
+
+function resolveStaticExpression(
+  value: AstNode | undefined,
+  initializers: ReadonlyMap<string, AstNode>,
+  resolving = new Set<string>(),
+): AstNode | undefined {
+  const expression = unwrapExpression(value)
+  if (expression?.type !== 'Identifier') return expression
+  const name = expression.name as string
+  const initializer = initializers.get(name)
+  if (!initializer || resolving.has(name)) return expression
+  const nextResolving = new Set(resolving)
+  nextResolving.add(name)
+  return resolveStaticExpression(initializer, initializers, nextResolving)
+}
+
+function collectIdentifierNames(program: AstNode): Set<string> {
+  const identifiers = new Set<string>()
+  walkAst(program, (node) => {
+    if (node.type === 'Identifier' && typeof node.name === 'string') {
+      identifiers.add(node.name)
+    }
+  })
+  return identifiers
+}
+
+function uniqueHelperName(base: string, used: ReadonlySet<string>): string {
+  if (!used.has(base)) return base
+  for (let index = 1; ; index += 1) {
+    const candidate = `${base}$${index}`
+    if (!used.has(candidate)) return candidate
+  }
+}
+
+function sourceImportPosition(program: AstNode): number {
+  let position = program.start
+  for (const statement of program.body ?? []) {
+    if (
+      statement.type !== 'ExpressionStatement' ||
+      typeof statement.directive !== 'string'
+    ) {
+      break
+    }
+    position = statement.end
+  }
+  return position
 }
 
 function collectImportedApis(program: AstNode): ImportedApis {
@@ -253,13 +346,22 @@ function isHttpCall(
   )
 }
 
-function returnedObject(factory: AstNode): AstNode | undefined {
-  const body = unwrapExpression(factory.body as AstNode | undefined)
+function returnedObject(
+  factory: AstNode,
+  initializers: ReadonlyMap<string, AstNode>,
+): AstNode | undefined {
+  const body = resolveStaticExpression(
+    factory.body as AstNode | undefined,
+    initializers,
+  )
   if (body?.type === 'ObjectExpression') return body
   if (body?.type !== 'BlockStatement') return undefined
   for (const statement of body.body ?? []) {
     if (statement.type !== 'ReturnStatement') continue
-    const returned = unwrapExpression(statement.argument as AstNode | undefined)
+    const returned = resolveStaticExpression(
+      statement.argument as AstNode | undefined,
+      initializers,
+    )
     if (returned?.type === 'ObjectExpression') return returned
   }
   return undefined
@@ -268,13 +370,15 @@ function returnedObject(factory: AstNode): AstNode | undefined {
 function instrumentMiddlewareArray(
   definition: AstNode,
   wrapSource: (node: AstNode, offset?: number) => void,
+  initializers: ReadonlyMap<string, AstNode>,
 ): void {
-  const middlewares = unwrapExpression(
+  const middlewares = resolveStaticExpression(
     objectPropertyValue(definition, 'middlewares'),
+    initializers,
   )
   if (middlewares?.type !== 'ArrayExpression') return
   for (const element of middlewares.elements ?? []) {
-    const middleware = unwrapExpression(element)
+    const middleware = resolveStaticExpression(element, initializers)
     if (middleware?.type === 'CallExpression') wrapSource(middleware)
   }
 }

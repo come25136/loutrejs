@@ -388,6 +388,44 @@ describe('Loutre CLI', () => {
     )
   })
 
+  it('Graph source locationはaliasと変数compositionでも定義元を保持する', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--entry',
+          'tests/fixtures/source-location-composition-app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+
+    const graph = JSON.parse(output.stdout.join('\n'))
+    const node = (kind: string, label: string) =>
+      graph.nodes.find(
+        (candidate: { kind: string; label: string }) =>
+          candidate.kind === kind && candidate.label === label,
+      )
+    const source = (line: number, column: number) => ({
+      file: 'tests/fixtures/source-location-composition-app.ts',
+      line,
+      column,
+    })
+
+    expect(node('provider', 'RealService')?.source).toEqual(source(15, 8))
+    expect(node('provider', 'source-location.composed-value')?.source).toEqual(
+      source(27, 20),
+    )
+    expect(node('entrypoint', 'POST /composed')?.source).toEqual(source(20, 3))
+    expect(node('handler', 'ComposedController.create')?.source).toEqual(
+      source(34, 5),
+    )
+  })
+
   it('Mermaid node labelへproject-relative source locationを表示する', async () => {
     const output = io()
     expect(

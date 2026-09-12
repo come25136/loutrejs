@@ -2,7 +2,7 @@
 
 Loutre ApplicationをNode.jsのHTTP serverへ接続するRuntime Adapterです。Web StandardのRequest / ResponseをLoutre HTTP Applicationへbridgeし、server lifecycleをNode.js上で管理します。
 
-Node.js 22以上を対象にしています。
+Node.js 22.12.0以上を対象にしています。
 
 ## Install
 

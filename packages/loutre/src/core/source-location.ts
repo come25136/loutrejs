@@ -30,6 +30,7 @@ export function registerSourceLocation<T>(value: T, source: SourceLocation): T {
   const target = asObject(value)
   if (!target) return value
   const current = sourceMetadata.get(target)
+  if (current?.source !== undefined) return value
   sourceMetadata.set(target, {
     ...(current?.members === undefined ? {} : { members: current.members }),
     source: snapshotSourceLocation(source),

@@ -102,7 +102,7 @@ function targetManifest(target: ProjectTarget): TargetManifest {
         },
         dependencies: { '@loutrejs/node': loutreVersion },
         devDependencies: { '@types/node': '^22.20.1', tsx: '^4.23.12' },
-        engines: { node: '>=22' },
+        engines: { node: '>=22.12.0' },
         types: ['node'],
       }
     case 'bun':
@@ -141,7 +141,7 @@ function targetManifest(target: ProjectTarget): TargetManifest {
             'esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/index.mjs',
         },
         devDependencies: { '@types/node': '^22.20.1', esbuild: '^0.28.2' },
-        engines: { node: '>=22' },
+        engines: { node: '>=22.12.0' },
         types: ['node'],
       }
   }

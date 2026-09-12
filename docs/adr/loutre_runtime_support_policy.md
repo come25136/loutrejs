@@ -50,7 +50,7 @@ Node.jsはupstreamでsupport中のLTS majorをLoutreのsupport対象とする。
 2026-08-28時点では:
 
 ```text
-minimum     Node 22
+minimum     Node 22.12.0
 latest LTS  Node 24
 Current     Node 26
 ```
@@ -60,14 +60,14 @@ Node上で実行される公開packageはminimumをsemver rangeとして宣言�
 ```json
 {
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
   }
 }
 ```
 
 `24.x`のようにdevelopment baselineへpackage consumerを固定しない。
 
-`@loutrejs/loutre`はNode専用packageではないためNode engineを宣言しない。`@loutrejs/node`およびNodeで実行するexampleはNode minimumを宣言する。`@loutrejs/cli`はNode.js / Bun / Denoの複数host runtimeで実行するため、Node.jsだけを要求する`engines.node`は宣言しない。
+`@loutrejs/loutre`はNode専用packageではないためNode engineを宣言しない。`@loutrejs/node`およびNodeで実行するexampleはNode minimumを宣言する。`@loutrejs/cli`はNode.js / Bun / Denoの複数host runtimeで実行する。`engines.node`はNode hostでのminimumを表し、Bun / Deno supportを否定するものではない。
 
 `.nvmrc`はminimumではなくdevelopment baselineを表し、latest LTSを使用する。
 
