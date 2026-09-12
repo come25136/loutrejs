@@ -388,6 +388,34 @@ describe('Loutre CLI', () => {
     )
   })
 
+  it('外部factoryで生成したHTTP middlewareもローカル生成地点のsourceを保持する', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--entry',
+          'examples/basic-auth/src/app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+
+    const graph = JSON.parse(output.stdout.join('\n'))
+    const middleware = graph.nodes.find(
+      (node: { kind: string; label: string }) =>
+        node.kind === 'middleware' && node.label === 'basicAuthentication',
+    )
+    expect(middleware?.source).toEqual({
+      file: 'examples/basic-auth/src/layers/authentication.ts',
+      line: 5,
+      column: 36,
+    })
+  })
+
   it('Graph source locationはaliasと変数compositionでも定義元を保持する', async () => {
     const output = io()
     expect(

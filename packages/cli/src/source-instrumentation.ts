@@ -197,6 +197,10 @@ export function instrumentSourceLocations(
       const init = unwrapExpression(declarator.init as AstNode)
       if (init?.type === 'CallExpression') {
         inspectKnownCall(init, name, statement.end)
+        add(
+          statement.end,
+          `;${sourceHelper}(${name},${sourceLiteral(init.start)})`,
+        )
       }
     }
   }

@@ -29,6 +29,22 @@ void Module
     )
     expect(transformed).toContain('__loutreSource$1(RealService')
   })
+  it('CallExpression initializerはローカル生成地点をsource registrationする', () => {
+    const source = `import { basicAuth } from '@loutrejs/loutre/http'
+const basicAuthentication = basicAuth({ name: 'basicAuthentication' })
+void basicAuthentication
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/authentication.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('__loutreSource(basicAuthentication')
+    expect(transformed).toContain('"file":"src/authentication.ts"')
+    expect(transformed).toContain('"line":2')
+  })
+
   it('alias initializerへgeneric source registrationを追加しない', () => {
     const source = `import { EventEmitter } from 'node:events'
 import * as events from 'node:events'
