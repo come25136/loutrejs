@@ -225,7 +225,7 @@ describe('Loutre CLI', () => {
       ),
     ).toBe(0)
     expect(output.stdout.join('\n')).toContain(
-      'n0["Module: UsersModule<br/>integrations/http-crud/src/index.ts:71:28"]',
+      'n0["`**Module: UsersModule**<br/>*↳ …/http-crud/src/index.ts:71*`"]',
     )
   })
 
@@ -406,15 +406,18 @@ describe('Loutre CLI', () => {
       ),
     ).toBe(0)
     const graph = output.stdout.join('\n')
+    expect(graph).toContain('"markdownAutoWrap":false')
+    expect(graph).toContain('white-space:nowrap')
     expect(graph).toContain(
-      'Provider: ClassService<br/>tests/fixtures/source-location-app.ts:11:8',
+      '`**Provider: ClassService**<br/>*↳ tests/fixtures/source-location-app.ts:11*`',
     )
     expect(graph).toContain(
-      'Route: POST /source<br/>tests/fixtures/source-location-app.ts:33:3',
+      '`**Route: POST /source**<br/>*↳ tests/fixtures/source-location-app.ts:33*`',
     )
     expect(graph).toContain(
-      'Handler: SourceController.create<br/>tests/fixtures/source-location-app.ts:47:5',
+      '`**Handler: SourceController.create**<br/>*↳ tests/fixtures/source-location-app.ts:47*`',
     )
+    expect(graph).not.toContain('source-location-app.ts:11:8')
     expect(graph).not.toContain(process.cwd())
   })
 
@@ -457,7 +460,7 @@ describe('Loutre CLI', () => {
     const lines = output.stdout.join('\n').split('\n')
     expect(
       lines.filter((line) =>
-        line.includes('["HTTP Controller: UsersController<br/>'),
+        line.includes('["`**HTTP Controller: UsersController**<br/>'),
       ),
     ).toHaveLength(1)
     expect(lines.some((line) => line.includes('|"get"|'))).toBe(true)
@@ -582,7 +585,7 @@ describe('Loutre CLI', () => {
     const lines = output.stdout.join('\n').split('\n')
     expect(
       lines.filter((line) =>
-        line.includes('["HTTP Controller: UsersController<br/>'),
+        line.includes('["`**HTTP Controller: UsersController**<br/>'),
       ),
     ).toHaveLength(1)
     expect(lines).toContain('  subgraph sg0["Module: UsersModule"]')

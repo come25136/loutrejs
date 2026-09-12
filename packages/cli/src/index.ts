@@ -549,6 +549,7 @@ function renderMermaidGraph(
   const lines = [
     `%%{init: ${JSON.stringify({
       theme: 'base',
+      markdownAutoWrap: false,
       themeVariables: {
         background: theme.canvasBackground,
         primaryTextColor: theme.foreground,
@@ -639,7 +640,7 @@ function renderMermaidGraph(
 
   for (const [className, style] of Object.entries(theme.nodes)) {
     lines.push(
-      `  classDef ${className} fill:${style.fill},stroke:${style.stroke},color:${style.text},stroke-width:2px`,
+      `  classDef ${className} fill:${style.fill},stroke:${style.stroke},color:${style.text},stroke-width:2px,white-space:nowrap`,
     )
   }
 
@@ -1216,7 +1217,7 @@ function mermaidNodeLabel(node: GraphViewNode): string {
   const label = `${role}: ${node.label}`
   return node.source === undefined
     ? label
-    : `${label}\n${formatSourceLocation(node.source)}`
+    : `\`**${label}**\n*↳ ${formatMermaidSourceLocation(node.source)}*\``
 }
 
 type MermaidNodeClass =
@@ -1317,6 +1318,18 @@ function formatSourceLocation(
   if (source.line === undefined) return source.file
   if (source.column === undefined) return `${source.file}:${source.line}`
   return `${source.file}:${source.line}:${source.column}`
+}
+
+function formatMermaidSourceLocation(
+  source: NonNullable<GraphNodeIR['source']>,
+): string {
+  const path = source.file.replaceAll('\\', '/')
+  const segments = path.split('/')
+  const compactPath =
+    segments.length <= 3 ? path : `…/${segments.slice(-3).join('/')}`
+  return source.line === undefined
+    ? compactPath
+    : `${compactPath}:${source.line}`
 }
 
 function requiredCapabilities(graph: ApplicationModelGraphIR): string[] {
