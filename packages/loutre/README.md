@@ -2,7 +2,7 @@
 
 LoutreのApplication Graph Kernelです。Application Definition / Model、Module、DI、Environment、Arguments、Lifecycle、Runtime Capability、generic Layer、Kernel bootstrapを提供します。
 
-HTTPは同じpackageの`@loutrejs/loutre/http` subpathからExecution Extensionとして提供します。Task、MessagePort、WebSocketは独立Extension packageです。
+HTTP、Task、MessagePort、WebSocketは同じpackageのsubpathからExecution Extensionとして提供します。
 
 ## Install
 
@@ -74,17 +74,14 @@ ExtensionがApplication Modelに存在するときだけ、そのExtensionのHos
 | ------------------------------- | --------------------------------------------- |
 | `@loutrejs/loutre`              | Application Graph Kernel / Kernel bootstrap   |
 | `@loutrejs/loutre/http`         | HTTP Execution Extension                      |
+| `@loutrejs/loutre/tasks`        | Task / Trigger / Queue Execution Extension    |
+| `@loutrejs/loutre/message-port` | MessagePort Execution Extension               |
+| `@loutrejs/loutre/websocket`    | WebSocket Execution Extension                 |
 | `@loutrejs/loutre/graph`        | Application Model graph projection            |
 | `@loutrejs/loutre/runtime`      | Runtime capability / Kernel runtime primitive |
 | `@loutrejs/loutre/http/openapi` | OpenAPI projection                            |
 | `@loutrejs/loutre/presentation` | startup presentation                          |
 | `@loutrejs/loutre/runtime/*`    | portable Runtime adapter                      |
-
-Additional official Extensions:
-
-- `@loutrejs/tasks`
-- `@loutrejs/message-port`
-- `@loutrejs/websocket`
 
 Node.js listener ownership is provided by `@loutrejs/node`.
 

@@ -60,7 +60,7 @@ Execution Extensionの具体的なcontractについては、次のADRを唯一�
 - shutdown ordering
 - Host API composition
 
-WebSocket固有のconnection lifecycle、ordering、backpressure、close semanticsは`@loutrejs/websocket`の公開contractと適合testを正本とする。
+WebSocket固有のconnection lifecycle、ordering、backpressure、close semanticsは`@loutrejs/loutre/websocket`の公開contractと適合testを正本とする。
 
 この分離により、同じinterfaceやlifecycleを複数ADRへ転写して矛盾させない。
 
@@ -174,7 +174,7 @@ Protocol固有のcapability判定はExtension registryとHost namespaceから導
 ├ Runtime fetch API
 └ OpenAPI projection source
 
-@loutrejs/websocket
+@loutrejs/loutre/websocket
 ├ handshake contract
 ├ connection/session lifecycle
 ├ message codec
@@ -323,14 +323,14 @@ Execution Extensionのarchitecture境界を、そのままnpm package境界に�
     ├─ may depend on public Core primitives
     └─ must not depend on Node.js built-ins
 
-@loutrejs/websocket ──────> @loutrejs/loutre/http
-@loutrejs/tasks ──────────> @loutrejs/loutre
-@loutrejs/message-port ───> @loutrejs/loutre
+@loutrejs/loutre/websocket ──────> @loutrejs/loutre/http
+@loutrejs/loutre/tasks ──────────> @loutrejs/loutre
+@loutrejs/loutre/message-port ───> @loutrejs/loutre
 ```
 
 同一npm package内でもHTTP semanticsをCoreへ逆流させない。`packages/loutre/src/http`とCoreのsource boundary、およびHTTPからNode.js built-inへの非依存はdependency-cruiserでCI enforcementする。
 
-Extension間依存は原則禁止し、protocol integrationとして必要なものだけ明示allowlistにする。WebSocket handshakeがHTTP semanticsを利用するため、`@loutrejs/websocket -> @loutrejs/loutre/http`は許可された依存とする。
+Extension間依存は原則禁止し、protocol integrationとして必要なものだけ明示allowlistにする。WebSocket handshakeがHTTP semanticsを利用するため、`@loutrejs/loutre/websocket -> @loutrejs/loutre/http`は許可された依存とする。
 
 別npm packageとして配布するExtensionについては、source importだけでなく`dependencies`、`peerDependencies`、`devDependencies`も境界テスト対象とする。
 
@@ -338,7 +338,7 @@ Extension間依存は原則禁止し、protocol integrationとして必要なも
 
 このPRではApplication Graph KernelとExecution Extensionへの破壊的移行を完了する。
 
-Task / Trigger / Queue Consumerは`@loutrejs/tasks`へ、MessagePortは`@loutrejs/message-port`へ移し、CoreとRuntimeに並行する旧execution modelを残さない。HTTP/CORS等の外向きsemanticsを変更する場合はruntime実装都合ではなくExtensionのContract/API仕様として明示する。
+Task / Trigger / Queue Consumerは`@loutrejs/loutre/tasks`へ、MessagePortは`@loutrejs/loutre/message-port`へ移し、CoreとRuntimeに並行する旧execution modelを残さない。HTTP/CORS等の外向きsemanticsを変更する場合はruntime実装都合ではなくExtensionのContract/API仕様として明示する。
 
 ## 11. Non-goals
 
