@@ -1,18 +1,14 @@
 import { diagnostic, isErrorDiagnostic, type Diagnostic } from './diagnostic.js'
-import type { ArgsClass } from './args.js'
 import {
   isExecutionDefinition,
   type AnyExecutionExtension,
   type ExecutionContribution,
   type ExecutionDefinition,
   type ExecutionExtension,
-  type RuntimeCapability,
 } from './extension.js'
-import type { ModuleInstance, ModuleTemplate } from './module.js'
-import type { ProviderDescriptor } from './provider.js'
-import type { LifecycleHook } from './lifecycle.js'
+import type { ModuleInstance } from './module.js'
 import { isFrameworkProvidedToken } from './token-internal.js'
-import { tokenName, type TokenLike } from './token.js'
+import { tokenName } from './token.js'
 import { createModelBuildContext } from './model/context.js'
 import { resolveLifecycleDependencies } from './model/lifecycle.js'
 import { collectModuleDeclarations } from './model/modules.js'
@@ -25,86 +21,28 @@ import { snapshotExecutionExtension } from './model/snapshot.js'
 import { validateHostNamespaces, validateNodeIds } from './model/validation.js'
 import { isTokenVisible, moduleDeclaresToken } from './model/visibility.js'
 
-export interface ModuleModelNode {
-  readonly kind: 'module'
-  readonly id: string
-  readonly name?: string
-  readonly description?: string
-}
+import type {
+  ApplicationModel,
+  ApplicationModelBuildOptions,
+  ApplicationModelExtension,
+  ApplicationModelExtensions,
+  ExecutionModelNode,
+} from './model/types.js'
 
-export interface ProviderModelNode {
-  readonly kind: 'provider'
-  readonly id: string
-  readonly token: TokenLike
-  readonly provider: ProviderDescriptor
-  readonly moduleId: string
-  readonly dependencies: readonly TokenLike[]
-}
-
-export interface ExecutionModelNode<TCompiled = unknown> {
-  readonly kind: 'execution'
-  readonly id: string
-  readonly executionKind: string
-  readonly moduleId: string
-  readonly dependencies: readonly TokenLike[]
-  readonly capabilities: readonly RuntimeCapability[]
-  readonly compiled: TCompiled
-}
-
-export interface LifecycleModelNode {
-  readonly kind: 'lifecycle'
-  readonly id: string
-  readonly moduleId: string
-  readonly phase: string
-  readonly hook: LifecycleHook<any>
-}
-
-export interface FrameworkModelNode {
-  readonly kind: 'framework'
-  readonly id: string
-  readonly frameworkKind: 'runtime-capability' | 'execution-extension'
-  readonly name: string
-}
-
-export type ApplicationModelNode =
-  | ModuleModelNode
-  | ProviderModelNode
-  | ExecutionModelNode
-  | LifecycleModelNode
-  | FrameworkModelNode
-
-export interface ApplicationModelEdge {
-  readonly from: string
-  readonly to: string
-  readonly kind:
-    | 'owns'
-    | 'imports'
-    | 'exports'
-    | 'injects'
-    | 'references'
-    | 'requires'
-    | 'starts'
-    | 'wraps'
-}
-
-export type CompiledOf<TExtension extends AnyExecutionExtension> =
-  TExtension extends ExecutionExtension<any, infer TCompiled, any, any, any>
-    ? TCompiled
-    : never
-
-export interface ApplicationModelExtension<
-  TExtension extends AnyExecutionExtension = AnyExecutionExtension,
-> {
-  readonly extension: TExtension
-  readonly executions: readonly ExecutionModelNode<CompiledOf<TExtension>>[]
-}
-
-export interface ApplicationModelExtensions extends Iterable<ApplicationModelExtension> {
-  get<TExtension extends AnyExecutionExtension>(
-    extension: TExtension,
-  ): ApplicationModelExtension<TExtension> | undefined
-  values(): readonly ApplicationModelExtension[]
-}
+export type {
+  ApplicationModel,
+  ApplicationModelBuildOptions,
+  ApplicationModelEdge,
+  ApplicationModelExtension,
+  ApplicationModelExtensions,
+  ApplicationModelNode,
+  CompiledOf,
+  ExecutionModelNode,
+  FrameworkModelNode,
+  LifecycleModelNode,
+  ModuleModelNode,
+  ProviderModelNode,
+} from './model/types.js'
 
 class ApplicationModelExtensionRegistry implements ApplicationModelExtensions {
   readonly #ordered: readonly ApplicationModelExtension[]
@@ -132,22 +70,6 @@ class ApplicationModelExtensionRegistry implements ApplicationModelExtensions {
   [Symbol.iterator](): Iterator<ApplicationModelExtension> {
     return this.#ordered[Symbol.iterator]()
   }
-}
-
-export interface ApplicationModel {
-  readonly kind: 'application-model'
-  readonly arguments?: ArgsClass
-  readonly providers: readonly ProviderDescriptor[]
-  readonly nodes: readonly ApplicationModelNode[]
-  readonly edges: readonly ApplicationModelEdge[]
-  readonly executions: readonly ExecutionModelNode[]
-  readonly extensions: ApplicationModelExtensions
-  readonly diagnostics: readonly Diagnostic[]
-}
-
-export interface ApplicationModelBuildOptions {
-  readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
-  readonly arguments?: ArgsClass
 }
 
 export class ApplicationModelError extends Error {

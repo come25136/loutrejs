@@ -16,13 +16,24 @@ module.exports = {
       to: { circular: true },
     },
     {
-      name: 'Coreを上位層とprotocolから分離する',
+      name: 'Coreを上位層から分離する',
       severity: 'error',
-      comment:
-        'CoreはApplication、Runtime実装、具体的なExecution Extensionを認識しない。',
+      comment: 'CoreはApplication、Graph、Runtime実装、Adapterを認識しない。',
       from: { path: '^packages/loutre/src/core(?:/|$)' },
       to: {
-        path: '^packages/loutre/src/(?:application|adapters|runtime|http|tasks|message-port|websocket)(?:/|$)',
+        path: '^packages/loutre/src/(?:application|graph|adapters|runtime)(?:/|$)',
+      },
+    },
+    {
+      name: 'Frameworkを具体protocolから分離する',
+      severity: 'error',
+      comment:
+        'Core/Application/Graph/Runtimeは具体的なExecution Extensionへ逆依存しない。',
+      from: {
+        path: '^packages/loutre/src/(?:core|application|graph|runtime)(?:/|$)',
+      },
+      to: {
+        path: '^packages/loutre/src/(?:http|tasks|message-port|websocket)(?:/|$)',
       },
     },
     {
@@ -34,6 +45,44 @@ module.exports = {
       to: {
         path: '^packages/loutre/src/(?:application/kernel|adapters|runtime/(?:kernel|di|execution-tracker)|http/runtime|tasks/runtime|message-port/runtime|websocket/runtime)(?:/|$|\\.ts$)',
       },
+    },
+    {
+      name: 'HTTPから他protocolへの依存を禁止する',
+      severity: 'error',
+      comment:
+        'Execution Extension間は明示allowlist制とし、HTTPから他Extensionへは依存しない。',
+      from: { path: '^packages/loutre/src/http(?:/|$)' },
+      to: {
+        path: '^packages/loutre/src/(?:tasks|message-port|websocket)(?:/|$)',
+      },
+    },
+    {
+      name: 'Tasksから他protocolへの依存を禁止する',
+      severity: 'error',
+      comment:
+        'Execution Extension間は明示allowlist制とし、Tasksから他Extensionへは依存しない。',
+      from: { path: '^packages/loutre/src/tasks(?:/|$)' },
+      to: {
+        path: '^packages/loutre/src/(?:http|message-port|websocket)(?:/|$)',
+      },
+    },
+    {
+      name: 'MessagePortから他protocolへの依存を禁止する',
+      severity: 'error',
+      comment:
+        'Execution Extension間は明示allowlist制とし、MessagePortから他Extensionへは依存しない。',
+      from: { path: '^packages/loutre/src/message-port(?:/|$)' },
+      to: {
+        path: '^packages/loutre/src/(?:http|tasks|websocket)(?:/|$)',
+      },
+    },
+    {
+      name: 'WebSocketのprotocol依存をHTTPだけに制限する',
+      severity: 'error',
+      comment:
+        'WebSocket handshake integrationのHTTP依存だけをallowlistし、他Extensionへの依存は禁止する。',
+      from: { path: '^packages/loutre/src/websocket(?:/|$)' },
+      to: { path: '^packages/loutre/src/(?:tasks|message-port)(?:/|$)' },
     },
     {
       name: 'Protocolからruntime adapterへの依存を禁止する',
