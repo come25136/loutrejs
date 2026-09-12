@@ -3,11 +3,7 @@
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [
-    [
-      "@loutrejs/loutre",
-      "@loutrejs/node",
-      "@loutrejs/bullmq"
-    ]
+    ["@loutrejs/loutre", "@loutrejs/node", "@loutrejs/bullmq"]
   ],
   "linked": [],
   "access": "public",
