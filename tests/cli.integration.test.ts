@@ -210,6 +210,206 @@ describe('Loutre CLI', () => {
     expect(output.stdout.join('\n')).toContain('n0["UsersModule"]')
   })
 
+  it('graph allはApplication Model全体を意味的に接続したJSONを返す', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--entry',
+          'integrations/http-crud/src/app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+
+    const graph = JSON.parse(output.stdout.join('\n'))
+    const node = (kind: string, label: string) =>
+      graph.nodes.find(
+        (candidate: { kind: string; label: string }) =>
+          candidate.kind === kind && candidate.label === label,
+      )
+    const module = node('module', 'UsersModule')
+    const service = node('provider', 'UsersService')
+    const controller = node('execution', 'UsersController')
+    const capability = node('runtime-capability', 'http.server')
+    const getRoute = node('entrypoint', 'GET /users/{id}')
+    const createRoute = node('entrypoint', 'POST /users')
+
+    expect(module).toBeDefined()
+    expect(service).toBeDefined()
+    expect(controller).toMatchObject({
+      id: 'UsersController',
+      executionKind: 'http.request',
+      capabilities: expect.arrayContaining(['http.server']),
+    })
+    expect(capability).toBeDefined()
+    expect(getRoute).toMatchObject({ entrypointKind: 'http-route' })
+    expect(createRoute).toMatchObject({ entrypointKind: 'http-route' })
+    expect(
+      graph.nodes.filter(
+        (candidate: { kind: string; label: string }) =>
+          candidate.kind === 'execution' &&
+          candidate.label === 'UsersController',
+      ),
+    ).toHaveLength(1)
+
+    expect(graph.edges).toContainEqual({
+      from: module.id,
+      to: service.id,
+      kind: 'owns',
+    })
+    expect(graph.edges).toContainEqual({
+      from: module.id,
+      to: controller.id,
+      kind: 'owns',
+    })
+    expect(graph.edges).toContainEqual({
+      from: controller.id,
+      to: service.id,
+      kind: 'injects',
+    })
+    expect(graph.edges).toContainEqual({
+      from: controller.id,
+      to: capability.id,
+      kind: 'requires',
+    })
+    expect(graph.edges).toContainEqual({
+      from: controller.id,
+      to: getRoute.id,
+      kind: 'handles',
+      label: 'get',
+    })
+    expect(graph.edges).toContainEqual({
+      from: controller.id,
+      to: createRoute.id,
+      kind: 'handles',
+      label: 'create',
+    })
+  })
+
+  it.each(['text', 'json', 'mermaid'])(
+    'graph allは%s formatで利用できる',
+    async (format) => {
+      const output = io()
+      expect(
+        await runCli(
+          [
+            'graph',
+            'all',
+            '--format',
+            format,
+            '--entry',
+            'integrations/http-crud/src/app.ts',
+          ],
+          output.value,
+        ),
+      ).toBe(0)
+      expect(output.stdout.join('\n')).toContain('UsersController')
+    },
+  )
+
+  it('graph allのMermaidでは同一Controllerを1nodeにdedupeする', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'mermaid',
+          '--entry',
+          'integrations/http-crud/src/app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+    const lines = output.stdout.join('\n').split('\n')
+    expect(
+      lines.filter((line) => line.includes('["UsersController"]')),
+    ).toHaveLength(1)
+    expect(lines.some((line) => line.includes('|"get"|'))).toBe(true)
+    expect(lines.some((line) => line.includes('|"create"|'))).toBe(true)
+  })
+
+  it('HTTP Mermaidも同一Controllerを1nodeにdedupeする', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'http',
+          '--format',
+          'mermaid',
+          '--entry',
+          'integrations/http-crud/src/app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+    const lines = output.stdout.join('\n').split('\n')
+    expect(
+      lines.filter((line) => line.includes('["UsersController"]')),
+    ).toHaveLength(1)
+  })
+
+  it('graphはsubject省略をusage付きでrejectする', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          '--format',
+          'mermaid',
+          '--entry',
+          'integrations/http-crud/src/app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(2)
+    expect(output.stderr.join('\n')).toContain(
+      'graph requires one of: all, modules, di, executions, http, runtime.',
+    )
+    expect(output.stderr.join('\n')).toContain('Usage: loutre graph <subject>')
+  })
+
+  it('graphはinvalid subjectをallを含むvalid一覧付きでrejectする', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        ['graph', 'unknown', '--entry', 'integrations/http-crud/src/app.ts'],
+        output.value,
+      ),
+    ).toBe(2)
+    expect(output.stderr.join('\n')).toContain(
+      'graph requires one of: all, modules, di, executions, http, runtime.',
+    )
+  })
+
+  it.each(['modules', 'di', 'http', 'executions', 'runtime'])(
+    '既存graph subject %sは引き続き利用できる',
+    async (subject) => {
+      const output = io()
+      expect(
+        await runCli(
+          [
+            'graph',
+            subject,
+            '--format',
+            'mermaid',
+            '--entry',
+            'integrations/http-crud/src/app.ts',
+          ],
+          output.value,
+        ),
+      ).toBe(0)
+      expect(output.stdout.join('\n')).toContain('flowchart LR')
+    },
+  )
+
   it('DOT formatを受け付けない', async () => {
     const output = io()
     expect(

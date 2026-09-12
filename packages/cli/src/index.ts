@@ -38,7 +38,41 @@ const runtimes: Readonly<Record<string, RuntimeSupportProfile>> = {
 const runtimeNames = Object.keys(runtimes)
 const deploymentRuntimes = ['aws-lambda', 'cloudflare-workers', 'deno'] as const
 type DeploymentRuntime = (typeof deploymentRuntimes)[number]
-type GraphSubject = 'modules' | 'di' | 'http' | 'runtime' | 'executions'
+type GraphSubject = 'all' | 'modules' | 'di' | 'http' | 'runtime' | 'executions'
+
+type GraphViewNodeKind =
+  | 'module'
+  | 'provider'
+  | 'execution'
+  | 'entrypoint'
+  | 'runtime-capability'
+
+interface GraphViewNode {
+  readonly id: string
+  readonly kind: GraphViewNodeKind
+  readonly label: string
+  readonly module?: string
+  readonly executionKind?: string
+  readonly capabilities?: readonly string[]
+  readonly extension?: GraphNodeIR['extension']
+  readonly entrypointKind?:
+    | 'http-route'
+    | 'message-port-method'
+    | 'websocket-route'
+  readonly attributes?: Readonly<Record<string, JsonValue>>
+}
+
+interface GraphViewEdge {
+  readonly from: string
+  readonly to: string
+  readonly kind: GraphEdgeIR['kind'] | 'handles'
+  readonly label?: string
+}
+
+interface GraphView {
+  readonly nodes: readonly GraphViewNode[]
+  readonly edges: readonly GraphViewEdge[]
+}
 
 export async function runCli(
   args: readonly string[],
@@ -113,7 +147,10 @@ export async function runCli(
     case 'graph': {
       if (!isGraphSubject(subject)) {
         io.stderr(
-          'graph requires one of: modules, di, http, executions, runtime.',
+          'graph requires one of: all, modules, di, executions, http, runtime.',
+        )
+        io.stderr(
+          'Usage: loutre graph <subject> --entry <entry> [--format text|json|mermaid]',
         )
         return 2
       }
@@ -264,6 +301,7 @@ function renderDeploymentEntry(runtime: DeploymentRuntime): string {
 
 function isGraphSubject(value: string | undefined): value is GraphSubject {
   return (
+    value === 'all' ||
     value === 'modules' ||
     value === 'di' ||
     value === 'http' ||
@@ -283,6 +321,14 @@ function graphData(
   subject: GraphSubject,
 ): unknown {
   switch (subject) {
+    case 'all': {
+      const view = buildGraphView(graph, subject)
+      return {
+        nodes: view.nodes,
+        edges: view.edges,
+        diagnostics: graph.diagnostics,
+      }
+    }
     case 'modules':
       return {
         modules: graph.modules.map((module) => moduleData(graph, module)),
@@ -318,6 +364,11 @@ function renderTextGraph(
   subject: GraphSubject,
   write: (value: string) => void,
 ): void {
+  if (subject === 'all') {
+    renderGraphViewText(buildGraphView(graph, subject), write)
+    return
+  }
+
   if (subject === 'modules') {
     for (const module of graph.modules) {
       const data = moduleData(graph, module)
@@ -417,33 +468,19 @@ function renderMermaidGraph(
   subject: GraphSubject,
 ): string {
   const lines = ['flowchart LR']
-  const node = (id: string, label: string) =>
-    lines.push(`  ${id}["${mermaidText(label)}"]`)
-  const edge = (from: string, to: string, label?: string) =>
-    lines.push(`  ${from} -->${label ? `|"${mermaidText(label)}"|` : ''} ${to}`)
-
-  if (subject === 'http') {
-    httpRoutes(graph).forEach((route, index) => {
-      node(`r${index}`, `${route.method} ${route.path}`)
-      node(`e${index}`, route.execution)
-      edge(`e${index}`, `r${index}`, route.name)
-    })
-    return lines.join('\n')
-  }
-
-  const selected = selectNodes(graph, subject)
-  const selectedIds = new Set(selected.map((candidate) => candidate.id))
+  const view = buildGraphView(graph, subject)
   const ids = new Map(
-    selected.map((candidate, index) => [candidate.id, `n${index}`]),
+    view.nodes.map((candidate, index) => [candidate.id, `n${index}`]),
   )
-  for (const candidate of selected) {
-    node(ids.get(candidate.id)!, nodeLabel(candidate))
+  for (const candidate of view.nodes) {
+    lines.push(`  ${ids.get(candidate.id)!}["${mermaidText(candidate.label)}"]`)
   }
-  for (const dependency of graph.edges) {
-    if (!selectedIds.has(dependency.from) || !selectedIds.has(dependency.to)) {
-      continue
-    }
-    edge(ids.get(dependency.from)!, ids.get(dependency.to)!, dependency.kind)
+  for (const relationship of view.edges) {
+    const from = ids.get(relationship.from)
+    const to = ids.get(relationship.to)
+    if (!from || !to) continue
+    const label = relationship.label ?? relationship.kind
+    lines.push(`  ${from} -->|"${mermaidText(label)}"| ${to}`)
   }
   return lines.join('\n')
 }
@@ -614,26 +651,214 @@ function httpRoutes(graph: ApplicationModelGraphIR): HttpRouteProjection[] {
   })
 }
 
-function selectNodes(
+function renderGraphViewText(
+  view: GraphView,
+  write: (value: string) => void,
+): void {
+  for (const node of view.nodes) {
+    write(`${node.kind}: ${node.label} [${node.id}]`)
+  }
+  if (view.nodes.length === 0) write('(no graph nodes)')
+  write('edges:')
+  if (view.edges.length === 0) write('  (none)')
+  for (const edge of view.edges) {
+    write(`  ${edge.from} --${edge.label ?? edge.kind}--> ${edge.to}`)
+  }
+}
+
+function buildGraphView(
+  graph: ApplicationModelGraphIR,
+  subject: GraphSubject,
+): GraphView {
+  if (subject === 'http') return buildHttpGraphView(graph)
+
+  const selected = selectApplicationNodes(graph, subject)
+  const nodes = selected.map(projectGraphViewNode)
+  const selectedIds = new Set(nodes.map((node) => node.id))
+  const edges: GraphViewEdge[] = graph.edges
+    .filter((edge) => selectedIds.has(edge.from) && selectedIds.has(edge.to))
+    .map((edge) => ({ ...edge }))
+
+  if (subject === 'all') {
+    const entrypoints = projectEntrypoints(graph)
+    nodes.push(...entrypoints.nodes)
+    edges.push(...entrypoints.edges)
+  }
+
+  return { nodes, edges }
+}
+
+function buildHttpGraphView(graph: ApplicationModelGraphIR): GraphView {
+  const executions = httpExecutions(graph).map(projectGraphViewNode)
+  const entrypoints = projectHttpEntrypoints(graph)
+  return {
+    nodes: [...executions, ...entrypoints.nodes],
+    edges: entrypoints.edges,
+  }
+}
+
+function selectApplicationNodes(
   graph: ApplicationModelGraphIR,
   subject: Exclude<GraphSubject, 'http'>,
-): readonly GraphNodeIR[] {
+): GraphNodeIR[] {
   switch (subject) {
+    case 'all':
+      return graph.nodes.filter(
+        (node) =>
+          node.kind === 'module' ||
+          node.kind === 'provider' ||
+          node.kind === 'execution' ||
+          isRuntimeCapabilityNode(node),
+      )
     case 'modules':
-      return graph.modules
+      return [...graph.modules]
     case 'di':
       return graph.nodes.filter(
         (node) => node.kind === 'provider' || node.kind === 'execution',
       )
     case 'executions':
-      return graph.executions
+      return [...graph.executions]
     case 'runtime':
-      return graph.nodes.filter(
-        (node) =>
-          node.kind === 'framework' &&
-          node.attributes?.frameworkKind === 'runtime-capability',
-      )
+      return graph.nodes.filter(isRuntimeCapabilityNode)
   }
+}
+
+function projectGraphViewNode(node: GraphNodeIR): GraphViewNode {
+  return {
+    id: node.id,
+    kind: isRuntimeCapabilityNode(node)
+      ? 'runtime-capability'
+      : (node.kind as GraphViewNodeKind),
+    label: nodeLabel(node),
+    ...(node.module === undefined ? {} : { module: node.module }),
+    ...(node.executionKind === undefined
+      ? {}
+      : { executionKind: node.executionKind }),
+    ...(node.capabilities === undefined
+      ? {}
+      : { capabilities: node.capabilities }),
+    ...(node.extension === undefined ? {} : { extension: node.extension }),
+    ...(node.attributes === undefined ? {} : { attributes: node.attributes }),
+  }
+}
+
+function isRuntimeCapabilityNode(node: GraphNodeIR): boolean {
+  return (
+    node.kind === 'framework' &&
+    node.attributes?.frameworkKind === 'runtime-capability'
+  )
+}
+
+function projectEntrypoints(graph: ApplicationModelGraphIR): GraphView {
+  const http = projectHttpEntrypoints(graph)
+  const messagePort = projectMessagePortEntrypoints(graph)
+  const websocket = projectWebSocketEntrypoints(graph)
+  return {
+    nodes: [...http.nodes, ...messagePort.nodes, ...websocket.nodes],
+    edges: [...http.edges, ...messagePort.edges, ...websocket.edges],
+  }
+}
+
+function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
+  const nodes: GraphViewNode[] = []
+  const edges: GraphViewEdge[] = []
+  for (const execution of httpExecutions(graph)) {
+    const metadata: unknown = execution.extension?.metadata
+    if (!isRecord(metadata) || !Array.isArray(metadata.routes)) continue
+    for (const route of metadata.routes) {
+      if (!isRecord(route)) continue
+      const name = typeof route.name === 'string' ? route.name : undefined
+      const method = typeof route.method === 'string' ? route.method : undefined
+      const path = typeof route.path === 'string' ? route.path : undefined
+      if (!name || !method || !path) continue
+      const id = entrypointId('http', execution.id, name)
+      nodes.push({
+        id,
+        kind: 'entrypoint',
+        entrypointKind: 'http-route',
+        label: `${method} ${path}`,
+        attributes: { name, method, path },
+      })
+      edges.push({
+        from: execution.id,
+        to: id,
+        kind: 'handles',
+        label: name,
+      })
+    }
+  }
+  return { nodes, edges }
+}
+
+function projectMessagePortEntrypoints(
+  graph: ApplicationModelGraphIR,
+): GraphView {
+  const nodes: GraphViewNode[] = []
+  const edges: GraphViewEdge[] = []
+  for (const execution of graph.executions) {
+    if (execution.extension?.hostNamespace !== 'messagePort') continue
+    const metadata: unknown = execution.extension.metadata
+    if (!isRecord(metadata) || !Array.isArray(metadata.methods)) continue
+    for (const method of metadata.methods) {
+      if (typeof method !== 'string') continue
+      const id = entrypointId('message-port', execution.id, method)
+      nodes.push({
+        id,
+        kind: 'entrypoint',
+        entrypointKind: 'message-port-method',
+        label: `MessagePort ${method}`,
+        attributes: { method },
+      })
+      edges.push({
+        from: execution.id,
+        to: id,
+        kind: 'handles',
+        label: method,
+      })
+    }
+  }
+  return { nodes, edges }
+}
+
+function projectWebSocketEntrypoints(
+  graph: ApplicationModelGraphIR,
+): GraphView {
+  const nodes: GraphViewNode[] = []
+  const edges: GraphViewEdge[] = []
+  for (const execution of graph.executions) {
+    if (execution.extension?.hostNamespace !== 'websocket') continue
+    const metadata: unknown = execution.extension.metadata
+    if (!isRecord(metadata) || !Array.isArray(metadata.routes)) continue
+    for (const route of metadata.routes) {
+      if (!isRecord(route)) continue
+      const name = typeof route.name === 'string' ? route.name : undefined
+      const path = typeof route.path === 'string' ? route.path : undefined
+      if (!name || !path) continue
+      const id = entrypointId('websocket', execution.id, name)
+      nodes.push({
+        id,
+        kind: 'entrypoint',
+        entrypointKind: 'websocket-route',
+        label: `WebSocket ${path}`,
+        attributes: { name, path },
+      })
+      edges.push({
+        from: execution.id,
+        to: id,
+        kind: 'handles',
+        label: name,
+      })
+    }
+  }
+  return { nodes, edges }
+}
+
+function entrypointId(
+  namespace: string,
+  executionId: string,
+  localId: string,
+): string {
+  return `entrypoint:${namespace}:${encodeURIComponent(executionId)}:${encodeURIComponent(localId)}`
 }
 
 function groupEdges(edges: readonly GraphEdgeIR[]): Map<string, GraphEdgeIR[]> {
@@ -700,7 +925,7 @@ function helpText(): string {
     'Loutre CLI',
     '  loutre check --entry <entry>',
     '  loutre doctor [--runtime node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
-    '  loutre graph modules|di|http|executions|runtime --entry <entry> [--format text|json|mermaid]',
+    '  loutre graph all|modules|di|executions|http|runtime --entry <entry> [--format text|json|mermaid]',
     '  loutre explain <target> --entry <entry>',
     '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',
     '',
