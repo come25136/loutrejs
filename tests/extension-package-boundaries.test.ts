@@ -67,25 +67,28 @@ describe('npm package境界', () => {
     expect(manifest.engines?.node).toBe('>=22')
   })
 
-  it('Core値を共有するlibrary packageだけがmain packageをpeerとして要求する', async () => {
-    const loutre = await readPackageManifest('loutre')
-    const compatibleRange = loutreCompatibilityRange(loutre.version)
-    const node = await readPackageManifest('node')
-    const bullmq = await readPackageManifest('bullmq')
+  it(
+    'Core値を共有するlibrary packageだけがmain packageをpeerとして要求する',
+    async () => {
+      const loutre = await readPackageManifest('loutre')
+      const compatibleRange = loutreCompatibilityRange(loutre.version)
+      const node = await readPackageManifest('node')
+      const bullmq = await readPackageManifest('bullmq')
 
-    for (const manifest of [node, bullmq]) {
-      expect(manifest.dependencies?.['@loutrejs/loutre']).toBeUndefined()
-      expect(manifest.peerDependencies?.['@loutrejs/loutre']).toBe(
-        compatibleRange,
-      )
-    }
+      for (const manifest of [node, bullmq]) {
+        expect(manifest.dependencies?.['@loutrejs/loutre']).toBeUndefined()
+        expect(manifest.peerDependencies?.['@loutrejs/loutre']).toBe(
+          compatibleRange,
+        )
+      }
 
-    for (const directory of ['cli', 'create-loutre']) {
-      const manifest = await readPackageManifest(directory)
-      expect(manifest.dependencies?.['@loutrejs/loutre']).toBeDefined()
-      expect(manifest.peerDependencies?.['@loutrejs/loutre']).toBeUndefined()
-    }
-  })
+      for (const directory of ['cli', 'create-loutre']) {
+        const manifest = await readPackageManifest(directory)
+        expect(manifest.dependencies?.['@loutrejs/loutre']).toBeDefined()
+        expect(manifest.peerDependencies?.['@loutrejs/loutre']).toBeUndefined()
+      }
+    },
+  )
 
   it('protocol extensionのruntime identityをnpm package名から独立させる', async () => {
     const identities = await Promise.all(
