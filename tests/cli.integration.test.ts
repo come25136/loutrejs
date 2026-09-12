@@ -378,29 +378,102 @@ describe('Loutre CLI', () => {
     expect(lines).toContain('  subgraph sg0["Module: UsersModule"]')
     expect(lines).toContain('  subgraph sg1["API: GET /users/{id}"]')
     expect(lines).toContain('  subgraph sg2["API: POST /users"]')
-    expect(graphLine(output, 'classDef provider')).toContain('fill:#BBF7D0')
-    expect(graphLine(output, 'classDef controller')).toContain('fill:#BFDBFE')
-    expect(graphLine(output, 'classDef middleware')).toContain('fill:#E9D5FF')
+    expect(graphLine(output, 'classDef provider')).toContain('fill:#DCFCE7')
+    expect(graphLine(output, 'classDef controller')).toContain('fill:#DBEAFE')
+    expect(graphLine(output, 'classDef middleware')).toContain('fill:#F3E8FF')
     expect(lines).toContain('  class n1 provider')
     expect(lines).toContain('  class n2 controller')
     expect(lines).toContain('  class n7 middleware')
     expect(lines).toContain(
-      '  linkStyle 0 stroke:#4F46E5,color:#4F46E5,stroke-width:2px',
+      '  linkStyle 0 stroke:#6D28D9,color:#111827,stroke-width:2px',
     )
     expect(lines).toContain(
-      '  linkStyle 2 stroke:#2563EB,color:#2563EB,stroke-width:2px',
+      '  linkStyle 2 stroke:#1D4ED8,color:#111827,stroke-width:2px',
     )
     expect(lines).toContain(
-      '  linkStyle 5 stroke:#D97706,color:#D97706,stroke-width:2px',
+      '  linkStyle 5 stroke:#B45309,color:#111827,stroke-width:2px',
     )
     expect(lines).toContain(
-      '  linkStyle 8 stroke:#9333EA,color:#9333EA,stroke-width:2px',
+      '  linkStyle 8 stroke:#7E22CE,color:#111827,stroke-width:2px',
     )
     expect(lines).toContain(
-      '  style sg0 fill:#F8FAFC,stroke:#4F46E5,color:#1E1B4B,stroke-width:2px',
+      '  style sg0 fill:#F8FAFC,stroke:#6D28D9,color:#111827,stroke-width:2px',
     )
     expect(lines).toContain(
-      '  style sg1 fill:#FFFBEB,stroke:#D97706,color:#78350F,stroke-width:2px',
+      '  style sg1 fill:#FFFBEB,stroke:#B45309,color:#111827,stroke-width:2px',
+    )
+  })
+
+  it('Mermaid dark themeは白文字とdark paletteを使う', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'mermaid',
+          '--theme',
+          'dark',
+          '--entry',
+          'integrations/http-crud/src/app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+    const graph = output.stdout.join('\n')
+    expect(graph).toContain('"edgeLabelBackground":"#111827"')
+    expect(graphLine(output, 'classDef controller')).toContain(
+      'fill:#1E3A8A,stroke:#60A5FA,color:#FFFFFF',
+    )
+    expect(graphLine(output, 'classDef provider')).toContain(
+      'fill:#14532D,stroke:#4ADE80,color:#FFFFFF',
+    )
+    expect(graphLine(output, 'linkStyle 2')).toContain(
+      'stroke:#60A5FA,color:#F8FAFC',
+    )
+    expect(graphLine(output, 'style sg0')).toContain('color:#FFFFFF')
+  })
+
+  it('graph --themeはlight/darkだけ受け付けMermaid専用', async () => {
+    const invalid = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'mermaid',
+          '--theme',
+          'sepia',
+          '--entry',
+          'integrations/http-crud/src/app.ts',
+        ],
+        invalid.value,
+      ),
+    ).toBe(2)
+    expect(invalid.stderr).toContain(
+      'graph --theme must be one of: light, dark.',
+    )
+
+    const json = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--theme',
+          'dark',
+          '--entry',
+          'integrations/http-crud/src/app.ts',
+        ],
+        json.value,
+      ),
+    ).toBe(2)
+    expect(json.stderr).toContain(
+      'graph --theme is only supported with --format mermaid.',
     )
   })
 

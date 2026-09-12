@@ -39,6 +39,60 @@ const runtimeNames = Object.keys(runtimes)
 const deploymentRuntimes = ['aws-lambda', 'cloudflare-workers', 'deno'] as const
 type DeploymentRuntime = (typeof deploymentRuntimes)[number]
 type GraphSubject = 'all' | 'modules' | 'di' | 'http' | 'runtime' | 'executions'
+type MermaidThemeName = 'light' | 'dark'
+
+const mermaidThemes = {
+  light: {
+    canvasBackground: '#FFFFFF',
+    foreground: '#111827',
+    defaultEdge: '#64748B',
+    edgeLabelText: '#111827',
+    edgeLabelBackground: '#FFFFFF',
+    nodes: {
+      moduleNode: { fill: '#EDE9FE', stroke: '#6D28D9', text: '#2E1065' },
+      provider: { fill: '#DCFCE7', stroke: '#15803D', text: '#14532D' },
+      controller: { fill: '#DBEAFE', stroke: '#1D4ED8', text: '#1E3A8A' },
+      execution: { fill: '#CFFAFE', stroke: '#0E7490', text: '#164E63' },
+      route: { fill: '#FEF3C7', stroke: '#B45309', text: '#78350F' },
+      middleware: { fill: '#F3E8FF', stroke: '#7E22CE', text: '#581C87' },
+      handler: { fill: '#FFEDD5', stroke: '#C2410C', text: '#7C2D12' },
+      runtimeCapability: {
+        fill: '#F3F4F6',
+        stroke: '#4B5563',
+        text: '#111827',
+      },
+    },
+    moduleSubgraph: { fill: '#F8FAFC', stroke: '#6D28D9', text: '#111827' },
+    endpointSubgraph: { fill: '#FFFBEB', stroke: '#B45309', text: '#111827' },
+  },
+  dark: {
+    canvasBackground: '#020617',
+    foreground: '#F8FAFC',
+    defaultEdge: '#94A3B8',
+    edgeLabelText: '#F8FAFC',
+    edgeLabelBackground: '#111827',
+    nodes: {
+      moduleNode: { fill: '#312E81', stroke: '#818CF8', text: '#FFFFFF' },
+      provider: { fill: '#14532D', stroke: '#4ADE80', text: '#FFFFFF' },
+      controller: { fill: '#1E3A8A', stroke: '#60A5FA', text: '#FFFFFF' },
+      execution: { fill: '#164E63', stroke: '#22D3EE', text: '#FFFFFF' },
+      route: { fill: '#78350F', stroke: '#FBBF24', text: '#FFFFFF' },
+      middleware: { fill: '#581C87', stroke: '#C084FC', text: '#FFFFFF' },
+      handler: { fill: '#7C2D12', stroke: '#FB923C', text: '#FFFFFF' },
+      runtimeCapability: {
+        fill: '#374151',
+        stroke: '#9CA3AF',
+        text: '#FFFFFF',
+      },
+    },
+    moduleSubgraph: { fill: '#0F172A', stroke: '#818CF8', text: '#FFFFFF' },
+    endpointSubgraph: { fill: '#1C1917', stroke: '#F59E0B', text: '#FFFFFF' },
+  },
+} as const
+
+function isMermaidThemeName(value: string): value is MermaidThemeName {
+  return value === 'light' || value === 'dark'
+}
 
 type GraphViewNodeKind =
   | 'module'
@@ -152,7 +206,7 @@ export async function runCli(
           'graph requires one of: all, modules, di, executions, http, runtime.',
         )
         io.stderr(
-          'Usage: loutre graph <subject> --entry <entry> [--format text|json|mermaid]',
+          'Usage: loutre graph <subject> --entry <entry> [--format text|json|mermaid] [--theme light|dark]',
         )
         return 2
       }
@@ -164,10 +218,23 @@ export async function runCli(
         io.stderr('graph --format must be one of: text, json, mermaid.')
         return 2
       }
+      const themeOption = readOption(args, '--theme')
+      let mermaidTheme: MermaidThemeName = 'light'
+      if (themeOption !== undefined) {
+        if (!isMermaidThemeName(themeOption)) {
+          io.stderr('graph --theme must be one of: light, dark.')
+          return 2
+        }
+        if (format !== 'mermaid') {
+          io.stderr('graph --theme is only supported with --format mermaid.')
+          return 2
+        }
+        mermaidTheme = themeOption
+      }
       if (format === 'json') {
         io.stdout(`${JSON.stringify(graphData(graph, subject), null, 2)}\n`)
       } else if (format === 'mermaid') {
-        io.stdout(renderMermaidGraph(graph, subject))
+        io.stdout(renderMermaidGraph(graph, subject, mermaidTheme))
       } else {
         renderTextGraph(graph, subject, io.stdout)
       }
@@ -471,8 +538,21 @@ function renderDiText(
 function renderMermaidGraph(
   graph: ApplicationModelGraphIR,
   subject: GraphSubject,
+  themeName: MermaidThemeName,
 ): string {
-  const lines = ['flowchart LR']
+  const theme = mermaidThemes[themeName]
+  const lines = [
+    `%%{init: ${JSON.stringify({
+      theme: 'base',
+      themeVariables: {
+        background: theme.canvasBackground,
+        primaryTextColor: theme.foreground,
+        lineColor: theme.defaultEdge,
+        edgeLabelBackground: theme.edgeLabelBackground,
+      },
+    })}}%%`,
+    'flowchart LR',
+  ]
   const view = buildGraphView(graph, subject)
   const ids = new Map(
     view.nodes.map((candidate, index) => [candidate.id, `n${index}`]),
@@ -547,19 +627,16 @@ function renderMermaidGraph(
         : `  ${from} -->|"${mermaidText(label)}"| ${to}`,
     )
     const source = byId.get(relationship.from)
-    edgeColors.push(source ? mermaidNodeStrokeColor(source) : '#64748B')
+    edgeColors.push(
+      source ? mermaidNodeStrokeColor(source, themeName) : theme.defaultEdge,
+    )
   }
 
-  lines.push(
-    '  classDef moduleNode fill:#DDD6FE,stroke:#4F46E5,color:#1E1B4B,stroke-width:2px',
-    '  classDef provider fill:#BBF7D0,stroke:#16A34A,color:#14532D,stroke-width:2px',
-    '  classDef controller fill:#BFDBFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px',
-    '  classDef execution fill:#A5F3FC,stroke:#0891B2,color:#164E63,stroke-width:2px',
-    '  classDef route fill:#FDE68A,stroke:#D97706,color:#78350F,stroke-width:2px',
-    '  classDef middleware fill:#E9D5FF,stroke:#9333EA,color:#581C87,stroke-width:2px',
-    '  classDef handler fill:#FED7AA,stroke:#EA580C,color:#7C2D12,stroke-width:2px',
-    '  classDef runtimeCapability fill:#E5E7EB,stroke:#6B7280,color:#111827,stroke-width:2px',
-  )
+  for (const [className, style] of Object.entries(theme.nodes)) {
+    lines.push(
+      `  classDef ${className} fill:${style.fill},stroke:${style.stroke},color:${style.text},stroke-width:2px`,
+    )
+  }
 
   const classes = new Map<string, string[]>()
   for (const candidate of view.nodes) {
@@ -573,17 +650,17 @@ function renderMermaidGraph(
   }
   for (const [index, color] of edgeColors.entries()) {
     lines.push(
-      `  linkStyle ${index} stroke:${color},color:${color},stroke-width:2px`,
+      `  linkStyle ${index} stroke:${color},color:${theme.edgeLabelText},stroke-width:2px`,
     )
   }
   for (const subgraphId of moduleSubgraphs) {
     lines.push(
-      `  style ${subgraphId} fill:#F8FAFC,stroke:#4F46E5,color:#1E1B4B,stroke-width:2px`,
+      `  style ${subgraphId} fill:${theme.moduleSubgraph.fill},stroke:${theme.moduleSubgraph.stroke},color:${theme.moduleSubgraph.text},stroke-width:2px`,
     )
   }
   for (const subgraphId of endpointSubgraphs) {
     lines.push(
-      `  style ${subgraphId} fill:#FFFBEB,stroke:#D97706,color:#78350F,stroke-width:2px`,
+      `  style ${subgraphId} fill:${theme.endpointSubgraph.fill},stroke:${theme.endpointSubgraph.stroke},color:${theme.endpointSubgraph.text},stroke-width:2px`,
     )
   }
 
@@ -1141,25 +1218,11 @@ function mermaidNodeClass(node: GraphViewNode): MermaidNodeClass {
   }
 }
 
-function mermaidNodeStrokeColor(node: GraphViewNode): string {
-  switch (mermaidNodeClass(node)) {
-    case 'moduleNode':
-      return '#4F46E5'
-    case 'provider':
-      return '#16A34A'
-    case 'controller':
-      return '#2563EB'
-    case 'execution':
-      return '#0891B2'
-    case 'route':
-      return '#D97706'
-    case 'middleware':
-      return '#9333EA'
-    case 'handler':
-      return '#EA580C'
-    case 'runtimeCapability':
-      return '#6B7280'
-  }
+function mermaidNodeStrokeColor(
+  node: GraphViewNode,
+  themeName: MermaidThemeName,
+): string {
+  return mermaidThemes[themeName].nodes[mermaidNodeClass(node)].stroke
 }
 
 function mermaidEdgeLabel(
@@ -1221,7 +1284,13 @@ function mermaidText(value: string): string {
     .replaceAll('>', '&gt;')
 }
 
-const valueOptions = new Set(['--entry', '--format', '--runtime', '--out-dir'])
+const valueOptions = new Set([
+  '--entry',
+  '--format',
+  '--theme',
+  '--runtime',
+  '--out-dir',
+])
 
 function readPositionals(args: readonly string[]): string[] {
   const positionals: string[] = []
@@ -1246,7 +1315,7 @@ function helpText(): string {
     'Loutre CLI',
     '  loutre check --entry <entry>',
     '  loutre doctor [--runtime node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
-    '  loutre graph all|modules|di|executions|http|runtime --entry <entry> [--format text|json|mermaid]',
+    '  loutre graph all|modules|di|executions|http|runtime --entry <entry> [--format text|json|mermaid] [--theme light|dark]',
     '  loutre explain <target> --entry <entry>',
     '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',
     '',
