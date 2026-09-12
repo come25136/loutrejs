@@ -102,17 +102,22 @@ export async function loadApplicationGraph(
   return projectApplicationModel(definition.model)
 }
 
-const loutrePackageRoot = resolve(
-  dirname(fileURLToPath(import.meta.resolve('@loutrejs/loutre'))),
-  '..',
-)
+const loutrePackageRoots = [
+  resolve(
+    dirname(fileURLToPath(import.meta.resolve('@loutrejs/loutre'))),
+    '..',
+  ),
+  resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'loutre'),
+] as const
 
 function sourceLocationPlugin(projectRoot: string): Plugin {
   return {
     name: 'loutre-source-locations',
     setup(build) {
       build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async (args) => {
-        if (isWithin(args.path, loutrePackageRoot)) return undefined
+        if (loutrePackageRoots.some((root) => isWithin(args.path, root))) {
+          return undefined
+        }
         const loader = sourceLoader(args.path)
         if (!loader) return undefined
         const source = await readFile(args.path, 'utf8')
