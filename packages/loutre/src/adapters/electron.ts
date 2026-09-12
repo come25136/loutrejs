@@ -3,14 +3,14 @@ import {
   type ApplicationDefinition,
   type BootstrapArguments,
   type KernelHostedApplication,
-  type RequireApplicationHost,
+  type RequireApplicationExtension,
 } from '../application/index.js'
 import type { RuntimeCapabilityBinding } from '../core/index.js'
-import { applicationHasHost } from '../application/kernel-internal.js'
+import { messagePortExtension } from '../message-port/index.js'
 import { assertRuntimeEngine } from '../runtime/engine.js'
 
 type MessagePortApplication<TDefinition extends ApplicationDefinition> =
-  RequireApplicationHost<TDefinition, 'messagePort'>
+  RequireApplicationExtension<TDefinition, typeof messagePortExtension>
 
 export interface MessagePortLike {
   postMessage(value: unknown): void
@@ -63,7 +63,9 @@ function attach<const TDefinition extends ApplicationDefinition>(
   options: ElectronAttachOptions<TDefinition>,
 ): ElectronAttachment<TDefinition> {
   assertRuntimeEngine('electron')
-  if (!applicationHasHost(options.application.model, 'messagePort')) {
+  if (
+    options.application.model.extensions.get(messagePortExtension) === undefined
+  ) {
     throw new Error(
       'LUTRE_RUNTIME_MESSAGE_PORT_REQUIRED: electronRuntime.attach() requires the MessagePort Execution Extension.',
     )

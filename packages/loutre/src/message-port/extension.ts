@@ -5,6 +5,7 @@ import {
   runInInjectionContext,
   validateSchema,
   type ExecutionDefinition,
+  type ExecutionExtension,
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
   type SchemaOutput,
@@ -108,6 +109,8 @@ export interface MessagePortHostApi {
   invoke(method: string, input?: unknown): Promise<MessagePortResult>
 }
 
+declare const messagePortExecutionExtensionIdentity: unique symbol
+
 export const messagePortExtension = defineExecutionExtension<
   MessagePortImplementationData & ExecutionDefinition,
   CompiledMessagePortExecution,
@@ -172,7 +175,13 @@ export const messagePortExtension = defineExecutionExtension<
       invoke: (method, input) => runtime.invoke(method, input),
     }),
   },
-})
+}) as ExecutionExtension<
+  MessagePortImplementationData & ExecutionDefinition,
+  CompiledMessagePortExecution,
+  'messagePort',
+  MessagePortHostApi,
+  MessagePortExtensionRuntime
+> & { readonly [messagePortExecutionExtensionIdentity]: true }
 
 export type MessagePortExecutionDefinition<
   TContract extends MessagePortContract = MessagePortContract,

@@ -3,13 +3,11 @@ import {
   type ApplicationDefinition,
   type BootstrapArguments,
   type KernelHostedApplication,
-  type RequireApplicationHost,
+  type RequireApplicationExtension,
 } from '../application/index.js'
 import type { RuntimeCapabilityBinding } from '../core/index.js'
-import {
-  applicationHasHost,
-  bindApplicationCapability,
-} from '../application/kernel-internal.js'
+import { bindApplicationCapability } from '../application/kernel-internal.js'
+import { httpExecutionExtension } from '../http/index.js'
 import {
   LOUTRE_VERSION,
   detectPresentationTerminal,
@@ -23,7 +21,7 @@ import {
 } from '../runtime/server-port.js'
 
 type HttpApplication<TDefinition extends ApplicationDefinition> =
-  RequireApplicationHost<TDefinition, 'http'>
+  RequireApplicationExtension<TDefinition, typeof httpExecutionExtension>
 
 type BunServer = {
   stop(closeActiveConnections?: boolean): void | Promise<void>
@@ -83,7 +81,10 @@ async function create<const TDefinition extends ApplicationDefinition>(
     },
   )
 
-  if (!applicationHasHost(options.application.model, 'http')) {
+  if (
+    options.application.model.extensions.get(httpExecutionExtension) ===
+    undefined
+  ) {
     throw new Error(
       'LUTRE_RUNTIME_HTTP_REQUIRED: bunRuntime.create() requires the HTTP Execution Extension.',
     )

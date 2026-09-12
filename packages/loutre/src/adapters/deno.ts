@@ -3,13 +3,11 @@ import {
   type ApplicationDefinition,
   type BootstrapArguments,
   type KernelHostedApplication,
-  type RequireApplicationHost,
+  type RequireApplicationExtension,
 } from '../application/index.js'
 import type { RuntimeCapabilityBinding } from '../core/index.js'
-import {
-  applicationHasHost,
-  bindApplicationCapability,
-} from '../application/kernel-internal.js'
+import { bindApplicationCapability } from '../application/kernel-internal.js'
+import { httpExecutionExtension } from '../http/index.js'
 import { LOUTRE_VERSION, startStartupPresentation } from '../presentation.js'
 import { assertRuntimeEngine } from '../runtime/engine.js'
 import { serverUrl } from '../runtime/server-url.js'
@@ -19,7 +17,7 @@ import {
 } from '../runtime/server-port.js'
 
 type HttpApplication<TDefinition extends ApplicationDefinition> =
-  RequireApplicationHost<TDefinition, 'http'>
+  RequireApplicationExtension<TDefinition, typeof httpExecutionExtension>
 
 type DenoServer = { shutdown(): Promise<void> }
 
@@ -75,7 +73,10 @@ function bind<const TDefinition extends ApplicationDefinition>(
   options: DenoRuntimeOptions<TDefinition>,
 ): DenoBinding {
   assertRuntimeEngine('deno')
-  if (!applicationHasHost(options.application.model, 'http')) {
+  if (
+    options.application.model.extensions.get(httpExecutionExtension) ===
+    undefined
+  ) {
     throw new Error(
       'LUTRE_RUNTIME_HTTP_REQUIRED: denoRuntime.bind() requires the HTTP Execution Extension.',
     )
@@ -123,7 +124,10 @@ async function create<const TDefinition extends ApplicationDefinition>(
     },
   )
 
-  if (!applicationHasHost(options.application.model, 'http')) {
+  if (
+    options.application.model.extensions.get(httpExecutionExtension) ===
+    undefined
+  ) {
     throw new Error(
       'LUTRE_RUNTIME_HTTP_REQUIRED: denoRuntime.create() requires the HTTP Execution Extension.',
     )
