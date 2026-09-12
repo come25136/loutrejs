@@ -13,6 +13,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changeset-policy:
+    name: Changeset Policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Reject Changesets outside release PRs
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        shell: bash
+        run: |
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- .changeset)"
+          if test -z "$changed"; then
+            exit 0
+          fi
+
+          case "$PR_TITLE" in
+            'chore(release): '*)
+              ;;
+            *)
+              echo 'Changesets are release-only. Move .changeset/** changes into a chore(release): ... PR.' >&2
+              printf '%s\n' "$changed" >&2
+              exit 1
+              ;;
+          esac
+
   quality-checks:
     name: Quality Checks / Node.js 24.x
     runs-on: ubuntu-latest
@@ -534,6 +566,7 @@ jobs:
     name: CI
     if: ${{ always() }}
     needs:
+      - changeset-policy
       - quality-checks
       - minimum-node-types
       - node-tests
