@@ -427,8 +427,8 @@ describe('Loutre CLI', () => {
     expect(node('provider', 'EventEmitter')?.source).toBeUndefined()
   })
 
-  it('既存graph subjectのJSON/textでもsource locationを保持する', async () => {
-    const jsonOutput = io()
+  it('graph modules JSONでもsource locationを保持する', async () => {
+    const output = io()
     expect(
       await runCli(
         [
@@ -439,23 +439,25 @@ describe('Loutre CLI', () => {
           '--entry',
           'tests/fixtures/source-location-app.ts',
         ],
-        jsonOutput.value,
+        output.value,
       ),
     ).toBe(0)
-    const modules = JSON.parse(jsonOutput.stdout.join('\n')).modules
+    const modules = JSON.parse(output.stdout.join('\n')).modules
     expect(modules[0].source).toEqual({
       file: 'tests/fixtures/source-location-app.ts',
       line: 53,
       column: 29,
     })
+  })
 
-    const cases = [
-      ['modules', 'source: tests/fixtures/source-location-app.ts:53:29'],
-      ['di', 'source: tests/fixtures/source-location-app.ts:11:8'],
-      ['http', 'route source: tests/fixtures/source-location-app.ts:33:3'],
-      ['executions', 'source: tests/fixtures/source-location-app.ts:43:33'],
-    ] as const
-    for (const [subject, expected] of cases) {
+  it.each([
+    ['modules', 'source: tests/fixtures/source-location-app.ts:53:29'],
+    ['di', 'source: tests/fixtures/source-location-app.ts:11:8'],
+    ['http', 'route source: tests/fixtures/source-location-app.ts:33:3'],
+    ['executions', 'source: tests/fixtures/source-location-app.ts:43:33'],
+  ] as const)(
+    'graph %s textでもsource locationを保持する',
+    async (subject, expected) => {
       const output = io()
       expect(
         await runCli(
@@ -471,8 +473,8 @@ describe('Loutre CLI', () => {
         ),
       ).toBe(0)
       expect(output.stdout.join('\n')).toContain(expected)
-    }
-  })
+    },
+  )
 
   it('Mermaid node labelへproject-relative source locationを表示する', async () => {
     const output = io()
