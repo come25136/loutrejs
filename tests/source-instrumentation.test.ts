@@ -29,4 +29,24 @@ void Module
     )
     expect(transformed).toContain('__loutreSource$1(RealService')
   })
+  it('alias initializerへgeneric source registrationを追加しない', () => {
+    const source = `import { EventEmitter } from 'node:events'
+import * as events from 'node:events'
+import { defineModule } from '@loutrejs/loutre'
+const ImportedAlias = EventEmitter
+const MemberAlias = events.EventEmitter
+const Module = defineModule(() => ({ providers: [ImportedAlias] }))
+void MemberAlias
+void Module
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).not.toContain('__loutreSource(ImportedAlias')
+    expect(transformed).not.toContain('__loutreSource(MemberAlias')
+    expect(transformed).toContain('const Module = __loutreSource(defineModule')
+  })
 })

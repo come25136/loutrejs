@@ -416,14 +416,62 @@ describe('Loutre CLI', () => {
       column,
     })
 
-    expect(node('provider', 'RealService')?.source).toEqual(source(15, 8))
+    expect(node('provider', 'RealService')?.source).toEqual(source(16, 8))
     expect(node('provider', 'source-location.composed-value')?.source).toEqual(
-      source(27, 20),
+      source(29, 20),
     )
-    expect(node('entrypoint', 'POST /composed')?.source).toEqual(source(20, 3))
+    expect(node('entrypoint', 'POST /composed')?.source).toEqual(source(22, 3))
     expect(node('handler', 'ComposedController.create')?.source).toEqual(
-      source(34, 5),
+      source(36, 5),
     )
+    expect(node('provider', 'EventEmitter')?.source).toBeUndefined()
+  })
+
+  it('既存graph subjectのJSON/textでもsource locationを保持する', async () => {
+    const jsonOutput = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'modules',
+          '--format',
+          'json',
+          '--entry',
+          'tests/fixtures/source-location-app.ts',
+        ],
+        jsonOutput.value,
+      ),
+    ).toBe(0)
+    const modules = JSON.parse(jsonOutput.stdout.join('\n')).modules
+    expect(modules[0].source).toEqual({
+      file: 'tests/fixtures/source-location-app.ts',
+      line: 53,
+      column: 29,
+    })
+
+    const cases = [
+      ['modules', 'source: tests/fixtures/source-location-app.ts:53:29'],
+      ['di', 'source: tests/fixtures/source-location-app.ts:11:8'],
+      ['http', 'route source: tests/fixtures/source-location-app.ts:33:3'],
+      ['executions', 'source: tests/fixtures/source-location-app.ts:43:33'],
+    ] as const
+    for (const [subject, expected] of cases) {
+      const output = io()
+      expect(
+        await runCli(
+          [
+            'graph',
+            subject,
+            '--format',
+            'text',
+            '--entry',
+            'tests/fixtures/source-location-app.ts',
+          ],
+          output.value,
+        ),
+      ).toBe(0)
+      expect(output.stdout.join('\n')).toContain(expected)
+    }
   })
 
   it('Mermaid node labelへproject-relative source locationを表示する', async () => {
@@ -819,6 +867,30 @@ describe('Loutre CLI', () => {
         application: built.default,
       })
       await application.close()
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('production buildではsource instrumentationがtree-shakingを阻害しない', async () => {
+    const output = io()
+    const directory = await mkdtemp(join(tmpdir(), 'loutre-tree-shaking-'))
+    try {
+      expect(
+        await runCli(
+          [
+            'build',
+            'tests/fixtures/source-location-tree-shaking-app.ts',
+            '--out-dir',
+            directory,
+          ],
+          output.value,
+        ),
+      ).toBe(0)
+      const source = await readFile(join(directory, 'application.mjs'), 'utf8')
+      expect(source).not.toContain('SOURCE_LOCATION_TREE_SHAKING_SENTINEL')
+      expect(source).not.toContain('CompletelyUnusedSourceLocationSentinel')
+      expect(source).not.toContain('registerSourceLocation')
     } finally {
       await rm(directory, { recursive: true, force: true })
     }

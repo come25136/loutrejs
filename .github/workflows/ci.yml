@@ -69,7 +69,7 @@ jobs:
           if-no-files-found: error
 
   minimum-node-types:
-    name: Minimum API Compatibility / Node.js 22.12.0
+    name: Minimum API Compatibility / Node.js 22.x
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -78,7 +78,7 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-node-workspace
         with:
-          node-version: 22.12.0
+          node-version: 22.x
 
       - name: Install Node.js 22 type baseline
         run: |
@@ -99,7 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [22.12.0, 24.x, 26.x]
+        version: [22.x, 24.x, 26.x]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

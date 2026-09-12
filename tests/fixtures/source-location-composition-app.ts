@@ -8,12 +8,14 @@ import {
   token,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
+import { EventEmitter } from 'node:events'
 
 const __loutreSource = 'user binding' // eslint-disable-line no-underscore-dangle
 const __loutreMemberSource = 'user member binding' // eslint-disable-line no-underscore-dangle
 
 export class RealService {}
 const Alias = RealService
+const ExternalAlias = EventEmitter
 const VALUE = token<string>('source-location.composed-value')
 
 const routes = {
@@ -24,7 +26,7 @@ const routes = {
   },
 } as const
 
-const providers = [provide(VALUE).useValue('value'), Alias]
+const providers = [provide(VALUE).useValue('value'), Alias, ExternalAlias]
 
 const Contract = http.contract(routes)
 const Controller = http.implementation({

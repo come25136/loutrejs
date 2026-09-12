@@ -191,17 +191,14 @@ export function instrumentSourceLocations(
     }
 
     if (declaration.type !== 'VariableDeclaration') continue
-    const annotations: string[] = []
     for (const declarator of declaration.declarations ?? []) {
       if (declarator.id?.type !== 'Identifier' || !declarator.init) continue
       const name = declarator.id.name as string
       const init = unwrapExpression(declarator.init as AstNode)
-      if (!init) continue
-      annotations.push(`${sourceHelper}(${name},${sourceLiteral(init.start)})`)
-      if (init.type === 'CallExpression')
+      if (init?.type === 'CallExpression') {
         inspectKnownCall(init, name, statement.end)
+      }
     }
-    if (annotations.length > 0) add(statement.end, `;${annotations.join(';')}`)
   }
 
   if (insertions.size === 0) return code

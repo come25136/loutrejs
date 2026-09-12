@@ -48,9 +48,9 @@ export async function emitApplication(
     sourcemap: 'inline',
     metafile: true,
     plugins:
-      options.sourceLocations === false
-        ? []
-        : [sourceLocationPlugin(projectRoot)],
+      options.sourceLocations === true
+        ? [sourceLocationPlugin(projectRoot)]
+        : [],
   })
   return Object.keys(result.metafile.inputs).map((path) =>
     resolve(workingDirectory, path),

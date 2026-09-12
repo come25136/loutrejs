@@ -213,7 +213,10 @@ export async function runCli(
       }
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target, { projectRoot: io.cwd })
+      const graph = await loadApplicationGraph(target, {
+        projectRoot: io.cwd,
+        sourceLocations: true,
+      })
       const format = readOption(args, '--format') ?? 'text'
       if (!['text', 'json', 'mermaid'].includes(format)) {
         io.stderr('graph --format must be one of: text, json, mermaid.')
@@ -250,7 +253,10 @@ export async function runCli(
       }
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target, { projectRoot: io.cwd })
+      const graph = await loadApplicationGraph(target, {
+        projectRoot: io.cwd,
+        sourceLocations: true,
+      })
       if (!renderExplanation(graph, subject, io.stdout)) {
         io.stderr(`Target not found: ${subject}`)
         return 1
@@ -311,6 +317,7 @@ export async function runCli(
       const applicationOutput = join(outputDirectory, 'application.mjs')
       await emitApplication(applicationEntry, applicationOutput, {
         projectRoot: io.cwd,
+        sourceLocations: false,
       })
       io.stdout(`Wrote Application: ${applicationOutput}`)
       if (deploymentRuntime) {
@@ -449,6 +456,8 @@ function renderTextGraph(
       write(
         module.name === undefined ? module.id : `${module.name} [${module.id}]`,
       )
+      if (module.source)
+        write(`  source: ${formatSourceLocation(module.source)}`)
       const description = stringAttribute(module, 'description')
       if (description !== undefined) write(`  description: ${description}`)
       write(`  imports: ${data.imports.join(', ') || '(none)'}`)
@@ -459,9 +468,32 @@ function renderTextGraph(
   }
 
   if (subject === 'http') {
+    const executions = new Map(
+      httpExecutions(graph).map((execution) => [
+        execution.name ?? execution.id,
+        execution,
+      ]),
+    )
     for (const route of httpRoutes(graph)) {
       write(`${route.execution}.${route.name} [http]`)
+      const execution = executions.get(route.execution)
+      if (execution?.source) {
+        write(`  controller source: ${formatSourceLocation(execution.source)}`)
+      }
+      if (route.source) {
+        write(`  route source: ${formatSourceLocation(route.source)}`)
+      }
       write(`  ${route.method} ${route.path}`)
+      for (const middleware of route.middlewares) {
+        if (middleware.source) {
+          write(
+            `  middleware ${middleware.name} source: ${formatSourceLocation(middleware.source)}`,
+          )
+        }
+      }
+      if (route.handlerSource) {
+        write(`  handler source: ${formatSourceLocation(route.handlerSource)}`)
+      }
       write(
         `  flow: ${[...route.middlewares.map((middleware) => middleware.name), 'handler'].join(' -> ')}`,
       )
@@ -479,6 +511,9 @@ function renderTextGraph(
   if (subject === 'executions') {
     for (const execution of graph.executions) {
       write(`${execution.executionKind}: ${execution.name ?? execution.id}`)
+      if (execution.source) {
+        write(`  source: ${formatSourceLocation(execution.source)}`)
+      }
     }
     if (graph.executions.length === 0) write('(no executions)')
     return
@@ -515,7 +550,7 @@ function renderDiText(
       const cycle = lineage.includes(edge.to)
       rendered.add(child.id)
       write(
-        `${prefix}${last ? '└──' : '├──'} ${nodeLabel(child)}${cycle ? ' ↺ cycle' : ''}`,
+        `${prefix}${last ? '└──' : '├──'} ${textNodeLabel(child)}${cycle ? ' ↺ cycle' : ''}`,
       )
       if (!cycle) {
         render(edge.to, `${prefix}${last ? '    ' : '│   '}`, [
@@ -528,13 +563,13 @@ function renderDiText(
 
   for (const root of roots) {
     rendered.add(root.id)
-    write(nodeLabel(root))
+    write(textNodeLabel(root))
     render(root.id, '', [root.id])
   }
   for (const node of relevant) {
     if (rendered.has(node.id)) continue
     rendered.add(node.id)
-    write(nodeLabel(node))
+    write(textNodeLabel(node))
     render(node.id, '', [node.id])
   }
   if (relevant.length === 0) write('(no DI nodes)')
@@ -816,6 +851,7 @@ function moduleData(graph: ApplicationModelGraphIR, module: GraphNodeIR) {
   return {
     id: module.id,
     name: module.name,
+    ...(module.source === undefined ? {} : { source: module.source }),
     description: stringAttribute(module, 'description'),
     imports: graph.edges
       .filter((edge) => edge.from === module.id && edge.kind === 'imports')
@@ -1290,6 +1326,13 @@ function groupEdges(edges: readonly GraphEdgeIR[]): Map<string, GraphEdgeIR[]> {
 
 function nodeLabel(node: GraphNodeIR): string {
   return node.name ?? node.id
+}
+
+function textNodeLabel(node: GraphNodeIR): string {
+  const label = nodeLabel(node)
+  return node.source === undefined
+    ? label
+    : `${label} [source: ${formatSourceLocation(node.source)}]`
 }
 
 function stringAttribute(node: GraphNodeIR, name: string): string | undefined {
