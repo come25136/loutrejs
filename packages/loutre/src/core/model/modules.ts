@@ -8,6 +8,7 @@ import type { ProviderModelNode } from './types.js'
 import type { ModelBuildContext } from './context.js'
 import { appendLifecycleNodes } from './lifecycle.js'
 import { snapshotProvider } from './snapshot.js'
+import { getSourceLocation } from '../source-location.js'
 
 export function collectModuleDeclarations(context: ModelBuildContext): void {
   const {
@@ -34,9 +35,11 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
       }
       moduleNames.add(module.definition.name)
     }
+    const moduleSource = getSourceLocation(module.template)
     nodes.push({
       kind: 'module',
       id: moduleId,
+      ...(moduleSource === undefined ? {} : { source: moduleSource }),
       ...(module.definition.name === undefined
         ? {}
         : { name: module.definition.name }),
@@ -49,7 +52,9 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
       if (target) edges.push({ from: moduleId, to: target, kind: 'imports' })
     }
     for (const declaration of module.definition.providers ?? []) {
-      const provider = snapshotProvider(normalizeProvider(declaration))
+      const normalized = normalizeProvider(declaration)
+      const provider = snapshotProvider(normalized)
+      const providerSource = getSourceLocation(declaration)
       const providerId = context.nextProviderId()
       const existingProvider = providerNodes.get(provider.provide)
       if (
@@ -83,6 +88,7 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
         provider,
         moduleId,
         dependencies: collectProviderDependencies(provider),
+        ...(providerSource === undefined ? {} : { source: providerSource }),
       }
       providers.push(provider)
       providerNodes.set(provider.provide, node)

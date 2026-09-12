@@ -23,7 +23,8 @@
   },
   "dependencies": {
     "@loutrejs/loutre": "^0.5.0",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "oxc-parser": "^0.148.0"
   },
   "devDependencies": {
     "tsx": "^4.23.12"

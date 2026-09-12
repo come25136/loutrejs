@@ -224,7 +224,9 @@ describe('Loutre CLI', () => {
         output.value,
       ),
     ).toBe(0)
-    expect(output.stdout.join('\n')).toContain('n0["Module: UsersModule"]')
+    expect(output.stdout.join('\n')).toContain(
+      'n0["Module: UsersModule<br/>integrations/http-crud/src/index.ts:71:28"]',
+    )
   })
 
   it('graph allはApplication Model全体を意味的に接続したJSONを返す', async () => {
@@ -331,6 +333,91 @@ describe('Loutre CLI', () => {
     })
   })
 
+  it('Graph source locationはModel/IRでmachine-readableに保持される', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--entry',
+          'tests/fixtures/source-location-app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+
+    const graph = JSON.parse(output.stdout.join('\n'))
+    const node = (kind: string, label: string) =>
+      graph.nodes.find(
+        (candidate: { kind: string; label: string }) =>
+          candidate.kind === kind && candidate.label === label,
+      )
+    const source = (line: number, column: number) => ({
+      file: 'tests/fixtures/source-location-app.ts',
+      line,
+      column,
+    })
+
+    expect(node('module', 'SourceModule')?.source).toEqual(source(53, 29))
+    expect(node('provider', 'ClassService')).toMatchObject({
+      attributes: { providerKind: 'class' },
+      source: source(11, 8),
+    })
+    expect(node('provider', 'source-location.value')).toMatchObject({
+      attributes: { providerKind: 'value' },
+      source: source(58, 5),
+    })
+    expect(node('provider', 'source-location.factory')).toMatchObject({
+      attributes: { providerKind: 'factory' },
+      source: source(59, 5),
+    })
+    expect(node('provider', 'source-location.conditional')).toMatchObject({
+      attributes: { providerKind: 'conditional' },
+      source: source(60, 5),
+    })
+    expect(node('execution', 'SourceController')?.source).toEqual(
+      source(43, 33),
+    )
+    expect(node('entrypoint', 'POST /source')?.source).toEqual(source(33, 3))
+    expect(node('middleware', 'audit')?.source).toEqual(source(25, 32))
+    expect(node('handler', 'SourceController.create')?.source).toEqual(
+      source(47, 5),
+    )
+  })
+
+  it('Mermaid node labelへproject-relative source locationを表示する', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'mermaid',
+          '--theme',
+          'dark',
+          '--entry',
+          'tests/fixtures/source-location-app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+    const graph = output.stdout.join('\n')
+    expect(graph).toContain(
+      'Provider: ClassService<br/>tests/fixtures/source-location-app.ts:11:8',
+    )
+    expect(graph).toContain(
+      'Route: POST /source<br/>tests/fixtures/source-location-app.ts:33:3',
+    )
+    expect(graph).toContain(
+      'Handler: SourceController.create<br/>tests/fixtures/source-location-app.ts:47:5',
+    )
+    expect(graph).not.toContain(process.cwd())
+  })
+
   it.each(['text', 'json', 'mermaid'])(
     'graph allは%s formatで利用できる',
     async (format) => {
@@ -370,7 +457,7 @@ describe('Loutre CLI', () => {
     const lines = output.stdout.join('\n').split('\n')
     expect(
       lines.filter((line) =>
-        line.includes('["HTTP Controller: UsersController"]'),
+        line.includes('["HTTP Controller: UsersController<br/>'),
       ),
     ).toHaveLength(1)
     expect(lines.some((line) => line.includes('|"get"|'))).toBe(true)
@@ -495,7 +582,7 @@ describe('Loutre CLI', () => {
     const lines = output.stdout.join('\n').split('\n')
     expect(
       lines.filter((line) =>
-        line.includes('["HTTP Controller: UsersController"]'),
+        line.includes('["HTTP Controller: UsersController<br/>'),
       ),
     ).toHaveLength(1)
     expect(lines).toContain('  subgraph sg0["Module: UsersModule"]')

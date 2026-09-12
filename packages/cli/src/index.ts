@@ -116,6 +116,7 @@ interface GraphViewNode {
     | 'message-port-method'
     | 'websocket-route'
   readonly attributes?: Readonly<Record<string, JsonValue>>
+  readonly source?: GraphNodeIR['source']
 }
 
 interface GraphViewEdge {
@@ -160,7 +161,7 @@ export async function runCli(
     case 'check': {
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, { projectRoot: io.cwd })
       if (!hasErrorDiagnostics(graph.diagnostics)) {
         if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
         io.stdout('Loutre Application Model is valid.')
@@ -188,7 +189,7 @@ export async function runCli(
       }
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, { projectRoot: io.cwd })
       const required = requiredCapabilities(graph)
       const check = checkRuntimeSupport(required, runtime)
       io.stdout(`Runtime: ${runtime.runtime}`)
@@ -212,7 +213,7 @@ export async function runCli(
       }
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, { projectRoot: io.cwd })
       const format = readOption(args, '--format') ?? 'text'
       if (!['text', 'json', 'mermaid'].includes(format)) {
         io.stderr('graph --format must be one of: text, json, mermaid.')
@@ -249,7 +250,7 @@ export async function runCli(
       }
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, { projectRoot: io.cwd })
       if (!renderExplanation(graph, subject, io.stdout)) {
         io.stderr(`Target not found: ${subject}`)
         return 1
@@ -274,7 +275,9 @@ export async function runCli(
         return 2
       }
       const applicationEntry = resolve(io.cwd, subject)
-      const graph = await loadApplicationGraph(applicationEntry)
+      const graph = await loadApplicationGraph(applicationEntry, {
+        projectRoot: io.cwd,
+      })
       if (hasErrorDiagnostics(graph.diagnostics)) {
         writeDiagnostics(graph, io)
         return 1
@@ -306,7 +309,9 @@ export async function runCli(
       )
       await mkdir(outputDirectory, { recursive: true })
       const applicationOutput = join(outputDirectory, 'application.mjs')
-      await emitApplication(applicationEntry, applicationOutput)
+      await emitApplication(applicationEntry, applicationOutput, {
+        projectRoot: io.cwd,
+      })
       io.stdout(`Wrote Application: ${applicationOutput}`)
       if (deploymentRuntime) {
         const deploymentOutput = join(outputDirectory, 'entry.mjs')
@@ -716,6 +721,7 @@ function renderExplanation(
   if (node.module) write(`managed by: ${node.module}`)
   if (node.executionKind) write(`execution: ${node.executionKind}`)
   if (node.extension) write(`extension: ${node.extension.name}`)
+  if (node.source) write(`source: ${formatSourceLocation(node.source)}`)
   for (const [key, value] of Object.entries(node.attributes ?? {})) {
     if (
       typeof value === 'string' ||
@@ -827,6 +833,7 @@ function moduleData(graph: ApplicationModelGraphIR, module: GraphNodeIR) {
 interface HttpMiddlewareProjection {
   readonly name: string
   readonly capabilities: readonly string[]
+  readonly source?: GraphNodeIR['source']
 }
 
 interface HttpRouteProjection {
@@ -836,6 +843,8 @@ interface HttpRouteProjection {
   readonly path: string
   readonly middlewares: readonly HttpMiddlewareProjection[]
   readonly responses?: JsonValue
+  readonly source?: GraphNodeIR['source']
+  readonly handlerSource?: GraphNodeIR['source']
 }
 
 function httpExecutions(
@@ -872,6 +881,9 @@ function httpRoutes(graph: ApplicationModelGraphIR): HttpRouteProjection[] {
                           typeof capability === 'string',
                       )
                     : [],
+                  ...(sourceLocation(middleware.source) === undefined
+                    ? {}
+                    : { source: sourceLocation(middleware.source) }),
                 },
               ]
             },
@@ -884,6 +896,12 @@ function httpRoutes(graph: ApplicationModelGraphIR): HttpRouteProjection[] {
           method,
           path,
           middlewares,
+          ...(sourceLocation(route.source) === undefined
+            ? {}
+            : { source: sourceLocation(route.source) }),
+          ...(sourceLocation(route.handlerSource) === undefined
+            ? {}
+            : { handlerSource: sourceLocation(route.handlerSource) }),
           ...(route.responses === undefined
             ? {}
             : { responses: route.responses }),
@@ -899,6 +917,7 @@ function renderGraphViewText(
 ): void {
   for (const node of view.nodes) {
     write(`${node.kind}: ${node.label} [${node.id}]`)
+    if (node.source) write(`  source: ${formatSourceLocation(node.source)}`)
   }
   if (view.nodes.length === 0) write('(no graph nodes)')
   write('edges:')
@@ -981,6 +1000,7 @@ function projectGraphViewNode(node: GraphNodeIR): GraphViewNode {
       : { capabilities: node.capabilities }),
     ...(node.extension === undefined ? {} : { extension: node.extension }),
     ...(node.attributes === undefined ? {} : { attributes: node.attributes }),
+    ...(node.source === undefined ? {} : { source: node.source }),
   }
 }
 
@@ -1014,12 +1034,14 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
       const path = typeof route.path === 'string' ? route.path : undefined
       if (!name || !method || !path) continue
       const routeId = entrypointId('http', execution.id, name)
+      const routeSource = sourceLocation(route.source)
       nodes.push({
         id: routeId,
         kind: 'entrypoint',
         entrypointKind: 'http-route',
         label: `${method} ${path}`,
         ...(execution.module === undefined ? {} : { module: execution.module }),
+        ...(routeSource === undefined ? {} : { source: routeSource }),
         attributes: { name, method, path },
       })
       edges.push({
@@ -1043,6 +1065,7 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
                 typeof capability === 'string',
             )
           : []
+        const middlewareSource = sourceLocation(middleware.source)
         nodes.push({
           id: middlewareId,
           kind: 'middleware',
@@ -1051,6 +1074,9 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
             ? {}
             : { module: execution.module }),
           ...(capabilities.length === 0 ? {} : { capabilities }),
+          ...(middlewareSource === undefined
+            ? {}
+            : { source: middlewareSource }),
           attributes: { route: name, index },
         })
         edges.push({ from: previousId, to: middlewareId, kind: 'flows-to' })
@@ -1065,11 +1091,14 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
       }
 
       const handlerId = httpHandlerId(execution.id, name)
+      const handlerSource =
+        sourceLocation(route.handlerSource) ?? execution.source
       nodes.push({
         id: handlerId,
         kind: 'handler',
         label: `${execution.name ?? execution.id}.${name}`,
         ...(execution.module === undefined ? {} : { module: execution.module }),
+        ...(handlerSource === undefined ? {} : { source: handlerSource }),
         attributes: { route: name },
       })
       edges.push({ from: previousId, to: handlerId, kind: 'flows-to' })
@@ -1184,7 +1213,10 @@ function mermaidNodeLabel(node: GraphViewNode): string {
         return 'Runtime Capability'
     }
   })()
-  return `${role}: ${node.label}`
+  const label = `${role}: ${node.label}`
+  return node.source === undefined
+    ? label
+    : `${label}\n${formatSourceLocation(node.source)}`
 }
 
 type MermaidNodeClass =
@@ -1268,6 +1300,25 @@ function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function sourceLocation(value: unknown): GraphNodeIR['source'] | undefined {
+  if (!isRecord(value) || typeof value.file !== 'string') return undefined
+  const line = typeof value.line === 'number' ? value.line : undefined
+  const column = typeof value.column === 'number' ? value.column : undefined
+  return {
+    file: value.file,
+    ...(line === undefined ? {} : { line }),
+    ...(column === undefined ? {} : { column }),
+  }
+}
+
+function formatSourceLocation(
+  source: NonNullable<GraphNodeIR['source']>,
+): string {
+  if (source.line === undefined) return source.file
+  if (source.column === undefined) return `${source.file}:${source.line}`
+  return `${source.file}:${source.line}:${source.column}`
+}
+
 function requiredCapabilities(graph: ApplicationModelGraphIR): string[] {
   return [
     ...new Set(
@@ -1282,6 +1333,7 @@ function mermaidText(value: string): string {
     .replaceAll('"', '&quot;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
+    .replaceAll('\n', '<br/>')
 }
 
 const valueOptions = new Set([
