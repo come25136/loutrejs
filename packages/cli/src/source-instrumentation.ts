@@ -418,16 +418,17 @@ function walkAst(root: AstNode, visit: (node: AstNode) => void): void {
 }
 
 function createSwcPositionMapper(code: string): (position: number) => number {
-  const indexByByteOffset = new Map<number, number>([[0, 0]])
+  const sourceStart = code.charCodeAt(0) === 0xfeff ? 1 : 0
+  const indexByByteOffset = new Map<number, number>([[0, sourceStart]])
   let byteOffset = 0
-  for (let index = 0; index < code.length;) {
+  for (let index = sourceStart; index < code.length;) {
     const codePoint = code.codePointAt(index)!
     byteOffset += utf8Length(codePoint)
     index += codePoint > 0xffff ? 2 : 1
     indexByByteOffset.set(byteOffset, index)
   }
   return (position: number) =>
-    indexByByteOffset.get(Math.max(0, position - 1)) ?? 0
+    indexByByteOffset.get(Math.max(0, position - 1)) ?? sourceStart
 }
 
 function utf8Length(codePoint: number): number {
@@ -442,7 +443,7 @@ function positionAt(
   offset: number,
 ): { line: number; column: number } {
   let line = 1
-  let lineStart = 0
+  let lineStart = code.charCodeAt(0) === 0xfeff ? 1 : 0
   for (let index = 0; index < offset; index++) {
     if (code.charCodeAt(index) !== 10) continue
     line += 1

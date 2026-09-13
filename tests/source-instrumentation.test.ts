@@ -1,3 +1,4 @@
+import { parseSync } from '@swc/core'
 import { instrumentSourceLocations } from '../packages/cli/src/source-instrumentation.js'
 
 describe('CLI source instrumentation', () => {
@@ -54,6 +55,40 @@ void Module
       'const provider = __loutreSource(provide(VALUE).useValue',
     )
     expect(transformed).toContain('const Module = __loutreSource(defineModule')
+  })
+
+  it('UTF-8 BOM付きclassでもSWC spanを正しいJS indexへ変換する', () => {
+    const source = `﻿class Service {}
+export { Service }
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/service.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('class Service {};__loutreSource(Service')
+    expect(transformed).toContain('"file":"src/service.ts","line":1,"column":1')
+    expect(() =>
+      parseSync(transformed, { syntax: 'typescript', target: 'esnext' }),
+    ).not.toThrow()
+  })
+
+  it('UTF-8 BOM付きdefine APIでもSWC spanを正しいJS indexへ変換する', () => {
+    const source = `﻿import { defineModule } from '@loutrejs/loutre'
+const M = defineModule(() => ({}))
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('const M = __loutreSource(defineModule')
+    expect(transformed).toContain('"file":"src/app.ts","line":2,"column":11')
+    expect(() =>
+      parseSync(transformed, { syntax: 'typescript', target: 'esnext' }),
+    ).not.toThrow()
   })
 
   it('日本語と絵文字が前にあってもUTF-8 byte spanでcodeを壊さない', () => {

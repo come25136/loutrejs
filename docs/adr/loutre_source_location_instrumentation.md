@@ -194,6 +194,7 @@ Instrumentationは元sourceの実行semanticsを壊してはならない。
 - user codeとhelper名の衝突回避
 - TypeScript / TSX / JSX / ESMのparse可能性
 - Unicodeを含むsourceの正しいinsert位置
+- UTF-8 BOM付きsourceの正しいspan / insert位置
 
 Source metadata取得のためにApplication semanticsを変更するtransformは認めない。
 
@@ -281,6 +282,7 @@ Source Locationの過去のmerge blockerは、同じ論点を再発させない�
 - imported APIと同名bindingのshadowing
 - `let` reassignment等を誤って追跡しない
 - Unicode / UTF-8 byte span
+- UTF-8 BOM付きsource
 - type-only import
 - namespace import
 - function / block内のnested class provider

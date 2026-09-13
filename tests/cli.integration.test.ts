@@ -455,6 +455,44 @@ describe('Loutre CLI', () => {
     expect(node('provider', 'EventEmitter')?.source).toBeUndefined()
   })
 
+  it('UTF-8 BOM付きApplicationでもsource instrumentationでcodeを壊さない', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--entry',
+          'tests/fixtures/source-location-bom-app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+
+    const graph = JSON.parse(output.stdout.join('\n'))
+    const provider = graph.nodes.find(
+      (node: { kind: string; label: string }) =>
+        node.kind === 'provider' && node.label === 'BomService',
+    )
+    const module = graph.nodes.find(
+      (node: { kind: string; label: string }) =>
+        node.kind === 'module' && node.label === 'BomModule',
+    )
+
+    expect(provider?.source).toEqual({
+      file: 'tests/fixtures/source-location-bom-app.ts',
+      line: 3,
+      column: 1,
+    })
+    expect(module?.source).toEqual({
+      file: 'tests/fixtures/source-location-bom-app.ts',
+      line: 5,
+      column: 16,
+    })
+  })
+
   it('namespace importとnested class providerでもsource locationを保持する', async () => {
     const output = io()
     expect(
