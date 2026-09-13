@@ -56,6 +56,25 @@ void Module
     expect(transformed).toContain('const Module = __loutreSource(defineModule')
   })
 
+  it('日本語と絵文字が前にあってもOxc offsetでcodeを壊さない', () => {
+    const source = `import { defineModule } from '@loutrejs/loutre'
+const marker = '日本語🦦'; const Module = defineModule(() => ({ name: 'App' }))
+void marker
+void Module
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain(
+      "const marker = '日本語🦦'; const Module = __loutreSource(defineModule",
+    )
+    expect(transformed).toContain('"file":"src/app.ts","line":2,"column":40')
+    expect(transformed).toContain('void marker\nvoid Module')
+  })
+
   it('aliasや未知callへgeneric source registrationを追加しない', () => {
     const source = `import { EventEmitter } from 'node:events'
 import { defineModule } from '@loutrejs/loutre'
