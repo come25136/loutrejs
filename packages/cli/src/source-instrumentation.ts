@@ -48,12 +48,21 @@ export function instrumentSourceLocations(
   const apis = collectImportedApis(program)
   const usedIdentifiers = collectIdentifierNames(program)
   const sourceHelper = uniqueHelperName('__loutreSource', usedIdentifiers)
-  const insertions = new Map<number, string[]>()
+  const helperImportPriority = 0
+  const sourceInsertionPriority = 1
+  const insertions = new Map<
+    number,
+    Array<{ text: string; priority: number }>
+  >()
   const wrapped = new Set<string>()
 
-  const add = (position: number, text: string) => {
+  const add = (
+    position: number,
+    text: string,
+    priority = sourceInsertionPriority,
+  ) => {
     const current = insertions.get(position) ?? []
-    current.push(text)
+    current.push({ text, priority })
     insertions.set(position, current)
   }
   const sourceLiteral = (offset: number) =>
@@ -133,11 +142,17 @@ export function instrumentSourceLocations(
   add(
     importPosition.position,
     `${importPosition.needsSemicolon ? ';' : ''}import{registerSourceLocation as ${sourceHelper}}from"@loutrejs/loutre";`,
+    helperImportPriority,
   )
 
   let output = code
   for (const position of [...insertions.keys()].toSorted((a, b) => b - a)) {
-    output = `${output.slice(0, position)}${insertions.get(position)!.join('')}${output.slice(position)}`
+    const text = insertions
+      .get(position)!
+      .toSorted((a, b) => a.priority - b.priority)
+      .map((insertion) => insertion.text)
+      .join('')
+    output = `${output.slice(0, position)}${text}${output.slice(position)}`
   }
   return output
 }
@@ -443,7 +458,14 @@ function positionAt(
   let line = 1
   let lineStart = code.charCodeAt(0) === 0xfeff ? 1 : 0
   for (let index = 0; index < offset; index++) {
-    if (code.charCodeAt(index) !== 10) continue
+    const char = code.charCodeAt(index)
+    if (char === 13) {
+      line += 1
+      if (code.charCodeAt(index + 1) === 10 && index + 1 < offset) index += 1
+      lineStart = index + 1
+      continue
+    }
+    if (char !== 10 && char !== 0x2028 && char !== 0x2029) continue
     line += 1
     lineStart = index + 1
   }

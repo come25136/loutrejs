@@ -195,6 +195,8 @@ Instrumentationは元sourceの実行semanticsを壊してはならない。
 - TypeScript / TSX / JSX / ESMのparse可能性
 - Unicodeを含むsourceの正しいinsert位置
 - UTF-8 BOM付きsourceの正しいspan / insert位置
+- `CR` / `LF` / `CRLF` / `U+2028` / `U+2029` をECMAScript line terminatorとして正しくline / columnへ反映する
+- helper importとsource wrapperが同じoffsetへ挿入される場合も、helper importを先に出力してvalid sourceをSyntaxErrorへ変えない
 
 Source metadata取得のためにApplication semanticsを変更するtransformは認めない。
 
@@ -274,6 +276,7 @@ Source Locationの過去のmerge blockerは、同じ論点を再発させない�
 - aliasでsourceが上書きされない
 - external class / external call resultへlocal sourceを付けない
 - `declare class`をruntime instrumentationしない
+- ファイル先頭 / shebang直後 / directive直後でhelper importとcall wrapperが同じoffsetになってもcodeを壊さない
 - shebang / directive prologueを壊さない
 - helper名衝突を避ける
 - production buildでtree-shakingを壊さない
@@ -283,6 +286,7 @@ Source Locationの過去のmerge blockerは、同じ論点を再発させない�
 - `let` reassignment等を誤って追跡しない
 - Unicode / UTF-8 byte span
 - UTF-8 BOM付きsource
+- CR / CRLF / U+2028 / U+2029 line terminator
 - type-only import
 - namespace import
 - function / block内のnested class provider

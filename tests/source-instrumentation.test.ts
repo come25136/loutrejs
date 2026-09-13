@@ -26,6 +26,44 @@ void Module
     expect(transformed).toContain('__loutreSource$1(RealService')
   })
 
+  it.each([
+    [
+      'ファイル先頭',
+      `http.contract({})
+import { http } from '@loutrejs/loutre/http'
+`,
+    ],
+    [
+      'shebang直後',
+      `#!/usr/bin/env node
+http.contract({})
+import { http } from '@loutrejs/loutre/http'
+`,
+    ],
+    [
+      'directive直後',
+      `'use strict';http.contract({});import { http } from '@loutrejs/loutre/http'
+`,
+    ],
+  ] as const)(
+    'helper importとcall wrapperが同じoffsetでもcodeを壊さない: %s',
+    (_name, source) => {
+      const transformed = instrumentSourceLocations(
+        source,
+        '/repo/src/app.ts',
+        '/repo',
+      )
+
+      const helper = transformed.indexOf('import{registerSourceLocation as')
+      const wrapper = transformed.indexOf('__loutreSource(http.contract')
+      expect(helper).toBeGreaterThanOrEqual(0)
+      expect(wrapper).toBeGreaterThan(helper)
+      expect(() =>
+        parseSync(transformed, { syntax: 'typescript', target: 'esnext' }),
+      ).not.toThrow()
+    },
+  )
+
   it('define系APIのcallsiteだけsource registrationする', () => {
     const source = `import { defineModule, provide, token } from '@loutrejs/loutre'
 import { basicAuth, http } from '@loutrejs/loutre/http'
@@ -90,6 +128,25 @@ const M = defineModule(() => ({}))
       parseSync(transformed, { syntax: 'typescript', target: 'esnext' }),
     ).not.toThrow()
   })
+
+  it.each([
+    ['CR', '\r'],
+    ['CRLF', '\r\n'],
+    ['LS', '\u2028'],
+    ['PS', '\u2029'],
+  ] as const)(
+    '%s line terminatorでもsource line/columnを正しく数える',
+    (_name, lineTerminator) => {
+      const source = `import { defineModule } from '@loutrejs/loutre'${lineTerminator}const Module = defineModule(() => ({}))`
+      const transformed = instrumentSourceLocations(
+        source,
+        '/repo/src/app.ts',
+        '/repo',
+      )
+
+      expect(transformed).toContain('"file":"src/app.ts","line":2,"column":16')
+    },
+  )
 
   it('日本語と絵文字が前にあってもUTF-8 byte spanでcodeを壊さない', () => {
     const source = `import { defineModule } from '@loutrejs/loutre'
