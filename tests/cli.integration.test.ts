@@ -649,6 +649,30 @@ describe('Loutre CLI', () => {
     },
   )
 
+  it('Mermaid Markdown String内のbacktickをentity escapeする', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'mermaid',
+          '--entry',
+          'tests/fixtures/source-location-`backtick`-app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+
+    const graph = output.stdout.join('\n')
+    expect(graph).toContain(
+      '`**Provider: provider#96;name**<br/>*↳ tests/fixtures/source-location-#96;backtick#96;-app.ts:9*`',
+    )
+    expect(graph).toContain('Module: Backtick#96;Module')
+    expect(graph).not.toContain('provider`name')
+  })
+
   it('Mermaid node labelへproject-relative source locationを表示する', async () => {
     const output = io()
     expect(

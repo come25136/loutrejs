@@ -623,7 +623,7 @@ function renderMermaidGraph(
   const declared = new Set<string>()
   const declareNode = (candidate: GraphViewNode, indent: string) => {
     const id = ids.get(candidate.id)!
-    lines.push(`${indent}${id}["${mermaidText(mermaidNodeLabel(candidate))}"]`)
+    lines.push(`${indent}${id}["${mermaidNodeLabel(candidate)}"]`)
     declared.add(candidate.id)
   }
 
@@ -1244,10 +1244,10 @@ function mermaidNodeLabel(node: GraphViewNode): string {
         return 'Runtime Capability'
     }
   })()
-  const label = `${role}: ${node.label}`
-  return node.source === undefined
-    ? label
-    : `\`**${label}**\n*↳ ${formatMermaidSourceLocation(node.source)}*\``
+  const label = mermaidText(`${role}: ${node.label}`)
+  if (node.source === undefined) return label
+  const source = mermaidText(formatMermaidSourceLocation(node.source))
+  return `\`**${label}**<br/>*↳ ${source}*\``
 }
 
 type MermaidNodeClass =
@@ -1383,6 +1383,7 @@ function mermaidText(value: string): string {
     .replaceAll('"', '&quot;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
+    .replaceAll('`', '#96;')
     .replaceAll('\n', '<br/>')
 }
 
