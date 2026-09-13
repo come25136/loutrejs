@@ -223,6 +223,8 @@ Application Modelから独立してraw Module DefinitionをwalkするRuntime gra
 
 OpenAPI等のprotocol-specific toolingはCore Graph IRそのものへHTTP semanticsを埋め込まず、HTTP Extensionが所有するcompiled contributionから生成する。
 
+Graph / Explainへ付与するSource Locationの意味、instrumentation、soundness境界、parser/bundler責務は[`loutre_source_location_instrumentation.md`](./loutre_source_location_instrumentation.md)を正本とする。Source LocationのためにRuntimeやCLIがraw Definitionを別経路で再解釈しない。
+
 ## 8. HTTPに対する含意
 
 Application Modelを正本とするため、HTTP Runtime実装の都合でContract semanticsを暗黙に変更しない。

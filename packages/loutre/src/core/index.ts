@@ -119,6 +119,12 @@ export type {
 } from './provider.js'
 export type { RuntimeInputContract, RuntimeInputKey } from './runtime-input.js'
 export {
+  getSourceLocation,
+  inheritSourceLocation,
+  registerSourceLocation,
+} from './source-location.js'
+export type { SourceLocation } from './source-location.js'
+export {
   SchemaValidationError,
   supportsJsonSchema,
   validateSchema,

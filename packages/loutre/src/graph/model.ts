@@ -8,6 +8,7 @@ import {
   type ApplicationModelNode,
   type Diagnostic,
   type ExecutionModelNode,
+  type SourceLocation,
 } from '../core/index.js'
 
 export type JsonPrimitive = string | number | boolean | null
@@ -29,6 +30,7 @@ export interface GraphNodeIR {
     readonly metadata?: JsonValue
   }
   readonly attributes?: Readonly<Record<string, JsonValue>>
+  readonly source?: SourceLocation
 }
 
 export interface GraphEdgeIR {
@@ -82,6 +84,7 @@ function projectCoreNode(
       return {
         id: node.id,
         kind: node.kind,
+        ...(node.source === undefined ? {} : { source: node.source }),
         ...(node.name === undefined ? {} : { name: node.name }),
         ...(node.description === undefined
           ? {}
@@ -93,6 +96,7 @@ function projectCoreNode(
         kind: node.kind,
         name: tokenName(node.token),
         module: node.moduleId,
+        ...(node.source === undefined ? {} : { source: node.source }),
         attributes: {
           providerKind: node.provider.kind,
           scope: node.provider.scope,
@@ -104,12 +108,14 @@ function projectCoreNode(
         kind: node.kind,
         name: node.phase,
         module: node.moduleId,
+        ...(node.source === undefined ? {} : { source: node.source }),
       }
     case 'framework':
       return {
         id: node.id,
         kind: node.kind,
         name: node.name,
+        ...(node.source === undefined ? {} : { source: node.source }),
         attributes: { frameworkKind: node.frameworkKind },
       }
   }
@@ -168,6 +174,7 @@ function projectExecutionBase(execution: ExecutionModelNode): GraphNodeIR {
     module: execution.moduleId,
     executionKind: execution.executionKind,
     capabilities: execution.capabilities.map((capability) => capability.id),
+    ...(execution.source === undefined ? {} : { source: execution.source }),
   }
 }
 

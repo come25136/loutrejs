@@ -38,7 +38,98 @@ const runtimes: Readonly<Record<string, RuntimeSupportProfile>> = {
 const runtimeNames = Object.keys(runtimes)
 const deploymentRuntimes = ['aws-lambda', 'cloudflare-workers', 'deno'] as const
 type DeploymentRuntime = (typeof deploymentRuntimes)[number]
-type GraphSubject = 'modules' | 'di' | 'http' | 'runtime' | 'executions'
+type GraphSubject = 'all' | 'modules' | 'di' | 'http' | 'runtime' | 'executions'
+type MermaidThemeName = 'light' | 'dark'
+
+const mermaidThemes = {
+  light: {
+    canvasBackground: '#FFFFFF',
+    foreground: '#111827',
+    defaultEdge: '#64748B',
+    edgeLabelText: '#111827',
+    edgeLabelBackground: '#FFFFFF',
+    nodes: {
+      moduleNode: { fill: '#EDE9FE', stroke: '#6D28D9', text: '#2E1065' },
+      provider: { fill: '#DCFCE7', stroke: '#15803D', text: '#14532D' },
+      controller: { fill: '#DBEAFE', stroke: '#1D4ED8', text: '#1E3A8A' },
+      execution: { fill: '#CFFAFE', stroke: '#0E7490', text: '#164E63' },
+      route: { fill: '#FEF3C7', stroke: '#B45309', text: '#78350F' },
+      middleware: { fill: '#F3E8FF', stroke: '#7E22CE', text: '#581C87' },
+      handler: { fill: '#FFEDD5', stroke: '#C2410C', text: '#7C2D12' },
+      runtimeCapability: {
+        fill: '#F3F4F6',
+        stroke: '#4B5563',
+        text: '#111827',
+      },
+    },
+    moduleSubgraph: { fill: '#F8FAFC', stroke: '#6D28D9', text: '#111827' },
+    endpointSubgraph: { fill: '#FFFBEB', stroke: '#B45309', text: '#111827' },
+  },
+  dark: {
+    canvasBackground: '#020617',
+    foreground: '#F8FAFC',
+    defaultEdge: '#94A3B8',
+    edgeLabelText: '#F8FAFC',
+    edgeLabelBackground: '#111827',
+    nodes: {
+      moduleNode: { fill: '#312E81', stroke: '#818CF8', text: '#FFFFFF' },
+      provider: { fill: '#14532D', stroke: '#4ADE80', text: '#FFFFFF' },
+      controller: { fill: '#1E3A8A', stroke: '#60A5FA', text: '#FFFFFF' },
+      execution: { fill: '#164E63', stroke: '#22D3EE', text: '#FFFFFF' },
+      route: { fill: '#78350F', stroke: '#FBBF24', text: '#FFFFFF' },
+      middleware: { fill: '#581C87', stroke: '#C084FC', text: '#FFFFFF' },
+      handler: { fill: '#7C2D12', stroke: '#FB923C', text: '#FFFFFF' },
+      runtimeCapability: {
+        fill: '#374151',
+        stroke: '#9CA3AF',
+        text: '#FFFFFF',
+      },
+    },
+    moduleSubgraph: { fill: '#0F172A', stroke: '#818CF8', text: '#FFFFFF' },
+    endpointSubgraph: { fill: '#1C1917', stroke: '#F59E0B', text: '#FFFFFF' },
+  },
+} as const
+
+function isMermaidThemeName(value: string): value is MermaidThemeName {
+  return value === 'light' || value === 'dark'
+}
+
+type GraphViewNodeKind =
+  | 'module'
+  | 'provider'
+  | 'execution'
+  | 'entrypoint'
+  | 'middleware'
+  | 'handler'
+  | 'runtime-capability'
+
+interface GraphViewNode {
+  readonly id: string
+  readonly kind: GraphViewNodeKind
+  readonly label: string
+  readonly module?: string
+  readonly executionKind?: string
+  readonly capabilities?: readonly string[]
+  readonly extension?: GraphNodeIR['extension']
+  readonly entrypointKind?:
+    | 'http-route'
+    | 'message-port-method'
+    | 'websocket-route'
+  readonly attributes?: Readonly<Record<string, JsonValue>>
+  readonly source?: GraphNodeIR['source']
+}
+
+interface GraphViewEdge {
+  readonly from: string
+  readonly to: string
+  readonly kind: GraphEdgeIR['kind'] | 'handles' | 'flows-to'
+  readonly label?: string
+}
+
+interface GraphView {
+  readonly nodes: readonly GraphViewNode[]
+  readonly edges: readonly GraphViewEdge[]
+}
 
 export async function runCli(
   args: readonly string[],
@@ -70,7 +161,7 @@ export async function runCli(
     case 'check': {
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, { projectRoot: io.cwd })
       if (!hasErrorDiagnostics(graph.diagnostics)) {
         if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
         io.stdout('Loutre Application Model is valid.')
@@ -98,7 +189,7 @@ export async function runCli(
       }
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, { projectRoot: io.cwd })
       const required = requiredCapabilities(graph)
       const check = checkRuntimeSupport(required, runtime)
       io.stdout(`Runtime: ${runtime.runtime}`)
@@ -113,22 +204,41 @@ export async function runCli(
     case 'graph': {
       if (!isGraphSubject(subject)) {
         io.stderr(
-          'graph requires one of: modules, di, http, executions, runtime.',
+          'graph requires one of: all, modules, di, executions, http, runtime.',
+        )
+        io.stderr(
+          'Usage: loutre graph <subject> --entry <entry> [--format text|json|mermaid] [--theme light|dark]',
         )
         return 2
       }
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, {
+        projectRoot: io.cwd,
+        sourceLocations: true,
+      })
       const format = readOption(args, '--format') ?? 'text'
       if (!['text', 'json', 'mermaid'].includes(format)) {
         io.stderr('graph --format must be one of: text, json, mermaid.')
         return 2
       }
+      const themeOption = readOption(args, '--theme')
+      let mermaidTheme: MermaidThemeName = 'light'
+      if (themeOption !== undefined) {
+        if (!isMermaidThemeName(themeOption)) {
+          io.stderr('graph --theme must be one of: light, dark.')
+          return 2
+        }
+        if (format !== 'mermaid') {
+          io.stderr('graph --theme is only supported with --format mermaid.')
+          return 2
+        }
+        mermaidTheme = themeOption
+      }
       if (format === 'json') {
         io.stdout(`${JSON.stringify(graphData(graph, subject), null, 2)}\n`)
       } else if (format === 'mermaid') {
-        io.stdout(renderMermaidGraph(graph, subject))
+        io.stdout(renderMermaidGraph(graph, subject, mermaidTheme))
       } else {
         renderTextGraph(graph, subject, io.stdout)
       }
@@ -143,7 +253,10 @@ export async function runCli(
       }
       const target = entry()
       if (!target) return 2
-      const graph = await loadApplicationGraph(target)
+      const graph = await loadApplicationGraph(target, {
+        projectRoot: io.cwd,
+        sourceLocations: true,
+      })
       if (!renderExplanation(graph, subject, io.stdout)) {
         io.stderr(`Target not found: ${subject}`)
         return 1
@@ -168,7 +281,9 @@ export async function runCli(
         return 2
       }
       const applicationEntry = resolve(io.cwd, subject)
-      const graph = await loadApplicationGraph(applicationEntry)
+      const graph = await loadApplicationGraph(applicationEntry, {
+        projectRoot: io.cwd,
+      })
       if (hasErrorDiagnostics(graph.diagnostics)) {
         writeDiagnostics(graph, io)
         return 1
@@ -200,7 +315,10 @@ export async function runCli(
       )
       await mkdir(outputDirectory, { recursive: true })
       const applicationOutput = join(outputDirectory, 'application.mjs')
-      await emitApplication(applicationEntry, applicationOutput)
+      await emitApplication(applicationEntry, applicationOutput, {
+        projectRoot: io.cwd,
+        sourceLocations: false,
+      })
       io.stdout(`Wrote Application: ${applicationOutput}`)
       if (deploymentRuntime) {
         const deploymentOutput = join(outputDirectory, 'entry.mjs')
@@ -264,6 +382,7 @@ function renderDeploymentEntry(runtime: DeploymentRuntime): string {
 
 function isGraphSubject(value: string | undefined): value is GraphSubject {
   return (
+    value === 'all' ||
     value === 'modules' ||
     value === 'di' ||
     value === 'http' ||
@@ -283,6 +402,14 @@ function graphData(
   subject: GraphSubject,
 ): unknown {
   switch (subject) {
+    case 'all': {
+      const view = buildGraphView(graph, subject)
+      return {
+        nodes: view.nodes,
+        edges: view.edges,
+        diagnostics: graph.diagnostics,
+      }
+    }
     case 'modules':
       return {
         modules: graph.modules.map((module) => moduleData(graph, module)),
@@ -318,12 +445,19 @@ function renderTextGraph(
   subject: GraphSubject,
   write: (value: string) => void,
 ): void {
+  if (subject === 'all') {
+    renderGraphViewText(buildGraphView(graph, subject), write)
+    return
+  }
+
   if (subject === 'modules') {
     for (const module of graph.modules) {
       const data = moduleData(graph, module)
       write(
         module.name === undefined ? module.id : `${module.name} [${module.id}]`,
       )
+      if (module.source)
+        write(`  source: ${formatSourceLocation(module.source)}`)
       const description = stringAttribute(module, 'description')
       if (description !== undefined) write(`  description: ${description}`)
       write(`  imports: ${data.imports.join(', ') || '(none)'}`)
@@ -334,9 +468,35 @@ function renderTextGraph(
   }
 
   if (subject === 'http') {
+    const executions = new Map(
+      httpExecutions(graph).map((execution) => [
+        execution.name ?? execution.id,
+        execution,
+      ]),
+    )
     for (const route of httpRoutes(graph)) {
       write(`${route.execution}.${route.name} [http]`)
+      const execution = executions.get(route.execution)
+      if (execution?.source) {
+        write(`  controller source: ${formatSourceLocation(execution.source)}`)
+      }
+      if (route.source) {
+        write(`  route source: ${formatSourceLocation(route.source)}`)
+      }
       write(`  ${route.method} ${route.path}`)
+      for (const middleware of route.middlewares) {
+        if (middleware.source) {
+          write(
+            `  middleware ${middleware.name} source: ${formatSourceLocation(middleware.source)}`,
+          )
+        }
+      }
+      if (execution?.source) {
+        write(`  handler source: ${formatSourceLocation(execution.source)}`)
+      }
+      write(
+        `  flow: ${[...route.middlewares.map((middleware) => middleware.name), 'handler'].join(' -> ')}`,
+      )
     }
     if (httpRoutes(graph).length === 0) write('(no HTTP executions)')
     return
@@ -351,6 +511,9 @@ function renderTextGraph(
   if (subject === 'executions') {
     for (const execution of graph.executions) {
       write(`${execution.executionKind}: ${execution.name ?? execution.id}`)
+      if (execution.source) {
+        write(`  source: ${formatSourceLocation(execution.source)}`)
+      }
     }
     if (graph.executions.length === 0) write('(no executions)')
     return
@@ -387,7 +550,7 @@ function renderDiText(
       const cycle = lineage.includes(edge.to)
       rendered.add(child.id)
       write(
-        `${prefix}${last ? '└──' : '├──'} ${nodeLabel(child)}${cycle ? ' ↺ cycle' : ''}`,
+        `${prefix}${last ? '└──' : '├──'} ${textNodeLabel(child)}${cycle ? ' ↺ cycle' : ''}`,
       )
       if (!cycle) {
         render(edge.to, `${prefix}${last ? '    ' : '│   '}`, [
@@ -400,13 +563,13 @@ function renderDiText(
 
   for (const root of roots) {
     rendered.add(root.id)
-    write(nodeLabel(root))
+    write(textNodeLabel(root))
     render(root.id, '', [root.id])
   }
   for (const node of relevant) {
     if (rendered.has(node.id)) continue
     rendered.add(node.id)
-    write(nodeLabel(node))
+    write(textNodeLabel(node))
     render(node.id, '', [node.id])
   }
   if (relevant.length === 0) write('(no DI nodes)')
@@ -415,37 +578,168 @@ function renderDiText(
 function renderMermaidGraph(
   graph: ApplicationModelGraphIR,
   subject: GraphSubject,
+  themeName: MermaidThemeName,
 ): string {
-  const lines = ['flowchart LR']
-  const node = (id: string, label: string) =>
-    lines.push(`  ${id}["${mermaidText(label)}"]`)
-  const edge = (from: string, to: string, label?: string) =>
-    lines.push(`  ${from} -->${label ? `|"${mermaidText(label)}"|` : ''} ${to}`)
-
-  if (subject === 'http') {
-    httpRoutes(graph).forEach((route, index) => {
-      node(`r${index}`, `${route.method} ${route.path}`)
-      node(`e${index}`, route.execution)
-      edge(`e${index}`, `r${index}`, route.name)
-    })
-    return lines.join('\n')
-  }
-
-  const selected = selectNodes(graph, subject)
-  const selectedIds = new Set(selected.map((candidate) => candidate.id))
+  const theme = mermaidThemes[themeName]
+  const lines = [
+    `%%{init: ${JSON.stringify({
+      theme: 'base',
+      markdownAutoWrap: false,
+      themeVariables: {
+        background: theme.canvasBackground,
+        primaryTextColor: theme.foreground,
+        lineColor: theme.defaultEdge,
+        edgeLabelBackground: theme.edgeLabelBackground,
+      },
+    })}}%%`,
+    'flowchart LR',
+  ]
+  const view = buildGraphView(graph, subject)
   const ids = new Map(
-    selected.map((candidate, index) => [candidate.id, `n${index}`]),
+    view.nodes.map((candidate, index) => [candidate.id, `n${index}`]),
   )
-  for (const candidate of selected) {
-    node(ids.get(candidate.id)!, nodeLabel(candidate))
-  }
-  for (const dependency of graph.edges) {
-    if (!selectedIds.has(dependency.from) || !selectedIds.has(dependency.to)) {
+  const moduleNames = new Map(
+    graph.modules.map((module) => [module.id, module.name ?? module.id]),
+  )
+  const moduleGroups = new Map<string, GraphViewNode[]>()
+
+  for (const candidate of view.nodes) {
+    const moduleId =
+      candidate.kind === 'module' ? candidate.id : candidate.module
+    if (!moduleId || !moduleNames.has(moduleId)) continue
+    if (
+      candidate.kind === 'entrypoint' ||
+      candidate.kind === 'middleware' ||
+      candidate.kind === 'handler'
+    ) {
       continue
     }
-    edge(ids.get(dependency.from)!, ids.get(dependency.to)!, dependency.kind)
+    const current = moduleGroups.get(moduleId) ?? []
+    current.push(candidate)
+    moduleGroups.set(moduleId, current)
   }
+
+  const endpointGroups = groupHttpEndpointNodes(view.nodes)
+  const declared = new Set<string>()
+  const declareNode = (candidate: GraphViewNode, indent: string) => {
+    const id = ids.get(candidate.id)!
+    lines.push(`${indent}${id}["${mermaidNodeLabel(candidate)}"]`)
+    declared.add(candidate.id)
+  }
+
+  let subgraphIndex = 0
+  const moduleSubgraphs: string[] = []
+  const endpointSubgraphs: string[] = []
+
+  for (const [moduleId, candidates] of moduleGroups) {
+    const subgraphId = `sg${subgraphIndex++}`
+    moduleSubgraphs.push(subgraphId)
+    lines.push(
+      `  subgraph ${subgraphId}["Module: ${mermaidText(moduleNames.get(moduleId)!)}"]`,
+    )
+    lines.push('    direction LR')
+    for (const candidate of candidates) declareNode(candidate, '    ')
+    lines.push('  end')
+  }
+
+  for (const group of endpointGroups.values()) {
+    const subgraphId = `sg${subgraphIndex++}`
+    endpointSubgraphs.push(subgraphId)
+    lines.push(`  subgraph ${subgraphId}["API: ${mermaidText(group.label)}"]`)
+    lines.push('    direction LR')
+    for (const candidate of group.nodes) declareNode(candidate, '    ')
+    lines.push('  end')
+  }
+
+  for (const candidate of view.nodes) {
+    if (!declared.has(candidate.id)) declareNode(candidate, '  ')
+  }
+
+  const byId = new Map(view.nodes.map((candidate) => [candidate.id, candidate]))
+  const edgeColors: string[] = []
+  for (const relationship of view.edges) {
+    const from = ids.get(relationship.from)
+    const to = ids.get(relationship.to)
+    if (!from || !to) continue
+    const label = mermaidEdgeLabel(relationship, byId)
+    lines.push(
+      label === undefined
+        ? `  ${from} --> ${to}`
+        : `  ${from} -->|"${mermaidText(label)}"| ${to}`,
+    )
+    const source = byId.get(relationship.from)
+    edgeColors.push(
+      source ? mermaidNodeStrokeColor(source, themeName) : theme.defaultEdge,
+    )
+  }
+
+  for (const [className, style] of Object.entries(theme.nodes)) {
+    lines.push(
+      `  classDef ${className} fill:${style.fill},stroke:${style.stroke},color:${style.text},stroke-width:2px,white-space:nowrap`,
+    )
+  }
+
+  const classes = new Map<string, string[]>()
+  for (const candidate of view.nodes) {
+    const className = mermaidNodeClass(candidate)
+    const current = classes.get(className) ?? []
+    current.push(ids.get(candidate.id)!)
+    classes.set(className, current)
+  }
+  for (const [className, nodeIds] of classes) {
+    lines.push(`  class ${nodeIds.join(',')} ${className}`)
+  }
+  for (const [index, color] of edgeColors.entries()) {
+    lines.push(
+      `  linkStyle ${index} stroke:${color},color:${theme.edgeLabelText},stroke-width:2px`,
+    )
+  }
+  for (const subgraphId of moduleSubgraphs) {
+    lines.push(
+      `  style ${subgraphId} fill:${theme.moduleSubgraph.fill},stroke:${theme.moduleSubgraph.stroke},color:${theme.moduleSubgraph.text},stroke-width:2px`,
+    )
+  }
+  for (const subgraphId of endpointSubgraphs) {
+    lines.push(
+      `  style ${subgraphId} fill:${theme.endpointSubgraph.fill},stroke:${theme.endpointSubgraph.stroke},color:${theme.endpointSubgraph.text},stroke-width:2px`,
+    )
+  }
+
   return lines.join('\n')
+}
+
+interface MermaidEndpointGroup {
+  readonly label: string
+  readonly nodes: readonly GraphViewNode[]
+}
+
+function groupHttpEndpointNodes(
+  candidates: readonly GraphViewNode[],
+): ReadonlyMap<string, MermaidEndpointGroup> {
+  const routes = new Map<string, GraphViewNode>()
+  for (const candidate of candidates) {
+    if (
+      candidate.kind === 'entrypoint' &&
+      candidate.entrypointKind === 'http-route'
+    ) {
+      const routeName = candidate.attributes?.name
+      if (typeof routeName === 'string') routes.set(routeName, candidate)
+    }
+  }
+
+  const grouped = new Map<string, MermaidEndpointGroup>()
+  for (const [routeName, route] of routes) {
+    const nodes = [route]
+    nodes.push(
+      ...candidates.filter(
+        (candidate) =>
+          (candidate.kind === 'middleware' || candidate.kind === 'handler') &&
+          candidate.attributes?.route === routeName,
+      ),
+    )
+    grouped.set(routeName, { label: route.label, nodes })
+  }
+  return grouped
 }
 
 function renderExplanation(
@@ -463,6 +757,7 @@ function renderExplanation(
   if (node.module) write(`managed by: ${node.module}`)
   if (node.executionKind) write(`execution: ${node.executionKind}`)
   if (node.extension) write(`extension: ${node.extension.name}`)
+  if (node.source) write(`source: ${formatSourceLocation(node.source)}`)
   for (const [key, value] of Object.entries(node.attributes ?? {})) {
     if (
       typeof value === 'string' ||
@@ -556,6 +851,7 @@ function moduleData(graph: ApplicationModelGraphIR, module: GraphNodeIR) {
   return {
     id: module.id,
     name: module.name,
+    ...(module.source === undefined ? {} : { source: module.source }),
     description: stringAttribute(module, 'description'),
     imports: graph.edges
       .filter((edge) => edge.from === module.id && edge.kind === 'imports')
@@ -571,12 +867,20 @@ function moduleData(graph: ApplicationModelGraphIR, module: GraphNodeIR) {
   }
 }
 
+interface HttpMiddlewareProjection {
+  readonly name: string
+  readonly capabilities: readonly string[]
+  readonly source?: GraphNodeIR['source']
+}
+
 interface HttpRouteProjection {
   readonly execution: string
   readonly name: string
   readonly method: string
   readonly path: string
+  readonly middlewares: readonly HttpMiddlewareProjection[]
   readonly responses?: JsonValue
+  readonly source?: GraphNodeIR['source']
 }
 
 function httpExecutions(
@@ -599,12 +903,38 @@ function httpRoutes(graph: ApplicationModelGraphIR): HttpRouteProjection[] {
       const method = typeof route.method === 'string' ? route.method : undefined
       const path = typeof route.path === 'string' ? route.path : undefined
       if (!name || !method || !path) return []
+      const middlewares = Array.isArray(route.middlewares)
+        ? route.middlewares.flatMap(
+            (middleware): HttpMiddlewareProjection[] => {
+              if (!isRecord(middleware) || typeof middleware.name !== 'string')
+                return []
+              return [
+                {
+                  name: middleware.name,
+                  capabilities: Array.isArray(middleware.capabilities)
+                    ? middleware.capabilities.filter(
+                        (capability): capability is string =>
+                          typeof capability === 'string',
+                      )
+                    : [],
+                  ...(sourceLocation(middleware.source) === undefined
+                    ? {}
+                    : { source: sourceLocation(middleware.source) }),
+                },
+              ]
+            },
+          )
+        : []
       return [
         {
           execution: execution.name ?? execution.id,
           name,
           method,
           path,
+          middlewares,
+          ...(sourceLocation(route.source) === undefined
+            ? {}
+            : { source: sourceLocation(route.source) }),
           ...(route.responses === undefined
             ? {}
             : { responses: route.responses }),
@@ -614,25 +944,367 @@ function httpRoutes(graph: ApplicationModelGraphIR): HttpRouteProjection[] {
   })
 }
 
-function selectNodes(
+function renderGraphViewText(
+  view: GraphView,
+  write: (value: string) => void,
+): void {
+  for (const node of view.nodes) {
+    write(`${node.kind}: ${node.label} [${node.id}]`)
+    if (node.source) write(`  source: ${formatSourceLocation(node.source)}`)
+  }
+  if (view.nodes.length === 0) write('(no graph nodes)')
+  write('edges:')
+  if (view.edges.length === 0) write('  (none)')
+  for (const edge of view.edges) {
+    write(`  ${edge.from} --${edge.label ?? edge.kind}--> ${edge.to}`)
+  }
+}
+
+function buildGraphView(
+  graph: ApplicationModelGraphIR,
+  subject: GraphSubject,
+): GraphView {
+  if (subject === 'http') return buildHttpGraphView(graph)
+
+  const selected = selectApplicationNodes(graph, subject)
+  const nodes = selected.map(projectGraphViewNode)
+  const selectedIds = new Set(nodes.map((node) => node.id))
+  const edges: GraphViewEdge[] = graph.edges
+    .filter((edge) => selectedIds.has(edge.from) && selectedIds.has(edge.to))
+    .map((edge) => ({ ...edge }))
+
+  if (subject === 'all') {
+    const entrypoints = projectEntrypoints(graph)
+    nodes.push(...entrypoints.nodes)
+    edges.push(...entrypoints.edges)
+  }
+
+  return { nodes, edges }
+}
+
+function buildHttpGraphView(graph: ApplicationModelGraphIR): GraphView {
+  const executions = httpExecutions(graph).map(projectGraphViewNode)
+  const entrypoints = projectHttpEntrypoints(graph)
+  return {
+    nodes: [...executions, ...entrypoints.nodes],
+    edges: entrypoints.edges,
+  }
+}
+
+function selectApplicationNodes(
   graph: ApplicationModelGraphIR,
   subject: Exclude<GraphSubject, 'http'>,
-): readonly GraphNodeIR[] {
+): GraphNodeIR[] {
   switch (subject) {
+    case 'all':
+      return graph.nodes.filter(
+        (node) =>
+          node.kind === 'module' ||
+          node.kind === 'provider' ||
+          node.kind === 'execution' ||
+          isRuntimeCapabilityNode(node),
+      )
     case 'modules':
-      return graph.modules
+      return [...graph.modules]
     case 'di':
       return graph.nodes.filter(
         (node) => node.kind === 'provider' || node.kind === 'execution',
       )
     case 'executions':
-      return graph.executions
+      return [...graph.executions]
     case 'runtime':
-      return graph.nodes.filter(
-        (node) =>
-          node.kind === 'framework' &&
-          node.attributes?.frameworkKind === 'runtime-capability',
-      )
+      return graph.nodes.filter(isRuntimeCapabilityNode)
+  }
+}
+
+function projectGraphViewNode(node: GraphNodeIR): GraphViewNode {
+  return {
+    id: node.id,
+    kind: isRuntimeCapabilityNode(node)
+      ? 'runtime-capability'
+      : (node.kind as GraphViewNodeKind),
+    label: nodeLabel(node),
+    ...(node.module === undefined ? {} : { module: node.module }),
+    ...(node.executionKind === undefined
+      ? {}
+      : { executionKind: node.executionKind }),
+    ...(node.capabilities === undefined
+      ? {}
+      : { capabilities: node.capabilities }),
+    ...(node.extension === undefined ? {} : { extension: node.extension }),
+    ...(node.attributes === undefined ? {} : { attributes: node.attributes }),
+    ...(node.source === undefined ? {} : { source: node.source }),
+  }
+}
+
+function isRuntimeCapabilityNode(node: GraphNodeIR): boolean {
+  return (
+    node.kind === 'framework' &&
+    node.attributes?.frameworkKind === 'runtime-capability'
+  )
+}
+
+function projectEntrypoints(graph: ApplicationModelGraphIR): GraphView {
+  const http = projectHttpEntrypoints(graph)
+  const messagePort = projectMessagePortEntrypoints(graph)
+  const websocket = projectWebSocketEntrypoints(graph)
+  return {
+    nodes: [...http.nodes, ...messagePort.nodes, ...websocket.nodes],
+    edges: [...http.edges, ...messagePort.edges, ...websocket.edges],
+  }
+}
+
+function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
+  const nodes: GraphViewNode[] = []
+  const edges: GraphViewEdge[] = []
+  for (const execution of httpExecutions(graph)) {
+    const metadata: unknown = execution.extension?.metadata
+    if (!isRecord(metadata) || !Array.isArray(metadata.routes)) continue
+    for (const route of metadata.routes) {
+      if (!isRecord(route)) continue
+      const name = typeof route.name === 'string' ? route.name : undefined
+      const method = typeof route.method === 'string' ? route.method : undefined
+      const path = typeof route.path === 'string' ? route.path : undefined
+      if (!name || !method || !path) continue
+      const routeId = entrypointId('http', execution.id, name)
+      const routeSource = sourceLocation(route.source)
+      nodes.push({
+        id: routeId,
+        kind: 'entrypoint',
+        entrypointKind: 'http-route',
+        label: `${method} ${path}`,
+        ...(execution.module === undefined ? {} : { module: execution.module }),
+        ...(routeSource === undefined ? {} : { source: routeSource }),
+        attributes: { name, method, path },
+      })
+      edges.push({
+        from: execution.id,
+        to: routeId,
+        kind: 'handles',
+        label: name,
+      })
+
+      let previousId = routeId
+      const middlewares = Array.isArray(route.middlewares)
+        ? route.middlewares
+        : []
+      for (const [index, middleware] of middlewares.entries()) {
+        if (!isRecord(middleware) || typeof middleware.name !== 'string')
+          continue
+        const middlewareId = httpMiddlewareStepId(execution.id, name, index)
+        const capabilities = Array.isArray(middleware.capabilities)
+          ? middleware.capabilities.filter(
+              (capability): capability is string =>
+                typeof capability === 'string',
+            )
+          : []
+        const middlewareSource = sourceLocation(middleware.source)
+        nodes.push({
+          id: middlewareId,
+          kind: 'middleware',
+          label: middleware.name,
+          ...(execution.module === undefined
+            ? {}
+            : { module: execution.module }),
+          ...(capabilities.length === 0 ? {} : { capabilities }),
+          ...(middlewareSource === undefined
+            ? {}
+            : { source: middlewareSource }),
+          attributes: { route: name, index },
+        })
+        edges.push({ from: previousId, to: middlewareId, kind: 'flows-to' })
+        for (const capability of capabilities) {
+          edges.push({
+            from: middlewareId,
+            to: `capability:${capability}`,
+            kind: 'requires',
+          })
+        }
+        previousId = middlewareId
+      }
+
+      const handlerId = httpHandlerId(execution.id, name)
+      nodes.push({
+        id: handlerId,
+        kind: 'handler',
+        label: `${execution.name ?? execution.id}.${name}`,
+        ...(execution.module === undefined ? {} : { module: execution.module }),
+        ...(execution.source === undefined ? {} : { source: execution.source }),
+        attributes: { route: name },
+      })
+      edges.push({ from: previousId, to: handlerId, kind: 'flows-to' })
+    }
+  }
+  return { nodes, edges }
+}
+
+function projectMessagePortEntrypoints(
+  graph: ApplicationModelGraphIR,
+): GraphView {
+  const nodes: GraphViewNode[] = []
+  const edges: GraphViewEdge[] = []
+  for (const execution of graph.executions) {
+    if (execution.extension?.hostNamespace !== 'messagePort') continue
+    const metadata: unknown = execution.extension.metadata
+    if (!isRecord(metadata) || !Array.isArray(metadata.methods)) continue
+    for (const method of metadata.methods) {
+      if (typeof method !== 'string') continue
+      const id = entrypointId('message-port', execution.id, method)
+      nodes.push({
+        id,
+        kind: 'entrypoint',
+        entrypointKind: 'message-port-method',
+        label: `MessagePort ${method}`,
+        ...(execution.module === undefined ? {} : { module: execution.module }),
+        attributes: { method },
+      })
+      edges.push({
+        from: execution.id,
+        to: id,
+        kind: 'handles',
+        label: method,
+      })
+    }
+  }
+  return { nodes, edges }
+}
+
+function projectWebSocketEntrypoints(
+  graph: ApplicationModelGraphIR,
+): GraphView {
+  const nodes: GraphViewNode[] = []
+  const edges: GraphViewEdge[] = []
+  for (const execution of graph.executions) {
+    if (execution.extension?.hostNamespace !== 'websocket') continue
+    const metadata: unknown = execution.extension.metadata
+    if (!isRecord(metadata) || !Array.isArray(metadata.routes)) continue
+    for (const route of metadata.routes) {
+      if (!isRecord(route)) continue
+      const name = typeof route.name === 'string' ? route.name : undefined
+      const path = typeof route.path === 'string' ? route.path : undefined
+      if (!name || !path) continue
+      const id = entrypointId('websocket', execution.id, name)
+      nodes.push({
+        id,
+        kind: 'entrypoint',
+        entrypointKind: 'websocket-route',
+        label: `WebSocket ${path}`,
+        ...(execution.module === undefined ? {} : { module: execution.module }),
+        attributes: { name, path },
+      })
+      edges.push({
+        from: execution.id,
+        to: id,
+        kind: 'handles',
+        label: name,
+      })
+    }
+  }
+  return { nodes, edges }
+}
+
+function entrypointId(
+  namespace: string,
+  executionId: string,
+  localId: string,
+): string {
+  return `entrypoint:${namespace}:${encodeURIComponent(executionId)}:${encodeURIComponent(localId)}`
+}
+
+function httpMiddlewareStepId(
+  executionId: string,
+  routeName: string,
+  index: number,
+): string {
+  return `middleware:http:${encodeURIComponent(executionId)}:${encodeURIComponent(routeName)}:${index}`
+}
+
+function httpHandlerId(executionId: string, routeName: string): string {
+  return `handler:http:${encodeURIComponent(executionId)}:${encodeURIComponent(routeName)}`
+}
+
+function mermaidNodeLabel(node: GraphViewNode): string {
+  const role = (() => {
+    switch (node.kind) {
+      case 'module':
+        return 'Module'
+      case 'provider':
+        return 'Provider'
+      case 'execution':
+        return node.extension?.hostNamespace === 'http'
+          ? 'HTTP Controller'
+          : 'Execution'
+      case 'entrypoint':
+        return 'Route'
+      case 'middleware':
+        return 'Middleware'
+      case 'handler':
+        return 'Handler'
+      case 'runtime-capability':
+        return 'Runtime Capability'
+    }
+  })()
+  const label = mermaidText(`${role}: ${node.label}`)
+  if (node.source === undefined) return label
+  const source = mermaidText(formatMermaidSourceLocation(node.source))
+  return `\`**${label}**<br/>*↳ ${source}*\``
+}
+
+type MermaidNodeClass =
+  | 'moduleNode'
+  | 'provider'
+  | 'controller'
+  | 'execution'
+  | 'route'
+  | 'middleware'
+  | 'handler'
+  | 'runtimeCapability'
+
+function mermaidNodeClass(node: GraphViewNode): MermaidNodeClass {
+  switch (node.kind) {
+    case 'module':
+      return 'moduleNode'
+    case 'provider':
+      return 'provider'
+    case 'execution':
+      return node.extension?.hostNamespace === 'http'
+        ? 'controller'
+        : 'execution'
+    case 'entrypoint':
+      return 'route'
+    case 'middleware':
+      return 'middleware'
+    case 'handler':
+      return 'handler'
+    case 'runtime-capability':
+      return 'runtimeCapability'
+  }
+}
+
+function mermaidNodeStrokeColor(
+  node: GraphViewNode,
+  themeName: MermaidThemeName,
+): string {
+  return mermaidThemes[themeName].nodes[mermaidNodeClass(node)].stroke
+}
+
+function mermaidEdgeLabel(
+  edge: GraphViewEdge,
+  byId: ReadonlyMap<string, GraphViewNode>,
+): string | undefined {
+  if (edge.kind === 'flows-to') return undefined
+  if (edge.kind !== 'owns') return edge.label ?? edge.kind
+  const target = byId.get(edge.to)
+  if (!target) return edge.kind
+  switch (target.kind) {
+    case 'provider':
+      return 'provider'
+    case 'execution':
+      return target.extension?.hostNamespace === 'http'
+        ? 'controller'
+        : 'execution'
+    default:
+      return edge.kind
   }
 }
 
@@ -650,6 +1322,13 @@ function nodeLabel(node: GraphNodeIR): string {
   return node.name ?? node.id
 }
 
+function textNodeLabel(node: GraphNodeIR): string {
+  const label = nodeLabel(node)
+  return node.source === undefined
+    ? label
+    : `${label} [source: ${formatSourceLocation(node.source)}]`
+}
+
 function stringAttribute(node: GraphNodeIR, name: string): string | undefined {
   const value = node.attributes?.[name]
   return typeof value === 'string' ? value : undefined
@@ -657,6 +1336,37 @@ function stringAttribute(node: GraphNodeIR, name: string): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function sourceLocation(value: unknown): GraphNodeIR['source'] | undefined {
+  if (!isRecord(value) || typeof value.file !== 'string') return undefined
+  const line = typeof value.line === 'number' ? value.line : undefined
+  const column = typeof value.column === 'number' ? value.column : undefined
+  return {
+    file: value.file,
+    ...(line === undefined ? {} : { line }),
+    ...(column === undefined ? {} : { column }),
+  }
+}
+
+function formatSourceLocation(
+  source: NonNullable<GraphNodeIR['source']>,
+): string {
+  if (source.line === undefined) return source.file
+  if (source.column === undefined) return `${source.file}:${source.line}`
+  return `${source.file}:${source.line}:${source.column}`
+}
+
+function formatMermaidSourceLocation(
+  source: NonNullable<GraphNodeIR['source']>,
+): string {
+  const path = source.file.replaceAll('\\', '/')
+  const segments = path.split('/')
+  const compactPath =
+    segments.length <= 3 ? path : `…/${segments.slice(-3).join('/')}`
+  return source.line === undefined
+    ? compactPath
+    : `${compactPath}:${source.line}`
 }
 
 function requiredCapabilities(graph: ApplicationModelGraphIR): string[] {
@@ -673,9 +1383,17 @@ function mermaidText(value: string): string {
     .replaceAll('"', '&quot;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
+    .replaceAll('`', '#96;')
+    .replaceAll('\n', '<br/>')
 }
 
-const valueOptions = new Set(['--entry', '--format', '--runtime', '--out-dir'])
+const valueOptions = new Set([
+  '--entry',
+  '--format',
+  '--theme',
+  '--runtime',
+  '--out-dir',
+])
 
 function readPositionals(args: readonly string[]): string[] {
   const positionals: string[] = []
@@ -700,7 +1418,7 @@ function helpText(): string {
     'Loutre CLI',
     '  loutre check --entry <entry>',
     '  loutre doctor [--runtime node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
-    '  loutre graph modules|di|http|executions|runtime --entry <entry> [--format text|json|mermaid]',
+    '  loutre graph all|modules|di|executions|http|runtime --entry <entry> [--format text|json|mermaid] [--theme light|dark]',
     '  loutre explain <target> --entry <entry>',
     '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',
     '',
