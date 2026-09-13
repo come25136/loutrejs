@@ -11,6 +11,8 @@ type AstNode = {
 }
 
 interface ImportedApis {
+  readonly loutreNamespaces: Set<string>
+  readonly httpNamespaces: Set<string>
   readonly defineModule: Set<string>
   readonly providerBuilders: Set<string>
   readonly providerFactories: Set<string>
@@ -70,42 +72,61 @@ export function instrumentSourceLocations(
     add(end, `,${sourceLiteral(start)})`)
   }
 
-  walkAst(program, (node) => {
-    if (node.type !== 'CallExpression') return
+  const registerClassSource = (
+    declaration: AstNode,
+    insertionSpan: NonNullable<AstNode['span']> | undefined,
+  ): void => {
+    const name = declaration.identifier?.value
     if (
-      isHttpCall(node, apis.httpContract, apis.httpObjects, 'contract') ||
-      isHttpCall(
-        node,
-        apis.httpImplementation,
-        apis.httpObjects,
-        'implementation',
-      ) ||
-      isHttpCall(node, apis.httpMiddleware, apis.httpObjects, 'middleware') ||
-      isDirectCall(node, apis.httpMiddlewareFactories) ||
-      isDirectCall(node, apis.providerFactories) ||
-      isProviderBuilderCall(node, apis.providerBuilders) ||
-      isDirectCall(node, apis.defineModule)
-    ) {
-      wrapSource(node)
-    }
-  })
-
-  for (const statement of program.body ?? []) {
-    const declaration = classDeclarationOf(statement)
-    const name = declaration?.identifier?.value
-    if (
-      !declaration ||
       declaration.declare === true ||
-      typeof name !== 'string'
+      typeof name !== 'string' ||
+      !declaration.span ||
+      !insertionSpan
     ) {
-      continue
+      return
     }
-    if (!statement.span || !declaration.span) continue
     add(
-      toIndex(statement.span.end),
+      toIndex(insertionSpan.end),
       `;${sourceHelper}(${name},${sourceLiteral(toIndex(declaration.span.start))})`,
     )
   }
+
+  walkAst(program, (node) => {
+    if (node.type === 'CallExpression') {
+      if (
+        isHttpCall(node, apis, 'contract') ||
+        isHttpCall(node, apis, 'implementation') ||
+        isHttpCall(node, apis, 'middleware') ||
+        isApiCall(node, apis.httpMiddlewareFactories, apis.httpNamespaces, [
+          'basicAuth',
+          'bearerAuth',
+          'cors',
+        ]) ||
+        isApiCall(node, apis.providerFactories, apis.loutreNamespaces, [
+          'environmentProvider',
+          'argumentsProvider',
+        ]) ||
+        isProviderBuilderCall(node, apis) ||
+        isApiCall(node, apis.defineModule, apis.loutreNamespaces, [
+          'defineModule',
+        ])
+      ) {
+        wrapSource(node)
+      }
+      return
+    }
+
+    if (node.type === 'ClassDeclaration') {
+      registerClassSource(node, node.span)
+      return
+    }
+    if (
+      node.type === 'ExportDefaultDeclaration' &&
+      node.decl?.type === 'ClassExpression'
+    ) {
+      registerClassSource(node.decl, node.span)
+    }
+  })
 
   if (insertions.size === 0) return code
   const importPosition = sourceImportPosition(program, code, toIndex)
@@ -186,6 +207,8 @@ function sourceImportPosition(
 
 function collectImportedApis(program: AstNode): ImportedApis {
   const apis: ImportedApis = {
+    loutreNamespaces: new Set(),
+    httpNamespaces: new Set(),
     defineModule: new Set(),
     providerBuilders: new Set(),
     providerFactories: new Set(),
@@ -204,6 +227,13 @@ function collectImportedApis(program: AstNode): ImportedApis {
       continue
     }
     for (const specifier of statement.specifiers ?? []) {
+      if (specifier.type === 'ImportNamespaceSpecifier') {
+        const key = bindingKey(specifier.local)
+        if (!key) continue
+        if (source === '@loutrejs/loutre') apis.loutreNamespaces.add(key)
+        if (source === '@loutrejs/loutre/http') apis.httpNamespaces.add(key)
+        continue
+      }
       if (
         specifier.type !== 'ImportSpecifier' ||
         specifier.isTypeOnly === true
@@ -263,17 +293,42 @@ function isImportedIdentifier(
   return key !== undefined && bindings.has(key)
 }
 
-function isDirectCall(call: AstNode, bindings: ReadonlySet<string>): boolean {
-  return isImportedIdentifier(
-    unwrapExpression(call.callee as AstNode | undefined),
-    bindings,
+function isApiReference(
+  node: AstNode | undefined,
+  directBindings: ReadonlySet<string>,
+  namespaceBindings: ReadonlySet<string>,
+  namespaceMembers: readonly string[],
+): boolean {
+  const value = unwrapExpression(node)
+  if (value?.type === 'Identifier') {
+    return isImportedIdentifier(value, directBindings)
+  }
+  return (
+    value?.type === 'MemberExpression' &&
+    value.property?.type === 'Identifier' &&
+    namespaceMembers.includes(value.property.value) &&
+    isImportedIdentifier(
+      unwrapExpression(value.object as AstNode | undefined),
+      namespaceBindings,
+    )
   )
 }
 
-function isProviderBuilderCall(
+function isApiCall(
   call: AstNode,
-  builders: ReadonlySet<string>,
+  directBindings: ReadonlySet<string>,
+  namespaceBindings: ReadonlySet<string>,
+  namespaceMembers: readonly string[],
 ): boolean {
+  return isApiReference(
+    call.callee as AstNode | undefined,
+    directBindings,
+    namespaceBindings,
+    namespaceMembers,
+  )
+}
+
+function isProviderBuilderCall(call: AstNode, apis: ImportedApis): boolean {
   const callee = unwrapExpression(call.callee as AstNode | undefined)
   if (
     callee?.type !== 'MemberExpression' ||
@@ -285,26 +340,44 @@ function isProviderBuilderCall(
     return false
   }
   const builder = unwrapExpression(callee.object as AstNode | undefined)
-  return builder?.type === 'CallExpression' && isDirectCall(builder, builders)
+  return (
+    builder?.type === 'CallExpression' &&
+    isApiCall(builder, apis.providerBuilders, apis.loutreNamespaces, [
+      'provide',
+    ])
+  )
 }
 
 function isHttpCall(
   call: AstNode,
-  directBindings: ReadonlySet<string>,
-  objectBindings: ReadonlySet<string>,
-  member: string,
+  apis: ImportedApis,
+  member: 'contract' | 'implementation' | 'middleware',
 ): boolean {
-  const callee = unwrapExpression(call.callee as AstNode | undefined)
-  if (callee?.type === 'Identifier') {
-    return isImportedIdentifier(callee, directBindings)
+  const directBindings =
+    member === 'contract'
+      ? apis.httpContract
+      : member === 'implementation'
+        ? apis.httpImplementation
+        : apis.httpMiddleware
+  const directMember =
+    member === 'contract'
+      ? 'defineHttpContract'
+      : member === 'implementation'
+        ? 'defineHttpImplementation'
+        : 'defineHttpMiddleware'
+  if (isApiCall(call, directBindings, apis.httpNamespaces, [directMember])) {
+    return true
   }
+  const callee = unwrapExpression(call.callee as AstNode | undefined)
   return (
     callee?.type === 'MemberExpression' &&
     callee.property?.type === 'Identifier' &&
     callee.property.value === member &&
-    isImportedIdentifier(
-      unwrapExpression(callee.object as AstNode | undefined),
-      objectBindings,
+    isApiReference(
+      callee.object as AstNode | undefined,
+      apis.httpObjects,
+      apis.httpNamespaces,
+      ['http'],
     )
   )
 }
@@ -326,23 +399,6 @@ function unwrapExpression(value: AstNode | undefined): AstNode | undefined {
     current = current.expression as AstNode
   }
   return current
-}
-
-function classDeclarationOf(statement: AstNode): AstNode | undefined {
-  if (statement.type === 'ClassDeclaration') return statement
-  if (
-    statement.type === 'ExportDeclaration' &&
-    statement.declaration?.type === 'ClassDeclaration'
-  ) {
-    return statement.declaration
-  }
-  if (
-    statement.type === 'ExportDefaultDeclaration' &&
-    statement.decl?.type === 'ClassExpression'
-  ) {
-    return statement.decl
-  }
-  return undefined
 }
 
 function walkAst(root: AstNode, visit: (node: AstNode) => void): void {

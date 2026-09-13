@@ -257,6 +257,102 @@ void Holder
     expect(transformed).toContain('__loutreSource(Service')
   })
 
+  it('named default-export classのsource registrationも維持する', () => {
+    const source = `export default class Service {}\n`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/service.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain(
+      'export default class Service {};__loutreSource(Service',
+    )
+  })
+
+  it('functionとblock内のnamed class declarationもsource registrationする', () => {
+    const source = `function create() {
+  class NestedService {}
+  {
+    class BlockService {}
+    void BlockService
+  }
+  return NestedService
+}
+void create
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/service.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('__loutreSource(NestedService')
+    expect(transformed).toContain('__loutreSource(BlockService')
+  })
+
+  it('namespace import経由のdefine APIもbinding identityでsource registrationする', () => {
+    const source = `import * as loutre from '@loutrejs/loutre'
+import * as httpApi from '@loutrejs/loutre/http'
+const VALUE = loutre.token('value')
+const provider = loutre.provide(VALUE).useValue('value')
+const env = loutre.environmentProvider()
+const args = loutre.argumentsProvider()
+const Contract = httpApi.http.contract({})
+const DirectContract = httpApi.defineHttpContract({})
+const Controller = httpApi.http.implementation({})
+const DirectController = httpApi.defineHttpImplementation({})
+const middleware = httpApi.http.middleware({})
+const DirectMiddleware = httpApi.defineHttpMiddleware({})
+const basic = httpApi.basicAuth({})
+const bearer = httpApi.bearerAuth({})
+const cors = httpApi.cors({})
+const Module = loutre.defineModule(() => ({}))
+function shadow(loutre: any, httpApi: any) {
+  loutre.defineModule()
+  httpApi.defineHttpContract({})
+  httpApi.http.contract({})
+}
+void provider
+void env
+void args
+void Contract
+void DirectContract
+void Controller
+void DirectController
+void middleware
+void DirectMiddleware
+void basic
+void bearer
+void cors
+void Module
+void shadow
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain(
+      'const provider = __loutreSource(loutre.provide(VALUE).useValue',
+    )
+    expect(transformed).toContain(
+      'const Contract = __loutreSource(httpApi.http.contract',
+    )
+    expect(transformed).toContain(
+      'const DirectContract = __loutreSource(httpApi.defineHttpContract',
+    )
+    expect(transformed).toContain(
+      'const Module = __loutreSource(loutre.defineModule',
+    )
+    expect(transformed).toContain('loutre.defineModule()')
+    expect(transformed).not.toContain(
+      'function shadow(loutre: any, httpApi: any) {\n  __loutreSource(loutre.defineModule()',
+    )
+    expect(transformed.match(/__loutreSource\(/g)).toHaveLength(13)
+  })
+
   it('Windows drive形式のproject-relative結果はinstrumentation対象外にする', () => {
     const source = `import { defineModule } from '@loutrejs/loutre'
 const Module = defineModule(() => ({ name: 'App' }))

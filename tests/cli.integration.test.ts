@@ -455,6 +455,43 @@ describe('Loutre CLI', () => {
     expect(node('provider', 'EventEmitter')?.source).toBeUndefined()
   })
 
+  it('namespace importとnested class providerでもsource locationを保持する', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--entry',
+          'tests/fixtures/source-location-namespace-nested-app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+
+    const graph = JSON.parse(output.stdout.join('\n'))
+    const node = (kind: string, label: string) =>
+      graph.nodes.find(
+        (candidate: { kind: string; label: string }) =>
+          candidate.kind === kind && candidate.label === label,
+      )
+    const source = (line: number, column: number) => ({
+      file: 'tests/fixtures/source-location-namespace-nested-app.ts',
+      line,
+      column,
+    })
+
+    expect(node('provider', 'NestedService')?.source).toEqual(source(5, 3))
+    expect(node('module', 'NamespaceNestedModule')?.source).toEqual(
+      source(25, 10),
+    )
+    expect(node('execution', 'NamespaceNestedController')?.source).toEqual(
+      source(15, 22),
+    )
+  })
+
   it('ambient classと外部call aliasを安全に扱いhandlerはimplementation sourceを使う', async () => {
     const output = io()
     expect(
