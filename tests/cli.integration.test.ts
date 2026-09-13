@@ -530,6 +530,39 @@ describe('Loutre CLI', () => {
     )
   })
 
+  it('useClass providerはimplementation class identityのsourceを使う', async () => {
+    const output = io()
+    expect(
+      await runCli(
+        [
+          'graph',
+          'all',
+          '--format',
+          'json',
+          '--entry',
+          'tests/fixtures/source-location-use-class-app.ts',
+        ],
+        output.value,
+      ),
+    ).toBe(0)
+
+    const graph = JSON.parse(output.stdout.join('\n'))
+    const provider = (label: string) =>
+      graph.nodes.find(
+        (candidate: { kind: string; label: string }) =>
+          candidate.kind === 'provider' && candidate.label === label,
+      )
+    const localSource = {
+      file: 'tests/fixtures/source-location-use-class-app.ts',
+      line: 9,
+      column: 1,
+    }
+
+    expect(provider('LocalService')?.source).toEqual(localSource)
+    expect(provider('review.local-class')?.source).toEqual(localSource)
+    expect(provider('review.external-class')?.source).toBeUndefined()
+  })
+
   it('ambient classと外部call aliasを安全に扱いhandlerはimplementation sourceを使う', async () => {
     const output = io()
     expect(

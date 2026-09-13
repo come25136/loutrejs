@@ -45,7 +45,7 @@ Canonical mappingは次とする。
 
 - Module: `defineModule(...)` のcallsite
 - Provider:
-  - class provider: named class declaration
+  - class provider: named class declaration。shorthand `[Service]` と `provide(T).useClass(Service)` のどちらもimplementation class identityからsourceを取得し、`useClass(...)` callsite自体はsourceにしない
   - value / factory / conditional provider: `provide(...).use*()` のcallsite
   - `environmentProvider(...)` / `argumentsProvider(...)`: factory callsite
 - HTTP Controller / Execution: `http.implementation(...)` / `defineHttpImplementation(...)` のcallsite

@@ -333,9 +333,7 @@ function isProviderBuilderCall(call: AstNode, apis: ImportedApis): boolean {
   if (
     callee?.type !== 'MemberExpression' ||
     callee.property?.type !== 'Identifier' ||
-    !['useClass', 'useValue', 'useFactory', 'select'].includes(
-      callee.property.value,
-    )
+    !['useValue', 'useFactory', 'select'].includes(callee.property.value)
   ) {
     return false
   }

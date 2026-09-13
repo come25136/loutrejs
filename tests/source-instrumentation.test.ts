@@ -110,6 +110,28 @@ void Module
     expect(transformed).toContain('void marker\nvoid Module')
   })
 
+  it('useClass provider descriptorはbuilder callsiteへsource registrationしない', () => {
+    const source = `import { provide, token } from '@loutrejs/loutre'
+class LocalService {}
+const SERVICE = token<LocalService>('service')
+const provider = provide(SERVICE).useClass(LocalService)
+void provider
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('__loutreSource(LocalService')
+    expect(transformed).toContain(
+      'const provider = provide(SERVICE).useClass(LocalService)',
+    )
+    expect(transformed).not.toContain(
+      'const provider = __loutreSource(provide(SERVICE).useClass',
+    )
+  })
+
   it('aliasや未知callへgeneric source registrationを追加しない', () => {
     const source = `import { EventEmitter } from 'node:events'
 import { defineModule } from '@loutrejs/loutre'

@@ -54,7 +54,10 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
     for (const declaration of module.definition.providers ?? []) {
       const normalized = normalizeProvider(declaration)
       const provider = snapshotProvider(normalized)
-      const providerSource = getSourceLocation(declaration)
+      const providerSource =
+        normalized.kind === 'class'
+          ? getSourceLocation(normalized.useClass)
+          : getSourceLocation(declaration)
       const providerId = context.nextProviderId()
       const existingProvider = providerNodes.get(provider.provide)
       if (
