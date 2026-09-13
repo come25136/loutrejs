@@ -381,10 +381,10 @@ describe('Loutre CLI', () => {
     expect(node('execution', 'SourceController')?.source).toEqual(
       source(43, 33),
     )
-    expect(node('entrypoint', 'POST /source')?.source).toEqual(source(33, 3))
+    expect(node('entrypoint', 'POST /source')?.source).toEqual(source(32, 31))
     expect(node('middleware', 'audit')?.source).toEqual(source(25, 32))
     expect(node('handler', 'SourceController.create')?.source).toEqual(
-      source(47, 5),
+      source(43, 33),
     )
   })
 
@@ -444,18 +444,18 @@ describe('Loutre CLI', () => {
       column,
     })
 
-    expect(node('provider', 'RealService')?.source).toEqual(source(16, 8))
+    expect(node('provider', 'RealService')?.source).toEqual(source(15, 8))
     expect(node('provider', 'source-location.composed-value')?.source).toEqual(
-      source(29, 20),
+      source(28, 20),
     )
-    expect(node('entrypoint', 'POST /composed')?.source).toEqual(source(22, 3))
+    expect(node('entrypoint', 'POST /composed')?.source).toEqual(source(30, 18))
     expect(node('handler', 'ComposedController.create')?.source).toEqual(
-      source(36, 5),
+      source(31, 20),
     )
     expect(node('provider', 'EventEmitter')?.source).toBeUndefined()
   })
 
-  it('ambient classと外部call aliasを安全に扱いshadowed handlerはControllerへfallbackする', async () => {
+  it('ambient classと外部call aliasを安全に扱いhandlerはimplementation sourceを使う', async () => {
     const output = io()
     expect(
       await runCli(
@@ -479,7 +479,7 @@ describe('Loutre CLI', () => {
       )
     const controllerSource = {
       file: 'tests/fixtures/source-location-safety-app.ts',
-      line: 35,
+      line: 21,
       column: 20,
     }
 
@@ -489,86 +489,6 @@ describe('Loutre CLI', () => {
     )
     expect(node('handler', 'SafetyController.create')?.source).toEqual(
       controllerSource,
-    )
-  })
-
-  it('曖昧なhandler factory/objectはhandler sourceをControllerへfallbackする', async () => {
-    const output = io()
-    expect(
-      await runCli(
-        [
-          'graph',
-          'all',
-          '--format',
-          'json',
-          '--entry',
-          'tests/fixtures/source-location-handler-safety-app.ts',
-        ],
-        output.value,
-      ),
-    ).toBe(0)
-
-    const graph = JSON.parse(output.stdout.join('\n'))
-    const node = (kind: string, label: string) =>
-      graph.nodes.find(
-        (candidate: { kind: string; label: string }) =>
-          candidate.kind === kind && candidate.label === label,
-      )
-
-    for (const name of [
-      'ReassignedController',
-      'BranchController',
-      'MutatedController',
-      'SpreadController',
-    ]) {
-      expect(node('handler', `${name}.create`)?.source).toEqual(
-        node('execution', name)?.source,
-      )
-    }
-  })
-
-  it('namespace importと分離したconst provider builderでもsource locationを保持する', async () => {
-    const output = io()
-    expect(
-      await runCli(
-        [
-          'graph',
-          'all',
-          '--format',
-          'json',
-          '--entry',
-          'tests/fixtures/source-location-namespace-app.ts',
-        ],
-        output.value,
-      ),
-    ).toBe(0)
-
-    const graph = JSON.parse(output.stdout.join('\n'))
-    const node = (kind: string, label: string) =>
-      graph.nodes.find(
-        (candidate: { kind: string; label: string }) =>
-          candidate.kind === kind && candidate.label === label,
-      )
-    const source = (line: number) => ({
-      file: 'tests/fixtures/source-location-namespace-app.ts',
-      line,
-    })
-
-    expect(node('module', 'NamespaceModule')?.source).toMatchObject(source(34))
-    expect(
-      node('provider', 'source-location.namespace-value')?.source,
-    ).toMatchObject(source(6))
-    expect(node('execution', 'NamespaceController')?.source).toMatchObject(
-      source(24),
-    )
-    expect(node('entrypoint', 'GET /namespace')?.source).toMatchObject(
-      source(16),
-    )
-    expect(node('middleware', 'namespaceAudit')?.source).toMatchObject(
-      source(8),
-    )
-    expect(node('handler', 'NamespaceController.get')?.source).toMatchObject(
-      source(28),
     )
   })
 
@@ -598,7 +518,7 @@ describe('Loutre CLI', () => {
   it.each([
     ['modules', 'source: tests/fixtures/source-location-app.ts:53:29'],
     ['di', 'source: tests/fixtures/source-location-app.ts:11:8'],
-    ['http', 'route source: tests/fixtures/source-location-app.ts:33:3'],
+    ['http', 'route source: tests/fixtures/source-location-app.ts:32:31'],
     ['executions', 'source: tests/fixtures/source-location-app.ts:43:33'],
   ] as const)(
     'graph %s textでもsource locationを保持する',
@@ -645,10 +565,10 @@ describe('Loutre CLI', () => {
       '`**Provider: ClassService**<br/>*↳ tests/fixtures/source-location-app.ts:11*`',
     )
     expect(graph).toContain(
-      '`**Route: POST /source**<br/>*↳ tests/fixtures/source-location-app.ts:33*`',
+      '`**Route: POST /source**<br/>*↳ tests/fixtures/source-location-app.ts:32*`',
     )
     expect(graph).toContain(
-      '`**Handler: SourceController.create**<br/>*↳ tests/fixtures/source-location-app.ts:47*`',
+      '`**Handler: SourceController.create**<br/>*↳ tests/fixtures/source-location-app.ts:43*`',
     )
     expect(graph).not.toContain('source-location-app.ts:11:8')
     expect(graph).not.toContain(process.cwd())

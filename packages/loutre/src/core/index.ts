@@ -120,10 +120,8 @@ export type {
 export type { RuntimeInputContract, RuntimeInputKey } from './runtime-input.js'
 export {
   getSourceLocation,
-  getSourceMemberLocation,
   inheritSourceLocation,
   registerSourceLocation,
-  registerSourceMemberLocation,
 } from './source-location.js'
 export type { SourceLocation } from './source-location.js'
 export {

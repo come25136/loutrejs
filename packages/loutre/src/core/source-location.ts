@@ -4,12 +4,7 @@ export interface SourceLocation {
   readonly column?: number
 }
 
-interface SourceMetadata {
-  readonly source?: SourceLocation
-  readonly members?: ReadonlyMap<string, SourceLocation>
-}
-
-const sourceMetadata = new WeakMap<object, SourceMetadata>()
+const sourceMetadata = new WeakMap<object, SourceLocation>()
 
 function asObject(value: unknown): object | undefined {
   return (typeof value === 'object' && value !== null) ||
@@ -28,44 +23,14 @@ function snapshotSourceLocation(source: SourceLocation): SourceLocation {
 
 export function registerSourceLocation<T>(value: T, source: SourceLocation): T {
   const target = asObject(value)
-  if (!target) return value
-  const current = sourceMetadata.get(target)
-  if (current?.source !== undefined) return value
-  sourceMetadata.set(target, {
-    ...(current?.members === undefined ? {} : { members: current.members }),
-    source: snapshotSourceLocation(source),
-  })
-  return value
-}
-
-export function registerSourceMemberLocation<T>(
-  value: T,
-  member: string,
-  source: SourceLocation,
-): T {
-  const target = asObject(value)
-  if (!target) return value
-  const current = sourceMetadata.get(target)
-  const members = new Map(current?.members)
-  members.set(member, snapshotSourceLocation(source))
-  sourceMetadata.set(target, {
-    ...(current?.source === undefined ? {} : { source: current.source }),
-    members,
-  })
+  if (!target || sourceMetadata.has(target)) return value
+  sourceMetadata.set(target, snapshotSourceLocation(source))
   return value
 }
 
 export function getSourceLocation(value: unknown): SourceLocation | undefined {
   const target = asObject(value)
-  return target ? sourceMetadata.get(target)?.source : undefined
-}
-
-export function getSourceMemberLocation(
-  value: unknown,
-  member: string,
-): SourceLocation | undefined {
-  const target = asObject(value)
-  return target ? sourceMetadata.get(target)?.members?.get(member) : undefined
+  return target ? sourceMetadata.get(target) : undefined
 }
 
 export function inheritSourceLocation<T>(target: T, source: unknown): T {

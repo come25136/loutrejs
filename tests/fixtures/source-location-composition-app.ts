@@ -11,7 +11,6 @@ import { http } from '@loutrejs/loutre/http'
 import { EventEmitter } from 'node:events'
 
 const __loutreSource = 'user binding' // eslint-disable-line no-underscore-dangle
-const __loutreMemberSource = 'user member binding' // eslint-disable-line no-underscore-dangle
 
 export class RealService {}
 const Alias = RealService
@@ -46,6 +45,5 @@ const Module = defineModule(() => ({
 }))
 
 void __loutreSource
-void __loutreMemberSource
 
 export default defineApplication({ modules: [Module()] })

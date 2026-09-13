@@ -491,8 +491,8 @@ function renderTextGraph(
           )
         }
       }
-      if (route.handlerSource) {
-        write(`  handler source: ${formatSourceLocation(route.handlerSource)}`)
+      if (execution?.source) {
+        write(`  handler source: ${formatSourceLocation(execution.source)}`)
       }
       write(
         `  flow: ${[...route.middlewares.map((middleware) => middleware.name), 'handler'].join(' -> ')}`,
@@ -881,7 +881,6 @@ interface HttpRouteProjection {
   readonly middlewares: readonly HttpMiddlewareProjection[]
   readonly responses?: JsonValue
   readonly source?: GraphNodeIR['source']
-  readonly handlerSource?: GraphNodeIR['source']
 }
 
 function httpExecutions(
@@ -936,9 +935,6 @@ function httpRoutes(graph: ApplicationModelGraphIR): HttpRouteProjection[] {
           ...(sourceLocation(route.source) === undefined
             ? {}
             : { source: sourceLocation(route.source) }),
-          ...(sourceLocation(route.handlerSource) === undefined
-            ? {}
-            : { handlerSource: sourceLocation(route.handlerSource) }),
           ...(route.responses === undefined
             ? {}
             : { responses: route.responses }),
@@ -1128,14 +1124,12 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
       }
 
       const handlerId = httpHandlerId(execution.id, name)
-      const handlerSource =
-        sourceLocation(route.handlerSource) ?? execution.source
       nodes.push({
         id: handlerId,
         kind: 'handler',
         label: `${execution.name ?? execution.id}.${name}`,
         ...(execution.module === undefined ? {} : { module: execution.module }),
-        ...(handlerSource === undefined ? {} : { source: handlerSource }),
+        ...(execution.source === undefined ? {} : { source: execution.source }),
         attributes: { route: name },
       })
       edges.push({ from: previousId, to: handlerId, kind: 'flows-to' })

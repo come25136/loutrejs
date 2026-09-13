@@ -9,8 +9,6 @@ type AstNode = {
 }
 
 interface ImportedApis {
-  readonly loutreNamespaces: Set<string>
-  readonly httpNamespaces: Set<string>
   readonly defineModule: Set<string>
   readonly providerBuilders: Set<string>
   readonly providerFactories: Set<string>
@@ -40,18 +38,8 @@ export function instrumentSourceLocations(
 
   const program = parsed.program as unknown as AstNode
   const apis = collectImportedApis(program)
-  const initializers = collectTopLevelConstInitializers(program)
-  const providerBuilderBindings = collectProviderBuilderBindings(
-    initializers,
-    apis,
-  )
   const usedIdentifiers = collectIdentifierNames(program)
   const sourceHelper = uniqueHelperName('__loutreSource', usedIdentifiers)
-  usedIdentifiers.add(sourceHelper)
-  const memberSourceHelper = uniqueHelperName(
-    '__loutreMemberSource',
-    usedIdentifiers,
-  )
   const insertions = new Map<number, string[]>()
   const wrapped = new Set<string>()
 
@@ -60,160 +48,35 @@ export function instrumentSourceLocations(
     current.push(text)
     insertions.set(position, current)
   }
-  const location = (offset: number): SourcePoint => ({
-    file: sourceFile,
-    ...positionAt(code, offset),
-  })
-  const sourceLiteral = (offset: number) => JSON.stringify(location(offset))
-  const wrapSource = (node: AstNode, offset = node.start) => {
+  const sourceLiteral = (offset: number) =>
+    JSON.stringify({
+      file: sourceFile,
+      ...positionAt(code, offset),
+    } satisfies SourcePoint)
+  const wrapSource = (node: AstNode) => {
     const key = `${node.start}:${node.end}`
     if (wrapped.has(key)) return
     wrapped.add(key)
     add(node.start, `${sourceHelper}(`)
-    add(node.end, `,${sourceLiteral(offset)})`)
+    add(node.end, `,${sourceLiteral(node.start)})`)
   }
 
-  const inspectRouteObject = (route: AstNode, definitionOffset: number) => {
-    wrapSource(route, definitionOffset)
-  }
-
-  const inspectRouteTree = (tree: AstNode) => {
-    const routeTree = resolveStaticExpression(tree, initializers)
-    if (routeTree?.type !== 'ObjectExpression') return
-    for (const property of objectProperties(routeTree)) {
-      const rawValue = unwrapExpression(property.value)
-      const value = resolveStaticExpression(rawValue, initializers)
-      if (!value || value.type !== 'ObjectExpression') continue
-      if (hasObjectProperty(value, 'method')) {
-        inspectRouteObject(
-          value,
-          rawValue === value ? property.start : value.start,
-        )
-        continue
-      }
-      const routes = objectPropertyValue(value, 'routes')
-      if (routes) inspectRouteTree(routes)
-    }
-  }
-
-  const inspectHttpImplementation = (
-    call: AstNode,
-    variableName?: string,
-    annotationPosition = call.end,
-  ) => {
-    const definition = unwrapExpression(call.arguments?.[0])
-    if (!definition || definition.type !== 'ObjectExpression') return
-    const factory = resolveStaticExpression(
-      objectPropertyValue(definition, 'factory'),
-      initializers,
-    )
-    const handlers = factory ? returnedHandlerObject(factory) : undefined
+  const inspectKnownCall = (call: AstNode) => {
     if (
-      !factory ||
-      !handlers ||
-      !isSafeHandlerObject(handlers) ||
-      !variableName
-    ) {
-      return
-    }
-    for (const property of objectProperties(handlers)) {
-      const name = propertyName(property)
-      if (!name) continue
-      add(
-        annotationPosition,
-        `;${memberSourceHelper}(${variableName}.factory,${JSON.stringify(name)},${sourceLiteral(property.start)})`,
-      )
-    }
-  }
-
-  const inspectKnownCall = (
-    call: AstNode,
-    variableName?: string,
-    annotationPosition = call.end,
-  ) => {
-    if (
-      isHttpCall(
-        call,
-        apis.httpContract,
-        apis.httpObjects,
-        apis.httpNamespaces,
-        'contract',
-      )
-    ) {
-      wrapSource(call)
-      const tree = resolveStaticExpression(call.arguments?.[0], initializers)
-      if (tree?.type === 'ObjectExpression') inspectRouteTree(tree)
-    }
-    if (
+      isHttpCall(call, apis.httpContract, apis.httpObjects, 'contract') ||
       isHttpCall(
         call,
         apis.httpImplementation,
         apis.httpObjects,
-        apis.httpNamespaces,
         'implementation',
-      )
+      ) ||
+      isHttpCall(call, apis.httpMiddleware, apis.httpObjects, 'middleware') ||
+      isDirectCall(call, apis.httpMiddlewareFactories) ||
+      isDirectCall(call, apis.providerFactories) ||
+      isProviderBuilderCall(call, apis.providerBuilders) ||
+      isDirectCall(call, apis.defineModule)
     ) {
       wrapSource(call)
-      inspectHttpImplementation(call, variableName, annotationPosition)
-    }
-    if (
-      isHttpCall(
-        call,
-        apis.httpMiddleware,
-        apis.httpObjects,
-        apis.httpNamespaces,
-        'middleware',
-      )
-    ) {
-      wrapSource(call)
-    }
-    if (
-      isApiCall(call, apis.httpMiddlewareFactories, apis.httpNamespaces, [
-        'basicAuth',
-        'bearerAuth',
-        'cors',
-      ])
-    ) {
-      wrapSource(call)
-    }
-    if (
-      isApiCall(call, apis.providerFactories, apis.loutreNamespaces, [
-        'environmentProvider',
-        'argumentsProvider',
-      ]) ||
-      isProviderBuilderCall(
-        call,
-        apis.providerBuilders,
-        apis.loutreNamespaces,
-        providerBuilderBindings,
-      )
-    ) {
-      wrapSource(call)
-    }
-    if (
-      isApiCall(call, apis.defineModule, apis.loutreNamespaces, [
-        'defineModule',
-      ])
-    ) {
-      wrapSource(call)
-      const factory = resolveStaticExpression(call.arguments?.[0], initializers)
-      const definition = factory
-        ? returnedObject(factory, initializers)
-        : undefined
-      const providers = definition
-        ? resolveStaticExpression(
-            objectPropertyValue(definition, 'providers'),
-            initializers,
-          )
-        : undefined
-      if (providers?.type === 'ArrayExpression') {
-        for (const element of providers.elements ?? []) {
-          const provider = resolveStaticExpression(element, initializers)
-          if (provider?.type === 'ObjectExpression') {
-            wrapSource(provider)
-          }
-        }
-      }
     }
   }
 
@@ -227,37 +90,19 @@ export function instrumentSourceLocations(
       statement.type === 'ExportDefaultDeclaration'
         ? (statement.declaration as AstNode | undefined)
         : statement
-    if (!declaration) continue
-
-    if (declaration.type === 'ClassDeclaration') {
-      if (declaration.declare === true) continue
-      if (declaration.id?.name) {
-        add(
-          statement.end,
-          `;${sourceHelper}(${declaration.id.name},${sourceLiteral(declaration.start)})`,
-        )
-      } else if (statement.type === 'ExportDefaultDeclaration') {
-        wrapSource(declaration)
-      }
-      continue
-    }
-
-    if (declaration.type !== 'VariableDeclaration') continue
-    for (const declarator of declaration.declarations ?? []) {
-      if (declarator.id?.type !== 'Identifier' || !declarator.init) continue
-      const name = declarator.id.name as string
-      const init = unwrapExpression(declarator.init as AstNode)
-      if (init?.type === 'CallExpression') {
-        inspectKnownCall(init, name, statement.end)
-      }
-    }
+    if (declaration?.type !== 'ClassDeclaration') continue
+    if (declaration.declare === true || !declaration.id?.name) continue
+    add(
+      statement.end,
+      `;${sourceHelper}(${declaration.id.name},${sourceLiteral(declaration.start)})`,
+    )
   }
 
   if (insertions.size === 0) return code
   const importPosition = sourceImportPosition(program)
   add(
     importPosition,
-    `${importPosition === program.start ? '' : ';'}import{registerSourceLocation as ${sourceHelper},registerSourceMemberLocation as ${memberSourceHelper}}from"@loutrejs/loutre";`,
+    `${importPosition === program.start ? '' : ';'}import{registerSourceLocation as ${sourceHelper}}from"@loutrejs/loutre";`,
   )
 
   let output = code
@@ -265,49 +110,6 @@ export function instrumentSourceLocations(
     output = `${output.slice(0, position)}${insertions.get(position)!.join('')}${output.slice(position)}`
   }
   return output
-}
-
-function collectTopLevelConstInitializers(
-  program: AstNode,
-): Map<string, AstNode> {
-  const initializers = new Map<string, AstNode>()
-  for (const statement of program.body ?? []) {
-    const declaration =
-      statement.type === 'ExportNamedDeclaration' ||
-      statement.type === 'ExportDefaultDeclaration'
-        ? (statement.declaration as AstNode | undefined)
-        : statement
-    if (
-      declaration?.type !== 'VariableDeclaration' ||
-      declaration.kind !== 'const'
-    ) {
-      continue
-    }
-    for (const declarator of declaration.declarations ?? []) {
-      if (
-        declarator.id?.type === 'Identifier' &&
-        declarator.init !== undefined
-      ) {
-        initializers.set(declarator.id.name, declarator.init as AstNode)
-      }
-    }
-  }
-  return initializers
-}
-
-function resolveStaticExpression(
-  value: AstNode | undefined,
-  initializers: ReadonlyMap<string, AstNode>,
-  resolving = new Set<string>(),
-): AstNode | undefined {
-  const expression = unwrapExpression(value)
-  if (expression?.type !== 'Identifier') return expression
-  const name = expression.name as string
-  const initializer = initializers.get(name)
-  if (!initializer || resolving.has(name)) return expression
-  const nextResolving = new Set(resolving)
-  nextResolving.add(name)
-  return resolveStaticExpression(initializer, initializers, nextResolving)
 }
 
 function collectIdentifierNames(program: AstNode): Set<string> {
@@ -344,8 +146,6 @@ function sourceImportPosition(program: AstNode): number {
 
 function collectImportedApis(program: AstNode): ImportedApis {
   const apis: ImportedApis = {
-    loutreNamespaces: new Set(),
-    httpNamespaces: new Set(),
     defineModule: new Set(),
     providerBuilders: new Set(),
     providerFactories: new Set(),
@@ -362,16 +162,10 @@ function collectImportedApis(program: AstNode): ImportedApis {
       continue
     }
     for (const specifier of statement.specifiers ?? []) {
-      const local = specifier.local?.name
-      if (typeof local !== 'string') continue
-      if (specifier.type === 'ImportNamespaceSpecifier') {
-        if (source === '@loutrejs/loutre') apis.loutreNamespaces.add(local)
-        if (source === '@loutrejs/loutre/http') apis.httpNamespaces.add(local)
-        continue
-      }
       if (specifier.type !== 'ImportSpecifier') continue
       const imported = specifier.imported?.name ?? specifier.imported?.value
-      if (typeof imported !== 'string') continue
+      const local = specifier.local?.name
+      if (typeof imported !== 'string' || typeof local !== 'string') continue
       if (source === '@loutrejs/loutre') {
         if (imported === 'defineModule') apis.defineModule.add(local)
         if (imported === 'provide') apis.providerBuilders.add(local)
@@ -402,53 +196,14 @@ function collectImportedApis(program: AstNode): ImportedApis {
   return apis
 }
 
-function isApiCall(
-  call: AstNode,
-  directNames: ReadonlySet<string>,
-  namespaces: ReadonlySet<string>,
-  members: readonly string[],
-): boolean {
+function isDirectCall(call: AstNode, names: ReadonlySet<string>): boolean {
   const callee = unwrapExpression(call.callee as AstNode | undefined)
-  if (callee?.type === 'Identifier') return directNames.has(callee.name)
-  return isNamespaceMember(callee, namespaces, members)
-}
-
-function isNamespaceMember(
-  value: AstNode | undefined,
-  namespaces: ReadonlySet<string>,
-  members: readonly string[],
-): boolean {
-  return (
-    value?.type === 'MemberExpression' &&
-    value.computed !== true &&
-    value.object?.type === 'Identifier' &&
-    namespaces.has(value.object.name) &&
-    members.includes(value.property?.name)
-  )
-}
-
-function collectProviderBuilderBindings(
-  initializers: ReadonlyMap<string, AstNode>,
-  apis: ImportedApis,
-): ReadonlySet<string> {
-  const bindings = new Set<string>()
-  for (const [name, initializer] of initializers) {
-    const call = unwrapExpression(initializer)
-    if (
-      call?.type === 'CallExpression' &&
-      isApiCall(call, apis.providerBuilders, apis.loutreNamespaces, ['provide'])
-    ) {
-      bindings.add(name)
-    }
-  }
-  return bindings
+  return callee?.type === 'Identifier' && names.has(callee.name)
 }
 
 function isProviderBuilderCall(
   call: AstNode,
   builders: ReadonlySet<string>,
-  namespaces: ReadonlySet<string>,
-  builderBindings: ReadonlySet<string>,
 ): boolean {
   const callee = unwrapExpression(call.callee as AstNode | undefined)
   if (
@@ -461,169 +216,24 @@ function isProviderBuilderCall(
     return false
   }
   const builder = unwrapExpression(callee.object as AstNode | undefined)
-  if (builder?.type === 'Identifier') return builderBindings.has(builder.name)
-  return (
-    builder?.type === 'CallExpression' &&
-    isApiCall(builder, builders, namespaces, ['provide'])
-  )
+  return builder?.type === 'CallExpression' && isDirectCall(builder, builders)
 }
 
 function isHttpCall(
   call: AstNode,
   directNames: ReadonlySet<string>,
   objectNames: ReadonlySet<string>,
-  namespaces: ReadonlySet<string>,
   member: string,
 ): boolean {
   const callee = unwrapExpression(call.callee as AstNode | undefined)
   if (callee?.type === 'Identifier') return directNames.has(callee.name)
-  if (callee?.type !== 'MemberExpression' || callee.computed === true) {
-    return false
-  }
-  const object = unwrapExpression(callee.object as AstNode | undefined)
-  if (callee.property?.name === member) {
-    if (object?.type === 'Identifier') return objectNames.has(object.name)
-    if (
-      object?.type === 'MemberExpression' &&
-      object.computed !== true &&
-      object.property?.name === 'http' &&
-      object.object?.type === 'Identifier' &&
-      namespaces.has(object.object.name)
-    ) {
-      return true
-    }
-  }
-  const directNamespaceMember =
-    member === 'contract'
-      ? 'defineHttpContract'
-      : member === 'implementation'
-        ? 'defineHttpImplementation'
-        : member === 'middleware'
-          ? 'defineHttpMiddleware'
-          : undefined
   return (
-    directNamespaceMember !== undefined &&
-    callee.property?.name === directNamespaceMember &&
-    object?.type === 'Identifier' &&
-    namespaces.has(object.name)
+    callee?.type === 'MemberExpression' &&
+    callee.computed !== true &&
+    callee.object?.type === 'Identifier' &&
+    objectNames.has(callee.object.name) &&
+    callee.property?.name === member
   )
-}
-
-function returnedHandlerObject(factory: AstNode): AstNode | undefined {
-  const body = unwrapExpression(factory.body as AstNode | undefined)
-  if (body?.type === 'ObjectExpression') return body
-  if (body?.type !== 'BlockStatement') return undefined
-  const returns = collectFunctionReturns(body)
-  if (returns.length !== 1) return undefined
-  const returned = unwrapExpression(returns[0]?.argument as AstNode | undefined)
-  return returned?.type === 'ObjectExpression' ? returned : undefined
-}
-
-function collectFunctionReturns(body: AstNode): readonly AstNode[] {
-  const returns: AstNode[] = []
-  const visit = (value: unknown, isRoot = false) => {
-    if (!value || typeof value !== 'object') return
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item)
-      return
-    }
-    const node = value as AstNode
-    if (!isRoot && isFunctionLike(node)) return
-    if (node.type === 'ReturnStatement') {
-      returns.push(node)
-      return
-    }
-    for (const [key, child] of Object.entries(node)) {
-      if (
-        key === 'type' ||
-        key === 'start' ||
-        key === 'end' ||
-        key === 'loc' ||
-        key === 'range'
-      ) {
-        continue
-      }
-      visit(child)
-    }
-  }
-  visit(body, true)
-  return returns
-}
-
-function isFunctionLike(node: AstNode): boolean {
-  return (
-    node.type === 'FunctionDeclaration' ||
-    node.type === 'FunctionExpression' ||
-    node.type === 'ArrowFunctionExpression' ||
-    node.type === 'ObjectMethod' ||
-    node.type === 'ClassMethod' ||
-    node.type === 'ClassPrivateMethod'
-  )
-}
-
-function returnedObject(
-  factory: AstNode,
-  initializers: ReadonlyMap<string, AstNode>,
-): AstNode | undefined {
-  const body = resolveStaticExpression(
-    factory.body as AstNode | undefined,
-    initializers,
-  )
-  if (body?.type === 'ObjectExpression') return body
-  if (body?.type !== 'BlockStatement') return undefined
-  for (const statement of body.body ?? []) {
-    if (statement.type !== 'ReturnStatement') continue
-    const returned = resolveStaticExpression(
-      statement.argument as AstNode | undefined,
-      initializers,
-    )
-    if (returned?.type === 'ObjectExpression') return returned
-  }
-  return undefined
-}
-
-function isSafeHandlerObject(value: AstNode): boolean {
-  if (value.type !== 'ObjectExpression') return false
-  const names = new Set<string>()
-  for (const property of value.properties ?? []) {
-    if (property.type !== 'Property' || property.computed === true) return false
-    const name = propertyName(property)
-    if (!name || names.has(name)) return false
-    names.add(name)
-  }
-  return true
-}
-
-function objectProperties(value: AstNode): readonly AstNode[] {
-  if (value.type !== 'ObjectExpression') return []
-  return (value.properties ?? []).filter(
-    (property: AstNode) => property.type === 'Property',
-  )
-}
-
-function objectPropertyValue(
-  value: AstNode,
-  name: string,
-): AstNode | undefined {
-  return objectProperties(value).find(
-    (property) => propertyName(property) === name,
-  )?.value
-}
-
-function hasObjectProperty(value: AstNode, name: string): boolean {
-  return objectPropertyValue(value, name) !== undefined
-}
-
-function propertyName(property: AstNode): string | undefined {
-  if (property.computed === true) return undefined
-  if (property.key?.type === 'Identifier') return property.key.name
-  if (
-    property.key?.type === 'Literal' &&
-    typeof property.key.value === 'string'
-  ) {
-    return property.key.value
-  }
-  return undefined
 }
 
 function unwrapExpression(value: AstNode | undefined): AstNode | undefined {

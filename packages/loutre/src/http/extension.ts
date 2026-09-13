@@ -1,7 +1,6 @@
 import {
   collectInjectedDependencies,
   getSourceLocation,
-  getSourceMemberLocation,
   inheritSourceLocation,
   composeLayers,
   defineExecution,
@@ -518,7 +517,6 @@ interface CompiledHttpRoute {
   readonly definition: HttpExecutionRouteDefinition
   readonly middlewares: readonly AnyHttpMiddleware[]
   readonly source?: SourceLocation
-  readonly handlerSource?: SourceLocation
 }
 
 interface CompiledHttpExecution {
@@ -558,14 +556,9 @@ export const httpExecutionExtension = defineExecutionExtension<
   abiVersion: '1',
   name: 'loutre:http',
   compile(definition, context) {
+    const contractSource = getSourceLocation(definition.contract)
     const routes = Object.entries(definition.contract.routes).map(
-      ([name, route]) =>
-        compileHttpRoute(
-          name,
-          route,
-          getSourceMemberLocation(definition.factory, name) ??
-            getSourceLocation(definition),
-        ),
+      ([name, route]) => compileHttpRoute(name, route, contractSource),
     )
     const id =
       definition.name || `${context.moduleId}.http.${context.definitionIndex}`
@@ -644,9 +637,6 @@ export const httpExecutionExtension = defineExecutionExtension<
       method: route.method,
       path: route.path,
       ...(route.source === undefined ? {} : { source: route.source }),
-      ...(route.handlerSource === undefined
-        ? {}
-        : { handlerSource: route.handlerSource }),
       middlewares: route.middlewares.map((middleware) => ({
         name: middleware.name,
         capabilities: middleware.capabilities.map(
@@ -1088,13 +1078,13 @@ export function withHttpFrameworkHeaders(
 function compileHttpRoute(
   name: string,
   route: HttpExecutionRouteDefinition,
-  handlerSource?: SourceLocation,
+  routeSourceFallback?: SourceLocation,
 ): CompiledHttpRoute {
   assertValidHttpMethod(route.method)
   const segments = parseHttpPath(route.path)
   assertValidHttpRouteDefinition(route, segments)
   const definition = snapshotHttpRouteDefinition(route)
-  const routeSource = getSourceLocation(route)
+  const routeSource = getSourceLocation(route) ?? routeSourceFallback
   return Object.freeze({
     name,
     method: route.method.toUpperCase(),
@@ -1104,7 +1094,6 @@ function compileHttpRoute(
     definition,
     middlewares: compileHttpMiddlewares(definition),
     ...(routeSource === undefined ? {} : { source: routeSource }),
-    ...(handlerSource === undefined ? {} : { handlerSource }),
   })
 }
 

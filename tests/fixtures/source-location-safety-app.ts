@@ -18,28 +18,14 @@ const Contract = http.contract({
   },
 })
 
-const handlers = {
-  create() {
-    throw new Error('decoy handler must never be used')
-  },
-}
-
-function makeHandlers() {
-  return {
-    create(ctx: any) {
-      return ctx.response.ok({})
-    },
-  }
-}
-
 const Controller = http.implementation({
   name: 'SafetyController',
   contract: Contract,
-  factory: () => {
-    // eslint-disable-next-line no-shadow
-    const handlers = makeHandlers()
-    return handlers
-  },
+  factory: () => ({
+    create(ctx) {
+      return ctx.response.ok({})
+    },
+  }),
 })
 
 const Module = defineModule(() => ({
@@ -47,7 +33,5 @@ const Module = defineModule(() => ({
   providers: [ExternalAlias],
   executions: [Controller],
 }))
-
-void handlers
 
 export default defineApplication({ modules: [Module()] })
