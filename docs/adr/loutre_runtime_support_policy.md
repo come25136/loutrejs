@@ -75,6 +75,8 @@ Node上で実行される公開packageはminimumをsemver rangeとして宣言�
 
 `@loutrejs/cli`のhost runtime supportはNode.js / Bun / Denoとする。各host runtimeのsupport versionは本ADRのNode.js / Bun / Deno policyへ追従する。
 
+Source Location parser等のdeveloper tooling dependencyを理由にCLIのhost runtime baselineを個別に引き上げない。Source instrumentationのparser選定とportable runtime境界の詳細は[`loutre_source_location_instrumentation.md`](./loutre_source_location_instrumentation.md)を参照する。
+
 CLI implementationは3 runtimeで共通して利用可能なWeb APIとNode.js compatibility APIのsubsetへ制限し、Node専用packageをruntime dependencyとして要求しない。Node runtimeのCapability検査に必要なmetadataはruntime-neutralな`@loutrejs/loutre/runtime`から取得する。
 
 `bin/loutre.js`のshebangはnpm / npx ecosystemとの互換性のため`#!/usr/bin/env node`を維持する。これはCLI implementationのNode専用化を意味しない。Bunでnative実行する場合は`bunx --bun`または`bun run --bun`を使用し、Denoでは`deno x`、`deno run`、`deno task`のnpm binary compatibilityから実行する。

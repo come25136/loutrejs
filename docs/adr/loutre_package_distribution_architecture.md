@@ -40,7 +40,7 @@ Tasks、MessagePort、WebSocketは内部では独立したExecution Extensionと
 
 `@loutrejs/bullmq`は公開済みであり、optional peer dependencyである`bullmq`とのintegration lifecycleを持つため、今回は独立packageを維持する。ただし外部dependencyの存在だけを、将来のpackage分割理由にはしない。
 
-`@loutrejs/cli`は`esbuild`などdeveloper tooling固有のdependencyを持つ。Runtime library利用者へtooling dependencyを強制しないため独立させる。
+`@loutrejs/cli`は`esbuild`や`@swc/core`などdeveloper tooling固有のdependencyを持つ。Runtime library利用者へtooling dependencyを強制しないため独立させる。bundlingとSource Location解析の責務分離は[`loutre_source_location_instrumentation.md`](./loutre_source_location_instrumentation.md)を正本とする。
 
 `create-loutre`はinitializer binaryとして独立したuser-facing lifecycleを持つため維持する。生成projectはExecution Extensionのsubpathを利用し、独立Extension packageを追加しない。
 
