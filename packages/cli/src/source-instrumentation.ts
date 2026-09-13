@@ -1,10 +1,12 @@
 import { isAbsolute, relative, sep, win32 } from 'node:path'
-import { parseSync } from 'oxc-parser'
+import { parseSync } from '@swc/core'
 
 type AstNode = {
   readonly type: string
-  readonly start: number
-  readonly end: number
+  readonly span?: {
+    readonly start: number
+    readonly end: number
+  }
   readonly [key: string]: any
 }
 
@@ -33,10 +35,14 @@ export function instrumentSourceLocations(
   const sourceFile = projectRelativeFile(file, projectRoot)
   if (!sourceFile) return code
 
-  const parsed = parseSync(file, code)
-  if (parsed.errors.length > 0) return code
+  let program: AstNode
+  try {
+    program = parseSync(code, parserOptions(file)) as unknown as AstNode
+  } catch {
+    return code
+  }
 
-  const program = parsed.program as unknown as AstNode
+  const toIndex = createSwcPositionMapper(code)
   const apis = collectImportedApis(program)
   const usedIdentifiers = collectIdentifierNames(program)
   const sourceHelper = uniqueHelperName('__loutreSource', usedIdentifiers)
@@ -54,55 +60,58 @@ export function instrumentSourceLocations(
       ...positionAt(code, offset),
     } satisfies SourcePoint)
   const wrapSource = (node: AstNode) => {
-    const key = `${node.start}:${node.end}`
+    if (!node.span) return
+    const start = toIndex(node.span.start)
+    const end = toIndex(node.span.end)
+    const key = `${start}:${end}`
     if (wrapped.has(key)) return
     wrapped.add(key)
-    add(node.start, `${sourceHelper}(`)
-    add(node.end, `,${sourceLiteral(node.start)})`)
+    add(start, `${sourceHelper}(`)
+    add(end, `,${sourceLiteral(start)})`)
   }
 
-  const inspectKnownCall = (call: AstNode) => {
+  walkAst(program, (node) => {
+    if (node.type !== 'CallExpression') return
     if (
-      isHttpCall(call, apis.httpContract, apis.httpObjects, 'contract') ||
+      isHttpCall(node, apis.httpContract, apis.httpObjects, 'contract') ||
       isHttpCall(
-        call,
+        node,
         apis.httpImplementation,
         apis.httpObjects,
         'implementation',
       ) ||
-      isHttpCall(call, apis.httpMiddleware, apis.httpObjects, 'middleware') ||
-      isDirectCall(call, apis.httpMiddlewareFactories) ||
-      isDirectCall(call, apis.providerFactories) ||
-      isProviderBuilderCall(call, apis.providerBuilders) ||
-      isDirectCall(call, apis.defineModule)
+      isHttpCall(node, apis.httpMiddleware, apis.httpObjects, 'middleware') ||
+      isDirectCall(node, apis.httpMiddlewareFactories) ||
+      isDirectCall(node, apis.providerFactories) ||
+      isProviderBuilderCall(node, apis.providerBuilders) ||
+      isDirectCall(node, apis.defineModule)
     ) {
-      wrapSource(call)
+      wrapSource(node)
     }
-  }
-
-  walkAst(program, (node) => {
-    if (node.type === 'CallExpression') inspectKnownCall(node)
   })
 
   for (const statement of program.body ?? []) {
-    const declaration =
-      statement.type === 'ExportNamedDeclaration' ||
-      statement.type === 'ExportDefaultDeclaration'
-        ? (statement.declaration as AstNode | undefined)
-        : statement
-    if (declaration?.type !== 'ClassDeclaration') continue
-    if (declaration.declare === true || !declaration.id?.name) continue
+    const declaration = classDeclarationOf(statement)
+    const name = declaration?.identifier?.value
+    if (
+      !declaration ||
+      declaration.declare === true ||
+      typeof name !== 'string'
+    ) {
+      continue
+    }
+    if (!statement.span || !declaration.span) continue
     add(
-      statement.end,
-      `;${sourceHelper}(${declaration.id.name},${sourceLiteral(declaration.start)})`,
+      toIndex(statement.span.end),
+      `;${sourceHelper}(${name},${sourceLiteral(toIndex(declaration.span.start))})`,
     )
   }
 
   if (insertions.size === 0) return code
-  const importPosition = sourceImportPosition(program)
+  const importPosition = sourceImportPosition(program, code, toIndex)
   add(
-    importPosition,
-    `${importPosition === program.start ? '' : ';'}import{registerSourceLocation as ${sourceHelper}}from"@loutrejs/loutre";`,
+    importPosition.position,
+    `${importPosition.needsSemicolon ? ';' : ''}import{registerSourceLocation as ${sourceHelper}}from"@loutrejs/loutre";`,
   )
 
   let output = code
@@ -112,11 +121,30 @@ export function instrumentSourceLocations(
   return output
 }
 
+function parserOptions(file: string) {
+  const lower = file.toLowerCase()
+  const typescript = /\.(?:ts|tsx|mts|cts)$/.test(lower)
+  const jsx = /\.(?:jsx|tsx)$/.test(lower)
+  return typescript
+    ? ({
+        syntax: 'typescript',
+        tsx: jsx,
+        decorators: true,
+        target: 'esnext',
+      } as const)
+    : ({
+        syntax: 'ecmascript',
+        jsx,
+        decorators: true,
+        target: 'esnext',
+      } as const)
+}
+
 function collectIdentifierNames(program: AstNode): Set<string> {
   const identifiers = new Set<string>()
   walkAst(program, (node) => {
-    if (node.type === 'Identifier' && typeof node.name === 'string') {
-      identifiers.add(node.name)
+    if (node.type === 'Identifier' && typeof node.value === 'string') {
+      identifiers.add(node.value)
     }
   })
   return identifiers
@@ -130,18 +158,30 @@ function uniqueHelperName(base: string, used: ReadonlySet<string>): string {
   }
 }
 
-function sourceImportPosition(program: AstNode): number {
-  let position = program.start
+function sourceImportPosition(
+  program: AstNode,
+  code: string,
+  toIndex: (position: number) => number,
+): { position: number; needsSemicolon: boolean } {
+  let position = code.charCodeAt(0) === 0xfeff ? 1 : 0
+  if (program.interpreter != null) {
+    const lineEnd = code.indexOf('\n', position)
+    position = lineEnd === -1 ? code.length : lineEnd + 1
+  }
+
+  let needsSemicolon = false
   for (const statement of program.body ?? []) {
     if (
       statement.type !== 'ExpressionStatement' ||
-      typeof statement.directive !== 'string'
+      statement.expression?.type !== 'StringLiteral' ||
+      !statement.span
     ) {
       break
     }
-    position = statement.end
+    position = toIndex(statement.span.end)
+    needsSemicolon = true
   }
-  return position
+  return { position, needsSemicolon }
 }
 
 function collectImportedApis(program: AstNode): ImportedApis {
@@ -156,39 +196,47 @@ function collectImportedApis(program: AstNode): ImportedApis {
     httpMiddlewareFactories: new Set(),
   }
   for (const statement of program.body ?? []) {
-    if (statement.type !== 'ImportDeclaration') continue
+    if (statement.type !== 'ImportDeclaration' || statement.typeOnly === true) {
+      continue
+    }
     const source = statement.source?.value
     if (source !== '@loutrejs/loutre' && source !== '@loutrejs/loutre/http') {
       continue
     }
     for (const specifier of statement.specifiers ?? []) {
-      if (specifier.type !== 'ImportSpecifier') continue
-      const imported = specifier.imported?.name ?? specifier.imported?.value
-      const local = specifier.local?.name
-      if (typeof imported !== 'string' || typeof local !== 'string') continue
+      if (
+        specifier.type !== 'ImportSpecifier' ||
+        specifier.isTypeOnly === true
+      ) {
+        continue
+      }
+      const local = specifier.local
+      const key = bindingKey(local)
+      const imported = specifier.imported?.value ?? local?.value
+      if (!key || typeof imported !== 'string') continue
       if (source === '@loutrejs/loutre') {
-        if (imported === 'defineModule') apis.defineModule.add(local)
-        if (imported === 'provide') apis.providerBuilders.add(local)
+        if (imported === 'defineModule') apis.defineModule.add(key)
+        if (imported === 'provide') apis.providerBuilders.add(key)
         if (
           imported === 'environmentProvider' ||
           imported === 'argumentsProvider'
         ) {
-          apis.providerFactories.add(local)
+          apis.providerFactories.add(key)
         }
       }
       if (source === '@loutrejs/loutre/http') {
-        if (imported === 'http') apis.httpObjects.add(local)
-        if (imported === 'defineHttpContract') apis.httpContract.add(local)
+        if (imported === 'http') apis.httpObjects.add(key)
+        if (imported === 'defineHttpContract') apis.httpContract.add(key)
         if (imported === 'defineHttpImplementation') {
-          apis.httpImplementation.add(local)
+          apis.httpImplementation.add(key)
         }
-        if (imported === 'defineHttpMiddleware') apis.httpMiddleware.add(local)
+        if (imported === 'defineHttpMiddleware') apis.httpMiddleware.add(key)
         if (
           imported === 'basicAuth' ||
           imported === 'bearerAuth' ||
           imported === 'cors'
         ) {
-          apis.httpMiddlewareFactories.add(local)
+          apis.httpMiddlewareFactories.add(key)
         }
       }
     }
@@ -196,9 +244,30 @@ function collectImportedApis(program: AstNode): ImportedApis {
   return apis
 }
 
-function isDirectCall(call: AstNode, names: ReadonlySet<string>): boolean {
-  const callee = unwrapExpression(call.callee as AstNode | undefined)
-  return callee?.type === 'Identifier' && names.has(callee.name)
+function bindingKey(node: AstNode | undefined): string | undefined {
+  if (
+    node?.type !== 'Identifier' ||
+    typeof node.value !== 'string' ||
+    typeof node.ctxt !== 'number'
+  ) {
+    return undefined
+  }
+  return `${node.value}\0${node.ctxt}`
+}
+
+function isImportedIdentifier(
+  node: AstNode | undefined,
+  bindings: ReadonlySet<string>,
+): boolean {
+  const key = bindingKey(node)
+  return key !== undefined && bindings.has(key)
+}
+
+function isDirectCall(call: AstNode, bindings: ReadonlySet<string>): boolean {
+  return isImportedIdentifier(
+    unwrapExpression(call.callee as AstNode | undefined),
+    bindings,
+  )
 }
 
 function isProviderBuilderCall(
@@ -208,9 +277,9 @@ function isProviderBuilderCall(
   const callee = unwrapExpression(call.callee as AstNode | undefined)
   if (
     callee?.type !== 'MemberExpression' ||
-    callee.computed === true ||
+    callee.property?.type !== 'Identifier' ||
     !['useClass', 'useValue', 'useFactory', 'select'].includes(
-      callee.property?.name,
+      callee.property.value,
     )
   ) {
     return false
@@ -221,34 +290,59 @@ function isProviderBuilderCall(
 
 function isHttpCall(
   call: AstNode,
-  directNames: ReadonlySet<string>,
-  objectNames: ReadonlySet<string>,
+  directBindings: ReadonlySet<string>,
+  objectBindings: ReadonlySet<string>,
   member: string,
 ): boolean {
   const callee = unwrapExpression(call.callee as AstNode | undefined)
-  if (callee?.type === 'Identifier') return directNames.has(callee.name)
+  if (callee?.type === 'Identifier') {
+    return isImportedIdentifier(callee, directBindings)
+  }
   return (
     callee?.type === 'MemberExpression' &&
-    callee.computed !== true &&
-    callee.object?.type === 'Identifier' &&
-    objectNames.has(callee.object.name) &&
-    callee.property?.name === member
+    callee.property?.type === 'Identifier' &&
+    callee.property.value === member &&
+    isImportedIdentifier(
+      unwrapExpression(callee.object as AstNode | undefined),
+      objectBindings,
+    )
   )
 }
 
 function unwrapExpression(value: AstNode | undefined): AstNode | undefined {
   let current = value
   while (
-    current &&
-    (current.type === 'ParenthesizedExpression' ||
-      current.type === 'TSAsExpression' ||
-      current.type === 'TSSatisfiesExpression' ||
-      current.type === 'TSNonNullExpression' ||
-      current.type === 'TSInstantiationExpression')
+    current?.expression &&
+    [
+      'ParenthesisExpression',
+      'TsAsExpression',
+      'TsConstAssertion',
+      'TsInstantiation',
+      'TsNonNullExpression',
+      'TsSatisfiesExpression',
+      'TsTypeAssertion',
+    ].includes(current.type)
   ) {
-    current = current.expression as AstNode | undefined
+    current = current.expression as AstNode
   }
   return current
+}
+
+function classDeclarationOf(statement: AstNode): AstNode | undefined {
+  if (statement.type === 'ClassDeclaration') return statement
+  if (
+    statement.type === 'ExportDeclaration' &&
+    statement.declaration?.type === 'ClassDeclaration'
+  ) {
+    return statement.declaration
+  }
+  if (
+    statement.type === 'ExportDefaultDeclaration' &&
+    statement.decl?.type === 'ClassExpression'
+  ) {
+    return statement.decl
+  }
+  return undefined
 }
 
 function walkAst(root: AstNode, visit: (node: AstNode) => void): void {
@@ -261,16 +355,30 @@ function walkAst(root: AstNode, visit: (node: AstNode) => void): void {
       return
     }
     const record = value as Record<string, unknown>
-    if (
-      typeof record.type === 'string' &&
-      typeof record.start === 'number' &&
-      typeof record.end === 'number'
-    ) {
-      visit(record as AstNode)
-    }
+    if (typeof record.type === 'string') visit(record as AstNode)
     for (const child of Object.values(record)) walk(child)
   }
   walk(root)
+}
+
+function createSwcPositionMapper(code: string): (position: number) => number {
+  const indexByByteOffset = new Map<number, number>([[0, 0]])
+  let byteOffset = 0
+  for (let index = 0; index < code.length;) {
+    const codePoint = code.codePointAt(index)!
+    byteOffset += utf8Length(codePoint)
+    index += codePoint > 0xffff ? 2 : 1
+    indexByByteOffset.set(byteOffset, index)
+  }
+  return (position: number) =>
+    indexByByteOffset.get(Math.max(0, position - 1)) ?? 0
+}
+
+function utf8Length(codePoint: number): number {
+  if (codePoint <= 0x7f) return 1
+  if (codePoint <= 0x7ff) return 2
+  if (codePoint <= 0xffff) return 3
+  return 4
 }
 
 function positionAt(

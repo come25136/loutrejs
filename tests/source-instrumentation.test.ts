@@ -56,7 +56,7 @@ void Module
     expect(transformed).toContain('const Module = __loutreSource(defineModule')
   })
 
-  it('日本語と絵文字が前にあってもOxc offsetでcodeを壊さない', () => {
+  it('日本語と絵文字が前にあってもUTF-8 byte spanでcodeを壊さない', () => {
     const source = `import { defineModule } from '@loutrejs/loutre'
 const marker = '日本語🦦'; const Module = defineModule(() => ({ name: 'App' }))
 void marker
@@ -94,6 +94,145 @@ void Module
     expect(transformed).not.toContain('__loutreSource(CallAlias')
     expect(transformed).not.toContain('__loutreSource(externalClass()')
     expect(transformed).toContain('const Module = __loutreSource(defineModule')
+  })
+
+  it('import APIと同名の関数引数callはsource registrationしない', () => {
+    const source = `import { argumentsProvider, defineModule, environmentProvider, provide } from '@loutrejs/loutre'
+import { basicAuth, bearerAuth, cors, defineHttpContract, defineHttpImplementation, defineHttpMiddleware, http } from '@loutrejs/loutre/http'
+const RealModule = defineModule(() => ({ name: 'Real' }))
+function shadow(
+  defineModule: any,
+  provide: any,
+  environmentProvider: any,
+  argumentsProvider: any,
+  http: any,
+  defineHttpContract: any,
+  defineHttpImplementation: any,
+  defineHttpMiddleware: any,
+  basicAuth: any,
+  bearerAuth: any,
+  cors: any,
+) {
+  defineModule()
+  provide(null).useValue(null)
+  environmentProvider()
+  argumentsProvider()
+  http.contract({})
+  http.implementation({})
+  http.middleware({})
+  defineHttpContract({})
+  defineHttpImplementation({})
+  defineHttpMiddleware({})
+  basicAuth({})
+  bearerAuth({})
+  cors({})
+}
+void RealModule
+void shadow
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain(
+      'const RealModule = __loutreSource(defineModule',
+    )
+    expect(transformed.match(/__loutreSource\(/g)).toHaveLength(1)
+  })
+
+  it('import aliasもbinding identityで判定しshadowingを除外する', () => {
+    const source = `import { defineModule as dm } from '@loutrejs/loutre'
+const RealModule = dm(() => ({ name: 'Real' }))
+function selectExternal(dm: () => unknown) {
+  return dm()
+}
+void RealModule
+void selectExternal
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('const RealModule = __loutreSource(dm')
+    expect(transformed).toContain('return dm()')
+    expect(transformed).not.toContain('return __loutreSource(dm()')
+    expect(transformed.match(/__loutreSource\(/g)).toHaveLength(1)
+  })
+
+  it('type-only importはruntime API bindingとして扱わない', () => {
+    const source = `import type { defineModule } from '@loutrejs/loutre'
+void 0
+`
+    expect(instrumentSourceLocations(source, '/repo/src/app.ts', '/repo')).toBe(
+      source,
+    )
+  })
+
+  it('lexical bindingでshadowされたimport API callはsource registrationしない', () => {
+    const source = `import { defineModule } from '@loutrejs/loutre'
+import { defineHttpContract, defineHttpImplementation, defineHttpMiddleware, http } from '@loutrejs/loutre/http'
+const RealModule = defineModule(() => ({ name: 'Real' }))
+function varShadow() {
+  defineModule()
+  var defineModule = () => null
+}
+function destructured({ http }: any) {
+  return http.contract({})
+}
+{
+  defineHttpContract({})
+  const defineHttpContract = () => null
+}
+try {
+  throw null
+} catch (defineHttpImplementation) {
+  defineHttpImplementation({})
+}
+for (const defineHttpMiddleware of []) {
+  defineHttpMiddleware({})
+}
+void RealModule
+void varShadow
+void destructured
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed.match(/__loutreSource\(/g)).toHaveLength(1)
+  })
+
+  it('parameter initializerとstatic blockのvar scopeを区別する', () => {
+    const source = `import { defineModule } from '@loutrejs/loutre'
+function defaultParam(value = defineModule(() => ({ name: 'Param' }))) {
+  var defineModule = () => null
+  return value
+}
+class Holder {
+  static {
+    defineModule()
+    var defineModule = () => null
+  }
+}
+void defaultParam
+void Holder
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('value = __loutreSource(defineModule(() =>')
+    expect(transformed).not.toContain(
+      'static {\n    __loutreSource(defineModule()',
+    )
   })
 
   it('declare classとanonymous default classはruntime instrumentation対象にしない', () => {
