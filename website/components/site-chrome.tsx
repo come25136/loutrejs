@@ -19,6 +19,7 @@ const chromeCopy = {
     navigationLabel: 'Main navigation',
     documentation: 'Documentation',
     examples: 'Examples',
+    devtools: 'Devtools',
     getStarted: 'Get started',
     community: 'Community',
     resources: 'Resources',
@@ -32,6 +33,7 @@ const chromeCopy = {
     navigationLabel: 'メインナビゲーション',
     documentation: 'ドキュメント',
     examples: 'サンプル',
+    devtools: 'Devtools',
     getStarted: 'はじめる',
     community: 'コミュニティ',
     resources: 'リソース',
@@ -128,6 +130,9 @@ function Brand({ prefix, label }: { prefix: string; label: string }) {
 
 export function SiteChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
+  const normalizedPathname = pathname.replace(/\/$/, '')
+  const isDevtools =
+    normalizedPathname === '/devtools' || normalizedPathname === '/ja/devtools'
   const currentLocale = localeFromPathname(pathname)
   const targetLocale = alternateLocale(currentLocale)
   const prefix = localePrefix(currentLocale)
@@ -146,6 +151,10 @@ export function SiteChrome({ children }: { children: ReactNode }) {
 
     return () => window.removeEventListener('scroll', syncScrollState)
   }, [])
+
+  if (isDevtools) {
+    return <div lang={currentLocale}>{children}</div>
+  }
 
   return (
     <div lang={currentLocale}>
@@ -169,6 +178,12 @@ export function SiteChrome({ children }: { children: ReactNode }) {
               href={`${prefix}/examples/`}
             >
               {copy.examples}
+            </Link>
+            <Link
+              className="transition hover:text-interaction"
+              href={`${prefix}/devtools/`}
+            >
+              {copy.devtools}
             </Link>
             <Link
               className="transition hover:text-interaction"

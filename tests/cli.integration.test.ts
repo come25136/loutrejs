@@ -88,6 +88,22 @@ describe('Loutre CLI', () => {
     ])
   })
 
+  it.each([
+    [
+      ['devtools', '--entry', 'src/app.ts', '--port', '0'],
+      'devtools --port must be an integer from 1 to 65535.',
+    ],
+    [
+      ['devtools', '--entry', 'src/app.ts', '--origin', 'example.com'],
+      'devtools --origin must be a URL origin: example.com',
+    ],
+  ])('devtoolsの接続設定を検証する', async (args, message) => {
+    const output = io()
+
+    expect(await runCli(args, output.value)).toBe(2)
+    expect(output.stderr).toEqual([message])
+  })
+
   it('Runtime capability mismatchをdoctorで説明する', async () => {
     const output = io()
     const code = await runCli(

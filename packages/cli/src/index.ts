@@ -19,6 +19,12 @@ import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
 import { emitApplication, loadApplicationGraph } from './application-loader.js'
+import {
+  DEFAULT_DEVTOOLS_ORIGINS,
+  DEFAULT_DEVTOOLS_PORT,
+  DEVTOOLS_PROTOCOL_VERSION,
+  startDevtoolsServer,
+} from './devtools-server.js'
 
 export interface CliIO {
   readonly cwd: string
@@ -244,6 +250,58 @@ export async function runCli(
       }
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
       return hasErrorDiagnostics(graph.diagnostics) ? 1 : 0
+    }
+
+    case 'devtools': {
+      if (subject) {
+        io.stderr(`Unexpected argument: ${subject}`)
+        return 2
+      }
+      const target = entry()
+      if (!target) return 2
+      const port = parsePort(readOption(args, '--port'))
+      if (port === undefined) {
+        io.stderr('devtools --port must be an integer from 1 to 65535.')
+        return 2
+      }
+      const requestedOrigins = readOptions(args, '--origin')
+      const origins = [
+        ...new Set([...DEFAULT_DEVTOOLS_ORIGINS, ...requestedOrigins]),
+      ]
+      for (const origin of origins) {
+        if (!isOrigin(origin)) {
+          io.stderr(`devtools --origin must be a URL origin: ${origin}`)
+          return 2
+        }
+      }
+
+      const server = await startDevtoolsServer({
+        projectRoot: io.cwd,
+        entry: requestedEntry(args)!,
+        port,
+        origins,
+        loadGraph: async () => {
+          const graph = await loadApplicationGraph(target, {
+            projectRoot: io.cwd,
+            sourceLocations: true,
+          })
+          const view = buildGraphView(graph, 'all')
+          return {
+            schemaVersion: DEVTOOLS_PROTOCOL_VERSION,
+            nodes: view.nodes,
+            edges: view.edges,
+            diagnostics: graph.diagnostics,
+          }
+        },
+      })
+      io.stdout(`Loutre Devtools API: ${server.url}`)
+      io.stdout(`Project: ${io.cwd}`)
+      io.stdout(`Entry: ${requestedEntry(args)}`)
+      io.stdout(`Allowed origins: ${origins.join(', ')}`)
+      io.stdout('Press Ctrl+C to stop.')
+      await waitForShutdownSignal()
+      await server.close()
+      return 0
     }
 
     case 'explain': {
@@ -1393,6 +1451,8 @@ const valueOptions = new Set([
   '--theme',
   '--runtime',
   '--out-dir',
+  '--port',
+  '--origin',
 ])
 
 function readPositionals(args: readonly string[]): string[] {
@@ -1413,15 +1473,59 @@ function readOption(args: readonly string[], name: string): string | undefined {
   return index < 0 ? undefined : args[index + 1]
 }
 
+function readOptions(args: readonly string[], name: string): string[] {
+  return args.flatMap((argument, index) =>
+    argument === name && args[index + 1] !== undefined
+      ? [args[index + 1]!]
+      : [],
+  )
+}
+
+function requestedEntry(args: readonly string[]): string | undefined {
+  return readOption(args, '--entry')
+}
+
+function parsePort(value: string | undefined): number | undefined {
+  if (value === undefined) return DEFAULT_DEVTOOLS_PORT
+  if (!/^\d+$/.test(value)) return undefined
+  const port = Number(value)
+  return port >= 1 && port <= 65_535 ? port : undefined
+}
+
+function isOrigin(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return (
+      url.origin === value &&
+      (url.protocol === 'http:' || url.protocol === 'https:')
+    )
+  } catch {
+    return false
+  }
+}
+
+function waitForShutdownSignal(): Promise<void> {
+  return new Promise((complete) => {
+    const finish = () => {
+      process.off('SIGINT', finish)
+      process.off('SIGTERM', finish)
+      complete()
+    }
+    process.once('SIGINT', finish)
+    process.once('SIGTERM', finish)
+  })
+}
+
 function helpText(): string {
   return [
     'Loutre CLI',
     '  loutre check --entry <entry>',
     '  loutre doctor [--runtime node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
     '  loutre graph all|modules|di|executions|http|runtime --entry <entry> [--format text|json|mermaid] [--theme light|dark]',
+    '  loutre devtools --entry <entry> [--port 4545] [--origin <origin>]',
     '  loutre explain <target> --entry <entry>',
     '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',
     '',
-    'Application execution is owned by the Host. Loutre CLI does not provide run/dev/start.',
+    'Application execution is owned by the Host. The devtools command only exposes tooling data.',
   ].join('\n')
 }
