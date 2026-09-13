@@ -9,12 +9,14 @@ import type { ModuleInstance, ModuleTemplate } from '../module.js'
 import type { ProviderDescriptor } from '../provider.js'
 import type { Diagnostic } from '../diagnostic.js'
 import type { TokenLike } from '../token.js'
+import type { SourceLocation } from '../source-location.js'
 
 export interface ModuleModelNode {
   readonly kind: 'module'
   readonly id: string
   readonly name?: string
   readonly description?: string
+  readonly source?: SourceLocation
 }
 
 export interface ProviderModelNode {
@@ -24,6 +26,7 @@ export interface ProviderModelNode {
   readonly provider: ProviderDescriptor
   readonly moduleId: string
   readonly dependencies: readonly TokenLike[]
+  readonly source?: SourceLocation
 }
 
 export interface ExecutionModelNode<TCompiled = unknown> {
@@ -34,6 +37,7 @@ export interface ExecutionModelNode<TCompiled = unknown> {
   readonly dependencies: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
   readonly compiled: TCompiled
+  readonly source?: SourceLocation
 }
 
 export interface LifecycleModelNode {
@@ -42,6 +46,7 @@ export interface LifecycleModelNode {
   readonly moduleId: string
   readonly phase: string
   readonly hook: LifecycleHook<any>
+  readonly source?: SourceLocation
 }
 
 export interface FrameworkModelNode {
@@ -49,6 +54,7 @@ export interface FrameworkModelNode {
   readonly id: string
   readonly frameworkKind: 'runtime-capability' | 'execution-extension'
   readonly name: string
+  readonly source?: SourceLocation
 }
 
 export type ApplicationModelNode =

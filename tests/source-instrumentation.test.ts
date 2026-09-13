@@ -1,0 +1,479 @@
+import { parseSync } from '@swc/core'
+import { instrumentSourceLocations } from '../packages/cli/src/source-instrumentation.js'
+
+describe('CLI source instrumentation', () => {
+  it('hashbangとdirective prologueを維持しhelper名衝突を回避する', () => {
+    const source = `#!/usr/bin/env node
+'use strict'
+import { defineModule } from '@loutrejs/loutre'
+const __loutreSource = 1
+class RealService {}
+const Module = defineModule(() => ({ providers: [RealService] }))
+void __loutreSource
+void Module
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed.startsWith('#!/usr/bin/env node\n')).toBe(true)
+    expect(transformed.indexOf("'use strict'")).toBeLessThan(
+      transformed.indexOf('registerSourceLocation as'),
+    )
+    expect(transformed).toContain('registerSourceLocation as __loutreSource$1')
+    expect(transformed).toContain('__loutreSource$1(RealService')
+  })
+
+  it.each([
+    [
+      'ファイル先頭',
+      `http.contract({})
+import { http } from '@loutrejs/loutre/http'
+`,
+    ],
+    [
+      'shebang直後',
+      `#!/usr/bin/env node
+http.contract({})
+import { http } from '@loutrejs/loutre/http'
+`,
+    ],
+    [
+      'directive直後',
+      `'use strict';http.contract({});import { http } from '@loutrejs/loutre/http'
+`,
+    ],
+  ] as const)(
+    'helper importとcall wrapperが同じoffsetでもcodeを壊さない: %s',
+    (_name, source) => {
+      const transformed = instrumentSourceLocations(
+        source,
+        '/repo/src/app.ts',
+        '/repo',
+      )
+
+      const helper = transformed.indexOf('import{registerSourceLocation as')
+      const wrapper = transformed.indexOf('__loutreSource(http.contract')
+      expect(helper).toBeGreaterThanOrEqual(0)
+      expect(wrapper).toBeGreaterThan(helper)
+      expect(() =>
+        parseSync(transformed, { syntax: 'typescript', target: 'esnext' }),
+      ).not.toThrow()
+    },
+  )
+
+  it('define系APIのcallsiteだけsource registrationする', () => {
+    const source = `import { defineModule, provide, token } from '@loutrejs/loutre'
+import { basicAuth, http } from '@loutrejs/loutre/http'
+const VALUE = token('value')
+const middleware = basicAuth({ name: 'auth' })
+const Contract = http.contract({ get: { method: 'GET', path: '/', responses: { ok: { status: 200 } } } })
+const Controller = http.implementation({ name: 'Controller', contract: Contract, factory: () => ({ get() {} }) })
+const provider = provide(VALUE).useValue('value')
+const Module = defineModule(() => ({ providers: [provider], executions: [Controller] }))
+void middleware
+void Module
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('const middleware = __loutreSource(basicAuth')
+    expect(transformed).toContain(
+      'const Contract = __loutreSource(http.contract',
+    )
+    expect(transformed).toContain(
+      'const Controller = __loutreSource(http.implementation',
+    )
+    expect(transformed).toContain(
+      'const provider = __loutreSource(provide(VALUE).useValue',
+    )
+    expect(transformed).toContain('const Module = __loutreSource(defineModule')
+  })
+
+  it('UTF-8 BOM付きclassでもSWC spanを正しいJS indexへ変換する', () => {
+    const source = `﻿class Service {}
+export { Service }
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/service.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('class Service {};__loutreSource(Service')
+    expect(transformed).toContain('"file":"src/service.ts","line":1,"column":1')
+    expect(() =>
+      parseSync(transformed, { syntax: 'typescript', target: 'esnext' }),
+    ).not.toThrow()
+  })
+
+  it('UTF-8 BOM付きdefine APIでもSWC spanを正しいJS indexへ変換する', () => {
+    const source = `﻿import { defineModule } from '@loutrejs/loutre'
+const M = defineModule(() => ({}))
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('const M = __loutreSource(defineModule')
+    expect(transformed).toContain('"file":"src/app.ts","line":2,"column":11')
+    expect(() =>
+      parseSync(transformed, { syntax: 'typescript', target: 'esnext' }),
+    ).not.toThrow()
+  })
+
+  it.each([
+    ['CR', '\r'],
+    ['CRLF', '\r\n'],
+    ['LS', '\u2028'],
+    ['PS', '\u2029'],
+  ] as const)(
+    '%s line terminatorでもsource line/columnを正しく数える',
+    (_name, lineTerminator) => {
+      const source = `import { defineModule } from '@loutrejs/loutre'${lineTerminator}const Module = defineModule(() => ({}))`
+      const transformed = instrumentSourceLocations(
+        source,
+        '/repo/src/app.ts',
+        '/repo',
+      )
+
+      expect(transformed).toContain('"file":"src/app.ts","line":2,"column":16')
+    },
+  )
+
+  it('日本語と絵文字が前にあってもUTF-8 byte spanでcodeを壊さない', () => {
+    const source = `import { defineModule } from '@loutrejs/loutre'
+const marker = '日本語🦦'; const Module = defineModule(() => ({ name: 'App' }))
+void marker
+void Module
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain(
+      "const marker = '日本語🦦'; const Module = __loutreSource(defineModule",
+    )
+    expect(transformed).toContain('"file":"src/app.ts","line":2,"column":40')
+    expect(transformed).toContain('void marker\nvoid Module')
+  })
+
+  it('useClass provider descriptorはbuilder callsiteへsource registrationしない', () => {
+    const source = `import { provide, token } from '@loutrejs/loutre'
+class LocalService {}
+const SERVICE = token<LocalService>('service')
+const provider = provide(SERVICE).useClass(LocalService)
+void provider
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('__loutreSource(LocalService')
+    expect(transformed).toContain(
+      'const provider = provide(SERVICE).useClass(LocalService)',
+    )
+    expect(transformed).not.toContain(
+      'const provider = __loutreSource(provide(SERVICE).useClass',
+    )
+  })
+
+  it('aliasや未知callへgeneric source registrationを追加しない', () => {
+    const source = `import { EventEmitter } from 'node:events'
+import { defineModule } from '@loutrejs/loutre'
+const ImportedAlias = EventEmitter
+function externalClass() { return EventEmitter }
+const CallAlias = externalClass()
+const Module = defineModule(() => ({ providers: [ImportedAlias, CallAlias] }))
+void Module
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).not.toContain('__loutreSource(ImportedAlias')
+    expect(transformed).not.toContain('__loutreSource(CallAlias')
+    expect(transformed).not.toContain('__loutreSource(externalClass()')
+    expect(transformed).toContain('const Module = __loutreSource(defineModule')
+  })
+
+  it('import APIと同名の関数引数callはsource registrationしない', () => {
+    const source = `import { argumentsProvider, defineModule, environmentProvider, provide } from '@loutrejs/loutre'
+import { basicAuth, bearerAuth, cors, defineHttpContract, defineHttpImplementation, defineHttpMiddleware, http } from '@loutrejs/loutre/http'
+const RealModule = defineModule(() => ({ name: 'Real' }))
+function shadow(
+  defineModule: any,
+  provide: any,
+  environmentProvider: any,
+  argumentsProvider: any,
+  http: any,
+  defineHttpContract: any,
+  defineHttpImplementation: any,
+  defineHttpMiddleware: any,
+  basicAuth: any,
+  bearerAuth: any,
+  cors: any,
+) {
+  defineModule()
+  provide(null).useValue(null)
+  environmentProvider()
+  argumentsProvider()
+  http.contract({})
+  http.implementation({})
+  http.middleware({})
+  defineHttpContract({})
+  defineHttpImplementation({})
+  defineHttpMiddleware({})
+  basicAuth({})
+  bearerAuth({})
+  cors({})
+}
+void RealModule
+void shadow
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain(
+      'const RealModule = __loutreSource(defineModule',
+    )
+    expect(transformed.match(/__loutreSource\(/g)).toHaveLength(1)
+  })
+
+  it('import aliasもbinding identityで判定しshadowingを除外する', () => {
+    const source = `import { defineModule as dm } from '@loutrejs/loutre'
+const RealModule = dm(() => ({ name: 'Real' }))
+function selectExternal(dm: () => unknown) {
+  return dm()
+}
+void RealModule
+void selectExternal
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('const RealModule = __loutreSource(dm')
+    expect(transformed).toContain('return dm()')
+    expect(transformed).not.toContain('return __loutreSource(dm()')
+    expect(transformed.match(/__loutreSource\(/g)).toHaveLength(1)
+  })
+
+  it('type-only importはruntime API bindingとして扱わない', () => {
+    const source = `import type { defineModule } from '@loutrejs/loutre'
+void 0
+`
+    expect(instrumentSourceLocations(source, '/repo/src/app.ts', '/repo')).toBe(
+      source,
+    )
+  })
+
+  it('lexical bindingでshadowされたimport API callはsource registrationしない', () => {
+    const source = `import { defineModule } from '@loutrejs/loutre'
+import { defineHttpContract, defineHttpImplementation, defineHttpMiddleware, http } from '@loutrejs/loutre/http'
+const RealModule = defineModule(() => ({ name: 'Real' }))
+function varShadow() {
+  defineModule()
+  var defineModule = () => null
+}
+function destructured({ http }: any) {
+  return http.contract({})
+}
+{
+  defineHttpContract({})
+  const defineHttpContract = () => null
+}
+try {
+  throw null
+} catch (defineHttpImplementation) {
+  defineHttpImplementation({})
+}
+for (const defineHttpMiddleware of []) {
+  defineHttpMiddleware({})
+}
+void RealModule
+void varShadow
+void destructured
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed.match(/__loutreSource\(/g)).toHaveLength(1)
+  })
+
+  it('parameter initializerとstatic blockのvar scopeを区別する', () => {
+    const source = `import { defineModule } from '@loutrejs/loutre'
+function defaultParam(value = defineModule(() => ({ name: 'Param' }))) {
+  var defineModule = () => null
+  return value
+}
+class Holder {
+  static {
+    defineModule()
+    var defineModule = () => null
+  }
+}
+void defaultParam
+void Holder
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('value = __loutreSource(defineModule(() =>')
+    expect(transformed).not.toContain(
+      'static {\n    __loutreSource(defineModule()',
+    )
+  })
+
+  it('declare classとanonymous default classはruntime instrumentation対象にしない', () => {
+    for (const source of [
+      `declare class AmbientOnlyType {}\n`,
+      `function dec(value: any) { return value }\n@dec\nexport default class {}\n`,
+      `export default abstract class {}\n`,
+    ]) {
+      expect(
+        instrumentSourceLocations(source, '/repo/src/service.ts', '/repo'),
+      ).toBe(source)
+    }
+  })
+
+  it('named class declarationはsource registrationする', () => {
+    const source = `export class Service {}\n`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/service.ts',
+      '/repo',
+    )
+    expect(transformed).toContain('__loutreSource(Service')
+  })
+
+  it('named default-export classのsource registrationも維持する', () => {
+    const source = `export default class Service {}\n`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/service.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain(
+      'export default class Service {};__loutreSource(Service',
+    )
+  })
+
+  it('functionとblock内のnamed class declarationもsource registrationする', () => {
+    const source = `function create() {
+  class NestedService {}
+  {
+    class BlockService {}
+    void BlockService
+  }
+  return NestedService
+}
+void create
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/service.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain('__loutreSource(NestedService')
+    expect(transformed).toContain('__loutreSource(BlockService')
+  })
+
+  it('namespace import経由のdefine APIもbinding identityでsource registrationする', () => {
+    const source = `import * as loutre from '@loutrejs/loutre'
+import * as httpApi from '@loutrejs/loutre/http'
+const VALUE = loutre.token('value')
+const provider = loutre.provide(VALUE).useValue('value')
+const env = loutre.environmentProvider()
+const args = loutre.argumentsProvider()
+const Contract = httpApi.http.contract({})
+const DirectContract = httpApi.defineHttpContract({})
+const Controller = httpApi.http.implementation({})
+const DirectController = httpApi.defineHttpImplementation({})
+const middleware = httpApi.http.middleware({})
+const DirectMiddleware = httpApi.defineHttpMiddleware({})
+const basic = httpApi.basicAuth({})
+const bearer = httpApi.bearerAuth({})
+const cors = httpApi.cors({})
+const Module = loutre.defineModule(() => ({}))
+function shadow(loutre: any, httpApi: any) {
+  loutre.defineModule()
+  httpApi.defineHttpContract({})
+  httpApi.http.contract({})
+}
+void provider
+void env
+void args
+void Contract
+void DirectContract
+void Controller
+void DirectController
+void middleware
+void DirectMiddleware
+void basic
+void bearer
+void cors
+void Module
+void shadow
+`
+    const transformed = instrumentSourceLocations(
+      source,
+      '/repo/src/app.ts',
+      '/repo',
+    )
+
+    expect(transformed).toContain(
+      'const provider = __loutreSource(loutre.provide(VALUE).useValue',
+    )
+    expect(transformed).toContain(
+      'const Contract = __loutreSource(httpApi.http.contract',
+    )
+    expect(transformed).toContain(
+      'const DirectContract = __loutreSource(httpApi.defineHttpContract',
+    )
+    expect(transformed).toContain(
+      'const Module = __loutreSource(loutre.defineModule',
+    )
+    expect(transformed).toContain('loutre.defineModule()')
+    expect(transformed).not.toContain(
+      'function shadow(loutre: any, httpApi: any) {\n  __loutreSource(loutre.defineModule()',
+    )
+    expect(transformed.match(/__loutreSource\(/g)).toHaveLength(13)
+  })
+
+  it('Windows drive形式のproject-relative結果はinstrumentation対象外にする', () => {
+    const source = `import { defineModule } from '@loutrejs/loutre'
+const Module = defineModule(() => ({ name: 'App' }))
+void Module
+`
+    expect(
+      instrumentSourceLocations(source, '/repo/D:\\external\\app.ts', '/repo'),
+    ).toBe(source)
+  })
+})

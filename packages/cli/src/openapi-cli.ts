@@ -34,7 +34,9 @@ export async function runOpenApiCli(
     return 2
   }
 
-  const application = await loadApplicationDefinition(resolve(io.cwd, entry))
+  const application = await loadApplicationDefinition(resolve(io.cwd, entry), {
+    projectRoot: io.cwd,
+  })
   const document = generateOpenApi(application.model, {
     info: { title, version },
   })
