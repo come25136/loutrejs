@@ -77,20 +77,51 @@ async function importApplicationDefinition(
   return application as ApplicationDefinition
 }
 
+export interface LoadedApplicationDefinition {
+  readonly definition: ApplicationDefinition
+  readonly files: readonly string[]
+}
+
+export interface LoadedApplicationGraph {
+  readonly graph: ApplicationModelGraphIR
+  readonly files: readonly string[]
+}
+
+export async function loadApplicationDefinitionWithFiles(
+  entry: string,
+  options: Pick<EmitApplicationOptions, 'projectRoot' | 'sourceLocations'> = {},
+): Promise<LoadedApplicationDefinition> {
+  const directory = await mkdtemp(join(tmpdir(), 'loutre-definition-'))
+  const output = join(directory, 'application.mjs')
+  try {
+    const files = await emitApplication(entry, output, {
+      nodeCompatibility: true,
+      ...options,
+    })
+    return {
+      definition: await importApplicationDefinition(output),
+      files,
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+}
+
 export async function loadApplicationDefinition(
   entry: string,
   options: Pick<EmitApplicationOptions, 'projectRoot' | 'sourceLocations'> = {},
 ): Promise<ApplicationDefinition> {
-  const directory = await mkdtemp(join(tmpdir(), 'loutre-definition-'))
-  const output = join(directory, 'application.mjs')
-  try {
-    await emitApplication(entry, output, {
-      nodeCompatibility: true,
-      ...options,
-    })
-    return await importApplicationDefinition(output)
-  } finally {
-    await rm(directory, { recursive: true, force: true })
+  return (await loadApplicationDefinitionWithFiles(entry, options)).definition
+}
+
+export async function loadApplicationGraphWithFiles(
+  entry: string,
+  options: Pick<EmitApplicationOptions, 'projectRoot' | 'sourceLocations'> = {},
+): Promise<LoadedApplicationGraph> {
+  const loaded = await loadApplicationDefinitionWithFiles(entry, options)
+  return {
+    graph: projectApplicationModel(loaded.definition.model),
+    files: loaded.files,
   }
 }
 
@@ -98,8 +129,7 @@ export async function loadApplicationGraph(
   entry: string,
   options: Pick<EmitApplicationOptions, 'projectRoot' | 'sourceLocations'> = {},
 ): Promise<ApplicationModelGraphIR> {
-  const definition = await loadApplicationDefinition(entry, options)
-  return projectApplicationModel(definition.model)
+  return (await loadApplicationGraphWithFiles(entry, options)).graph
 }
 
 const loutrePackageRoots = [

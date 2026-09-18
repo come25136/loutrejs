@@ -5,3 +5,6 @@ coverage/
 website/.next/
 website/next-env.d.ts
 website/out/
+
+.tmp/
+.loutre/

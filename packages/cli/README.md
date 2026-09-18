@@ -15,6 +15,7 @@ npm install --save-dev @loutrejs/cli
 | `check`   | Application Graphをvalidation                    |
 | `doctor`  | runtime capabilityとの互換性を確認               |
 | `graph`   | modules / DI / http / executions / runtimeを表示 |
+| `dev`     | ApplicationをDevTools付きで起動                  |
 | `explain` | Graph上のtargetを説明                            |
 | `build`   | Application bundleとdeployment entryを生成       |
 | `openapi` | OpenAPI 3.2 documentを生成                       |
@@ -33,6 +34,38 @@ npm exec loutre -- explain GreetingService --entry src/app.ts
 `doctor`で`--runtime`を省略した場合は、CLIを実行しているruntimeを使用します。別runtimeとの互換性を確認する場合は`--runtime`で明示します。
 
 Graph outputは`text`、`json`、`mermaid`に対応しています。
+
+## DevTools
+
+Applicationへ`DevtoolsModule()`を追加し、`loutre dev`から普段のApplication commandを起動します。CLIはApplication ModelからGraphを構築し、子Application processへlocal DevTools channelを渡します。
+
+```ts
+import { defineModule } from '@loutrejs/loutre'
+import { DevtoolsModule } from '@loutrejs/loutre/devtools'
+
+const AppModule = defineModule(() => ({
+  imports: [DevtoolsModule()],
+}))
+```
+
+```sh
+npm exec loutre -- dev --entry src/app.ts -- npm run dev
+```
+
+Dev serverは既定で`127.0.0.1:25136`にlistenします。BrowserやAgent向けControl Planeは`ws://127.0.0.1:25136/__loutre/client`、Application runtime channelは`ws://127.0.0.1:25136/__loutre/app`です。Graph更新、Runtime Trace、Replay、Provider Playgroundは同じstructured command/event protocolを利用します。Browser UIはControl Planeのclientの1つであり、Application Modelやruntime instanceをremote serverへ送る必要はありません。
+
+listen先はloopbackに固定し、HostとBrowser Originを検証します。native clientはloopback接続ならOriginなしでControl Planeへ接続できます。Application channelはBrowser channelと分離し、loopbackかつBrowser Originを持たないruntime接続だけを受け付けます。Browser用tokenやhandshake endpointはありません。追加のBrowser originは`--origin`で明示します。
+
+```sh
+npm exec loutre -- dev --entry src/app.ts \
+  --port 25137 \
+  --origin https://preview.example.com \
+  -- npm run dev
+```
+
+source変更時はApplication Graphを再構築し、Browserへpushします。watch対象はApplication Definitionのbundle dependencyから絞り込み、`.git`、`.loutre`、`.next`、`coverage`、`dist`、`node_modules`は既定で除外します。追加除外は`--ignore`で指定できます。
+
+DevToolsで保存したGraph Snapshotと選択中のbaseはproject rootの`.loutre/devtools/`へ保存されます。任意のSnapshotをbaseとして固定でき、`loutre dev`を再起動しても選択状態を復元します。
 
 ## Build
 
