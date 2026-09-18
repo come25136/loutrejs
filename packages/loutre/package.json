@@ -20,6 +20,10 @@
       "types": "./dist/graph/index.d.ts",
       "import": "./dist/graph/index.js"
     },
+    "./devtools": {
+      "types": "./dist/devtools/index.d.ts",
+      "import": "./dist/devtools/index.js"
+    },
     "./runtime": {
       "types": "./dist/runtime/index.d.ts",
       "import": "./dist/runtime/index.js"

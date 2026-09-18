@@ -18,6 +18,9 @@ export default defineConfig({
         'packages/loutre/src/presentation.ts',
       ),
       '@loutrejs/loutre/graph': resolve('packages/loutre/src/graph/index.ts'),
+      '@loutrejs/loutre/devtools': resolve(
+        'packages/loutre/src/devtools/index.ts',
+      ),
       '@loutrejs/loutre/runtime/bun': resolve(
         'packages/loutre/src/adapters/bun.ts',
       ),
@@ -45,6 +48,6 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.ts', 'website/tests/**/*.test.ts'],
   },
 })

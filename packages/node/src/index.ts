@@ -1,6 +1,7 @@
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import { Readable } from 'node:stream'
+import { createNodeDevtoolsSession } from './devtools.js'
 import {
   createKernelApplication,
   type ApplicationDefinition,
@@ -81,16 +82,31 @@ async function create<const TDefinition extends ApplicationDefinition>(
     )
   }
 
-  const hosted = createKernelApplication<TDefinition>({
-    ...options,
-    application: options.application,
-    capabilities: [
-      bindHttpServer({ runtime: 'node' }),
-      ...(options.capabilities ?? []),
-    ],
-    environment: 'environment' in options ? options.environment : process.env,
-  })
-  await hosted.init()
+  const devtools = createNodeDevtoolsSession(options.application)
+  let hosted: ReturnType<typeof createKernelApplication<TDefinition>>
+  try {
+    hosted = createKernelApplication<TDefinition>({
+      ...options,
+      application: options.application,
+      capabilities: [
+        bindHttpServer({ runtime: 'node' }),
+        ...(options.capabilities ?? []),
+      ],
+      environment: 'environment' in options ? options.environment : process.env,
+      ...(devtools === undefined
+        ? {}
+        : { instrumentation: devtools.instrumentation }),
+    })
+  } catch (error) {
+    devtools?.dispose()
+    throw error
+  }
+  try {
+    await hosted.init()
+  } catch (error) {
+    devtools?.closeTransport()
+    throw error
+  }
   const application = hosted as NodeRuntimeApplication<TDefinition>
   const http = (hosted as unknown as { readonly http: HttpHostApi }).http
 
@@ -138,6 +154,8 @@ async function create<const TDefinition extends ApplicationDefinition>(
           await serverClosing
         } catch (error) {
           errors.push(error)
+        } finally {
+          devtools?.closeTransport()
         }
       }
       if (errors.length > 0) {
