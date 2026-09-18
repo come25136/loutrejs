@@ -547,6 +547,7 @@ function createTasksRuntime(
   applicationRuntime: ExecutionKernelRuntime,
 ): TasksExtensionRuntime {
   const runtimes = new Map<symbol, (...arguments_: any[]) => any>()
+  const runtimeExecutionIds = new Map<symbol, string>()
   const triggers: TasksCompiledExecution[] = []
   for (const execution of executions) {
     const compiled = execution.compiled
@@ -567,6 +568,7 @@ function createTasksRuntime(
       () => compiled.factory(),
     )
     runtimes.set(compiled.taskExecutionId, runtime)
+    runtimeExecutionIds.set(compiled.taskExecutionId, execution.id)
   }
 
   let triggerHandles: TriggerHandle[] = []
@@ -576,10 +578,10 @@ function createTasksRuntime(
   let state: 'running' | 'draining' | 'stopped' = 'running'
   const activeInvocations = new Set<Promise<unknown>>()
 
-  const run = (
+  const invokeTask = (
     taskExecutionId: symbol,
     taskName: string,
-    ...arguments_: any[]
+    arguments_: readonly unknown[],
   ): Promise<unknown> => {
     if (state !== 'running') {
       return Promise.reject(new Error(`LUTRE_TASKS_${state.toUpperCase()}`))
@@ -589,11 +591,35 @@ function createTasksRuntime(
       return Promise.reject(new Error(`LUTRE_TASK_NOT_REGISTERED: ${taskName}`))
     }
     const invocation = (async () => {
-      const lease = applicationRuntime.beginExecution()
+      const executionId = runtimeExecutionIds.get(taskExecutionId) ?? taskName
+      const hasInput = arguments_.length > 0
+      const input = hasInput ? arguments_[0] : undefined
+      const lease = applicationRuntime.beginExecution(
+        {
+          executionId,
+          executionKind: 'task.invocation',
+          graphNodeId: executionId,
+          name: taskName,
+        },
+        {
+          input,
+          invoke: (nextInput) =>
+            invokeTask(taskExecutionId, taskName, hasInput ? [nextInput] : []),
+        },
+      )
+      let result: unknown
+      let hasResult = false
       try {
-        return await Reflect.apply(runtime, undefined, arguments_)
+        const invoke = () => Reflect.apply(runtime, undefined, arguments_)
+        result = await (lease.run ? lease.run(invoke) : invoke())
+        hasResult = true
+        return result
+      } catch (error) {
+        lease.fail?.(error)
+        throw error
       } finally {
-        lease.complete()
+        if (hasResult) lease.complete(result)
+        else lease.complete()
       }
     })()
     activeInvocations.add(invocation)
@@ -603,6 +629,12 @@ function createTasksRuntime(
     )
     return invocation
   }
+
+  const run = (
+    taskExecutionId: symbol,
+    taskName: string,
+    ...arguments_: any[]
+  ): Promise<unknown> => invokeTask(taskExecutionId, taskName, arguments_)
 
   const stopTriggers = (): Promise<void> => {
     if (triggerStop) return triggerStop

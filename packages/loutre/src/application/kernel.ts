@@ -2,6 +2,7 @@
 
 import type {
   RuntimeCapabilityBinding,
+  RuntimeInstrumentation,
   TokenLike,
   TokenValue,
 } from '../core/index.js'
@@ -34,6 +35,7 @@ export type KernelApplicationOptions<
   readonly environment?: unknown
   readonly logger?: Logger
   readonly forceShutdownTimeoutMs?: number
+  readonly instrumentation?: RuntimeInstrumentation
 } & BootstrapArguments<TDefinition>
 
 export function createKernelApplication<
