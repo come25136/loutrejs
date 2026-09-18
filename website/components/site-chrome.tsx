@@ -3,8 +3,9 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ExternalLink, Languages, Moon, Star, Sun } from 'lucide-react'
+import { ExternalLink, Languages, Star } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
+import { ThemeToggle } from './theme-toggle'
 import {
   alternateLocale,
   localeFromPathname,
@@ -19,6 +20,7 @@ const chromeCopy = {
     navigationLabel: 'Main navigation',
     documentation: 'Documentation',
     examples: 'Examples',
+    devtools: 'Devtools',
     getStarted: 'Get started',
     community: 'Community',
     resources: 'Resources',
@@ -32,6 +34,7 @@ const chromeCopy = {
     navigationLabel: 'メインナビゲーション',
     documentation: 'ドキュメント',
     examples: 'サンプル',
+    devtools: 'Devtools',
     getStarted: 'はじめる',
     community: 'コミュニティ',
     resources: 'リソース',
@@ -41,70 +44,6 @@ const chromeCopy = {
     lightTheme: 'ライトテーマに切り替える',
   },
 } satisfies Record<Locale, Record<string, string>>
-
-type Theme = 'light' | 'dark'
-
-const themeStorageKey = 'loutre-theme'
-
-function applyTheme(theme: Theme) {
-  document.documentElement.dataset.theme = theme
-  document.documentElement.style.colorScheme = theme
-}
-
-function ThemeToggle({
-  darkLabel,
-  lightLabel,
-}: {
-  darkLabel: string
-  lightLabel: string
-}) {
-  const [theme, setTheme] = useState<Theme | null>(null)
-
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const syncTheme = () => {
-      setTheme(
-        document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
-      )
-    }
-    const syncSystemTheme = (event: MediaQueryListEvent) => {
-      if (localStorage.getItem(themeStorageKey) === null) {
-        applyTheme(event.matches ? 'dark' : 'light')
-        syncTheme()
-      }
-    }
-
-    syncTheme()
-    media.addEventListener('change', syncSystemTheme)
-
-    return () => media.removeEventListener('change', syncSystemTheme)
-  }, [])
-
-  const isDark = theme === 'dark'
-  const label = isDark ? lightLabel : darkLabel
-
-  return (
-    <button
-      className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-line text-ink-soft transition hover:border-line-strong hover:bg-surface-muted hover:text-ink"
-      type="button"
-      onClick={() => {
-        const nextTheme: Theme = isDark ? 'light' : 'dark'
-        localStorage.setItem(themeStorageKey, nextTheme)
-        applyTheme(nextTheme)
-        setTheme(nextTheme)
-      }}
-      aria-label={label}
-      aria-pressed={isDark}
-      title={label}
-    >
-      {isDark ? (
-        <Sun size={15} aria-hidden="true" />
-      ) : (
-        <Moon size={15} aria-hidden="true" />
-      )}
-    </button>
-  )
-}
 
 function Brand({ prefix, label }: { prefix: string; label: string }) {
   return (
@@ -128,6 +67,9 @@ function Brand({ prefix, label }: { prefix: string; label: string }) {
 
 export function SiteChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
+  const normalizedPathname = pathname.replace(/\/$/, '')
+  const isDevtools =
+    normalizedPathname === '/devtools' || normalizedPathname === '/ja/devtools'
   const currentLocale = localeFromPathname(pathname)
   const targetLocale = alternateLocale(currentLocale)
   const prefix = localePrefix(currentLocale)
@@ -146,6 +88,10 @@ export function SiteChrome({ children }: { children: ReactNode }) {
 
     return () => window.removeEventListener('scroll', syncScrollState)
   }, [])
+
+  if (isDevtools) {
+    return <div lang={currentLocale}>{children}</div>
+  }
 
   return (
     <div lang={currentLocale}>
@@ -169,6 +115,12 @@ export function SiteChrome({ children }: { children: ReactNode }) {
               href={`${prefix}/examples/`}
             >
               {copy.examples}
+            </Link>
+            <Link
+              className="transition hover:text-interaction"
+              href={`${prefix}/devtools/`}
+            >
+              {copy.devtools}
             </Link>
             <Link
               className="transition hover:text-interaction"
