@@ -39,6 +39,20 @@ function edgeRoute(
   ].map((point) => ({ x: point.x + offset.x, y: point.y + offset.y }))
 }
 
+function nodeSize(node: LoutreFlowNode): {
+  readonly width: number
+  readonly height: number
+} {
+  const styleWidth =
+    typeof node.style?.width === 'number' ? node.style.width : undefined
+  const styleHeight =
+    typeof node.style?.height === 'number' ? node.style.height : undefined
+  return {
+    width: node.measured?.width ?? node.width ?? styleWidth ?? nodeWidth,
+    height: node.measured?.height ?? node.height ?? styleHeight ?? nodeHeight,
+  }
+}
+
 export async function layoutGraph(
   nodes: readonly LoutreFlowNode[],
   edges: readonly LoutreFlowEdge[],
@@ -58,16 +72,23 @@ export async function layoutGraph(
   )
   const toElkNode = (node: LoutreFlowNode): ElkNode => {
     const children = childrenByParent.get(node.id)
+    const size = nodeSize(node)
     return children
       ? {
           id: node.id,
+          width: size.width,
+          height: size.height,
           children: children.map(toElkNode),
           layoutOptions: {
             ...layeredLayoutOptions,
             'elk.padding': '[top=64,left=36,bottom=36,right=36]',
           },
         }
-      : { id: node.id, width: nodeWidth, height: nodeHeight }
+      : {
+          id: node.id,
+          width: size.width,
+          height: size.height,
+        }
   }
   const elkEdges: ElkExtendedEdge[] = edges.map((edge) => ({
     id: edge.id,

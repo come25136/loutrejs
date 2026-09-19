@@ -8,6 +8,14 @@ import type {
 
 export interface SemanticNodeData extends Record<string, unknown> {
   readonly graphNode: GraphNode
+  readonly sourceHandles?: readonly FlowHandle[]
+  readonly targetHandles?: readonly FlowHandle[]
+}
+
+export interface FlowHandle {
+  readonly id: string
+  /** Position along the node's height, expressed as 0..1. */
+  readonly offset: number
 }
 
 export interface EdgeRoutePoint {
@@ -17,6 +25,7 @@ export interface EdgeRoutePoint {
 
 export interface GraphEdgeData extends Record<string, unknown> {
   readonly kind: string
+  readonly dashed?: boolean
   readonly route?: readonly EdgeRoutePoint[]
   readonly labelPosition?: EdgeRoutePoint
   readonly followHandles?: boolean
@@ -70,6 +79,10 @@ export function graphEdgeLabel(
   return edge.kind
 }
 
+function handleOffset(index: number, count: number): number {
+  return count <= 1 ? 0.5 : (index + 1) / (count + 1)
+}
+
 export function adaptGraph(snapshot: GraphSnapshot): {
   readonly nodes: LoutreFlowNode[]
   readonly edges: LoutreFlowEdge[]
@@ -82,7 +95,7 @@ export function adaptGraph(snapshot: GraphSnapshot): {
     id: moduleGroupId(module.id),
     type: 'module-group',
     position: { x: 0, y: 0 },
-    data: { graphNode: module },
+    data: { graphNode: module, sourceHandles: [], targetHandles: [] },
     style: { width: 520, height: 320 },
     draggable: true,
     selectable: false,
@@ -96,7 +109,7 @@ export function adaptGraph(snapshot: GraphSnapshot): {
       id: node.id,
       type: flowType(node.kind),
       position: { x: 0, y: 0 },
-      data: { graphNode: node },
+      data: { graphNode: node, sourceHandles: [], targetHandles: [] },
       draggable: true,
       selectable: true,
       deletable: false,
@@ -108,8 +121,7 @@ export function adaptGraph(snapshot: GraphSnapshot): {
         : {}),
     }
   })
-  const nodes = [...moduleGroups, ...semanticNodes]
-  const edges = snapshot.edges
+  const baseEdges = snapshot.edges
     .filter((edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to))
     .map<LoutreFlowEdge>((edge, index) => ({
       id: `${edge.from}:${edge.kind}:${edge.to}:${index}`,
@@ -117,8 +129,58 @@ export function adaptGraph(snapshot: GraphSnapshot): {
       target: edge.to,
       type: 'graph-edge',
       label: graphEdgeLabel(edge, byId),
-      data: { kind: edge.kind },
+      data: {
+        kind: edge.kind,
+        dashed:
+          edge.kind === 'imports' &&
+          byId.get(edge.from)?.kind === 'module' &&
+          byId.get(edge.to)?.kind === 'module',
+      },
     }))
+
+  const outgoing = new Map<string, LoutreFlowEdge[]>()
+  const incoming = new Map<string, LoutreFlowEdge[]>()
+  for (const edge of baseEdges) {
+    outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge])
+    incoming.set(edge.target, [...(incoming.get(edge.target) ?? []), edge])
+  }
+
+  const edges = baseEdges.map((edge) => {
+    const sourceEdges = outgoing.get(edge.source) ?? []
+    const targetEdges = incoming.get(edge.target) ?? []
+    const sourceIndex = sourceEdges.findIndex(
+      (candidate) => candidate.id === edge.id,
+    )
+    const targetIndex = targetEdges.findIndex(
+      (candidate) => candidate.id === edge.id,
+    )
+    return {
+      ...edge,
+      sourceHandle: `source-${sourceIndex}`,
+      targetHandle: `target-${targetIndex}`,
+    }
+  })
+
+  const withHandles = (node: LoutreFlowNode): LoutreFlowNode => {
+    const sourceEdges = outgoing.get(node.id) ?? []
+    const targetEdges = incoming.get(node.id) ?? []
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        sourceHandles: sourceEdges.map((_, index) => ({
+          id: `source-${index}`,
+          offset: handleOffset(index, sourceEdges.length),
+        })),
+        targetHandles: targetEdges.map((_, index) => ({
+          id: `target-${index}`,
+          offset: handleOffset(index, targetEdges.length),
+        })),
+      },
+    }
+  }
+
+  const nodes = [...moduleGroups, ...semanticNodes].map(withHandles)
   return { nodes, edges }
 }
 

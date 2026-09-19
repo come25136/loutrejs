@@ -5,11 +5,13 @@ import {
   MarkerType,
   MiniMap,
   ReactFlow,
+  applyNodeChanges,
   type ReactFlowInstance,
+  type NodeChange,
   useEdgesState,
   useNodesState,
 } from '@xyflow/react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { GraphNode, GraphSnapshot } from '../../lib/devtools'
 import {
   adaptGraph,
@@ -17,9 +19,13 @@ import {
   type LoutreFlowEdge,
   type LoutreFlowNode,
 } from './graph-adapter'
-import { followDraggedNode } from './graph-drag'
 import { GraphEdge } from './graph-edge'
 import { layoutGraph } from './graph-layout'
+import {
+  applyEdgeRoutes,
+  createGraphEdgeRouter,
+  type GraphEdgeRouter,
+} from './graph-routing'
 import { ModuleGroup } from './module-group'
 import { SemanticNode } from './semantic-node'
 
@@ -46,6 +52,30 @@ interface GraphCanvasProps {
   readonly onSelect: (node: GraphNode | undefined) => void
 }
 
+function decorateEdges(
+  edges: readonly LoutreFlowEdge[],
+  selectedId: string | undefined,
+): LoutreFlowEdge[] {
+  return edges.map((edge) => {
+    const highlighted =
+      selectedId !== undefined &&
+      (edge.source === selectedId || edge.target === selectedId)
+    return {
+      ...edge,
+      data: {
+        ...(edge.data ?? { kind: 'unknown' }),
+        highlighted,
+      },
+      markerEnd: highlighted
+        ? {
+            type: MarkerType.ArrowClosed,
+            color: 'var(--site-accent-text)',
+          }
+        : { type: MarkerType.ArrowClosed },
+    }
+  })
+}
+
 export function connectedNodeIds(
   graph: GraphSnapshot,
   nodeId: string,
@@ -64,22 +94,111 @@ export function GraphCanvas({
   focusRequest,
   onSelect,
 }: GraphCanvasProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState<LoutreFlowNode>([])
+  const [nodes, setNodes] = useNodesState<LoutreFlowNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<LoutreFlowEdge>([])
   const [instance, setInstance] =
     useState<ReactFlowInstance<LoutreFlowNode, LoutreFlowEdge>>()
   const [layoutError, setLayoutError] = useState<string>()
+  const nodesRef = useRef(nodes)
+  const edgesRef = useRef(edges)
+  const dragLayoutFrameRef = useRef<number | undefined>(undefined)
+  const dragLayoutPendingRef = useRef<
+    | {
+        readonly nodes: readonly LoutreFlowNode[]
+        readonly edges: readonly LoutreFlowEdge[]
+        readonly generation: number
+      }
+    | undefined
+  >(undefined)
+  const dragLayoutRunningRef = useRef(false)
+  const dragLayoutGenerationRef = useRef(0)
+  const edgeRouterRef = useRef<GraphEdgeRouter | undefined>(undefined)
+  const instanceRef = useRef(instance)
   const selectedIdRef = useRef(selectedId)
   const focusRequestRef = useRef(focusRequest)
   const handledFocusNonceRef = useRef<number | undefined>(undefined)
   selectedIdRef.current = selectedId
   focusRequestRef.current = focusRequest
-  const followNode = (nodeId: string): void => {
-    setEdges((currentEdges) => followDraggedNode(nodes, currentEdges, nodeId))
+  nodesRef.current = nodes
+  edgesRef.current = edges
+  instanceRef.current = instance
+
+  const requestDragLayoutFrame = (): void => {
+    if (
+      dragLayoutFrameRef.current !== undefined ||
+      dragLayoutRunningRef.current
+    ) {
+      return
+    }
+    dragLayoutFrameRef.current = window.requestAnimationFrame(() => {
+      dragLayoutFrameRef.current = undefined
+      const pending = dragLayoutPendingRef.current
+      dragLayoutPendingRef.current = undefined
+      if (!pending) return
+      dragLayoutRunningRef.current = true
+      void Promise.resolve(edgeRouterRef.current?.route(pending.nodes))
+        .then((routes) => {
+          if (pending.generation !== dragLayoutGenerationRef.current) return
+          setLayoutError(undefined)
+          const currentSelectedId = selectedIdRef.current
+          const laidOutNodes = pending.nodes.map((node) => ({
+            ...node,
+            selected: node.id === currentSelectedId,
+          }))
+          const laidOutEdges = decorateEdges(
+            routes
+              ? applyEdgeRoutes(pending.edges, routes, pending.nodes)
+              : pending.edges,
+            currentSelectedId,
+          )
+          nodesRef.current = laidOutNodes
+          edgesRef.current = laidOutEdges
+          setNodes(laidOutNodes)
+          setEdges(laidOutEdges)
+        })
+        .catch((error: unknown) => {
+          if (pending.generation !== dragLayoutGenerationRef.current) return
+          setLayoutError(error instanceof Error ? error.message : String(error))
+        })
+        .finally(() => {
+          dragLayoutRunningRef.current = false
+          if (dragLayoutPendingRef.current) requestDragLayoutFrame()
+        })
+    })
   }
 
+  const scheduleDragLayout = (nextNodes: readonly LoutreFlowNode[]): void => {
+    dragLayoutPendingRef.current = {
+      nodes: [...nextNodes],
+      edges: edgesRef.current,
+      generation: dragLayoutGenerationRef.current,
+    }
+    requestDragLayoutFrame()
+  }
+
+  const onNodesChange = useCallback(
+    (changes: NodeChange<LoutreFlowNode>[]) => {
+      setNodes((currentNodes) => {
+        let nextNodes = applyNodeChanges(changes, currentNodes)
+        for (const change of changes) {
+          if (change.type !== 'position') continue
+          const movedNode = nextNodes.find((node) => node.id === change.id)
+          if (movedNode) nextNodes = resizeModuleGroups(nextNodes, movedNode)
+        }
+        return nextNodes
+      })
+    },
+    [setNodes],
+  )
+
   useEffect(() => {
+    dragLayoutGenerationRef.current += 1
+    dragLayoutPendingRef.current = undefined
+    edgeRouterRef.current?.destroy()
+    edgeRouterRef.current = undefined
     if (graph.nodes.length === 0) {
+      nodesRef.current = []
+      edgesRef.current = []
       setNodes([])
       setEdges([])
       return
@@ -87,44 +206,39 @@ export function GraphCanvas({
     let active = true
     const adapted = adaptGraph(graph)
     void layoutGraph(adapted.nodes, adapted.edges)
-      .then((layout) => {
-        if (!active) return
+      .then(async (layout) => {
+        const edgeRouter = await createGraphEdgeRouter(
+          layout.nodes,
+          layout.edges,
+        )
+        if (!active) {
+          edgeRouter.destroy()
+          return
+        }
+        edgeRouterRef.current = edgeRouter
         setLayoutError(undefined)
         const currentSelectedId = selectedIdRef.current
-        setNodes(
-          layout.nodes.map((node) => ({
-            ...node,
-            selected: node.id === currentSelectedId,
-          })),
+        const routedEdges = applyEdgeRoutes(
+          layout.edges,
+          edgeRouter.initialRoutes,
+          layout.nodes,
         )
-        setEdges(
-          layout.edges.map((edge) => {
-            const highlighted =
-              currentSelectedId !== undefined &&
-              (edge.source === currentSelectedId ||
-                edge.target === currentSelectedId)
-            return {
-              ...edge,
-              data: {
-                ...(edge.data ?? { kind: 'unknown' }),
-                highlighted,
-              },
-              markerEnd: highlighted
-                ? {
-                    type: MarkerType.ArrowClosed,
-                    color: 'var(--site-accent-text)',
-                  }
-                : { type: MarkerType.ArrowClosed },
-            }
-          }),
-        )
+        const laidOutNodes = layout.nodes.map((node) => ({
+          ...node,
+          selected: node.id === currentSelectedId,
+        }))
+        const laidOutEdges = decorateEdges(routedEdges, currentSelectedId)
+        nodesRef.current = laidOutNodes
+        edgesRef.current = laidOutEdges
+        setNodes(laidOutNodes)
+        setEdges(laidOutEdges)
         const pendingFocus = focusRequestRef.current
         if (
           !pendingFocus ||
           handledFocusNonceRef.current === pendingFocus.nonce
         ) {
           window.requestAnimationFrame(() =>
-            instance?.fitView({ padding: 0.15, duration: 350 }),
+            instanceRef.current?.fitView({ padding: 0.15, duration: 350 }),
           )
         }
       })
@@ -134,8 +248,10 @@ export function GraphCanvas({
       })
     return () => {
       active = false
+      edgeRouterRef.current?.destroy()
+      edgeRouterRef.current = undefined
     }
-  }, [graph, instance, setEdges, setNodes])
+  }, [graph, setEdges, setNodes])
 
   useEffect(() => {
     setNodes((currentNodes) =>
@@ -144,27 +260,9 @@ export function GraphCanvas({
         return node.selected === selected ? node : { ...node, selected }
       }),
     )
-    setEdges((currentEdges) =>
-      currentEdges.map((edge) => {
-        const highlighted =
-          selectedId !== undefined &&
-          (edge.source === selectedId || edge.target === selectedId)
-        if (edge.data?.highlighted === highlighted) return edge
-        return {
-          ...edge,
-          data: {
-            ...(edge.data ?? { kind: 'unknown' }),
-            highlighted,
-          },
-          markerEnd: highlighted
-            ? {
-                type: MarkerType.ArrowClosed,
-                color: 'var(--site-accent-text)',
-              }
-            : { type: MarkerType.ArrowClosed },
-        }
-      }),
-    )
+    const nextEdges = decorateEdges(edgesRef.current, selectedId)
+    edgesRef.current = nextEdges
+    setEdges(nextEdges)
   }, [selectedId, setEdges, setNodes])
 
   useEffect(() => {
@@ -238,16 +336,32 @@ export function GraphCanvas({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onInit={setInstance}
-      onNodeDragStart={(_event, node) => followNode(node.id)}
       onNodeDrag={(_event, node) => {
-        setNodes((currentNodes) => resizeModuleGroups(currentNodes, node))
-        followNode(node.id)
+        const nextNodes = resizeModuleGroups(
+          nodesRef.current.map((currentNode) =>
+            currentNode.id === node.id ? node : currentNode,
+          ),
+          node,
+        )
+        nodesRef.current = nextNodes
+        scheduleDragLayout(nextNodes)
       }}
       onNodeDragStop={(_event, node) => {
-        setNodes((currentNodes) => resizeModuleGroups(currentNodes, node))
+        const nextNodes = resizeModuleGroups(
+          nodesRef.current.map((currentNode) =>
+            currentNode.id === node.id ? node : currentNode,
+          ),
+          node,
+        )
+        nodesRef.current = nextNodes
+        scheduleDragLayout(nextNodes)
       }}
       onNodeClick={(_event, node) => {
         if (node.type !== 'module-group') onSelect(node.data.graphNode)
+      }}
+      onEdgeClick={(_event, edge) => {
+        const target = graph.nodes.find((node) => node.id === edge.target)
+        if (target) onSelect(target)
       }}
       onPaneClick={() => onSelect(undefined)}
       nodesConnectable={false}

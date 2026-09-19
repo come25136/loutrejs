@@ -72,6 +72,7 @@ export function GraphEdge(props: EdgeProps<LoutreFlowEdge>) {
   const fallback = getSmoothStepPath(props)
   const followsHandles = props.data?.followHandles === true
   const highlighted = props.data?.highlighted === true
+  const dashed = props.data?.dashed === true
   const path =
     route && route.length >= 2 && !followsHandles
       ? roundedOrthogonalPath(route)
@@ -92,7 +93,7 @@ export function GraphEdge(props: EdgeProps<LoutreFlowEdge>) {
     <>
       {highlighted && (
         <BaseEdge
-          className="graph-edge__glow"
+          className={`graph-edge__glow ${dashed ? 'is-dashed' : ''}`}
           path={path}
           style={{
             stroke: 'var(--site-accent-text)',
@@ -103,7 +104,7 @@ export function GraphEdge(props: EdgeProps<LoutreFlowEdge>) {
         />
       )}
       <BaseEdge
-        className={`${followsHandles ? 'graph-edge__path is-following' : 'graph-edge__path'} ${highlighted ? 'is-highlighted' : ''}`}
+        className={`${followsHandles ? 'graph-edge__path is-following' : 'graph-edge__path'} ${highlighted ? 'is-highlighted' : ''} ${dashed ? 'is-dashed' : ''}`}
         path={path}
         {...(props.markerEnd === undefined
           ? {}
@@ -118,7 +119,7 @@ export function GraphEdge(props: EdgeProps<LoutreFlowEdge>) {
       />
       {highlighted && (
         <BaseEdge
-          className="graph-edge__pulse"
+          className={`graph-edge__pulse ${dashed ? 'is-dashed' : ''}`}
           path={path}
           style={{
             stroke: 'var(--site-accent-text)',

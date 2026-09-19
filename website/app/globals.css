@@ -340,6 +340,12 @@ html[data-theme='dark'] {
   filter: drop-shadow(0 0 5px rgb(255 106 48 / 0.35));
 }
 
+.loutre-devtools .graph-edge__path.is-dashed,
+.loutre-devtools .graph-edge__glow.is-dashed,
+.loutre-devtools .graph-edge__pulse.is-dashed {
+  stroke-dasharray: 7 6;
+}
+
 .loutre-devtools .graph-edge__pulse {
   stroke-dasharray: 5 11;
   animation: loutre-edge-flow 900ms linear infinite;
@@ -350,6 +356,11 @@ html[data-theme='dark'] {
   fill: var(--site-accent-text);
 }
 
+.loutre-devtools .react-flow__edgelabel-renderer {
+  z-index: 1000 !important;
+  isolation: isolate;
+}
+
 @keyframes loutre-edge-flow {
   to {
     stroke-dashoffset: -16;
@@ -358,6 +369,7 @@ html[data-theme='dark'] {
 
 .loutre-devtools .graph-edge__label {
   position: absolute;
+  z-index: 1001;
   padding: 3px 7px;
   color: var(--site-ink-soft);
   font-size: 10px;

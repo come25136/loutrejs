@@ -13,6 +13,10 @@ import {
   roundedOrthogonalPath,
 } from '../components/devtools-graph/graph-edge.js'
 import { layoutGraph } from '../components/devtools-graph/graph-layout.js'
+import {
+  applyEdgeRoutes,
+  createGraphEdgeRouter,
+} from '../components/devtools-graph/graph-routing.js'
 
 function node(id: string): LoutreFlowNode {
   return {
@@ -126,6 +130,30 @@ describe('ブラウザ版Devtools Graph', () => {
     expect(
       result.nodes.find((item) => item.id === 'first')?.position.x,
     ).toBeGreaterThanOrEqual(370)
+  })
+
+  it('Libavoidはnodeを動かさずedgeだけ再ルーティングする', async () => {
+    const source = { ...node('source'), position: { x: 80, y: 100 } }
+    const obstacle = { ...node('obstacle'), position: { x: 360, y: 60 } }
+    const target = { ...node('target'), position: { x: 700, y: 100 } }
+    const router = await createGraphEdgeRouter(
+      [source, obstacle, target],
+      [edge('source-target', 'source', 'target', 'requires')],
+    )
+
+    try {
+      const movedSource = { ...source, position: { x: 80, y: 220 } }
+      const routes = router.route([movedSource, obstacle, target])
+      const routedEdge = applyEdgeRoutes(
+        [edge('source-target', 'source', 'target', 'requires')],
+        routes,
+        [movedSource, obstacle, target],
+      )[0]
+      expect(routedEdge?.data?.route?.[0]).toEqual({ x: 300, y: 263 })
+      expect(routedEdge?.data?.route?.at(-1)).toEqual({ x: 700, y: 143 })
+    } finally {
+      router.destroy()
+    }
   })
 
   it('Module境界内のnodeへedge端点を正確に接続する', async () => {
