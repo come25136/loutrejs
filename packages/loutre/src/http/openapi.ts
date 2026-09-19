@@ -11,6 +11,7 @@ import {
   type HttpResponseHeadersDefinition,
   type HttpResponseHeadersWithDefaults,
 } from './extension.js'
+import { match } from 'ts-pattern'
 
 export interface OpenApiInfo {
   readonly title: string
@@ -441,17 +442,20 @@ function mergeResponseHeaders(
 function responseHeadersSchema(
   headers: HttpResponseHeadersDefinition | undefined,
 ): StandardSchemaV1 | undefined {
-  if (isStandardSchema(headers)) return headers
-  if (isResponseHeadersWithDefaults(headers)) return headers.schema
-  return undefined
+  return match(headers)
+    .when(isStandardSchema, (schema) => schema)
+    .when(isResponseHeadersWithDefaults, (definition) => definition.schema)
+    .otherwise(() => undefined)
 }
 
 function responseHeadersDefaults(
   headers: HttpResponseHeadersDefinition | undefined,
 ) {
-  if (headers === undefined || isStandardSchema(headers)) return undefined
-  if (isResponseHeadersWithDefaults(headers)) return headers.defaults
-  return headers
+  return match(headers)
+    .with(undefined, () => undefined)
+    .when(isStandardSchema, () => undefined)
+    .when(isResponseHeadersWithDefaults, (definition) => definition.defaults)
+    .otherwise((definition) => definition)
 }
 
 function isStandardSchema(value: unknown): value is StandardSchemaV1 {

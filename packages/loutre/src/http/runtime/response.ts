@@ -1,4 +1,5 @@
 import { validateSchema, type StandardSchemaV1 } from '../../core/index.js'
+import { match } from 'ts-pattern'
 
 type HttpHeaderValue = string | readonly string[]
 type HttpHeaders = Readonly<Record<string, HttpHeaderValue | undefined>>
@@ -34,17 +35,20 @@ export async function validateResponseHeaders(
 export function responseHeadersSchema(
   headers: HttpResponseHeadersDefinition | undefined,
 ): StandardSchemaV1 | undefined {
-  if (isStandardSchema(headers)) return headers
-  if (isResponseHeadersWithDefaults(headers)) return headers.schema
-  return undefined
+  return match(headers)
+    .when(isStandardSchema, (schema) => schema)
+    .when(isResponseHeadersWithDefaults, (definition) => definition.schema)
+    .otherwise(() => undefined)
 }
 
 export function responseHeadersDefaults(
   headers: HttpResponseHeadersDefinition | undefined,
 ): HttpHeaders | undefined {
-  if (headers === undefined || isStandardSchema(headers)) return undefined
-  if (isResponseHeadersWithDefaults(headers)) return headers.defaults
-  return headers
+  return match(headers)
+    .with(undefined, () => undefined)
+    .when(isStandardSchema, () => undefined)
+    .when(isResponseHeadersWithDefaults, (definition) => definition.defaults)
+    .otherwise((definition) => definition)
 }
 
 export function isStandardSchema(value: unknown): value is StandardSchemaV1 {

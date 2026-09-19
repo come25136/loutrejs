@@ -14,6 +14,7 @@ import type {
   HttpResponseHeadersWithDefaults,
 } from './extension.js'
 import { parseHttpPath, type PathParamNames } from './path.js'
+import { match } from 'ts-pattern'
 
 export interface HttpClientTransportRequest {
   readonly method: string
@@ -257,9 +258,10 @@ async function decodeResponse(
 function responseHeadersSchema(
   headers: HttpResponseHeadersDefinition | undefined,
 ): StandardSchemaV1 | undefined {
-  if (isStandardSchema(headers)) return headers
-  if (isResponseHeadersWithDefaults(headers)) return headers.schema
-  return undefined
+  return match(headers)
+    .when(isStandardSchema, (schema) => schema)
+    .when(isResponseHeadersWithDefaults, (definition) => definition.schema)
+    .otherwise(() => undefined)
 }
 
 function isStandardSchema(value: unknown): value is StandardSchemaV1 {

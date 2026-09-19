@@ -10,6 +10,7 @@ import {
   type ExecutionModelNode,
   type SourceLocation,
 } from '../core/index.js'
+import { match } from 'ts-pattern'
 
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue =
@@ -79,46 +80,42 @@ export function projectApplicationModel(
 function projectCoreNode(
   node: Exclude<ApplicationModelNode, ExecutionModelNode>,
 ): GraphNodeIR {
-  switch (node.kind) {
-    case 'module':
-      return {
-        id: node.id,
-        kind: node.kind,
-        ...(node.source === undefined ? {} : { source: node.source }),
-        ...(node.name === undefined ? {} : { name: node.name }),
-        ...(node.description === undefined
-          ? {}
-          : { attributes: { description: node.description } }),
-      }
-    case 'provider':
-      return {
-        id: node.id,
-        kind: node.kind,
-        name: tokenName(node.token),
-        module: node.moduleId,
-        ...(node.source === undefined ? {} : { source: node.source }),
-        attributes: {
-          providerKind: node.provider.kind,
-          scope: node.provider.scope,
-        },
-      }
-    case 'lifecycle':
-      return {
-        id: node.id,
-        kind: node.kind,
-        name: node.phase,
-        module: node.moduleId,
-        ...(node.source === undefined ? {} : { source: node.source }),
-      }
-    case 'framework':
-      return {
-        id: node.id,
-        kind: node.kind,
-        name: node.name,
-        ...(node.source === undefined ? {} : { source: node.source }),
-        attributes: { frameworkKind: node.frameworkKind },
-      }
-  }
+  return match(node)
+    .with({ kind: 'module' }, (candidate) => ({
+      id: candidate.id,
+      kind: candidate.kind,
+      ...(candidate.source === undefined ? {} : { source: candidate.source }),
+      ...(candidate.name === undefined ? {} : { name: candidate.name }),
+      ...(candidate.description === undefined
+        ? {}
+        : { attributes: { description: candidate.description } }),
+    }))
+    .with({ kind: 'provider' }, (candidate) => ({
+      id: candidate.id,
+      kind: candidate.kind,
+      name: tokenName(candidate.token),
+      module: candidate.moduleId,
+      ...(candidate.source === undefined ? {} : { source: candidate.source }),
+      attributes: {
+        providerKind: candidate.provider.kind,
+        scope: candidate.provider.scope,
+      },
+    }))
+    .with({ kind: 'lifecycle' }, (candidate) => ({
+      id: candidate.id,
+      kind: candidate.kind,
+      name: candidate.phase,
+      module: candidate.moduleId,
+      ...(candidate.source === undefined ? {} : { source: candidate.source }),
+    }))
+    .with({ kind: 'framework' }, (candidate) => ({
+      id: candidate.id,
+      kind: candidate.kind,
+      name: candidate.name,
+      ...(candidate.source === undefined ? {} : { source: candidate.source }),
+      attributes: { frameworkKind: candidate.frameworkKind },
+    }))
+    .exhaustive()
 }
 
 function projectExtensionGroup<TExtension extends AnyExecutionExtension>(

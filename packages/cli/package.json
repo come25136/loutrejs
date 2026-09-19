@@ -26,6 +26,7 @@
     "@swc/core": "^1.16.2",
     "chokidar": "^5.0.0",
     "esbuild": "^0.28.2",
+    "ts-pattern": "^5.9.0",
     "ws": "^8.21.3"
   },
   "devDependencies": {

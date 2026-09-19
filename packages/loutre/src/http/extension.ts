@@ -61,6 +61,7 @@ import {
   responseHeadersSchema,
   validateResponseHeaders,
 } from './runtime/response.js'
+import { match as patternMatch } from 'ts-pattern'
 
 export interface HttpServerDriver {
   readonly runtime: string
@@ -1183,8 +1184,8 @@ function compileHttpValidationMiddleware(
   middleware: HttpValidationMiddleware,
   route: HttpExecutionRouteDefinition,
 ): AnyHttpMiddleware {
-  switch (middleware.part) {
-    case 'body': {
+  return patternMatch(middleware)
+    .with({ part: 'body' }, () => {
       const schema = route.request?.body
       if (!schema) {
         throw new TypeError(
@@ -1192,8 +1193,8 @@ function compileHttpValidationMiddleware(
         )
       }
       return createBodyValidationMiddleware(schema)
-    }
-  }
+    })
+    .exhaustive()
 }
 
 function createBodyValidationMiddleware(

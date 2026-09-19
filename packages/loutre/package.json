@@ -75,7 +75,8 @@
     "provenance": true
   },
   "dependencies": {
-    "@standard-schema/spec": "^1.1.0"
+    "@standard-schema/spec": "^1.1.0",
+    "ts-pattern": "^5.9.0"
   },
   "repository": {
     "type": "git",

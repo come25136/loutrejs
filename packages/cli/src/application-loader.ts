@@ -9,6 +9,7 @@ import {
   type ApplicationModelGraphIR,
 } from '@loutrejs/loutre/graph'
 import { build as buildWithEsbuild, type Loader, type Plugin } from 'esbuild'
+import { match } from 'ts-pattern'
 import { instrumentSourceLocations } from './source-instrumentation.js'
 
 export interface EmitApplicationOptions {
@@ -164,22 +165,12 @@ function sourceLocationPlugin(projectRoot: string): Plugin {
 }
 
 function sourceLoader(file: string): Loader | undefined {
-  switch (extname(file)) {
-    case '.ts':
-    case '.mts':
-    case '.cts':
-      return 'ts'
-    case '.tsx':
-      return 'tsx'
-    case '.js':
-    case '.mjs':
-    case '.cjs':
-      return 'js'
-    case '.jsx':
-      return 'jsx'
-    default:
-      return undefined
-  }
+  return match(extname(file))
+    .with('.ts', '.mts', '.cts', () => 'ts' as const)
+    .with('.tsx', () => 'tsx' as const)
+    .with('.js', '.mjs', '.cjs', () => 'js' as const)
+    .with('.jsx', () => 'jsx' as const)
+    .otherwise(() => undefined)
 }
 
 function isWithin(file: string, directory: string): boolean {

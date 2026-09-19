@@ -1,3 +1,5 @@
+import { match } from 'ts-pattern'
+
 export type DevtoolsValue =
   | null
   | boolean
@@ -190,13 +192,31 @@ function shouldRedact(
 }
 
 function valueType(value: unknown): string {
-  if (value === null) return 'null'
-  if (Array.isArray(value)) return 'array'
-  if (value instanceof Date) return 'date'
-  if (value instanceof Uint8Array) return 'bytes'
-  if (value instanceof Map) return 'map'
-  if (value instanceof Set) return 'set'
-  return typeof value === 'object' ? 'object' : typeof value
+  return match(value)
+    .with(null, () => 'null')
+    .when(Array.isArray, () => 'array')
+    .when(
+      (candidate): candidate is Date => candidate instanceof Date,
+      () => 'date',
+    )
+    .when(
+      (candidate): candidate is Uint8Array => candidate instanceof Uint8Array,
+      () => 'bytes',
+    )
+    .when(
+      (candidate): candidate is Map<unknown, unknown> =>
+        candidate instanceof Map,
+      () => 'map',
+    )
+    .when(
+      (candidate): candidate is Set<unknown> => candidate instanceof Set,
+      () => 'set',
+    )
+    .when(
+      (candidate) => typeof candidate === 'object',
+      () => 'object',
+    )
+    .otherwise((candidate) => typeof candidate)
 }
 
 function safeValueType(value: unknown): string {

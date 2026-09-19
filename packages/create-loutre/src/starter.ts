@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { cp, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { match } from 'ts-pattern'
 import {
   createIsTarget,
   type PackageManager,
@@ -92,59 +93,54 @@ interface TargetManifest {
 }
 
 function targetManifest(target: ProjectTarget): TargetManifest {
-  switch (target) {
-    case 'node':
-      return {
-        scripts: {
-          dev: 'tsx watch src/main.ts',
-          build: 'tsc -p tsconfig.build.json',
-          start: 'node dist/main.js',
-        },
-        dependencies: { '@loutrejs/node': loutreVersion },
-        devDependencies: { '@types/node': '^22.20.1', tsx: '^4.23.12' },
-        engines: { node: '>=22' },
-        types: ['node'],
-      }
-    case 'bun':
-      return {
-        scripts: {
-          dev: 'bun --watch src/main.ts',
-          build: 'bun build src/main.ts --outdir dist --target bun',
-          start: 'bun dist/main.js',
-        },
-        devDependencies: { '@types/bun': '^1.4.0' },
-        types: ['bun'],
-      }
-    case 'deno':
-      return {
-        scripts: {
-          dev: 'deno run -A --watch src/main.ts',
-          start: 'deno run -A src/main.ts',
-        },
-        typecheck: 'tsc --noEmit --allowImportingTsExtensions',
-        types: [],
-      }
-    case 'cloudflare-workers':
-      return {
-        scripts: {
-          dev: 'wrangler dev',
-          build: 'wrangler deploy --dry-run --outdir dist',
-          deploy: 'wrangler deploy',
-        },
-        devDependencies: { wrangler: '^4.127.1' },
-        types: [],
-      }
-    case 'aws-lambda':
-      return {
-        scripts: {
-          build:
-            'esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/index.mjs',
-        },
-        devDependencies: { '@types/node': '^22.20.1', esbuild: '^0.28.2' },
-        engines: { node: '>=22' },
-        types: ['node'],
-      }
-  }
+  return match(target)
+    .with('node', () => ({
+      scripts: {
+        dev: 'tsx watch src/main.ts',
+        build: 'tsc -p tsconfig.build.json',
+        start: 'node dist/main.js',
+      },
+      dependencies: { '@loutrejs/node': loutreVersion },
+      devDependencies: { '@types/node': '^22.20.1', tsx: '^4.23.12' },
+      engines: { node: '>=22' },
+      types: ['node'],
+    }))
+    .with('bun', () => ({
+      scripts: {
+        dev: 'bun --watch src/main.ts',
+        build: 'bun build src/main.ts --outdir dist --target bun',
+        start: 'bun dist/main.js',
+      },
+      devDependencies: { '@types/bun': '^1.4.0' },
+      types: ['bun'],
+    }))
+    .with('deno', () => ({
+      scripts: {
+        dev: 'deno run -A --watch src/main.ts',
+        start: 'deno run -A src/main.ts',
+      },
+      typecheck: 'tsc --noEmit --allowImportingTsExtensions',
+      types: [],
+    }))
+    .with('cloudflare-workers', () => ({
+      scripts: {
+        dev: 'wrangler dev',
+        build: 'wrangler deploy --dry-run --outdir dist',
+        deploy: 'wrangler deploy',
+      },
+      devDependencies: { wrangler: '^4.127.1' },
+      types: [],
+    }))
+    .with('aws-lambda', () => ({
+      scripts: {
+        build:
+          'esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/index.mjs',
+      },
+      devDependencies: { '@types/node': '^22.20.1', esbuild: '^0.28.2' },
+      engines: { node: '>=22' },
+      types: ['node'],
+    }))
+    .exhaustive()
 }
 
 function renderPackageJson(options: StarterOptions): string {
