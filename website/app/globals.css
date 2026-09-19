@@ -215,6 +215,22 @@ html[data-theme='dark'] {
   border-radius: 0.5rem;
 }
 
+.loutre-devtools .react-flow__attribution {
+  background: var(--site-surface);
+  border: 1px solid var(--site-line);
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0 0.35rem 0 0;
+}
+
+.loutre-devtools .react-flow__attribution a {
+  color: var(--site-ink-soft);
+}
+
+.loutre-devtools .react-flow__attribution a:hover {
+  color: var(--site-ink);
+}
+
 .loutre-devtools .react-flow__pane {
   cursor: default !important;
 }
