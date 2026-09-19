@@ -341,14 +341,18 @@ html[data-theme='dark'] {
 }
 
 .loutre-devtools .graph-edge__path.is-dashed,
-.loutre-devtools .graph-edge__glow.is-dashed,
-.loutre-devtools .graph-edge__pulse.is-dashed {
+.loutre-devtools .graph-edge__glow.is-dashed {
   stroke-dasharray: 7 6;
+}
+
+.loutre-devtools .graph-edge__path.is-dashed.is-highlighted,
+.loutre-devtools .graph-edge__glow.is-dashed {
+  animation: loutre-edge-flow 900ms linear infinite;
 }
 
 .loutre-devtools .graph-edge__pulse {
   stroke-dasharray: 5 11;
-  animation: loutre-edge-flow 900ms linear infinite;
+  animation: loutre-edge-pulse 900ms linear infinite;
   filter: drop-shadow(0 0 3px rgb(255 106 48 / 0.5));
 }
 
@@ -362,6 +366,12 @@ html[data-theme='dark'] {
 }
 
 @keyframes loutre-edge-flow {
+  to {
+    stroke-dashoffset: -13;
+  }
+}
+
+@keyframes loutre-edge-pulse {
   to {
     stroke-dashoffset: -16;
   }

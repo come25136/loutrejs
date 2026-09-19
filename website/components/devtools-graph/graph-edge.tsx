@@ -117,9 +117,9 @@ export function GraphEdge(props: EdgeProps<LoutreFlowEdge>) {
           vectorEffect: 'non-scaling-stroke',
         }}
       />
-      {highlighted && (
+      {highlighted && !dashed && (
         <BaseEdge
-          className={`graph-edge__pulse ${dashed ? 'is-dashed' : ''}`}
+          className="graph-edge__pulse"
           path={path}
           style={{
             stroke: 'var(--site-accent-text)',
