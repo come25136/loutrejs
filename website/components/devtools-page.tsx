@@ -33,6 +33,7 @@ import {
 import {
   buildDiagnosticAgentPrompt,
   diagnosticSource,
+  diagnosticsByNodeId,
 } from '../lib/devtools-diagnostics'
 import {
   connectDevtools,
@@ -1013,6 +1014,7 @@ function Inspector({
       </div>
     )
   }
+  const nodeDiagnostics = diagnosticsByNodeId(snapshot).get(node.id) ?? []
   const relations: Array<{
     readonly edge: GraphEdge
     readonly target: GraphNode
@@ -1144,10 +1146,10 @@ function Inspector({
           </dl>
         </InspectorSection>
       )}
-      {snapshot.diagnostics.length > 0 && (
+      {nodeDiagnostics.length > 0 && (
         <InspectorSection title={labels.diagnostics}>
           <div className="grid gap-2">
-            {snapshot.diagnostics.map((diagnostic, index) => (
+            {nodeDiagnostics.map((diagnostic, index) => (
               <article
                 key={`${diagnostic.code}:${index}`}
                 className="rounded-md border border-line p-2 text-[10px]"
