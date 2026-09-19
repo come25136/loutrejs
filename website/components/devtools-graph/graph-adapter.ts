@@ -36,8 +36,6 @@ export type FlowNodeType =
   | 'handler'
   | 'capability'
 
-const moduleGroupMinWidth = 520
-const moduleGroupMinHeight = 320
 const moduleGroupPadding = {
   top: 64,
   right: 36,
@@ -150,11 +148,11 @@ export function resizeModuleGroups(
   const shiftX = left - moduleGroupPadding.left
   const shiftY = top - moduleGroupPadding.top
   const width = Math.max(
-    moduleGroupMinWidth + Math.max(0, -shiftX),
+    Math.max(0, -shiftX),
     right - shiftX + moduleGroupPadding.right,
   )
   const height = Math.max(
-    moduleGroupMinHeight + Math.max(0, -shiftY),
+    Math.max(0, -shiftY),
     bottom - shiftY + moduleGroupPadding.bottom,
   )
 
