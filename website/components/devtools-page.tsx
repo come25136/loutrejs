@@ -873,18 +873,30 @@ function Inspector({
             {relations.map(({ edge, target, direction }, index) => (
               <button
                 key={`${edge.from}:${edge.to}:${index}`}
-                className="grid grid-cols-[14px_1fr] gap-2 rounded-md p-2 text-left transition hover:bg-surface-muted"
+                className="flex items-start gap-2 rounded-md p-2 text-left transition hover:bg-surface-muted"
                 type="button"
                 onClick={() => onSelect(target.id)}
               >
-                <ChevronRight
-                  size={12}
-                  className={`mt-0.5 text-ink-muted ${direction === 'in' ? 'rotate-180' : ''}`}
-                />
+                <span className="mt-0.5 flex size-3 shrink-0 items-start">
+                  {direction === 'in' && (
+                    <ChevronRight
+                      size={12}
+                      className="shrink-0 rotate-180 text-ink-muted"
+                    />
+                  )}
+                </span>
                 <span className="min-w-0">
-                  <strong className="block break-words text-[10px]">
-                    {target.label}
-                  </strong>
+                  <span className="flex min-w-0 items-start gap-1">
+                    <strong className="min-w-0 break-words text-[10px]">
+                      {target.label}
+                    </strong>
+                    {direction === 'out' && (
+                      <ChevronRight
+                        size={12}
+                        className="mt-0.5 shrink-0 text-ink-muted"
+                      />
+                    )}
+                  </span>
                   <small className="text-[9px] text-ink-muted">
                     {edge.kind}
                   </small>
