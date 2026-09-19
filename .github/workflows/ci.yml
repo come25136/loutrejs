@@ -559,6 +559,11 @@ jobs:
         with:
           node-version: 24.x
 
+      - name: Check generated OSS license data
+        run: |
+          npm run generate:licenses --workspace @loutrejs/website
+          git diff --exit-code -- website/lib/oss-licenses.generated.ts
+
       - name: Build website
         run: npm run build:website
 

@@ -18,8 +18,13 @@ export class DependencyResolutionError extends Error {
   }
 }
 
+export interface ContainerHooks {
+  created?(provider: ProviderDescriptor, value: unknown): void
+}
+
 export interface ContainerOptions {
   readonly logger?: Logger
+  readonly hooks?: ContainerHooks
   readonly environment?: ReadonlyMap<EnvClass, object>
   readonly arguments?: ReadonlyMap<ArgsClass, object>
 }
@@ -28,6 +33,7 @@ export class Container {
   readonly #providers = new Map<TokenLike, ProviderDescriptor>()
   readonly #applicationCache = new Map<TokenLike, unknown>()
   readonly #logger: Logger
+  readonly #hooks: ContainerHooks
   readonly #environment = new Map<EnvClass, object>()
   readonly #arguments = new Map<ArgsClass, object>()
 
@@ -37,6 +43,7 @@ export class Container {
   ) {
     this.#logger =
       options instanceof Logger ? options : (options.logger ?? new Logger())
+    this.#hooks = options instanceof Logger ? {} : (options.hooks ?? {})
     if (!(options instanceof Logger)) {
       for (const [environment, value] of options.environment ?? []) {
         this.#environment.set(environment, value)
@@ -210,8 +217,10 @@ export class Container {
   ): unknown {
     try {
       switch (provider.kind) {
-        case 'value':
+        case 'value': {
+          this.#hooks.created?.(provider, provider.useValue)
           return provider.useValue
+        }
         case 'environment': {
           if (this.#environment.has(provider.provide)) {
             return this.#environment.get(provider.provide)
@@ -228,8 +237,11 @@ export class Container {
             `LUTRE_ARGS_005: Arguments ${provider.provide.name} requires runtime Arguments before Application initialization.`,
           )
         }
-        case 'class':
-          return this.#instantiate(provider.useClass, lineage)
+        case 'class': {
+          const value = this.#instantiate(provider.useClass, lineage)
+          this.#hooks.created?.(provider, value)
+          return value
+        }
         case 'factory': {
           const dependencies = provider.inject.map((token) =>
             this.#resolve(token, tokenName(provider.provide), lineage),
@@ -240,6 +252,7 @@ export class Container {
               'LUTRE_DI_ASYNC_FACTORY: Async factory providers are not supported. Move asynchronous resource initialization to application lifecycle.',
             )
           }
+          this.#hooks.created?.(provider, value)
           return value
         }
         case 'conditional': {
@@ -255,7 +268,9 @@ export class Container {
               `No conditional Provider matches ${provider.select.key}=${String(selected)}`,
             )
           }
-          return this.#instantiate(implementation, lineage)
+          const value = this.#instantiate(implementation, lineage)
+          this.#hooks.created?.(provider, value)
+          return value
         }
       }
     } catch (error) {

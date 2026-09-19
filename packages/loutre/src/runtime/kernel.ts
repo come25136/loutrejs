@@ -3,16 +3,24 @@ import {
   loadArgs,
   loadEnv,
   RuntimeCapabilityRegistry,
+  tokenName,
   type ApplicationModel,
   type ExecutionExtension,
   type ExecutionExtensionRuntime,
   type ExecutionKernelRuntime,
   type ExecutionLease,
+  type ExecutionOperationLease,
   type LifecycleHook,
   type LifecycleModelNode,
   type ModuleModelNode,
+  type ProviderDescriptor,
   type ProviderModelNode,
   type RuntimeCapabilityBinding,
+  type RuntimeExecutionMetadata,
+  type RuntimeInstrumentation,
+  type RuntimeInstrumentationScope,
+  type RuntimeInvocationRegistration,
+  type RuntimeOperationMetadata,
   type TokenLike,
 } from '../core/index.js'
 import { Container } from './di.js'
@@ -25,6 +33,7 @@ export interface ApplicationKernelRuntimeOptions {
   readonly environmentSource?: unknown
   readonly argumentsSource?: unknown
   readonly forceShutdownTimeoutMs?: number
+  readonly instrumentation?: RuntimeInstrumentation
 }
 
 const defaultForceShutdownTimeoutMs = 5_000
@@ -47,6 +56,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   readonly capabilities: RuntimeCapabilityRegistry
   readonly #extensionRuntimes = new Map<symbol, ExecutionExtensionRuntime>()
   readonly #providerInstances = new Map<string, unknown[]>()
+  readonly #providerNodes = new Map<ProviderDescriptor, ProviderModelNode>()
   readonly #initializedModuleIds = new Set<string>()
   readonly #executions = new ExecutionTracker()
   readonly #extensionDrainOperations = new Map<
@@ -56,6 +66,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   readonly #environmentSource: unknown
   readonly #argumentsSource: unknown
   readonly #forceShutdownTimeoutMs: number
+  readonly #instrumentation: RuntimeInstrumentation | undefined
   #state: RuntimeState = 'created'
   #initialization: Promise<void> | undefined
   #shutdown: Promise<void> | undefined
@@ -65,6 +76,9 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     options: ApplicationKernelRuntimeOptions = {},
   ) {
     this.model = assertValidApplicationModel(model)
+    for (const node of this.model.nodes) {
+      if (node.kind === 'provider') this.#providerNodes.set(node.provider, node)
+    }
     this.capabilities = new RuntimeCapabilityRegistry(
       options.capabilities ?? [],
     )
@@ -73,6 +87,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       'argumentsSource' in options ? options.argumentsSource : Object.freeze({})
     this.#forceShutdownTimeoutMs =
       options.forceShutdownTimeoutMs ?? defaultForceShutdownTimeoutMs
+    this.#instrumentation = options.instrumentation
     if (
       !Number.isFinite(this.#forceShutdownTimeoutMs) ||
       this.#forceShutdownTimeoutMs < 0
@@ -83,6 +98,10 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     }
     this.container = new Container(model.providers, {
       logger: options.logger ?? new Logger(),
+      hooks: {
+        created: (provider, value) =>
+          this.#notifyProviderCreated(provider, value),
+      },
     })
   }
 
@@ -224,9 +243,64 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     return runtime as TRuntime
   }
 
-  beginExecution(): ExecutionLease {
+  beginExecution(
+    metadata?: RuntimeExecutionMetadata,
+    invocation?: RuntimeInvocationRegistration,
+  ): ExecutionLease {
     if (this.#state !== 'running') throw applicationStateError(this.#state)
-    return this.#executions.begin()
+    const tracked = this.#executions.begin()
+    if (metadata === undefined) return tracked
+
+    const scope = safely(() =>
+      this.#instrumentation?.beginExecution?.(metadata, invocation),
+    )
+    if (!scope) return tracked
+    const instrumented = instrumentationLease(scope)
+
+    return {
+      signal: tracked.signal,
+      run: instrumented.run,
+      abort(reason?: unknown) {
+        callInstrumentation(() => scope.abort?.(reason))
+        tracked.abort(reason)
+      },
+      fail: instrumented.fail,
+      annotate: instrumented.annotate,
+      complete(...result: [] | [unknown]) {
+        instrumented.complete(...result)
+        tracked.complete()
+      },
+    }
+  }
+
+  beginOperation(
+    metadata: RuntimeOperationMetadata,
+    invocation?: RuntimeInvocationRegistration,
+  ): ExecutionOperationLease {
+    return instrumentationLease(
+      safely(() =>
+        this.#instrumentation?.beginOperation?.(metadata, invocation),
+      ),
+    )
+  }
+
+  #notifyProviderCreated(provider: ProviderDescriptor, value: unknown): void {
+    const instrumentation = this.#instrumentation
+    if (!instrumentation?.providerCreated) return
+    const providerNode = this.#providerNodes.get(provider)
+    if (!providerNode) return
+    callInstrumentation(() =>
+      instrumentation.providerCreated!(
+        {
+          providerId: providerNode.id,
+          graphNodeId: providerNode.id,
+          name: tokenName(providerNode.token),
+          scope: provider.scope,
+          providerKind: provider.kind,
+        },
+        value,
+      ),
+    )
   }
 
   shutdown(signal?: string): Promise<void> {
@@ -243,6 +317,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     if (this.#initialization) await this.#initialization.catch(() => undefined)
     if (this.#state === 'created') {
       this.#state = 'stopped'
+      await closeInstrumentation(this.#instrumentation)
       return
     }
     if (this.#state === 'stopped') return
@@ -316,6 +391,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     this.#extensionDrainOperations.clear()
     await this.#cleanupProviders(signal, errors)
     this.#state = 'stopped'
+    await closeInstrumentation(this.#instrumentation)
     if (errors.length > 0) {
       throw new AggregateError(errors, 'Application shutdown failed.')
     }
@@ -415,6 +491,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         )
       }
     }
+    await closeInstrumentation(this.#instrumentation)
     return errors
   }
 
@@ -459,6 +536,58 @@ function lifecycleHookOf(
       node.moduleId === moduleId &&
       node.phase === phase,
   )?.hook
+}
+
+interface InstrumentationLease extends ExecutionOperationLease {
+  run<T>(operation: () => T): T
+  fail(reason: unknown): void
+  annotate(attributes: Readonly<Record<string, unknown>>): void
+}
+
+function instrumentationLease(
+  scope: RuntimeInstrumentationScope | undefined,
+): InstrumentationLease {
+  return {
+    run<T>(operation: () => T): T {
+      if (!scope?.run) return operation()
+      return scope.run(operation)
+    },
+    fail(reason: unknown) {
+      callInstrumentation(() => scope?.fail?.(reason))
+    },
+    annotate(attributes: Readonly<Record<string, unknown>>) {
+      callInstrumentation(() => scope?.annotate?.(attributes))
+    },
+    complete(...result: [] | [unknown]) {
+      callInstrumentation(() => scope?.complete(...result))
+    },
+  }
+}
+
+function safely<T>(operation: () => T): T | undefined {
+  try {
+    return operation()
+  } catch {
+    return undefined
+  }
+}
+
+function callInstrumentation(operation: () => unknown): void {
+  try {
+    operation()
+  } catch {
+    // instrumentation障害をApplication semanticsへ伝播させてはならない。
+  }
+}
+
+async function closeInstrumentation(
+  instrumentation: RuntimeInstrumentation | undefined,
+): Promise<void> {
+  try {
+    await instrumentation?.close?.()
+  } catch {
+    // instrumentationのcleanup失敗をshutdown失敗として扱わない。
+  }
 }
 
 async function withTimeout<T>(

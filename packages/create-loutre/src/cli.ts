@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { relative } from 'node:path'
-import { isCancel, select, text } from '@clack/prompts'
+import { select, text } from '@clack/prompts'
 import { Command, CommanderError, Option } from 'commander'
 import { bootstrapApplication } from '@loutrejs/loutre'
 import {
@@ -254,7 +254,7 @@ async function terminalPrompt(
   initialValue: string,
 ): Promise<string | undefined> {
   const result = await text({ message, defaultValue: initialValue })
-  return isCancel(result) ? undefined : result
+  return typeof result === 'string' ? result : undefined
 }
 
 async function terminalSelect(
@@ -263,7 +263,7 @@ async function terminalSelect(
   initialValue: string,
 ): Promise<string | undefined> {
   const result = await select({ message, options: [...options], initialValue })
-  return isCancel(result) ? undefined : result
+  return typeof result === 'string' ? result : undefined
 }
 
 function installDependencies(

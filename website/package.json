@@ -3,13 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "generate:licenses": "node scripts/generate-oss-licenses.mjs",
     "dev": "next dev",
+    "predev": "npm run generate:licenses",
+    "prebuild": "npm run generate:licenses",
     "build": "next build"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@mr_mint/elkjs-libavoid": "^0.5.0",
     "@next/third-parties": "^16.3.2",
+    "@xyflow/react": "^12.8.6",
+    "elkjs": "^0.10.0",
     "github-slugger": "^2.0.0",
     "highlight.js": "11.12.0",
     "lucide-react": "1.33.0",

@@ -3,6 +3,7 @@ import { GoogleAnalytics } from '@next/third-parties/google'
 import type { ReactNode } from 'react'
 import '@fontsource-variable/inter'
 import '@fontsource-variable/jetbrains-mono'
+import '@xyflow/react/dist/style.css'
 import { SiteChrome } from '../components/site-chrome'
 import './globals.css'
 

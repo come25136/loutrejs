@@ -1,0 +1,1 @@
+export const DEVTOOLS_PROTOCOL_VERSION = 1

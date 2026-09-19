@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type {
@@ -7,6 +8,7 @@ import type {
   JsonValue,
 } from '@loutrejs/loutre/graph'
 import { hasErrorDiagnostics } from '@loutrejs/loutre'
+import { devtoolsOptionsOf } from '@loutrejs/loutre/devtools'
 import {
   checkRuntimeSupport,
   detectRuntimeEngine,
@@ -18,7 +20,19 @@ import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
-import { emitApplication, loadApplicationGraph } from './application-loader.js'
+import {
+  emitApplication,
+  loadApplicationDefinition,
+  loadApplicationGraph,
+  loadApplicationGraphWithFiles,
+} from './application-loader.js'
+import {
+  DEFAULT_DEVTOOLS_ORIGINS,
+  DEFAULT_DEVTOOLS_PORT,
+  DEVTOOLS_PROTOCOL_VERSION,
+  startDevServer,
+} from './dev/server.js'
+import { startDevApplicationSupervisor } from './dev/run-supervisor.js'
 
 export interface CliIO {
   readonly cwd: string
@@ -132,9 +146,12 @@ interface GraphView {
 }
 
 export async function runCli(
-  args: readonly string[],
+  rawArgs: readonly string[],
   io: CliIO,
 ): Promise<number> {
+  const separator = rawArgs.indexOf('--')
+  const args = separator < 0 ? rawArgs : rawArgs.slice(0, separator)
+  const passthroughArgs = separator < 0 ? [] : rawArgs.slice(separator + 1)
   const [command, subject] = readPositionals(args)
   if (
     !command ||
@@ -244,6 +261,114 @@ export async function runCli(
       }
       if (graph.diagnostics.length > 0) writeDiagnostics(graph, io)
       return hasErrorDiagnostics(graph.diagnostics) ? 1 : 0
+    }
+
+    case 'dev': {
+      if (subject) {
+        io.stderr(`Unexpected argument: ${subject}`)
+        return 2
+      }
+      const target = entry()
+      if (!target) return 2
+      if (passthroughArgs.length === 0) {
+        io.stderr(
+          'dev requires an Application command after --, for example: loutre dev --entry src/app.ts -- npm run dev',
+        )
+        return 2
+      }
+      const port = parseDevPort(readOption(args, '--port'))
+      if (port === undefined) {
+        io.stderr('dev --port must be an integer from 0 to 65535.')
+        return 2
+      }
+      const requestedOrigins = readOptions(args, '--origin')
+      const origins = [
+        ...new Set([...DEFAULT_DEVTOOLS_ORIGINS, ...requestedOrigins]),
+      ]
+      const ignore = readOptions(args, '--ignore')
+      for (const origin of origins) {
+        if (!isOrigin(origin)) {
+          io.stderr(`dev --origin must be a URL origin: ${origin}`)
+          return 2
+        }
+      }
+
+      const definition = await loadApplicationDefinition(target, {
+        projectRoot: io.cwd,
+      })
+      let applicationModelValid = !hasErrorDiagnostics(
+        definition.model.diagnostics,
+      )
+      const devtoolsOptions = devtoolsOptionsOf(definition.model)
+      if (!devtoolsOptions || devtoolsOptions.enabled === false) {
+        io.stderr(
+          'loutre dev requires DevtoolsModule() in the Application imports.',
+        )
+        return 2
+      }
+
+      const runId = `run_${randomUUID()}`
+      let supervisor:
+        | ReturnType<typeof startDevApplicationSupervisor>
+        | undefined
+      const server = await startDevServer({
+        projectRoot: io.cwd,
+        entry: requestedEntry(args)!,
+        port,
+        origins,
+        ignore,
+        onSourceGraphReload: () => {
+          if (applicationModelValid) supervisor?.restartIfStopped()
+        },
+        loadGraph: async () => {
+          const loaded = await loadApplicationGraphWithFiles(target, {
+            projectRoot: io.cwd,
+            sourceLocations: true,
+          })
+          applicationModelValid = !hasErrorDiagnostics(loaded.graph.diagnostics)
+          const view = buildGraphView(loaded.graph, 'all')
+          return {
+            snapshot: {
+              schemaVersion: DEVTOOLS_PROTOCOL_VERSION,
+              nodes: view.nodes,
+              edges: view.edges,
+              diagnostics: loaded.graph.diagnostics,
+            },
+            watchFiles: loaded.files,
+          }
+        },
+      })
+
+      io.stdout(`Loutre Dev: ${server.url}`)
+      io.stdout(`Project: ${io.cwd}`)
+      io.stdout(`Entry: ${requestedEntry(args)}`)
+      io.stdout(`Control channel: ${server.clientEndpoint}`)
+      io.stdout(`Application channel: ${server.applicationEndpoint}`)
+      io.stdout('Devtools UI: https://loutrejs.come25136.id/devtools/')
+      io.stdout(`Command: ${passthroughArgs.join(' ')}`)
+
+      try {
+        supervisor = startDevApplicationSupervisor({
+          command: passthroughArgs as [string, ...string[]],
+          cwd: io.cwd,
+          environment: {
+            LOUTRE_DEV_ENDPOINT: server.applicationEndpoint,
+            LOUTRE_DEV_RUN_ID: runId,
+          },
+          startImmediately: applicationModelValid,
+          onStopped: ({ code, signal }) => {
+            const reason =
+              code === null ? `signal ${signal ?? 'unknown'}` : `code ${code}`
+            io.stderr(
+              `Application exited with ${reason}. DevTools remains available; waiting for source changes.`,
+            )
+          },
+        })
+        return await supervisor.result
+      } finally {
+        await supervisor?.close()
+        await server.close()
+      }
     }
 
     case 'explain': {
@@ -1393,6 +1518,9 @@ const valueOptions = new Set([
   '--theme',
   '--runtime',
   '--out-dir',
+  '--port',
+  '--origin',
+  '--ignore',
 ])
 
 function readPositionals(args: readonly string[]): string[] {
@@ -1413,15 +1541,47 @@ function readOption(args: readonly string[], name: string): string | undefined {
   return index < 0 ? undefined : args[index + 1]
 }
 
+function readOptions(args: readonly string[], name: string): string[] {
+  return args.flatMap((argument, index) =>
+    argument === name && args[index + 1] !== undefined
+      ? [args[index + 1]!]
+      : [],
+  )
+}
+
+function requestedEntry(args: readonly string[]): string | undefined {
+  return readOption(args, '--entry')
+}
+
+function parseDevPort(value: string | undefined): number | undefined {
+  if (value === undefined) return DEFAULT_DEVTOOLS_PORT
+  if (!/^\d+$/.test(value)) return undefined
+  const port = Number(value)
+  return port >= 0 && port <= 65_535 ? port : undefined
+}
+
+function isOrigin(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return (
+      url.origin === value &&
+      (url.protocol === 'http:' || url.protocol === 'https:')
+    )
+  } catch {
+    return false
+  }
+}
+
 function helpText(): string {
   return [
     'Loutre CLI',
     '  loutre check --entry <entry>',
     '  loutre doctor [--runtime node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
     '  loutre graph all|modules|di|executions|http|runtime --entry <entry> [--format text|json|mermaid] [--theme light|dark]',
+    '  loutre dev --entry <entry> [--port 25136] [--origin <origin>] [--ignore <path>] -- <application command>',
     '  loutre explain <target> --entry <entry>',
     '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',
     '',
-    'Application execution is owned by the Host. Loutre CLI does not provide run/dev/start.',
+    'The dev command supervises your Host command and connects an opt-in DevtoolsModule to the local DevTools session.',
   ].join('\n')
 }

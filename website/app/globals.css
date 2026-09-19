@@ -189,3 +189,264 @@ html[data-theme='dark'] {
     transition-duration: 0.01ms !important;
   }
 }
+
+.loutre-devtools .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--site-line);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgb(2 8 23 / 0.08);
+}
+
+.loutre-devtools .react-flow__controls-button {
+  color: var(--site-ink-soft);
+  fill: currentColor;
+  background: var(--site-surface);
+  border-bottom-color: var(--site-line);
+}
+
+.loutre-devtools .react-flow__controls-button:hover {
+  color: var(--site-ink);
+  background: var(--site-surface-subtle);
+}
+
+.loutre-devtools .react-flow__minimap {
+  background: var(--site-surface);
+  border: 1px solid var(--site-line);
+  border-radius: 0.5rem;
+}
+
+.loutre-devtools .react-flow__attribution {
+  background: var(--site-surface);
+  border: 1px solid var(--site-line);
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0 0.35rem 0 0;
+}
+
+.loutre-devtools .react-flow__attribution a {
+  color: var(--site-ink-soft);
+}
+
+.loutre-devtools .react-flow__attribution a:hover {
+  color: var(--site-ink);
+}
+
+.loutre-devtools .react-flow__pane {
+  cursor: default !important;
+}
+
+.loutre-devtools .react-flow__node,
+.loutre-devtools .react-flow__node *,
+.loutre-devtools .react-flow__edge,
+.loutre-devtools .react-flow__edge * {
+  cursor: pointer !important;
+}
+
+.loutre-devtools .react-flow__handle {
+  width: 6px;
+  height: 6px;
+  opacity: 0;
+}
+
+.loutre-devtools .semantic-node {
+  position: relative;
+  display: flex;
+  width: 220px;
+  height: 86px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 12px 14px;
+  color: var(--site-ink);
+  background: var(--site-surface);
+  border: 1px solid var(--site-line-strong);
+  border-left: 3px solid var(--site-line-strong);
+  border-radius: 7px;
+  box-shadow: 0 2px 10px rgb(2 8 23 / 0.08);
+}
+
+.loutre-devtools .semantic-node.is-selected {
+  border-color: #f97316;
+  border-left-color: #f97316;
+  box-shadow:
+    0 0 0 2px rgb(255 106 48 / 0.12),
+    0 4px 16px rgb(2 8 23 / 0.1);
+}
+
+.loutre-devtools .semantic-node.has-diagnostic {
+  border-color: #dc2626;
+  border-left-color: #dc2626;
+  box-shadow:
+    0 0 0 2px rgb(220 38 38 / 0.12),
+    0 4px 16px rgb(127 29 29 / 0.14);
+}
+
+.loutre-devtools .semantic-node strong {
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.loutre-devtools .semantic-node__kind {
+  color: var(--site-ink-soft);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.loutre-devtools .semantic-node__source {
+  color: var(--site-ink-muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+}
+
+.loutre-devtools .semantic-node__diagnostic {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  color: #b91c1c;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+}
+
+html[data-theme='dark'] .loutre-devtools .semantic-node__diagnostic {
+  color: #fecaca;
+  background: rgb(127 29 29 / 0.35);
+  border-color: rgb(248 113 113 / 0.5);
+}
+
+.loutre-devtools .semantic-node--provider {
+  border-left-color: #15803d;
+}
+
+.loutre-devtools .semantic-node--module {
+  border-left-color: #e84f16;
+}
+
+.loutre-devtools .semantic-node--execution {
+  border-left-color: #64748b;
+}
+
+.loutre-devtools .semantic-node--entrypoint {
+  border-left-color: #b45309;
+}
+
+.loutre-devtools .semantic-node--middleware {
+  border-left-color: #8b7d72;
+}
+
+.loutre-devtools .semantic-node--handler {
+  border-left-color: #ff6a30;
+}
+
+.loutre-devtools .semantic-node--runtime-capability {
+  border-left-color: #94a3b8;
+}
+
+.loutre-devtools .module-group {
+  width: 100%;
+  height: 100%;
+  padding: 14px 18px;
+  color: var(--site-accent-text);
+  background: rgb(255 106 48 / 0.035);
+  border: 1px solid rgb(255 106 48 / 0.22);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.loutre-devtools .module-group span {
+  display: block;
+  color: var(--site-accent-text);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.loutre-devtools .module-group strong {
+  font-size: 13px;
+}
+
+.loutre-devtools .graph-edge__endpoint {
+  fill: var(--site-line-strong);
+  stroke: var(--site-surface);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.loutre-devtools .graph-edge__glow {
+  filter: drop-shadow(0 0 5px rgb(255 106 48 / 0.35));
+}
+
+.loutre-devtools .graph-edge__path.is-dashed,
+.loutre-devtools .graph-edge__glow.is-dashed {
+  stroke-dasharray: 7 6;
+}
+
+.loutre-devtools .graph-edge__path.is-dashed.is-highlighted,
+.loutre-devtools .graph-edge__glow.is-dashed {
+  animation: loutre-edge-flow 900ms linear infinite;
+}
+
+.loutre-devtools .graph-edge__pulse {
+  stroke-dasharray: 5 11;
+  animation: loutre-edge-pulse 900ms linear infinite;
+  filter: drop-shadow(0 0 3px rgb(255 106 48 / 0.5));
+}
+
+.loutre-devtools .graph-edge__endpoint.is-highlighted {
+  fill: var(--site-accent-text);
+}
+
+.loutre-devtools .react-flow__edgelabel-renderer {
+  z-index: 1000 !important;
+  isolation: isolate;
+}
+
+@keyframes loutre-edge-flow {
+  to {
+    stroke-dashoffset: -13;
+  }
+}
+
+@keyframes loutre-edge-pulse {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+.loutre-devtools .graph-edge__label {
+  position: absolute;
+  z-index: 1001;
+  padding: 3px 7px;
+  color: var(--site-ink-soft);
+  font-size: 10px;
+  pointer-events: all;
+  background: var(--site-surface);
+  border: 1px solid var(--site-line-strong);
+  border-radius: 4px;
+}
+
+.loutre-devtools .graph-edge__label.is-highlighted {
+  color: var(--site-accent-text);
+  border-color: rgb(255 106 48 / 0.45);
+}
+
+.loutre-devtools .canvas-message {
+  display: grid;
+  height: 100%;
+  color: var(--site-ink-muted);
+  font-size: 13px;
+  place-items: center;
+}

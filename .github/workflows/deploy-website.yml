@@ -7,6 +7,7 @@ on:
       - '.github/actions/setup-node-workspace/**'
       - '.github/workflows/deploy-website.yml'
       - 'docs/**'
+      - 'website/scripts/generate-oss-licenses.mjs'
       - 'website/**'
       - 'package.json'
       - 'package-lock.json'

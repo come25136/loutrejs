@@ -600,7 +600,12 @@ function createWebSocketRuntime(
       }
       let lease: ReturnType<ExecutionKernelRuntime['beginExecution']>
       try {
-        lease = applicationRuntime.beginExecution()
+        lease = applicationRuntime.beginExecution({
+          executionId: match.executionId,
+          executionKind: 'websocket.session',
+          graphNodeId: match.executionId,
+          name: `WS ${match.route.path}`,
+        })
       } catch (error) {
         completePendingIngress()
         throw error
@@ -609,6 +614,7 @@ function createWebSocketRuntime(
       try {
         upgraded = await driver.upgrade(request)
       } catch (error) {
+        lease.fail?.(error)
         lease.complete()
         completePendingIngress()
         throw error
@@ -619,6 +625,7 @@ function createWebSocketRuntime(
         input,
         lease,
         handlers.get(match.executionId)?.[match.route.name],
+        lease.run,
       )
       sessions.add(session.active)
       void session.completion.then(
@@ -753,6 +760,7 @@ function createSession(
   handler:
     | ((context: WebSocketHandlerContext<any>) => void | Promise<void>)
     | undefined,
+  runInExecution: (<T>(operation: () => T) => T) | undefined,
 ): { readonly active: ActiveSession; readonly completion: Promise<void> } {
   let state: 'open' | 'closing' | 'closed' = 'open'
   let transportFailed = false
@@ -766,6 +774,7 @@ function createSession(
     },
     (error: unknown) => {
       state = 'closed'
+      lease.fail?.(error)
       lease.abort(error)
       throw error
     },
@@ -818,9 +827,11 @@ function createSession(
       if (!handler) {
         throw new Error(`LUTRE_WEBSOCKET_HANDLER_MISSING: ${route.name}`)
       }
-      await handler(context)
+      const invoke = () => handler(context)
+      await (runInExecution ? runInExecution(invoke) : invoke())
       if (state === 'open') await close(1000, '')
-    } catch {
+    } catch (error) {
+      lease.fail?.(error)
       if (state === 'open') await close(1011, '')
     } finally {
       try {

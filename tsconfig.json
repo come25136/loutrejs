@@ -21,6 +21,7 @@
         "./packages/loutre/src/presentation.ts"
       ],
       "@loutrejs/loutre/graph": ["./packages/loutre/src/graph/index.ts"],
+      "@loutrejs/loutre/devtools": ["./packages/loutre/src/devtools/index.ts"],
       "@loutrejs/loutre/runtime": ["./packages/loutre/src/runtime/index.ts"],
       "@loutrejs/loutre/http": ["./packages/loutre/src/http/index.ts"],
       "@loutrejs/loutre/websocket": [

@@ -1399,7 +1399,12 @@ function createHttpExtensionRuntime(
             }
             let lease: ReturnType<ExecutionKernelRuntime['beginExecution']>
             try {
-              lease = applicationRuntime.beginExecution()
+              lease = applicationRuntime.beginExecution({
+                executionId: match.executionId,
+                executionKind: 'http.request',
+                graphNodeId: match.executionId,
+                name: `OPTIONS ${match.route.path}`,
+              })
             } catch (error) {
               completePendingIngress()
               throw error
@@ -1411,6 +1416,7 @@ function createHttpExtensionRuntime(
                 match.route.method,
               )
               if (headers) {
+                lease.annotate?.({ 'http.status_code': 204 })
                 return new Response(null, { status: 204, headers })
               }
             } finally {
@@ -1442,7 +1448,31 @@ function createHttpExtensionRuntime(
         )
       }
       if (!match) {
-        return Response.json({ error: 'Not Found' }, { status: 404 })
+        const completePendingIngress = ingress.enter()
+        if (!completePendingIngress) {
+          return Response.json(
+            { error: 'Service Unavailable' },
+            { status: 503 },
+          )
+        }
+        let lease: ReturnType<ExecutionKernelRuntime['beginExecution']>
+        try {
+          lease = applicationRuntime.beginExecution({
+            executionId: 'http.not-found',
+            executionKind: 'http.request',
+            name: `${method} ${url.pathname}`,
+          })
+        } catch (error) {
+          completePendingIngress()
+          throw error
+        }
+        try {
+          lease.annotate?.({ 'http.status_code': 404 })
+          return Response.json({ error: 'Not Found' }, { status: 404 })
+        } finally {
+          lease.complete()
+          completePendingIngress()
+        }
       }
 
       const completePendingIngress = ingress.enter()
@@ -1451,7 +1481,12 @@ function createHttpExtensionRuntime(
       }
       let lease: ReturnType<ExecutionKernelRuntime['beginExecution']>
       try {
-        lease = applicationRuntime.beginExecution()
+        lease = applicationRuntime.beginExecution({
+          executionId: match.executionId,
+          executionKind: 'http.request',
+          graphNodeId: match.executionId,
+          name: `${match.route.method} ${match.route.path}`,
+        })
       } catch (error) {
         completePendingIngress()
         throw error
@@ -1459,11 +1494,14 @@ function createHttpExtensionRuntime(
       const abortRequest = () => lease.abort(request.signal.reason)
       let executionOwnedByStream = false
       let executionFinished = false
+      let executionResult: unknown
+      let hasExecutionResult = false
       const finishExecution = () => {
         if (executionFinished) return
         executionFinished = true
         request.signal.removeEventListener('abort', abortRequest)
-        lease.complete()
+        if (hasExecutionResult) lease.complete(executionResult)
+        else lease.complete()
       }
       const adoptResponseStream = (stream: HttpResponseStreamControl) => {
         executionOwnedByStream = true
@@ -1481,13 +1519,21 @@ function createHttpExtensionRuntime(
       }
       request.signal.addEventListener('abort', abortRequest, { once: true })
       if (request.signal.aborted) abortRequest()
+      const annotateResponse = <TResponse extends Response>(
+        response: TResponse,
+      ): TResponse => {
+        lease.annotate?.({ 'http.status_code': response.status })
+        return response
+      }
       try {
         const corsHeaders = await createCorsActualResponseHeaders(
           match.route.middlewares,
           request,
         )
         const complete = (response: Response): Response =>
-          applyFrameworkHeadersToResponse(response, corsHeaders)
+          annotateResponse(
+            applyFrameworkHeadersToResponse(response, corsHeaders),
+          )
 
         let context: HttpExecutionContext
         try {
@@ -1526,18 +1572,59 @@ function createHttpExtensionRuntime(
             `LUTRE_HTTP_HANDLER_MISSING: ${match.executionId}.${match.route.name}`,
           )
         }
-        const result = await composeLayers({
-          context,
-          layers: match.route.middlewares,
-          resolve: (token, source) => applicationRuntime.resolve(token, source),
-          terminal: async (middlewareContext) =>
-            handler({
-              input: middlewareContext.input,
-              response: middlewareContext.response,
-              signal: middlewareContext.signal,
-              state: middlewareContext.state,
-            } as HttpExecutionContext),
-        })
+        const dispatch = () =>
+          composeLayers({
+            context,
+            layers: match.route.middlewares,
+            resolve: (token, source) =>
+              applicationRuntime.resolve(token, source),
+            terminal: async (middlewareContext) => {
+              const handlerName = `${match.executionId}.${match.route.name}`
+              const handlerOperation = applicationRuntime.beginOperation?.(
+                {
+                  kind: 'http.handler',
+                  name: handlerName,
+                  graphNodeId: match.executionId,
+                },
+                {
+                  input: middlewareContext.input,
+                  invoke: (input) =>
+                    replayHttpHandler(
+                      applicationRuntime,
+                      handler,
+                      match,
+                      input,
+                      middlewareContext.state,
+                    ),
+                },
+              )
+              const invoke = () =>
+                handler({
+                  input: middlewareContext.input,
+                  response: middlewareContext.response,
+                  signal: middlewareContext.signal,
+                  state: middlewareContext.state,
+                } as HttpExecutionContext)
+              let result: HttpExecutionResult | undefined
+              let hasResult = false
+              try {
+                result = await (handlerOperation?.run
+                  ? handlerOperation.run(invoke)
+                  : invoke())
+                hasResult = true
+                return result
+              } catch (error) {
+                handlerOperation?.fail?.(error)
+                throw error
+              } finally {
+                if (hasResult) handlerOperation?.complete(result)
+                else handlerOperation?.complete()
+              }
+            },
+          })
+        const result = await (lease.run ? lease.run(dispatch) : dispatch())
+        executionResult = result
+        hasExecutionResult = true
         const finalized = await finalizeHttpResult(
           match.route.definition,
           result,
@@ -1549,17 +1636,22 @@ function createHttpExtensionRuntime(
         return complete(finalized.response)
       } catch (error) {
         if (error instanceof HttpInputDecodeError) {
-          return applyFrameworkHeadersToResponse(
-            Response.json({ error: 'Invalid request' }, { status: 400 }),
-            await safeCorsHeaders(match.route.middlewares, request),
+          return annotateResponse(
+            applyFrameworkHeadersToResponse(
+              Response.json({ error: 'Invalid request' }, { status: 400 }),
+              await safeCorsHeaders(match.route.middlewares, request),
+            ),
           )
         }
         if (error instanceof HttpInputValidationError) {
-          return applyFrameworkHeadersToResponse(
-            Response.json({ error: 'Validation failed' }, { status: 400 }),
-            await safeCorsHeaders(match.route.middlewares, request),
+          return annotateResponse(
+            applyFrameworkHeadersToResponse(
+              Response.json({ error: 'Validation failed' }, { status: 400 }),
+              await safeCorsHeaders(match.route.middlewares, request),
+            ),
           )
         }
+        lease.fail?.(error)
         try {
           const mapped = await mapDeclaredError(match.route.definition, error)
           if (mapped) {
@@ -1572,17 +1664,21 @@ function createHttpExtensionRuntime(
             if (finalized.streamControl) {
               adoptResponseStream(finalized.streamControl)
             }
-            return applyFrameworkHeadersToResponse(
-              finalized.response,
-              await safeCorsHeaders(match.route.middlewares, request),
+            return annotateResponse(
+              applyFrameworkHeadersToResponse(
+                finalized.response,
+                await safeCorsHeaders(match.route.middlewares, request),
+              ),
             )
           }
         } catch {
           // 内部のmapping/finalization errorをclientへ公開しない。
         }
-        return applyFrameworkHeadersToResponse(
-          Response.json({ error: 'Internal Server Error' }, { status: 500 }),
-          await safeCorsHeaders(match.route.middlewares, request),
+        return annotateResponse(
+          applyFrameworkHeadersToResponse(
+            Response.json({ error: 'Internal Server Error' }, { status: 500 }),
+            await safeCorsHeaders(match.route.middlewares, request),
+          ),
         )
       } finally {
         if (!executionOwnedByStream) finishExecution()
@@ -1657,8 +1753,28 @@ async function createHttpContext(
       )
     : Object.fromEntries(request.headers.entries())
   const body = definition?.body ? request.body : undefined
-  const response = Object.fromEntries(
-    Object.keys(route.definition.responses).map((name) => [
+  const response = createHttpResponseHelpers(route.definition.responses)
+  return {
+    request,
+    input: { params, query, headers, body },
+    response,
+    signal,
+  } as unknown as HttpExecutionContext
+}
+
+function createHttpResponseHelpers(
+  responses: HttpExecutionRouteDefinition['responses'],
+): Readonly<
+  Record<
+    string,
+    (value?: {
+      readonly body?: unknown
+      readonly headers?: HttpHeaders
+    }) => HttpExecutionResult
+  >
+> {
+  return Object.fromEntries(
+    Object.keys(responses).map((name) => [
       name,
       (
         value: { readonly body?: unknown; readonly headers?: HttpHeaders } = {},
@@ -1670,12 +1786,46 @@ async function createHttpContext(
       }),
     ]),
   )
-  return {
-    request,
-    input: { params, query, headers, body },
-    response,
-    signal,
-  } as unknown as HttpExecutionContext
+}
+
+async function replayHttpHandler(
+  applicationRuntime: ExecutionKernelRuntime,
+  handler: (
+    context: HttpExecutionContext,
+  ) => HttpExecutionResult | Promise<HttpExecutionResult>,
+  match: RuntimeHttpRoute & { readonly params: Record<string, string> },
+  input: unknown,
+  state: unknown,
+): Promise<HttpExecutionResult> {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    throw new TypeError('LUTRE_DEVTOOLS_HTTP_HANDLER_INPUT_REQUIRED')
+  }
+  const lease = applicationRuntime.beginExecution({
+    executionId: match.executionId,
+    executionKind: 'http.handler',
+    graphNodeId: match.executionId,
+    name: `${match.executionId}.${match.route.name}`,
+  })
+  const invoke = () =>
+    handler({
+      input,
+      response: createHttpResponseHelpers(match.route.definition.responses),
+      signal: lease.signal,
+      state,
+    } as unknown as HttpExecutionContext)
+  let result: HttpExecutionResult | undefined
+  let hasResult = false
+  try {
+    result = await (lease.run ? lease.run(invoke) : invoke())
+    hasResult = true
+    return result
+  } catch (error) {
+    lease.fail?.(error)
+    throw error
+  } finally {
+    if (hasResult) lease.complete(result)
+    else lease.complete()
+  }
 }
 
 interface FinalizedHttpResult {

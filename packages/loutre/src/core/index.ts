@@ -32,6 +32,7 @@ export type {
   ExecutionKernelRuntime,
   ExecutionLease,
   ExecutionProjectionContext,
+  ExecutionOperationLease,
   ExtensionOfDefinition,
   HostApiOfExtension,
   HostExtension,
@@ -41,6 +42,14 @@ export type {
   RuntimeCapabilityBindings,
   RuntimeCapabilityValue,
 } from './extension.js'
+export type {
+  RuntimeExecutionMetadata,
+  RuntimeInstrumentation,
+  RuntimeInstrumentationScope,
+  RuntimeInvocationRegistration,
+  RuntimeProviderMetadata,
+  RuntimeOperationMetadata,
+} from './instrumentation.js'
 export { composeLayers, defineLayer } from './generic-layer.js'
 export type {
   GenericLayer,

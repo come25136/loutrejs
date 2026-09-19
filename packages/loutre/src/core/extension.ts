@@ -1,4 +1,9 @@
 import type { Diagnostic } from './diagnostic.js'
+import type {
+  RuntimeExecutionMetadata,
+  RuntimeInvocationRegistration,
+  RuntimeOperationMetadata,
+} from './instrumentation.js'
 import type { TokenLike } from './token.js'
 
 declare const runtimeCapabilityValue: unique symbol
@@ -83,12 +88,29 @@ export class RuntimeCapabilityRegistry implements RuntimeCapabilityBindings {
 
 export interface ExecutionLease {
   readonly signal: AbortSignal
+  run?<T>(operation: () => T): T
   abort(reason?: unknown): void
-  complete(): void
+  fail?(reason: unknown): void
+  annotate?(attributes: Readonly<Record<string, unknown>>): void
+  complete(...result: [] | [unknown]): void
+}
+
+export interface ExecutionOperationLease {
+  run?<T>(operation: () => T): T
+  fail?(reason: unknown): void
+  annotate?(attributes: Readonly<Record<string, unknown>>): void
+  complete(...result: [] | [unknown]): void
 }
 
 export interface ExecutionKernelRuntime {
-  beginExecution(): ExecutionLease
+  beginExecution(
+    metadata?: RuntimeExecutionMetadata,
+    invocation?: RuntimeInvocationRegistration,
+  ): ExecutionLease
+  beginOperation?(
+    metadata: RuntimeOperationMetadata,
+    invocation?: RuntimeInvocationRegistration,
+  ): ExecutionOperationLease
   resolve<TValue>(token: TokenLike<TValue>, source?: string): TValue
 }
 

@@ -249,6 +249,7 @@ function createMessagePortRuntime(
   const routes = new Map<
     string,
     {
+      readonly executionId: string
       readonly route: MessagePortRouteDefinition
       readonly handler: (
         context: MessagePortContext,
@@ -275,7 +276,13 @@ function createMessagePortRuntime(
       execution.compiled.routes,
     )) {
       const handler = handlers[method]
-      if (handler) routes.set(method, { route: definition, handler })
+      if (handler) {
+        routes.set(method, {
+          executionId: execution.id,
+          route: definition,
+          handler,
+        })
+      }
     }
   }
   return {
@@ -291,7 +298,12 @@ function createMessagePortRuntime(
       }
       let lease: ReturnType<ExecutionKernelRuntime['beginExecution']>
       try {
-        lease = applicationRuntime.beginExecution()
+        lease = applicationRuntime.beginExecution({
+          executionId: route.executionId,
+          executionKind: 'message-port.invocation',
+          graphNodeId: route.executionId,
+          name: method,
+        })
       } catch (error) {
         completePendingIngress()
         throw error
@@ -311,11 +323,13 @@ function createMessagePortRuntime(
             }),
           ]),
         )
-        const result = await route.handler({
-          input: value,
-          response,
-          signal: lease.signal,
-        } as MessagePortContext)
+        const invoke = () =>
+          route.handler({
+            input: value,
+            response,
+            signal: lease.signal,
+          } as MessagePortContext)
+        const result = await (lease.run ? lease.run(invoke) : invoke())
         const schema = route.route.responses[result.response]
         if (!schema) {
           throw new Error(
@@ -339,6 +353,9 @@ function createMessagePortRuntime(
           ...result,
           value: await validateSchema(schema, result.value),
         }
+      } catch (error) {
+        lease.fail?.(error)
+        throw error
       } finally {
         if (!executionOwnedByStream) lease.complete()
         completePendingIngress()
@@ -488,6 +505,7 @@ function createLeasedMessagePortStream(
   else lease.signal.addEventListener('abort', onAbort, { once: true })
 
   const closeAfterError = async (error: unknown): Promise<never> => {
+    lease.fail?.(error)
     let cleanupError: unknown
     try {
       await startIteratorCleanup(error)

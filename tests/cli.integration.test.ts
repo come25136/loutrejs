@@ -2,7 +2,15 @@ import { createKernelApplication } from '@loutrejs/loutre'
 import { bootstrapApplication } from '@loutrejs/loutre'
 import { bindHttpServer } from '@loutrejs/loutre/http'
 import { runCli } from '@loutrejs/cli'
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { startDevApplicationSupervisor } from '../packages/cli/src/dev/run-supervisor.js'
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -29,6 +37,21 @@ describe('Loutre CLI', () => {
         .split('\n')
         .find((line) => line.includes(fragment)) ?? ''
     )
+  }
+
+  async function waitForFileValue(
+    file: string,
+    expected: string,
+    timeoutMs = 5_000,
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      try {
+        if ((await readFile(file, 'utf8')) === expected) return
+      } catch {}
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    throw new Error(`Timed out waiting for ${file}=${expected}.`)
   }
 
   it('HTTP Execution Graphを表示する', async () => {
@@ -86,6 +109,347 @@ describe('Loutre CLI', () => {
     expect(output.stderr).toEqual([
       'doctor --runtime must be one of: node, deno, bun, cloudflare-workers, electron, aws-lambda.',
     ])
+  })
+
+  it.each([
+    [
+      ['dev', '--entry', 'src/app.ts', '--port', '65536', '--', 'node'],
+      'dev --port must be an integer from 0 to 65535.',
+    ],
+    [
+      ['dev', '--entry', 'src/app.ts', '--origin', 'example.com', '--', 'node'],
+      'dev --origin must be a URL origin: example.com',
+    ],
+  ])('devの接続設定を検証する', async (args, message) => {
+    const output = io()
+    expect(await runCli(args, output.value)).toBe(2)
+    expect(output.stderr).toContain(message)
+  })
+
+  it('devはDevtoolsModuleがないApplicationを起動しない', async () => {
+    const output = io()
+    const code = await runCli(
+      [
+        'dev',
+        '--entry',
+        'integrations/http-crud/src/app.ts',
+        '--',
+        process.execPath,
+        '-e',
+        'process.exit(99)',
+      ],
+      output.value,
+    )
+
+    expect(code).toBe(2)
+    expect(output.stderr).toContain(
+      'loutre dev requires DevtoolsModule() in the Application imports.',
+    )
+  })
+
+  it('devはApplication commandへlocal DevTools endpointを渡す', async () => {
+    const output = io()
+    const code = await runCli(
+      [
+        'dev',
+        '--entry',
+        'tests/fixtures/devtools-enabled-app.ts',
+        '--port',
+        '0',
+        '--ignore',
+        '.tmp',
+        '--',
+        process.execPath,
+        '-e',
+        [
+          'const endpoint = process.env.LOUTRE_DEV_ENDPOINT;',
+          'const runId = process.env.LOUTRE_DEV_RUN_ID;',
+          "if (!/^ws:\\/\\/127\\.0\\.0\\.1:\\d+\\/__loutre\\/app$/.test(endpoint ?? '') || !runId?.startsWith('run_')) process.exit(7);",
+        ].join(' '),
+      ],
+      output.value,
+    )
+
+    expect(code).toBe(0)
+    const devServerLine = output.stdout.find((line) =>
+      line.startsWith('Loutre Dev: '),
+    )
+    expect(devServerLine).toBeDefined()
+    const devServer = new URL(devServerLine!.slice('Loutre Dev: '.length))
+    expect(devServer.hostname).toBe('127.0.0.1')
+    expect(Number(devServer.port)).toBeGreaterThan(0)
+    expect(output.stdout.join('\n')).toContain(
+      `Control channel: ws://127.0.0.1:${devServer.port}/__loutre/client`,
+    )
+    expect(output.stdout.join('\n')).toContain(
+      `Application channel: ws://127.0.0.1:${devServer.port}/__loutre/app`,
+    )
+    const devtoolsUiLine = output.stdout.find((line) =>
+      line.startsWith('Devtools UI: '),
+    )
+    expect(devtoolsUiLine).toBeDefined()
+    const devtoolsUi = new URL(devtoolsUiLine!.slice('Devtools UI: '.length))
+    expect(devtoolsUi.origin + devtoolsUi.pathname).toBe(
+      'https://loutrejs.come25136.id/devtools/',
+    )
+    expect(devtoolsUi.search).toBe('')
+    expect(devtoolsUi.hash).toBe('')
+    expect(output.stdout.join('\n')).not.toContain('token')
+  })
+
+  it('devはApplication commandのspawn失敗時にもDev serverとsignal listenerを解放する', async () => {
+    const output = io()
+    const sigintListeners = process.listenerCount('SIGINT')
+    const sigtermListeners = process.listenerCount('SIGTERM')
+
+    await expect(
+      runCli(
+        [
+          'dev',
+          '--entry',
+          'tests/fixtures/devtools-enabled-app.ts',
+          '--port',
+          '0',
+          '--',
+          `loutre-command-that-does-not-exist-${Date.now()}`,
+        ],
+        output.value,
+      ),
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+
+    expect(process.listenerCount('SIGINT')).toBe(sigintListeners)
+    expect(process.listenerCount('SIGTERM')).toBe(sigtermListeners)
+    const serverLine = output.stdout.find((line) =>
+      line.startsWith('Loutre Dev: '),
+    )
+    expect(serverLine).toBeDefined()
+    await expect(
+      fetch(serverLine!.slice('Loutre Dev: '.length)),
+    ).rejects.toThrow()
+  })
+
+  it('dev supervisorは終了signalを無視するchildをtimeout後に強制終了する', async () => {
+    await mkdir(join(process.cwd(), '.tmp'), { recursive: true })
+    const directory = await mkdtemp(
+      join(process.cwd(), '.tmp', 'loutre-dev-force-stop-'),
+    )
+    const readyPath = join(directory, 'ready.txt')
+    const command = [
+      `const fs = require('node:fs');`,
+      `process.on('SIGTERM', () => {});`,
+      `fs.writeFileSync(${JSON.stringify(readyPath)}, 'ready');`,
+      `setInterval(() => {}, 1000);`,
+    ].join(' ')
+    const supervisor = startDevApplicationSupervisor({
+      command: [process.execPath, '-e', command],
+      cwd: process.cwd(),
+      environment: {},
+      shutdownTimeoutMs: 100,
+    })
+
+    try {
+      await waitForFileValue(readyPath, 'ready')
+      await expect(supervisor.close()).resolves.toBeUndefined()
+      await expect(supervisor.result).resolves.toBe(0)
+    } finally {
+      await supervisor.close().catch(() => undefined)
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('devはApplicationが異常終了してもDevToolsを維持しsource変更後に再起動する', async () => {
+    await mkdir(join(process.cwd(), '.tmp'), { recursive: true })
+    const directory = await mkdtemp(
+      join(process.cwd(), '.tmp', 'loutre-dev-supervisor-'),
+    )
+    const applicationPath = join(directory, 'app.ts')
+    const counterPath = join(directory, 'attempts.txt')
+    const source = [
+      "import { defineApplication, defineModule } from '../../packages/loutre/src/index.js'",
+      "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
+      'const AppModule = defineModule(() => ({ imports: [DevtoolsModule()] }))',
+      'export default defineApplication({ modules: [AppModule()] })',
+      '',
+    ].join('\n')
+    await writeFile(applicationPath, source)
+
+    const output = io()
+    const command = [
+      `const fs = require('node:fs');`,
+      `const file = ${JSON.stringify(counterPath)};`,
+      `let count = 0;`,
+      `try { count = Number(fs.readFileSync(file, 'utf8')) || 0 } catch {}`,
+      `count += 1;`,
+      `fs.writeFileSync(file, String(count));`,
+      `process.exit(count === 1 ? 1 : 0);`,
+    ].join(' ')
+
+    const running = runCli(
+      [
+        'dev',
+        '--entry',
+        applicationPath,
+        '--port',
+        '0',
+        '--',
+        process.execPath,
+        '-e',
+        command,
+      ],
+      output.value,
+    )
+
+    try {
+      await waitForFileValue(counterPath, '1')
+      await vi.waitFor(() => {
+        expect(output.stderr.join('\n')).toContain(
+          'DevTools remains available; waiting for source changes.',
+        )
+      })
+      const serverLine = output.stdout.find((line) =>
+        line.startsWith('Loutre Dev: '),
+      )
+      expect(serverLine).toBeDefined()
+      const response = await fetch(serverLine!.slice('Loutre Dev: '.length))
+      expect(response.status).toBe(200)
+
+      await writeFile(applicationPath, `${source}\n`)
+      await expect(running).resolves.toBe(0)
+      expect(await readFile(counterPath, 'utf8')).toBe('2')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('devはApplicationが生存中のsource変更ではApplicationを再起動しない', async () => {
+    await mkdir(join(process.cwd(), '.tmp'), { recursive: true })
+    const directory = await mkdtemp(
+      join(process.cwd(), '.tmp', 'loutre-dev-running-app-'),
+    )
+    const applicationPath = join(directory, 'app.ts')
+    const counterPath = join(directory, 'attempts.txt')
+    const stopPath = join(directory, 'stop.txt')
+    const source = [
+      "import { defineApplication, defineModule } from '../../packages/loutre/src/index.js'",
+      "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
+      'const AppModule = defineModule(() => ({ imports: [DevtoolsModule()] }))',
+      'export default defineApplication({ modules: [AppModule()] })',
+      '',
+    ].join('\n')
+    await writeFile(applicationPath, source)
+
+    const output = io()
+    const command = [
+      `const fs = require('node:fs');`,
+      `const file = ${JSON.stringify(counterPath)};`,
+      `const stop = ${JSON.stringify(stopPath)};`,
+      `let count = 0;`,
+      `try { count = Number(fs.readFileSync(file, 'utf8')) || 0 } catch {}`,
+      `fs.writeFileSync(file, String(count + 1));`,
+      `const timer = setInterval(() => { if (fs.existsSync(stop)) { clearInterval(timer); process.exit(0) } }, 20);`,
+    ].join(' ')
+    const running = runCli(
+      [
+        'dev',
+        '--entry',
+        applicationPath,
+        '--port',
+        '0',
+        '--',
+        process.execPath,
+        '-e',
+        command,
+      ],
+      output.value,
+    )
+
+    try {
+      await waitForFileValue(counterPath, '1')
+      await writeFile(applicationPath, `${source}\n`)
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      expect(await readFile(counterPath, 'utf8')).toBe('1')
+      await writeFile(stopPath, 'stop')
+      await expect(running).resolves.toBe(0)
+    } finally {
+      await writeFile(stopPath, 'stop').catch(() => undefined)
+      await running.catch(() => undefined)
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('devはinvalidなApplication ModelでもGraphを維持し修復後にApplicationを起動する', async () => {
+    await mkdir(join(process.cwd(), '.tmp'), { recursive: true })
+    const directory = await mkdtemp(
+      join(process.cwd(), '.tmp', 'loutre-dev-invalid-model-'),
+    )
+    const applicationPath = join(directory, 'app.ts')
+    const counterPath = join(directory, 'attempts.txt')
+    const invalidSource = [
+      "import { defineApplication, defineModule, inject, token } from '../../packages/loutre/src/index.js'",
+      "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
+      "const Missing = token('fixture.missing')",
+      'class BrokenProvider { constructor(readonly missing = inject(Missing)) {} }',
+      'const AppModule = defineModule(() => ({',
+      '  imports: [DevtoolsModule()],',
+      '  providers: [BrokenProvider],',
+      '}))',
+      'export default defineApplication({ modules: [AppModule()] })',
+      '',
+    ].join('\n')
+    const validSource = [
+      "import { defineApplication, defineModule, inject, provide, token } from '../../packages/loutre/src/index.js'",
+      "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
+      "const Missing = token('fixture.missing')",
+      'class BrokenProvider { constructor(readonly missing = inject(Missing)) {} }',
+      'const AppModule = defineModule(() => ({',
+      '  imports: [DevtoolsModule()],',
+      '  providers: [provide(Missing).useValue({}), BrokenProvider],',
+      '}))',
+      'export default defineApplication({ modules: [AppModule()] })',
+      '',
+    ].join('\n')
+    await writeFile(applicationPath, invalidSource)
+
+    const output = io()
+    const command = [
+      `const fs = require('node:fs');`,
+      `const file = ${JSON.stringify(counterPath)};`,
+      `fs.writeFileSync(file, '1');`,
+      `process.exit(0);`,
+    ].join(' ')
+    const running = runCli(
+      [
+        'dev',
+        '--entry',
+        applicationPath,
+        '--port',
+        '0',
+        '--',
+        process.execPath,
+        '-e',
+        command,
+      ],
+      output.value,
+    )
+
+    try {
+      await vi.waitFor(
+        () => {
+          expect(
+            output.stdout.some((line) => line.startsWith('Loutre Dev: ')),
+          ).toBe(true)
+        },
+        { timeout: 5_000 },
+      )
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      await expect(readFile(counterPath, 'utf8')).rejects.toThrow()
+
+      await writeFile(applicationPath, validSource)
+      await expect(running).resolves.toBe(0)
+      expect(await readFile(counterPath, 'utf8')).toBe('1')
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   })
 
   it('Runtime capability mismatchをdoctorで説明する', async () => {
@@ -1030,7 +1394,7 @@ describe('Loutre CLI', () => {
   })
 
   it('Application host commandは提供しない', async () => {
-    for (const command of ['run', 'dev', 'start']) {
+    for (const command of ['run', 'start']) {
       const output = io()
       expect(await runCli([command, 'src/app.ts'], output.value)).toBe(2)
       expect(output.stderr).toEqual([`Unknown command: ${command}`])
