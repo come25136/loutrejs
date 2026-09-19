@@ -259,7 +259,7 @@ export function DevtoolsPage({
       setRequestedSpanId(undefined)
     }
     setWorkspace(nextWorkspace)
-    router.replace(href)
+    window.history.replaceState(window.history.state, '', href)
   }
 
   const displayedSnapshot = snapshot
