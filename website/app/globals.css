@@ -233,6 +233,7 @@ html[data-theme='dark'] {
 }
 
 .loutre-devtools .semantic-node {
+  position: relative;
   display: flex;
   width: 220px;
   height: 86px;
@@ -256,6 +257,14 @@ html[data-theme='dark'] {
     0 4px 16px rgb(2 8 23 / 0.1);
 }
 
+.loutre-devtools .semantic-node.has-diagnostic {
+  border-color: #dc2626;
+  border-left-color: #dc2626;
+  box-shadow:
+    0 0 0 2px rgb(220 38 38 / 0.12),
+    0 4px 16px rgb(127 29 29 / 0.14);
+}
+
 .loutre-devtools .semantic-node strong {
   overflow: hidden;
   font-size: 12px;
@@ -275,6 +284,30 @@ html[data-theme='dark'] {
   color: var(--site-ink-muted);
   font-family: var(--font-mono);
   font-size: 8px;
+}
+
+.loutre-devtools .semantic-node__diagnostic {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  color: #b91c1c;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+}
+
+html[data-theme='dark'] .loutre-devtools .semantic-node__diagnostic {
+  color: #fecaca;
+  background: rgb(127 29 29 / 0.35);
+  border-color: rgb(248 113 113 / 0.5);
 }
 
 .loutre-devtools .semantic-node--provider {

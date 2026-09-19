@@ -81,6 +81,38 @@ describe('ブラウザ版Devtools Graph', () => {
     })
   })
 
+  it('診断の対象Nodeをグラフ上の警告表示へ投影する', () => {
+    const graph: GraphSnapshot = {
+      schemaVersion: 1,
+      nodes: [
+        { id: 'module', kind: 'module', label: 'AppModule' },
+        {
+          id: 'provider:broken',
+          kind: 'provider',
+          label: 'BrokenService',
+          module: 'module',
+        },
+      ],
+      edges: [],
+      diagnostics: [
+        {
+          code: 'LUTRE_PROVIDER_DEPENDENCY_MISSING',
+          message: 'BrokenService has an unresolved dependency.',
+          path: 'provider:broken',
+          severity: 'error',
+        },
+      ],
+    }
+
+    const result = adaptGraph(graph)
+    expect(
+      result.nodes.find((item) => item.id === 'provider:broken')?.data
+        .diagnostics,
+    ).toMatchObject([
+      { code: 'LUTRE_PROVIDER_DEPENDENCY_MISSING', severity: 'error' },
+    ])
+  })
+
   it('Executionのownership labelへHost namespaceを反映する', () => {
     const nodes = new Map([
       [

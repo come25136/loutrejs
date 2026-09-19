@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  X,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { GraphCanvas } from './devtools-graph/graph-canvas'
@@ -27,6 +28,10 @@ import {
   type GraphNodeKind,
   type GraphSnapshot,
 } from '../lib/devtools'
+import {
+  buildDiagnosticAgentPrompt,
+  diagnosticSource,
+} from '../lib/devtools-diagnostics'
 import {
   connectDevtools,
   disconnectDevtools,
@@ -90,6 +95,14 @@ const copy = {
     source: 'Source',
     attributes: 'Attributes',
     diagnostics: 'Diagnostics',
+    diagnosticDetails: 'Diagnostics',
+    noDiagnostics: 'No diagnostics found.',
+    agentPrompt: 'Agent prompt',
+    agentPromptHint:
+      'Copy this prompt to give an agent the current Graph diagnostic context.',
+    copyPrompt: 'Copy prompt',
+    copied: 'Copied',
+    close: 'Close',
     noGraph: 'Start the local CLI, then connect to explore the Graph.',
     invalidUrl: 'Use a 127.0.0.1 HTTP URL.',
     theme: 'Theme',
@@ -120,6 +133,14 @@ const copy = {
     source: 'Source',
     attributes: 'Attributes',
     diagnostics: 'Diagnostics',
+    diagnosticDetails: 'Diagnostics',
+    noDiagnostics: '問題は検出されていません。',
+    agentPrompt: 'エージェント向けプロンプト',
+    agentPromptHint:
+      '現在のGraph診断を含む、エージェントへの修正依頼プロンプトです。',
+    copyPrompt: 'プロンプトをコピー',
+    copied: 'コピーしました',
+    close: '閉じる',
     noGraph: 'ローカルCLIを起動し、接続するとGraphを探索できます。',
     invalidUrl: '127.0.0.1のHTTP URLを指定してください。',
     theme: 'テーマ',
@@ -133,6 +154,8 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
   const text = copy[locale]
   const [serverUrl, setServerUrl] = useState('http://127.0.0.1:25136')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
+  const [promptCopied, setPromptCopied] = useState(false)
   const [settingsServerUrl, setSettingsServerUrl] = useState(serverUrl)
   const [settingsError, setSettingsError] = useState<string>()
   const [workspace, setWorkspace] = useState<'graph' | 'runtime'>('graph')
@@ -310,6 +333,11 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
   const selected = displayedSnapshot?.nodes.find(
     (node) => node.id === selectedId,
   )
+  const diagnostics = displayedSnapshot?.diagnostics ?? []
+  const hasDiagnostics = diagnostics.length > 0
+  const agentPrompt = displayedSnapshot
+    ? buildDiagnosticAgentPrompt(displayedSnapshot, locale)
+    : ''
   const connectionLabel =
     connectionStatus === 'connected'
       ? text.connectedStatus
@@ -466,6 +494,29 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
                     {graph.nodes.length} nodes · {graph.edges.length} edges
                   </span>
                   <button
+                    className={`inline-flex items-center gap-1 font-mono text-[10px] transition ${
+                      hasDiagnostics
+                        ? 'text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200'
+                        : 'cursor-default text-ink-muted'
+                    }`}
+                    type="button"
+                    onClick={() => {
+                      if (!hasDiagnostics) return
+                      setPromptCopied(false)
+                      setDiagnosticsOpen(true)
+                    }}
+                    disabled={!hasDiagnostics}
+                    aria-label={`${diagnostics.length} ${text.diagnostics.toLowerCase()}`}
+                    title={
+                      hasDiagnostics
+                        ? text.diagnosticDetails
+                        : text.noDiagnostics
+                    }
+                  >
+                    {hasDiagnostics && <AlertTriangle size={12} />}
+                    {diagnostics.length} {text.diagnostics.toLowerCase()}
+                  </button>
+                  <button
                     className="grid size-8 place-items-center rounded-md border border-line transition hover:bg-surface-muted disabled:opacity-50"
                     type="button"
                     onClick={() => void reload()}
@@ -605,6 +656,107 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
               >
                 {text.apply}
               </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {diagnosticsOpen && displayedSnapshot && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/25 p-4 backdrop-blur-[1px]"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDiagnosticsOpen(false)
+          }}
+        >
+          <section
+            className="w-full max-w-[720px] rounded-xl border border-line bg-surface p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="devtools-diagnostics-title"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle
+                  size={16}
+                  className="text-red-600 dark:text-red-300"
+                />
+                <div>
+                  <h2
+                    id="devtools-diagnostics-title"
+                    className="text-sm font-semibold text-ink"
+                  >
+                    {diagnostics.length} {text.diagnostics}
+                  </h2>
+                  <p className="mt-1 text-[10px] text-ink-soft">
+                    {text.agentPromptHint}
+                  </p>
+                </div>
+              </div>
+              <button
+                className="grid size-8 place-items-center rounded-md text-ink-soft transition hover:bg-surface-muted hover:text-ink"
+                type="button"
+                onClick={() => setDiagnosticsOpen(false)}
+                aria-label={text.close}
+                title={text.close}
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="mt-5 max-h-[38vh] space-y-2 overflow-y-auto pr-1">
+              {diagnostics.map((diagnostic, index) => {
+                const source = diagnosticSource(displayedSnapshot, diagnostic)
+                return (
+                  <article
+                    key={`${diagnostic.code}:${diagnostic.path}:${index}`}
+                    className="rounded-lg border border-red-400/30 bg-red-500/5 p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px]">
+                      <strong className="text-red-700 dark:text-red-300">
+                        {diagnostic.code}
+                      </strong>
+                      <span className="text-red-600/80 dark:text-red-300/80">
+                        {(diagnostic.severity ?? 'error').toUpperCase()}
+                      </span>
+                      <span className="text-ink-muted">{diagnostic.path}</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-ink-soft">
+                      {diagnostic.message}
+                    </p>
+                    {source && (
+                      <p className="mt-2 font-mono text-[10px] text-ink-muted">
+                        {source}
+                      </p>
+                    )}
+                  </article>
+                )
+              })}
+            </div>
+
+            <div className="mt-5 border-t border-line pt-4">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h3 className="text-[11px] font-semibold text-ink">
+                  {text.agentPrompt}
+                </h3>
+                <button
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 text-[10px] font-semibold text-ink-soft transition hover:bg-surface-muted hover:text-ink"
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(agentPrompt)
+                    setPromptCopied(true)
+                  }}
+                >
+                  <Copy size={11} />
+                  {promptCopied ? text.copied : text.copyPrompt}
+                </button>
+              </div>
+              <textarea
+                className="h-40 w-full resize-y rounded-lg border border-line bg-surface-muted/45 p-3 font-mono text-[10px] leading-5 text-ink outline-none"
+                value={agentPrompt}
+                readOnly
+                aria-label={text.agentPrompt}
+              />
             </div>
           </section>
         </div>

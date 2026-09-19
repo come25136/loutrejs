@@ -305,6 +305,7 @@ export function GraphCanvas({
 
   const miniMapColor = useMemo(
     () => (node: LoutreFlowNode) => {
+      if ((node.data.diagnostics?.length ?? 0) > 0) return '#dc2626'
       const colors: Record<string, string> = {
         'module-group': '#e84f16',
         module: '#e84f16',

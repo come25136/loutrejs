@@ -1,13 +1,16 @@
 import type { Edge, Node } from '@xyflow/react'
 import type {
   GraphEdge,
+  GraphDiagnostic,
   GraphNode,
   GraphNodeKind,
   GraphSnapshot,
 } from '../../lib/devtools'
+import { diagnosticsByNodeId } from '../../lib/devtools-diagnostics'
 
 export interface SemanticNodeData extends Record<string, unknown> {
   readonly graphNode: GraphNode
+  readonly diagnostics?: readonly GraphDiagnostic[]
   readonly sourceHandles?: readonly FlowHandle[]
   readonly targetHandles?: readonly FlowHandle[]
 }
@@ -89,6 +92,7 @@ export function adaptGraph(snapshot: GraphSnapshot): {
 } {
   const visibleIds = new Set(snapshot.nodes.map((node) => node.id))
   const byId = new Map(snapshot.nodes.map((node) => [node.id, node]))
+  const nodeDiagnostics = diagnosticsByNodeId(snapshot)
   const modules = snapshot.nodes.filter((node) => node.kind === 'module')
   const moduleIds = new Set(modules.map((node) => node.id))
   const moduleGroups = modules.map<LoutreFlowNode>((module) => ({
@@ -109,7 +113,12 @@ export function adaptGraph(snapshot: GraphSnapshot): {
       id: node.id,
       type: flowType(node.kind),
       position: { x: 0, y: 0 },
-      data: { graphNode: node, sourceHandles: [], targetHandles: [] },
+      data: {
+        graphNode: node,
+        diagnostics: nodeDiagnostics.get(node.id) ?? [],
+        sourceHandles: [],
+        targetHandles: [],
+      },
       draggable: true,
       selectable: true,
       deletable: false,

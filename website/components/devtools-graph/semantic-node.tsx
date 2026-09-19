@@ -1,8 +1,13 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { AlertTriangle } from 'lucide-react'
 import type { LoutreFlowNode } from './graph-adapter'
 
 export function SemanticNode({ data, selected }: NodeProps<LoutreFlowNode>) {
   const node = data.graphNode
+  const diagnostics = data.diagnostics ?? []
+  const diagnosticSummary = diagnostics
+    .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
+    .join('\n')
   const sourceHandles =
     (data.sourceHandles ?? []).length > 0
       ? (data.sourceHandles ?? [])
@@ -22,7 +27,7 @@ export function SemanticNode({ data, selected }: NodeProps<LoutreFlowNode>) {
   })()
   return (
     <div
-      className={`semantic-node semantic-node--${node.kind} ${selected ? 'is-selected' : ''}`}
+      className={`semantic-node semantic-node--${node.kind} ${selected ? 'is-selected' : ''} ${diagnostics.length > 0 ? 'has-diagnostic' : ''}`}
     >
       {targetHandles.map((handle) => (
         <Handle
@@ -36,6 +41,16 @@ export function SemanticNode({ data, selected }: NodeProps<LoutreFlowNode>) {
       ))}
       <span className="semantic-node__kind">{typeLabel}</span>
       <strong>{node.label}</strong>
+      {diagnostics.length > 0 && (
+        <span
+          className="semantic-node__diagnostic"
+          title={diagnosticSummary}
+          aria-label={`${diagnostics.length} diagnostic${diagnostics.length === 1 ? '' : 's'}`}
+        >
+          <AlertTriangle size={10} />
+          {diagnostics.length}
+        </span>
+      )}
       {source && (
         <span className="semantic-node__source">
           {source.file.split('/').at(-1)}:{source.line}
