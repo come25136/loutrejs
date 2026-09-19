@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "predev": "node ../scripts/generate-website-licenses.mjs",
+    "prebuild": "node ../scripts/generate-website-licenses.mjs",
     "build": "next build"
   },
   "dependencies": {

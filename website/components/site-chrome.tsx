@@ -24,6 +24,7 @@ const chromeCopy = {
     getStarted: 'Get started',
     community: 'Community',
     resources: 'Resources',
+    openSourceLicenses: 'Open source licenses',
     language: '日本語',
     languageLabel: 'Switch to Japanese',
     darkTheme: 'Switch to dark theme',
@@ -38,6 +39,7 @@ const chromeCopy = {
     getStarted: 'はじめる',
     community: 'コミュニティ',
     resources: 'リソース',
+    openSourceLicenses: 'オープンソースライセンス',
     language: 'English',
     languageLabel: '英語に切り替える',
     darkTheme: 'ダークテーマに切り替える',
@@ -215,6 +217,9 @@ export function SiteChrome({ children }: { children: ReactNode }) {
               >
                 npm
               </a>
+              <Link className="hover:text-ink" href={`${prefix}/oss-licenses/`}>
+                {copy.openSourceLicenses}
+              </Link>
             </div>
           </div>
         </div>
