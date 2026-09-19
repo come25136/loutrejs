@@ -118,22 +118,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export interface GraphSnapshotSummary {
-  readonly id: string
-  readonly createdAt: string
-  readonly sourceRevision: number
-  readonly name?: string
-}
-
-export interface StoredGraphSnapshot extends GraphSnapshotSummary {
-  readonly snapshot: GraphSnapshot
-}
-
-export interface GraphSnapshotsState {
-  readonly snapshots: readonly GraphSnapshotSummary[]
-  readonly activeBaseSnapshotId?: string
-}
-
 export interface GraphControlState {
   readonly revision: number
   readonly snapshot?: GraphSnapshot
@@ -174,86 +158,4 @@ function parseGraphControlState(value: unknown): GraphControlState {
       : { snapshot: parseGraphSnapshot(value.snapshot) }),
     ...(value.error === undefined ? {} : { error: value.error }),
   }
-}
-
-export async function fetchGraphSnapshots(
-  baseUrl: string,
-): Promise<GraphSnapshotsState> {
-  return parseGraphSnapshotsState(
-    await devtoolsRequest(baseUrl, 'graph.snapshots.list'),
-  )
-}
-
-export async function fetchGraphSnapshot(
-  baseUrl: string,
-  snapshotId: string,
-): Promise<StoredGraphSnapshot> {
-  return parseStoredGraphSnapshot(
-    await devtoolsRequest(baseUrl, 'graph.snapshot.get', { snapshotId }),
-  )
-}
-
-export async function createGraphSnapshot(
-  baseUrl: string,
-  options: { readonly name?: string; readonly setAsBase?: boolean } = {},
-): Promise<StoredGraphSnapshot> {
-  return parseStoredGraphSnapshot(
-    await devtoolsRequest(baseUrl, 'graph.snapshot.create', options),
-  )
-}
-
-export async function setGraphBase(
-  baseUrl: string,
-  snapshotId?: string,
-): Promise<GraphSnapshotsState> {
-  return parseGraphSnapshotsState(
-    await devtoolsRequest(baseUrl, 'graph.base.set', {
-      snapshotId: snapshotId ?? null,
-    }),
-  )
-}
-
-function parseGraphSnapshotsState(value: unknown): GraphSnapshotsState {
-  if (
-    !isRecord(value) ||
-    !Array.isArray(value.snapshots) ||
-    !value.snapshots.every(isGraphSnapshotSummary)
-  ) {
-    throw new Error('The CLI returned invalid Graph Snapshot state.')
-  }
-  if (
-    value.activeBaseSnapshotId !== undefined &&
-    typeof value.activeBaseSnapshotId !== 'string'
-  ) {
-    throw new Error('The CLI returned an invalid Graph base.')
-  }
-  return {
-    snapshots: value.snapshots as unknown as readonly GraphSnapshotSummary[],
-    ...(value.activeBaseSnapshotId === undefined
-      ? {}
-      : { activeBaseSnapshotId: value.activeBaseSnapshotId }),
-  }
-}
-
-function parseStoredGraphSnapshot(value: unknown): StoredGraphSnapshot {
-  if (!isGraphSnapshotSummary(value) || !isRecord(value)) {
-    throw new Error('The CLI returned an invalid stored Graph Snapshot.')
-  }
-  return {
-    id: value.id as string,
-    createdAt: value.createdAt as string,
-    sourceRevision: value.sourceRevision as number,
-    ...(typeof value.name === 'string' ? { name: value.name } : {}),
-    snapshot: parseGraphSnapshot(value.snapshot),
-  }
-}
-
-function isGraphSnapshotSummary(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    typeof value.id === 'string' &&
-    typeof value.createdAt === 'string' &&
-    typeof value.sourceRevision === 'number' &&
-    (value.name === undefined || typeof value.name === 'string')
-  )
 }

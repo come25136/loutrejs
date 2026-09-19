@@ -171,13 +171,6 @@ function isControlMethod(value: string): value is DevtoolsControlMethod {
   return [
     'graph.get',
     'graph.reload',
-    'graph.snapshots.list',
-    'graph.snapshot.get',
-    'graph.snapshot.create',
-    'graph.snapshot.rename',
-    'graph.snapshot.delete',
-    'graph.base.get',
-    'graph.base.set',
     'runtime.runs',
     'runtime.traces',
     'runtime.traces.clear',

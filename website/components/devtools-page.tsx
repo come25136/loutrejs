@@ -18,20 +18,14 @@ import { DevtoolsRuntimePane } from './devtools-runtime-pane'
 import { ThemePicker } from './theme-toggle'
 import {
   graphNodeKinds,
-  createGraphSnapshot,
-  fetchGraphSnapshot,
-  fetchGraphSnapshots,
   fetchGraphState,
   reloadGraph,
-  setGraphBase,
   subscribeGraphEvents,
   type GraphControlState,
   type GraphEdge,
   type GraphNode,
   type GraphNodeKind,
   type GraphSnapshot,
-  type GraphSnapshotsState,
-  type StoredGraphSnapshot,
 } from '../lib/devtools'
 import {
   connectDevtools,
@@ -85,9 +79,6 @@ const copy = {
     apply: 'Apply',
     stale: 'Showing the last valid Graph',
     reload: 'Rebuild Graph',
-    base: 'Base',
-    liveGraph: 'Live Graph',
-    saveSnapshot: 'Save snapshot',
     explorer: 'Explorer',
     search: 'Search nodes…',
     nodes: 'Nodes',
@@ -118,9 +109,6 @@ const copy = {
     apply: '適用',
     stale: '直前の有効なGraphを表示中',
     reload: 'Graphを再build',
-    base: 'Base',
-    liveGraph: 'Live Graph',
-    saveSnapshot: 'Snapshotを保存',
     explorer: 'Explorer',
     search: 'Nodeを検索…',
     nodes: 'Nodes',
@@ -151,11 +139,6 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
   const [requestedTraceId, setRequestedTraceId] = useState<string>()
   const [requestedSpanId, setRequestedSpanId] = useState<string>()
   const [snapshot, setSnapshot] = useState<GraphSnapshot>()
-  const [snapshotState, setSnapshotState] = useState<GraphSnapshotsState>({
-    snapshots: [],
-  })
-  const [baseSnapshot, setBaseSnapshot] = useState<StoredGraphSnapshot>()
-  const [snapshotSaving, setSnapshotSaving] = useState(false)
   const [selectedId, setSelectedId] = useState<string>()
   const [graphFocusRequest, setGraphFocusRequest] = useState<{
     readonly nodeId: string
@@ -230,8 +213,6 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
       return
     }
 
-    setSnapshotState({ snapshots: [] })
-    setBaseSnapshot(undefined)
     const generation = connectionGeneration.current + 1
     connectionGeneration.current = generation
     const isCurrent = () => connectionGeneration.current === generation
@@ -255,23 +236,6 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
         void fetchGraphState(baseUrl)
           .then((state) => {
             if (isCurrent()) applyGraphState(state)
-          })
-          .catch((cause: unknown) => {
-            if (isCurrent()) setError(errorMessage(cause))
-          })
-        void fetchGraphSnapshots(baseUrl)
-          .then(async (state) => {
-            if (!isCurrent()) return
-            setSnapshotState(state)
-            if (!state.activeBaseSnapshotId) {
-              setBaseSnapshot(undefined)
-              return
-            }
-            const stored = await fetchGraphSnapshot(
-              baseUrl,
-              state.activeBaseSnapshotId,
-            )
-            if (isCurrent()) setBaseSnapshot(stored)
           })
           .catch((cause: unknown) => {
             if (isCurrent()) setError(errorMessage(cause))
@@ -338,39 +302,7 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
     }
   }
 
-  const selectGraphBase = async (value: string) => {
-    try {
-      const baseUrl = localApiUrl(serverUrl)
-      const snapshotId = value === 'live' ? undefined : value
-      const nextState = await setGraphBase(baseUrl, snapshotId)
-      setSnapshotState(nextState)
-      setBaseSnapshot(
-        snapshotId === undefined
-          ? undefined
-          : await fetchGraphSnapshot(baseUrl, snapshotId),
-      )
-      setSelectedId(undefined)
-    } catch (cause) {
-      setError(errorMessage(cause))
-    }
-  }
-
-  const saveGraphSnapshot = async () => {
-    setSnapshotSaving(true)
-    try {
-      const baseUrl = localApiUrl(serverUrl)
-      const stored = await createGraphSnapshot(baseUrl, { setAsBase: true })
-      setBaseSnapshot(stored)
-      setSnapshotState(await fetchGraphSnapshots(baseUrl))
-      setSelectedId(undefined)
-    } catch (cause) {
-      setError(errorMessage(cause))
-    } finally {
-      setSnapshotSaving(false)
-    }
-  }
-
-  const displayedSnapshot = baseSnapshot?.snapshot ?? snapshot
+  const displayedSnapshot = snapshot
   const graph = useMemo(
     () => projectGraph(displayedSnapshot, query, enabledKinds, showOwnership),
     [displayedSnapshot, query, enabledKinds, showOwnership],
@@ -533,32 +465,6 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
                   <span className="font-mono text-[10px] text-ink-muted">
                     {graph.nodes.length} nodes · {graph.edges.length} edges
                   </span>
-                  <label className="ml-auto flex items-center gap-1.5 text-[10px] text-ink-muted">
-                    {text.base}
-                    <select
-                      className="h-8 max-w-48 rounded-md border border-line bg-surface px-2 text-[10px] text-ink outline-none"
-                      value={snapshotState.activeBaseSnapshotId ?? 'live'}
-                      onChange={(event) =>
-                        void selectGraphBase(event.target.value)
-                      }
-                      disabled={!connected}
-                    >
-                      <option value="live">{text.liveGraph}</option>
-                      {snapshotState.snapshots.map((stored) => (
-                        <option key={stored.id} value={stored.id}>
-                          {graphSnapshotLabel(stored, locale)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    className="h-8 rounded-md border border-line px-2.5 text-[10px] font-semibold transition hover:bg-surface-muted disabled:opacity-50"
-                    type="button"
-                    onClick={() => void saveGraphSnapshot()}
-                    disabled={!connected || !snapshot || snapshotSaving}
-                  >
-                    {text.saveSnapshot}
-                  </button>
                   <button
                     className="grid size-8 place-items-center rounded-md border border-line transition hover:bg-surface-muted disabled:opacity-50"
                     type="button"
@@ -592,7 +498,7 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
                   labels={text}
                   locale={locale}
                   baseUrl={serverUrl}
-                  connected={connected && baseSnapshot === undefined}
+                  connected={connected}
                   onOpenTrace={(traceId) => navigateRuntime(traceId)}
                 />
               </aside>
@@ -610,11 +516,6 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
         {displayedSnapshot && (
           <div className="flex min-h-8 items-center gap-3 border-t border-line bg-surface px-4 font-mono text-[9px] text-ink-soft">
             <Database size={11} /> schema v{displayedSnapshot.schemaVersion}
-            {baseSnapshot && (
-              <span className="rounded border border-line px-1.5 py-0.5">
-                base: {graphSnapshotLabel(baseSnapshot, locale)}
-              </span>
-            )}
             <span className="ml-auto">
               {displayedSnapshot.diagnostics.length}{' '}
               {text.diagnostics.toLowerCase()}
@@ -1084,19 +985,6 @@ function projectGraph(
     return true
   })
   return { ...snapshot, nodes, edges }
-}
-
-function graphSnapshotLabel(
-  snapshot: { readonly name?: string; readonly createdAt: string },
-  locale: Locale,
-): string {
-  if (snapshot.name) return snapshot.name
-  return new Intl.DateTimeFormat(locale === 'ja' ? 'ja-JP' : 'en-US', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(snapshot.createdAt))
 }
 
 function localApiUrl(value: string): string {

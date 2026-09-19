@@ -65,8 +65,6 @@ npm exec loutre -- dev --entry src/app.ts \
 
 source変更時はApplication Graphを再構築し、Browserへpushします。watch対象はApplication Definitionのbundle dependencyから絞り込み、`.git`、`.loutre`、`.next`、`coverage`、`dist`、`node_modules`は既定で除外します。追加除外は`--ignore`で指定できます。
 
-DevToolsで保存したGraph Snapshotと選択中のbaseはproject rootの`.loutre/devtools/`へ保存されます。任意のSnapshotをbaseとして固定でき、`loutre dev`を再起動しても選択状態を復元します。
-
 ## Build
 
 ```sh

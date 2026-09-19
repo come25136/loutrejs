@@ -6,7 +6,6 @@ import type {
 } from '@loutrejs/loutre/devtools'
 import type { ApplicationChannel } from './application-channel.js'
 import { DevtoolsEventStore } from './event-store.js'
-import { DevtoolsGraphSnapshotStore } from './snapshot-store.js'
 
 export interface DevtoolsControlGraphSnapshot {
   readonly schemaVersion: number
@@ -36,13 +35,6 @@ export type DevtoolsControlEvent =
 export type DevtoolsControlMethod =
   | 'graph.get'
   | 'graph.reload'
-  | 'graph.snapshots.list'
-  | 'graph.snapshot.get'
-  | 'graph.snapshot.create'
-  | 'graph.snapshot.rename'
-  | 'graph.snapshot.delete'
-  | 'graph.base.get'
-  | 'graph.base.set'
   | 'runtime.runs'
   | 'runtime.traces'
   | 'runtime.traces.clear'
@@ -59,7 +51,6 @@ export interface DevtoolsControlRequest {
 export interface DevtoolsControlPlaneOptions {
   readonly graphState: () => DevtoolsControlGraphState
   readonly reload: () => Promise<void>
-  readonly snapshotStore?: DevtoolsGraphSnapshotStore
   readonly eventStore?: DevtoolsEventStore
   readonly command?: ApplicationChannel['command']
 }
@@ -99,72 +90,6 @@ export class DevtoolsControlPlane {
       case 'graph.reload':
         await this.options.reload()
         return this.options.graphState()
-      case 'graph.snapshots.list':
-        return this.#snapshots().list()
-      case 'graph.snapshot.get': {
-        const { snapshotId } = paramsRecord(request.params)
-        if (typeof snapshotId !== 'string' || snapshotId.length === 0) {
-          throw new Error('Graph Snapshot id is required.')
-        }
-        return this.#snapshots().get(snapshotId)
-      }
-      case 'graph.snapshot.create': {
-        const state = this.options.graphState()
-        if (!state.snapshot) throw new Error('No Graph Snapshot is available.')
-        const body = paramsRecord(request.params)
-        if (body.name !== undefined && typeof body.name !== 'string') {
-          throw new Error('Graph Snapshot name must be a string.')
-        }
-        if (
-          body.setAsBase !== undefined &&
-          typeof body.setAsBase !== 'boolean'
-        ) {
-          throw new Error('setAsBase must be a boolean.')
-        }
-        return this.#snapshots().create(state.snapshot, {
-          sourceRevision: state.revision,
-          ...(typeof body.name === 'string' ? { name: body.name } : {}),
-          ...(body.setAsBase === true ? { setAsBase: true } : {}),
-        })
-      }
-      case 'graph.snapshot.rename': {
-        const body = paramsRecord(request.params)
-        if (
-          typeof body.snapshotId !== 'string' ||
-          body.snapshotId.length === 0
-        ) {
-          throw new Error('Graph Snapshot id is required.')
-        }
-        if (body.name !== undefined && typeof body.name !== 'string') {
-          throw new Error('Graph Snapshot name must be a string.')
-        }
-        return this.#snapshots().rename(
-          body.snapshotId,
-          typeof body.name === 'string' ? body.name : undefined,
-        )
-      }
-      case 'graph.snapshot.delete': {
-        const { snapshotId } = paramsRecord(request.params)
-        if (typeof snapshotId !== 'string' || snapshotId.length === 0) {
-          throw new Error('Graph Snapshot id is required.')
-        }
-        return this.#snapshots().delete(snapshotId)
-      }
-      case 'graph.base.get':
-        return { base: (await this.#snapshots().base()) ?? null }
-      case 'graph.base.set': {
-        const { snapshotId } = paramsRecord(request.params)
-        if (
-          snapshotId !== null &&
-          snapshotId !== undefined &&
-          typeof snapshotId !== 'string'
-        ) {
-          throw new Error('Graph base snapshot id must be a string or null.')
-        }
-        return this.#snapshots().setBase(
-          typeof snapshotId === 'string' ? snapshotId : undefined,
-        )
-      }
       case 'runtime.runs':
         return { runs: this.#runtime().eventStore.listRuns() }
       case 'runtime.traces':
@@ -195,13 +120,6 @@ export class DevtoolsControlPlane {
 
   #emit(event: DevtoolsControlEvent): void {
     for (const listener of this.#listeners) listener(event)
-  }
-
-  #snapshots(): DevtoolsGraphSnapshotStore {
-    if (!this.options.snapshotStore) {
-      throw new Error('Graph Snapshot storage is not available.')
-    }
-    return this.options.snapshotStore
   }
 
   #runtime(): {

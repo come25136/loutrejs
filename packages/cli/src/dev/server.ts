@@ -21,7 +21,6 @@ import {
 } from './control-plane.js'
 import { DevtoolsEventStore } from './event-store.js'
 import { DEVTOOLS_PROTOCOL_VERSION } from './protocol.js'
-import { DevtoolsGraphSnapshotStore } from './snapshot-store.js'
 import { isDevtoolsLoopbackRequest } from './security.js'
 
 export { DEVTOOLS_PROTOCOL_VERSION } from './protocol.js'
@@ -110,7 +109,6 @@ export async function startDevServer(
   let watchedPaths: readonly string[] | undefined
   let controlPlane: DevtoolsControlPlane | undefined
   const eventStore = new DevtoolsEventStore(options.maxEvents)
-  const snapshotStore = new DevtoolsGraphSnapshotStore(options.projectRoot)
 
   const reload = (): Promise<void> => {
     reloadRequested = true
@@ -163,7 +161,6 @@ export async function startDevServer(
   controlPlane = new DevtoolsControlPlane({
     graphState: () => state,
     reload,
-    snapshotStore,
     eventStore,
     command: (runId, command) => applicationChannel.command(runId, command),
   })
