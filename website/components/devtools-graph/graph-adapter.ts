@@ -36,6 +36,15 @@ export type FlowNodeType =
   | 'handler'
   | 'capability'
 
+const moduleGroupMinWidth = 520
+const moduleGroupMinHeight = 320
+const moduleGroupPadding = {
+  top: 64,
+  right: 36,
+  bottom: 36,
+  left: 36,
+} as const
+
 export function moduleGroupId(moduleId: string): string {
   return `module-group:${encodeURIComponent(moduleId)}`
 }
@@ -97,8 +106,6 @@ export function adaptGraph(snapshot: GraphSnapshot): {
       ...(parentModuleId && moduleIds.has(parentModuleId)
         ? {
             parentId: moduleGroupId(parentModuleId),
-            extent: 'parent' as const,
-            expandParent: true,
           }
         : {}),
     }
@@ -115,4 +122,70 @@ export function adaptGraph(snapshot: GraphSnapshot): {
       data: { kind: edge.kind },
     }))
   return { nodes, edges }
+}
+
+export function resizeModuleGroups(
+  nodes: readonly LoutreFlowNode[],
+  movedNode: LoutreFlowNode,
+): LoutreFlowNode[] {
+  if (!movedNode.parentId) return [...nodes]
+
+  const nextNodes = nodes.map((node) =>
+    node.id === movedNode.id ? movedNode : node,
+  )
+  const parent = nextNodes.find((node) => node.id === movedNode.parentId)
+  if (!parent || parent.type !== 'module-group') return nextNodes
+
+  const children = nextNodes.filter((node) => node.parentId === parent.id)
+  if (children.length === 0) return nextNodes
+
+  const left = Math.min(...children.map((node) => node.position.x))
+  const top = Math.min(...children.map((node) => node.position.y))
+  const right = Math.max(
+    ...children.map((node) => node.position.x + nodeWidth(node)),
+  )
+  const bottom = Math.max(
+    ...children.map((node) => node.position.y + nodeHeight(node)),
+  )
+  const shiftX = left - moduleGroupPadding.left
+  const shiftY = top - moduleGroupPadding.top
+  const width = Math.max(
+    moduleGroupMinWidth + Math.max(0, -shiftX),
+    right - shiftX + moduleGroupPadding.right,
+  )
+  const height = Math.max(
+    moduleGroupMinHeight + Math.max(0, -shiftY),
+    bottom - shiftY + moduleGroupPadding.bottom,
+  )
+
+  return nextNodes.map((node) => {
+    if (node.id === parent.id) {
+      return {
+        ...node,
+        position: {
+          x: node.position.x + shiftX,
+          y: node.position.y + shiftY,
+        },
+        style: { ...node.style, width, height },
+      }
+    }
+    if (node.parentId !== parent.id || (shiftX === 0 && shiftY === 0)) {
+      return node
+    }
+    return {
+      ...node,
+      position: {
+        x: node.position.x - shiftX,
+        y: node.position.y - shiftY,
+      },
+    }
+  })
+}
+
+function nodeWidth(node: LoutreFlowNode): number {
+  return node.measured?.width ?? node.width ?? 220
+}
+
+function nodeHeight(node: LoutreFlowNode): number {
+  return node.measured?.height ?? node.height ?? 86
 }

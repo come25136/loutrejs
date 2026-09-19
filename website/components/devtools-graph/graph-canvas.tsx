@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GraphNode, GraphSnapshot } from '../../lib/devtools'
 import {
   adaptGraph,
+  resizeModuleGroups,
   type LoutreFlowEdge,
   type LoutreFlowNode,
 } from './graph-adapter'
@@ -238,7 +239,13 @@ export function GraphCanvas({
       onEdgesChange={onEdgesChange}
       onInit={setInstance}
       onNodeDragStart={(_event, node) => followNode(node.id)}
-      onNodeDrag={(_event, node) => followNode(node.id)}
+      onNodeDrag={(_event, node) => {
+        setNodes((currentNodes) => resizeModuleGroups(currentNodes, node))
+        followNode(node.id)
+      }}
+      onNodeDragStop={(_event, node) => {
+        setNodes((currentNodes) => resizeModuleGroups(currentNodes, node))
+      }}
       onNodeClick={(_event, node) => {
         if (node.type !== 'module-group') onSelect(node.data.graphNode)
       }}
