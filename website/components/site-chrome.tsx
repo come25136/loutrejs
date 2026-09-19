@@ -71,7 +71,10 @@ export function SiteChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const normalizedPathname = pathname.replace(/\/$/, '')
   const isDevtools =
-    normalizedPathname === '/devtools' || normalizedPathname === '/ja/devtools'
+    normalizedPathname === '/devtools' ||
+    normalizedPathname.startsWith('/devtools/') ||
+    normalizedPathname === '/ja/devtools' ||
+    normalizedPathname.startsWith('/ja/devtools/')
   const currentLocale = localeFromPathname(pathname)
   const targetLocale = alternateLocale(currentLocale)
   const prefix = localePrefix(currentLocale)
@@ -120,7 +123,7 @@ export function SiteChrome({ children }: { children: ReactNode }) {
             </Link>
             <Link
               className="transition hover:text-interaction"
-              href={`${prefix}/devtools/`}
+              href={`${prefix}/devtools/graph/`}
             >
               {copy.devtools}
             </Link>

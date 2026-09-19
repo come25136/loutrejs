@@ -6,12 +6,14 @@ import {
   ChevronRight,
   CircleDot,
   Copy,
-  Database,
   RefreshCw,
   Search,
   Settings,
   X,
 } from 'lucide-react'
+import Image from 'next/image'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { GraphCanvas } from './devtools-graph/graph-canvas'
 import { DevtoolsProviderPlayground } from './devtools-provider-playground'
@@ -77,6 +79,7 @@ const copy = {
     connectingStatus: 'Connecting…',
     reconnectingStatus: 'Reconnecting…',
     disconnectedStatus: 'Disconnected',
+    home: 'Loutre home page',
     settings: 'Settings',
     serverUrl: 'Server URL',
     serverUrlHint: 'Local Loutre DevTools server endpoint.',
@@ -115,6 +118,7 @@ const copy = {
     connectingStatus: '接続中…',
     reconnectingStatus: '再接続中…',
     disconnectedStatus: '未接続',
+    home: 'Loutreトップページ',
     settings: '設定',
     serverUrl: 'Server URL',
     serverUrlHint: 'Loutre DevTools ServerのURLを指定してください',
@@ -150,15 +154,33 @@ const copy = {
   },
 } satisfies Record<Locale, Record<string, string>>
 
-export function DevtoolsPage({ locale }: { locale: Locale }) {
+export type DevtoolsWorkspace = 'graph' | 'trace'
+
+function devtoolsWorkspaceHref(
+  locale: Locale,
+  workspace: DevtoolsWorkspace,
+): string {
+  const prefix = locale === 'ja' ? '/ja' : ''
+  return `${prefix}/devtools/${workspace}/`
+}
+
+export function DevtoolsPage({
+  locale,
+  initialWorkspace,
+}: {
+  locale: Locale
+  initialWorkspace: DevtoolsWorkspace
+}) {
   const text = copy[locale]
+  const router = useRouter()
   const [serverUrl, setServerUrl] = useState('http://127.0.0.1:25136')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
   const [promptCopied, setPromptCopied] = useState(false)
   const [settingsServerUrl, setSettingsServerUrl] = useState(serverUrl)
   const [settingsError, setSettingsError] = useState<string>()
-  const [workspace, setWorkspace] = useState<'graph' | 'runtime'>('graph')
+  const [workspace, setWorkspace] =
+    useState<DevtoolsWorkspace>(initialWorkspace)
   const [requestedTraceId, setRequestedTraceId] = useState<string>()
   const [requestedSpanId, setRequestedSpanId] = useState<string>()
   const [snapshot, setSnapshot] = useState<GraphSnapshot>()
@@ -182,6 +204,8 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
   const connectionGeneration = useRef(0)
   const initialized = useRef(false)
   const connected = connectionStatus === 'connected'
+  const graphHref = devtoolsWorkspaceHref(locale, 'graph')
+  const traceHref = devtoolsWorkspaceHref(locale, 'trace')
 
   const applyGraphState = (state: GraphControlState) => {
     if (state.snapshot) setSnapshot(state.snapshot)
@@ -199,7 +223,11 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
       const target = parseDevtoolsRuntimeTarget(window.location.search)
       setRequestedTraceId(target.traceId)
       setRequestedSpanId(target.spanId)
-      if (target.traceId) setWorkspace('runtime')
+      setWorkspace(
+        window.location.pathname.replace(/\/$/, '').endsWith('/devtools/trace')
+          ? 'trace'
+          : 'graph',
+      )
     }
 
     applyLocation()
@@ -301,16 +329,31 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
   }
 
   const navigateRuntime = (traceId: string, spanId?: string) => {
-    const href = devtoolsRuntimeHref(traceId, spanId)
+    const href = `${traceHref}${devtoolsRuntimeHref(traceId, spanId)}`
     setRequestedTraceId(traceId)
     setRequestedSpanId(spanId)
-    setWorkspace('runtime')
-    if (
-      `${window.location.pathname}${window.location.search}` !==
-      `${window.location.pathname}${href}`
-    ) {
-      window.history.pushState(null, '', href)
+    setWorkspace('trace')
+    if (`${window.location.pathname}${window.location.search}` !== href) {
+      router.replace(href)
     }
+  }
+
+  const navigateGraph = (graphNodeId: string) => {
+    setSelectedId(graphNodeId)
+    setGraphFocusRequest((current) => ({
+      nodeId: graphNodeId,
+      nonce: (current?.nonce ?? 0) + 1,
+      scope: 'node',
+    }))
+    setWorkspace('graph')
+    if (`${window.location.pathname}${window.location.search}` !== graphHref) {
+      router.replace(graphHref)
+    }
+  }
+
+  const replaceWorkspace = (workspace: DevtoolsWorkspace, href: string) => {
+    setWorkspace(workspace)
+    router.replace(href)
   }
 
   const reload = async () => {
@@ -356,41 +399,52 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
   return (
     <main className="loutre-devtools h-dvh w-full overflow-auto bg-paper">
       <section className="flex h-full min-w-[900px] flex-col overflow-hidden bg-paper">
-        <div className="flex min-h-14 items-center gap-2 border-b border-line bg-surface/95 p-2.5">
+        <div className="grid min-h-14 grid-cols-[1fr_auto_1fr] items-center border-b border-line bg-surface/95 px-2.5">
+          <Link
+            className="grid size-9 place-items-center rounded-md transition hover:bg-surface-muted"
+            href={locale === 'ja' ? '/ja/' : '/'}
+            aria-label={text.home}
+          >
+            <Image
+              className="size-6"
+              src="/loutre.svg"
+              width={1254}
+              height={1254}
+              alt=""
+              priority
+            />
+          </Link>
           <div className="flex h-9 items-center rounded-lg border border-line bg-surface-muted/70 p-0.5">
-            <button
-              className={`h-7 rounded-md px-3 text-[10px] font-semibold transition ${workspace === 'graph' ? 'bg-action text-action-foreground shadow-sm' : 'text-ink-soft hover:bg-surface hover:text-ink'}`}
-              type="button"
-              onClick={() => setWorkspace('graph')}
+            <Link
+              className={`inline-flex h-7 items-center justify-center rounded-md px-3 text-[10px] font-semibold transition ${workspace === 'graph' ? 'bg-action text-action-foreground shadow-sm' : 'text-ink-soft hover:bg-surface hover:text-ink'}`}
+              href={graphHref}
+              onClick={(event) => {
+                event.preventDefault()
+                replaceWorkspace('graph', graphHref)
+              }}
             >
               Graph
-            </button>
-            <button
-              className={`h-7 rounded-md px-3 text-[10px] font-semibold transition ${workspace === 'runtime' ? 'bg-action text-action-foreground shadow-sm' : 'text-ink-soft hover:bg-surface hover:text-ink'}`}
-              type="button"
-              onClick={() => setWorkspace('runtime')}
+            </Link>
+            <Link
+              className={`inline-flex h-7 items-center justify-center rounded-md px-3 text-[10px] font-semibold transition ${workspace === 'trace' ? 'bg-action text-action-foreground shadow-sm' : 'text-ink-soft hover:bg-surface hover:text-ink'}`}
+              href={traceHref}
+              onClick={(event) => {
+                event.preventDefault()
+                replaceWorkspace('trace', traceHref)
+              }}
             >
               Traces
-            </button>
+            </Link>
           </div>
-          <div className="ml-auto flex items-center gap-2">
-            <div
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-[11px] font-semibold text-ink-soft"
-              title={serverUrl}
-            >
-              <span className={`size-2 rounded-full ${connectionDot}`} />
-              {connectionLabel}
-            </div>
-            <button
-              type="button"
-              title={text.settings}
-              aria-label={text.settings}
-              className="grid size-9 place-items-center rounded-lg border border-line bg-surface text-ink-soft transition hover:bg-surface-muted hover:text-ink"
-              onClick={openSettings}
-            >
-              <Settings size={14} />
-            </button>
-          </div>
+          <button
+            type="button"
+            title={text.settings}
+            aria-label={text.settings}
+            className="grid size-9 justify-self-end place-items-center rounded-md text-ink-muted transition hover:bg-surface-muted hover:text-ink"
+            onClick={openSettings}
+          >
+            <Settings size={14} />
+          </button>
         </div>
 
         {error && (
@@ -404,7 +458,7 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
         )}
 
         {displayedSnapshot ? (
-          workspace === 'runtime' ? (
+          workspace === 'trace' ? (
             <DevtoolsRuntimePane
               locale={locale}
               baseUrl={serverUrl}
@@ -412,15 +466,7 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
               requestedTraceId={requestedTraceId}
               requestedSpanId={requestedSpanId}
               onNavigateRuntime={navigateRuntime}
-              onJumpToGraph={(graphNodeId) => {
-                setSelectedId(graphNodeId)
-                setGraphFocusRequest((current) => ({
-                  nodeId: graphNodeId,
-                  nonce: (current?.nonce ?? 0) + 1,
-                  scope: 'node',
-                }))
-                setWorkspace('graph')
-              }}
+              onJumpToGraph={navigateGraph}
             />
           ) : (
             <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)_270px]">
@@ -490,32 +536,6 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
                       onChange={(event) => setQuery(event.target.value)}
                     />
                   </label>
-                  <span className="font-mono text-[10px] text-ink-muted">
-                    {graph.nodes.length} nodes · {graph.edges.length} edges
-                  </span>
-                  <button
-                    className={`inline-flex items-center gap-1 font-mono text-[10px] transition ${
-                      hasDiagnostics
-                        ? 'text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200'
-                        : 'cursor-default text-ink-muted'
-                    }`}
-                    type="button"
-                    onClick={() => {
-                      if (!hasDiagnostics) return
-                      setPromptCopied(false)
-                      setDiagnosticsOpen(true)
-                    }}
-                    disabled={!hasDiagnostics}
-                    aria-label={`${diagnostics.length} ${text.diagnostics.toLowerCase()}`}
-                    title={
-                      hasDiagnostics
-                        ? text.diagnosticDetails
-                        : text.noDiagnostics
-                    }
-                  >
-                    {hasDiagnostics && <AlertTriangle size={12} />}
-                    {diagnostics.length} {text.diagnostics.toLowerCase()}
-                  </button>
                   <button
                     className="grid size-8 place-items-center rounded-md border border-line transition hover:bg-surface-muted disabled:opacity-50"
                     type="button"
@@ -564,15 +584,52 @@ export function DevtoolsPage({ locale }: { locale: Locale }) {
           </div>
         )}
 
-        {displayedSnapshot && (
-          <div className="flex min-h-8 items-center gap-3 border-t border-line bg-surface px-4 font-mono text-[9px] text-ink-soft">
-            <Database size={11} /> schema v{displayedSnapshot.schemaVersion}
-            <span className="ml-auto">
-              {displayedSnapshot.diagnostics.length}{' '}
-              {text.diagnostics.toLowerCase()}
-            </span>
+        <div className="flex min-h-8 items-center justify-between border-t border-line bg-surface px-3 font-mono text-[9px] text-ink-soft">
+          <div className="flex items-center gap-2">
+            <div
+              className="inline-flex items-center gap-1.5 px-1 font-sans text-[10px] font-semibold text-ink-soft"
+              title={serverUrl}
+            >
+              <span className={`size-2 rounded-full ${connectionDot}`} />
+              {connectionLabel}
+            </div>
+            {displayedSnapshot && (
+              <>
+                <span className="h-3 border-l border-line" aria-hidden="true" />
+                <span className="inline-flex items-center">
+                  <span>{graph.nodes.length} nodes</span>
+                  <span
+                    className="mx-2 h-3 border-l border-line"
+                    aria-hidden="true"
+                  />
+                  <span>{graph.edges.length} edges</span>
+                </span>
+                <span className="h-3 border-l border-line" aria-hidden="true" />
+                <button
+                  className={`inline-flex items-center gap-1 transition ${
+                    hasDiagnostics
+                      ? 'text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200'
+                      : 'cursor-default text-ink-muted'
+                  }`}
+                  type="button"
+                  onClick={() => {
+                    if (!hasDiagnostics) return
+                    setPromptCopied(false)
+                    setDiagnosticsOpen(true)
+                  }}
+                  disabled={!hasDiagnostics}
+                  aria-label={`${diagnostics.length} ${text.diagnostics.toLowerCase()}`}
+                  title={
+                    hasDiagnostics ? text.diagnosticDetails : text.noDiagnostics
+                  }
+                >
+                  {hasDiagnostics && <AlertTriangle size={11} />}
+                  {diagnostics.length} {text.diagnostics.toLowerCase()}
+                </button>
+              </>
+            )}
           </div>
-        )}
+        </div>
       </section>
 
       {settingsOpen && (

@@ -1,12 +1,15 @@
 import type { Metadata } from 'next'
-import { DevtoolsPage } from '../../components/devtools-page'
+import { DevtoolsPage } from '../../../components/devtools-page'
 
 export const metadata: Metadata = {
-  title: 'Devtools',
+  title: 'Devtools Graph',
   description: 'Explore a local Loutre Application Graph in the browser.',
   alternates: {
-    canonical: '/devtools/',
-    languages: { en: '/devtools/', ja: '/ja/devtools/' },
+    canonical: '/devtools/graph/',
+    languages: {
+      en: '/devtools/graph/',
+      ja: '/ja/devtools/graph/',
+    },
   },
 }
 
