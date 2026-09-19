@@ -1,17 +1,17 @@
-# Loutre Browser DevTools Architecture
+# Loutre Browser DevToolsのアーキテクチャ
 
-- Status: **Accepted**
-- Date: 2026-09-13
-- Updated: 2026-09-17
-- Scope: CLI tooling / local runtime instrumentation / 公式サイト
+- 状態: **承認済み**
+- 日付: 2026-09-13
+- 更新日: 2026-09-17
+- 対象: CLI tooling / local runtime instrumentation / 公式サイト
 
-## Context
+## 背景
 
 DevTools専用desktop applicationを正本にすると、公式サイトが持つNext.js、React、theme、navigationなどのWeb資産を共有できず、配布と更新の責務も増える。一方、公式サイトはGitHub Pagesへのstatic exportを維持するため、project固有のApplication Definitionやruntime instanceをremote serverで評価できない。
 
 また、Graphの可視化だけではruntime debuggingに不足する。HTTP、Task、MessagePort、WebSocket、Provider methodなどの実行をApplication Model上のnodeへ対応付け、Trace、Replay、Provider PlaygroundをBrowserと将来のAgent/MCP clientから同じprotocolで操作できる必要がある。
 
-## Decision
+## 決定
 
 `DevtoolsModule()`をApplication側の明示的なopt-inとし、`loutre dev --entry <entry> -- <application command>`がlocal Dev serverとApplication processをまとめて起動する。`DevtoolsModule()`はserverを起動せず、capture / replay policyだけをApplication Modelへ提供する。
 
@@ -37,7 +37,7 @@ source変更はCLIが監視し、Application Definitionのbundle dependencyか�
 
 protocolにはnpm package versionと独立した`DEVTOOLS_PROTOCOL_VERSION`を持たせる。
 
-## Runtime boundary
+## Runtime境界
 
 Core RuntimeはDevTools固有のTrace形式を知らず、genericな`RuntimeInstrumentation` boundaryだけを提供する。Execution Extensionは自分が所有するexecution semanticsをmetadataとしてKernelへ渡す。
 
@@ -49,7 +49,7 @@ Core RuntimeはDevTools固有のTrace形式を知らず、genericな`RuntimeInst
 
 Instrumentationはbest-effortであり、observerやtransportの失敗がApplicationのDI、execution、shutdown semanticsを変えてはならない。
 
-## Security boundary
+## Security境界
 
 Dev serverは`127.0.0.1`だけにbindし、LANへ公開しない。HTTP/WebSocket requestはloopback Hostを検証する。
 
@@ -59,13 +59,13 @@ Application channelはloopbackかつBrowser Originなしの接続だけを受け
 
 CLIは対象Application Definitionをローカルで評価するため、信頼していないprojectで`loutre dev`を実行しない。Websiteへlive handler、Provider instance、native resourceを渡さない。
 
-## Website boundary
+## Website境界
 
 公式サイトは引き続きstatic exportとする。動的な状態を所有するのはlocal Dev serverであり、WebsiteはControl Planeへ接続するclient-side applicationとして動作する。
 
 Graph canvasにはReact Flow、階層layoutにはELKを使う。Runtime viewはTrace / Waterfall / Replay / Provider Playgroundを同じlocal sessionから表示する。Electron preload APIやNode.js APIへ依存しない。
 
-## Alternatives
+## 代替案
 
 ### Application Definitionを公式サイトへuploadする
 
@@ -79,7 +79,7 @@ Graph canvasにはReact Flow、階層layoutにはELKを使う。Runtime viewはT
 
 採用しない。Trace、Replay、Provider Playground、将来のAgent操作まで含めると双方向command/eventが必要になるため、Control Planeを単一WebSocketへ統一する。
 
-## Consequences
+## 結果
 
 - Browserと将来のAgent/MCP adapterが同じstructured protocolを利用できる。
 - Application Modelとruntime Traceを同じGraph identityで接続できる。

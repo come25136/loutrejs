@@ -41,7 +41,7 @@ function handleOffset(
     side === 'source'
       ? (node?.data.sourceHandles ?? [])
       : (node?.data.targetHandles ?? [])
-  return handles.find((handle) => handle.id === handleId)?.offset ?? 0.5
+  return handles.find((handle) => handle.id === handleId)?.relativeY ?? 0.5
 }
 
 function absolutePositions(
@@ -91,20 +91,20 @@ function routingGraph(
           ports: [
             ...((node.data.sourceHandles ?? []).length > 0
               ? (node.data.sourceHandles ?? [])
-              : [{ id: 'source-0', offset: 0.5 }]
+              : [{ id: 'source-0', relativeY: 0.5 }]
             ).map((handle) => ({
               id: `${node.id}:${handle.id}`,
               x: size.width,
-              y: size.height * handle.offset,
+              y: size.height * handle.relativeY,
               properties: { 'port.side': 'EAST' },
             })),
             ...((node.data.targetHandles ?? []).length > 0
               ? (node.data.targetHandles ?? [])
-              : [{ id: 'target-0', offset: 0.5 }]
+              : [{ id: 'target-0', relativeY: 0.5 }]
             ).map((handle) => ({
               id: `${node.id}:${handle.id}`,
               x: 0,
-              y: size.height * handle.offset,
+              y: size.height * handle.relativeY,
               properties: { 'port.side': 'WEST' },
             })),
           ],
@@ -165,8 +165,7 @@ function edgeLabelPosition(
     | undefined
   let fallbackLength = 0
 
-  // Search backwards so the label stays on the straight section immediately
-  // before the target node, while skipping a short terminal stub.
+  // 短いterminal stubではlabelがNodeと重なるため、その手前の直線を後方から探す。
   for (let index = points.length - 1; index > 0; index -= 1) {
     const from = points[index - 1]!
     const to = points[index]!
@@ -289,9 +288,8 @@ function orthogonalizeEndpoints(
       point.y !== points[index - 1]!.y,
   )
 
-  // Libavoid may put the final turn directly on a node boundary when the
-  // source and target ports have different y coordinates. Pull that turn
-  // into the open space so every edge enters/leaves a node horizontally.
+  // sourceとtargetのportでY座標が異なる場合、LibavoidはNode境界上へturnを置く。
+  // Edgeを水平に出入りさせるため、turnを空き領域側へ移す。
   const terminalStub = 28
   const first = normalized[0]
   const firstTurn = normalized[1]

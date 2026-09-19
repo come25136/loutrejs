@@ -17,8 +17,7 @@ export interface SemanticNodeData extends Record<string, unknown> {
 
 export interface FlowHandle {
   readonly id: string
-  /** Position along the node's height, expressed as 0..1. */
-  readonly offset: number
+  readonly relativeY: number
 }
 
 export interface EdgeRoutePoint {
@@ -179,11 +178,11 @@ export function adaptGraph(snapshot: GraphSnapshot): {
         ...node.data,
         sourceHandles: sourceEdges.map((_, index) => ({
           id: `source-${index}`,
-          offset: handleOffset(index, sourceEdges.length),
+          relativeY: handleOffset(index, sourceEdges.length),
         })),
         targetHandles: targetEdges.map((_, index) => ({
           id: `target-${index}`,
-          offset: handleOffset(index, targetEdges.length),
+          relativeY: handleOffset(index, targetEdges.length),
         })),
       },
     }

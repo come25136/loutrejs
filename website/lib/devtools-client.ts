@@ -30,7 +30,7 @@ export async function connectDevtools(baseUrl: string): Promise<void> {
 }
 
 export function disconnectDevtools(baseUrl: string): void {
-  const normalized = normalizeBaseUrl(baseUrl)
+  const normalized = normalizeDevtoolsBaseUrl(baseUrl)
   const client = clients.get(normalized)
   if (!client) return
   clients.delete(normalized)
@@ -170,7 +170,7 @@ class DevtoolsClient {
         try {
           socket.close()
         } catch {
-          // Closing an incompatible socket is best-effort.
+          // 非互換socketのclose失敗でhandshake errorを置き換えてはならない。
         }
       }
 
@@ -221,7 +221,7 @@ class DevtoolsClient {
         try {
           socket.close()
         } catch {
-          // The close event is best-effort while the socket is still connecting.
+          // 接続途中のclose失敗でconnection errorを置き換えてはならない。
         }
       })
       socket.addEventListener('close', () => {
@@ -252,7 +252,7 @@ class DevtoolsClient {
       this.#reconnectTimer = undefined
       if (!this.#shouldReconnect) return
       void this.#openSocket(true).catch(() => {
-        // #openSocket schedules the next retry while reconnection is enabled.
+        // 再接続が有効な間は#openSocket側で次のretryを予約する。
       })
     }, delay)
   }
@@ -331,7 +331,7 @@ function protocolVersionFromHello(raw: string): number | undefined {
 }
 
 function clientFor(baseUrl: string): DevtoolsClient {
-  const normalized = normalizeBaseUrl(baseUrl)
+  const normalized = normalizeDevtoolsBaseUrl(baseUrl)
   const current = clients.get(normalized)
   if (current) return current
   const client = new DevtoolsClient(normalized)
@@ -340,7 +340,7 @@ function clientFor(baseUrl: string): DevtoolsClient {
 }
 
 function controlEndpoint(baseUrl: string): string {
-  const url = new URL(normalizeBaseUrl(baseUrl))
+  const url = new URL(normalizeDevtoolsBaseUrl(baseUrl))
   url.protocol = 'ws:'
   url.pathname = '/__loutre/client'
   url.search = ''
@@ -348,7 +348,7 @@ function controlEndpoint(baseUrl: string): string {
   return url.toString()
 }
 
-function normalizeBaseUrl(value: string): string {
+export function normalizeDevtoolsBaseUrl(value: string): string {
   const url = new URL(value)
   if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1') {
     throw new Error('Invalid local DevTools URL.')

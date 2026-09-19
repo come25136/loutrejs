@@ -2,77 +2,38 @@
 
 import {
   AlertTriangle,
-  ChevronDown,
-  ChevronRight,
   CircleDot,
-  Copy,
   RefreshCw,
   Search,
   Settings,
-  X,
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { GraphCanvas } from './devtools-graph/graph-canvas'
-import { DevtoolsProviderPlayground } from './devtools-provider-playground'
+import {
+  DevtoolsDiagnosticsDialog,
+  DevtoolsSettingsDialog,
+} from './devtools-dialogs'
+import {
+  graphNodeKindCopy,
+  graphNodeKindStyles,
+  Inspector,
+  NodeTree,
+  PaneTitle,
+} from './devtools-graph-sidebars'
 import { DevtoolsRuntimePane } from './devtools-runtime-pane'
-import { ThemePicker } from './theme-toggle'
-import {
-  graphNodeKinds,
-  fetchGraphState,
-  reloadGraph,
-  subscribeGraphEvents,
-  type GraphControlState,
-  type GraphEdge,
-  type GraphNode,
-  type GraphNodeKind,
-  type GraphSnapshot,
-} from '../lib/devtools'
-import {
-  buildDiagnosticAgentPrompt,
-  diagnosticSource,
-  diagnosticsByNodeId,
-} from '../lib/devtools-diagnostics'
-import {
-  connectDevtools,
-  disconnectDevtools,
-  subscribeDevtoolsConnection,
-  type DevtoolsConnectionStatus,
-} from '../lib/devtools-client'
-import {
-  buildDevtoolsNodeTree,
-  type DevtoolsNodeTreeItem,
-} from '../lib/devtools-tree'
+import { graphNodeKinds, type GraphNodeKind } from '../lib/devtools'
+import { buildDiagnosticAgentPrompt } from '../lib/devtools-diagnostics'
+import { normalizeDevtoolsBaseUrl } from '../lib/devtools-client'
 import type { Locale } from '../lib/i18n'
 import {
   devtoolsRuntimeHref,
   parseDevtoolsRuntimeTarget,
 } from '../lib/devtools-runtime-link'
-
-const kindCopy: Record<GraphNodeKind, string> = {
-  module: 'Module',
-  provider: 'Provider',
-  execution: 'Execution',
-  entrypoint: 'Entrypoint',
-  middleware: 'Middleware',
-  handler: 'Handler',
-  'runtime-capability': 'Capability',
-}
-
-const kindStyles: Record<
-  GraphNodeKind,
-  { readonly stroke: string; readonly fill: string }
-> = {
-  module: { stroke: '#e84f16', fill: '#fff7ed' },
-  provider: { stroke: '#15803d', fill: '#f0fdf4' },
-  execution: { stroke: '#475569', fill: '#f8fafc' },
-  entrypoint: { stroke: '#b45309', fill: '#fffbeb' },
-  middleware: { stroke: '#7c6f64', fill: '#fafaf9' },
-  handler: { stroke: '#ff6a30', fill: '#fff7ed' },
-  'runtime-capability': { stroke: '#94a3b8', fill: '#f8fafc' },
-}
+import { filterDevtoolsGraph } from '../lib/devtools-graph-filter'
+import { useDevtoolsGraphSession } from './use-devtools-graph-session'
 
 const copy = {
   en: {
@@ -184,7 +145,6 @@ export function DevtoolsPage({
     useState<DevtoolsWorkspace>(initialWorkspace)
   const [requestedTraceId, setRequestedTraceId] = useState<string>()
   const [requestedSpanId, setRequestedSpanId] = useState<string>()
-  const [snapshot, setSnapshot] = useState<GraphSnapshot>()
   const [selectedId, setSelectedId] = useState<string>()
   const [graphFocusRequest, setGraphFocusRequest] = useState<{
     readonly nodeId: string
@@ -196,28 +156,19 @@ export function DevtoolsPage({
   )
   const [showOwnership, setShowOwnership] = useState(true)
   const [query, setQuery] = useState('')
-  const [connectionStatus, setConnectionStatus] =
-    useState<DevtoolsConnectionStatus>('disconnected')
   const [serverInitialized, setServerInitialized] = useState(false)
-  const [reloading, setReloading] = useState(false)
-  const [error, setError] = useState<string>()
-  const [stale, setStale] = useState(false)
-  const connectionGeneration = useRef(0)
   const initialized = useRef(false)
-  const connected = connectionStatus === 'connected'
   const graphHref = devtoolsWorkspaceHref(locale, 'graph')
   const traceHref = devtoolsWorkspaceHref(locale, 'trace')
-
-  const applyGraphState = (state: GraphControlState) => {
-    if (state.snapshot) setSnapshot(state.snapshot)
-    if (state.error) {
-      setError(state.error)
-      setStale(state.snapshot !== undefined)
-      return
-    }
-    setError(undefined)
-    setStale(false)
-  }
+  const {
+    snapshot,
+    connectionStatus,
+    connected,
+    reloading,
+    error,
+    stale,
+    reload,
+  } = useDevtoolsGraphSession(serverInitialized ? serverUrl : undefined)
 
   useEffect(() => {
     const applyLocation = () => {
@@ -240,7 +191,7 @@ export function DevtoolsPage({
       let initialServerUrl = serverUrl
       if (stored) {
         try {
-          initialServerUrl = localApiUrl(stored)
+          initialServerUrl = normalizeDevtoolsBaseUrl(stored)
         } catch {
           localStorage.removeItem('loutre-devtools-url')
         }
@@ -253,59 +204,6 @@ export function DevtoolsPage({
     return () => window.removeEventListener('popstate', applyLocation)
   }, [])
 
-  useEffect(() => {
-    if (!serverInitialized) return
-
-    let baseUrl: string
-    try {
-      baseUrl = localApiUrl(serverUrl)
-    } catch {
-      setError(text.invalidUrl)
-      setConnectionStatus('disconnected')
-      return
-    }
-
-    const generation = connectionGeneration.current + 1
-    connectionGeneration.current = generation
-    const isCurrent = () => connectionGeneration.current === generation
-
-    const unsubscribeGraph = subscribeGraphEvents(baseUrl, (state) => {
-      if (!isCurrent()) return
-      try {
-        applyGraphState(state)
-      } catch (cause) {
-        setError(errorMessage(cause))
-      }
-    })
-
-    const initialConnection = connectDevtools(baseUrl)
-    const unsubscribeConnection = subscribeDevtoolsConnection(
-      baseUrl,
-      (status) => {
-        if (!isCurrent()) return
-        setConnectionStatus(status)
-        if (status !== 'connected') return
-        void fetchGraphState(baseUrl)
-          .then((state) => {
-            if (isCurrent()) applyGraphState(state)
-          })
-          .catch((cause: unknown) => {
-            if (isCurrent()) setError(errorMessage(cause))
-          })
-      },
-    )
-    void initialConnection.catch(() => {
-      // The transport keeps retrying; connection status communicates the outage.
-    })
-
-    return () => {
-      connectionGeneration.current += 1
-      unsubscribeGraph()
-      unsubscribeConnection()
-      disconnectDevtools(baseUrl)
-    }
-  }, [serverInitialized, serverUrl])
-
   const openSettings = () => {
     setSettingsServerUrl(serverUrl)
     setSettingsError(undefined)
@@ -315,14 +213,13 @@ export function DevtoolsPage({
   const applySettings = () => {
     let nextServerUrl: string
     try {
-      nextServerUrl = localApiUrl(settingsServerUrl)
+      nextServerUrl = normalizeDevtoolsBaseUrl(settingsServerUrl)
     } catch {
       setSettingsError(text.invalidUrl)
       return
     }
 
     localStorage.setItem('loutre-devtools-url', nextServerUrl)
-    if (nextServerUrl !== serverUrl) setConnectionStatus('connecting')
     setServerUrl(nextServerUrl)
     setSettingsServerUrl(nextServerUrl)
     setSettingsError(undefined)
@@ -352,26 +249,24 @@ export function DevtoolsPage({
     }
   }
 
-  const replaceWorkspace = (workspace: DevtoolsWorkspace, href: string) => {
-    setWorkspace(workspace)
-    router.replace(href)
-  }
-
-  const reload = async () => {
-    setReloading(true)
-    try {
-      const baseUrl = localApiUrl(serverUrl)
-      applyGraphState(await reloadGraph(baseUrl))
-    } catch (cause) {
-      setError(errorMessage(cause))
-    } finally {
-      setReloading(false)
+  const replaceWorkspace = (nextWorkspace: DevtoolsWorkspace, href: string) => {
+    if (nextWorkspace === 'trace') {
+      setRequestedTraceId(undefined)
+      setRequestedSpanId(undefined)
     }
+    setWorkspace(nextWorkspace)
+    router.replace(href)
   }
 
   const displayedSnapshot = snapshot
   const graph = useMemo(
-    () => projectGraph(displayedSnapshot, query, enabledKinds, showOwnership),
+    () =>
+      filterDevtoolsGraph(
+        displayedSnapshot,
+        query,
+        enabledKinds,
+        showOwnership,
+      ),
     [displayedSnapshot, query, enabledKinds, showOwnership],
   )
   const selected = displayedSnapshot?.nodes.find(
@@ -508,9 +403,11 @@ export function DevtoolsPage({
                         />
                         <span
                           className={`size-2 rounded-sm transition ${enabledKinds.has(kind) ? 'opacity-100' : 'opacity-20'}`}
-                          style={{ background: kindStyles[kind].stroke }}
+                          style={{
+                            background: graphNodeKindStyles[kind].stroke,
+                          }}
                         />
-                        {kindCopy[kind]}
+                        {graphNodeKindCopy[kind]}
                       </label>
                     ))}
                   </div>
@@ -634,594 +531,29 @@ export function DevtoolsPage({
       </section>
 
       {settingsOpen && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/25 p-4 backdrop-blur-[1px]"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setSettingsOpen(false)
+        <DevtoolsSettingsDialog
+          labels={text}
+          serverUrl={settingsServerUrl}
+          error={settingsError}
+          onServerUrlChange={(value) => {
+            setSettingsServerUrl(value)
+            setSettingsError(undefined)
           }}
-        >
-          <section
-            className="w-full max-w-[420px] rounded-xl border border-line bg-surface p-5 shadow-2xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="devtools-settings-title"
-          >
-            <div className="mb-6 flex items-center gap-2.5">
-              <Settings size={15} className="text-ink-soft" />
-              <h2
-                id="devtools-settings-title"
-                className="text-sm font-semibold text-ink"
-              >
-                {text.settings}
-              </h2>
-            </div>
-
-            <div className="grid gap-5">
-              <label className="block">
-                <span className="text-[11px] font-semibold text-ink">
-                  {text.theme}
-                </span>
-                <div className="mt-2">
-                  <ThemePicker
-                    systemLabel={text.systemTheme}
-                    lightLabel={text.lightTheme}
-                    darkLabel={text.darkTheme}
-                  />
-                </div>
-              </label>
-
-              <label className="block">
-                <span className="text-[11px] font-semibold text-ink">
-                  {text.serverUrl}
-                </span>
-                <span className="mt-1 block text-[10px] leading-4 text-ink-soft">
-                  {text.serverUrlHint}
-                </span>
-                <input
-                  className="mt-2 h-10 w-full rounded-lg border border-line bg-surface-muted/45 px-3 font-mono text-xs text-ink outline-none transition focus:border-line-strong"
-                  value={settingsServerUrl}
-                  spellCheck={false}
-                  onChange={(event) => {
-                    setSettingsServerUrl(event.target.value)
-                    setSettingsError(undefined)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void applySettings()
-                    if (event.key === 'Escape') setSettingsOpen(false)
-                  }}
-                />
-                {settingsError && (
-                  <span className="mt-2 block text-[10px] text-red-600 dark:text-red-300">
-                    {settingsError}
-                  </span>
-                )}
-              </label>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-2 border-t border-line pt-4">
-              <button
-                type="button"
-                className="h-9 rounded-lg border border-line px-3 text-xs font-semibold text-ink-soft transition hover:bg-surface-muted hover:text-ink"
-                onClick={() => setSettingsOpen(false)}
-              >
-                {text.cancel}
-              </button>
-              <button
-                type="button"
-                className="h-9 rounded-lg bg-action px-4 text-xs font-semibold text-action-foreground transition hover:bg-action-hover"
-                onClick={() => void applySettings()}
-              >
-                {text.apply}
-              </button>
-            </div>
-          </section>
-        </div>
+          onClose={() => setSettingsOpen(false)}
+          onApply={applySettings}
+        />
       )}
 
       {diagnosticsOpen && displayedSnapshot && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/25 p-4 backdrop-blur-[1px]"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setDiagnosticsOpen(false)
-          }}
-        >
-          <section
-            className="w-full max-w-[720px] rounded-xl border border-line bg-surface p-5 shadow-2xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="devtools-diagnostics-title"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-2.5">
-                <AlertTriangle
-                  size={16}
-                  className="text-red-600 dark:text-red-300"
-                />
-                <div>
-                  <h2
-                    id="devtools-diagnostics-title"
-                    className="text-sm font-semibold text-ink"
-                  >
-                    {diagnostics.length} {text.diagnostics}
-                  </h2>
-                  <p className="mt-1 text-[10px] text-ink-soft">
-                    {text.agentPromptHint}
-                  </p>
-                </div>
-              </div>
-              <button
-                className="grid size-8 place-items-center rounded-md text-ink-soft transition hover:bg-surface-muted hover:text-ink"
-                type="button"
-                onClick={() => setDiagnosticsOpen(false)}
-                aria-label={text.close}
-                title={text.close}
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            <div className="mt-5 max-h-[38vh] space-y-2 overflow-y-auto pr-1">
-              {diagnostics.map((diagnostic, index) => {
-                const source = diagnosticSource(displayedSnapshot, diagnostic)
-                return (
-                  <article
-                    key={`${diagnostic.code}:${diagnostic.path}:${index}`}
-                    className="rounded-lg border border-red-400/30 bg-red-500/5 p-3"
-                  >
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px]">
-                      <strong className="text-red-700 dark:text-red-300">
-                        {diagnostic.code}
-                      </strong>
-                      <span className="text-red-600/80 dark:text-red-300/80">
-                        {(diagnostic.severity ?? 'error').toUpperCase()}
-                      </span>
-                      <span className="text-ink-muted">{diagnostic.path}</span>
-                    </div>
-                    <p className="mt-2 text-xs leading-5 text-ink-soft">
-                      {diagnostic.message}
-                    </p>
-                    {source && (
-                      <p className="mt-2 font-mono text-[10px] text-ink-muted">
-                        {source}
-                      </p>
-                    )}
-                  </article>
-                )
-              })}
-            </div>
-
-            <div className="mt-5 border-t border-line pt-4">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <h3 className="text-[11px] font-semibold text-ink">
-                  {text.agentPrompt}
-                </h3>
-                <button
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line px-2.5 text-[10px] font-semibold text-ink-soft transition hover:bg-surface-muted hover:text-ink"
-                  type="button"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(agentPrompt)
-                    setPromptCopied(true)
-                  }}
-                >
-                  <Copy size={11} />
-                  {promptCopied ? text.copied : text.copyPrompt}
-                </button>
-              </div>
-              <textarea
-                className="h-40 w-full resize-y rounded-lg border border-line bg-surface-muted/45 p-3 font-mono text-[10px] leading-5 text-ink outline-none"
-                value={agentPrompt}
-                readOnly
-                aria-label={text.agentPrompt}
-              />
-            </div>
-          </section>
-        </div>
+        <DevtoolsDiagnosticsDialog
+          labels={text}
+          snapshot={displayedSnapshot}
+          agentPrompt={agentPrompt}
+          copied={promptCopied}
+          onCopied={() => setPromptCopied(true)}
+          onClose={() => setDiagnosticsOpen(false)}
+        />
       )}
     </main>
   )
-}
-
-function NodeTree({
-  graph,
-  selectedId,
-  onSelect,
-}: {
-  graph: GraphSnapshot
-  selectedId?: string
-  onSelect: (id: string) => void
-}) {
-  const tree = useMemo(() => buildDevtoolsNodeTree(graph), [graph])
-  const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(
-    new Set(),
-  )
-
-  if (tree.length === 0) {
-    return (
-      <div className="min-h-0 flex-1 px-3 py-4 text-[11px] text-ink-muted">
-        No nodes match this graph.
-      </div>
-    )
-  }
-
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-2" role="tree">
-      {tree.map((item, index) => (
-        <NodeTreeRow
-          key={item.node.id}
-          item={item}
-          depth={0}
-          isLastSibling={index === tree.length - 1}
-          ancestorContinues={[]}
-          selectedId={selectedId}
-          collapsedIds={collapsedIds}
-          onSelect={onSelect}
-          onToggle={(id) => {
-            setCollapsedIds((current) => {
-              const next = new Set(current)
-              if (next.has(id)) next.delete(id)
-              else next.add(id)
-              return next
-            })
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
-function NodeTreeRow({
-  item,
-  depth,
-  isLastSibling,
-  ancestorContinues,
-  selectedId,
-  collapsedIds,
-  onSelect,
-  onToggle,
-}: {
-  item: DevtoolsNodeTreeItem
-  depth: number
-  isLastSibling: boolean
-  ancestorContinues: readonly boolean[]
-  selectedId?: string
-  collapsedIds: ReadonlySet<string>
-  onSelect: (id: string) => void
-  onToggle: (id: string) => void
-}) {
-  const hasChildren = item.children.length > 0
-  const collapsed = collapsedIds.has(item.node.id)
-  const selected = item.node.id === selectedId
-
-  return (
-    <div role="treeitem" aria-expanded={hasChildren ? !collapsed : undefined}>
-      <div
-        className={`group relative flex h-8 min-w-0 items-center rounded-md pr-1 transition ${selected ? 'bg-surface-subtle text-ink' : 'text-ink-soft hover:bg-surface-muted hover:text-ink'}`}
-        style={{ paddingLeft: 4 + depth * 20 }}
-      >
-        {ancestorContinues.map((continues, level) =>
-          continues ? (
-            <span
-              key={`guide:${level}`}
-              className="pointer-events-none absolute inset-y-0 w-px bg-line-strong opacity-50"
-              style={{ left: 16 + level * 20 }}
-            />
-          ) : null,
-        )}
-        {depth > 0 && (
-          <>
-            <span
-              className="pointer-events-none absolute top-0 w-px bg-line-strong opacity-50"
-              style={{
-                left: 16 + (depth - 1) * 20,
-                height: isLastSibling ? 16 : 32,
-              }}
-            />
-            <span
-              className="pointer-events-none absolute h-px w-1.5 bg-line-strong opacity-50"
-              style={{ left: 16 + (depth - 1) * 20, top: 16 }}
-            />
-          </>
-        )}
-        {hasChildren ? (
-          <button
-            type="button"
-            className="grid size-6 shrink-0 place-items-center rounded text-ink-muted hover:text-ink"
-            onClick={() => onToggle(item.node.id)}
-            aria-label={collapsed ? 'Expand node' : 'Collapse node'}
-          >
-            {collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
-          onClick={() => onSelect(item.node.id)}
-          title={item.node.label}
-        >
-          <span
-            className="size-1.5 shrink-0 rounded-sm"
-            style={{ background: kindStyles[item.node.kind].stroke }}
-          />
-          <span
-            className={`min-w-0 flex-1 truncate text-[11px] ${selected ? 'font-semibold' : ''}`}
-          >
-            {item.node.label}
-          </span>
-        </button>
-      </div>
-      {hasChildren && !collapsed && (
-        <div role="group">
-          {item.children.map((child, index) => (
-            <NodeTreeRow
-              key={child.node.id}
-              item={child}
-              depth={depth + 1}
-              isLastSibling={index === item.children.length - 1}
-              ancestorContinues={
-                depth === 0 ? [] : [...ancestorContinues, !isLastSibling]
-              }
-              selectedId={selectedId}
-              collapsedIds={collapsedIds}
-              onSelect={onSelect}
-              onToggle={onToggle}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function PaneTitle({ title, label }: { title: string; label: string }) {
-  return (
-    <div className="flex h-12 items-center justify-between border-b border-line px-4">
-      <strong className="text-xs">{title}</strong>
-      <span className="text-[9px] font-bold tracking-[0.12em] text-ink-soft">
-        {label}
-      </span>
-    </div>
-  )
-}
-
-function Inspector({
-  node,
-  snapshot,
-  onSelect,
-  labels,
-  locale,
-  baseUrl,
-  connected,
-  onOpenTrace,
-}: {
-  node?: GraphNode
-  snapshot: GraphSnapshot
-  onSelect: (id: string) => void
-  labels: (typeof copy)[Locale]
-  locale: Locale
-  baseUrl: string
-  connected: boolean
-  onOpenTrace: (traceId: string) => void
-}) {
-  if (!node) {
-    return (
-      <div className="grid min-h-56 place-items-center p-7 text-center text-xs leading-5 text-ink-muted">
-        <div>
-          <CircleDot size={24} className="mx-auto mb-3" />
-          {labels.selectNode}
-        </div>
-      </div>
-    )
-  }
-  const nodeDiagnostics = diagnosticsByNodeId(snapshot).get(node.id) ?? []
-  const relations: Array<{
-    readonly edge: GraphEdge
-    readonly target: GraphNode
-    readonly direction: 'in' | 'out'
-  }> = []
-  for (const edge of snapshot.edges) {
-    if (edge.from === node.id) {
-      const target = snapshot.nodes.find(
-        (candidate) => candidate.id === edge.to,
-      )
-      if (target) relations.push({ edge, target, direction: 'out' })
-    }
-    if (edge.to === node.id) {
-      const target = snapshot.nodes.find(
-        (candidate) => candidate.id === edge.from,
-      )
-      if (target) relations.push({ edge, target, direction: 'in' })
-    }
-  }
-  const source = node.source
-    ? [node.source.file, node.source.line, node.source.column]
-        .filter((part) => part !== undefined)
-        .join(':')
-    : undefined
-
-  return (
-    <div className="max-h-[640px] overflow-y-auto p-4">
-      <div className="flex items-start gap-3 border-b border-line pb-4">
-        <span
-          className="mt-1 size-2 rounded-sm"
-          style={{ background: kindStyles[node.kind].stroke }}
-        />
-        <div className="min-w-0">
-          <h2 className="break-words text-sm font-semibold">{node.label}</h2>
-          <p className="mt-1 text-[10px] text-ink-muted">
-            {kindCopy[node.kind]}
-          </p>
-        </div>
-      </div>
-      {node.kind === 'provider' && (
-        <InspectorSection title="Playground">
-          <DevtoolsProviderPlayground
-            locale={locale}
-            baseUrl={baseUrl}
-            connected={connected}
-            graphNodeId={node.id}
-            onOpenTrace={onOpenTrace}
-          />
-        </InspectorSection>
-      )}
-      {source && (
-        <InspectorSection title={labels.source}>
-          <button
-            className="inline-flex max-w-full items-center gap-2 break-all text-left font-mono text-[10px] text-copper-dark"
-            type="button"
-            onClick={() => void navigator.clipboard.writeText(source)}
-          >
-            <Copy size={11} className="shrink-0" /> {source}
-          </button>
-        </InspectorSection>
-      )}
-      <InspectorSection title={labels.relationships}>
-        {relations.length === 0 ? (
-          <p className="text-[10px] text-ink-muted">(none)</p>
-        ) : (
-          <div className="grid gap-1">
-            {relations.map(({ edge, target, direction }, index) => (
-              <button
-                key={`${edge.from}:${edge.to}:${index}`}
-                className="flex items-start gap-2 rounded-md p-2 text-left transition hover:bg-surface-muted"
-                type="button"
-                onClick={() => onSelect(target.id)}
-              >
-                <span className="mt-0.5 flex size-3 shrink-0 items-start">
-                  {direction === 'in' && (
-                    <ChevronRight
-                      size={12}
-                      className="shrink-0 rotate-180 text-ink-muted"
-                    />
-                  )}
-                </span>
-                <span className="min-w-0">
-                  <span className="flex min-w-0 items-start gap-1">
-                    <strong className="min-w-0 break-words text-[10px]">
-                      {target.label}
-                    </strong>
-                    {direction === 'out' && (
-                      <ChevronRight
-                        size={12}
-                        className="mt-0.5 shrink-0 text-ink-muted"
-                      />
-                    )}
-                  </span>
-                  <small className="text-[9px] text-ink-muted">
-                    {edge.kind}
-                  </small>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </InspectorSection>
-      {node.capabilities && node.capabilities.length > 0 && (
-        <InspectorSection title="Capabilities">
-          <div className="flex flex-wrap gap-1">
-            {node.capabilities.map((capability) => (
-              <span
-                key={capability}
-                className="rounded border border-line bg-surface-muted px-2 py-1 font-mono text-[9px]"
-              >
-                {capability}
-              </span>
-            ))}
-          </div>
-        </InspectorSection>
-      )}
-      {node.attributes && Object.keys(node.attributes).length > 0 && (
-        <InspectorSection title={labels.attributes}>
-          <dl className="grid gap-2">
-            {Object.entries(node.attributes).map(([key, value]) => (
-              <div
-                key={key}
-                className="grid grid-cols-[76px_1fr] gap-2 text-[10px]"
-              >
-                <dt className="text-ink-muted">{key}</dt>
-                <dd className="m-0 break-all">{displayValue(value)}</dd>
-              </div>
-            ))}
-          </dl>
-        </InspectorSection>
-      )}
-      {nodeDiagnostics.length > 0 && (
-        <InspectorSection title={labels.diagnostics}>
-          <div className="grid gap-2">
-            {nodeDiagnostics.map((diagnostic, index) => (
-              <article
-                key={`${diagnostic.code}:${index}`}
-                className="rounded-md border border-line p-2 text-[10px]"
-              >
-                <strong className="text-copper-dark">{diagnostic.code}</strong>
-                <p className="mt-1 leading-4 text-ink-soft">
-                  {diagnostic.message}
-                </p>
-              </article>
-            ))}
-          </div>
-        </InspectorSection>
-      )}
-    </div>
-  )
-}
-
-function InspectorSection({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="border-b border-line py-4 last:border-b-0">
-      <h3 className="mb-3 text-[9px] font-bold tracking-[0.14em] text-ink-muted uppercase">
-        {title}
-      </h3>
-      {children}
-    </section>
-  )
-}
-
-function projectGraph(
-  snapshot: GraphSnapshot | undefined,
-  query: string,
-  enabledKinds: ReadonlySet<GraphNodeKind>,
-  showOwnership: boolean,
-): GraphSnapshot {
-  if (!snapshot) {
-    return { schemaVersion: 1, nodes: [], edges: [], diagnostics: [] }
-  }
-  const normalizedQuery = query.trim().toLocaleLowerCase()
-  const nodes = snapshot.nodes.filter(
-    (node) =>
-      enabledKinds.has(node.kind) &&
-      (normalizedQuery === '' ||
-        node.label.toLocaleLowerCase().includes(normalizedQuery) ||
-        node.id.toLocaleLowerCase().includes(normalizedQuery)),
-  )
-  const ids = new Set(nodes.map((node) => node.id))
-  const edges = snapshot.edges.filter((edge) => {
-    if (!ids.has(edge.from) || !ids.has(edge.to)) return false
-    if (edge.kind === 'owns' && !showOwnership) return false
-    return true
-  })
-  return { ...snapshot, nodes, edges }
-}
-
-function localApiUrl(value: string): string {
-  const url = new URL(value)
-  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1') {
-    throw new Error('Invalid local API URL.')
-  }
-  return url.origin
-}
-
-function displayValue(value: unknown): string {
-  return typeof value === 'object' ? JSON.stringify(value) : String(value)
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

@@ -129,10 +129,8 @@ export async function startDevServer(
             )
           }
         } catch (error) {
-          // A failed build may reference a file that does not exist yet and
-          // therefore cannot appear in the last successful dependency list.
-          // Temporarily widen reload triggers to the project until a build
-          // succeeds and gives us a fresh dependency-aware watch set.
+          // build失敗の原因が未作成fileの場合、直前のdependency一覧だけでは
+          // 復旧を検知できないため、次の成功まではproject全体を監視する。
           watchedPaths = undefined
           state = {
             revision: state.revision + 1,

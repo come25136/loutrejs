@@ -8,6 +8,7 @@ import {
   type ProviderMethodInvocationResult,
   type ProviderPlaygroundDescriptor,
 } from '../lib/devtools-runtime'
+import { devtoolsErrorMessage } from '../lib/devtools-error'
 import type { Locale } from '../lib/i18n'
 
 const copy = {
@@ -77,7 +78,7 @@ export function DevtoolsProviderPlayground({
         setSelectedMethod(next.methods[0]?.name)
       })
       .catch((cause: unknown) => {
-        if (active) setError(errorMessage(cause))
+        if (active) setError(devtoolsErrorMessage(cause))
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -115,7 +116,7 @@ export function DevtoolsProviderPlayground({
         setError(next.error?.message ?? 'Provider method invocation failed.')
       }
     } catch (cause) {
-      setError(errorMessage(cause))
+      setError(devtoolsErrorMessage(cause))
     } finally {
       setRunning(false)
     }
@@ -236,8 +237,4 @@ function previewText(value: ProviderMethodInvocationResult['result']): string {
     }
   }
   return value.preview
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

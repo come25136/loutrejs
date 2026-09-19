@@ -207,7 +207,7 @@ export class ReplayCapsuleStore {
         return { mode: 'snapshot', value: structuredClone(value) }
       }
     } catch {
-      // Fall through to a live reference when inspection or cloning is unsafe.
+      // cloneできない値を失うより、同一process内だけで有効な参照として保持する。
     }
     if (value !== undefined) {
       const handleId = `ref_${crypto.randomUUID()}`

@@ -102,13 +102,13 @@ export function startDevApplicationSupervisor(
         process.kill(-running.pid, signal)
         return
       } catch {
-        // Fall back to signalling the direct child below.
+        // Process groupが既に消えている場合も、直下のchildへsignalできる可能性は残す。
       }
     }
     try {
       running.kill(signal)
     } catch {
-      // The child may have exited between the state check and kill().
+      // 状態確認直後にchildが終了しても、shutdown処理自体は失敗させない。
     }
   }
 

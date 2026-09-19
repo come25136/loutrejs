@@ -530,11 +530,9 @@ export class RuntimeDevtoolsInstrumentation
       throw error
     }
 
-    // Observing Promise settlement would attach a rejection handler and can
-    // change Application-level unhandled-rejection semantics. Preserve the
-    // original Promise identity and only auto-trace provider calls whose full
-    // lifetime is synchronously observable. Playground/Replay are explicit
-    // invocations and still await Promise-returning methods.
+    // Promiseのsettlementを観測するとrejection handlerが追加され、Applicationの
+    // unhandled-rejection semanticsを変え得る。自動Traceは同期的に完結する呼び出しへ
+    // 限定し、明示実行であるPlaygroundとReplayだけがPromiseをawaitする。
     if (result instanceof Promise) {
       if (capsule) this.#capsules?.discard(capsule.id)
       return result
@@ -730,7 +728,7 @@ export class RuntimeDevtoolsInstrumentation
         | undefined
       callback?.(event)
     } catch {
-      // Runtime observation is best-effort and must never affect application behavior.
+      // observerの失敗をApplicationの挙動へ伝播させてはならない。
     }
   }
 }

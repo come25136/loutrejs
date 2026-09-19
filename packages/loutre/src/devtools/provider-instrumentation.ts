@@ -125,7 +125,7 @@ function defineWrapper(
       value: wrapper,
     })
   } catch {
-    // Provider method tracing is best-effort developer instrumentation.
+    // instrumentationのために変更不能なProviderを壊してはならない。
     return undefined
   }
 
@@ -137,7 +137,7 @@ function defineWrapper(
         delete (instance as Record<PropertyKey, unknown>)[key]
       else Object.defineProperty(instance, key, descriptor)
     } catch {
-      // Cleanup is best-effort and must not overwrite Application changes.
+      // Application側の変更をcleanupで上書きしてはならない。
     }
   }
 }

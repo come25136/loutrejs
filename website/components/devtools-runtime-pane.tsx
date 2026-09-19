@@ -2,12 +2,10 @@
 
 import {
   Activity,
-  Braces,
   CircleAlert,
   CircleCheck,
   CircleDot,
   Check,
-  Copy,
   Clock3,
   GitBranch,
   Pause,
@@ -15,28 +13,27 @@ import {
   RefreshCw,
   RotateCcw,
   Trash2,
-  Route,
   SquareArrowOutUpRight,
-  Zap,
 } from 'lucide-react'
-import hljs from 'highlight.js/lib/core'
-import json from 'highlight.js/lib/languages/json'
-import { useEffect, useMemo, useState } from 'react'
-import {
-  clearTraces,
-  fetchTrace,
-  fetchTraces,
-  replayCapsule,
-  subscribeRuntimeEvents,
-  type DevtoolsTraceSummary,
-  type ReplayResult,
-  type RuntimeEvent,
-} from '../lib/devtools-runtime'
-import { buildTimeline, type TimelineEntry } from '../lib/devtools-timeline'
+import { useEffect, useState } from 'react'
+import { replayCapsule, type ReplayResult } from '../lib/devtools-runtime'
+import { devtoolsErrorMessage } from '../lib/devtools-error'
 import type { Locale } from '../lib/i18n'
 import { devtoolsRuntimeHref } from '../lib/devtools-runtime-link'
-
-hljs.registerLanguage('json', json)
+import {
+  Detail,
+  formatDuration,
+  formatTraceTime,
+  HorizontalWaterfall,
+  HttpStatusCode,
+  JsonCodeBlock,
+  RuntimeIdLink,
+  RuntimeSection,
+  shortId,
+  traceHttpStatusCode,
+  TraceStatus,
+} from './devtools-runtime-presentation'
+import { useDevtoolsRuntimeSession } from './use-devtools-runtime-session'
 
 const copy = {
   en: {
@@ -103,93 +100,32 @@ export function DevtoolsRuntimePane({
   onJumpToGraph,
 }: RuntimePaneProps) {
   const text = copy[locale]
-  const [traces, setTraces] = useState<readonly DevtoolsTraceSummary[]>([])
-  const [selectedTraceId, setSelectedTraceId] = useState<string>()
-  const [events, setEvents] = useState<readonly RuntimeEvent[]>([])
-  const [selectedSpanId, setSelectedSpanId] = useState<string>()
-  const [runtimeError, setRuntimeError] = useState<string>()
-  const [paused, setPaused] = useState(false)
   const [replayInput, setReplayInput] = useState('')
   const [editingArguments, setEditingArguments] = useState(false)
   const [replayResult, setReplayResult] = useState<ReplayResult>()
   const [replayError, setReplayError] = useState<string>()
   const [replaying, setReplaying] = useState(false)
-  const [clearingHistory, setClearingHistory] = useState(false)
-  const [runtimeRevision, setRuntimeRevision] = useState(0)
   const [toast, setToast] = useState<string>()
-
-  useEffect(() => {
-    setTraces([])
-    setEvents([])
-    setSelectedTraceId(undefined)
-    setSelectedSpanId(undefined)
-    setRuntimeError(undefined)
-  }, [baseUrl])
-
-  useEffect(() => {
-    if (!requestedTraceId) return
-    setSelectedTraceId(requestedTraceId)
-    setSelectedSpanId(requestedSpanId)
-  }, [requestedSpanId, requestedTraceId])
-
-  useEffect(() => {
-    if (!connected || paused) return
-    const unsubscribe = subscribeRuntimeEvents(baseUrl, () => {
-      setRuntimeRevision((revision) => revision + 1)
-    })
-    return unsubscribe
-  }, [baseUrl, connected, paused])
-
-  useEffect(() => {
-    if (!connected || paused) return
-    let active = true
-    void fetchTraces(baseUrl)
-      .then((nextTraces) => {
-        if (!active) return
-        setTraces(nextTraces)
-        setRuntimeError(undefined)
-        setSelectedTraceId((current) =>
-          current && nextTraces.some((trace) => trace.traceId === current)
-            ? current
-            : nextTraces[0]?.traceId,
-        )
-      })
-      .catch((error: unknown) => {
-        if (active) setRuntimeError(errorMessage(error))
-      })
-    return () => {
-      active = false
-    }
-  }, [baseUrl, connected, paused, runtimeRevision])
-
-  useEffect(() => {
-    if (!connected || !selectedTraceId || paused) return
-    let active = true
-    void fetchTrace(baseUrl, selectedTraceId)
-      .then((nextEvents) => {
-        if (!active) return
-        setEvents(nextEvents)
-        setSelectedSpanId((current) =>
-          current && nextEvents.some((event) => event.spanId === current)
-            ? current
-            : buildTimeline(nextEvents).entries[0]?.start.spanId,
-        )
-      })
-      .catch((error: unknown) => {
-        if (active) setRuntimeError(errorMessage(error))
-      })
-    return () => {
-      active = false
-    }
-  }, [baseUrl, connected, paused, runtimeRevision, selectedTraceId])
-
-  const selectedTrace = traces.find(
-    (trace) => trace.traceId === selectedTraceId,
-  )
-  const timeline = useMemo(() => buildTimeline(events), [events])
-  const selectedTimeline = timeline.entries.find(
-    (entry) => entry.start.spanId === selectedSpanId,
-  )
+  const {
+    traces,
+    selectedTrace,
+    timeline,
+    selectedSpanId,
+    selectedTimeline,
+    runtimeError,
+    paused,
+    clearingHistory,
+    selectTrace,
+    selectSpan,
+    togglePaused,
+    clearHistory,
+  } = useDevtoolsRuntimeSession({
+    baseUrl,
+    connected,
+    requestedTraceId,
+    requestedSpanId,
+    onNavigateRuntime,
+  })
   const selectedEvent = selectedTimeline?.start
   const selectedCapsule =
     selectedEvent && 'capsuleId' in selectedEvent
@@ -209,11 +145,6 @@ export function DevtoolsRuntimePane({
         : JSON.stringify(selectedInput.value, null, 2),
     )
   }, [selectedEvent?.spanId, selectedInput?.preview])
-
-  const selectSpan = (spanId: string) => {
-    setSelectedSpanId(spanId)
-    if (selectedTraceId) onNavigateRuntime(selectedTraceId, spanId)
-  }
 
   const showToast = (message: string) => {
     setToast(message)
@@ -237,26 +168,6 @@ export function DevtoolsRuntimePane({
     )
   }
 
-  const clearHistory = async () => {
-    if (clearingHistory) return
-    setClearingHistory(true)
-    setRuntimeError(undefined)
-    try {
-      await clearTraces(baseUrl)
-      setTraces([])
-      setEvents([])
-      setSelectedTraceId(undefined)
-      setSelectedSpanId(undefined)
-      setReplayResult(undefined)
-      setReplayError(undefined)
-      setEditingArguments(false)
-    } catch (error) {
-      setRuntimeError(errorMessage(error))
-    } finally {
-      setClearingHistory(false)
-    }
-  }
-
   const runReplay = async () => {
     if (!selectedCapsule) return
     let input: unknown
@@ -276,7 +187,7 @@ export function DevtoolsRuntimePane({
         setReplayError(result.error?.message ?? 'Replay failed.')
       }
     } catch (error) {
-      setReplayError(errorMessage(error))
+      setReplayError(devtoolsErrorMessage(error))
     } finally {
       setReplaying(false)
     }
@@ -308,7 +219,7 @@ export function DevtoolsRuntimePane({
               className="grid size-7 place-items-center rounded-md border border-line bg-surface text-ink-muted transition hover:text-ink"
               type="button"
               title={paused ? text.resume : text.pause}
-              onClick={() => setPaused((current) => !current)}
+              onClick={togglePaused}
             >
               {paused ? <Play size={11} /> : <Pause size={11} />}
             </button>
@@ -324,12 +235,10 @@ export function DevtoolsRuntimePane({
             traces.map((trace) => (
               <button
                 key={trace.traceId}
-                className={`w-full min-w-0 overflow-hidden rounded-lg border border-l-2 px-3 py-2.5 text-left transition ${trace.traceId === selectedTraceId ? 'border-line-strong border-l-copper bg-surface-subtle shadow-sm' : 'border-transparent hover:border-line hover:bg-surface-muted'}`}
+                className={`w-full min-w-0 overflow-hidden rounded-lg border border-l-2 px-3 py-2.5 text-left transition ${trace.traceId === selectedTrace?.traceId ? 'border-line-strong border-l-copper bg-surface-subtle shadow-sm' : 'border-transparent hover:border-line hover:bg-surface-muted'}`}
                 type="button"
                 onClick={() => {
-                  setSelectedTraceId(trace.traceId)
-                  setSelectedSpanId(undefined)
-                  onNavigateRuntime(trace.traceId)
+                  selectTrace(trace.traceId)
                 }}
               >
                 <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
@@ -628,390 +537,4 @@ export function DevtoolsRuntimePane({
       )}
     </div>
   )
-}
-
-function JsonCodeBlock({
-  value,
-  fallback,
-  maxHeight = 'max-h-72',
-  borderless = false,
-  onCopy,
-}: {
-  value?: unknown
-  fallback?: string
-  maxHeight?: string
-  borderless?: boolean
-  onCopy?: (value: string) => void | Promise<void>
-}) {
-  const source =
-    value === undefined
-      ? (fallback ?? '(undefined)')
-      : JSON.stringify(value, null, 2)
-  const highlighted = useMemo(() => {
-    try {
-      return hljs.highlight(source, { language: 'json', ignoreIllegals: true })
-        .value
-    } catch {
-      return escapeHtml(source)
-    }
-  }, [source])
-  return (
-    <div className="group/copy relative">
-      <pre
-        className={`${maxHeight} overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-5 text-ink ${borderless ? '' : 'rounded-lg border border-line bg-surface-subtle/70 p-3'} ${onCopy ? 'pr-8' : ''} [&_.hljs-attr]:text-sky-700 [&_.hljs-keyword]:text-violet-700 [&_.hljs-literal]:font-semibold [&_.hljs-literal]:text-violet-700 [&_.hljs-number]:text-amber-700 [&_.hljs-punctuation]:text-ink-soft [&_.hljs-string]:text-emerald-700 dark:[&_.hljs-attr]:text-sky-300 dark:[&_.hljs-keyword]:text-violet-300 dark:[&_.hljs-literal]:text-violet-300 dark:[&_.hljs-number]:text-amber-300 dark:[&_.hljs-string]:text-emerald-300`}
-      >
-        <code dangerouslySetInnerHTML={{ __html: highlighted }} />
-      </pre>
-      {onCopy && (
-        <button
-          type="button"
-          title="Copy value"
-          aria-label="Copy value"
-          className="absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-md border border-line bg-surface text-ink-soft opacity-0 shadow-sm transition hover:text-ink group-hover/copy:opacity-100 focus-visible:opacity-100"
-          onClick={() => void onCopy(source)}
-        >
-          <Copy size={11} />
-        </button>
-      )}
-    </div>
-  )
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;')
-}
-
-const timelineTicks = [0, 0.25, 0.5, 0.75, 1] as const
-
-function HorizontalWaterfall({
-  entries,
-  durationMs,
-  selectedSpanId,
-  onSelect,
-}: {
-  entries: readonly TimelineEntry[]
-  durationMs: number
-  selectedSpanId?: string
-  onSelect: (spanId: string) => void
-}) {
-  return (
-    <div className="overflow-hidden rounded-lg border border-line bg-surface">
-      <div className="grid grid-cols-[minmax(180px,230px)_minmax(260px,1fr)] border-b border-line bg-surface-subtle/70">
-        <div className="flex h-9 items-center px-3 text-[9px] font-bold tracking-[0.1em] text-ink-soft uppercase">
-          Span
-        </div>
-        <div className="relative h-9 border-l border-line">
-          {timelineTicks.map((tick) => (
-            <div
-              key={tick}
-              className="absolute inset-y-0"
-              style={{ left: `${tick * 100}%` }}
-            >
-              <span
-                className={`absolute top-2 font-mono text-[9px] text-ink-soft ${tick === 0 ? 'left-1' : tick === 1 ? 'right-1' : '-translate-x-1/2'}`}
-              >
-                {formatAxisTime(durationMs * tick)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-      {entries.map((entry) => {
-        const start = entry.start
-        const kind = timelineKind(entry)
-        const tone = timelineTone(entry)
-        const left = percent(entry.offsetMs, durationMs)
-        const rawWidth = percent(entry.durationMs ?? 0, durationMs)
-        const width = Math.max(0.7, Math.min(100 - left, rawWidth))
-        const selected = start.spanId === selectedSpanId
-        return (
-          <div
-            key={`${start.spanId}:${start.seq}`}
-            className="grid min-h-12 grid-cols-[minmax(180px,230px)_minmax(260px,1fr)] border-b border-line/70 last:border-b-0"
-          >
-            <button
-              type="button"
-              className={`min-w-0 px-3 py-2 text-left transition hover:bg-surface-muted/60 ${selected ? 'bg-surface-subtle' : ''}`}
-              onClick={() => onSelect(start.spanId)}
-            >
-              <div
-                className="flex min-w-0 items-center gap-2"
-                style={{ paddingLeft: Math.min(entry.depth, 6) * 12 }}
-              >
-                <TimelineIcon entry={entry} />
-                <span className="min-w-0 flex-1">
-                  <strong className="block truncate text-[11px] leading-4">
-                    {start.name}
-                  </strong>
-                  <span className="mt-0.5 block truncate font-mono text-[9px] text-ink-soft">
-                    {kind} · {formatDuration(entry.durationMs)}
-                  </span>
-                </span>
-              </div>
-            </button>
-            <div className="relative min-h-12 border-l border-line bg-surface-muted/25">
-              {timelineTicks.map((tick) => (
-                <span
-                  key={tick}
-                  className="absolute inset-y-0 border-l border-line/55"
-                  style={{ left: `${tick * 100}%` }}
-                />
-              ))}
-              <button
-                type="button"
-                title={`${start.name} · ${formatDuration(entry.durationMs)}`}
-                aria-label={`${start.name}, ${formatDuration(entry.durationMs)}`}
-                className={`absolute top-1/2 h-5 -translate-y-1/2 overflow-hidden rounded border transition hover:brightness-95 ${tone} ${selected ? 'z-10 ring-2 ring-copper/35' : ''}`}
-                style={{ left: `${left}%`, width: `${width}%` }}
-                onClick={() => onSelect(start.spanId)}
-              >
-                {width >= 13 && (
-                  <span className="block truncate px-1.5 text-left font-mono text-[9px] font-semibold">
-                    {start.name}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function TimelineIcon({
-  entry,
-  compact = false,
-}: {
-  entry: TimelineEntry
-  compact?: boolean
-}) {
-  const isRoot = entry.start.type === 'execution.started'
-  const kind = timelineKind(entry)
-  const size = compact ? 9 : 10
-  return (
-    <span
-      className={`grid shrink-0 place-items-center rounded ${compact ? 'size-4' : 'size-5'} ${isRoot ? 'bg-copper/10 text-copper-dark' : kind === 'provider.method' ? 'bg-moss/10 text-moss' : 'bg-surface-subtle text-ink-soft'}`}
-    >
-      {isRoot ? (
-        <Route size={size} />
-      ) : kind === 'provider.method' ? (
-        <Zap size={size} />
-      ) : (
-        <Activity size={size} />
-      )}
-    </span>
-  )
-}
-
-function timelineKind(entry: TimelineEntry): string {
-  return entry.start.type === 'span.started'
-    ? entry.start.kind
-    : entry.start.executionKind
-}
-
-function timelineTone(entry: TimelineEntry): string {
-  const kind = timelineKind(entry)
-  if (entry.end?.status === 'error')
-    return 'border-red-400/45 bg-red-500/12 text-red-700 dark:text-red-300'
-  if (entry.end?.status === 'cancelled')
-    return 'border-amber-400/45 bg-amber-500/12 text-amber-700 dark:text-amber-300'
-  if (entry.start.type === 'execution.started')
-    return 'border-copper/40 bg-copper/10 text-ink'
-  if (kind === 'provider.method') return 'border-moss/35 bg-moss/8 text-ink'
-  return 'border-line-strong bg-surface-muted text-ink'
-}
-
-function percent(value: number, durationMs: number): number {
-  return Math.max(0, Math.min(100, (value / Math.max(durationMs, 0.01)) * 100))
-}
-
-function formatAxisTime(value: number): string {
-  if (value < 1) return `${value.toFixed(1)}ms`
-  if (value < 1_000) return `${Math.round(value)}ms`
-  return `${(value / 1_000).toFixed(value < 10_000 ? 1 : 0)}s`
-}
-
-function traceHttpStatusCode(trace: DevtoolsTraceSummary): number | undefined {
-  const value = trace.attributes?.['http.status_code']
-  return typeof value === 'number' && Number.isInteger(value)
-    ? value
-    : undefined
-}
-
-function httpStatusTone(
-  statusCode: number,
-): 'ok' | 'redirect' | 'client' | 'server' {
-  if (statusCode >= 500) return 'server'
-  if (statusCode >= 400) return 'client'
-  if (statusCode >= 300) return 'redirect'
-  return 'ok'
-}
-
-function HttpStatusCode({ statusCode }: { statusCode: number }) {
-  const tone = httpStatusTone(statusCode)
-  const className =
-    tone === 'server'
-      ? 'bg-red-500/10 text-red-700 dark:text-red-300'
-      : tone === 'client'
-        ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-        : tone === 'ok'
-          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-          : 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
-  return (
-    <span className={`shrink-0 rounded px-1 py-px font-semibold ${className}`}>
-      {statusCode}
-    </span>
-  )
-}
-
-function TraceStatus({
-  status,
-  httpStatusCode,
-}: {
-  status: DevtoolsTraceSummary['status']
-  httpStatusCode?: number
-}) {
-  const httpTone =
-    httpStatusCode === undefined ? undefined : httpStatusTone(httpStatusCode)
-  if (httpTone === 'server')
-    return <CircleAlert size={11} className="mt-0.5 shrink-0 text-red-500" />
-  if (httpTone === 'client')
-    return <CircleAlert size={11} className="mt-0.5 shrink-0 text-amber-500" />
-  if (status === 'ok')
-    return (
-      <CircleCheck size={11} className="mt-0.5 shrink-0 text-emerald-500" />
-    )
-  if (status === 'error')
-    return <CircleAlert size={11} className="mt-0.5 shrink-0 text-red-500" />
-  if (status === 'cancelled')
-    return <CircleAlert size={11} className="mt-0.5 shrink-0 text-amber-500" />
-  return (
-    <CircleDot
-      size={11}
-      className="mt-0.5 shrink-0 animate-pulse text-copper"
-    />
-  )
-}
-
-function RuntimeIdLink({
-  href,
-  onCopy,
-  title,
-  children,
-}: {
-  href: string
-  onCopy: () => void
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <a
-      href={href}
-      title={`${title} · click to copy link`}
-      className="group/id inline-flex items-center gap-1 text-ink-soft underline decoration-line-strong underline-offset-2 transition hover:text-copper-dark"
-      onClick={(event) => {
-        if (
-          event.button !== 0 ||
-          event.metaKey ||
-          event.ctrlKey ||
-          event.shiftKey ||
-          event.altKey
-        ) {
-          return
-        }
-        event.preventDefault()
-        onCopy()
-      }}
-    >
-      <span>{children}</span>
-      <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded text-ink-soft opacity-0 transition group-hover/id:opacity-100">
-        <Copy size={10} />
-      </span>
-    </a>
-  )
-}
-
-function RuntimeSection({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="border-b border-line py-4 first:pt-0 last:border-b-0">
-      <h3 className="mb-3 flex items-center gap-1.5 text-[10px] font-bold tracking-[0.12em] text-ink-soft uppercase">
-        <Braces size={9} /> {title}
-      </h3>
-      {children}
-    </section>
-  )
-}
-
-function Detail({
-  label,
-  value,
-  copyValue,
-  onCopy,
-  mono = false,
-}: {
-  label: string
-  value: React.ReactNode
-  copyValue?: string
-  onCopy?: (value: string) => void | Promise<void>
-  mono?: boolean
-}) {
-  return (
-    <div className="grid grid-cols-[64px_1fr] gap-2">
-      <dt className="font-medium text-ink-soft">{label}</dt>
-      <dd
-        className={`group/copy m-0 flex min-w-0 items-start gap-1 break-all text-ink ${mono ? 'font-mono' : ''}`}
-      >
-        <span className="min-w-0">{value}</span>
-        {copyValue !== undefined && onCopy && (
-          <button
-            type="button"
-            title="Copy value"
-            aria-label={`Copy ${label}`}
-            className="mt-0.5 grid size-5 shrink-0 place-items-center rounded text-ink-soft opacity-0 transition hover:bg-surface-muted hover:text-ink group-hover/copy:opacity-100 focus-visible:opacity-100"
-            onClick={() => void onCopy(copyValue)}
-          >
-            <Copy size={10} />
-          </button>
-        )}
-      </dd>
-    </div>
-  )
-}
-
-function shortId(value: string): string {
-  return value.length <= 22 ? value : `${value.slice(0, 11)}…${value.slice(-7)}`
-}
-
-function formatDuration(value: number | undefined): string {
-  if (value === undefined) return '…'
-  if (value < 1) return `${value.toFixed(2)}ms`
-  if (value < 1_000) return `${value.toFixed(value < 10 ? 1 : 0)}ms`
-  return `${(value / 1_000).toFixed(2)}s`
-}
-
-function formatTraceTime(value: number): string {
-  const date = new Date(value)
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(
-    date.getSeconds(),
-  )}.${String(date.getMilliseconds()).padStart(3, '0')}`
-}
-
-function pad2(value: number): string {
-  return String(value).padStart(2, '0')
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

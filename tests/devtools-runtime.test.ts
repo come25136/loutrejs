@@ -619,7 +619,7 @@ describe('DevTools runtime observation', () => {
     let thenReads = 0
     let thenCalls = 0
     const lazyThenable: Record<string, unknown> = {}
-    // oxlint-disable-next-line unicorn/no-thenable -- Regression fixture intentionally models a lazy thenable.
+    // oxlint-disable-next-line unicorn/no-thenable -- lazy thenableを再現するregression fixture。
     Object.defineProperty(lazyThenable, 'then', {
       enumerable: true,
       get() {

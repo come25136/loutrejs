@@ -31,8 +31,7 @@ export function createNodeDevtoolsSession(
   const endpoint = process.env.LOUTRE_DEV_ENDPOINT
   const runIdSeed = process.env.LOUTRE_DEV_RUN_ID
   if (!endpoint || !runIdSeed) return undefined
-  // Watch wrappers inherit the same environment across child restarts.
-  // Give every actual Application process/session a distinct run identity.
+  // watch wrapperから同じ環境変数を継承する再起動も別sessionとして識別する。
   const runId = `${runIdSeed}.${crypto.randomUUID()}`
 
   const queue: RuntimeEvent[] = []
@@ -61,8 +60,7 @@ export function createNodeDevtoolsSession(
           }),
         )
       } catch {
-        // Runtime observation is best-effort. Non-serializable user metadata or
-        // transport failures must never affect Application semantics.
+        // serialize不能なmetadataやtransport障害をApplicationへ伝播させてはならない。
       }
     }
   }
@@ -119,7 +117,7 @@ export function createNodeDevtoolsSession(
     void executeInspectorCommand(websocket, instrumentation, command)
   })
   websocket.addEventListener('error', () => {
-    // DevTools transport is best-effort and must not affect the Application.
+    // DevTools transport障害をApplicationへ伝播させてはならない。
   })
 
   const closeTransport = () => {

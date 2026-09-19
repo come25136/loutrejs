@@ -576,7 +576,7 @@ function callInstrumentation(operation: () => unknown): void {
   try {
     operation()
   } catch {
-    // Instrumentation is best-effort and must not affect Application semantics.
+    // instrumentation障害をApplication semanticsへ伝播させてはならない。
   }
 }
 
@@ -586,7 +586,7 @@ async function closeInstrumentation(
   try {
     await instrumentation?.close?.()
   } catch {
-    // Instrumentation cleanup is best-effort.
+    // instrumentationのcleanup失敗をshutdown失敗として扱わない。
   }
 }
 

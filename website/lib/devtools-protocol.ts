@@ -1,3 +1,3 @@
-// Keep this browser-side expectation in sync with @loutrejs/loutre/devtools.
-// website/tests/devtools-client.test.ts verifies the versions do not drift.
+// package間でversion定数を共有するとbrowser bundleへruntime実装が混入するため、
+// website/tests/devtools-client.test.tsで値のずれを検出する。
 export const DEVTOOLS_PROTOCOL_VERSION = 1

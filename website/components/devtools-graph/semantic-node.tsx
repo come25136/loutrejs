@@ -11,11 +11,11 @@ export function SemanticNode({ data, selected }: NodeProps<LoutreFlowNode>) {
   const sourceHandles =
     (data.sourceHandles ?? []).length > 0
       ? (data.sourceHandles ?? [])
-      : [{ id: 'source-0', offset: 0.5 }]
+      : [{ id: 'source-0', relativeY: 0.5 }]
   const targetHandles =
     (data.targetHandles ?? []).length > 0
       ? (data.targetHandles ?? [])
-      : [{ id: 'target-0', offset: 0.5 }]
+      : [{ id: 'target-0', relativeY: 0.5 }]
   const source = node.source
   const typeLabel = (() => {
     if (node.kind === 'entrypoint') return 'Route'
@@ -35,7 +35,7 @@ export function SemanticNode({ data, selected }: NodeProps<LoutreFlowNode>) {
           id={handle.id}
           type="target"
           position={Position.Left}
-          style={{ top: `${handle.offset * 100}%` }}
+          style={{ top: `${handle.relativeY * 100}%` }}
           isConnectable={false}
         />
       ))}
@@ -62,7 +62,7 @@ export function SemanticNode({ data, selected }: NodeProps<LoutreFlowNode>) {
           id={handle.id}
           type="source"
           position={Position.Right}
-          style={{ top: `${handle.offset * 100}%` }}
+          style={{ top: `${handle.relativeY * 100}%` }}
           isConnectable={false}
         />
       ))}

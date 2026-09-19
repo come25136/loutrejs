@@ -3,6 +3,7 @@ import {
   connectDevtools,
   devtoolsRequest,
   disconnectDevtools,
+  normalizeDevtoolsBaseUrl,
   subscribeDevtoolsConnection,
   subscribeDevtoolsEvents,
   type DevtoolsConnectionStatus,
@@ -72,6 +73,18 @@ afterEach(() => {
 })
 
 describe('DevTools control connection', () => {
+  it('loopback HTTP originだけを接続先として正規化する', () => {
+    expect(
+      normalizeDevtoolsBaseUrl('http://127.0.0.1:25136/path?query=1'),
+    ).toBe('http://127.0.0.1:25136')
+    expect(() => normalizeDevtoolsBaseUrl('http://localhost:25136')).toThrow(
+      'Invalid local DevTools URL.',
+    )
+    expect(() => normalizeDevtoolsBaseUrl('https://127.0.0.1:25136')).toThrow(
+      'Invalid local DevTools URL.',
+    )
+  })
+
   it('切断後にbackoffして同じclientを自動再接続する', async () => {
     const baseUrl = 'http://127.0.0.1:25137'
     const statuses: DevtoolsConnectionStatus[] = []
