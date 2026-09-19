@@ -10,6 +10,7 @@ import {
   type TokenLike,
 } from '../core/index.js'
 import { Logger } from './logger.js'
+import { match } from 'ts-pattern'
 
 export class DependencyResolutionError extends Error {
   constructor(message: string) {
@@ -216,63 +217,63 @@ export class Container {
     lineage: readonly TokenLike[],
   ): unknown {
     try {
-      switch (provider.kind) {
-        case 'value': {
-          this.#hooks.created?.(provider, provider.useValue)
-          return provider.useValue
-        }
-        case 'environment': {
-          if (this.#environment.has(provider.provide)) {
-            return this.#environment.get(provider.provide)
+      return match(provider)
+        .with({ kind: 'value' }, (candidate) => {
+          this.#hooks.created?.(candidate, candidate.useValue)
+          return candidate.useValue
+        })
+        .with({ kind: 'environment' }, (candidate) => {
+          if (this.#environment.has(candidate.provide)) {
+            return this.#environment.get(candidate.provide)
           }
           throw new DependencyResolutionError(
-            `LUTRE_ENV_005: Environment ${provider.provide.name} requires a runtime Environment source before Application initialization.`,
+            `LUTRE_ENV_005: Environment ${candidate.provide.name} requires a runtime Environment source before Application initialization.`,
           )
-        }
-        case 'arguments': {
-          if (this.#arguments.has(provider.provide)) {
-            return this.#arguments.get(provider.provide)
+        })
+        .with({ kind: 'arguments' }, (candidate) => {
+          if (this.#arguments.has(candidate.provide)) {
+            return this.#arguments.get(candidate.provide)
           }
           throw new DependencyResolutionError(
-            `LUTRE_ARGS_005: Arguments ${provider.provide.name} requires runtime Arguments before Application initialization.`,
+            `LUTRE_ARGS_005: Arguments ${candidate.provide.name} requires runtime Arguments before Application initialization.`,
           )
-        }
-        case 'class': {
-          const value = this.#instantiate(provider.useClass, lineage)
-          this.#hooks.created?.(provider, value)
+        })
+        .with({ kind: 'class' }, (candidate) => {
+          const value = this.#instantiate(candidate.useClass, lineage)
+          this.#hooks.created?.(candidate, value)
           return value
-        }
-        case 'factory': {
-          const dependencies = provider.inject.map((token) =>
-            this.#resolve(token, tokenName(provider.provide), lineage),
+        })
+        .with({ kind: 'factory' }, (candidate) => {
+          const dependencies = candidate.inject.map((token) =>
+            this.#resolve(token, tokenName(candidate.provide), lineage),
           )
-          const value = provider.useFactory(...dependencies)
+          const value = candidate.useFactory(...dependencies)
           if (isThenable(value)) {
             throw new DependencyResolutionError(
               'LUTRE_DI_ASYNC_FACTORY: Async factory providers are not supported. Move asynchronous resource initialization to application lifecycle.',
             )
           }
-          this.#hooks.created?.(provider, value)
+          this.#hooks.created?.(candidate, value)
           return value
-        }
-        case 'conditional': {
+        })
+        .with({ kind: 'conditional' }, (candidate) => {
           const input = this.#resolve(
-            provider.select.contract,
-            tokenName(provider.provide),
+            candidate.select.contract,
+            tokenName(candidate.provide),
             lineage,
           ) as Record<string, unknown>
-          const selected = input[provider.select.key]
-          const implementation = provider.mapping[selected as PropertyKey]
+          const selected = input[candidate.select.key]
+          const implementation = candidate.mapping[selected as PropertyKey]
           if (!implementation) {
             throw new DependencyResolutionError(
-              `No conditional Provider matches ${provider.select.key}=${String(selected)}`,
+              `No conditional Provider matches ${candidate.select.key}=${String(selected)}`,
             )
           }
           const value = this.#instantiate(implementation, lineage)
-          this.#hooks.created?.(provider, value)
+          this.#hooks.created?.(candidate, value)
           return value
-        }
-      }
+        })
+        .exhaustive()
     } catch (error) {
       if (provider.scope === 'application') {
         this.#applicationCache.delete(provider.provide)

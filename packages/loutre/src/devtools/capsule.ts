@@ -7,6 +7,7 @@ import type {
   RuntimeInvocationResult,
 } from './inspector.js'
 import { previewDevtoolsValue, type DevtoolsValuePreview } from './values.js'
+import { match } from 'ts-pattern'
 
 export interface ReplayRegistration {
   readonly input: unknown
@@ -218,21 +219,20 @@ export class ReplayCapsuleStore {
   }
 
   #restore(captured: CapturedValue): unknown {
-    switch (captured.mode) {
-      case 'snapshot':
-        return structuredClone(captured.value)
-      case 'reference':
-        if (this.#references.has(captured.handleId)) {
-          return this.#references.get(captured.handleId)
+    return match(captured)
+      .with({ mode: 'snapshot' }, (value) => structuredClone(value.value))
+      .with({ mode: 'reference' }, (value) => {
+        if (this.#references.has(value.handleId)) {
+          return this.#references.get(value.handleId)
         }
         throw new Error(
-          `LUTRE_DEVTOOLS_REFERENCE_UNAVAILABLE: ${captured.handleId}`,
+          `LUTRE_DEVTOOLS_REFERENCE_UNAVAILABLE: ${value.handleId}`,
         )
-      case 'unavailable':
-        throw new Error(
-          `LUTRE_DEVTOOLS_CAPTURE_UNAVAILABLE: ${captured.reason}`,
-        )
-    }
+      })
+      .with({ mode: 'unavailable' }, (value) => {
+        throw new Error(`LUTRE_DEVTOOLS_CAPTURE_UNAVAILABLE: ${value.reason}`)
+      })
+      .exhaustive()
   }
 
   #purgeExpired(): void {

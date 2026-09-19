@@ -1,4 +1,5 @@
 import type { RuntimeEngine } from '@loutrejs/loutre/runtime'
+import { match } from 'ts-pattern'
 
 export const projectTargets = [
   'node',
@@ -44,16 +45,11 @@ export function runScriptCommand(
   packageManager: PackageManager,
   script: string,
 ): string {
-  switch (packageManager) {
-    case 'npm':
-      return `npm run ${script}`
-    case 'pnpm':
-      return `pnpm run ${script}`
-    case 'yarn':
-      return `yarn run ${script}`
-    case 'bun':
-      return `bun run ${script}`
-    case 'deno':
-      return `deno task ${script}`
-  }
+  return match(packageManager)
+    .with('npm', () => `npm run ${script}`)
+    .with('pnpm', () => `pnpm run ${script}`)
+    .with('yarn', () => `yarn run ${script}`)
+    .with('bun', () => `bun run ${script}`)
+    .with('deno', () => `deno task ${script}`)
+    .exhaustive()
 }

@@ -15,6 +15,7 @@ import {
   type Token,
 } from '../core/index.js'
 import { isValidCronExpression, matchesCronTrigger } from './runtime/cron.js'
+import { match } from 'ts-pattern'
 
 export type TaskRuntime<TInput, TOutput> = [TInput] extends [void]
   ? () => TOutput | Promise<TOutput>
@@ -207,89 +208,86 @@ export const tasksExtension = defineExecutionExtension<
   abiVersion: '1',
   name: 'loutre:tasks',
   compile(definition) {
-    switch (definition.type) {
-      case 'task':
-        return {
-          kind: 'execution',
-          id: `task.${definition.name}`,
-          executionKind: 'task.invocation',
-          dependencies: collectInjectedDependencies(
-            {
-              kind: 'execution',
-              id: `task:${definition.name}`,
-              name: definition.name,
-            },
-            () => definition.factory(),
-          ),
-          capabilities: [],
-          compiled: Object.freeze({
-            type: 'task',
-            taskExecutionId: definition[taskExecutionIdentityKey],
-            name: definition.name,
-            factory: definition.factory as TasksCompiledTask['factory'],
-          }),
-        }
-      case 'cron':
-        return {
-          kind: 'execution',
-          id: `trigger.${definition.name}`,
-          executionKind: 'trigger.cron',
-          dependencies: [],
-          capabilities: [],
-          compiled: Object.freeze({
-            type: 'cron',
-            name: definition.name,
-            expression: definition.expression,
-            timezone: definition.timezone,
-            overlap: definition.overlap,
-            taskExecutionId: definition.task[taskExecutionIdentityKey],
-            taskName: definition.task.name,
-          }),
-        }
-      case 'fixed-delay':
-        return {
-          kind: 'execution',
-          id: `trigger.${definition.name}`,
-          executionKind: 'trigger.fixed-delay',
-          dependencies: [],
-          capabilities: [],
-          compiled: Object.freeze({
-            type: 'fixed-delay',
-            name: definition.name,
-            delay: definition.delay,
-            immediate: definition.immediate,
-            taskExecutionId: definition.task[taskExecutionIdentityKey],
-            taskName: definition.task.name,
-          }),
-        }
-      case 'queue-consumer':
-        return {
-          kind: 'execution',
-          id: `trigger.${definition.name}`,
-          executionKind: 'trigger.queue-consumer',
-          dependencies: [queueRuntimeToken(definition.queue)],
-          capabilities: [],
-          compiled: Object.freeze({
-            type: 'queue-consumer',
-            name: definition.name,
-            queueName: definition.queue.name,
-            queuePayload: definition.queue.payload,
-            queueDriver: queueRuntimeToken(definition.queue),
-            taskExecutionId: definition.task[taskExecutionIdentityKey],
-            taskName: definition.task.name,
-          }),
-        }
-    }
+    return match(definition)
+      .with({ type: 'task' }, (candidate) => ({
+        kind: 'execution' as const,
+        id: `task.${candidate.name}`,
+        executionKind: 'task.invocation',
+        dependencies: collectInjectedDependencies(
+          {
+            kind: 'execution',
+            id: `task:${candidate.name}`,
+            name: candidate.name,
+          },
+          () => candidate.factory(),
+        ),
+        capabilities: [],
+        compiled: Object.freeze({
+          type: 'task',
+          taskExecutionId: candidate[taskExecutionIdentityKey],
+          name: candidate.name,
+          factory: candidate.factory as TasksCompiledTask['factory'],
+        }),
+      }))
+      .with({ type: 'cron' }, (candidate) => ({
+        kind: 'execution' as const,
+        id: `trigger.${candidate.name}`,
+        executionKind: 'trigger.cron',
+        dependencies: [],
+        capabilities: [],
+        compiled: Object.freeze({
+          type: 'cron',
+          name: candidate.name,
+          expression: candidate.expression,
+          timezone: candidate.timezone,
+          overlap: candidate.overlap,
+          taskExecutionId: candidate.task[taskExecutionIdentityKey],
+          taskName: candidate.task.name,
+        }),
+      }))
+      .with({ type: 'fixed-delay' }, (candidate) => ({
+        kind: 'execution' as const,
+        id: `trigger.${candidate.name}`,
+        executionKind: 'trigger.fixed-delay',
+        dependencies: [],
+        capabilities: [],
+        compiled: Object.freeze({
+          type: 'fixed-delay',
+          name: candidate.name,
+          delay: candidate.delay,
+          immediate: candidate.immediate,
+          taskExecutionId: candidate.task[taskExecutionIdentityKey],
+          taskName: candidate.task.name,
+        }),
+      }))
+      .with({ type: 'queue-consumer' }, (candidate) => ({
+        kind: 'execution' as const,
+        id: `trigger.${candidate.name}`,
+        executionKind: 'trigger.queue-consumer',
+        dependencies: [queueRuntimeToken(candidate.queue)],
+        capabilities: [],
+        compiled: Object.freeze({
+          type: 'queue-consumer',
+          name: candidate.name,
+          queueName: candidate.queue.name,
+          queuePayload: candidate.queue.payload,
+          queueDriver: queueRuntimeToken(candidate.queue),
+          taskExecutionId: candidate.task[taskExecutionIdentityKey],
+          taskName: candidate.task.name,
+        }),
+      }))
+      .exhaustive()
   },
   references(definition) {
-    switch (definition.type) {
-      case 'task':
-        return []
-      case 'cron':
-      case 'fixed-delay':
-      case 'queue-consumer':
-        return [definition.task]
-    }
+    return match(definition)
+      .with({ type: 'task' }, () => [])
+      .with(
+        { type: 'cron' },
+        { type: 'fixed-delay' },
+        { type: 'queue-consumer' },
+        (candidate) => [candidate.task],
+      )
+      .exhaustive()
   },
   validate({ executions }) {
     const taskExecutionIds = new Set(
@@ -337,34 +335,33 @@ export const tasksExtension = defineExecutionExtension<
   },
   projectGraph: ({ execution }) => {
     const compiled = execution.compiled
-    switch (compiled.type) {
-      case 'task':
-        return { type: 'task', name: compiled.name }
-      case 'cron':
-        return {
-          type: 'cron',
-          name: compiled.name,
-          expression: compiled.expression,
-          timezone: compiled.timezone,
-          overlap: compiled.overlap,
-          task: compiled.taskName,
-        }
-      case 'fixed-delay':
-        return {
-          type: 'fixed-delay',
-          name: compiled.name,
-          delay: compiled.delay,
-          immediate: compiled.immediate,
-          task: compiled.taskName,
-        }
-      case 'queue-consumer':
-        return {
-          type: 'queue-consumer',
-          name: compiled.name,
-          queue: compiled.queueName,
-          task: compiled.taskName,
-        }
-    }
+    return match(compiled)
+      .with({ type: 'task' }, (candidate) => ({
+        type: 'task',
+        name: candidate.name,
+      }))
+      .with({ type: 'cron' }, (candidate) => ({
+        type: 'cron',
+        name: candidate.name,
+        expression: candidate.expression,
+        timezone: candidate.timezone,
+        overlap: candidate.overlap,
+        task: candidate.taskName,
+      }))
+      .with({ type: 'fixed-delay' }, (candidate) => ({
+        type: 'fixed-delay',
+        name: candidate.name,
+        delay: candidate.delay,
+        immediate: candidate.immediate,
+        task: candidate.taskName,
+      }))
+      .with({ type: 'queue-consumer' }, (candidate) => ({
+        type: 'queue-consumer',
+        name: candidate.name,
+        queue: candidate.queueName,
+        task: candidate.taskName,
+      }))
+      .exhaustive()
   },
   host: {
     namespace: 'tasks',
@@ -756,14 +753,15 @@ async function startTrigger(
   ) => Promise<unknown>,
   applicationRuntime: ExecutionKernelRuntime,
 ): Promise<TriggerHandle> {
-  switch (trigger.type) {
-    case 'cron':
-      return startCronTrigger(trigger, run)
-    case 'fixed-delay':
-      return startFixedDelayTrigger(trigger, run)
-    case 'queue-consumer':
-      return startQueueTrigger(trigger, run, applicationRuntime)
-  }
+  return match(trigger)
+    .with({ type: 'cron' }, (candidate) => startCronTrigger(candidate, run))
+    .with({ type: 'fixed-delay' }, (candidate) =>
+      startFixedDelayTrigger(candidate, run),
+    )
+    .with({ type: 'queue-consumer' }, (candidate) =>
+      startQueueTrigger(candidate, run, applicationRuntime),
+    )
+    .exhaustive()
 }
 
 function startCronTrigger(

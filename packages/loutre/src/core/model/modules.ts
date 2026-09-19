@@ -9,6 +9,7 @@ import type { ModelBuildContext } from './context.js'
 import { appendLifecycleNodes } from './lifecycle.js'
 import { snapshotProvider } from './snapshot.js'
 import { getSourceLocation } from '../source-location.js'
+import { match } from 'ts-pattern'
 
 export function collectModuleDeclarations(context: ModelBuildContext): void {
   const {
@@ -108,30 +109,34 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
 function collectProviderDependencies(
   provider: ProviderDescriptor,
 ): readonly TokenLike[] {
-  switch (provider.kind) {
-    case 'class':
-      return Object.freeze(
-        collectInjectedDependencies(provider.provide, () =>
-          Reflect.construct(provider.useClass, []),
+  return match(provider)
+    .with({ kind: 'class' }, (candidate) =>
+      Object.freeze(
+        collectInjectedDependencies(candidate.provide, () =>
+          Reflect.construct(candidate.useClass, []),
         ),
-      )
-    case 'factory':
-      return Object.freeze([...provider.inject])
-    case 'conditional': {
+      ),
+    )
+    .with({ kind: 'factory' }, (candidate) =>
+      Object.freeze([...candidate.inject]),
+    )
+    .with({ kind: 'conditional' }, (candidate) => {
       const dependencies = new Set<TokenLike>()
-      for (const implementation of Object.values(provider.mapping)) {
+      for (const implementation of Object.values(candidate.mapping)) {
         for (const dependency of collectInjectedDependencies(
-          provider.provide,
+          candidate.provide,
           () => Reflect.construct(implementation, []),
         )) {
           dependencies.add(dependency)
         }
       }
       return Object.freeze([...dependencies])
-    }
-    case 'value':
-    case 'environment':
-    case 'arguments':
-      return Object.freeze([])
-  }
+    })
+    .with(
+      { kind: 'value' },
+      { kind: 'environment' },
+      { kind: 'arguments' },
+      () => Object.freeze([]),
+    )
+    .exhaustive()
 }

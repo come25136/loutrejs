@@ -20,6 +20,7 @@ import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
+import { match } from 'ts-pattern'
 import {
   emitApplication,
   loadApplicationDefinition,
@@ -477,32 +478,35 @@ function hasHostNamespace(
 }
 
 function renderDeploymentEntry(runtime: DeploymentRuntime): string {
-  switch (runtime) {
-    case 'aws-lambda':
-      return [
+  return match(runtime)
+    .with('aws-lambda', () =>
+      [
         "import application from './application.mjs'",
         "import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'",
         '',
         'export const handler = awsLambdaRuntime.bind({ application })',
         '',
-      ].join('\n')
-    case 'cloudflare-workers':
-      return [
+      ].join('\n'),
+    )
+    .with('cloudflare-workers', () =>
+      [
         "import application from './application.mjs'",
         "import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'",
         '',
         'export default cloudflareWorkersRuntime.bind({ application })',
         '',
-      ].join('\n')
-    case 'deno':
-      return [
+      ].join('\n'),
+    )
+    .with('deno', () =>
+      [
         "import application from './application.mjs'",
         "import { denoRuntime } from '@loutrejs/loutre/runtime/deno'",
         '',
         'export default denoRuntime.bind({ application })',
         '',
-      ].join('\n')
-  }
+      ].join('\n'),
+    )
+    .exhaustive()
 }
 
 function isGraphSubject(value: string | undefined): value is GraphSubject {
@@ -526,43 +530,38 @@ function graphData(
   graph: ApplicationModelGraphIR,
   subject: GraphSubject,
 ): unknown {
-  switch (subject) {
-    case 'all': {
+  return match(subject)
+    .with('all', () => {
       const view = buildGraphView(graph, subject)
       return {
         nodes: view.nodes,
         edges: view.edges,
         diagnostics: graph.diagnostics,
       }
-    }
-    case 'modules':
-      return {
-        modules: graph.modules.map((module) => moduleData(graph, module)),
-        diagnostics: graph.diagnostics,
-      }
-    case 'di':
-      return {
-        nodes: graph.nodes,
-        edges: graph.edges,
-        diagnostics: graph.diagnostics,
-      }
-    case 'http':
-      return {
-        executions: httpExecutions(graph),
-        routes: httpRoutes(graph),
-        diagnostics: graph.diagnostics,
-      }
-    case 'runtime':
-      return {
-        capabilities: requiredCapabilities(graph),
-        diagnostics: graph.diagnostics,
-      }
-    case 'executions':
-      return {
-        executions: graph.executions,
-        diagnostics: graph.diagnostics,
-      }
-  }
+    })
+    .with('modules', () => ({
+      modules: graph.modules.map((module) => moduleData(graph, module)),
+      diagnostics: graph.diagnostics,
+    }))
+    .with('di', () => ({
+      nodes: graph.nodes,
+      edges: graph.edges,
+      diagnostics: graph.diagnostics,
+    }))
+    .with('http', () => ({
+      executions: httpExecutions(graph),
+      routes: httpRoutes(graph),
+      diagnostics: graph.diagnostics,
+    }))
+    .with('runtime', () => ({
+      capabilities: requiredCapabilities(graph),
+      diagnostics: graph.diagnostics,
+    }))
+    .with('executions', () => ({
+      executions: graph.executions,
+      diagnostics: graph.diagnostics,
+    }))
+    .exhaustive()
 }
 
 function renderTextGraph(
@@ -1120,26 +1119,25 @@ function selectApplicationNodes(
   graph: ApplicationModelGraphIR,
   subject: Exclude<GraphSubject, 'http'>,
 ): GraphNodeIR[] {
-  switch (subject) {
-    case 'all':
-      return graph.nodes.filter(
+  return match(subject)
+    .with('all', () =>
+      graph.nodes.filter(
         (node) =>
           node.kind === 'module' ||
           node.kind === 'provider' ||
           node.kind === 'execution' ||
           isRuntimeCapabilityNode(node),
-      )
-    case 'modules':
-      return [...graph.modules]
-    case 'di':
-      return graph.nodes.filter(
+      ),
+    )
+    .with('modules', () => [...graph.modules])
+    .with('di', () =>
+      graph.nodes.filter(
         (node) => node.kind === 'provider' || node.kind === 'execution',
-      )
-    case 'executions':
-      return [...graph.executions]
-    case 'runtime':
-      return graph.nodes.filter(isRuntimeCapabilityNode)
-  }
+      ),
+    )
+    .with('executions', () => [...graph.executions])
+    .with('runtime', () => graph.nodes.filter(isRuntimeCapabilityNode))
+    .exhaustive()
 }
 
 function projectGraphViewNode(node: GraphNodeIR): GraphViewNode {
@@ -1349,26 +1347,19 @@ function httpHandlerId(executionId: string, routeName: string): string {
 }
 
 function mermaidNodeLabel(node: GraphViewNode): string {
-  const role = (() => {
-    switch (node.kind) {
-      case 'module':
-        return 'Module'
-      case 'provider':
-        return 'Provider'
-      case 'execution':
-        return node.extension?.hostNamespace === 'http'
-          ? 'HTTP Controller'
-          : 'Execution'
-      case 'entrypoint':
-        return 'Route'
-      case 'middleware':
-        return 'Middleware'
-      case 'handler':
-        return 'Handler'
-      case 'runtime-capability':
-        return 'Runtime Capability'
-    }
-  })()
+  const role = match(node)
+    .with({ kind: 'module' }, () => 'Module')
+    .with({ kind: 'provider' }, () => 'Provider')
+    .with({ kind: 'execution' }, (candidate) =>
+      candidate.extension?.hostNamespace === 'http'
+        ? 'HTTP Controller'
+        : 'Execution',
+    )
+    .with({ kind: 'entrypoint' }, () => 'Route')
+    .with({ kind: 'middleware' }, () => 'Middleware')
+    .with({ kind: 'handler' }, () => 'Handler')
+    .with({ kind: 'runtime-capability' }, () => 'Runtime Capability')
+    .exhaustive()
   const label = mermaidText(`${role}: ${node.label}`)
   if (node.source === undefined) return label
   const source = mermaidText(formatMermaidSourceLocation(node.source))
@@ -1386,24 +1377,19 @@ type MermaidNodeClass =
   | 'runtimeCapability'
 
 function mermaidNodeClass(node: GraphViewNode): MermaidNodeClass {
-  switch (node.kind) {
-    case 'module':
-      return 'moduleNode'
-    case 'provider':
-      return 'provider'
-    case 'execution':
-      return node.extension?.hostNamespace === 'http'
+  return match(node)
+    .with({ kind: 'module' }, () => 'moduleNode' as const)
+    .with({ kind: 'provider' }, () => 'provider' as const)
+    .with({ kind: 'execution' }, (candidate) =>
+      candidate.extension?.hostNamespace === 'http'
         ? 'controller'
-        : 'execution'
-    case 'entrypoint':
-      return 'route'
-    case 'middleware':
-      return 'middleware'
-    case 'handler':
-      return 'handler'
-    case 'runtime-capability':
-      return 'runtimeCapability'
-  }
+        : 'execution',
+    )
+    .with({ kind: 'entrypoint' }, () => 'route' as const)
+    .with({ kind: 'middleware' }, () => 'middleware' as const)
+    .with({ kind: 'handler' }, () => 'handler' as const)
+    .with({ kind: 'runtime-capability' }, () => 'runtimeCapability' as const)
+    .exhaustive()
 }
 
 function mermaidNodeStrokeColor(
@@ -1421,16 +1407,14 @@ function mermaidEdgeLabel(
   if (edge.kind !== 'owns') return edge.label ?? edge.kind
   const target = byId.get(edge.to)
   if (!target) return edge.kind
-  switch (target.kind) {
-    case 'provider':
-      return 'provider'
-    case 'execution':
-      return target.extension?.hostNamespace === 'http'
+  return match(target)
+    .with({ kind: 'provider' }, () => 'provider')
+    .with({ kind: 'execution' }, (candidate) =>
+      candidate.extension?.hostNamespace === 'http'
         ? 'controller'
-        : 'execution'
-    default:
-      return edge.kind
-  }
+        : 'execution',
+    )
+    .otherwise(() => edge.kind)
 }
 
 function groupEdges(edges: readonly GraphEdgeIR[]): Map<string, GraphEdgeIR[]> {

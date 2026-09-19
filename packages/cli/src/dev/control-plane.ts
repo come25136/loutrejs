@@ -6,6 +6,7 @@ import type {
 } from '@loutrejs/loutre/devtools'
 import type { ApplicationChannel } from './application-channel.js'
 import { DevtoolsEventStore } from './event-store.js'
+import { match } from 'ts-pattern'
 
 export interface DevtoolsControlGraphSnapshot {
   readonly schemaVersion: number
@@ -88,38 +89,43 @@ export class DevtoolsControlPlane {
   }
 
   async request(request: DevtoolsControlRequest): Promise<unknown> {
-    switch (request.method) {
-      case 'graph.get':
-        return this.options.graphState()
-      case 'graph.reload':
+    return match(request)
+      .with({ method: 'graph.get' }, () => this.options.graphState())
+      .with({ method: 'graph.reload' }, async () => {
         await this.options.reload()
         return this.options.graphState()
-      case 'runtime.runs':
-        return { runs: this.#runtime().eventStore.listRuns() }
-      case 'runtime.traces':
-        return { traces: this.#runtime().eventStore.listTraces() }
-      case 'runtime.traces.clear': {
+      })
+      .with({ method: 'runtime.runs' }, () => ({
+        runs: this.#runtime().eventStore.listRuns(),
+      }))
+      .with({ method: 'runtime.traces' }, () => ({
+        traces: this.#runtime().eventStore.listTraces(),
+      }))
+      .with({ method: 'runtime.traces.clear' }, () => {
         const runtime = this.#runtime()
         const cleared = runtime.eventStore.clearEvents()
         this.publishRuntimeSnapshot()
         return { cleared }
-      }
-      case 'runtime.trace.get': {
-        const { traceId } = paramsRecord(request.params)
+      })
+      .with({ method: 'runtime.trace.get' }, (candidate) => {
+        const { traceId } = paramsRecord(candidate.params)
         if (typeof traceId !== 'string' || traceId.length === 0) {
           throw new Error('Trace id is required.')
         }
         const events = this.#runtime().eventStore.traceEvents(traceId)
         if (events.length === 0) throw new Error('Trace not found.')
         return { traceId, events }
-      }
-      case 'runtime.capsule.replay':
-        return this.#replayCapsule(request.params)
-      case 'runtime.provider.playground':
-        return this.#providerPlayground(request.params)
-      case 'runtime.provider.invoke':
-        return this.#invokeProvider(request.params)
-    }
+      })
+      .with({ method: 'runtime.capsule.replay' }, (candidate) =>
+        this.#replayCapsule(candidate.params),
+      )
+      .with({ method: 'runtime.provider.playground' }, (candidate) =>
+        this.#providerPlayground(candidate.params),
+      )
+      .with({ method: 'runtime.provider.invoke' }, (candidate) =>
+        this.#invokeProvider(candidate.params),
+      )
+      .exhaustive()
   }
 
   #emit(event: DevtoolsControlEvent): void {
