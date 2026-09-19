@@ -3,9 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "generate:licenses": "node scripts/generate-oss-licenses.mjs",
     "dev": "next dev",
-    "predev": "node ../scripts/generate-website-licenses.mjs",
-    "prebuild": "node ../scripts/generate-website-licenses.mjs",
+    "predev": "npm run generate:licenses",
+    "prebuild": "npm run generate:licenses",
     "build": "next build"
   },
   "dependencies": {
