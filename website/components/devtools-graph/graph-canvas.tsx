@@ -43,6 +43,7 @@ const edgeTypes = { 'graph-edge': GraphEdge }
 
 interface GraphCanvasProps {
   readonly graph: GraphSnapshot
+  readonly emptyMessage: string
   readonly selectedId?: string
   readonly focusRequest?: {
     readonly nodeId: string
@@ -90,6 +91,7 @@ export function connectedNodeIds(
 
 export function GraphCanvas({
   graph,
+  emptyMessage,
   selectedId,
   focusRequest,
   onSelect,
@@ -325,7 +327,7 @@ export function GraphCanvas({
     return <div className="canvas-message">Layout failed: {layoutError}</div>
   }
   if (graph.nodes.length === 0) {
-    return <div className="canvas-message">No nodes match this view.</div>
+    return <div className="canvas-message">{emptyMessage}</div>
   }
 
   return (

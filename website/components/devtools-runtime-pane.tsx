@@ -61,7 +61,7 @@ const copy = {
     traces: 'Traces',
     pause: '更新を一時停止',
     resume: '更新を再開',
-    noTrace: 'Applicationを実行するとExecution traceがここに流れる。',
+    noTrace: 'Applicationを実行するとExecution traceがここに流れます。',
     timeline: 'Timeline',
     waterfall: 'Waterfall',
     details: 'Execution details',

@@ -54,6 +54,8 @@ const copy = {
     nodes: 'Nodes',
     filters: 'Filters',
     ownership: 'Ownership edges',
+    emptyGraph: 'No nodes match this graph.',
+    emptyView: 'No nodes match this view.',
     inspector: 'Inspector',
     selectNode: 'Select a node to inspect its semantics and relationships.',
     relationships: 'Relationships',
@@ -87,14 +89,16 @@ const copy = {
     cancel: 'キャンセル',
     apply: '適用',
     stale: '直前の有効なGraphを表示中',
-    reload: 'Graphを再build',
+    reload: 'Graphをrebuild',
     explorer: 'Explorer',
     search: 'Nodeを検索…',
     nodes: 'Nodes',
     filters: 'Filters',
-    ownership: 'Ownership edge',
+    ownership: 'Ownership edges',
+    emptyGraph: 'このGraphに一致するNodeはありません。',
+    emptyView: 'このViewに一致するNodeはありません。',
     inspector: 'Inspector',
-    selectNode: 'Nodeを選択するとsemanticsとrelationshipを確認できます。',
+    selectNode: 'Nodeを選択するとsemanticsとrelationshipsを確認できます。',
     relationships: 'Relationships',
     source: 'Source',
     attributes: 'Attributes',
@@ -103,7 +107,7 @@ const copy = {
     noDiagnostics: '問題は検出されていません。',
     agentPrompt: 'エージェント向けプロンプト',
     agentPromptHint:
-      '現在のGraph診断を含む、エージェントへの修正依頼プロンプトです。',
+      '現在のGraph診断を含む、エージェント向けの修正依頼プロンプトです。',
     copyPrompt: 'プロンプトをコピー',
     copied: 'コピーしました',
     close: '閉じる',
@@ -370,6 +374,7 @@ export function DevtoolsPage({
                 <PaneTitle title={text.explorer} label="TREE" />
                 <NodeTree
                   graph={graph}
+                  emptyMessage={text.emptyGraph}
                   selectedId={selectedId}
                   onSelect={(nodeId) => {
                     setSelectedId(nodeId)
@@ -451,6 +456,7 @@ export function DevtoolsPage({
                 <div className="min-h-0 flex-1 bg-surface-muted/35">
                   <GraphCanvas
                     graph={graph}
+                    emptyMessage={text.emptyView}
                     selectedId={selectedId}
                     focusRequest={graphFocusRequest}
                     onSelect={(node) => setSelectedId(node?.id)}

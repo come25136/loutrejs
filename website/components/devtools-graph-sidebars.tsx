@@ -49,10 +49,12 @@ export interface DevtoolsGraphInspectorLabels {
 
 export function NodeTree({
   graph,
+  emptyMessage,
   selectedId,
   onSelect,
 }: {
   graph: GraphSnapshot
+  emptyMessage: string
   selectedId?: string
   onSelect: (id: string) => void
 }) {
@@ -64,7 +66,7 @@ export function NodeTree({
   if (tree.length === 0) {
     return (
       <div className="min-h-0 flex-1 px-3 py-4 text-[11px] text-ink-muted">
-        No nodes match this graph.
+        {emptyMessage}
       </div>
     )
   }
