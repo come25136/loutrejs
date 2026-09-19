@@ -78,6 +78,10 @@ export class DevtoolsControlPlane {
     })
   }
 
+  publishRuntimeSnapshot(): void {
+    this.#emit({ type: 'event', event: 'runtime.snapshot', payload: [] })
+  }
+
   close(): void {
     this.#unsubscribeRuntime?.()
     this.#listeners.clear()
@@ -97,7 +101,7 @@ export class DevtoolsControlPlane {
       case 'runtime.traces.clear': {
         const runtime = this.#runtime()
         const cleared = runtime.eventStore.clearEvents()
-        this.#emit({ type: 'event', event: 'runtime.snapshot', payload: [] })
+        this.publishRuntimeSnapshot()
         return { cleared }
       }
       case 'runtime.trace.get': {

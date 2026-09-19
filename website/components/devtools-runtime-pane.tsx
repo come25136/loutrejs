@@ -56,6 +56,8 @@ const copy = {
     clearHistory: 'Clear',
     linkCopied: 'Link copied',
     valueCopied: 'Value copied',
+    runtimeNotConnected:
+      'No Application runtime is connected. Ensure the Application started by loutre dev imports DevtoolsModule().',
   },
   ja: {
     traces: 'Traces',
@@ -77,6 +79,8 @@ const copy = {
     clearHistory: '消去',
     linkCopied: 'リンクをコピーしました',
     valueCopied: '値をコピーしました',
+    runtimeNotConnected:
+      'アプリケーションランタイムが接続されていません。loutre devで起動するアプリケーションでDevtoolsModule()をimportしてください。',
   },
 } as const
 
@@ -112,6 +116,7 @@ export function DevtoolsRuntimePane({
     timeline,
     selectedSpanId,
     selectedTimeline,
+    hasConnectedRuntime,
     runtimeError,
     paused,
     clearingHistory,
@@ -228,9 +233,14 @@ export function DevtoolsRuntimePane({
 
         <div className="grid gap-1 p-2">
           {traces.length === 0 ? (
-            <p className="px-3 py-8 text-center text-[11px] leading-5 text-ink-muted">
-              {text.noTrace}
-            </p>
+            <div className="px-3 py-8 text-center text-[11px] leading-5 text-ink-muted">
+              <p>{text.noTrace}</p>
+              {!hasConnectedRuntime && (
+                <p className="mt-3 rounded-md border border-amber-400/35 bg-amber-500/8 px-3 py-2 text-left text-amber-800 dark:text-amber-200">
+                  {text.runtimeNotConnected}
+                </p>
+              )}
+            </div>
           ) : (
             traces.map((trace) => (
               <button
