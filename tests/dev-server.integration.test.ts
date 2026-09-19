@@ -560,6 +560,7 @@ describe('Loutre Devtools control channel', () => {
         application.once('open', resolve)
         application.once('error', reject)
       })
+      const runtimeConnected = client.nextEvent('runtime.snapshot')
       application.send(
         JSON.stringify({
           type: 'hello',
@@ -568,6 +569,8 @@ describe('Loutre Devtools control channel', () => {
           application: { runtime: 'node', pid: 1234 },
         }),
       )
+
+      expect(await runtimeConnected).toEqual([])
 
       const runtimeEvent = client.nextEvent('runtime.batch')
       application.send(

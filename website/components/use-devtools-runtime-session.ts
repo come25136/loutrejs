@@ -5,8 +5,10 @@ import { devtoolsErrorMessage } from '../lib/devtools-error'
 import {
   clearTraces,
   fetchTrace,
+  fetchRuns,
   fetchTraces,
   subscribeRuntimeEvents,
+  type DevtoolsRun,
   type DevtoolsTraceSummary,
   type RuntimeEvent,
 } from '../lib/devtools-runtime'
@@ -26,6 +28,7 @@ export interface DevtoolsRuntimeSession {
   readonly timeline: ReturnType<typeof buildTimeline>
   readonly selectedSpanId?: string
   readonly selectedTimeline?: TimelineEntry
+  readonly hasConnectedRuntime: boolean
   readonly runtimeError?: string
   readonly paused: boolean
   readonly clearingHistory: boolean
@@ -43,6 +46,7 @@ export function useDevtoolsRuntimeSession({
   onNavigateRuntime,
 }: RuntimeSessionOptions): DevtoolsRuntimeSession {
   const [traces, setTraces] = useState<readonly DevtoolsTraceSummary[]>([])
+  const [runs, setRuns] = useState<readonly DevtoolsRun[]>([])
   const [selectedTraceId, setSelectedTraceId] = useState<string>()
   const [events, setEvents] = useState<readonly RuntimeEvent[]>([])
   const [eventsTraceId, setEventsTraceId] = useState<string>()
@@ -54,6 +58,7 @@ export function useDevtoolsRuntimeSession({
 
   useEffect(() => {
     setTraces([])
+    setRuns([])
     setEvents([])
     setEventsTraceId(undefined)
     setSelectedTraceId(undefined)
@@ -96,6 +101,21 @@ export function useDevtoolsRuntimeSession({
       active = false
     }
   }, [baseUrl, connected, paused, runtimeRevision])
+
+  useEffect(() => {
+    if (!connected) return
+    let active = true
+    void fetchRuns(baseUrl)
+      .then((nextRuns) => {
+        if (active) setRuns(nextRuns)
+      })
+      .catch((error: unknown) => {
+        if (active) setRuntimeError(devtoolsErrorMessage(error))
+      })
+    return () => {
+      active = false
+    }
+  }, [baseUrl, connected, runtimeRevision])
 
   useEffect(() => {
     if (!connected || !selectedTraceId) return
@@ -169,6 +189,7 @@ export function useDevtoolsRuntimeSession({
     timeline,
     selectedSpanId,
     selectedTimeline,
+    hasConnectedRuntime: runs.some((run) => run.stoppedAt === undefined),
     runtimeError,
     paused,
     clearingHistory,

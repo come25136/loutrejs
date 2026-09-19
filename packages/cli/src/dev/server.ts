@@ -154,7 +154,10 @@ export async function startDevServer(
     handleHttpRequest(request, response, options.projectRoot, options.entry)
   })
 
-  const applicationChannel = attachApplicationChannel(server, { eventStore })
+  const applicationChannel = attachApplicationChannel(server, {
+    eventStore,
+    onRunChanged: () => controlPlane?.publishRuntimeSnapshot(),
+  })
 
   controlPlane = new DevtoolsControlPlane({
     graphState: () => state,

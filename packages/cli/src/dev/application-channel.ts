@@ -18,6 +18,7 @@ export const DEVTOOLS_APPLICATION_CHANNEL_PATH = '/__loutre/app'
 
 export interface ApplicationChannelOptions {
   readonly eventStore: DevtoolsEventStore
+  readonly onRunChanged?: () => void
 }
 
 export type DevtoolsApplicationCommand =
@@ -197,6 +198,7 @@ function attachApplication(
       }
       applications.set(runId, { websocket, pending })
       options.eventStore.connectRun(message.runId, message.application ?? {})
+      options.onRunChanged?.()
       return
     }
 
@@ -226,6 +228,7 @@ function attachApplication(
     if (runId && applications.get(runId)?.websocket === websocket) {
       applications.delete(runId)
       options.eventStore.stopRun(runId)
+      options.onRunChanged?.()
     }
   })
 }
