@@ -2,9 +2,9 @@ import type { Metadata } from 'next'
 import { HomePage } from '../../components/home-page'
 
 export const metadata: Metadata = {
-  title: 'Loutre — ランタイムに縛られないTypeScriptアプリケーション',
+  title: 'Loutre — ランタイムに縛られないTypeScript Application Framework',
   description:
-    'Application、Contract、DI、Taskを一つのGraphとして構築し、複数のRuntimeで実行できるTypeScript Application Framework',
+    'Loutreはひとつの明示的なApplication ModelをNode.js、Bun、Deno、Cloudflare Workers、AWS Lambda、Electronで実行できるTypeScript Application Frameworkです。',
   alternates: {
     canonical: '/ja/',
     languages: {

@@ -13,11 +13,11 @@ const googleAnalyticsId = 'G-46R1D6Y88K'
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: 'Loutre — TypeScript applications for any runtime',
+    default: 'Loutre — TypeScript Applications for Any Runtime',
     template: '%s | Loutre',
   },
   description:
-    'A TypeScript application framework that builds Application, Contract, DI, and Task as one Graph and runs it across multiple runtimes.',
+    'A TypeScript application framework that runs one explicit Application Model across Node.js, Bun, Deno, Cloudflare Workers, AWS Lambda, and Electron.',
   alternates: {
     canonical: '/',
     languages: {
@@ -30,24 +30,24 @@ export const metadata: Metadata = {
     locale: 'en_US',
     alternateLocale: ['ja_JP'],
     siteName: 'Loutre',
-    title: 'Loutre — TypeScript applications for any runtime',
+    title: 'Loutre — TypeScript Applications for Any Runtime',
     description:
-      'Build Application, Contract, DI, and Task as one Graph and run it across multiple runtimes.',
+      'Run one explicit Application Model across server, edge, serverless, and desktop runtimes.',
     images: [
       {
         url: '/og.png',
         width: 1280,
         height: 640,
-        alt: 'Loutre — A type-safe application framework for any runtime',
+        alt: 'Loutre — TypeScript Applications for Any Runtime',
       },
     ],
     url: siteUrl,
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Loutre — TypeScript applications for any runtime',
+    title: 'Loutre — TypeScript Applications for Any Runtime',
     description:
-      'Build Application, Contract, DI, and Task as one Graph and run it across multiple runtimes.',
+      'Run one explicit Application Model across server, edge, serverless, and desktop runtimes.',
     images: ['/og.png'],
   },
 }

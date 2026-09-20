@@ -146,19 +146,6 @@ html[data-theme='dark'] {
 
   html[data-theme='dark'] body {
     background-color: var(--site-canvas);
-    background-image:
-      radial-gradient(
-        circle at 18% -10%,
-        rgb(14 165 233 / 0.11),
-        transparent 34rem
-      ),
-      radial-gradient(
-        circle at 88% 8%,
-        rgb(37 99 235 / 0.08),
-        transparent 30rem
-      ),
-      linear-gradient(180deg, #09121b 0%, #081018 48%, #070d13 100%);
-    background-attachment: fixed;
   }
 
   a,

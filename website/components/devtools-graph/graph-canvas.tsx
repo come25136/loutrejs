@@ -45,6 +45,7 @@ interface GraphCanvasProps {
   readonly graph: GraphSnapshot
   readonly emptyMessage: string
   readonly selectedId?: string
+  readonly showMiniMap?: boolean
   readonly focusRequest?: {
     readonly nodeId: string
     readonly nonce: number
@@ -93,6 +94,7 @@ export function GraphCanvas({
   graph,
   emptyMessage,
   selectedId,
+  showMiniMap = true,
   focusRequest,
   onSelect,
 }: GraphCanvasProps) {
@@ -377,12 +379,14 @@ export function GraphCanvas({
       minZoom={0.08}
       maxZoom={2}
     >
-      <MiniMap
-        nodeColor={miniMapColor}
-        maskColor="rgba(107, 114, 128, 0.16)"
-        pannable
-        zoomable
-      />
+      {showMiniMap && (
+        <MiniMap
+          nodeColor={miniMapColor}
+          maskColor="rgba(107, 114, 128, 0.16)"
+          pannable
+          zoomable
+        />
+      )}
       <Controls showInteractive={false} />
       <Background
         variant={BackgroundVariant.Dots}
