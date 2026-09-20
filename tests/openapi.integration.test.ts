@@ -75,6 +75,27 @@ describe('OpenAPI generation', () => {
     })
   })
 
+  it('HttpContractから生成する場合もparameter名だけ異なる重複routeを拒否する', () => {
+    const contract = http.contract({
+      first: {
+        method: 'GET',
+        path: '/users/{first}',
+        responses: { ok: { status: 204 } },
+      },
+      second: {
+        method: 'get',
+        path: '/users/{second}',
+        responses: { ok: { status: 204 } },
+      },
+    })
+
+    expect(() =>
+      generateOpenApi(contract, {
+        info: { title: 'Users API', version: '1.0.0' },
+      }),
+    ).toThrow('LUTRE_OPENAPI_OPERATION_001')
+  })
+
   it('operationIdをOpenAPI生成側で明示的に決められる', () => {
     const contract = http.contract({
       get: {

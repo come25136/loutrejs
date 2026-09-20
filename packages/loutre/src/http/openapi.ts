@@ -12,6 +12,7 @@ import {
   type HttpResponseHeadersDefinition,
   type HttpResponseHeadersWithDefaults,
 } from './extension.js'
+import { createHttpDispatchKey, parseHttpPath } from './path.js'
 import { match } from 'ts-pattern'
 
 export interface OpenApiInfo {
@@ -112,10 +113,22 @@ export function generateOpenApi(
 
 function httpOperationTargets(source: OpenApiSource): HttpOperationTarget[] {
   if (source.kind === 'http-contract') {
-    return Object.entries(source.routes).map(([procedure, definition]) => ({
-      procedure,
-      definition,
-    }))
+    const dispatches = new Map<string, HttpExecutionRouteDefinition>()
+    return Object.entries(source.routes).map(([procedure, definition]) => {
+      const dispatch = createHttpDispatchKey(
+        definition.method,
+        parseHttpPath(definition.path),
+      )
+      const existing = dispatches.get(dispatch)
+      if (existing) {
+        throw openApiError(
+          'LUTRE_OPENAPI_OPERATION_001',
+          `Duplicate OpenAPI operation: ${definition.method.toUpperCase()} ${definition.path} conflicts with ${existing.method.toUpperCase()} ${existing.path}`,
+        )
+      }
+      dispatches.set(dispatch, definition)
+      return { procedure, definition }
+    })
   }
 
   assertValidApplicationModel(source)
