@@ -1,7 +1,38 @@
-import { runOpenApiCli } from '../packages/cli/src/openapi-cli.js'
 import { resolve } from 'node:path'
+import { runOpenApiCli } from '../packages/cli/src/openapi-cli.js'
 
 describe('HTTP ExtensionのOpenAPI CLI', () => {
+  it('default exportされたHttpContractからOpenAPIを生成する', async () => {
+    const output: string[] = []
+    const errors: string[] = []
+
+    const result = await runOpenApiCli(['--entry', 'src/api.ts'], {
+      cwd: resolve('integrations', 'openapi-contract'),
+      stdout: (value) => output.push(value),
+      stderr: (value) => errors.push(value),
+    })
+
+    expect(result).toBe(0)
+    expect(errors).toEqual([])
+
+    const document = JSON.parse(output[0]!)
+    expect(document.openapi).toBe('3.2.0')
+    expect(document.paths['/users/{id}'].get).toBeDefined()
+    expect(document.paths['/users'].post).toBeDefined()
+  })
+
+  it('OpenAPIに無効なdefault exportを拒否する', async () => {
+    await expect(
+      runOpenApiCli(['--entry', 'invalid-openapi-entry.ts'], {
+        cwd: resolve('tests', 'fixtures'),
+        stdout: () => undefined,
+        stderr: () => undefined,
+      }),
+    ).rejects.toThrow(
+      'OpenAPI entry must default export an ApplicationDefinition or HttpContract.',
+    )
+  })
+
   it.each(['hello-http', 'cors', 'basic-auth', 'bearer-auth'])(
     '%sの新APIからルートとschemaを出力する',
     async (example) => {

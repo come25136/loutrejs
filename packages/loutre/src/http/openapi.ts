@@ -6,6 +6,7 @@ import {
 } from '../core/index.js'
 import {
   httpExecutionExtension,
+  type HttpContract,
   type HttpExecutionResponseDefinition,
   type HttpExecutionRouteDefinition,
   type HttpResponseHeadersDefinition,
@@ -81,33 +82,22 @@ const FIXED_METHODS = new Set([
   'query',
 ])
 
+export type OpenApiSource = ApplicationModel | HttpContract
+
 export function generateOpenApi(
-  source: ApplicationModel | { readonly model: ApplicationModel },
+  source: OpenApiSource,
   options: GenerateOpenApiOptions,
 ): OpenApiDocument {
-  const model = 'model' in source ? source.model : source
-  assertValidApplicationModel(model)
-
   const registry = new SchemaRegistry()
   const paths: Record<string, OpenApiPathItem> = {}
   const operationIds = new Set<string>()
-  const http = model.extensions.get(httpExecutionExtension)
-  for (const execution of http?.executions ?? []) {
-    for (const route of execution.compiled.routes) {
-      const target: HttpOperationTarget = {
-        procedure: route.name,
-        definition: {
-          ...route.definition,
-          method: route.method,
-          path: route.path,
-        },
-      }
-      attachOperation(
-        paths,
-        target.definition,
-        createOperation(target, registry, operationIds, options.operationId),
-      )
-    }
+
+  for (const target of httpOperationTargets(source)) {
+    attachOperation(
+      paths,
+      target.definition,
+      createOperation(target, registry, operationIds, options.operationId),
+    )
   }
 
   const schemas = registry.components()
@@ -118,6 +108,28 @@ export function generateOpenApi(
     paths,
     ...(Object.keys(schemas).length === 0 ? {} : { components: { schemas } }),
   }
+}
+
+function httpOperationTargets(source: OpenApiSource): HttpOperationTarget[] {
+  if (source.kind === 'http-contract') {
+    return Object.entries(source.routes).map(([procedure, definition]) => ({
+      procedure,
+      definition,
+    }))
+  }
+
+  assertValidApplicationModel(source)
+  const http = source.extensions.get(httpExecutionExtension)
+  return (http?.executions ?? []).flatMap((execution) =>
+    execution.compiled.routes.map((route) => ({
+      procedure: route.name,
+      definition: {
+        ...route.definition,
+        method: route.method,
+        path: route.path,
+      },
+    })),
+  )
 }
 
 function createOperation(
