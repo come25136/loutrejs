@@ -900,12 +900,15 @@ export function defineHttpContract(
   routes: HttpContractRouteTree,
 ): HttpContract {
   const resolvedRoutes = resolveHttpContractRoutes(routes)
-  for (const [name, route] of Object.entries(resolvedRoutes)) {
-    compileHttpRoute(name, route)
-  }
+  const canonicalRoutes = Object.fromEntries(
+    Object.entries(resolvedRoutes).map(([name, route]) => [
+      name,
+      compileHttpRoute(name, route).definition,
+    ]),
+  )
   return Object.freeze({
     kind: 'http-contract',
-    routes: Object.freeze(resolvedRoutes),
+    routes: Object.freeze(canonicalRoutes),
   })
 }
 

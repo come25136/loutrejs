@@ -117,6 +117,41 @@ describe('OpenAPI generation', () => {
     expect(methods).toEqual(['GET'])
   })
 
+  it('HttpContractとApplication Modelから同じOpenAPI projectionを生成する', () => {
+    const tags = ['before']
+    const response = { status: 200, description: 'before' } as const
+    const contract = http.contract({
+      get: {
+        method: 'get',
+        path: '/items',
+        tags,
+        responses: { ok: response },
+      },
+    })
+    const application = applicationFor(contract, () => ({
+      get: (ctx) => ctx.response.ok({}),
+    }))
+
+    ;(response as { status: number; description: string }).status = 201
+    ;(response as { status: number; description: string }).description = 'after'
+    tags.push('after')
+
+    const options = {
+      info: { title: 'Projection API', version: '1.0.0' },
+    }
+    const contractDocument = generateOpenApi(contract, options)
+    const applicationDocument = generateOpenApi(application.model, options)
+
+    expect(contractDocument).toEqual(applicationDocument)
+    const operation = contractDocument.paths['/items']?.get as Record<
+      string,
+      any
+    >
+    expect(operation.tags).toEqual(['before'])
+    expect(operation.responses).toHaveProperty('200')
+    expect(operation.responses).not.toHaveProperty('201')
+  })
+
   it('operationIdをOpenAPI生成側で明示的に決められる', () => {
     const contract = http.contract({
       get: {
