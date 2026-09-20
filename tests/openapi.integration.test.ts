@@ -96,6 +96,27 @@ describe('OpenAPI generation', () => {
     ).toThrow('LUTRE_OPENAPI_OPERATION_001')
   })
 
+  it('HttpContractから直接生成してもHTTP methodをcompiled routeと同じ形式へ正規化する', () => {
+    const contract = http.contract({
+      get: {
+        method: 'get',
+        path: '/users',
+        responses: { ok: { status: 204 } },
+      },
+    })
+    const methods: string[] = []
+
+    generateOpenApi(contract, {
+      info: { title: 'Users API', version: '1.0.0' },
+      operationId: ({ method }) => {
+        methods.push(method)
+        return 'get'
+      },
+    })
+
+    expect(methods).toEqual(['GET'])
+  })
+
   it('operationIdをOpenAPI生成側で明示的に決められる', () => {
     const contract = http.contract({
       get: {

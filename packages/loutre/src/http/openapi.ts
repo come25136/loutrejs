@@ -125,7 +125,13 @@ function httpOperationTargets(source: OpenApiSource): HttpOperationTarget[] {
         `Duplicate OpenAPI operation: ${conflict.route.method.toUpperCase()} ${conflict.route.path} conflicts with ${conflict.existing.method.toUpperCase()} ${conflict.existing.path}`,
       )
     }
-    return routes
+    return routes.map(({ procedure, definition }) => ({
+      procedure,
+      definition: {
+        ...definition,
+        method: definition.method.toUpperCase(),
+      },
+    }))
   }
 
   assertValidApplicationModel(source)
