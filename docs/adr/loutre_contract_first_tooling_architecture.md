@@ -147,6 +147,8 @@ Contract-first側だけがこれを許可したり、Application Model側だけ�
 
 Contract-first toolingが受け取るのは任意のroute-like objectではなく、`http.contract()`が生成した`HttpContract`である。
 
+`kind: 'http-contract'`だけを持つstructural objectはcanonical sourceとみなさない。`http.contract()`はbundle / import境界を越えて検証できるstable runtime brandを付与し、toolingはそのidentityを確認してからconsumeする。これにより、Contract construction時のvalidationを通っていない手書きobjectがContract-first pathへ入ることを防ぐ。
+
 `http.contract()`はnested routeの解決、path validation、response inheritanceなど、Contract単体で確定できるHTTP semanticsを構築時に確定する。
 
 そのためOpenAPI toolingは生の`HttpContractRouteTree`を再解釈しない。resolved `HttpContract.routes`をconsumeする。

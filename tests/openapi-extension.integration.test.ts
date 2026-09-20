@@ -21,6 +21,18 @@ describe('HTTP ExtensionのOpenAPI CLI', () => {
     expect(document.paths['/users'].post).toBeDefined()
   })
 
+  it('kindだけを偽装したHttpContract entryを拒否する', async () => {
+    await expect(
+      runOpenApiCli(['--entry', 'forged-http-contract-entry.ts'], {
+        cwd: resolve('tests', 'fixtures'),
+        stdout: () => undefined,
+        stderr: () => undefined,
+      }),
+    ).rejects.toThrow(
+      'OpenAPI entry must default export an ApplicationDefinition or HttpContract.',
+    )
+  })
+
   it('OpenAPIに無効なdefault exportを拒否する', async () => {
     await expect(
       runOpenApiCli(['--entry', 'invalid-openapi-entry.ts'], {

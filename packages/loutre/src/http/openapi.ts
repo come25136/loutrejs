@@ -6,6 +6,7 @@ import {
 } from '../core/index.js'
 import {
   httpExecutionExtension,
+  isHttpContract,
   type HttpContract,
   type HttpExecutionResponseDefinition,
   type HttpExecutionRouteDefinition,
@@ -113,6 +114,12 @@ export function generateOpenApi(
 
 function httpOperationTargets(source: OpenApiSource): HttpOperationTarget[] {
   if (source.kind === 'http-contract') {
+    if (!isHttpContract(source)) {
+      throw openApiError(
+        'LUTRE_OPENAPI_SOURCE_001',
+        'HttpContract source must be created by http.contract().',
+      )
+    }
     const routes = Object.entries(source.routes).map(
       ([procedure, definition]) => ({ procedure, definition }),
     )

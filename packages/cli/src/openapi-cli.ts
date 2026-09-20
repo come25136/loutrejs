@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { ApplicationDefinition, ApplicationModel } from '@loutrejs/loutre'
-import type { HttpContract } from '@loutrejs/loutre/http'
+import { isHttpContract } from '@loutrejs/loutre/http'
 import {
   generateOpenApi,
   type OpenApiSource,
@@ -63,8 +63,8 @@ function openApiSourceFromEntry(entry: unknown): OpenApiSource {
     throw invalidOpenApiEntry()
   }
 
-  if (entry.kind === 'http-contract') {
-    return entry as HttpContract
+  if (isHttpContract(entry)) {
+    return entry
   }
 
   if (entry.kind === 'application-definition') {

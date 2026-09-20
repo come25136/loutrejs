@@ -341,12 +341,28 @@ type HttpMiddlewareState<TRoute extends HttpExecutionRouteDefinition> =
     ? UnionToIntersection<MiddlewareContribution<TMiddlewares[number]>>
     : {}
 
+const httpContractBrand: unique symbol = Symbol.for(
+  'loutre.http-contract',
+) as typeof httpContractBrand
+
 export interface HttpContract<
   TRoutes extends Readonly<Record<string, HttpExecutionRouteDefinition>> =
     Readonly<Record<string, HttpExecutionRouteDefinition>>,
 > {
   readonly kind: 'http-contract'
   readonly routes: TRoutes
+  readonly [httpContractBrand]: true
+}
+
+export function isHttpContract(value: unknown): value is HttpContract {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Partial<HttpContract>
+  return (
+    candidate.kind === 'http-contract' &&
+    candidate[httpContractBrand] === true &&
+    typeof candidate.routes === 'object' &&
+    candidate.routes !== null
+  )
 }
 
 type RequestValue<
@@ -908,6 +924,7 @@ export function defineHttpContract(
   )
   return Object.freeze({
     kind: 'http-contract',
+    [httpContractBrand]: true as const,
     routes: Object.freeze(canonicalRoutes),
   })
 }

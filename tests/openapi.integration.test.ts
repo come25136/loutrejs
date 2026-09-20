@@ -75,6 +75,28 @@ describe('OpenAPI generation', () => {
     })
   })
 
+  it('http.contract()を経由していないHttpContract-like objectを拒否する', () => {
+    const contractLike = {
+      kind: 'http-contract',
+      routes: {
+        get: {
+          method: 'GET',
+          path: '/users',
+          responses: { ok: { status: 200 } },
+        },
+      },
+    }
+
+    expect(() =>
+      generateOpenApi(
+        contractLike as unknown as Parameters<typeof generateOpenApi>[0],
+        {
+          info: { title: 'Users API', version: '1.0.0' },
+        },
+      ),
+    ).toThrow('LUTRE_OPENAPI_SOURCE_001')
+  })
+
   it('HttpContractから生成する場合もparameter名だけ異なる重複routeを拒否する', () => {
     const contract = http.contract({
       first: {
