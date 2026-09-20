@@ -36,6 +36,7 @@ import {
   type HttpPathSegment,
   type PathParamNames,
 } from './path.js'
+import { findHttpRouteConflicts } from './route-validation.js'
 import { IngressGate } from '../runtime/ingress-gate.js'
 import {
   AsyncIteratorCleanupDeadlineError,
@@ -607,23 +608,18 @@ export const httpExecutionExtension = defineExecutionExtension<
     }
   },
   validate({ executions }) {
-    const dispatches = new Map<string, string>()
-    return executions.flatMap((execution) =>
-      execution.compiled.routes.flatMap((route) => {
-        const owner = dispatches.get(route.dispatch)
-        if (owner) {
-          return [
-            {
-              code: 'LUTRE_HTTP_DUPLICATE_ROUTE',
-              message: `${route.method} ${route.path} conflicts with ${owner}.`,
-              path: execution.id,
-            },
-          ]
-        }
-        dispatches.set(route.dispatch, execution.id)
-        return []
-      }),
+    const routes = executions.flatMap((execution) =>
+      execution.compiled.routes.map((route) => ({
+        method: route.method,
+        path: route.path,
+        owner: execution.id,
+      })),
     )
+    return findHttpRouteConflicts(routes).map(({ existing, route }) => ({
+      code: 'LUTRE_HTTP_DUPLICATE_ROUTE',
+      message: `${route.method} ${route.path} conflicts with ${existing.owner}.`,
+      path: route.owner,
+    }))
   },
   createRuntime(context) {
     context.capabilities.get(HTTP_SERVER)
