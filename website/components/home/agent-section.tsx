@@ -81,25 +81,25 @@ export function AgentSection({ locale }: { readonly locale: Locale }) {
             aria-hidden="true"
           />
 
-          <div className="overflow-hidden border border-slate-700 bg-[#0d1721]">
-            <div className="flex h-9 items-center gap-2 border-b border-white/8 px-3 font-mono text-[9px] text-slate-400">
+          <div className="overflow-hidden border border-line bg-surface">
+            <div className="flex h-9 items-center gap-2 border-b border-line bg-surface-muted/45 px-3 font-mono text-[9px] text-ink-muted">
               <span className="size-2 rounded-full bg-emerald-400" /> agent
               <Copy
                 size={11}
-                className="ml-auto text-slate-600"
+                className="ml-auto text-ink-muted"
                 aria-hidden="true"
               />
             </div>
-            <div className="p-4 font-mono text-[9px] leading-5 text-slate-400">
-              <p className="text-slate-200">{copy.contextLabel}</p>
+            <div className="p-4 font-mono text-[9px] leading-5 text-ink-soft">
+              <p className="text-ink">{copy.contextLabel}</p>
               <dl className="mt-4 grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 gap-y-2">
-                <dt className="text-slate-600">route</dt>
+                <dt className="text-ink-muted">route</dt>
                 <dd>{route.label}</dd>
-                <dt className="text-slate-600">handler</dt>
+                <dt className="text-ink-muted">handler</dt>
                 <dd>{handler.label}</dd>
-                <dt className="text-slate-600">depends on</dt>
+                <dt className="text-ink-muted">depends on</dt>
                 <dd>{service.label}</dd>
-                <dt className="text-slate-600">source</dt>
+                <dt className="text-ink-muted">source</dt>
                 <dd className="break-words">
                   {homeDevtoolsFixture.sourceFile}:54
                 </dd>
