@@ -6,11 +6,14 @@ import {
 } from '../core/index.js'
 import {
   httpExecutionExtension,
+  isHttpContract,
+  type HttpContract,
   type HttpExecutionResponseDefinition,
   type HttpExecutionRouteDefinition,
   type HttpResponseHeadersDefinition,
   type HttpResponseHeadersWithDefaults,
 } from './extension.js'
+import { findHttpRouteConflicts } from './route-validation.js'
 import { match } from 'ts-pattern'
 
 export interface OpenApiInfo {
@@ -81,33 +84,22 @@ const FIXED_METHODS = new Set([
   'query',
 ])
 
+export type OpenApiSource = ApplicationModel | HttpContract
+
 export function generateOpenApi(
-  source: ApplicationModel | { readonly model: ApplicationModel },
+  source: OpenApiSource,
   options: GenerateOpenApiOptions,
 ): OpenApiDocument {
-  const model = 'model' in source ? source.model : source
-  assertValidApplicationModel(model)
-
   const registry = new SchemaRegistry()
   const paths: Record<string, OpenApiPathItem> = {}
   const operationIds = new Set<string>()
-  const http = model.extensions.get(httpExecutionExtension)
-  for (const execution of http?.executions ?? []) {
-    for (const route of execution.compiled.routes) {
-      const target: HttpOperationTarget = {
-        procedure: route.name,
-        definition: {
-          ...route.definition,
-          method: route.method,
-          path: route.path,
-        },
-      }
-      attachOperation(
-        paths,
-        target.definition,
-        createOperation(target, registry, operationIds, options.operationId),
-      )
-    }
+
+  for (const target of httpOperationTargets(source)) {
+    attachOperation(
+      paths,
+      target.definition,
+      createOperation(target, registry, operationIds, options.operationId),
+    )
   }
 
   const schemas = registry.components()
@@ -118,6 +110,49 @@ export function generateOpenApi(
     paths,
     ...(Object.keys(schemas).length === 0 ? {} : { components: { schemas } }),
   }
+}
+
+function httpOperationTargets(source: OpenApiSource): HttpOperationTarget[] {
+  if (source.kind === 'http-contract') {
+    if (!isHttpContract(source)) {
+      throw openApiError(
+        'LUTRE_OPENAPI_SOURCE_001',
+        'HttpContract source must be created by http.contract().',
+      )
+    }
+    const routes = Object.entries(source.routes).map(
+      ([procedure, definition]) => ({ procedure, definition }),
+    )
+    const [conflict] = findHttpRouteConflicts(
+      routes.map(({ definition }) => definition),
+    )
+    if (conflict) {
+      throw openApiError(
+        'LUTRE_OPENAPI_OPERATION_001',
+        `Duplicate OpenAPI operation: ${conflict.route.method.toUpperCase()} ${conflict.route.path} conflicts with ${conflict.existing.method.toUpperCase()} ${conflict.existing.path}`,
+      )
+    }
+    return routes.map(({ procedure, definition }) => ({
+      procedure,
+      definition: {
+        ...definition,
+        method: definition.method.toUpperCase(),
+      },
+    }))
+  }
+
+  assertValidApplicationModel(source)
+  const http = source.extensions.get(httpExecutionExtension)
+  return (http?.executions ?? []).flatMap((execution) =>
+    execution.compiled.routes.map((route) => ({
+      procedure: route.name,
+      definition: {
+        ...route.definition,
+        method: route.method,
+        path: route.path,
+      },
+    })),
+  )
 }
 
 function createOperation(

@@ -1,7 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
-import { loadApplicationDefinition } from './application-loader.js'
+import type { ApplicationDefinition, ApplicationModel } from '@loutrejs/loutre'
+import { isHttpContract } from '@loutrejs/loutre/http'
+import {
+  generateOpenApi,
+  type OpenApiSource,
+} from '@loutrejs/loutre/http/openapi'
+import { loadEntry } from './entry-loader.js'
 
 export interface OpenApiCliIO {
   readonly cwd: string
@@ -34,10 +39,11 @@ export async function runOpenApiCli(
     return 2
   }
 
-  const application = await loadApplicationDefinition(resolve(io.cwd, entry), {
+  const entryValue = await loadEntry(resolve(io.cwd, entry), {
     projectRoot: io.cwd,
   })
-  const document = generateOpenApi(application.model, {
+  const source = openApiSourceFromEntry(entryValue)
+  const document = generateOpenApi(source, {
     info: { title, version },
   })
   const serialized = `${JSON.stringify(document, null, 2)}\n`
@@ -50,6 +56,40 @@ export async function runOpenApiCli(
   await writeFile(outputPath, serialized, 'utf8')
   io.stdout(`Wrote OpenAPI 3.2 document: ${outputPath}`)
   return 0
+}
+
+function openApiSourceFromEntry(entry: unknown): OpenApiSource {
+  if (typeof entry !== 'object' || entry === null || !('kind' in entry)) {
+    throw invalidOpenApiEntry()
+  }
+
+  if (isHttpContract(entry)) {
+    return entry
+  }
+
+  if (entry.kind === 'application-definition') {
+    const application = entry as ApplicationDefinition
+    assertApplicationModel(application.model)
+    return application.model
+  }
+
+  throw invalidOpenApiEntry()
+}
+
+function assertApplicationModel(
+  model: ApplicationDefinition['model'] | undefined,
+): asserts model is ApplicationModel {
+  if (!model || model.kind !== 'application-model') {
+    throw new Error(
+      'ApplicationDefinition must contain a compiled Application Model.',
+    )
+  }
+}
+
+function invalidOpenApiEntry(): Error {
+  return new Error(
+    'OpenAPI entry must default export an ApplicationDefinition or HttpContract.',
+  )
 }
 
 async function readPackageInfo(
@@ -81,7 +121,9 @@ function readOption(args: readonly string[], name: string): string | undefined {
 
 function openApiHelpText(): string {
   return [
-    'loutre openapi --entry <application.ts> [options]',
+    'loutre openapi --entry <entry.ts> [options]',
+    '',
+    'The entry must default export an ApplicationDefinition or HttpContract.',
     '',
     'Options:',
     '  --output <openapi.json>  Write a JSON file (defaults to stdout)',

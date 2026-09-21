@@ -75,6 +75,105 @@ describe('OpenAPI generation', () => {
     })
   })
 
+  it('http.contract()を経由していないHttpContract-like objectを拒否する', () => {
+    const contractLike = {
+      kind: 'http-contract',
+      routes: {
+        get: {
+          method: 'GET',
+          path: '/users',
+          responses: { ok: { status: 200 } },
+        },
+      },
+    }
+
+    expect(() =>
+      generateOpenApi(
+        contractLike as unknown as Parameters<typeof generateOpenApi>[0],
+        {
+          info: { title: 'Users API', version: '1.0.0' },
+        },
+      ),
+    ).toThrow('LUTRE_OPENAPI_SOURCE_001')
+  })
+
+  it('HttpContractから生成する場合もparameter名だけ異なる重複routeを拒否する', () => {
+    const contract = http.contract({
+      first: {
+        method: 'GET',
+        path: '/users/{first}',
+        responses: { ok: { status: 204 } },
+      },
+      second: {
+        method: 'get',
+        path: '/users/{second}',
+        responses: { ok: { status: 204 } },
+      },
+    })
+
+    expect(() =>
+      generateOpenApi(contract, {
+        info: { title: 'Users API', version: '1.0.0' },
+      }),
+    ).toThrow('LUTRE_OPENAPI_OPERATION_001')
+  })
+
+  it('HttpContractから直接生成してもHTTP methodをcompiled routeと同じ形式へ正規化する', () => {
+    const contract = http.contract({
+      get: {
+        method: 'get',
+        path: '/users',
+        responses: { ok: { status: 204 } },
+      },
+    })
+    const methods: string[] = []
+
+    generateOpenApi(contract, {
+      info: { title: 'Users API', version: '1.0.0' },
+      operationId: ({ method }) => {
+        methods.push(method)
+        return 'get'
+      },
+    })
+
+    expect(methods).toEqual(['GET'])
+  })
+
+  it('HttpContractとApplication Modelから同じOpenAPI projectionを生成する', () => {
+    const tags = ['before']
+    const response = { status: 200, description: 'before' } as const
+    const contract = http.contract({
+      get: {
+        method: 'get',
+        path: '/items',
+        tags,
+        responses: { ok: response },
+      },
+    })
+    const application = applicationFor(contract, () => ({
+      get: (ctx) => ctx.response.ok({}),
+    }))
+
+    ;(response as { status: number; description: string }).status = 201
+    ;(response as { status: number; description: string }).description = 'after'
+    tags.push('after')
+
+    const options = {
+      info: { title: 'Projection API', version: '1.0.0' },
+    }
+    const contractDocument = generateOpenApi(contract, options)
+    const applicationDocument = generateOpenApi(application.model, options)
+
+    expect(contractDocument).toEqual(applicationDocument)
+    const operation = contractDocument.paths['/items']?.get as Record<
+      string,
+      any
+    >
+    expect(operation.tags).toEqual(['before'])
+    expect(operation.responses).toHaveProperty('200')
+    expect(operation.responses).not.toHaveProperty('201')
+  })
+
   it('operationIdをOpenAPI生成側で明示的に決められる', () => {
     const contract = http.contract({
       get: {

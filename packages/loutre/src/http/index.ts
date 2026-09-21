@@ -35,6 +35,7 @@ export {
   httpError,
   executionHttp as http,
   httpExecutionExtension,
+  isHttpContract,
   HTTP_SERVER,
   validate,
 } from './extension.js'

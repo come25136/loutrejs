@@ -79,9 +79,13 @@ npm exec loutre -- build src/app.ts --runtime aws-lambda
 
 ## OpenAPI
 
+Application DefinitionまたはHTTP Contractをdefault exportするentryからOpenAPIを生成できます。
+
 ```sh
-npm exec loutre -- openapi --entry src/app.ts --output openapi.json
+npm exec loutre -- openapi --entry src/api.ts --output openapi.json
 ```
+
+Contract-firstでschemaだけ先に定義する場合、Applicationやimplementationは不要です。Application entryから生成する場合も同じcommandを使えます。
 
 API titleとversionは`package.json`から読み取られ、`--title` / `--api-version`で上書きできます。
 

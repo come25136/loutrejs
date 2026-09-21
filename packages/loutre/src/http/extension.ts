@@ -36,6 +36,7 @@ import {
   type HttpPathSegment,
   type PathParamNames,
 } from './path.js'
+import { findHttpRouteConflicts } from './route-validation.js'
 import { IngressGate } from '../runtime/ingress-gate.js'
 import {
   AsyncIteratorCleanupDeadlineError,
@@ -340,12 +341,28 @@ type HttpMiddlewareState<TRoute extends HttpExecutionRouteDefinition> =
     ? UnionToIntersection<MiddlewareContribution<TMiddlewares[number]>>
     : {}
 
+const httpContractBrand: unique symbol = Symbol.for(
+  'loutre.http-contract',
+) as typeof httpContractBrand
+
 export interface HttpContract<
   TRoutes extends Readonly<Record<string, HttpExecutionRouteDefinition>> =
     Readonly<Record<string, HttpExecutionRouteDefinition>>,
 > {
   readonly kind: 'http-contract'
   readonly routes: TRoutes
+  readonly [httpContractBrand]: true
+}
+
+export function isHttpContract(value: unknown): value is HttpContract {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Partial<HttpContract>
+  return (
+    candidate.kind === 'http-contract' &&
+    candidate[httpContractBrand] === true &&
+    typeof candidate.routes === 'object' &&
+    candidate.routes !== null
+  )
 }
 
 type RequestValue<
@@ -607,23 +624,18 @@ export const httpExecutionExtension = defineExecutionExtension<
     }
   },
   validate({ executions }) {
-    const dispatches = new Map<string, string>()
-    return executions.flatMap((execution) =>
-      execution.compiled.routes.flatMap((route) => {
-        const owner = dispatches.get(route.dispatch)
-        if (owner) {
-          return [
-            {
-              code: 'LUTRE_HTTP_DUPLICATE_ROUTE',
-              message: `${route.method} ${route.path} conflicts with ${owner}.`,
-              path: execution.id,
-            },
-          ]
-        }
-        dispatches.set(route.dispatch, execution.id)
-        return []
-      }),
+    const routes = executions.flatMap((execution) =>
+      execution.compiled.routes.map((route) => ({
+        method: route.method,
+        path: route.path,
+        owner: execution.id,
+      })),
     )
+    return findHttpRouteConflicts(routes).map(({ existing, route }) => ({
+      code: 'LUTRE_HTTP_DUPLICATE_ROUTE',
+      message: `${route.method} ${route.path} conflicts with ${existing.owner}.`,
+      path: route.owner,
+    }))
   },
   createRuntime(context) {
     context.capabilities.get(HTTP_SERVER)
@@ -904,12 +916,16 @@ export function defineHttpContract(
   routes: HttpContractRouteTree,
 ): HttpContract {
   const resolvedRoutes = resolveHttpContractRoutes(routes)
-  for (const [name, route] of Object.entries(resolvedRoutes)) {
-    compileHttpRoute(name, route)
-  }
+  const canonicalRoutes = Object.fromEntries(
+    Object.entries(resolvedRoutes).map(([name, route]) => [
+      name,
+      compileHttpRoute(name, route).definition,
+    ]),
+  )
   return Object.freeze({
     kind: 'http-contract',
-    routes: Object.freeze(resolvedRoutes),
+    [httpContractBrand]: true as const,
+    routes: Object.freeze(canonicalRoutes),
   })
 }
 
