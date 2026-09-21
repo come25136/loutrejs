@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     template: '%s | Loutre',
   },
   description:
-    'A TypeScript framework for Node.js, Bun, Deno, Cloudflare Workers, AWS Lambda, and Electron, with type inference and DevTools built for a simple development experience.',
+    'A TypeScript framework for a variety of runtimes. Type inference and DevTools provide a simple development experience.',
   alternates: {
     canonical: '/',
     languages: {
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     siteName: 'Loutre',
     title: 'Loutre — TypeScript Framework',
     description:
-      'Build TypeScript applications across server, edge, serverless, and desktop runtimes with type inference and DevTools.',
+      'A TypeScript framework for a variety of runtimes, with type inference and DevTools for a simple development experience.',
     images: [
       {
         url: '/og.png',
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Loutre — TypeScript Framework',
     description:
-      'Build TypeScript applications across server, edge, serverless, and desktop runtimes with type inference and DevTools.',
+      'A TypeScript framework for a variety of runtimes, with type inference and DevTools for a simple development experience.',
     images: ['/og.png'],
   },
 }
