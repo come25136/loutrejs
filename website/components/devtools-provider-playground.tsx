@@ -33,12 +33,12 @@ const copy = {
     running: '実行中…',
     result: 'Result',
     openTrace: 'Traceを開く',
-    noMethods: 'このProviderには呼び出せるmethodがありません。',
-    unavailable: 'Playgroundを使うにはApplication runtimeに接続してください。',
+    noMethods: 'このProviderに呼び出せるmethodはありません。',
+    unavailable: 'Playgroundを使うにはApplication Runtimeに接続してください。',
     argsHint: 'JSON配列。例: [123, { "name": "Loutre" }]',
-    invalidArgs: 'ArgumentsはJSON配列で指定してください。',
+    invalidArgs: 'ArgumentsにはJSON配列を指定してください。',
     loading: 'Playgroundを読み込み中…',
-    invocationFailed: 'Provider methodの呼び出しに失敗しました。',
+    invocationFailed: 'Providerのmethod呼び出しに失敗しました。',
   },
 } as const
 

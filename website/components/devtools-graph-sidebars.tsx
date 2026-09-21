@@ -1,7 +1,7 @@
 'use client'
 
 import { ChevronDown, ChevronRight, CircleDot, Copy } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import {
   type GraphEdge,
   type GraphNode,
@@ -294,11 +294,23 @@ export function Inspector({
       {source && (
         <InspectorSection title={labels.source}>
           <button
-            className="inline-flex max-w-full items-center gap-2 break-all text-left font-mono text-[10px] text-copper-dark"
+            className="inline-flex max-w-full items-start gap-2 text-left font-mono text-[10px] text-copper-dark"
             type="button"
             onClick={() => void navigator.clipboard.writeText(source)}
           >
-            <Copy size={11} className="shrink-0" /> {source}
+            <Copy size={11} className="mt-0.5 shrink-0" />
+            <span className="min-w-0 break-words">
+              {source.split('/').map((segment, index, segments) => (
+                <Fragment key={`${segment}:${index}`}>
+                  <span data-source-segment>{segment}</span>
+                  {index < segments.length - 1 && (
+                    <>
+                      /<wbr />
+                    </>
+                  )}
+                </Fragment>
+              ))}
+            </span>
           </button>
         </InspectorSection>
       )}

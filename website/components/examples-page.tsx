@@ -12,7 +12,7 @@ const examples = [
     stackblitzUrl: null,
     description: {
       en: 'A CLI application that accepts arguments and runs a Task',
-      ja: '引数を受け取り、Taskを実行するCLI application',
+      ja: '引数を受け取り、Taskを実行するCLI Application',
     },
   },
   {
@@ -31,7 +31,7 @@ const examples = [
       'https://stackblitz.com/fork/github/come25136/loutrejs/tree/main/examples/hello-http?startScript=dev&title=Loutre%20Hello%20HTTP&initialpath=%2FLoutre',
     description: {
       en: 'A minimal HTTP API with path parameters and validation',
-      ja: 'path parameterとvalidationを含む最小構成のHTTP API',
+      ja: 'path parameterとvalidationを使った最小構成のHTTP API',
     },
   },
   {
@@ -40,7 +40,7 @@ const examples = [
     stackblitzUrl: null,
     description: {
       en: 'Apply authentication at a parent Contract branch and inherit its Context',
-      ja: '上位Contract branchで認証し、Contextの型を子Controllerへ継承する',
+      ja: '親Contract branchで認証し、Contextの型を子Controllerへ引き継ぐ',
     },
   },
   {
@@ -67,7 +67,7 @@ const examples = [
     stackblitzUrl: null,
     description: {
       en: 'Handle CORS and preflight requests in a Pipeline',
-      ja: 'PipelineでCORSとpreflight requestを処理する',
+      ja: 'PipelineでCORSとpreflight requestを扱う',
     },
   },
   {
@@ -76,7 +76,7 @@ const examples = [
     stackblitzUrl: null,
     description: {
       en: 'The fundamentals of using transactions',
-      ja: 'Transactionの基本的な使い方',
+      ja: 'transactionの基本的な使い方',
     },
   },
   {
@@ -85,7 +85,7 @@ const examples = [
     stackblitzUrl: null,
     description: {
       en: 'PostgreSQL transactions with pg',
-      ja: 'pgを使ったPostgreSQL transaction',
+      ja: 'pgを使ったPostgreSQLのtransaction',
     },
   },
   {
@@ -94,7 +94,7 @@ const examples = [
     stackblitzUrl: null,
     description: {
       en: 'Transactions with Drizzle and PostgreSQL',
-      ja: 'DrizzleとPostgreSQLを使ったtransaction',
+      ja: 'DrizzleとPostgreSQLを使ったtransaction処理',
     },
   },
   {
@@ -103,7 +103,7 @@ const examples = [
     stackblitzUrl: null,
     description: {
       en: 'Use Prisma interactive transactions from a Pipeline',
-      ja: 'Prisma interactive transactionをPipelineから使う',
+      ja: 'PipelineからPrisma interactive transactionを利用する',
     },
   },
 ] as const

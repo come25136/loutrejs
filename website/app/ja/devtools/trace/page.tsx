@@ -3,7 +3,7 @@ import { DevtoolsPage } from '../../../../components/devtools-page'
 
 export const metadata: Metadata = {
   title: 'Devtools Traces',
-  description: 'ローカルのLoutre execution traceをブラウザで確認します。',
+  description: 'ローカルのLoutre Execution Traceをブラウザで確認します。',
   alternates: {
     canonical: '/ja/devtools/trace/',
     languages: {
