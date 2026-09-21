@@ -18,7 +18,7 @@ const inspectorLabels = {
     diagnostics: 'Diagnostics',
   },
   ja: {
-    selectNode: 'Nodeを選択するとsemanticsとrelationshipsを確認できます。',
+    selectNode: 'Nodeを選択すると、SemanticsとRelationshipsを確認できます。',
     source: 'Source',
     relationships: 'Relationships',
     attributes: 'Attributes',

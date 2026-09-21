@@ -4,12 +4,12 @@
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 :root {
-  --site-canvas: #ffffff;
-  --site-surface: #ffffff;
-  --site-surface-muted: #f9fafb;
-  --site-surface-subtle: #f3f4f6;
-  --site-line: #e5e7eb;
-  --site-line-strong: #d1d5db;
+  --site-canvas: #fbfbfa;
+  --site-surface: #fefefd;
+  --site-surface-muted: #f5f6f5;
+  --site-surface-subtle: #eef0ef;
+  --site-line: #e1e4e2;
+  --site-line-strong: #cbd0cd;
   --site-ink: #111827;
   --site-ink-soft: #6b7280;
   --site-ink-muted: #9ca3af;
@@ -65,8 +65,8 @@ html[data-theme='dark'] {
 @theme {
   --color-copper: #ff6a30;
   --color-moss: #15803d;
-  --font-sans: 'Inter Variable', 'Noto Sans JP', ui-sans-serif, sans-serif;
-  --font-serif: 'Inter Variable', 'Noto Sans JP', ui-sans-serif, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI Variable', 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  --font-serif: var(--font-sans);
   --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
   --shadow-code: 0 24px 70px rgba(17, 24, 39, 0.18);
   --animate-page-in: page-in 420ms ease-out both;

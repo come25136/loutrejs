@@ -32,12 +32,12 @@ export function ArchitectureSection({ locale }: { readonly locale: Locale }) {
 
   return (
     <HomeSection className="py-18 sm:py-24">
-      <div className="shell grid grid-cols-[0.95fr_1.05fr] items-center gap-12 max-lg:grid-cols-1 lg:gap-16">
-        <div>
+      <div className="shell grid grid-cols-[1.05fr_0.95fr] items-center gap-12 max-lg:grid-cols-1 lg:gap-16">
+        <div className="lg:order-2">
           <p className="text-[10px] font-bold tracking-[0.18em] text-ink-muted">
             {copy.architecture.eyebrow}
           </p>
-          <h2 className="mt-5 text-[clamp(2rem,3.2vw,2.9rem)] leading-[1.08] font-bold tracking-[-0.055em]">
+          <h2 className="mt-5 whitespace-pre-line text-[clamp(2rem,3.2vw,2.9rem)] leading-[1.08] font-bold tracking-[-0.055em] lg:whitespace-pre">
             {copy.architecture.title}
           </h2>
           <p className="mt-6 max-w-xl text-[15px] leading-7 text-ink-soft">
@@ -49,7 +49,7 @@ export function ArchitectureSection({ locale }: { readonly locale: Locale }) {
             </TextLink>
           </div>
         </div>
-        <div className="relative mx-auto h-[390px] w-full max-w-[620px] sm:h-[420px]">
+        <div className="relative mx-auto h-[390px] w-full max-w-[620px] sm:h-[420px] lg:order-1">
           <svg
             className="absolute inset-0 size-full text-line-strong"
             viewBox="0 0 620 420"
@@ -57,32 +57,39 @@ export function ArchitectureSection({ locale }: { readonly locale: Locale }) {
             aria-hidden="true"
           >
             <path
-              d="M310 210L127 72"
+              d="M96 96V128H194V182H210"
               stroke="currentColor"
-              strokeDasharray="4 6"
+              strokeWidth="1.25"
+              strokeDasharray="4 7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
             <path
-              d="M310 210L493 72"
+              d="M524 96V128H426V182H410"
               stroke="currentColor"
-              strokeDasharray="4 6"
+              strokeWidth="1.25"
+              strokeDasharray="4 7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
             <path
-              d="M310 210L127 348"
+              d="M96 324V292H194V238H210"
               stroke="currentColor"
-              strokeDasharray="4 6"
+              strokeWidth="1.25"
+              strokeDasharray="4 7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
             <path
-              d="M310 210L493 348"
+              d="M524 324V292H426V238H410"
               stroke="currentColor"
-              strokeDasharray="4 6"
+              strokeWidth="1.25"
+              strokeDasharray="4 7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
-            <circle cx="310" cy="210" r="3" fill="#38bdf8" />
-            <circle cx="127" cy="72" r="3" fill="currentColor" />
-            <circle cx="493" cy="72" r="3" fill="currentColor" />
-            <circle cx="127" cy="348" r="3" fill="currentColor" />
-            <circle cx="493" cy="348" r="3" fill="currentColor" />
           </svg>
-          <div className="absolute left-1/2 top-1/2 grid h-28 w-44 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-lg border-2 border-sky-400 bg-sky-400/7 text-center shadow-[0_18px_55px_rgba(56,189,248,0.12)]">
+          <div className="absolute left-1/2 top-1/2 grid h-28 w-44 -translate-x-1/2 -translate-y-1/2 place-items-center border border-sky-400/70 bg-sky-400/6 text-center">
             <div>
               <strong className="block text-base text-sky-500">
                 Application
@@ -94,7 +101,7 @@ export function ArchitectureSection({ locale }: { readonly locale: Locale }) {
           </div>
           {architectureNodes.map((node) => (
             <div
-              className={`absolute flex h-24 w-48 flex-col items-center justify-center rounded-lg border border-line-strong bg-surface text-center shadow-[0_12px_38px_rgba(15,23,42,0.05)] max-sm:w-36 ${node.className}`}
+              className={`absolute flex h-24 w-48 flex-col items-center justify-center border border-line-strong bg-paper text-center max-sm:w-36 ${node.className}`}
               key={node.title}
             >
               <strong className="text-sm">{node.title}</strong>
@@ -103,9 +110,7 @@ export function ArchitectureSection({ locale }: { readonly locale: Locale }) {
               </span>
             </div>
           ))}
-          <p className="absolute bottom-10 left-1/2 -translate-x-1/2 rotate-[-3deg] whitespace-nowrap text-sm font-semibold text-sky-500 italic">
-            {copy.architecture.annotation}
-          </p>
+          <p className="sr-only">{copy.architecture.annotation}</p>
         </div>
       </div>
     </HomeSection>

@@ -1,8 +1,17 @@
+import hljs from 'highlight.js/lib/core'
+import typescript from 'highlight.js/lib/languages/typescript'
 import Image from 'next/image'
-import { ShieldCheck } from 'lucide-react'
 import type { Locale } from '../../lib/i18n'
 import { homeCopy } from './home-copy'
 import { HomeSection } from './shared'
+
+hljs.registerLanguage('typescript', typescript)
+
+const applicationSource = `const application = defineApplication({
+  modules: [UsersModule(), HealthModule()],
+})
+
+export default application`
 
 const runtimes = [
   { name: 'Node.js', src: '/runtimes/nodejs.svg', width: 44, height: 50 },
@@ -48,20 +57,20 @@ function ApplicationCode() {
           app.ts
         </span>
       </div>
-      <pre className="px-4 py-3 pr-24 font-mono text-[9px] leading-5 text-ink sm:px-5 sm:py-4 sm:pr-28 sm:text-[10px] sm:leading-6">
-        <code>
-          <span className="text-copper">const</span> application ={' '}
-          <span className="text-violet-600">defineApplication</span>({'{'}
-          {'\n'} {'  '}modules: [UsersModule(), HealthModule()],
-          {'\n'}
-          {'}'}
-          {'\n\n'}
-          <span className="text-copper">export default</span> application
-        </code>
+      <pre className="px-4 py-3 pr-24 font-mono text-[9px] leading-5 text-ink sm:px-5 sm:py-4 sm:pr-28 sm:text-[10px] sm:leading-6 [&_.hljs-attr]:text-sky-700 [&_.hljs-keyword]:text-copper [&_.hljs-title]:text-violet-600 [&_.hljs-title.class_]:text-violet-600">
+        <code
+          className="hljs language-typescript"
+          dangerouslySetInnerHTML={{
+            __html: hljs.highlight(applicationSource, {
+              language: 'typescript',
+              ignoreIllegals: true,
+            }).value,
+          }}
+        />
       </pre>
       <Image
         className="pointer-events-none absolute -bottom-5 right-1 z-10 h-auto w-24 sm:right-2 sm:w-28"
-        src="/characters/otter-laptop.png"
+        src="/characters/otter-wave.png"
         width={1254}
         height={1254}
         alt="Loutre"
@@ -76,10 +85,10 @@ function RuntimeNode({
   readonly runtime: (typeof runtimes)[number]
 }) {
   return (
-    <div className="mx-auto flex aspect-square w-full max-w-[88px] flex-col items-center justify-center gap-1 rounded-[1.35rem] border border-line bg-surface px-2 py-2 text-center shadow-[0_10px_24px_rgba(17,24,39,0.08)] sm:max-w-[104px] sm:gap-1.5">
-      <span className="grid size-8 shrink-0 place-items-center sm:size-9">
+    <div className="mx-auto flex w-full max-w-[112px] flex-col items-center justify-center gap-2 px-2 py-3 text-center">
+      <span className="grid size-10 shrink-0 place-items-center sm:size-11">
         <Image
-          className="size-7 object-contain sm:size-8"
+          className="size-9 object-contain sm:size-10"
           src={runtime.src}
           width={runtime.width}
           height={runtime.height}
@@ -87,7 +96,7 @@ function RuntimeNode({
           aria-hidden="true"
         />
       </span>
-      <strong className="min-w-0 text-[9px] leading-3 sm:text-[10px] sm:leading-3">
+      <strong className="min-w-0 text-[10px] leading-4 font-semibold text-ink-soft sm:text-[11px]">
         {runtime.name}
       </strong>
     </div>
@@ -96,7 +105,7 @@ function RuntimeNode({
 
 function RuntimeDiagram() {
   return (
-    <div className="relative mx-auto h-[460px] w-full max-w-[620px]">
+    <div className="relative mx-auto h-[440px] w-full max-w-[620px]">
       <div className="absolute inset-x-0 top-0 z-10 grid grid-cols-3 gap-2 sm:gap-3">
         {runtimes.slice(0, 3).map((runtime) => (
           <RuntimeNode runtime={runtime} key={runtime.name} />
@@ -151,7 +160,7 @@ function RuntimeDiagram() {
         </g>
       </svg>
 
-      <div className="absolute inset-x-[12%] top-[130px] z-10">
+      <div className="absolute inset-x-[12%] top-[120px] z-10">
         <ApplicationCode />
       </div>
 
@@ -169,12 +178,12 @@ export function RuntimeSection({ locale }: { readonly locale: Locale }) {
 
   return (
     <HomeSection className="overflow-hidden bg-surface-muted py-18 sm:py-24">
-      <div className="shell grid grid-cols-[0.72fr_1.28fr] items-center gap-12 max-lg:grid-cols-1 lg:gap-16">
-        <div>
+      <div className="shell grid grid-cols-[1.1fr_0.9fr] items-center gap-12 max-lg:grid-cols-1 lg:gap-16">
+        <div className="lg:order-2">
           <p className="text-[10px] font-bold tracking-[0.18em] text-ink-muted">
             {copy.eyebrow}
           </p>
-          <h2 className="mt-5 max-w-xl text-[clamp(2rem,3.2vw,3rem)] leading-[1.06] font-bold tracking-[-0.055em] text-balance">
+          <h2 className="mt-5 max-w-xl whitespace-pre-line text-[clamp(2rem,3.2vw,3rem)] leading-[1.06] font-bold tracking-[-0.055em] lg:whitespace-pre">
             {copy.title}
           </h2>
           <p className="mt-6 max-w-xl text-[15px] leading-7 text-ink-soft">
@@ -184,21 +193,10 @@ export function RuntimeSection({ locale }: { readonly locale: Locale }) {
               </span>
             ))}
           </p>
-          <p className="mt-7 inline-flex items-center gap-2 rounded-full border border-line-strong bg-surface px-3 py-2 font-mono text-[10px] text-ink-soft">
-            <ShieldCheck
-              size={13}
-              className="text-emerald-600"
-              aria-hidden="true"
-            />
-            {copy.capability}
-          </p>
         </div>
 
-        <div className="relative">
+        <div className="relative lg:order-1">
           <RuntimeDiagram />
-          <p className="absolute -right-1 -bottom-10 rotate-[-3deg] whitespace-nowrap text-sm font-medium text-sky-500/80 italic max-lg:right-2 max-lg:text-xs">
-            {copy.annotation}
-          </p>
         </div>
       </div>
     </HomeSection>

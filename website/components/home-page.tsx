@@ -4,7 +4,7 @@ import { ArchitectureSection } from './home/architecture-section'
 import { ExplicitGraphSection } from './home/explicit-graph-section'
 import { FinalCta } from './home/final-cta'
 import { Hero } from './home/hero'
-import { LocalLoopSection } from './home/local-loop-section'
+import { TypeInferenceSection } from './home/type-inference-section'
 import { RuntimeSection } from './home/runtime-section'
 
 export function HomePage({ locale }: { readonly locale: Locale }) {
@@ -13,7 +13,7 @@ export function HomePage({ locale }: { readonly locale: Locale }) {
       <Hero locale={locale} />
       <RuntimeSection locale={locale} />
       <ExplicitGraphSection locale={locale} />
-      <LocalLoopSection locale={locale} />
+      <TypeInferenceSection locale={locale} />
       <AgentSection locale={locale} />
       <ArchitectureSection locale={locale} />
       <FinalCta locale={locale} />

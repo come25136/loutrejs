@@ -44,7 +44,7 @@ export function ExplicitGraphSection({ locale }: { readonly locale: Locale }) {
           </p>
         </div>
         <div className="relative grid grid-cols-[0.86fr_auto_1.14fr] items-stretch gap-5 max-sm:grid-cols-1">
-          <article className="rounded-lg border border-line bg-surface p-5 shadow-[0_14px_45px_rgba(15,23,42,0.05)]">
+          <article className="border-y border-line bg-surface/45 p-5">
             <p className="flex items-center gap-2 text-[10px] font-bold tracking-[0.14em] text-ink-muted uppercase">
               <FileCode2 size={13} aria-hidden="true" /> {copy.before}
             </p>
@@ -67,7 +67,7 @@ export function ExplicitGraphSection({ locale }: { readonly locale: Locale }) {
             size={19}
             aria-hidden="true"
           />
-          <article className="rounded-lg border border-sky-400/35 bg-surface p-5 shadow-[0_14px_45px_rgba(15,23,42,0.06)]">
+          <article className="border-y border-sky-400/40 bg-surface/45 p-5">
             <p className="flex items-center gap-2 text-[10px] font-bold tracking-[0.14em] text-sky-500 uppercase">
               <GitBranch size={13} aria-hidden="true" /> {copy.after}
             </p>
@@ -104,7 +104,7 @@ export function ExplicitGraphSection({ locale }: { readonly locale: Locale }) {
               </div>
             </div>
           </article>
-          <p className="absolute -right-3 -top-8 rotate-[-5deg] text-sm font-semibold text-sky-500 italic max-sm:right-2 max-sm:top-[47%]">
+          <p className="sr-only">
             {copy.annotation}
           </p>
         </div>
