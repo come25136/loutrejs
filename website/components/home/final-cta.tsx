@@ -15,14 +15,16 @@ export function FinalCta({ locale }: { readonly locale: Locale }) {
 
   return (
     <HomeSection className="bg-surface-muted/38 py-18 sm:py-24">
-      <div className="shell grid grid-cols-[1fr_0.55fr] items-center gap-10 max-md:grid-cols-1">
+      <div className="shell relative grid grid-cols-[1fr_0.55fr] items-center gap-8 max-sm:block md:gap-10">
         <div>
-          <h2 className="text-[clamp(2.3rem,4vw,3.5rem)] leading-tight font-bold tracking-[-0.06em]">
-            {copy.finalCta.title}
-          </h2>
-          <p className="mt-4 max-w-xl text-[15px] leading-7 text-ink-soft">
-            {copy.finalCta.body}
-          </p>
+          <div className="max-sm:pr-28">
+            <h2 className="text-[clamp(2.3rem,4vw,3.5rem)] leading-tight font-bold tracking-[-0.06em] max-sm:text-[2rem]">
+              {copy.finalCta.title}
+            </h2>
+            <p className="mt-4 max-w-xl text-[15px] leading-7 text-ink-soft">
+              {copy.finalCta.body}
+            </p>
+          </div>
 
           <div className="mt-7 flex flex-wrap items-center gap-4">
             <a
@@ -53,9 +55,9 @@ export function FinalCta({ locale }: { readonly locale: Locale }) {
           </div>
         </div>
 
-        <div className="relative mx-auto w-full max-w-[320px] max-md:mt-4">
+        <div className="relative mx-auto w-full max-w-[320px] max-sm:absolute max-sm:top-0 max-sm:right-0 max-sm:m-0 max-sm:w-24">
           <Image
-            className="mx-auto h-auto w-72"
+            className="mx-auto h-auto w-72 max-sm:w-24"
             src="/characters/otter-laptop.png"
             width={1254}
             height={1254}

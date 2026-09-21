@@ -91,7 +91,7 @@ export const homeCopy = {
     },
     typeInference: {
       eyebrow: 'TYPE INFERENCE',
-      title: '型定義は、一度だけ。',
+      title: '型安全を、シンプルに。',
       body: 'Contractに型を書くだけで、RequestもResponseも型がそのまま伝わります。',
       note: 'declare / as / is を使う必要もありません。',
       codeComment: 'stringとして推論される',

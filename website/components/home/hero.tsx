@@ -11,13 +11,13 @@ export function Hero({ locale }: { readonly locale: Locale }) {
   return (
     <section className="overflow-hidden pb-20 pt-14 sm:pb-24 sm:pt-20 lg:pb-28 lg:pt-24">
       <div className="shell">
-        <div className="grid grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] items-start gap-8 max-lg:grid-cols-1 lg:gap-10">
-          <div className="relative z-10 animate-reveal-up motion-reduce:animate-none lg:pt-4">
+        <div className="grid grid-cols-1 items-start gap-8 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] xl:gap-10">
+          <div className="relative z-10 animate-reveal-up motion-reduce:animate-none xl:pt-4">
             <h1 className="max-w-3xl text-[clamp(2.8rem,4.8vw,4.35rem)] leading-[1.01] font-bold tracking-[-0.045em] text-balance">
-              <span className="block lg:whitespace-nowrap">
+              <span className="block xl:whitespace-nowrap">
                 {copy.hero.title[0]}
               </span>
-              <span className="mt-1 block lg:whitespace-nowrap">
+              <span className="mt-1 block xl:whitespace-nowrap">
                 {copy.hero.title[1]}
               </span>
             </h1>
@@ -39,10 +39,10 @@ export function Hero({ locale }: { readonly locale: Locale }) {
               </TextLink>
             </div>
           </div>
-          <div className="min-w-0 animate-reveal-up [animation-delay:140ms] motion-reduce:animate-none lg:-mr-[20vw] lg:mt-64">
-            <div className="relative w-full lg:w-[min(940px,72vw)]">
+          <div className="min-w-0 animate-reveal-up [animation-delay:140ms] motion-reduce:animate-none mt-4 xl:-mr-[20vw] xl:mt-64">
+            <div className="relative w-full xl:w-[min(940px,72vw)]">
               <Image
-                className="pointer-events-none absolute -top-[122px] right-[205px] z-10 hidden h-auto w-36 xl:block"
+                className="pointer-events-none absolute -top-20 right-5 z-10 h-auto w-24 sm:-top-24 sm:right-10 sm:w-28 xl:-top-[122px] xl:right-[205px] xl:w-36"
                 src="/characters/otter-peek.png"
                 width={1254}
                 height={1254}

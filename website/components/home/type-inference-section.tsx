@@ -96,13 +96,20 @@ export function TypeInferenceSection({ locale }: { readonly locale: Locale }) {
 
   return (
     <HomeSection className="py-20 sm:py-28">
-      <div className="shell grid grid-cols-[1.28fr_0.72fr] items-center gap-12 max-lg:grid-cols-1 lg:gap-14">
+      <div className="shell grid grid-cols-[1.28fr_0.72fr] items-center gap-8 max-lg:grid-cols-1 lg:gap-14">
         <div className="max-w-3xl lg:order-2">
           <p className="text-[10px] font-bold tracking-[0.18em] text-ink-muted">
             {copy.eyebrow}
           </p>
           <h2 className="mt-5 text-[clamp(2.25rem,3.7vw,3.5rem)] leading-[1.03] font-bold tracking-[-0.055em]">
-            {copy.title}
+            {locale === 'ja' ? (
+              <>
+                <span className="whitespace-nowrap">型安全を、</span>{' '}
+                <span className="whitespace-nowrap">シンプルに。</span>
+              </>
+            ) : (
+              copy.title
+            )}
           </h2>
           <p className="mt-5 max-w-2xl text-[15px] leading-7 text-ink-soft">
             {copy.body}
@@ -112,7 +119,7 @@ export function TypeInferenceSection({ locale }: { readonly locale: Locale }) {
           </p>
         </div>
 
-        <div className="mt-10 min-w-0 lg:order-1 lg:mt-0">
+        <div className="min-w-0 lg:order-1">
           <InferenceCode comment={copy.codeComment} />
         </div>
       </div>
