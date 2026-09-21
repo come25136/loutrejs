@@ -70,7 +70,7 @@ function Brand({
         aria-label={label}
       >
         <Image
-          className="h-7 w-auto dark:brightness-0 dark:invert"
+          className="h-7 w-auto"
           src="/loutre.svg"
           width={1254}
           height={1254}
