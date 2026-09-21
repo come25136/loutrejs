@@ -233,7 +233,7 @@ export function SiteChrome({ children }: { readonly children: ReactNode }) {
               <GithubMark className="size-3.5" />
               {copy.github}
             </a>
-            <span>© 2026 · MIT</span>
+            <span>© 2026 come25136. MIT License</span>
           </nav>
         </div>
       </footer>
