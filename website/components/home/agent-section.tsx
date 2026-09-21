@@ -100,7 +100,9 @@ export function AgentSection({ locale }: { readonly locale: Locale }) {
                 <dt className="text-slate-600">depends on</dt>
                 <dd>{service.label}</dd>
                 <dt className="text-slate-600">source</dt>
-                <dd className="break-words">{homeDevtoolsFixture.sourceFile}:54</dd>
+                <dd className="break-words">
+                  {homeDevtoolsFixture.sourceFile}:54
+                </dd>
               </dl>
             </div>
           </div>

@@ -65,7 +65,9 @@ html[data-theme='dark'] {
 @theme {
   --color-copper: #ff6a30;
   --color-moss: #15803d;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI Variable', 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI Variable', 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
   --font-serif: var(--font-sans);
   --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
   --shadow-code: 0 24px 70px rgba(17, 24, 39, 0.18);

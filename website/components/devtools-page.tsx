@@ -106,8 +106,7 @@ const copy = {
     diagnosticDetails: 'Diagnostics',
     noDiagnostics: '問題は検出されていません。',
     agentPrompt: 'Agent向けプロンプト',
-    agentPromptHint:
-      '現在のGraph診断を含む、Agent向けの修正プロンプトです。',
+    agentPromptHint: '現在のGraph診断を含む、Agent向けの修正プロンプトです。',
     copyPrompt: 'プロンプトをコピー',
     copied: 'コピーしました',
     close: '閉じる',

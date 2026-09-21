@@ -86,11 +86,7 @@ export const homeCopy = {
       ],
       before: 'コードだけ',
       after: 'Loutre DevTools',
-      questions: [
-        'どこから呼ばれる？',
-        '何に依存してる？',
-        'どこへつながる？',
-      ],
+      questions: ['どこから呼ばれる？', '何に依存してる？', 'どこへつながる？'],
       annotation: '一目でわかる。',
     },
     typeInference: {

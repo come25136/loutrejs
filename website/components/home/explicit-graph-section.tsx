@@ -104,9 +104,7 @@ export function ExplicitGraphSection({ locale }: { readonly locale: Locale }) {
               </div>
             </div>
           </article>
-          <p className="sr-only">
-            {copy.annotation}
-          </p>
+          <p className="sr-only">{copy.annotation}</p>
         </div>
       </div>
     </HomeSection>
