@@ -4,7 +4,7 @@ import { DocumentPage } from '../../../../components/document-page'
 export const metadata: Metadata = {
   title: 'Architecture',
   description:
-    'LoutreにおけるArchitecture原則と、Applicationを構成する公開境界を解説します。',
+    'LoutreのArchitectureと、Applicationを構成する公開インターフェースを解説します。',
   alternates: {
     canonical: '/ja/docs/architecture/',
     languages: {

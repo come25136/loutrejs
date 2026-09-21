@@ -36,7 +36,7 @@ const documentMetadata = {
       label: 'Architecture',
       title: 'Loutre Architecture',
       description:
-        'Application、Runtime、Toolingをつなぐ公開境界を解説します。',
+        'Application、Runtime、Toolingをつなぐ公開インターフェースを解説します。',
       filename: 'architecture.md',
     },
   ],

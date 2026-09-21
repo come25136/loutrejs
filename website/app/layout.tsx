@@ -13,11 +13,11 @@ const googleAnalyticsId = 'G-46R1D6Y88K'
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: 'Loutre — TypeScript applications for any runtime',
+    default: 'Loutre — TypeScript Framework',
     template: '%s | Loutre',
   },
   description:
-    'A TypeScript application framework that builds Application, Contract, DI, and Task as one Graph and runs it across multiple runtimes.',
+    'A TypeScript framework for a variety of runtimes. Type inference and DevTools provide a simple development experience.',
   alternates: {
     canonical: '/',
     languages: {
@@ -30,24 +30,24 @@ export const metadata: Metadata = {
     locale: 'en_US',
     alternateLocale: ['ja_JP'],
     siteName: 'Loutre',
-    title: 'Loutre — TypeScript applications for any runtime',
+    title: 'Loutre — TypeScript Framework',
     description:
-      'Build Application, Contract, DI, and Task as one Graph and run it across multiple runtimes.',
+      'A TypeScript framework for a variety of runtimes, with type inference and DevTools for a simple development experience.',
     images: [
       {
         url: '/og.png',
         width: 1280,
         height: 640,
-        alt: 'Loutre — A type-safe application framework for any runtime',
+        alt: 'Loutre — TypeScript Framework',
       },
     ],
     url: siteUrl,
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Loutre — TypeScript applications for any runtime',
+    title: 'Loutre — TypeScript Framework',
     description:
-      'Build Application, Contract, DI, and Task as one Graph and run it across multiple runtimes.',
+      'A TypeScript framework for a variety of runtimes, with type inference and DevTools for a simple development experience.',
     images: ['/og.png'],
   },
 }

@@ -11,7 +11,7 @@ flowchart TB
   code["Application code\nModules / Providers / Executions"] --> definition["Application Definition"]
   definition --> model["Application Model"]
   model --> runtime["Kernel Runtime"]
-  model --> graph["Graph Projection"]
+  model --> graphProjection["Graph Projection"]
   model --> tooling["CLI / OpenAPI / Build"]
 
   http["HTTP Extension"] --> model

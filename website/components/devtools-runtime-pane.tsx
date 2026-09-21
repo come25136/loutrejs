@@ -63,7 +63,7 @@ const copy = {
     traces: 'Traces',
     pause: '更新を一時停止',
     resume: '更新を再開',
-    noTrace: 'Applicationを実行するとExecution traceがここに流れます。',
+    noTrace: 'Applicationを実行すると、Execution Traceがここに表示されます。',
     timeline: 'Timeline',
     waterfall: 'Waterfall',
     details: 'Execution details',
@@ -80,7 +80,7 @@ const copy = {
     linkCopied: 'リンクをコピーしました',
     valueCopied: '値をコピーしました',
     runtimeNotConnected:
-      'アプリケーションランタイムが接続されていません。loutre devで起動するアプリケーションでDevtoolsModule()をimportしてください。',
+      'Application Runtimeが接続されていません。loutre devで起動するApplicationがDevtoolsModule()をimportしていることを確認してください。',
   },
 } as const
 
