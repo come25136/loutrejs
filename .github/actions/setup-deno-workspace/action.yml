@@ -19,4 +19,10 @@ runs:
     - name: Install dependencies
       shell: bash
       # Deno 2.9.5 は有効な package-lock.json の変換に失敗するため、npm lockfile は読み込ませない。
-      run: deno install --no-lock
+      # Security Dependabot PR は脆弱性修正を優先し、公開後7日の待機を解除する。
+      run: |
+        if test "${SECURITY_DEPENDABOT_PR:-false}" = 'true'; then
+          deno install --no-lock --minimum-dependency-age 0
+        else
+          deno install --no-lock
+        fi

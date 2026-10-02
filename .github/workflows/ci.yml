@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+env:
+  SECURITY_DEPENDABOT_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' && startsWith(github.head_ref, 'dependabot/npm_and_yarn/all-security-updates-') }}
+  NPM_CONFIG_MIN_RELEASE_AGE: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' && startsWith(github.head_ref, 'dependabot/npm_and_yarn/all-security-updates-') && '0' || '7' }}
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -476,7 +480,11 @@ jobs:
           }
           JSON
 
-          deno install
+          if test "$SECURITY_DEPENDABOT_PR" = 'true'; then
+            deno install --minimum-dependency-age 0
+          else
+            deno install
+          fi
           deno eval "import { denoRuntime } from '@loutrejs/loutre/runtime/deno'; if (denoRuntime.runtime !== 'deno') throw new Error('Deno runtime import failed')"
           deno eval "import { http } from '@loutrejs/loutre/http'; if (!http) throw new Error('HTTP subpath import failed')"
           deno eval "import { tasksExtension } from '@loutrejs/loutre/tasks'; if (!tasksExtension) throw new Error('Tasks subpath import failed')"
