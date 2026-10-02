@@ -8,10 +8,6 @@ on:
 permissions:
   contents: read
 
-env:
-  SECURITY_DEPENDABOT_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' && startsWith(github.head_ref, 'dependabot/npm_and_yarn/all-security-updates-') }}
-  NPM_CONFIG_MIN_RELEASE_AGE: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' && startsWith(github.head_ref, 'dependabot/npm_and_yarn/all-security-updates-') && '0' || '7' }}
-
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -119,7 +115,7 @@ jobs:
       - name: Install Node.js 22 type baseline
         run: |
           npm pkg set 'devDependencies.@types/node=22.20.1'
-          npm install --ignore-scripts --no-audit --no-fund
+          NPM_CONFIG_MIN_RELEASE_AGE=0 npm install --ignore-scripts --no-audit --no-fund
 
       - name: Type check
         run: npm run check
@@ -295,7 +291,7 @@ jobs:
           node-version: 24.x
 
       - name: Install Electron ${{ matrix.version }}
-        run: npm install --no-save --package-lock=false electron@${{ matrix.version }}
+        run: NPM_CONFIG_MIN_RELEASE_AGE=0 npm install --no-save --package-lock=false electron@${{ matrix.version }}
 
       - name: Build packages
         run: npm run build
@@ -354,7 +350,7 @@ jobs:
           mkdir -p "$consumer"
           cd "$consumer"
           npm init -y >/dev/null
-          npm install "${RUNNER_TEMP}/loutre-package-tarballs"/*.tgz --no-audit --no-fund
+          NPM_CONFIG_MIN_RELEASE_AGE=0 npm install "${RUNNER_TEMP}/loutre-package-tarballs"/*.tgz --no-audit --no-fund
 
           node --input-type=module -e "import { nodeRuntime } from '@loutrejs/node'; if (nodeRuntime.runtime !== 'node') throw new Error('Node runtime import failed')"
           node --input-type=module -e "import { http } from '@loutrejs/loutre/http'; if (!http) throw new Error('HTTP subpath import failed')"
@@ -480,11 +476,7 @@ jobs:
           }
           JSON
 
-          if test "$SECURITY_DEPENDABOT_PR" = 'true'; then
-            deno install --minimum-dependency-age 0
-          else
-            deno install
-          fi
+          deno install --minimum-dependency-age 0
           deno eval "import { denoRuntime } from '@loutrejs/loutre/runtime/deno'; if (denoRuntime.runtime !== 'deno') throw new Error('Deno runtime import failed')"
           deno eval "import { http } from '@loutrejs/loutre/http'; if (!http) throw new Error('HTTP subpath import failed')"
           deno eval "import { tasksExtension } from '@loutrejs/loutre/tasks'; if (!tasksExtension) throw new Error('Tasks subpath import failed')"
