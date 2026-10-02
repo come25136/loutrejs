@@ -18,7 +18,7 @@ const helloHttpWorkspace = '@loutrejs/example-hello-http'
 const nestedContractAuthWorkspace = '@loutrejs/example-nested-contract-auth'
 const helloWorkerWorkspace = '@loutrejs/example-hello-worker'
 
-describe.sequential('example projects', () => {
+describe('example projects', { concurrent: false }, () => {
   it('Hello HTTP projectをstartして外部HTTP requestへ応答する', async () => {
     const port = await reserveHttpPort()
     const example = startWorkspace(helloHttpWorkspace, 'start', {
