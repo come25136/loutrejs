@@ -47,17 +47,17 @@
     "check:dependencies": "depcruise --config .dependency-cruiser.cjs packages/loutre/src packages/node/src packages/bullmq/src packages/cli/src packages/create-loutre/src"
   },
   "devDependencies": {
-    "@changesets/cli": "^3.0.1",
+    "@changesets/cli": "^3.0.3",
     "@swc/core": "^1.16.0",
-    "@types/node": "^26.2.0",
-    "dependency-cruiser": "^18.2.0",
-    "electron": "^43.4.1",
+    "@types/node": "^26.6.2",
+    "dependency-cruiser": "^18.4.0",
+    "electron": "^44.4.5",
     "esbuild": "^0.28.2",
-    "oxfmt": "^0.64.0",
-    "oxlint": "^1.79.0",
+    "oxfmt": "^0.70.0",
+    "oxlint": "^1.85.0",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11",
-    "workerd": "^1.20260823.1",
-    "zod": "^4.4.3"
+    "vitest": "^5.0.2",
+    "workerd": "^1.20260925.1",
+    "zod": "^4.6.5"
   }
 }
