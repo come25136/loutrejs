@@ -17,7 +17,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@clack/prompts": "^1.7.0",
+    "@clack/prompts": "^1.8.1",
     "@loutrejs/loutre": "^0.7.0",
     "commander": "^15.0.0",
     "ts-pattern": "^5.9.0"
