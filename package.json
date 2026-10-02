@@ -51,7 +51,7 @@
     "@swc/core": "^1.16.0",
     "@types/node": "^26.2.0",
     "dependency-cruiser": "^18.2.0",
-    "electron": "^43.4.1",
+    "electron": "^43.5.0",
     "esbuild": "^0.28.2",
     "oxfmt": "^0.64.0",
     "oxlint": "^1.79.0",
