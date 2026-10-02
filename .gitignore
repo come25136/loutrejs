@@ -5,6 +5,7 @@ coverage/
 website/.next/
 website/next-env.d.ts
 website/out/
+website/lib/oss-licenses.generated.ts
 
 .tmp/
 .loutre/
