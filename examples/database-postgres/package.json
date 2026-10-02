@@ -19,12 +19,12 @@
     "@loutrejs/loutre": "0.7.0",
     "@loutrejs/node": "0.7.0",
     "pg": "^8.23.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@loutrejs/cli": "0.7.0",
     "@types/pg": "^8.23.1",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
