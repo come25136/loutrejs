@@ -27,7 +27,7 @@
     "chokidar": "^5.0.0",
     "esbuild": "^0.28.2",
     "ts-pattern": "^5.9.0",
-    "ws": "^8.21.3"
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",
