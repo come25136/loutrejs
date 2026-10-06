@@ -23,14 +23,14 @@
   },
   "dependencies": {
     "@loutrejs/loutre": "^0.7.0",
-    "@swc/core": "^1.16.2",
+    "@swc/core": "^1.16.12",
     "chokidar": "^5.0.0",
     "esbuild": "^0.28.2",
     "ts-pattern": "^5.9.0",
-    "ws": "^8.21.3"
+    "ws": "^8.22.0"
   },
   "devDependencies": {
-    "@types/ws": "^8.18.1",
+    "@types/ws": "^8.18.2",
     "tsx": "^4.23.15"
   },
   "repository": {
