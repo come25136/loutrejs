@@ -19,6 +19,8 @@ for (const http of [true, false]) {
       `http://127.0.0.1:${port}/graphql`,
       http,
       () => application.close(),
+      // Bun 1.3のclientはserverが1001を送ってもclose eventを1000として通知する。
+      runtime.runtime === 'bun' ? [1000, 1001] : [1001],
     )
   } finally {
     await application.close()

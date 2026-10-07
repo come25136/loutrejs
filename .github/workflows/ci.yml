@@ -221,6 +221,7 @@ jobs:
         run: |
           BUN_BIN="$(command -v bun)"
           "$BUN_BIN" conformance/bun.ts
+          "$BUN_BIN" conformance/graphql-native.ts
 
   deno-conformance:
     name: Runtime Conformance / Deno 2.9.5
@@ -259,6 +260,7 @@ jobs:
         run: |
           DENO_BIN="$(command -v deno)"
           "$DENO_BIN" run -A --sloppy-imports conformance/deno.ts
+          "$DENO_BIN" run -A --sloppy-imports conformance/graphql-native.ts
 
   cloudflare-workers-conformance:
     name: Runtime Conformance / Cloudflare Workers
@@ -295,7 +297,7 @@ jobs:
           node-version: 24.x
 
       - name: Install Electron ${{ matrix.version }}
-        run: npm install --no-save --package-lock=false electron@${{ matrix.version }}
+        run: npm install --no-save --no-audit --no-fund electron@${{ matrix.version }}
 
       - name: Build packages
         run: npm run build

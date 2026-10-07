@@ -34,4 +34,6 @@ WebSocket clientは`graphql-transport-ws` subprotocolを指定してください
 
 transportを省略するとHTTPだけを有効にします。WebSocketだけの場合は`transports: { websocket: true }`を指定します。Node.js / Bun / Deno / Cloudflare Workersで両transportを利用でき、AWS LambdaはHTTPだけを利用します。
 
+Bun 1.3ではserver側からWebSocketを閉じた後にnative `server.stop()`が完了しない[既知の不具合](https://github.com/oven-sh/bun/issues/36223)があります。Loutreのcleanupを完了してから、`forceShutdownTimeoutMs`（既定5秒）までnative stopを待機し、期限を過ぎたら強制停止します。
+
 [設計](../../docs/adr/loutre_graphql_transport_architecture.md)
