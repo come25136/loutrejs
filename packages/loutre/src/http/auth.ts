@@ -72,7 +72,9 @@ export interface BasicAuthRuntime<
     | null
     | undefined
     | Promise<TContribution | null | undefined>
-  unauthorized(): HttpAuthenticationFailure<TResponse, TUnauthorizedBody>
+  unauthorized():
+    | HttpAuthenticationFailure<TResponse, TUnauthorizedBody>
+    | Response
 }
 
 export function basicAuth<
@@ -87,27 +89,29 @@ export function basicAuth<
   AuthenticationShortCircuit<TResponse, TUnauthorizedBody>
 > {
   const challenge = formatBasicChallenge(definition.realm)
-  return defineLayer<TContribution, HttpMiddlewareContext, HttpExecutionResult>(
-    {
-      name: definition.name ?? 'basicAuth',
-      factory: () => {
-        const runtime = definition.factory()
-        return async (context, next) => {
-          const credentials = decodeBasicCredentials(
-            context.request.headers.get('authorization'),
-          )
-          if (!credentials) {
-            return authenticationFailure(runtime.unauthorized(), challenge)
-          }
-          const contribution = await runtime.authenticate(credentials)
-          if (contribution == null) {
-            return authenticationFailure(runtime.unauthorized(), challenge)
-          }
-          await next(contribution)
+  return defineLayer<
+    TContribution,
+    HttpMiddlewareContext,
+    HttpExecutionResult | Response
+  >({
+    name: definition.name ?? 'basicAuth',
+    factory: () => {
+      const runtime = definition.factory()
+      return async (context, next) => {
+        const credentials = decodeBasicCredentials(
+          context.request.headers.get('authorization'),
+        )
+        if (!credentials) {
+          return authenticationFailure(runtime.unauthorized(), challenge)
         }
-      },
+        const contribution = await runtime.authenticate(credentials)
+        if (contribution == null) {
+          return authenticationFailure(runtime.unauthorized(), challenge)
+        }
+        await next(contribution)
+      }
     },
-  )
+  })
 }
 
 export interface BearerAuthDefinition<
@@ -136,7 +140,9 @@ export interface BearerAuthRuntime<
     | null
     | undefined
     | Promise<TContribution | null | undefined>
-  unauthorized(): HttpAuthenticationFailure<TResponse, TUnauthorizedBody>
+  unauthorized():
+    | HttpAuthenticationFailure<TResponse, TUnauthorizedBody>
+    | Response
 }
 
 export function bearerAuth<
@@ -151,33 +157,44 @@ export function bearerAuth<
   AuthenticationShortCircuit<TResponse, TUnauthorizedBody>
 > {
   const challenge = formatBearerChallenge(definition.realm)
-  return defineLayer<TContribution, HttpMiddlewareContext, HttpExecutionResult>(
-    {
-      name: definition.name ?? 'bearerAuth',
-      factory: () => {
-        const runtime = definition.factory()
-        return async (context, next) => {
-          const token = readBearerToken(
-            context.request.headers.get('authorization'),
-          )
-          if (!token) {
-            return authenticationFailure(runtime.unauthorized(), challenge)
-          }
-          const contribution = await runtime.authenticate(token)
-          if (contribution == null) {
-            return authenticationFailure(runtime.unauthorized(), challenge)
-          }
-          await next(contribution)
+  return defineLayer<
+    TContribution,
+    HttpMiddlewareContext,
+    HttpExecutionResult | Response
+  >({
+    name: definition.name ?? 'bearerAuth',
+    factory: () => {
+      const runtime = definition.factory()
+      return async (context, next) => {
+        const token = readBearerToken(
+          context.request.headers.get('authorization'),
+        )
+        if (!token) {
+          return authenticationFailure(runtime.unauthorized(), challenge)
         }
-      },
+        const contribution = await runtime.authenticate(token)
+        if (contribution == null) {
+          return authenticationFailure(runtime.unauthorized(), challenge)
+        }
+        await next(contribution)
+      }
     },
-  )
+  })
 }
 
 function authenticationFailure<TResponse extends string, TBody>(
-  failure: HttpAuthenticationFailure<TResponse, TBody>,
+  failure: HttpAuthenticationFailure<TResponse, TBody> | Response,
   challenge: string,
-): AuthenticationShortCircuit<TResponse, TBody> {
+): AuthenticationShortCircuit<TResponse, TBody> | Response {
+  if (failure instanceof Response) {
+    const headers = new Headers(failure.headers)
+    headers.set('www-authenticate', challenge)
+    return new Response(failure.body, {
+      status: failure.status,
+      statusText: failure.statusText,
+      headers,
+    })
+  }
   return {
     kind: 'http-result',
     response: failure.response,

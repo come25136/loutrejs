@@ -1,6 +1,6 @@
 # Loutre GraphQLトランスポート設計
 
-ステータス: Draft
+ステータス: Accepted
 
 ## 背景
 
@@ -94,9 +94,7 @@ export interface ExecutionGroup {
   readonly executions: readonly ExecutionDeclaration[]
 }
 
-export type ExecutionDeclaration =
-  | ExecutionDefinition
-  | ExecutionGroup
+export type ExecutionDeclaration = ExecutionDefinition | ExecutionGroup
 ```
 
 Moduleの`executions`は`ExecutionDeclaration[]`を受け取り、Application Model compilerがcompile前にflattenする。
@@ -113,10 +111,7 @@ http.raw({
   route: {
     method: '*',
     path: '/graphql',
-    middlewares: [
-      auth(),
-      rateLimit(),
-    ],
+    middlewares: [auth(), rateLimit()],
   },
   factory: () => async (ctx) => {
     return graphqlHandler(ctx.request)
@@ -419,13 +414,9 @@ GraphQL operationはそのsession配下のsub-operationとしてtraceする。
 interface ExecutionContextView {
   readonly signal: AbortSignal
 
-  annotate(
-    attributes: Readonly<Record<string, unknown>>,
-  ): void
+  annotate(attributes: Readonly<Record<string, unknown>>): void
 
-  beginOperation(
-    metadata: RuntimeOperationMetadata,
-  ): ExecutionOperationLease
+  beginOperation(metadata: RuntimeOperationMetadata): ExecutionOperationLease
 }
 ```
 

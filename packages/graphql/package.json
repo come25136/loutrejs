@@ -1,5 +1,5 @@
 {
-  "name": "@loutrejs/node",
+  "name": "@loutrejs/graphql",
   "version": "0.7.0",
   "license": "MIT",
   "type": "module",
@@ -18,18 +18,17 @@
     "access": "public",
     "provenance": true
   },
-  "engines": {
-    "node": ">=22"
-  },
   "peerDependencies": {
-    "@loutrejs/loutre": "^0.7.0"
+    "@loutrejs/loutre": "^0.7.0",
+    "graphql": "^16.11.0 || ^17.0.0"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/come25136/loutrejs",
-    "directory": "packages/node"
+    "directory": "packages/graphql"
   },
   "dependencies": {
-    "ws": "^8.18.3"
+    "graphql-http": "^1.23.1",
+    "graphql-ws": "^6.3.0"
   }
 }

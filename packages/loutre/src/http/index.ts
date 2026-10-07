@@ -32,6 +32,7 @@ export {
   defineHttpContract,
   defineHttpImplementation,
   defineHttpMiddleware,
+  defineHttpRaw,
   httpError,
   executionHttp as http,
   httpExecutionExtension,
@@ -40,6 +41,10 @@ export {
   validate,
 } from './extension.js'
 export type {
+  HttpRawDefinition,
+  HttpRawRouteDefinition,
+  HttpRawExecutionContext,
+  HttpRawExecutionDefinition,
   HttpContract,
   HttpContractBranchDefinition,
   HttpContractNodeDefinition,
@@ -76,3 +81,5 @@ export {
   parseHttpPath,
 } from './path.js'
 export type { HttpPathSegment, PathParamNames } from './path.js'
+
+export type { HttpRequestHeadDefinition } from './request-head.js'

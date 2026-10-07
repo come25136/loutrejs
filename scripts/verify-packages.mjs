@@ -9,6 +9,7 @@ const repositoryUrl = 'https://github.com/come25136/loutrejs'
 const expectedPublicPackages = new Set([
   '@loutrejs/loutre',
   '@loutrejs/node',
+  '@loutrejs/graphql',
   '@loutrejs/bullmq',
   '@loutrejs/cli',
   'create-loutre',

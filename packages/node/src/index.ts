@@ -1,3 +1,8 @@
+import { createNodeWebSocketDriver } from './websocket.js'
+import {
+  bindWebSocketServer,
+  type WebSocketHostApi,
+} from '@loutrejs/loutre/websocket'
 import { once } from 'node:events'
 import { createServer, type Server } from 'node:http'
 import { Readable } from 'node:stream'
@@ -7,14 +12,9 @@ import {
   type ApplicationDefinition,
   type BootstrapArguments,
   type KernelHostedApplication,
-  type RequireApplicationExtension,
   type RuntimeCapabilityBinding,
 } from '@loutrejs/loutre'
-import {
-  bindHttpServer,
-  httpExecutionExtension,
-  type HttpHostApi,
-} from '@loutrejs/loutre/http'
+import { bindHttpServer, type HttpHostApi } from '@loutrejs/loutre/http'
 import {
   LOUTRE_VERSION,
   detectPresentationTerminal,
@@ -28,11 +28,8 @@ import {
   serverUrl,
 } from '@loutrejs/loutre/runtime'
 
-type HttpApplication<TDefinition extends ApplicationDefinition> =
-  RequireApplicationExtension<TDefinition, typeof httpExecutionExtension>
-
 export type NodeCreateOptions<TDefinition extends ApplicationDefinition> = {
-  readonly application: HttpApplication<TDefinition>
+  readonly application: TDefinition
   readonly environment?: unknown
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
   readonly forceShutdownTimeoutMs?: number
@@ -73,15 +70,11 @@ async function create<const TDefinition extends ApplicationDefinition>(
     },
   )
 
-  if (
-    options.application.model.extensions.get(httpExecutionExtension) ===
-    undefined
-  ) {
-    throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: nodeRuntime.create() requires the HTTP Execution Extension.',
+  const websocketDriver = createNodeWebSocketDriver()
+  const requires = (id: string) =>
+    options.application.model.executions.some((execution) =>
+      execution.capabilities.some((capability) => capability.id === id),
     )
-  }
-
   const devtools = createNodeDevtoolsSession(options.application)
   let hosted: ReturnType<typeof createKernelApplication<TDefinition>>
   try {
@@ -89,7 +82,12 @@ async function create<const TDefinition extends ApplicationDefinition>(
       ...options,
       application: options.application,
       capabilities: [
-        bindHttpServer({ runtime: 'node' }),
+        ...(requires('http.server')
+          ? [bindHttpServer({ runtime: 'node' })]
+          : []),
+        ...(requires('websocket.server')
+          ? [bindWebSocketServer(websocketDriver.driver)]
+          : []),
         ...(options.capabilities ?? []),
       ],
       environment: 'environment' in options ? options.environment : process.env,
@@ -108,7 +106,12 @@ async function create<const TDefinition extends ApplicationDefinition>(
     throw error
   }
   const application = hosted as NodeRuntimeApplication<TDefinition>
-  const http = (hosted as unknown as { readonly http: HttpHostApi }).http
+  const http = (hosted as unknown as { readonly http?: HttpHostApi }).http ?? {
+    fetch: async () => new Response('Not Found', { status: 404 }),
+  }
+  const websocket = (
+    hosted as unknown as { readonly websocket?: WebSocketHostApi }
+  ).websocket
 
   const closeApplication = application.close.bind(application)
   let server: Server | undefined
@@ -184,6 +187,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
     serving = true
     try {
       server = createNodeHttpServerDriver(http)
+      if (websocket) websocketDriver.attach(server, websocket)
       const requestedPort = serveOptions.port
       let port = initialServerPort(requestedPort)
       while (true) {

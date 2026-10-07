@@ -33,6 +33,7 @@ function deferred<T>(): Deferred<T> {
 }
 
 class FixtureConnection implements WebSocketConnectionDriver {
+  readonly protocol = ''
   readonly sent: WebSocketDataMessage[] = []
   readonly closeRequests: {
     readonly code?: number
@@ -111,7 +112,7 @@ describe('WebSocket Execution Extension', () => {
       contract: websocket.contract({
         route: {
           path: '/rooms/{roomId}',
-          request: { params: { other: z.string() } },
+          handshake: { params: { other: z.string() } },
         },
       }),
       factory: () => ({ route: async () => undefined }),
@@ -129,30 +130,8 @@ describe('WebSocket Execution Extension', () => {
         'api.chat': async () => undefined,
       }),
     })
-    const duplicateInheritedResponse = websocket.implementation({
-      name: 'duplicate-inherited-response',
-      contract: websocket.contract({
-        api: {
-          responses: { unauthorized: { status: 401 } },
-          routes: {
-            route: {
-              path: '/route',
-              responses: { unauthorized: { status: 403 } },
-            },
-          },
-        },
-      }),
-      factory: () => ({
-        'api.route': async () => undefined,
-      }),
-    })
     const Module = defineModule(() => ({
-      executions: [
-        invalidPath,
-        invalidParams,
-        duplicateNestedName,
-        duplicateInheritedResponse,
-      ],
+      executions: [invalidPath, invalidParams, duplicateNestedName],
     }))
 
     const diagnostics = defineApplication({
@@ -177,12 +156,6 @@ describe('WebSocket Execution Extension', () => {
             'Duplicate nested WebSocket route name',
           ),
         }),
-        expect.objectContaining({
-          code: 'LUTRE_EXTENSION_COMPILE',
-          message: expect.stringContaining(
-            'Duplicate inherited WebSocket response',
-          ),
-        }),
       ]),
     )
   })
@@ -196,7 +169,7 @@ describe('WebSocket Execution Extension', () => {
     const contract = websocket.contract({
       chat: {
         path: '/rooms/{roomId}/chat',
-        request: { params: { roomId: z.string() } },
+        handshake: { params: { roomId: z.string() } },
         messages: websocket.json({
           input: z.object({ type: z.literal('hello') }),
           output: z.object({ sequence: z.number() }),
@@ -260,7 +233,7 @@ describe('WebSocket Execution Extension', () => {
     const connection = new FixtureConnection()
     const route = {
       path: '/snapshot/{roomId}',
-      request: { params: { roomId: z.string() } },
+      handshake: { params: { roomId: z.string() } },
     }
     const contract = websocket.contract({ snapshot: route })
     const controller = websocket.implementation({
@@ -274,7 +247,7 @@ describe('WebSocket Execution Extension', () => {
     const Module = defineModule(() => ({ executions: [controller] }))
     const definition = defineApplication({ modules: [Module()] })
 
-    ;(route.request.params as Record<string, unknown>).roomId = z.number()
+    ;(route.handshake.params as Record<string, unknown>).roomId = z.number()
 
     const application = await bootstrapApplication({
       application: definition,
@@ -297,11 +270,11 @@ describe('WebSocket Execution Extension', () => {
     const contract = websocket.contract({
       room: {
         path: '/rooms/{roomId}',
-        request: { params: { roomId: z.string() } },
+        handshake: { params: { roomId: z.string() } },
       },
       current: {
         path: '/rooms/me',
-        request: {
+        handshake: {
           query: z.object({ tag: z.array(z.string()) }),
         },
       },
@@ -402,6 +375,7 @@ describe('WebSocket Execution Extension', () => {
     const secondClosed = deferred<WebSocketCloseInfo>()
     const connections: WebSocketConnectionDriver[] = [
       {
+        protocol: '',
         messages: (async function* () {})(),
         closed: firstClosed.promise,
         async send() {},
@@ -414,6 +388,7 @@ describe('WebSocket Execution Extension', () => {
         },
       },
       {
+        protocol: '',
         messages: (async function* () {})(),
         closed: secondClosed.promise,
         async send() {},
@@ -504,6 +479,7 @@ describe('WebSocket Execution Extension', () => {
       const closed = deferred<WebSocketCloseInfo>()
       let terminateAttempts = 0
       const connection: WebSocketConnectionDriver = {
+        protocol: '',
         messages: (async function* () {})(),
         closed: closed.promise,
         async send() {},
@@ -686,6 +662,7 @@ describe('WebSocket Execution Extension', () => {
     const closed = deferred<WebSocketCloseInfo>()
     let terminateAttempts = 0
     const connection: WebSocketConnectionDriver = {
+      protocol: '',
       messages: (async function* () {})(),
       closed: closed.promise,
       async send() {},

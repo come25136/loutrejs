@@ -108,7 +108,7 @@ workerApplication.tasks.start()
 workerApplication.tasks.stop()
 // @ts-expect-error Task inputはnumber
 workerApplication.tasks.run(calculate, '41')
-// @ts-expect-error HTTP executionが無いApplicationにはhttpを公開しない
+// @ts-expect-error HTTP executionが無いApplicationにhttpは公開しない
 workerApplication.http
 // @ts-expect-error required ArgumentsはKernel Application生成時に必要
 createKernelApplication({ application: workerDefinition })
@@ -167,19 +167,15 @@ const customHttpDefinition = defineApplication({
   modules: [customHttpModule()],
 })
 nodeRuntime.create({
-  // @ts-expect-error Node runtimeはnamespaceだけが同じcustom extensionを受け付けない
   application: customHttpDefinition,
 })
 bunRuntime.create({
-  // @ts-expect-error Bun runtimeもHTTP Extension identityを要求する
   application: customHttpDefinition,
 })
 denoRuntime.create({
-  // @ts-expect-error Deno runtimeもHTTP Extension identityを要求する
   application: customHttpDefinition,
 })
 cloudflareWorkersRuntime.bind({
-  // @ts-expect-error Cloudflare Workers runtimeもHTTP Extension identityを要求する
   application: customHttpDefinition,
 })
 awsLambdaRuntime.bind({
@@ -241,7 +237,6 @@ denoRuntime.create({ application: httpDefinition }).then((app) => {
   app.serve({ shutdownHooks: false })
 })
 nodeRuntime.create({
-  // @ts-expect-error HTTP executionが無いApplicationはNode server runtimeへ渡せない
   application: workerDefinition,
   arguments: { instance: 'worker-1' },
 })

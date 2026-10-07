@@ -3,6 +3,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { build } from 'esbuild'
+import { pathToFileURL } from 'node:url'
 
 const directory = await mkdtemp(join(tmpdir(), 'loutre-cloudflare-workers-'))
 const worker = join(directory, 'worker.js')
@@ -64,6 +65,29 @@ try {
   if (!(await streamed.text()).includes('"sequence":3')) {
     throw new Error('Cloudflare Workers server-stream conformance failed')
   }
+  const client = join(directory, 'graphql-client.mjs')
+  await build({
+    entryPoints: [resolve('conformance/graphql-client.ts')],
+    outfile: client,
+    bundle: true,
+    format: 'esm',
+    platform: 'neutral',
+  })
+  const { verifyGraphQLTransports } = await import(pathToFileURL(client).href)
+  await verifyGraphQLTransports(
+    'http://127.0.0.1:18787/graphql',
+    true,
+    async () => {
+      await fetch('http://127.0.0.1:18787/shutdown?http=true')
+    },
+  )
+  await verifyGraphQLTransports(
+    'http://127.0.0.1:18787/ws-only',
+    false,
+    async () => {
+      await fetch('http://127.0.0.1:18787/shutdown')
+    },
+  )
   console.log('Cloudflare Workers (workerd 2026-08-24) conformance: passed')
 } finally {
   await terminateChild(child)

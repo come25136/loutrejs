@@ -62,6 +62,7 @@ import {
   responseHeadersSchema,
   validateResponseHeaders,
 } from './runtime/response.js'
+import type { HttpRequestHeadDefinition } from './request-head.js'
 import { match as patternMatch } from 'ts-pattern'
 
 export interface HttpServerDriver {
@@ -70,10 +71,7 @@ export interface HttpServerDriver {
 
 export const HTTP_SERVER = runtimeCapability<HttpServerDriver>('http.server')
 
-export interface HttpExecutionRequestDefinition {
-  readonly params?: Readonly<Record<string, StandardSchemaV1>>
-  readonly query?: StandardSchemaV1
-  readonly headers?: StandardSchemaV1
+export interface HttpExecutionRequestDefinition extends HttpRequestHeadDefinition {
   readonly body?: StandardSchemaV1
 }
 
@@ -136,7 +134,8 @@ export interface HttpExecutionRouteDefinition {
   readonly interaction?: 'unary' | 'server-stream'
 }
 
-type AnyHttpMiddleware = GenericLayer<any, any, HttpExecutionResult>
+type HttpMiddlewareOutcome = HttpExecutionResult | Response
+type AnyHttpMiddleware = GenericLayer<any, any, HttpMiddlewareOutcome>
 type HttpRouteMiddleware = AnyHttpMiddleware | HttpValidationMiddleware
 
 export interface HttpContractBranchDefinition {
@@ -160,7 +159,7 @@ export type HttpMiddleware<
   TContribution extends object = object,
   TContext extends object = HttpMiddlewareContext,
   TShortCircuit extends HttpExecutionResult = never,
-> = GenericLayer<TContext, TContribution, HttpExecutionResult> & {
+> = GenericLayer<TContext, TContribution, HttpMiddlewareOutcome> & {
   readonly [httpMiddlewareShortCircuit]?: TShortCircuit
 }
 
@@ -526,6 +525,49 @@ export interface HttpImplementationDefinition<
   readonly factory: () => HttpHandlers<TContract>
 }
 
+export interface HttpRawRouteDefinition {
+  readonly method: string
+  readonly path: string
+  readonly middlewares?: readonly AnyHttpMiddleware[]
+  readonly protocol?: string
+}
+
+export interface HttpRawExecutionContext<
+  TState = Readonly<Record<string, unknown>>,
+> {
+  readonly request: Request
+  readonly signal: AbortSignal
+  readonly state: Readonly<TState>
+}
+
+type RawMiddlewareState<TMiddlewares extends readonly AnyHttpMiddleware[]> =
+  UnionToIntersection<MiddlewareContribution<TMiddlewares[number]>> & object
+
+export interface HttpRawDefinition<
+  TMiddlewares extends readonly AnyHttpMiddleware[] =
+    readonly AnyHttpMiddleware[],
+> {
+  readonly name?: string
+  readonly route: HttpRawRouteDefinition & {
+    readonly middlewares?: TMiddlewares
+  }
+  readonly factory: () => (
+    context: HttpRawExecutionContext<RawMiddlewareState<TMiddlewares>>,
+  ) => Response | Promise<Response>
+}
+
+export type HttpRawExecutionDefinition = HttpRawDefinition &
+  ExecutionDefinition<typeof httpExecutionExtension>
+
+export function defineHttpRaw<
+  const TMiddlewares extends readonly AnyHttpMiddleware[] = readonly [],
+>(
+  definition: HttpRawDefinition<TMiddlewares>,
+): HttpRawDefinition<TMiddlewares> &
+  ExecutionDefinition<typeof httpExecutionExtension> {
+  return defineExecution(httpExecutionExtension, { ...definition, raw: true })
+}
+
 interface CompiledHttpRoute {
   readonly name: string
   readonly method: string
@@ -535,6 +577,8 @@ interface CompiledHttpRoute {
   readonly definition: HttpExecutionRouteDefinition
   readonly middlewares: readonly AnyHttpMiddleware[]
   readonly source?: SourceLocation
+  readonly raw?: boolean
+  readonly protocol?: string
 }
 
 interface CompiledHttpExecution {
@@ -543,7 +587,7 @@ interface CompiledHttpExecution {
     string,
     (
       context: HttpExecutionContext,
-    ) => HttpExecutionResult | Promise<HttpExecutionResult>
+    ) => HttpMiddlewareOutcome | Promise<HttpMiddlewareOutcome>
   >
 }
 
@@ -564,7 +608,7 @@ export interface HttpHostApi {
 declare const httpExecutionExtensionIdentity: unique symbol
 
 export const httpExecutionExtension = defineExecutionExtension<
-  HttpImplementationDefinition & ExecutionDefinition,
+  (HttpImplementationDefinition | HttpRawDefinition) & ExecutionDefinition,
   CompiledHttpExecution,
   'http',
   HttpHostApi,
@@ -574,10 +618,12 @@ export const httpExecutionExtension = defineExecutionExtension<
   abiVersion: '1',
   name: 'loutre:http',
   compile(definition, context) {
-    const contractSource = getSourceLocation(definition.contract)
-    const routes = Object.entries(definition.contract.routes).map(
-      ([name, route]) => compileHttpRoute(name, route, contractSource),
-    )
+    const raw = 'route' in definition
+    const routes: CompiledHttpRoute[] = raw
+      ? [compileRawRoute(definition.route)]
+      : Object.entries(definition.contract.routes).map(([name, route]) =>
+          compileHttpRoute(name, route, getSourceLocation(definition.contract)),
+        )
     const id =
       definition.name || `${context.moduleId}.http.${context.definitionIndex}`
     const dependencies = new Set(
@@ -619,7 +665,9 @@ export const httpExecutionExtension = defineExecutionExtension<
       ],
       compiled: Object.freeze({
         routes: Object.freeze(routes),
-        factory: definition.factory as CompiledHttpExecution['factory'],
+        factory: (raw
+          ? () => ({ raw: definition.factory() })
+          : definition.factory) as CompiledHttpExecution['factory'],
       }),
     }
   },
@@ -659,12 +707,20 @@ export const httpExecutionExtension = defineExecutionExtension<
           ? {}
           : { source: getSourceLocation(middleware) }),
       })),
-      responses: Object.fromEntries(
-        Object.entries(route.definition.responses).map(([name, response]) => [
-          name,
-          { status: response.status },
-        ]),
-      ),
+      ...(route.raw
+        ? {
+            raw: true,
+            ...(route.protocol === undefined
+              ? {}
+              : { protocol: route.protocol }),
+          }
+        : {
+            responses: Object.fromEntries(
+              Object.entries(route.definition.responses).map(
+                ([name, response]) => [name, { status: response.status }],
+              ),
+            ),
+          }),
     })),
   }),
   host: {
@@ -672,7 +728,7 @@ export const httpExecutionExtension = defineExecutionExtension<
     create: ({ runtime }) => ({ fetch: (request) => runtime.fetch(request) }),
   },
 }) as ExecutionExtension<
-  HttpImplementationDefinition & ExecutionDefinition,
+  (HttpImplementationDefinition | HttpRawDefinition) & ExecutionDefinition,
   CompiledHttpExecution,
   'http',
   HttpHostApi,
@@ -1048,9 +1104,11 @@ export function defineHttpMiddleware<
   readonly state?: Type<TContribution>
   readonly factory: HttpMiddleware<NoInfer<TContribution>>['factory']
 }): HttpMiddleware<TContribution> {
-  return defineLayer<TContribution, HttpMiddlewareContext, HttpExecutionResult>(
-    definition,
-  )
+  return defineLayer<
+    TContribution,
+    HttpMiddlewareContext,
+    HttpMiddlewareOutcome
+  >(definition)
 }
 
 const bodyValidation = Object.freeze({
@@ -1063,6 +1121,7 @@ export const validate = Object.freeze({
 })
 
 export const executionHttp = Object.freeze({
+  raw: defineHttpRaw,
   contract: defineHttpContract,
   implementation: defineHttpImplementation,
   middleware: defineHttpMiddleware,
@@ -1092,11 +1151,33 @@ export function withHttpFrameworkHeaders(
   } as HttpExecutionResultWithFrameworkHeaders
 }
 
+function compileRawRoute(route: HttpRawRouteDefinition): CompiledHttpRoute {
+  if (route.method !== '*') assertValidHttpMethod(route.method)
+  const segments = parseHttpPath(route.path)
+  return Object.freeze({
+    name: 'raw',
+    method: route.method.toUpperCase(),
+    path: route.path,
+    segments,
+    dispatch: createHttpDispatchKey(route.method, segments),
+    definition: Object.freeze({
+      method: route.method,
+      path: route.path,
+      responses: Object.freeze({}),
+    }),
+    middlewares: Object.freeze([...(route.middlewares ?? [])]),
+    raw: true,
+    ...(route.protocol === undefined ? {} : { protocol: route.protocol }),
+  })
+}
+
 function compileHttpRoute(
   name: string,
   route: HttpExecutionRouteDefinition,
   routeSourceFallback?: SourceLocation,
 ): CompiledHttpRoute {
+  if (route.method === '*')
+    throw new TypeError('method: *はhttp.raw()でのみ利用できます。')
   assertValidHttpMethod(route.method)
   const segments = parseHttpPath(route.path)
   assertValidHttpRouteDefinition(route, segments)
@@ -1603,26 +1684,31 @@ function createHttpExtensionRuntime(
                   name: handlerName,
                   graphNodeId: match.executionId,
                 },
-                {
-                  input: middlewareContext.input,
-                  invoke: (input) =>
-                    replayHttpHandler(
-                      applicationRuntime,
-                      handler,
-                      match,
-                      input,
-                      middlewareContext.state,
-                    ),
-                },
+                match.route.raw
+                  ? undefined
+                  : {
+                      input: middlewareContext.input,
+                      invoke: (input) =>
+                        replayHttpHandler(
+                          applicationRuntime,
+                          handler as Parameters<typeof replayHttpHandler>[1],
+                          match,
+                          input,
+                          middlewareContext.state,
+                        ),
+                    },
               )
               const invoke = () =>
                 handler({
+                  ...(match.route.raw ? { request } : {}),
                   input: middlewareContext.input,
                   response: middlewareContext.response,
-                  signal: middlewareContext.signal,
+                  signal: match.route.raw
+                    ? request.signal
+                    : middlewareContext.signal,
                   state: middlewareContext.state,
                 } as HttpExecutionContext)
-              let result: HttpExecutionResult | undefined
+              let result: HttpMiddlewareOutcome | undefined
               let hasResult = false
               try {
                 result = await (handlerOperation?.run
@@ -1642,6 +1728,28 @@ function createHttpExtensionRuntime(
         const result = await (lease.run ? lease.run(dispatch) : dispatch())
         executionResult = result
         hasExecutionResult = true
+        if (result instanceof Response) {
+          if (result.body) {
+            const stream = createLeasedReadableStream(
+              result.body,
+              lease.signal,
+              finishExecution,
+            )
+            adoptResponseStream(stream)
+            return complete(
+              new Response(stream.stream, {
+                status: result.status,
+                statusText: result.statusText,
+                headers: result.headers,
+              }),
+            )
+          }
+          return complete(result)
+        }
+        if (match.route.raw)
+          throw new TypeError(
+            'Raw handlerとmiddlewareはResponseを返す必要があります。',
+          )
         const finalized = await finalizeHttpResult(
           match.route.definition,
           result,
@@ -1713,7 +1821,8 @@ function findRuntimeHttpRoute(
   | (RuntimeHttpRoute & { readonly params: Record<string, string> })
   | undefined {
   for (const candidate of routes) {
-    if (candidate.route.method !== method) continue
+    if (candidate.route.method !== method && candidate.route.method !== '*')
+      continue
     const params = matchHttpPath(candidate.route.segments, pathname)
     if (!params) continue
     return { ...candidate, params }

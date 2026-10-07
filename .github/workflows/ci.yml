@@ -34,7 +34,7 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         shell: bash
         run: |
-          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- .changeset)"
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- .changeset ':(exclude).changeset/config.json' ':(exclude).changeset/README.md')"
           if test -z "$changed"; then
             exit 0
           fi
@@ -356,6 +356,7 @@ jobs:
           npm init -y >/dev/null
           npm install "${RUNNER_TEMP}/loutre-package-tarballs"/*.tgz --no-audit --no-fund
 
+          node --input-type=module -e "import { graphql } from '@loutrejs/graphql'; if (!graphql.endpoint) throw new Error('GraphQL package import failed')"
           node --input-type=module -e "import { nodeRuntime } from '@loutrejs/node'; if (nodeRuntime.runtime !== 'node') throw new Error('Node runtime import failed')"
           node --input-type=module -e "import { http } from '@loutrejs/loutre/http'; if (!http) throw new Error('HTTP subpath import failed')"
           node node_modules/@loutrejs/cli/bin/loutre.js --help | grep -q '^Loutre CLI$'
