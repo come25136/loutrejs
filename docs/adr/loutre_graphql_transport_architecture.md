@@ -1,23 +1,23 @@
-# Loutre GraphQL transport architecture
+# Loutre GraphQLトランスポート設計
 
-Status: Draft
+ステータス: Draft
 
-## Context
+## 背景
 
-LoutreにGraphQL Query / Mutation / Subscriptionを追加したい。
+LoutreにGraphQLのQuery / Mutation / Subscriptionを追加する。
 
-現状のLoutreではHTTP、WebSocket、Tasks、MessagePortがExecution Extensionとして分離されている。GraphQLはこれらと同列のtransportではなく、HTTP / WebSocket上で動作するapplication protocolである。
+現状のLoutreではHTTP、WebSocket、Tasks、MessagePortがExecution Extensionとして分離されている。GraphQLはこれらと同列のトランスポートではなく、HTTP / WebSocket上で動作するアプリケーションプロトコルである。
 
-GraphQL対応にあたり、以下の問題を解消する必要がある。
+GraphQL対応にあたり、次の課題を解消する必要がある。
 
-- GraphQL over HTTPのsemanticsを既存HTTP Contractへ二重定義したくない
+- GraphQL over HTTPの仕様を既存HTTP Contractへ二重定義したくない
 - WebSocket subprotocol `graphql-transport-ws` をnegotiationできない
-- Node / Bun / Deno / Cloudflare Workers runtimeでWebSocketをfirst-classにserveしたい
-- 1 socket上で複数GraphQL operationをmultiplexできるようにしたい
+- Node / Bun / Deno / Cloudflare WorkersでWebSocketをfirst-classにserveしたい
+- 1本のsocket上で複数GraphQL operationをmultiplexできるようにしたい
 - SubscriptionのAsyncIterable lifecycleとLoutreのdrain / tracingを整合させたい
-- GraphQL protocol semanticsをDurable Objectやdomain event routerへ漏らしたくない
+- GraphQL固有のprotocol semanticsをDurable Objectやdomain event routerへ漏らしたくない
 
-## Decision
+## 決定
 
 GraphQLは新しいExecution Extensionにはしない。
 
@@ -36,9 +36,9 @@ GraphQL Endpoint
                      └── graphql.subscribe()
 ```
 
-GraphQL schemaは標準の`GraphQLSchema`をそのままsource of truthとし、Loutre独自GraphQL Contract DSLは導入しない。
+GraphQL schemaは標準の`GraphQLSchema`をそのままsource of truthとし、Loutre独自のGraphQL Contract DSLは導入しない。
 
-## Package boundary
+## package境界
 
 新しいpublic packageを追加する。
 
@@ -83,9 +83,9 @@ const GraphQLApi = graphql.endpoint({
 
 `graphql.endpoint()`は内部でHTTP / WebSocket Executionを生成する。
 
-## Composite Execution
+## 複合Execution
 
-GraphQL endpointは複数Executionを返すため、CoreへgenericなExecution groupを追加する。
+GraphQL endpointは複数Executionを返すため、Coreへ汎用的なExecution groupを追加する。
 
 ```ts
 export interface ExecutionGroup {
@@ -101,7 +101,7 @@ export type ExecutionDeclaration =
 
 Moduleの`executions`は`ExecutionDeclaration[]`を受け取り、Application Model compilerがcompile前にflattenする。
 
-GraphQL固有semanticsはCoreへ入れない。
+GraphQL固有のsemanticsはCoreへ入れない。
 
 ## HTTP raw protocol endpoint
 
@@ -124,7 +124,7 @@ http.raw({
 })
 ```
 
-Raw endpointでも通常HTTP routeと同じmiddleware、DI、routing、lifecycle、tracingを利用できる。
+Raw endpointでも通常のHTTP routeと同じmiddleware、DI、routing、lifecycle、tracingを利用できる。
 
 ```text
 Request
@@ -154,7 +154,7 @@ interface HttpRawExecutionContext<TState = unknown> {
 }
 ```
 
-Loutreが担当するもの:
+Loutreが担当する範囲:
 
 - route matching
 - middleware
@@ -165,7 +165,7 @@ Loutreが担当するもの:
 - drain
 - trace
 
-integrationが担当するもの:
+integrationが担当する範囲:
 
 - protocol body decode
 - protocol validation
@@ -174,6 +174,10 @@ integrationが担当するもの:
 - response serialization
 
 Raw endpointのみ`method: '*'`を許可し、GraphQL HTTP handler自身へmethod validationを委譲する。
+
+認証、CORS、rate limit、traceなどGraphQL handler到達前に適用したい処理は通常のLoutre middlewareとして挟めるようにする。
+
+一方、GraphQL fieldやoperation内容に依存するauthorizationはresolver / execution context側で処理する。
 
 ## WebSocket handshake model
 
@@ -289,9 +293,9 @@ interface WebSocketHandlerContext {
 }
 ```
 
-session idはWebSocket Extensionが生成するserver-side opaque IDとし、platform-specific socket identifierには依存しない。
+session idはWebSocket Extensionが生成するserver-side opaque IDとし、platform固有のsocket identifierには依存しない。
 
-## Runtime adapter redesign
+## Runtime adapterの再設計
 
 Runtime adapterの「HTTP Extension必須」制約を撤廃する。
 
@@ -317,7 +321,7 @@ node:http Server
 
 とする。
 
-GraphQL packageはplatform-specific codeを持たない。
+GraphQL packageはplatform固有コードを持たない。
 
 ## GraphQL over HTTP
 
@@ -325,7 +329,7 @@ HTTP側は`graphql-http`のFetch handlerを利用する。
 
 GraphQL request parsing / validation / status / content negotiationをLoutre側で複製しない。
 
-認証等のendpoint-level policyはLoutre HTTP middlewareで処理できる。
+endpoint全体に対する認証等はLoutre HTTP middlewareで処理できる。
 
 GraphQL field / operation内容に依存するauthorizationはGraphQL resolver / execution context側で処理する。
 
@@ -409,7 +413,7 @@ WebSocket connection全体は1つの`websocket.session` Executionとしてtrace�
 
 GraphQL operationはそのsession配下のsub-operationとしてtraceする。
 
-既存Coreの`beginOperation()`を利用できるよう、WebSocket handler contextへgeneric execution instrumentation viewを公開する。
+既存Coreの`beginOperation()`を利用できるよう、WebSocket handler contextへ汎用的なexecution instrumentation viewを公開する。
 
 ```ts
 interface ExecutionContextView {
@@ -463,7 +467,7 @@ Subscription eventごとに新しいExecutionLeaseは作らない。
 
 GraphQL responseの`errors`は必ずしもruntime failureではないため、それだけで`lease.fail()`は呼ばない。
 
-## Distributed subscription architecture
+## 分散Subscription構成
 
 GraphQL protocol semanticsはGraphQL integration / Worker側に留める。
 
@@ -489,6 +493,8 @@ Client
 
 Durable Objectやevent routerへGraphQL document、selection set、`graphql-transport-ws` messageを持ち込まない。
 
+下流はdomain event infrastructureとしてGraphQL非依存を維持する。
+
 ## OpenAPI / tooling
 
 GraphQL raw endpointは通常HTTP schemaとしてOpenAPIへ展開しない。
@@ -497,11 +503,11 @@ Graph projectionにはprotocol endpointとして最低限のmetadataだけを出
 
 GraphQL schema toolingにはGraphQL introspection / SDLを使う。
 
-Application Modelへlive`GraphQLSchema`全体をserializeしない。
+Application Modelへlive `GraphQLSchema` 全体をserializeしない。
 
-## Breaking changes
+## 破壊的変更
 
-0.8.0では以下をbreaking changeとして許容する。
+0.8.0では次をbreaking changeとして許容する。
 
 ```diff
 -WebSocketRouteDefinition.request
@@ -527,25 +533,25 @@ Application Modelへlive`GraphQLSchema`全体をserializeしない。
 +@loutrejs/graphql
 ```
 
-## Implementation order
+## 実装順序
 
 1. WebSocket v2 + subprotocol negotiation
-2. Node / Bun / Deno / Cloudflare WebSocket runtime
+2. Node / Bun / Deno / Cloudflare Workers WebSocket runtime
 3. HTTP raw endpoint + middleware state
 4. Composite Execution
-5. `@loutrejs/graphql` HTTP support
-6. GraphQL WebSocket + Subscription
-7. Operation tracing / session correlation
-8. Conformance tests
+5. `@loutrejs/graphql` HTTP Query / Mutation対応
+6. GraphQL WebSocket + Subscription対応
+7. operation tracing / session correlation
+8. conformance test
 
-## Suggested PR split
+## PR分割案
 
 ```text
 PR 1
 WebSocket Execution v2 + subprotocol
 
 PR 2
-Node / Bun / Deno / Cloudflare WebSocket runtime
+Node / Bun / Deno / Cloudflare Workers WebSocket runtime
 
 PR 3
 HTTP raw protocol endpoint + ExecutionGroup
@@ -560,7 +566,22 @@ PR 6
 GraphQL operation tracing + conformance
 ```
 
-## Consequences
+## 完了条件
+
+次を満たした時点でGraphQL transport対応の初期実装を完了とする。
+
+- Query / MutationをGraphQL over HTTPで実行できる
+- Query / Mutation / SubscriptionをGraphQL over WebSocketで実行できる
+- `graphql-transport-ws` subprotocolを正しくnegotiationできる
+- Raw endpointで通常のLoutre middlewareとmiddleware stateを利用できる
+- Node / Bun / Deno / Cloudflare Workersで対応runtimeを提供できる
+- WebSocket session IDとGraphQL operation IDをtrace上でcorrelationできる
+- Subscription停止時にiterator cleanupとAbortSignal propagationが行われる
+- Application drain時にactive Subscriptionがgracefulに終了する
+- GraphQL protocol semanticsがDurable Object / event routerへ漏れない
+- runtime / protocol conformance testが通る
+
+## 結果
 
 この設計によりGraphQL対応のためだけのprotocol-specific logicをCoreへ追加せず、HTTP / WebSocket transport自体をより再利用可能な形へ整理できる。
 
@@ -574,4 +595,3 @@ GraphQL operation tracing + conformance
 - operation-level instrumentation
 
 はGraphQL以外のprotocol integrationでも再利用できる。
-
