@@ -9,14 +9,21 @@ import { nodeRuntime } from '@loutrejs/node'
 import { serverAudits } from 'graphql-http'
 
 async function create(http: boolean) {
+  const schema = buildSchema(
+    'type Query { hello: String! } type Subscription { hello: String! }',
+  )
+  schema.getQueryType()!.getFields().hello!.resolve = () => 'Hello World'
+  const hello = schema.getSubscriptionType()!.getFields().hello!
+  hello.subscribe = async function* () {
+    yield 'Hello World'
+  }
+  hello.resolve = (event: string) => event
   const endpoint = graphql.endpoint({
     name: 'Native',
     path: '/graphql',
-    schema: buildSchema(
-      'type Query { hello: String! } type Subscription { hello: String! }',
-    ),
+    schema,
     transports: { http, websocket: true },
-    factory: () => ({ rootValue: { hello: () => 'Hello World' } }),
+    factory: () => ({ context: () => ({}) }),
   })
   const Module = defineModule(() => ({ executions: [endpoint] }))
   const app = await nodeRuntime.create({

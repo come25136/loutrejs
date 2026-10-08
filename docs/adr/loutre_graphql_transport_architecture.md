@@ -36,7 +36,7 @@ GraphQL Endpoint
                      └── graphql.subscribe()
 ```
 
-GraphQL schemaは標準の`GraphQLSchema`をそのままsource of truthとし、Loutre独自のGraphQL Contract DSLは導入しない。
+実行時は標準の`GraphQLSchema`を使用し、Loutre独自のGraphQL Contract DSLは導入しない。共有する契約SDLから型付きresolverとclient型を生成する方針は[型生成とdomain mappingの設計](./loutre_graphql_codegen_architecture.md)に従う。
 
 ## package境界
 

@@ -2,6 +2,11 @@ import { EventEmitter, on } from 'node:events'
 
 export interface Counter {
   readonly value: number
+  readonly stepId: string
+}
+
+export interface CounterChanged {
+  readonly counterChanged: Counter
 }
 
 export class CounterStore {
@@ -18,7 +23,7 @@ export class CounterStore {
   }
 
   current(): Counter {
-    return { value: this.#value }
+    return { value: this.#value, stepId: 'default' }
   }
 
   increment(amount: number): Counter {
@@ -35,7 +40,7 @@ export class CounterStore {
     return counter
   }
 
-  async *watch(signal: AbortSignal) {
+  async *watch(signal: AbortSignal): AsyncGenerator<CounterChanged> {
     const events = on(this.#events, 'changed', { signal })
     this.#activeSubscriptions++
     try {

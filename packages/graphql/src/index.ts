@@ -6,6 +6,7 @@ import {
 } from '@loutrejs/loutre/websocket'
 import { createHandler } from 'graphql-http/lib/use/fetch'
 import { serveGraphQLWebSocket } from './websocket.js'
+import { validateEndpointSchema, validateRuntime } from './validation.js'
 
 import type { GraphQLEndpointDefinition } from './types.js'
 export type {
@@ -59,6 +60,9 @@ const textSchema = {
 export function defineGraphQLEndpoint<
   const TDefinition extends GraphQLEndpointDefinition,
 >(definition: TDefinition): GraphQLEndpoint<TDefinition> {
+  if (typeof definition.factory !== 'function')
+    throw new TypeError('GraphQL endpointにfactoryが必要です。')
+  validateEndpointSchema(definition.schema)
   const transports = definition.transports ?? { http: true }
   if (!transports.http && !transports.websocket)
     throw new TypeError('GraphQL transportを一つ以上有効にしてください。')
@@ -80,18 +84,17 @@ export function defineGraphQLEndpoint<
             : {}),
         },
         factory: () => {
-          const runtime = definition.factory?.() ?? {}
+          const runtime = validateRuntime(definition.factory())
           return (context) =>
             createHandler<Record<string, unknown>>({
               schema: definition.schema,
-              rootValue: runtime.rootValue,
-              context: () =>
-                runtime.context?.({
+              context: async () =>
+                (await runtime.context({
                   transport: 'http',
                   request: context.request,
                   signal: context.request.signal,
                   state: context.state,
-                }) ?? {},
+                })) as Record<string, unknown>,
             })(context.request)
         },
       }),
@@ -111,7 +114,7 @@ export function defineGraphQLEndpoint<
           },
         }),
         factory: () => {
-          const runtime = definition.factory?.() ?? {}
+          const runtime = validateRuntime(definition.factory())
           return {
             endpoint: (context) =>
               serveGraphQLWebSocket(

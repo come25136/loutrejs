@@ -79,6 +79,9 @@ jobs:
       - name: Build packages
         run: npm run build
 
+      - name: Check GraphQL generated contracts
+        run: node packages/cli/bin/loutre.js graphql generate --config examples/graphql-counter/graphql.codegen.json --check
+
       - name: Verify release version
         run: node scripts/verify-release-version.mjs
 
@@ -206,6 +209,7 @@ jobs:
       - name: Run Bun CLI conformance
         run: |
           BUN_BIN="$(command -v bun)"
+          "$BUN_BIN" packages/cli/bin/loutre.js graphql generate --config examples/graphql-counter/graphql.codegen.json --check
           "$BUN_BIN" packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
           "$BUN_BIN" packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
           "$BUN_BIN" packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
@@ -245,6 +249,7 @@ jobs:
       - name: Run Deno CLI conformance
         run: |
           DENO_BIN="$(command -v deno)"
+          "$DENO_BIN" run -A packages/cli/bin/loutre.js graphql generate --config examples/graphql-counter/graphql.codegen.json --check
           "$DENO_BIN" run -A packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
           "$DENO_BIN" run -A packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
           "$DENO_BIN" run -A packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json

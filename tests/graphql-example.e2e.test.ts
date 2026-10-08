@@ -1,5 +1,7 @@
 import { createClient, type FormattedExecutionResult } from 'graphql-ws'
 import WebSocket from 'ws'
+import { print } from 'graphql'
+import { AddDocument } from '../examples/graphql-counter/src/generated/client.js'
 import {
   runWorkspaceCommand,
   startWorkspace,
@@ -37,6 +39,20 @@ it('GraphQL exampleでHTTP mutationを別clientの購読へ配信し、停止・
 
   try {
     await waitForPort(port)
+    const before = await request('query { stepBatchCount }')
+    expect(
+      await request(
+        'query { first: counter { value step { amount } } second: counter { value step { amount } } }',
+      ),
+    ).toEqual({
+      data: {
+        first: { value: 0, step: { amount: 1 } },
+        second: { value: 0, step: { amount: 1 } },
+      },
+    })
+    expect(await request('query { stepBatchCount }')).toEqual({
+      data: { stepBatchCount: before.data.stepBatchCount + 1 },
+    })
     const stops = clients.map((client, index) =>
       client.subscribe(
         {
@@ -62,12 +78,9 @@ it('GraphQL exampleでHTTP mutationを別clientの購読へ配信し、停止・
       data: { activeSubscriptions: 2 },
     })
 
-    expect(
-      await request(
-        'mutation Add($amount: Int!) { increment(amount: $amount) { value } }',
-        { amount: 5 },
-      ),
-    ).toEqual({ data: { increment: { value: 5 } } })
+    expect(await request(print(AddDocument), { amount: 5 })).toEqual({
+      data: { increment: { value: 5 } },
+    })
     await vi.waitFor(
       () => {
         for (const received of events) {

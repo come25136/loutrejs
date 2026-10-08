@@ -117,6 +117,7 @@ Runtimeごとの役割と対応範囲は[Getting Started](./docs/getting-started
 
 - [Website](https://loutrejs.come25136.id)
 - [Getting Started](./docs/getting-started.md) — project作成、HTTP、Task、Runtime、CLI
+- [GraphQLの型生成](./docs/graphql-codegen.md) — SDL共有、型付きresolver、domain mapping、client operation
 - [Architecture](./docs/architecture.md) — Application Definition、Application Graph、Runtimeの境界
 - [Examples](./examples/) — HTTP、GraphQL、Auth、CORS、Worker、Database
 

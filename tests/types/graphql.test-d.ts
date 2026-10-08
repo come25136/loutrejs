@@ -9,12 +9,20 @@ import { http } from '@loutrejs/loutre/http'
 import { websocket } from '@loutrejs/loutre/websocket'
 
 const schema = buildSchema('type Query { hello: String }')
-const httpOnly = graphql.endpoint({ name: 'Http', path: '/graphql', schema })
+schema.getQueryType()!.getFields().hello!.resolve = () => 'Hello'
+const factory = () => ({ context: () => ({}) })
+const httpOnly = graphql.endpoint({
+  name: 'Http',
+  path: '/graphql',
+  schema,
+  factory,
+})
 const websocketOnly = graphql.endpoint({
   name: 'WebSocket',
   path: '/graphql',
   schema,
   transports: { websocket: true },
+  factory,
 })
 const both = graphql.endpoint({
   name: 'Both',
@@ -81,3 +89,20 @@ const invalidWebSocketRoute = {
 }
 // @ts-expect-error WebSocket v2はHTTP response contractを持たない
 websocket.contract({ route: invalidWebSocketRoute })
+
+// @ts-expect-error factoryは必須
+graphql.endpoint({ name: 'MissingFactory', path: '/graphql', schema })
+graphql.endpoint({
+  name: 'MissingContext',
+  path: '/graphql',
+  schema,
+  // @ts-expect-error contextは必須
+  factory: () => ({}),
+})
+graphql.endpoint({
+  name: 'Legacy',
+  path: '/graphql',
+  schema,
+  // @ts-expect-error rootValueを返すfactoryは拒否する
+  factory: () => ({ context: () => ({}), rootValue: {} }),
+})

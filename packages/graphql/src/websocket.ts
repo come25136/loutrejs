@@ -103,22 +103,19 @@ export async function serveGraphQLWebSocket(
       const errors = validate(schema, document)
       if (errors.length > 0) return errors
       if (!ast) return [new GraphQLError('Unable to identify operation')]
-      const contextValue = await run(
-        operation,
-        () =>
-          runtime.context?.({
-            transport: 'websocket',
-            request: context.request,
-            connectionParams: connection.connectionParams,
-            operationId: id,
-            signal: controller.signal,
-          }) ?? {},
+      const contextValue = await run(operation, () =>
+        runtime.context({
+          transport: 'websocket',
+          request: context.request,
+          connectionParams: connection.connectionParams,
+          operationId: id,
+          signal: controller.signal,
+        }),
       )
       const args: ExecutionArgs = {
         schema,
         document,
         contextValue,
-        rootValue: runtime.rootValue,
         ...(payload.operationName == null
           ? {}
           : { operationName: payload.operationName }),

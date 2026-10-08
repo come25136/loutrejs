@@ -20,16 +20,13 @@ export type GraphQLContextInput =
   | GraphQLHttpContextInput
   | GraphQLWebSocketContextInput
 
-export interface GraphQLRuntime<
-  TContext extends Record<string, unknown> = Record<string, unknown>,
-> {
-  context?(input: GraphQLContextInput): TContext | Promise<TContext>
-  readonly rootValue?: unknown
+export interface GraphQLRuntime<TContext extends object = object> {
+  context(input: GraphQLContextInput): TContext | Promise<TContext>
+  // 既存のfactoryから構造的型付けで旧指定が紛れ込むことも拒否する。
+  readonly rootValue?: never
 }
 
-export interface GraphQLEndpointDefinition<
-  TContext extends Record<string, unknown> = Record<string, unknown>,
-> {
+export interface GraphQLEndpointDefinition<TContext extends object = object> {
   readonly name: string
   readonly path: string
   readonly schema: GraphQLSchema
@@ -41,5 +38,5 @@ export interface GraphQLEndpointDefinition<
       | boolean
       | { readonly connectionInitWaitTimeout?: number }
   }
-  readonly factory?: () => GraphQLRuntime<TContext>
+  readonly factory: () => GraphQLRuntime<TContext>
 }

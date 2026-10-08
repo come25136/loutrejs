@@ -1,0 +1,20 @@
+type Counter {
+  value: Int!
+  step: Step!
+}
+type Step {
+  id: ID!
+  amount: Int!
+}
+type Query {
+  counter: Counter!
+  activeSubscriptions: Int!
+  stepBatchCount: Int!
+}
+type Mutation {
+  increment(amount: Int! = 1): Counter!
+  reset(value: Int! = 0): Counter!
+}
+type Subscription {
+  counterChanged: Counter!
+}

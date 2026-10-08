@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildSchema } from 'graphql'
+import {
+  buildSchema,
+  GraphQLScalarType,
+  GraphQLObjectType,
+  GraphQLSchema,
+} from 'graphql'
 import { graphql, type GraphQLContextInput } from '@loutrejs/graphql'
 import {
   bootstrapApplication,
@@ -19,12 +24,12 @@ import {
   type WebSocketDriverChannel,
 } from '@loutrejs/loutre/websocket'
 
-const schema = buildSchema(`
+const typeDefs = `
   type Trip { id: ID!, name: String!, secret: String! }
   type Query { hello: String!, trip: Trip!, failure: String }
   type Mutation { update(value: String!): String! }
   type Subscription { trips: Trip! }
-`)
+`
 
 function source() {
   const queued: unknown[] = []
@@ -125,6 +130,29 @@ async function fixture(
   const stream = source()
   const contexts: GraphQLContextInput[] = []
   const Service = token<string>('greeting')
+  const schema = buildSchema(typeDefs)
+  const queryFields = schema.getQueryType()!.getFields()
+  queryFields.hello!.resolve = (
+    _parent,
+    _args,
+    context: { greeting: string },
+  ) => context.greeting
+  queryFields.trip!.resolve = () => ({
+    id: '1',
+    name: 'Loutre',
+    secret: 'hidden',
+  })
+  queryFields.failure!.resolve = () => {
+    throw new Error('resolver failure')
+  }
+  schema.getMutationType()!.getFields().update!.resolve = (
+    _parent,
+    args: { value: string },
+  ) => args.value
+  const trips = schema.getSubscriptionType()!.getFields().trips!
+  trips.subscribe = (_parent, _args, context: { signal: AbortSignal }) =>
+    options.subscription?.(context) ?? stream.iterator
+  trips.resolve = (event: { trips: unknown }) => event.trips
   const endpoint = graphql.endpoint({
     name: 'Api',
     path: '/graphql',
@@ -147,17 +175,6 @@ async function fixture(
         return (
           options.makeContext?.(input) ?? { greeting, signal: input.signal }
         )
-      },
-      rootValue: {
-        hello: (_args: unknown, context: { greeting: string }) =>
-          context.greeting,
-        trip: () => ({ id: '1', name: 'Loutre', secret: 'hidden' }),
-        failure: () => {
-          throw new Error('resolver failure')
-        },
-        update: ({ value }: { value: string }) => value,
-        trips: (_args: unknown, context: { signal: AbortSignal }) =>
-          options.subscription?.(context) ?? stream.iterator,
       },
     }),
   })
@@ -762,3 +779,123 @@ describe('GraphQL WebSocket', () => {
     }
   })
 })
+
+describe('GraphQLのresolver契約', () => {
+  it('root fieldのresolveが欠落したschemaを拒否する', () => {
+    expect(() =>
+      graphql.endpoint({
+        name: 'Missing',
+        path: '/graphql',
+        schema: buildSchema('type Query { hello: String }'),
+        factory: () => ({ context: () => ({}) }),
+      }),
+    ).toThrow('Query.hello')
+  })
+
+  it.each(['subscribe', 'resolve'] as const)(
+    'Subscriptionの%sが欠落したschemaを拒否する',
+    (missing) => {
+      const schema = buildSchema(
+        'type Query { hello: String } type Subscription { events: String }',
+      )
+      schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
+      const field = schema.getSubscriptionType()!.getFields().events!
+      if (missing !== 'subscribe')
+        field.subscribe = async function* () {
+          yield 'event'
+        }
+      if (missing !== 'resolve') field.resolve = (event) => event
+      expect(() =>
+        graphql.endpoint({
+          name: 'Missing',
+          path: '/graphql',
+          schema,
+          factory: () => ({ context: () => ({}) }),
+        }),
+      ).toThrow('Subscription.events')
+    },
+  )
+
+  it.each(['rootValue', 'context'] as const)(
+    'JavaScriptからの旧%s factoryをApplication compileで拒否する',
+    (invalid) => {
+      const schema = buildSchema('type Query { hello: String }')
+      schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
+      const endpoint = graphql.endpoint({
+        name: 'Legacy',
+        path: '/graphql',
+        schema,
+        factory: (() =>
+          invalid === 'rootValue'
+            ? { context: () => ({}), rootValue: {} }
+            : {}) as never,
+      })
+      const Module = defineModule(() => ({ executions: [endpoint] }))
+      const application = defineApplication({ modules: [Module()] })
+      expect(application.model.diagnostics).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining(invalid) }),
+      )
+    },
+  )
+
+  it('QueryとMutationの同名fieldを別resolverとして実行する', async () => {
+    const schema = buildSchema(
+      'type Query { value: String! } type Mutation { value: Int! }',
+    )
+    schema.getQueryType()!.getFields().value!.resolve = () => 'query'
+    schema.getMutationType()!.getFields().value!.resolve = () => 42
+    const endpoint = graphql.endpoint({
+      name: 'Separate',
+      path: '/graphql',
+      schema,
+      factory: () => ({ context: () => ({}) }),
+    })
+    const Module = defineModule(() => ({ executions: [endpoint] }))
+    const app = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+    try {
+      for (const [query, value] of [
+        ['query { value }', 'query'],
+        ['mutation { value }', 42],
+      ]) {
+        const response = await app.http.fetch(
+          new Request('http://test/graphql', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ query }),
+          }),
+        )
+        expect(await response.json()).toEqual({ data: { value } })
+      }
+    } finally {
+      await app.close()
+    }
+  })
+})
+
+it.each([false, true])(
+  'custom scalarの出力coercion登録=%sをendpoint定義で検証する',
+  (registered) => {
+    const scalar = new GraphQLScalarType({
+      name: 'Timestamp',
+      ...(registered ? { serialize: (value: unknown) => String(value) } : {}),
+    })
+    const schema = new GraphQLSchema({
+      query: new GraphQLObjectType({
+        name: 'Query',
+        fields: { timestamp: { type: scalar, resolve: () => '2026-10-08' } },
+      }),
+    })
+    const create = () =>
+      graphql.endpoint({
+        name: 'Scalar',
+        path: '/graphql',
+        schema,
+        factory: () => ({ context: () => ({}) }),
+      })
+    if (registered) expect(create).not.toThrow()
+    else expect(create).toThrow('Timestamp')
+  },
+)

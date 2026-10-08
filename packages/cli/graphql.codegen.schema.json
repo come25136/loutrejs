@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "targets": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "schema": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "output": {
+                "type": "string",
+                "pattern": "\\.ts$"
+              },
+              "scalars": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "input": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "output": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["input", "output"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "kind": {
+                "type": "string",
+                "const": "server"
+              },
+              "contextType": {
+                "type": "string",
+                "minLength": 1
+              },
+              "mappers": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": ["schema", "output", "kind", "contextType"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "schema": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "output": {
+                "type": "string",
+                "pattern": "\\.ts$"
+              },
+              "scalars": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "input": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "output": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["input", "output"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "kind": {
+                "type": "string",
+                "const": "client"
+              },
+              "documents": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": ["schema", "output", "kind", "documents"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "required": ["targets"],
+  "additionalProperties": false
+}

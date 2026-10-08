@@ -1,41 +1,45 @@
 # @loutrejs/graphql
 
-LoutreのHTTP / WebSocket Executionを利用するGraphQL integrationです。標準の`GraphQLSchema`を使用し、HTTPは`graphql-http`、WebSocketは`graphql-ws`へ委譲します。
-
-Query・Mutation・SubscriptionとDIを組み合わせたserverの実装例は、[GraphQL Counter Example](../../examples/graphql-counter/README.md)を参照してください。
+標準のGraphQLSchemaに登録したresolve / subscribeを、LoutreのHTTP / WebSocket Executionで実行するintegrationです。HTTPはgraphql-http、WebSocketはgraphql-wsへ委譲します。
 
 ```sh
-npm install @loutrejs/loutre @loutrejs/graphql graphql
+npm install @loutrejs/loutre @loutrejs/graphql graphql @graphql-tools/schema
+npm install --save-dev @loutrejs/cli
 ```
+
+SDLからCLIでresolver型とtypeDefsを生成し、domain型とcontextへ接続してください。
 
 ```ts
-import { buildSchema } from 'graphql'
 import { graphql } from '@loutrejs/graphql'
-import { defineModule } from '@loutrejs/loutre'
+import { inject } from '@loutrejs/loutre'
+import { makeExecutableSchema } from '@graphql-tools/schema'
+import { typeDefs } from './generated/server.js'
+import { resolvers } from './graphql/resolvers.js'
+import { CounterStore } from './domain/counter.js'
 
-const schema = buildSchema('type Query { hello: String! }')
 const endpoint = graphql.endpoint({
-  name: 'Api',
+  name: 'Counter',
   path: '/graphql',
-  schema,
-  transports: {
-    http: true,
-    websocket: { connectionInitWaitTimeout: 3_000 },
-  },
-  factory: () => ({ rootValue: { hello: () => 'Hello' } }),
+  schema: makeExecutableSchema({ typeDefs, resolvers }),
+  transports: { http: true, websocket: { connectionInitWaitTimeout: 3_000 } },
+  factory: (counter = inject(CounterStore)) => ({
+    context: (input) => ({ counter, signal: input.signal }),
+  }),
 })
-
-export const ApiModule = defineModule(() => ({ executions: [endpoint] }))
 ```
 
-`factory`のdefault parameterで通常の`inject(Service)`を使用できます。`context(input)`が返す値はresolverのcontextです。HTTPには`transport`、`request`、`signal`、middlewareの`state`を渡します。WebSocketには`transport`、opening `request`、`connectionParams`、`operationId`、operationごとの`signal`を渡します。
+factoryとcontext関数は必須です。rootValueは廃止しました。Query / Mutationのroot fieldにはresolve、Subscriptionのroot fieldにはsubscribeとresolveを登録します。通常のobject fieldはGraphQL標準のdefault resolverを使用できます。custom scalarには出力coercionを明示し、入力に使う場合はparse処理も実装してください。
 
-HTTP前段の認証やrate limitは`transports.http.middlewares`へ通常の`http.middleware()`を指定します。raw endpointを短絡するmiddlewareはFetch APIの`Response`を返します。`basicAuth()` / `bearerAuth()`も利用でき、`unauthorized()`から`Response`を返します。HTTP Contractのresponse variantを返すmiddlewareは、raw endpointでは`Response`を返すように定義してください。field単位のauthorizationはresolverで行います。
+factoryのdefault parameterで通常のinject(Service)を使えます。HTTPとWebSocketではfactoryを個別に実行するため、共有するdomainの状態はDI providerへ置きます。contextはoperationごとに生成し、loaderもここへ置きます。Subscriptionのcontextは購読中維持されるため、exampleではDataLoaderのcache:falseを使用します。
 
-WebSocket clientは`graphql-transport-ws` subprotocolを指定してください。Subscription resolverはAsyncIterableを返し、operationの`signal`で停止できるようにします。`complete`、切断、Application drainではsignalがabortされ、iteratorの`return()`を呼び出します。保留中の外部I/Oもsignalで終了できるようにしてください。
+HTTP contextの入力はtransport / request / signal / middlewareのstateです。WebSocketはtransport / opening request / connectionParams / operationId / operationごとのsignalを渡します。
 
-transportを省略するとHTTPだけを有効にします。WebSocketだけの場合は`transports: { websocket: true }`を指定します。Node.js / Bun / Deno / Cloudflare Workersで両transportを利用でき、AWS LambdaはHTTPだけを利用します。
+HTTP前段の認証やrate limitはtransports.http.middlewaresへhttp.middleware()を指定します。raw endpointを短絡するmiddlewareはFetch APIのResponseを返します。basicAuth() / bearerAuth()も使用でき、unauthorized()からResponseを返します。field単位のauthorizationはresolverで行います。
 
-Bun 1.3ではserver側からWebSocketを閉じた後にnative `server.stop()`が完了しない[既知の不具合](https://github.com/oven-sh/bun/issues/36223)があります。Loutreのcleanupを完了してから、`forceShutdownTimeoutMs`（既定5秒）までnative stopを待機し、期限を過ぎたら強制停止します。
+WebSocketはgraphql-transport-ws subprotocolを使用します。SubscriptionのAsyncIterableはoperationのsignalに協調して停止してください。complete / 切断 / Application drainではsignalのabortとiterator.returnを伝播します。
 
-[設計](../../docs/adr/loutre_graphql_transport_architecture.md)
+transport省略時はHTTPだけを有効にします。WebSocketだけの場合はtransports: { websocket: true }を指定します。Node.js / Bun / Deno / Cloudflare Workersで両transport、AWS LambdaではHTTPだけを使用できます。
+
+Bun 1.3のserver側WebSocket close後にnative stopが完了しない[既知の不具合](https://github.com/oven-sh/bun/issues/36223)には、cleanup後のnative stopにもforceShutdownTimeoutMs（既定5秒）を適用します。
+
+[実行可能なserver example](../../examples/graphql-counter/README.md)、[CLIによる型生成](../../docs/graphql-codegen.md)、[transport設計](../../docs/adr/loutre_graphql_transport_architecture.md)を参照してください。

@@ -1,0 +1,21 @@
+{
+  "$schema": "../../packages/cli/graphql.codegen.schema.json",
+  "targets": {
+    "server": {
+      "kind": "server",
+      "schema": ["contracts/*.graphql"],
+      "output": "src/generated/server.ts",
+      "contextType": "../graphql/context.js#AppContext",
+      "mappers": {
+        "Counter": "../domain/counter.js#Counter",
+        "Step": "../domain/step.js#Step"
+      }
+    },
+    "client": {
+      "kind": "client",
+      "schema": ["contracts/*.graphql"],
+      "documents": ["operations/*.graphql"],
+      "output": "src/generated/client.ts"
+    }
+  }
+}

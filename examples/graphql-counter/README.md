@@ -1,6 +1,6 @@
 # GraphQL Counter Example
 
-Query・Mutation・Subscriptionを同じ`/graphql` endpointで提供するNode.js serverのexampleです。HTTPとWebSocketのresolverがDIで同じ`CounterStore`を取得し、Mutationによる状態変更を購読中のclientへ通知します。
+共有SDLから型を生成し、domain mapping・DI・DataLoader・Subscriptionを組み合わせるNode.js serverです。同じ/graphqlでQuery / Mutation / Subscriptionを提供します。
 
 ## 起動
 
@@ -9,35 +9,45 @@ Node.js 22以上を使用し、repository rootで実行します。
 ```sh
 npm ci
 npm run build
+npm run generate --workspace @loutrejs/example-graphql-counter
 npm run dev --workspace @loutrejs/example-graphql-counter
 ```
 
-HTTPは`http://127.0.0.1:3000/graphql`、WebSocketは`ws://127.0.0.1:3000/graphql`です。portを変える場合は`PORT=3001 npm run dev --workspace @loutrejs/example-graphql-counter`で起動します。
+HTTPはhttp://127.0.0.1:3000/graphql、WebSocketはws://127.0.0.1:3000/graphqlです。PORT=3001でportを変更できます。
 
 ## Serverの構成
 
-- [`src/endpoint.ts`](./src/endpoint.ts): `GraphQLSchema`とresolverを`graphql.endpoint()`へ登録します。factoryのdefault parameterで`inject(CounterStore)`を使い、contextへoperationの`signal`を渡します。
-- [`src/counter.ts`](./src/counter.ts): カウンターの状態と変更通知を管理します。SubscriptionのAsyncIterableは最初に現在値を返し、その後は変更を配信します。`AbortSignal`で待機を終了し、購読を解放します。
-- [`src/app.ts`](./src/app.ts): providerとendpointをmoduleへ登録します。
-- [`src/main.ts`](./src/main.ts): Node.js Runtimeでserverを起動します。
+- [contracts/counter.graphql](./contracts/counter.graphql): 共有するAPI契約。
+- [graphql.codegen.json](./graphql.codegen.json): server / client生成、context型、domain mapping。
+- [src/domain/counter.ts](./src/domain/counter.ts): valueとstepIdを持つdomainと変更通知。
+- [src/domain/step.ts](./src/domain/step.ts): 関連するStepの一括取得。
+- [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): 生成したResolvers型を使い、Counter.stepをstepIdから解決。
+- [src/graphql/context.ts](./src/graphql/context.ts) / [loaders.ts](./src/graphql/loaders.ts): operationのsignalとloader。cache:falseでbatchし、長寿命の購読cacheを保持しない。
+- [src/endpoint.ts](./src/endpoint.ts): schemaとDIをcontextへ接続。
+- [operations/snapshot.graphql](./operations/snapshot.graphql): 別の利用側でも共有SDLから型を生成できるoperation。
 
-HTTPとWebSocketではfactoryが個別に実行されるため、共有したい状態はfactory内のlocal variableではなくproviderへ置きます。このexampleは単一processのメモリ内に状態を保持し、再起動すると0に戻ります。
+domainのCounterにはGraphQLのstep objectがありません。mappersによってresolverのparentをdomain型として扱い、stepIdで関連domainを取得します。取得・保存方法はGraphQLの契約に含めません。このexampleでは状態をメモリに持ち、再起動すると0へ戻ります。
 
-## QueryとMutationを試す
+## Query / Mutation
 
-別terminalからQueryを送ります。
+別terminalからQueryを実行します。
 
 ```sh
 curl http://127.0.0.1:3000/graphql \
   -H 'content-type: application/json' \
-  --data '{"query":"query { counter { value } activeSubscriptions }"}'
+  --data '{"query":"query { counter { value step { amount } } activeSubscriptions }"}'
 ```
 
 ```json
-{ "data": { "counter": { "value": 0 }, "activeSubscriptions": 0 } }
+{
+  "data": {
+    "counter": { "value": 0, "step": { "amount": 1 } },
+    "activeSubscriptions": 0
+  }
+}
 ```
 
-variablesを使ったMutationでカウンターを増やします。
+variablesを使って状態を変更します。
 
 ```sh
 curl http://127.0.0.1:3000/graphql \
@@ -49,44 +59,40 @@ curl http://127.0.0.1:3000/graphql \
 { "data": { "increment": { "value": 2 } } }
 ```
 
-`mutation { reset { value } }`で0に戻せます。未知のfield、不正なvariables、GraphQL Intの範囲を超える変更はGraphQLの`errors`として返ります。
+mutation { reset { value } }で0へ戻せます。
 
-## Subscriptionを試す
+Queryで`first: counter { step { amount } } second: counter { step { amount } }`を選択すると、同じoperationの取得が一回のbatchにまとまります。別QueryでstepBatchCountを前後に確認してください。
 
-repository rootの別terminalで、標準の`graphql-ws` clientを実行します。Node.jsの組み込みWebSocketを使用します。
+## Subscription
+
+repository rootの別terminalで標準graphql-ws clientを実行します。
 
 ```sh
 node --input-type=module <<'JS'
 import { createClient } from 'graphql-ws'
-
-const client = createClient({
-  url: 'ws://127.0.0.1:3000/graphql',
-  retryAttempts: 0,
-})
+const client = createClient({ url: 'ws://127.0.0.1:3000/graphql', retryAttempts: 0 })
 const stop = client.subscribe(
-  { query: 'subscription { counterChanged { value } }' },
+  { query: 'subscription { counterChanged { value step { amount } } }' },
   {
-    next: (result) => console.log(JSON.stringify(result)),
-    error: (error) => console.error(error),
+    next: result => console.log(JSON.stringify(result)),
+    error: error => console.error(error),
     complete: () => console.log('購読を終了しました。'),
   },
 )
-process.once('SIGINT', async () => {
-  stop()
-  await client.dispose()
-})
+process.once('SIGINT', async () => { stop(); await client.dispose() })
 JS
 ```
 
-最初に現在値が届きます。購読を続けたまま別terminalからMutationを実行すると、更新後の値が届きます。同じclientをもう一つ起動すれば、両方へ通知されることを確認できます。
+最初に現在値が届き、別terminalからのMutationで変更が届きます。clientを複数起動すれば両方へ配信されます。Ctrl+Cで停止します。activeSubscriptionsで購読数を確認でき、停止 / 切断で減ります。停止はserverへ非同期に伝わります。
 
-`Ctrl+C`で停止してください。Queryの`activeSubscriptions`は購読の開始で増え、停止・切断で減ります。停止はserverへ非同期に伝わります。
-
-## Applicationの検証
+## 生成と検証
 
 ```sh
+npm run generate --workspace @loutrejs/example-graphql-counter
+npm run generate:check --workspace @loutrejs/example-graphql-counter
+npm run generate --workspace @loutrejs/example-graphql-counter -- --watch
 npm run check --workspace @loutrejs/example-graphql-counter
 npm run typecheck --workspace @loutrejs/example-graphql-counter
 ```
 
-GraphQL integrationの設定は[`@loutrejs/graphql`](../../packages/graphql/README.md)を参照してください。
+生成物はcommitします。SDLを変更したら再生成し、resolverとdomain型を更新して型検査してください。生成設定と契約共有は[GraphQLの型生成](../../docs/graphql-codegen.md)を参照してください。
