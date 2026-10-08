@@ -109,6 +109,7 @@ Runtimeごとの役割と対応範囲は[Getting Started](./docs/getting-started
 - [`hello-http`](./examples/hello-http/) — Contract、Implementation、DIを使うHTTP Application
 - [`hello-cli`](./examples/hello-cli/) — Argumentsを受け取りTaskを実行するApplication
 - [`hello-worker`](./examples/hello-worker/) — `fixedDelay` TriggerでTaskを定期実行するWorker
+- [`graphql-counter`](./examples/graphql-counter/) — DIで共有する状態に対しQuery・Mutation・Subscriptionを提供するGraphQL server
 - [`basic-auth`](./examples/basic-auth/) / [`bearer-auth`](./examples/bearer-auth/) — HTTP認証
 - [`database-postgres`](./examples/database-postgres/) / [`database-drizzle-postgres`](./examples/database-drizzle-postgres/) / [`database-prisma-postgres`](./examples/database-prisma-postgres/) — Database integration
 
@@ -117,7 +118,7 @@ Runtimeごとの役割と対応範囲は[Getting Started](./docs/getting-started
 - [Website](https://loutrejs.come25136.id)
 - [Getting Started](./docs/getting-started.md) — project作成、HTTP、Task、Runtime、CLI
 - [Architecture](./docs/architecture.md) — Application Definition、Application Graph、Runtimeの境界
-- [Examples](./examples/) — HTTP、Auth、CORS、Worker、Database
+- [Examples](./examples/) — HTTP、GraphQL、Auth、CORS、Worker、Database
 
 ## Packages
 

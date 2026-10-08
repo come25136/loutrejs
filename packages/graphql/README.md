@@ -2,6 +2,8 @@
 
 LoutreのHTTP / WebSocket Executionを利用するGraphQL integrationです。標準の`GraphQLSchema`を使用し、HTTPは`graphql-http`、WebSocketは`graphql-ws`へ委譲します。
 
+Query・Mutation・SubscriptionとDIを組み合わせたserverの実装例は、[GraphQL Counter Example](../../examples/graphql-counter/README.md)を参照してください。
+
 ```sh
 npm install @loutrejs/loutre @loutrejs/graphql graphql
 ```
