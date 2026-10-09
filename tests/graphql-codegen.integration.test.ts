@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { runCli } from '@loutrejs/cli'
-import { buildSchema, graphql as execute } from 'graphql'
+import { buildASTSchema, graphql as execute } from 'graphql'
 import { generatedHeader } from '../packages/cli/src/graphql-codegen.js'
 
 const directories: string[] = []
@@ -37,7 +37,8 @@ async function fixture() {
       server: {
         kind: 'server',
         schema: ['*.graphql'],
-        output: 'generated/server.ts',
+        output: 'generated',
+        resolvers: 'resolvers.ts',
         contextType: '../context.js#AppContext',
         mappers: { User: '../domain.js#User' },
         scalars: { DateTime: { input: 'Date', output: 'Date' } },
@@ -46,7 +47,7 @@ async function fixture() {
         kind: 'client',
         schema: ['schema.graphql'],
         documents: ['operation.graphql'],
-        output: 'generated/client.ts',
+        output: 'client.ts',
         scalars: { DateTime: 'string' },
       },
     },
@@ -75,12 +76,12 @@ describe('GraphQL CLI', () => {
       await f.invoke(['generate', '--config', 'config.json']),
       f.stderr.join('\n'),
     ).toBe(0)
-    const server = await readFile(join(f.cwd, 'generated/server.ts'), 'utf8')
-    const client = await readFile(join(f.cwd, 'generated/client.ts'), 'utf8')
+    const server = await readFile(join(f.cwd, 'generated/types.ts'), 'utf8')
+    const client = await readFile(join(f.cwd, 'client.ts'), 'utf8')
     expect(server).toContain('User as UserDomain')
     expect(server).toContain('AppContext')
     expect(server).toContain('input: Date')
-    expect(server).toContain('export const typeDefs')
+    expect(server).toContain('export interface SchemaFields')
     expect(client).toContain('UserNameQueryVariables')
     expect(client).toContain('UserNameDocument')
     expect(client).toContain('/** keep */')
@@ -102,7 +103,7 @@ describe('GraphQL CLI', () => {
     expect(
       await f.invoke(['generate', '--config', 'config.json', '--check']),
     ).toBe(1)
-    expect(await readFile(join(f.cwd, 'generated/server.ts'), 'utf8')).toBe(
+    expect(await readFile(join(f.cwd, 'generated/types.ts'), 'utf8')).toBe(
       original,
     )
   })
@@ -122,9 +123,9 @@ describe('GraphQL CLI', () => {
         { cwd: '/', stdout: () => {}, stderr: (text) => f.stderr.push(text) },
       ),
     ).toBe(0)
-    await expect(
-      readFile(join(f.cwd, 'generated/client.ts')),
-    ).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(join(f.cwd, 'client.ts'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
     expect(
       await f.invoke([
         'generate',
@@ -167,12 +168,18 @@ describe('GraphQL CLI', () => {
       await f.invoke(['generate', '--config', 'config.json']),
       f.stderr.join('\n'),
     ).toBe(0)
-    const generated = await readFile(join(f.cwd, 'generated/server.ts'), 'utf8')
-    const schema = buildSchema(
-      Function(
-        'return (' + generated.split('export const typeDefs =')[1] + ')',
-      )(),
+    const staticSchema = await readFile(
+      join(f.cwd, 'generated/schema-ast.ts'),
+      'utf8',
     )
+    const document = Function(
+      'return (' +
+        staticSchema
+          .split('export const schemaDocument =')[1]!
+          .replace(/ as unknown as DocumentNode\s*$/, '') +
+        ')',
+    )()
+    const schema = buildASTSchema(document)
     schema.getQueryType()!.getFields().user!.resolve = () => ({
       id: '1',
       name: 'Loutre',
@@ -218,7 +225,7 @@ describe('GraphQL CLI', () => {
     await writeFile(join(f.cwd, 'config.json'), JSON.stringify(config))
     expect(await f.invoke(['generate', '--config', 'config.json'])).toBe(1)
     await expect(
-      readFile(join(f.cwd, 'generated/server.ts')),
+      readFile(join(f.cwd, 'generated/types.ts')),
     ).rejects.toMatchObject({ code: 'ENOENT' })
     expect(f.stderr.length).toBeGreaterThan(0)
   })
@@ -235,9 +242,9 @@ describe('GraphQL CLI', () => {
     expect(await readFile(join(f.cwd, 'domain.ts'), 'utf8')).toBe(
       'export interface User { id: string }',
     )
-    await expect(
-      readFile(join(f.cwd, 'generated/client.ts')),
-    ).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(join(f.cwd, 'client.ts'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
   })
 
   it('schemaの破壊的変更とdangerous changeを分類する', async () => {
@@ -303,7 +310,7 @@ describe('GraphQL CLI', () => {
       await vi.waitFor(() => expect(output).toContain('監視しています'), {
         timeout: 10000,
       })
-      const path = join(f.cwd, 'generated/server.ts')
+      const path = join(f.cwd, 'generated/types.ts')
       const previous = await readFile(path, 'utf8')
       await writeFile(join(f.cwd, 'schema.graphql'), 'type Query {')
       await vi.waitFor(() => expect(output).toContain('Syntax Error'), {
@@ -339,4 +346,37 @@ describe('GraphQL CLI', () => {
       if (child.exitCode === null) child.kill('SIGKILL')
     }
   }, 20000)
+})
+
+it('TypeScript設定から整合したManifestを生成し、Resolver Moduleとvalue importを実行しない', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'loutre-graphql-config-'))
+  directories.push(cwd)
+  await writeFile(join(cwd, 'schema.graphql'), 'type Query { hello: String! }')
+  await writeFile(
+    join(cwd, 'resolvers.ts'),
+    'throw new Error("ResolverをCLIから実行しない")',
+  )
+  const config = `import type { GraphQLCodegenConfig } from '@loutrejs/cli'; export default {targets:{server:{kind:'server',schema:['schema.graphql'],resolvers:'resolvers.ts',contextType:'../context.js#Context',output:'generated'}}} satisfies GraphQLCodegenConfig`
+  await writeFile(join(cwd, 'config.ts'), config)
+  const stderr: string[] = []
+  const invoke = () =>
+    runCli(['graphql', 'generate', '--config', 'config.ts'], {
+      cwd,
+      stdout: () => {},
+      stderr: (value) => stderr.push(value),
+    })
+  expect(await invoke(), stderr.join('\n')).toBe(0)
+  const manifest = await readFile(join(cwd, 'generated/manifest.ts'), 'utf8')
+  const builder = await readFile(join(cwd, 'generated/data.ts'), 'utf8')
+  const types = await readFile(join(cwd, 'generated/types.ts'), 'utf8')
+  expect(manifest).toContain("from '../resolvers.js'")
+  expect(builder).not.toContain('resolvers')
+  expect(builder).not.toContain('manifest')
+  expect(types).not.toContain('bindManifest')
+  expect(types).toContain('import type')
+  const previous = types
+  await writeFile(join(cwd, 'config.ts'), `import './resolvers.ts';${config}`)
+  expect(await invoke()).toBe(1)
+  expect(stderr.join('\n')).not.toContain('ResolverをCLIから実行しない')
+  expect(await readFile(join(cwd, 'generated/types.ts'), 'utf8')).toBe(previous)
 })

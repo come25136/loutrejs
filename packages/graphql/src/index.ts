@@ -7,6 +7,10 @@ import {
 import { createHandler } from 'graphql-http/lib/use/fetch'
 import { serveGraphQLWebSocket } from './websocket.js'
 import { validateEndpointSchema, validateRuntime } from './validation.js'
+import { getManifest } from './manifest-internal.js'
+import type { GraphQLManifest } from './manifest-internal.js'
+import type { GraphQLRuntime } from './types.js'
+import { executeManifest } from './execution.js'
 
 import type { GraphQLEndpointDefinition } from './types.js'
 export type {
@@ -16,6 +20,7 @@ export type {
   GraphQLRuntime,
   GraphQLEndpointDefinition,
 } from './types.js'
+export type { GraphQLManifest } from './manifest-internal.js'
 
 type TransportExecution<
   TTransports,
@@ -59,10 +64,23 @@ const textSchema = {
 
 export function defineGraphQLEndpoint<
   const TDefinition extends GraphQLEndpointDefinition,
->(definition: TDefinition): GraphQLEndpoint<TDefinition> {
+>(
+  definition: TDefinition & {
+    readonly factory: () => GraphQLRuntime<
+      TDefinition['manifest'] extends GraphQLManifest<infer Context>
+        ? Context
+        : never
+    >
+  },
+): GraphQLEndpoint<TDefinition> {
   if (typeof definition.factory !== 'function')
     throw new TypeError('GraphQL endpointにfactoryが必要です。')
-  validateEndpointSchema(definition.schema)
+  if ('schema' in definition)
+    throw new TypeError(
+      'schemaは廃止しました。CLIが生成したmanifestを指定してください。',
+    )
+  const bound = getManifest(definition.manifest)
+  validateEndpointSchema(bound.schema)
   const transports = definition.transports ?? { http: true }
   if (!transports.http && !transports.websocket)
     throw new TypeError('GraphQL transportを一つ以上有効にしてください。')
@@ -87,7 +105,27 @@ export function defineGraphQLEndpoint<
           const runtime = validateRuntime(definition.factory())
           return (context) =>
             createHandler<Record<string, unknown>>({
-              schema: definition.schema,
+              schema: bound.schema,
+              execute: async (args) => {
+                const operation = context.execution.beginOperation({
+                  kind: 'graphql.operation',
+                  name: args.operationName ?? 'GraphQL',
+                })
+                operation.annotate?.({ 'graphql.transport': 'http' })
+                try {
+                  const invoke = () =>
+                    executeManifest(bound, args, {
+                      signal: context.request.signal,
+                      annotate: (attributes) =>
+                        operation.annotate?.(attributes),
+                    })
+                  return await (operation.run
+                    ? operation.run(invoke)
+                    : invoke())
+                } finally {
+                  operation.complete()
+                }
+              },
               context: async () =>
                 (await runtime.context({
                   transport: 'http',
@@ -117,12 +155,7 @@ export function defineGraphQLEndpoint<
           const runtime = validateRuntime(definition.factory())
           return {
             endpoint: (context) =>
-              serveGraphQLWebSocket(
-                context,
-                definition.schema,
-                runtime,
-                options,
-              ),
+              serveGraphQLWebSocket(context, bound, runtime, options),
           }
         },
       }) as WebSocketExecutionDefinition,

@@ -1,4 +1,5 @@
-// このファイルはloutre graphql generateが生成します。直接編集しないでください。
+// @generated loutre graphql generateの出力です。直接編集しないでください。
+// 入力指紋: afedce8c88d098bf929f905c1cde61aa5d8a5575d70deba73c161afc82969154
 import type { GraphQLResolveInfo } from 'graphql'
 import type { Counter as CounterDomain } from '../domain/counter.js'
 import type { Step as StepDomain } from '../domain/step.js'
@@ -31,35 +32,29 @@ export type Scalars = {
   }
 }
 export type Counter = {
-  __typename?: 'Counter'
-  value: Scalars['Int']['output']
-  step: Step
+  readonly __typename?: 'Counter'
+  readonly value: Scalars['Int']['output']
+  readonly step: Step
 }
 export type Step = {
-  __typename?: 'Step'
-  id: Scalars['ID']['output']
-  amount: Scalars['Int']['output']
+  readonly __typename?: 'Step'
+  readonly id: Scalars['ID']['output']
+  readonly amount: Scalars['Int']['output']
 }
 export type Query = {
-  __typename?: 'Query'
-  counter: Counter
-  activeSubscriptions: Scalars['Int']['output']
-  stepBatchCount: Scalars['Int']['output']
+  readonly __typename?: 'Query'
+  readonly counter: Counter
+  readonly activeSubscriptions: Scalars['Int']['output']
+  readonly stepBatchCount: Scalars['Int']['output']
 }
 export type Mutation = {
-  __typename?: 'Mutation'
-  increment: Counter
-  reset: Counter
-}
-export type MutationIncrementArgs = {
-  amount?: Scalars['Int']['input']
-}
-export type MutationResetArgs = {
-  value?: Scalars['Int']['input']
+  readonly __typename?: 'Mutation'
+  readonly increment: Counter
+  readonly reset: Counter
 }
 export type Subscription = {
-  __typename?: 'Subscription'
-  counterChanged: Counter
+  readonly __typename?: 'Subscription'
+  readonly counterChanged: Counter
 }
 export type ResolverTypeWrapper<T> = Promise<T> | T
 export type ResolverWithResolve<TResult, TParent, TContext, TArgs> = {
@@ -225,13 +220,13 @@ export type MutationResolvers<
     ResolversTypes['Counter'],
     ParentType,
     ContextType,
-    RequireFields<MutationIncrementArgs, 'amount'>
+    RequireFields<MutationincrementArgs, 'amount'>
   >
   reset?: Resolver<
     ResolversTypes['Counter'],
     ParentType,
     ContextType,
-    RequireFields<MutationResetArgs, 'value'>
+    RequireFields<MutationresetArgs, 'value'>
   >
 }
 export type SubscriptionResolvers<
@@ -253,5 +248,87 @@ export type Resolvers<ContextType = AppContext> = {
   Mutation?: MutationResolvers<ContextType>
   Subscription?: SubscriptionResolvers<ContextType>
 }
-export const typeDefs =
-  'type Counter {\n  value: Int!\n  step: Step!\n}\n\ntype Step {\n  id: ID!\n  amount: Int!\n}\n\ntype Query {\n  counter: Counter!\n  activeSubscriptions: Int!\n  stepBatchCount: Int!\n}\n\ntype Mutation {\n  increment(amount: Int! = 1): Counter!\n  reset(value: Int! = 0): Counter!\n}\n\ntype Subscription {\n  counterChanged: Counter!\n}'
+export type MutationincrementArgs = {
+  readonly amount: Scalars['Int']['input']
+}
+export type MutationresetArgs = {
+  readonly value: Scalars['Int']['input']
+}
+export interface CoercedInputTypes {}
+import type { FieldSpec } from '@loutrejs/graphql/data'
+import type { AppContext as LoutreContext } from '../graphql/context.js'
+export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
+  readonly [P in K]-?: Exclude<T[P], undefined>
+}
+export interface SchemaFields {
+  Counter: {
+    step: FieldSpec<
+      ResolversParentTypes['Counter'],
+      Record<string, never>,
+      ResolversParentTypes['Step'],
+      LoutreContext
+    >
+    value: FieldSpec<
+      ResolversParentTypes['Counter'],
+      Record<string, never>,
+      Scalars['Int']['output'],
+      LoutreContext
+    >
+  }
+  Mutation: {
+    increment: FieldSpec<
+      ResolversParentTypes['Mutation'],
+      MutationincrementArgs,
+      ResolversParentTypes['Counter'],
+      LoutreContext
+    >
+    reset: FieldSpec<
+      ResolversParentTypes['Mutation'],
+      MutationresetArgs,
+      ResolversParentTypes['Counter'],
+      LoutreContext
+    >
+  }
+  Query: {
+    activeSubscriptions: FieldSpec<
+      ResolversParentTypes['Query'],
+      Record<string, never>,
+      Scalars['Int']['output'],
+      LoutreContext
+    >
+    counter: FieldSpec<
+      ResolversParentTypes['Query'],
+      Record<string, never>,
+      ResolversParentTypes['Counter'],
+      LoutreContext
+    >
+    stepBatchCount: FieldSpec<
+      ResolversParentTypes['Query'],
+      Record<string, never>,
+      Scalars['Int']['output'],
+      LoutreContext
+    >
+  }
+  Step: {
+    amount: FieldSpec<
+      ResolversParentTypes['Step'],
+      Record<string, never>,
+      Scalars['Int']['output'],
+      LoutreContext
+    >
+    id: FieldSpec<
+      ResolversParentTypes['Step'],
+      Record<string, never>,
+      Scalars['ID']['output'],
+      LoutreContext
+    >
+  }
+  Subscription: {
+    counterChanged: FieldSpec<
+      ResolversParentTypes['Subscription'],
+      Record<string, never>,
+      ResolversParentTypes['Counter'],
+      LoutreContext
+    >
+  }
+}

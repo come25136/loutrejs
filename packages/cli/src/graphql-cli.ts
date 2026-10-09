@@ -1,9 +1,8 @@
-import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { watch } from 'chokidar'
 import glob from 'fast-glob'
 import type { CliIO } from './cli-io.js'
-import { graphQLCodegenConfig } from './graphql-config.js'
+import { loadGraphQLConfig } from './graphql-config.js'
 import { compareSchemas, generate, loadSchema } from './graphql-codegen.js'
 
 const help = [
@@ -164,9 +163,7 @@ async function watchGeneration(
     }
     running = true
     try {
-      const parsed = graphQLCodegenConfig.parse(
-        JSON.parse(await readFile(config, 'utf8')),
-      )
+      const parsed = await loadGraphQLConfig(config)
       const targets = Object.entries(parsed.targets)
         .filter(([name]) => selected === undefined || selected === name)
         .map(([, target]) => target)
@@ -213,8 +210,15 @@ async function watchGeneration(
     watcher.once('ready', resolveReady)
     watcher.once('error', reject)
   })
-  watcher.on('all', async (_event, path) => {
-    if (stopped || outputs.has(resolve(path)) || /\.[\da-f-]+\.tmp$/.test(path))
+  const changed = async (path: string) => {
+    if (
+      stopped ||
+      [...outputs].some(
+        (output) =>
+          resolve(path) === output || resolve(path).startsWith(output + '/'),
+      ) ||
+      /\.[\da-f-]+\.tmp$/.test(path)
+    )
       return
     if (resolve(path) !== config && !inputs.has(resolve(path))) {
       const current = await glob(patterns, {
@@ -228,6 +232,9 @@ async function watchGeneration(
     timer = setTimeout(() => {
       active = refresh()
     }, 50)
+  }
+  watcher.on('all', (_event, path) => {
+    void changed(path).catch((error) => io.stderr(message(error)))
   })
   await ready
   active = refresh()

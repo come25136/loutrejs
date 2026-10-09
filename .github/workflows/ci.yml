@@ -80,7 +80,10 @@ jobs:
         run: npm run build
 
       - name: Check GraphQL generated contracts
-        run: node packages/cli/bin/loutre.js graphql generate --config examples/graphql-counter/graphql.codegen.json --check
+        run: |
+          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts conformance/graphql/graphql.config.ts; do
+            node packages/cli/bin/loutre.js graphql generate --config "$GRAPHQL_CONFIG_FILE" --check
+          done
 
       - name: Verify release version
         run: node scripts/verify-release-version.mjs
@@ -90,6 +93,9 @@ jobs:
 
       - name: Pack published packages
         run: node scripts/pack-packages.mjs
+
+      - name: Verify GraphQL.js 16/17 consumers
+        run: node conformance/graphql-versions.mjs
 
       - name: Upload package tarballs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -209,7 +215,9 @@ jobs:
       - name: Run Bun CLI conformance
         run: |
           BUN_BIN="$(command -v bun)"
-          "$BUN_BIN" packages/cli/bin/loutre.js graphql generate --config examples/graphql-counter/graphql.codegen.json --check
+          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts conformance/graphql/graphql.config.ts; do
+            "$BUN_BIN" packages/cli/bin/loutre.js graphql generate --config "$GRAPHQL_CONFIG_FILE" --check
+          done
           "$BUN_BIN" packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
           "$BUN_BIN" packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
           "$BUN_BIN" packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
@@ -249,7 +257,9 @@ jobs:
       - name: Run Deno CLI conformance
         run: |
           DENO_BIN="$(command -v deno)"
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js graphql generate --config examples/graphql-counter/graphql.codegen.json --check
+          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts conformance/graphql/graphql.config.ts; do
+            "$DENO_BIN" run -A packages/cli/bin/loutre.js graphql generate --config "$GRAPHQL_CONFIG_FILE" --check
+          done
           "$DENO_BIN" run -A packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
           "$DENO_BIN" run -A packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
           "$DENO_BIN" run -A packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json

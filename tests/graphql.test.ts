@@ -1,3 +1,4 @@
+import { manifestFromSchema } from './helpers/graphql-manifest.js'
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildSchema,
@@ -156,7 +157,7 @@ async function fixture(
   const endpoint = graphql.endpoint({
     name: 'Api',
     path: '/graphql',
-    schema,
+    manifest: manifestFromSchema(schema),
     transports: {
       http:
         options.http === false
@@ -786,7 +787,9 @@ describe('GraphQLのresolver契約', () => {
       graphql.endpoint({
         name: 'Missing',
         path: '/graphql',
-        schema: buildSchema('type Query { hello: String }'),
+        manifest: manifestFromSchema(
+          buildSchema('type Query { hello: String }'),
+        ),
         factory: () => ({ context: () => ({}) }),
       }),
     ).toThrow('Query.hello')
@@ -809,7 +812,7 @@ describe('GraphQLのresolver契約', () => {
         graphql.endpoint({
           name: 'Missing',
           path: '/graphql',
-          schema,
+          manifest: manifestFromSchema(schema),
           factory: () => ({ context: () => ({}) }),
         }),
       ).toThrow('Subscription.events')
@@ -824,7 +827,7 @@ describe('GraphQLのresolver契約', () => {
       const endpoint = graphql.endpoint({
         name: 'Legacy',
         path: '/graphql',
-        schema,
+        manifest: manifestFromSchema(schema),
         factory: (() =>
           invalid === 'rootValue'
             ? { context: () => ({}), rootValue: {} }
@@ -847,7 +850,7 @@ describe('GraphQLのresolver契約', () => {
     const endpoint = graphql.endpoint({
       name: 'Separate',
       path: '/graphql',
-      schema,
+      manifest: manifestFromSchema(schema),
       factory: () => ({ context: () => ({}) }),
     })
     const Module = defineModule(() => ({ executions: [endpoint] }))
@@ -892,7 +895,7 @@ it.each([false, true])(
       graphql.endpoint({
         name: 'Scalar',
         path: '/graphql',
-        schema,
+        manifest: manifestFromSchema(schema),
         factory: () => ({ context: () => ({}) }),
       })
     if (registered) expect(create).not.toThrow()

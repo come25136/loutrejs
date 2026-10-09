@@ -1,6 +1,13 @@
-import { readFile, mkdir, rename, rm, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import {
+  readFile,
+  mkdir,
+  rename,
+  rm,
+  writeFile,
+  access,
+} from 'node:fs/promises'
+import { dirname, resolve, relative, sep } from 'node:path'
+import { randomUUID, createHash } from 'node:crypto'
 import glob from 'fast-glob'
 import {
   assertValidSchema,
@@ -12,7 +19,13 @@ import {
   isInterfaceType,
   isScalarType,
   parse,
-  print,
+  isNonNullType,
+  isListType,
+  isInputObjectType,
+  type GraphQLInputType,
+  type GraphQLType,
+  type GraphQLObjectType,
+  type GraphQLInterfaceType,
   Source,
   validate,
   type DocumentNode,
@@ -26,12 +39,12 @@ import * as documentNode from '@graphql-codegen/typed-document-node'
 import { format } from 'oxfmt'
 import { parse as parseTypeScript, print as printTypeScript } from '@swc/core'
 import {
-  graphQLCodegenConfig,
+  loadGraphQLConfig,
   type GraphQLCodegenTarget,
 } from './graphql-config.js'
 
 export const generatedHeader =
-  '// このファイルはloutre graphql generateが生成します。直接編集しないでください。\n'
+  '// @generated loutre graphql generateの出力です。直接編集しないでください。\n'
 
 export async function inputFiles(
   patterns: readonly string[],
@@ -106,6 +119,103 @@ function validateOperations(schema: GraphQLSchema, ast: DocumentNode) {
   if (count === 0) throw new Error('client documentにoperationが必要です。')
 }
 
+function stripLocations(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripLocations)
+  if (value && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => key !== 'loc')
+        .map(([key, item]) => [key, stripLocations(item)]),
+    )
+  return value
+}
+function modulePath(from: string, to: string) {
+  const path = relative(from, to)
+    .split(sep)
+    .join('/')
+    .replace(/\.(?:ts|mts)$/, '.js')
+  return path.startsWith('.') ? path : `./${path}`
+}
+function resultType(type: GraphQLType): string {
+  const inner = (value: GraphQLType): string =>
+    isListType(value)
+      ? `ReadonlyArray<${resultType(value.ofType)}>`
+      : isScalarType(value)
+        ? `Scalars['${value.name}']['output']`
+        : `ResolversParentTypes['${value.toString()}']`
+  return isNonNullType(type) ? inner(type.ofType) : `Maybe<${inner(type)}>`
+}
+function inputType(type: GraphQLInputType): string {
+  const inner = (value: GraphQLInputType): string =>
+    isListType(value)
+      ? `ReadonlyArray<${inputType(value.ofType)}>`
+      : isScalarType(value)
+        ? `Scalars['${value.name}']['input']`
+        : isInputObjectType(value)
+          ? `CoercedInputTypes['${value.name}']`
+          : value.toString()
+  return isNonNullType(type) ? inner(type.ofType) : `InputMaybe<${inner(type)}>`
+}
+function inputProperties(
+  fields: readonly {
+    readonly name: string
+    readonly type: GraphQLInputType
+    readonly defaultValue?: unknown
+    readonly default?: unknown
+  }[],
+) {
+  return fields
+    .map(
+      (field) =>
+        `readonly ${field.name}${isNonNullType(field.type) || field.defaultValue !== undefined || field.default !== undefined ? '' : '?'}: ${inputType(field.type)}`,
+    )
+    .join('\n')
+}
+async function formattedOutput(
+  path: string,
+  content: string,
+  fingerprint: string,
+) {
+  const module = await parseTypeScript(content, {
+    syntax: 'typescript',
+    comments: false,
+  })
+  const aliases = new Map<string, string>()
+  const body = []
+  for (const statement of module.body) {
+    if (
+      statement.type === 'ExportDeclaration' &&
+      statement.declaration.type === 'TsTypeAliasDeclaration'
+    ) {
+      const name = statement.declaration.id.value
+      const printed = (await printTypeScript({ ...module, body: [statement] }))
+        .code
+      const previous = aliases.get(name)
+      if (previous !== undefined) {
+        if (previous !== printed)
+          throw new Error(`生成された型定義が競合しています: ${name}`)
+        continue
+      }
+      aliases.set(name, printed)
+    }
+    body.push(statement)
+  }
+  const normalized = await printTypeScript({ ...module, body })
+  const formatted = await format(
+    path,
+    `${generatedHeader}// 入力指紋: ${fingerprint}\n${normalized.code}`,
+    {
+      singleQuote: true,
+      semi: false,
+      trailingComma: 'all',
+      printWidth: 80,
+      endOfLine: 'lf',
+    },
+  )
+  if (formatted.errors.length)
+    throw new Error(formatted.errors.map((error) => error.message).join('\n'))
+  return { path, content: formatted.code }
+}
 async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
   const { schema, ast, files } = await loadSchema(target.schema, cwd)
   validateTarget(target, schema)
@@ -114,9 +224,22 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
   const docs = await documents(inputs)
   if (target.kind === 'client')
     validateOperations(schema, concatAST(docs.map((value) => value.document)))
+  const blueprint = stripLocations(ast)
+  const fingerprint = createHash('sha256')
+    .update(
+      JSON.stringify({
+        version: 2,
+        target,
+        blueprint,
+        documents: docs.map((doc) => stripLocations(doc.document)),
+      }),
+    )
+    .digest('hex')
   const config = {
     useTypeImports: true,
+    namingConvention: 'keep',
     enumsAsTypes: true,
+    immutableTypes: true,
     strictScalars: true,
     defaultScalarType: 'unknown',
     disableDescriptions: true,
@@ -129,8 +252,8 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
         }
       : {}),
   }
-  const content = await codegen({
-    filename: target.output,
+  let content = await codegen({
+    filename: target.kind === 'server' ? 'types.ts' : target.output,
     schema: ast,
     documents: docs,
     config,
@@ -140,62 +263,136 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
         ? [{ typescript: {} }, { resolvers: {} }]
         : [{ typescript: {} }, { operations: {} }, { documentNode: {} }],
   })
-  const runtimeSchema =
-    target.kind === 'server'
-      ? `\nexport const typeDefs = ${JSON.stringify(print(ast))}\n`
-      : ''
-  const normalized = await printTypeScript(
-    await parseTypeScript(content + runtimeSchema, {
-      syntax: 'typescript',
-      comments: false,
-    }),
+  const output = resolve(cwd, target.output)
+  if (target.kind === 'client')
+    return {
+      name: 'client',
+      root: output,
+      files: [await formattedOutput(output, content, fingerprint)],
+      inputs: [...files, ...inputs],
+    }
+  const resolverModule = resolve(cwd, target.resolvers)
+  if (
+    [output, resolverModule].some((value) => value === cwd) ||
+    resolverModule.startsWith(`${output}${sep}`)
   )
-  const formatted = await format(
-    target.output,
-    generatedHeader + normalized.code,
-    {
-      singleQuote: true,
-      semi: false,
-      trailingComma: 'all',
-      printWidth: 80,
-      endOfLine: 'lf',
-    },
+    throw new Error('Resolver Moduleは生成directoryの外に置いてください。')
+  const types = Object.values(schema.getTypeMap())
+    .filter(
+      (type): type is GraphQLObjectType | GraphQLInterfaceType =>
+        !type.name.startsWith('__') &&
+        (isObjectType(type) || isInterfaceType(type)),
+    )
+    .toSorted((left, right) => left.name.localeCompare(right.name))
+  const identities: Record<string, Record<string, string>> = {}
+  const fields = types
+    .map((type) => {
+      identities[type.name] = {}
+      const items = Object.values(type.getFields())
+        .toSorted((left, right) => left.name.localeCompare(right.name))
+        .map((field) => {
+          identities[type.name]![field.name] = `${type.name}.${field.name}`
+          const args = field.args.length
+            ? `${type.name}${field.name}Args`
+            : 'Record<string, never>'
+          return `${field.name}: FieldSpec<ResolversParentTypes['${type.name}'], ${args}, ${resultType(field.type)}, AppContext>`
+        })
+      return `${type.name}: { ${items.join('\n')} }`
+    })
+    .join('\n')
+  const args = types.flatMap((type) =>
+    Object.values(type.getFields())
+      .filter((field) => field.args.length)
+      .map((field) => ({
+        name: `${type.name}${field.name}Args`,
+        content: `export type ${type.name}${field.name}Args = { ${inputProperties(field.args)} }`,
+      })),
   )
-  if (formatted.errors.length)
-    throw new Error(formatted.errors.map((error) => error.message).join('\n'))
+  const module = await parseTypeScript(content, {
+    syntax: 'typescript',
+    comments: false,
+  })
+  const argumentNames = new Set(args.map((arg) => arg.name))
+  content =
+    (
+      await printTypeScript({
+        ...module,
+        body: module.body.filter(
+          (statement) =>
+            !(
+              statement.type === 'ExportDeclaration' &&
+              statement.declaration.type === 'TsTypeAliasDeclaration' &&
+              argumentNames.has(statement.declaration.id.value)
+            ),
+        ),
+      })
+    ).code + args.map((arg) => arg.content).join('\n')
+  const inputObjects = Object.values(schema.getTypeMap())
+    .filter(isInputObjectType)
+    .map(
+      (type) =>
+        `${type.name}: { ${inputProperties(Object.values(type.getFields()))} }`,
+    )
+    .join('\n')
+  content += `\nexport interface CoercedInputTypes { ${inputObjects} }\n`
+  const contextImport = target.contextType.split('#')
+  const contextName =
+    contextImport.length === 2 ? 'LoutreContext' : target.contextType
+  const extra = `\nimport type { FieldSpec } from '@loutrejs/graphql/data'\n${contextImport.length === 2 ? `import type { ${contextImport[1]} as LoutreContext } from '${contextImport[0]}'` : ''}\nexport type CoercedArguments<T, K extends keyof T> = Omit<T, K> & { readonly [P in K]-?: Exclude<T[P], undefined> }\nexport interface SchemaFields { ${fields.replaceAll(', AppContext>', `, ${contextName}>`)} }\n`
+  const outputs = {
+    'types.ts': content + extra,
+    'data.ts': `import { createSchemaData } from '@loutrejs/graphql/data'\nimport type { SchemaFields } from './types.js'\nexport const createData = () => createSchemaData<SchemaFields>(${JSON.stringify(identities)}, '${fingerprint}')`,
+    'schema-ast.ts': `import type { DocumentNode } from 'graphql'\nexport const schemaDocument = ${JSON.stringify(blueprint)} as unknown as DocumentNode`,
+    'manifest.ts': `import { bindManifest } from '@loutrejs/graphql/runtime'\nimport { schemaDocument } from './schema-ast.js'\nimport { resolvers } from '${modulePath(output, resolverModule)}'\nimport type { SchemaFields } from './types.js'\nexport type * from './types.js'\nexport const manifest = bindManifest<SchemaFields['${schema.getQueryType()!.name}']['${Object.keys(schema.getQueryType()!.getFields())[0]}']['context']>({ schemaDocument, resolvers, fingerprint: '${fingerprint}' })`,
+  }
   return {
-    path: resolve(cwd, target.output),
-    content: formatted.code,
-    inputs: [...files, ...inputs],
+    name: 'server',
+    root: output,
+    files: await Promise.all(
+      Object.entries(outputs).map(([file, source]) =>
+        formattedOutput(resolve(output, file), source, fingerprint),
+      ),
+    ),
+    inputs: files,
   }
 }
 
 export async function planGeneration(configPath: string, selected?: string) {
-  const config = graphQLCodegenConfig.parse(
-    JSON.parse(await readFile(configPath, 'utf8')),
-  )
-  const entries = Object.entries(config.targets).filter(
-    ([name]) => selected === undefined || name === selected,
-  )
-  if (entries.length === 0)
-    throw new Error(`targetが見つかりません: ${selected}`)
+  const config = await loadGraphQLConfig(configPath)
+  const entries = Object.entries(config.targets)
+    .filter(([name]) => selected === undefined || name === selected)
+    .toSorted(([a], [b]) => a.localeCompare(b))
+  if (!entries.length) throw new Error(`targetが見つかりません: ${selected}`)
   const cwd = dirname(configPath)
-  const outputs = await Promise.all(
+  const generations = await Promise.all(
     entries.map(async ([name, target]) => ({
-      name,
       ...(await generateTarget(target, cwd)),
+      name,
     })),
   )
-  const paths = new Set<string>()
-  const inputs = new Set(outputs.flatMap((output) => output.inputs))
-  for (const output of outputs) {
-    if (paths.has(output.path) || inputs.has(output.path))
-      throw new Error(`出力先が重複するか入力と衝突します: ${output.path}`)
-    paths.add(output.path)
+  const roots: string[] = []
+  const inputs = new Set(
+    generations.flatMap((generation) => generation.inputs).concat(configPath),
+  )
+  for (const generation of generations) {
+    if (
+      roots.some(
+        (root) =>
+          root === generation.root ||
+          root.startsWith(`${generation.root}${sep}`) ||
+          generation.root.startsWith(`${root}${sep}`),
+      ) ||
+      [...inputs].some(
+        (input) =>
+          input === generation.root ||
+          input.startsWith(`${generation.root}${sep}`),
+      )
+    )
+      throw new Error(`出力先が重複するか入力と衝突します: ${generation.root}`)
+    roots.push(generation.root)
   }
-  return outputs
+  return generations
 }
-
 async function existingContent(path: string) {
   try {
     return await readFile(path, 'utf8')
@@ -204,13 +401,24 @@ async function existingContent(path: string) {
     throw error
   }
 }
-
+async function exists(path: string) {
+  try {
+    await access(path)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
+}
 export async function generate(
   configPath: string,
   selected: string | undefined,
   check: boolean,
 ) {
-  const outputs = await planGeneration(configPath, selected)
+  const generations = await planGeneration(configPath, selected)
+  const outputs = generations.flatMap((generation) =>
+    generation.files.map((file) => ({ ...file, name: generation.name })),
+  )
   const changed: string[] = []
   for (const output of outputs) {
     const previous = await existingContent(output.path)
@@ -218,17 +426,90 @@ export async function generate(
       throw new Error(`生成物以外のfileは上書きできません: ${output.path}`)
     if (previous !== output.content) changed.push(output.path)
   }
-  if (!check) {
-    for (const output of outputs) {
-      if (!changed.includes(output.path)) continue
-      await mkdir(dirname(output.path), { recursive: true })
-      const temporary = `${output.path}.${randomUUID()}.tmp`
-      try {
-        await writeFile(temporary, output.content)
-        await rename(temporary, output.path)
-      } finally {
-        await rm(temporary, { force: true })
+  for (const generation of generations) {
+    if (generation.files.length > 1 && (await exists(generation.root))) {
+      const existing = await glob('**/*', {
+        cwd: generation.root,
+        absolute: true,
+        onlyFiles: true,
+        dot: true,
+      })
+      for (const path of existing)
+        if (!generation.files.some((file) => file.path === path))
+          throw new Error(`生成directoryに管理外のfileがあります: ${path}`)
+    }
+  }
+  if (!check && changed.length) {
+    const stages: {
+      root: string
+      temporary: string
+      backup: string
+      previous: boolean
+      mutated: boolean
+      preserveBackup: boolean
+    }[] = []
+    try {
+      for (const generation of generations) {
+        if (!generation.files.some((file) => changed.includes(file.path)))
+          continue
+        await mkdir(dirname(generation.root), { recursive: true })
+        const temporary = `${generation.root}.${randomUUID()}.tmp`
+        const backup = `${generation.root}.${randomUUID()}.tmp`
+        const stage = {
+          root: generation.root,
+          temporary,
+          backup,
+          previous: await exists(generation.root),
+          mutated: false,
+          preserveBackup: false,
+        }
+        stages.push(stage)
+        if (generation.files.length > 1) await mkdir(temporary)
+        for (const file of generation.files)
+          await writeFile(
+            generation.files.length > 1
+              ? resolve(temporary, relative(generation.root, file.path))
+              : temporary,
+            file.content,
+          )
       }
+      for (const stage of stages) {
+        if (stage.previous) await rename(stage.root, stage.backup)
+        stage.mutated = true
+        await rename(stage.temporary, stage.root)
+      }
+    } catch (error) {
+      const failures: unknown[] = [error]
+      for (const stage of stages.toReversed()) {
+        if (!stage.mutated) continue
+        try {
+          await rm(stage.root, { recursive: true, force: true })
+          if (stage.previous) await rename(stage.backup, stage.root)
+        } catch (failure) {
+          stage.preserveBackup = true
+          failures.push(
+            new Error(`正常世代のbackupを保持しました: ${stage.backup}`, {
+              cause: failure,
+            }),
+          )
+        }
+      }
+      if (failures.length > 1)
+        throw new AggregateError(
+          failures,
+          '生成物の復旧に失敗しました。backupを保持しています。',
+          { cause: error },
+        )
+      throw error
+    } finally {
+      await Promise.all(
+        stages.flatMap((stage) => [
+          rm(stage.temporary, { recursive: true, force: true }),
+          ...(stage.preserveBackup
+            ? []
+            : [rm(stage.backup, { recursive: true, force: true })]),
+        ]),
+      )
     }
   }
   return { outputs, changed }

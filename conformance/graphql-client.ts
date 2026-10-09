@@ -4,6 +4,9 @@ export async function verifyGraphQLTransports(
   drain: () => Promise<void>,
   closeCodes: readonly number[] = [1001],
 ): Promise<void> {
+  await verifyOrderResolution(
+    new URL(http ? '/commerce' : '/commerce-ws-only', url).href,
+  )
   if (http) {
     const response = await fetch(
       `${url}?query=${encodeURIComponent('{hello}')}`,
@@ -171,5 +174,49 @@ async function withTimeout<T>(
     ])
   } finally {
     clearTimeout(timer)
+  }
+}
+
+export async function verifyOrderResolution(url: string): Promise<void> {
+  const query = `query($strategy: Strategy!) { orders(strategy:$strategy,pagination:{offset:0,limit:100}) { totalCount pageInfo { hasPreviousPage hasNextPage __typename } edges { id customer { id account { id name __typename } __typename } items { id quantity product { id name category { name __typename } __typename } __typename } __typename } __typename } }`
+  let expected: string | undefined
+  for (const strategy of ['EAGER', 'LAZY', 'HYBRID']) {
+    const before = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: '{productBatchCount}' }),
+    }).then((response) => response.json())
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query, variables: { strategy } }),
+    })
+    const result = await response.json()
+    assert(
+      !result.errors,
+      `Order ${strategy}: ${JSON.stringify(result.errors)}`,
+    )
+    assert(
+      result.data.orders.edges.length === 100 &&
+        result.data.orders.edges.reduce(
+          (count: number, order: { items: unknown[] }) =>
+            count + order.items.length,
+          0,
+        ) === 200,
+      '100注文 / 200明細',
+    )
+    const serialized = JSON.stringify(result)
+    if (expected === undefined) expected = serialized
+    else assert(serialized === expected, `Order ${strategy}の結果一致`)
+    const after = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: '{productBatchCount}' }),
+    }).then((value) => value.json())
+    const calls = after.data.productBatchCount - before.data.productBatchCount
+    assert(
+      strategy === 'EAGER' ? calls === 0 : calls > 0 && calls < 200,
+      `Order ${strategy}のreuse / Batch`,
+    )
   }
 }

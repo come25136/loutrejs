@@ -58,11 +58,15 @@ Package Distribution ADRのpublic package制限は、このpackage追加に合�
 
 基本APIは`graphql.endpoint()`とする。
 
+Schemaとresolverの結合は[GraphQL Codegen ADR](loutre_graphql_codegen_architecture.md)の生成Manifestへ委譲する。
+
 ```ts
+import { manifest } from './generated/manifest.js'
+
 const GraphQLApi = graphql.endpoint({
   name: 'GraphQLApi',
   path: '/graphql',
-  schema,
+  manifest,
   transports: {
     http: true,
     websocket: {
@@ -351,7 +355,11 @@ Subscription executionはGraphQL.jsへ委譲する。
 ```text
 Source Stream
       ↓
-graphql.subscribe()
+GraphQL.js createSourceEventStream()
+      ↓
+配送eventごとのData Resolution Scope
+      ↓
+GraphQL.jsによるeventの標準execution
       ↓
 AsyncIterable<ExecutionResult>
       ↓
@@ -359,6 +367,8 @@ graphql-ws
       ↓
 Client
 ```
+
+GraphQL.js 16では`execute()`、17では`executeSubscriptionEvent()`を利用し、eventごとにScopeを破棄する。
 
 Client `complete` またはsocket close時にはactive iteratorへ`return()`を伝播する。
 

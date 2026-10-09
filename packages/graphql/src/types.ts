@@ -1,5 +1,5 @@
 import type { HttpRawDefinition } from '@loutrejs/loutre/http'
-import type { GraphQLSchema } from 'graphql'
+import type { GraphQLManifest } from './manifest-internal.js'
 
 export interface GraphQLHttpContextInput {
   readonly transport: 'http'
@@ -29,7 +29,8 @@ export interface GraphQLRuntime<TContext extends object = object> {
 export interface GraphQLEndpointDefinition<TContext extends object = object> {
   readonly name: string
   readonly path: string
-  readonly schema: GraphQLSchema
+  readonly manifest: GraphQLManifest<TContext>
+  readonly schema?: never
   readonly transports?: {
     readonly http?:
       | boolean

@@ -1,4 +1,5 @@
-import { buildSchema } from 'graphql'
+import { parse } from 'graphql'
+import { bindManifest } from '@loutrejs/graphql/runtime'
 import { graphql } from '@loutrejs/graphql'
 import {
   defineApplication,
@@ -8,26 +9,29 @@ import {
 import { http } from '@loutrejs/loutre/http'
 import { websocket } from '@loutrejs/loutre/websocket'
 
-const schema = buildSchema('type Query { hello: String }')
-schema.getQueryType()!.getFields().hello!.resolve = () => 'Hello'
+const manifest = bindManifest({
+  schemaDocument: parse('type Query { hello: String }'),
+  resolvers: { Query: { hello: () => 'Hello' } },
+  fingerprint: 'test',
+})
 const factory = () => ({ context: () => ({}) })
 const httpOnly = graphql.endpoint({
   name: 'Http',
   path: '/graphql',
-  schema,
+  manifest,
   factory,
 })
 const websocketOnly = graphql.endpoint({
   name: 'WebSocket',
   path: '/graphql',
-  schema,
+  manifest,
   transports: { websocket: true },
   factory,
 })
 const both = graphql.endpoint({
   name: 'Both',
   path: '/graphql',
-  schema,
+  manifest,
   transports: { http: true, websocket: true },
   factory: () => ({
     context(input) {
@@ -91,18 +95,18 @@ const invalidWebSocketRoute = {
 websocket.contract({ route: invalidWebSocketRoute })
 
 // @ts-expect-error factoryは必須
-graphql.endpoint({ name: 'MissingFactory', path: '/graphql', schema })
+graphql.endpoint({ name: 'MissingFactory', path: '/graphql', manifest })
 graphql.endpoint({
   name: 'MissingContext',
   path: '/graphql',
-  schema,
+  manifest,
   // @ts-expect-error contextは必須
   factory: () => ({}),
 })
 graphql.endpoint({
   name: 'Legacy',
   path: '/graphql',
-  schema,
+  manifest,
   // @ts-expect-error rootValueを返すfactoryは拒否する
   factory: () => ({ context: () => ({}), rootValue: {} }),
 })

@@ -11,6 +11,7 @@ import {
   SchemaValidationError,
   validateSchema,
   type ExecutionDefinition,
+  type ExecutionContextView,
   type ExecutionExtension,
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
@@ -538,6 +539,7 @@ export interface HttpRawExecutionContext<
   readonly request: Request
   readonly signal: AbortSignal
   readonly state: Readonly<TState>
+  readonly execution: ExecutionContextView
 }
 
 type RawMiddlewareState<TMiddlewares extends readonly AnyHttpMiddleware[]> =
@@ -1700,7 +1702,28 @@ function createHttpExtensionRuntime(
               )
               const invoke = () =>
                 handler({
-                  ...(match.route.raw ? { request } : {}),
+                  ...(match.route.raw
+                    ? {
+                        request,
+                        execution: {
+                          signal: lease.signal,
+                          annotate: (
+                            attributes: Readonly<Record<string, unknown>>,
+                          ) => lease.annotate?.(attributes),
+                          beginOperation: (
+                            metadata: Parameters<
+                              ExecutionContextView['beginOperation']
+                            >[0],
+                          ) => {
+                            const begin = () =>
+                              applicationRuntime.beginOperation?.(metadata) ?? {
+                                complete() {},
+                              }
+                            return lease.run ? lease.run(begin) : begin()
+                          },
+                        },
+                      }
+                    : {}),
                   input: middlewareContext.input,
                   response: middlewareContext.response,
                   signal: match.route.raw

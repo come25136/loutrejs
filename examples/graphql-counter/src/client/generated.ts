@@ -1,4 +1,5 @@
-// このファイルはloutre graphql generateが生成します。直接編集しないでください。
+// @generated loutre graphql generateの出力です。直接編集しないでください。
+// 入力指紋: 6f08754bf07e2e63d6deabb3ee6a04a91860a052abcbf2bd0b847e1b93b293f1
 type Exact<
   T extends {
     [key: string]: unknown
@@ -37,45 +38,45 @@ export type Scalars = {
   }
 }
 export type Counter = {
-  __typename?: 'Counter'
-  value: Scalars['Int']['output']
-  step: Step
+  readonly __typename?: 'Counter'
+  readonly value: Scalars['Int']['output']
+  readonly step: Step
 }
 export type Step = {
-  __typename?: 'Step'
-  id: Scalars['ID']['output']
-  amount: Scalars['Int']['output']
+  readonly __typename?: 'Step'
+  readonly id: Scalars['ID']['output']
+  readonly amount: Scalars['Int']['output']
 }
 export type Query = {
-  __typename?: 'Query'
-  counter: Counter
-  activeSubscriptions: Scalars['Int']['output']
-  stepBatchCount: Scalars['Int']['output']
+  readonly __typename?: 'Query'
+  readonly counter: Counter
+  readonly activeSubscriptions: Scalars['Int']['output']
+  readonly stepBatchCount: Scalars['Int']['output']
 }
 export type Mutation = {
-  __typename?: 'Mutation'
-  increment: Counter
-  reset: Counter
+  readonly __typename?: 'Mutation'
+  readonly increment: Counter
+  readonly reset: Counter
 }
-export type MutationIncrementArgs = {
+export type MutationincrementArgs = {
   amount?: Scalars['Int']['input']
 }
-export type MutationResetArgs = {
+export type MutationresetArgs = {
   value?: Scalars['Int']['input']
 }
 export type Subscription = {
-  __typename?: 'Subscription'
-  counterChanged: Counter
+  readonly __typename?: 'Subscription'
+  readonly counterChanged: Counter
 }
 export type SnapshotQueryVariables = Exact<{
   [key: string]: never
 }>
 export type SnapshotQuery = {
-  activeSubscriptions: number
-  counter: {
-    value: number
-    step: {
-      amount: number
+  readonly activeSubscriptions: number
+  readonly counter: {
+    readonly value: number
+    readonly step: {
+      readonly amount: number
     }
   }
 }
@@ -83,18 +84,18 @@ export type AddMutationVariables = Exact<{
   amount: number
 }>
 export type AddMutation = {
-  increment: {
-    value: number
+  readonly increment: {
+    readonly value: number
   }
 }
 export type WatchSubscriptionVariables = Exact<{
   [key: string]: never
 }>
 export type WatchSubscription = {
-  counterChanged: {
-    value: number
-    step: {
-      amount: number
+  readonly counterChanged: {
+    readonly value: number
+    readonly step: {
+      readonly amount: number
     }
   }
 }

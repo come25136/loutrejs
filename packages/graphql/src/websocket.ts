@@ -5,17 +5,20 @@ import type {
 } from '@loutrejs/loutre/websocket'
 import { makeServer, parseMessage, MessageType } from 'graphql-ws'
 import {
-  execute,
-  subscribe,
   parse,
   validate,
   getOperationAST,
   GraphQLError,
   type ExecutionArgs,
   type ExecutionResult,
-  type GraphQLSchema,
 } from 'graphql'
 import type { GraphQLRuntime } from './types.js'
+import type { BoundManifest } from './manifest-internal.js'
+import {
+  executeManifest,
+  subscribeManifest,
+  incrementalErrors,
+} from './execution.js'
 
 interface Operation {
   readonly controller: AbortController
@@ -41,11 +44,12 @@ type SessionContext = WebSocketHandlerContext<{
 
 export async function serveGraphQLWebSocket(
   context: SessionContext,
-  schema: GraphQLSchema,
+  bound: BoundManifest,
   runtime: GraphQLRuntime,
   options: { readonly connectionInitWaitTimeout?: number },
 ): Promise<void> {
   const operations = new Map<string, Operation>()
+  const schema = bound.schema
   const executionOperations = new WeakMap<ExecutionArgs, Operation>()
   const tasks = new Set<Promise<void>>()
   const operationTasks = new Map<string, Promise<void>>()
@@ -100,7 +104,10 @@ export async function serveGraphQLWebSocket(
           'graphql.operation.name': ast.name?.value ?? '',
           'graphql.operation.type': ast.operation,
         })
-      const errors = validate(schema, document)
+      const errors = [
+        ...validate(schema, document),
+        ...incrementalErrors(document),
+      ]
       if (errors.length > 0) return errors
       if (!ast) return [new GraphQLError('Unable to identify operation')]
       const contextValue = await run(operation, () =>
@@ -129,12 +136,22 @@ export async function serveGraphQLWebSocket(
     execute(args) {
       const operation = executionOperations.get(args)
       if (operation?.controller.signal.aborted) return { data: null }
-      return run(operation, () => execute(args))
+      return run(operation, () =>
+        executeManifest(bound, args, {
+          signal: operation!.controller.signal,
+          annotate: (attributes) => operation?.lease.annotate?.(attributes),
+        }),
+      )
     },
     async subscribe(args) {
       const operation = executionOperations.get(args)!
       if (operation.controller.signal.aborted) return { data: null }
-      const result = await run(operation, () => subscribe(args))
+      const result = await run(operation, () =>
+        subscribeManifest(bound, args, {
+          signal: operation.controller.signal,
+          annotate: (attributes) => operation.lease.annotate?.(attributes),
+        }),
+      )
       if (!isAsyncIterable(result)) return result
       const iterator = cancellableIterator(
         result[Symbol.asyncIterator](),

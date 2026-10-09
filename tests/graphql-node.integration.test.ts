@@ -1,3 +1,4 @@
+import { manifestFromSchema } from './helpers/graphql-manifest.js'
 import { request as httpRequest } from 'node:http'
 import { once } from 'node:events'
 import { describe, expect, it } from 'vitest'
@@ -21,7 +22,7 @@ async function create(http: boolean) {
   const endpoint = graphql.endpoint({
     name: 'Native',
     path: '/graphql',
-    schema,
+    manifest: manifestFromSchema(schema),
     transports: { http, websocket: true },
     factory: () => ({ context: () => ({}) }),
   })

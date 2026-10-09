@@ -16,8 +16,9 @@ const websocketOnly = cloudflareWorkersRuntime.bind({
 export default {
   async fetch(request: Request, environment?: unknown, context?: unknown) {
     const path = new URL(request.url).pathname
-    if (path === '/graphql') return graphql.fetch(request, environment, context)
-    if (path === '/ws-only')
+    if (path === '/graphql' || path === '/commerce')
+      return graphql.fetch(request, environment, context)
+    if (path === '/ws-only' || path === '/commerce-ws-only')
       return websocketOnly.fetch(request, environment, context)
     if (path === '/shutdown') {
       await (new URL(request.url).searchParams.has('http')

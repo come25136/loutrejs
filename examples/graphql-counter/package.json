@@ -11,16 +11,14 @@
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
     "typecheck": "tsc --noEmit",
-    "generate": "loutre graphql generate --config graphql.codegen.json",
-    "generate:check": "loutre graphql generate --config graphql.codegen.json --check"
+    "generate": "loutre graphql generate --config graphql.config.ts",
+    "generate:check": "loutre graphql generate --config graphql.config.ts --check"
   },
   "dependencies": {
-    "@graphql-tools/schema": "^10.1.3",
     "@graphql-typed-document-node/core": "^3.2.0",
     "@loutrejs/graphql": "0.7.0",
     "@loutrejs/loutre": "0.7.0",
     "@loutrejs/node": "0.7.0",
-    "dataloader": "^2.2.3",
     "graphql": "^17.0.2",
     "zod": "^4.6.5"
   },

@@ -1,0 +1,56 @@
+enum Strategy {
+  EAGER
+  LAZY
+  HYBRID
+}
+input OrderFilter {
+  customerId: ID
+}
+input PaginationInput {
+  offset: Int! = 0
+  limit: Int! = 100
+}
+type PageInfo {
+  hasPreviousPage: Boolean!
+  hasNextPage: Boolean!
+}
+type OrderConnection {
+  totalCount: Int!
+  pageInfo: PageInfo!
+  edges: [Order!]!
+}
+type Order {
+  id: ID!
+  customer: Customer!
+  items: [OrderItem!]!
+}
+type Customer {
+  id: ID!
+  account: Account!
+}
+type Account {
+  id: ID!
+  name: String!
+}
+type OrderItem {
+  id: ID!
+  quantity: Int!
+  product: Product!
+}
+type Product {
+  id: ID!
+  name: String!
+  category: Category!
+}
+type Category {
+  id: ID!
+  name: String!
+}
+type Query {
+  orders(
+    filter: OrderFilter! = {}
+    pagination: PaginationInput! = {}
+    strategy: Strategy! = LAZY
+  ): OrderConnection!
+  productBatchCount: Int!
+}

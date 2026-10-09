@@ -1,7 +1,7 @@
 import { createClient, type FormattedExecutionResult } from 'graphql-ws'
 import WebSocket from 'ws'
 import { print } from 'graphql'
-import { AddDocument } from '../examples/graphql-counter/src/generated/client.js'
+import { AddDocument } from '../examples/graphql-counter/src/client/generated.js'
 import {
   runWorkspaceCommand,
   startWorkspace,

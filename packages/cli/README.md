@@ -103,9 +103,9 @@ API titleとversionは`package.json`から読み取られ、`--title` / `--api-v
 ## GraphQL
 
 ```sh
-loutre graphql generate --config graphql.codegen.json
-loutre graphql generate --config graphql.codegen.json --check
-loutre graphql generate --config graphql.codegen.json --watch
+loutre graphql generate --config graphql.config.ts
+loutre graphql generate --config graphql.config.ts --check
+loutre graphql generate --config graphql.config.ts --watch
 ```
 
-Applicationを起動せず、共有SDLからserverのresolver型とclientのoperation型を生成します。serverではdomain mappingとcontext型を指定でき、clientでは選択fieldの結果とvariablesを型付けします。設定と契約共有の手順は[GraphQLの型生成](../../docs/graphql-codegen.md)を参照してください。
+Applicationを起動せず、共有SDLからserverの型・Typed Field Builder・Static Schema・Runtime ManifestとclientのOperation型を生成します。serverではdomain mappingとcontext型を指定でき、clientでは選択fieldの結果とvariablesを型付けします。設定と契約共有の手順は[GraphQLの型生成](../../docs/graphql-codegen.md)を参照してください。

@@ -1,0 +1,18 @@
+type Query {
+  hello: String!
+  cleanupCount: Int!
+  at(value: DateTime!): DateTime!
+  nullableTicks: [Tick]
+}
+type Mutation {
+  update(value: String!): String!
+}
+type Tick {
+  sequence: Int!
+  hidden: String!
+}
+type Subscription {
+  ticks: Tick!
+}
+
+scalar DateTime

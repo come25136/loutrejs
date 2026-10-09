@@ -37,6 +37,7 @@ import { startDevApplicationSupervisor } from './dev/run-supervisor.js'
 
 import type { CliIO } from './cli-io.js'
 export type { CliIO } from './cli-io.js'
+export type { GraphQLCodegenConfig } from './graphql-config.js'
 
 const runtimes: Readonly<Record<string, RuntimeSupportProfile>> = {
   node: nodeRuntimeSupport,
