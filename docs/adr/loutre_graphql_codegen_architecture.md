@@ -165,8 +165,7 @@ Applicationで記述するBinding:
 
 ```ts
 // manifest.ts — Applicationが保守する。
-import { bindManifest } from '@loutrejs/graphql/runtime'
-import { schemaDocument } from './generated/schema-ast.js'
+import { bindManifest, schemaDocument } from './generated/schema-ast.js'
 import { resolvers } from './resolvers.js'
 
 export const manifest = bindManifest({
@@ -175,7 +174,7 @@ export const manifest = bindManifest({
 })
 ```
 
-生成schemaDocumentはContextの型を持ち、bindManifestからendpointまで型を引き継ぐ。`schemaDocument`はSDL文字列ではなくCLIでparse済みのASTを静的モジュールとして生成する。Runtime Bindingで`buildASTSchema()`相当の処理とResolver Bindingを行う。**TypeScriptの型を実行時に反射する仕組みは導入しない。**
+生成schemaDocumentはContextの型を持ち、bindManifestからendpointまで型を引き継ぐ。schema-ast.tsはSchema専用のbindManifest helperもexportし、inline Resolverを生成Resolvers<Context>で型付けする。利用者はContextだけを明示できる。TypeScriptは一部のGeneric Type引数を明示したときに残りを推論できないため、Schemaを生成helperに固定する。helperはResolver Moduleをimportせず、利用者から受け取ったBindingを共通Runtimeへ委譲する。`schemaDocument`はSDL文字列ではなくCLIでparse済みのASTを静的モジュールとして生成する。Runtime Bindingで`buildASTSchema()`相当の処理とResolver Bindingを行う。**TypeScriptの型を実行時に反射する仕組みは導入しない。**
 
 Runtime Bindは次を検証する。
 

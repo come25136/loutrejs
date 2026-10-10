@@ -1,5 +1,4 @@
-import { bindManifest } from '@loutrejs/graphql/runtime'
-import { schemaDocument } from './generated/schema-ast.js'
+import { bindManifest, schemaDocument } from './generated/schema-ast.js'
 import { resolvers } from './resolvers.js'
 
 export const manifest = bindManifest({ schemaDocument, resolvers })

@@ -1,5 +1,5 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// fingerprint: 52129744de387e7ffa40c29968f1e0a784c4878dcf51820cd75441e7ecbc2ef4
+// fingerprint: 702a128e52c3eba92e691a4969f3cf6c4b5debefafd122d5fce8c373d11ec18f
 import type { GraphQLResolveInfo } from 'graphql'
 import type {
   OrderConnection as OrderConnectionDomain,

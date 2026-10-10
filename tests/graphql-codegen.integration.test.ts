@@ -173,7 +173,11 @@ describe('GraphQL CLI', () => {
     )
     const document = Function(
       'Kind',
-      'return (' + staticSchema.split(' = ')[1]! + ')',
+      'return (' +
+        staticSchema
+          .split(' = ')[1]!
+          .split('export function bindManifest')[0]! +
+        ')',
     )(Kind)
     const schema = buildASTSchema(document)
     schema.getQueryType()!.getFields().user!.resolve = () => ({
@@ -365,7 +369,8 @@ it('TypeScript設定からBinding用のschemaとdataを生成し、Application�
   const schema = await readFile(join(cwd, 'generated/schema-ast.ts'), 'utf8')
   const builder = await readFile(join(cwd, 'generated/data.ts'), 'utf8')
   const types = await readFile(join(cwd, 'generated/types.ts'), 'utf8')
-  expect(schema).not.toContain('resolvers')
+  expect(schema).not.toContain("from '../resolvers")
+  expect(schema).toContain('resolvers: Resolvers<Context>')
   expect(schema).not.toContain(' as unknown')
   expect(schema).toContain('GraphQLSchemaDocument<SchemaContext>')
   expect(builder).not.toContain('resolvers')

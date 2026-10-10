@@ -328,7 +328,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify({
-        version: 3,
+        version: 4,
         target,
         blueprint,
         documents: docs.map((doc) => stripLocations(doc.document)),
@@ -436,7 +436,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
   const outputs = {
     'types.ts': content + extra,
     'data.ts': `import { createSchemaData } from '@loutrejs/graphql/data'\nimport type { SchemaFields } from './types.js'\nexport const createData = () => createSchemaData<SchemaFields>(${JSON.stringify(identities)})`,
-    'schema-ast.ts': `import type { GraphQLSchemaDocument } from '@loutrejs/graphql/runtime'\nimport type { SchemaContext } from './types.js'\nexport const schemaDocument: GraphQLSchemaDocument<SchemaContext> = ${JSON.stringify(blueprint)}`,
+    'schema-ast.ts': `import type { DocumentNode } from 'graphql'\nimport { bindManifest as bindRuntimeManifest, type GraphQLSchemaDocument, type GraphQLManifest } from '@loutrejs/graphql/runtime'\nimport type { SchemaContext, Resolvers } from './types.js'\nexport const schemaDocument: GraphQLSchemaDocument<SchemaContext> = ${JSON.stringify(blueprint)}\nexport function bindManifest<Context extends object = SchemaContext>(input: { readonly schemaDocument: DocumentNode; readonly resolvers: Resolvers<Context> }): GraphQLManifest<Context> { return bindRuntimeManifest<Context>(input) }`,
   }
   return {
     name: 'server',

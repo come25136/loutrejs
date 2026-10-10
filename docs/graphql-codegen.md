@@ -101,8 +101,7 @@ export const resolvers = {
 ```ts
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { bindManifest } from '@loutrejs/graphql/runtime'
-import { schemaDocument } from './generated/schema-ast.js'
+import { bindManifest, schemaDocument } from './generated/schema-ast.js'
 import { resolvers } from './resolvers.js'
 
 const manifest = bindManifest({ schemaDocument, resolvers })
@@ -120,6 +119,28 @@ export const endpoint = graphql.endpoint({
   }),
 })
 ```
+
+schema-ast.tsはSchema専用のbindManifestもexportします。inline ResolverへParent / coerced Args / Result / Contextを付けるため、Bindingにはこの生成helperをimportします。Contextは設定のcontextTypeをdefaultとして使い、明示的に差し替える場合はbindManifest<AppContext>と指定できます。例えばCounter serverでは次のように記述できます。
+
+```ts
+import { bindManifest, schemaDocument } from './generated/schema-ast.js'
+import type { AppContext } from './context.js'
+
+const manifest = bindManifest<AppContext>({
+  schemaDocument,
+  resolvers: {
+    Query: {
+      counter: (_parent, _args, context) => context.counter.current(),
+    },
+    Mutation: {
+      increment: (_parent, args, context) =>
+        context.counter.increment(args.amount),
+    },
+  },
+})
+```
+
+args.amountはSDLからnumber、contextはAppContextとして推論します。存在しないType / Field、誤った戻り値は型エラーになります。分割Moduleでは引き続きsatisfies Resolversで実装を検査できます。共通runtimeのbindManifestは低水準のBinding関数で、Schema専用の型付けは生成helperが担当します。
 
 manifestはOpaque Typeです。schema / typeDefs / rootValueをendpointへ渡す経路はありません。makeExecutableSchema()や手動prepareは不要です。BindingはApplicationが保守するModuleへ記述します。生成ModuleはResolverをimportしません。Resolverからはgenerated/dataをvalue importし、generated/typesをtype-only importします。Binding Moduleの値をResolverから逆importしないでください。data ModuleのimportだけではSchema構築やResolver Moduleのimportを開始しません。
 

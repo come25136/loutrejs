@@ -100,8 +100,7 @@ try {
       join(cwd, 'src/app.ts'),
       `import { defineApplication,defineModule } from '@loutrejs/loutre'
       import { graphql } from '@loutrejs/graphql'
-      import { bindManifest } from '@loutrejs/graphql/runtime'
-      import { schemaDocument } from './generated/schema-ast.js'
+      import { bindManifest, schemaDocument } from './generated/schema-ast.js'
       import { resolvers } from './resolvers.js'
       const manifest = bindManifest({ schemaDocument, resolvers })
       export const state={parent:{id:'same'},revision:0,calls:0,cleanups:0}

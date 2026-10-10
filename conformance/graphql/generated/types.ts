@@ -1,5 +1,5 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// fingerprint: c86c2a17a6ef154ebb41485c38f78004a165ee5eed17a651c3696773a53cc218
+// fingerprint: 1019ddbefd93081317c0b508666094f140fcd3191c5394dcabbda6e414e0bdd2
 import type {
   GraphQLResolveInfo,
   GraphQLScalarType,

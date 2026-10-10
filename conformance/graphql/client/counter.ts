@@ -1,5 +1,5 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// fingerprint: 40e7ac12dd6e3ff1be44d54590aa180cfcbec999906aee6e2b1ac14143cd0dfa
+// fingerprint: 43e4a6d9d4a067cb077971a94d6aa9540e4a1a09b42b4a2c7db485745241870d
 import { Kind, OperationTypeNode } from 'graphql'
 type Exact<
   T extends {

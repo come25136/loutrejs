@@ -1,5 +1,5 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// fingerprint: ec21de3ef8c94c1ebc2ef45a5a0f20a9f959c83d377081109ac89fcebce60e9a
+// fingerprint: 9998cd77979a3341de177c98c02b25aee37d1e626fd39c88098c24f92b94706b
 import type { GraphQLResolveInfo } from 'graphql'
 import type { Counter as CounterDomain } from '../domain/counter.js'
 import type { Step as StepDomain } from '../domain/step.js'

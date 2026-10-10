@@ -10,12 +10,12 @@ npm install --save-dev @loutrejs/cli
 ```ts
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { bindManifest } from '@loutrejs/graphql/runtime'
-import { schemaDocument } from './generated/schema-ast.js'
+import { bindManifest, schemaDocument } from './generated/schema-ast.js'
 import { resolvers } from './resolvers.js'
 
-const manifest = bindManifest({ schemaDocument, resolvers })
 import { CounterStore } from './domain/counter.js'
+
+const manifest = bindManifest({ schemaDocument, resolvers })
 
 export const endpoint = graphql.endpoint({
   name: 'Counter',
