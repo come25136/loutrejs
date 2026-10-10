@@ -1,5 +1,4 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// fingerprint: 1d64979b639c80b938d5db39ecf8f238fd8bc42f5ada36e18769e36b99358026
 import { Kind } from 'graphql'
 import type { DocumentNode } from 'graphql'
 export const schemaDocument: DocumentNode = {

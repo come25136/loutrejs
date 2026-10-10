@@ -7,7 +7,7 @@ import {
   access,
 } from 'node:fs/promises'
 import { dirname, resolve, relative, sep } from 'node:path'
-import { randomUUID, createHash } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import glob from 'fast-glob'
 import {
   assertValidSchema,
@@ -170,11 +170,7 @@ function inputProperties(
     )
     .join('\n')
 }
-async function formattedOutput(
-  path: string,
-  content: string,
-  fingerprint: string,
-) {
+async function formattedOutput(path: string, content: string) {
   const module = await parseTypeScript(content, {
     syntax: 'typescript',
     comments: false,
@@ -301,17 +297,13 @@ async function formattedOutput(
     ...module,
     body: [...(constantModule?.body ?? []), ...body],
   })
-  const formatted = await format(
-    path,
-    `${generatedHeader}// fingerprint: ${fingerprint}\n${normalized.code}`,
-    {
-      singleQuote: true,
-      semi: false,
-      trailingComma: 'all',
-      printWidth: 80,
-      endOfLine: 'lf',
-    },
-  )
+  const formatted = await format(path, `${generatedHeader}${normalized.code}`, {
+    singleQuote: true,
+    semi: false,
+    trailingComma: 'all',
+    printWidth: 80,
+    endOfLine: 'lf',
+  })
   if (formatted.errors.length)
     throw new Error(formatted.errors.map((error) => error.message).join('\n'))
   return { path, content: formatted.code }
@@ -325,16 +317,6 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
   if (target.kind === 'client')
     validateOperations(schema, concatAST(docs.map((value) => value.document)))
   const blueprint = stripLocations(ast)
-  const fingerprint = createHash('sha256')
-    .update(
-      JSON.stringify({
-        version: 5,
-        target,
-        blueprint,
-        documents: docs.map((doc) => stripLocations(doc.document)),
-      }),
-    )
-    .digest('hex')
   const config = {
     useTypeImports: true,
     namingConvention: 'keep',
@@ -368,7 +350,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
     return {
       name: 'client',
       root: output,
-      files: [await formattedOutput(output, content, fingerprint)],
+      files: [await formattedOutput(output, content)],
       inputs: [...files, ...inputs],
     }
   const types = Object.values(schema.getTypeMap())
@@ -441,7 +423,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
     root: output,
     files: await Promise.all(
       Object.entries(outputs).map(([file, source]) =>
-        formattedOutput(resolve(output, file), source, fingerprint),
+        formattedOutput(resolve(output, file), source),
       ),
     ),
     inputs: files,

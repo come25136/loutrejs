@@ -129,7 +129,7 @@ manifest.ts ───────► resolvers.ts
 - Field Builderは型とField Identityを保持する。`generated/data.ts`をimportするだけではGraphQLSchemaの生成やアプリのResolver Module importを開始しない。
 - `createData<AppContext>()`はSchema固有のField Builderだけを構築し、Execution ScopeやBatch Queueは生成しない。
 - `resolvers.ts`が`manifest.ts`から値をimportすることはサポート対象外とする（起動時に検出できるケースはエラー）。
-- 開発者は生成ディレクトリを手編集しない。生成ファイルへ `// @generated` とfingerprintを付ける。
+- 開発者は生成ディレクトリを手編集しない。生成ファイルへ `// @generated` を付ける。
 - CLI 1回で複数のGenerated Filesを出力してよい。**「型込み」は同一生成処理・同一Schema入力を意味し、必ず1ファイルに詰める意味ではない。**
 
 ## 3. Build-time / Runtime Responsibility Boundaries
@@ -144,7 +144,7 @@ manifest.ts ───────► resolvers.ts
 4. `GraphQLSchema`を組み立てるための**Static Blueprint**（事前生成したAST・Type/Field情報）を生成する。
 5. 生成ModuleへApplicationのimportや個別のBindingを含めず、ContextをGeneric Type引数で受け取る型付きBinding helperを生成する。
 6. Client TargetがあればTypedDocumentNode/Variables/Result型を生成する。
-7. 入力変更による生成差分を確定的に出力する（決定的な並び・ハッシュ・原子的ファイル更新）。
+7. 入力変更による生成差分を確定的に出力する（決定的な並び・原子的ファイル更新）。
 
 **CLIはアプリケーションのResolver、Repository、DI Containerを実行しない。** CLIからは任意のTypeScript式中にある`requires: ['productId']`等の値を安全に評価できないため、これらをStatic Analysisのみで完全に取得できるとは仮定しない。
 
@@ -602,7 +602,7 @@ loutre graphql generate --config graphql.config.ts --watch
 
 - `server` targetは`types.ts`＋`data.ts`＋`schema-ast.ts`＋`bindings.ts`を**整合した1世代として**生成する。`client` targetが指定された場合はOperation/Fragmentの型とdocumentを追加生成する。
 - CLIの設定でSDL paths、Domain Mapper、Custom Scalar、Operation paths、出力先を宣言する。
-- CLIによる生成はdeterministic。fingerprintを生成物のheaderへ記録する。これは生成入力の識別用で、Runtimeの検証には使わない。`--check`は生成済み内容全体との差分を検出する。
+- CLIによる生成はdeterministic。同時出力の整合性は原子的更新で守り、`--check`は生成済み内容全体との差分を検出する。入力ハッシュを持たせる必要はない。
 - 生成に失敗した場合は、`types.ts`だけ新しい／`data.ts`・`schema-ast.ts`・`bindings.ts`だけ古い状態を作らない。temp出力→全ファイル検証→原子的更新を基本にする。
 - `--watch`は入力の変更を監視して正しい世代へ更新し、直前の正常出力を保護する。Resolver実装コードの変更がMetadataに影響するときはアプリのHMRまたは再起動時に再Bindingする。
 - SDLのunknown type、operation/fragmentの不正、scalar mapper不足は生成時エラー。

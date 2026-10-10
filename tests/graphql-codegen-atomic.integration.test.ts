@@ -21,8 +21,8 @@ vi.mock('node:fs/promises', async (original) => {
 it('全fileをstageし、後続targetのpublish失敗時は全targetの正常世代へ戻す', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'loutre-graphql-atomic-'))
   const stderr: string[] = []
-  const invoke = () =>
-    runCli(['graphql', 'generate', '--config', 'config.ts'], {
+  const invoke = (args: string[] = []) =>
+    runCli(['graphql', 'generate', '--config', 'config.ts', ...args], {
       cwd,
       stdout: () => {},
       stderr: (value) => stderr.push(value),
@@ -60,11 +60,7 @@ it('全fileをstageし、後続targetのpublish失敗時は全targetの正常世
     expect(await invoke()).toBe(0)
     const current = await readFile(join(cwd, 'generated/types.ts'), 'utf8')
     expect(current).not.toEqual(previous[1])
-    const fingerprint = current.split('\n')[1]
-    for (const file of paths.filter((path) => path.startsWith('generated/')))
-      expect((await readFile(join(cwd, file), 'utf8')).split('\n')[1]).toBe(
-        fingerprint,
-      )
+    expect(await invoke(['--check']), stderr.join('\n')).toBe(0)
   } finally {
     failure.publish = false
     await rm(cwd, { recursive: true, force: true })

@@ -46,7 +46,7 @@ loutre graphql generate --config graphql.config.ts --check
 
 server targetはtypes.ts・data.ts・schema-ast.ts・bindings.tsを同一世代で生成します。client targetは名前付きOperation / FragmentのVariables・選択結果・TypedDocumentNodeを生成します。client projectには`@graphql-typed-document-node/core`も追加してください。
 
-生成物には@generatedとfingerprintが付きます。fingerprintは生成入力の識別用headerで、Runtimeへ渡さず、Binding時の照合にも使いません。全targetの生成・整形・検証とtemp出力を終えてから更新し、更新中の失敗では全targetを前の正常世代へ戻します。`--check`は書き込みません。watchはSDL・Operation・設定の追加 / 変更 / 削除を追跡し、エラー後の正常な世代を保持します。生成directoryへ人間のsource fileを置かないでください。Resolver実装の変更はApplicationの再起動 / HMRでBindingし直します。
+生成物には@generatedが付きます。全targetの生成・整形・検証とtemp出力を終えてから更新し、更新中の失敗では全targetを前の正常世代へ戻します。`--check`は生成済み内容全体と比較し、書き込みません。watchはSDL・Operation・設定の追加 / 変更 / 削除を追跡し、エラー後の正常な世代を保持します。生成directoryへ人間のsource fileを置かないでください。Resolver実装の変更はApplicationの再起動 / HMRでBindingし直します。
 
 ## Domain MapperとScalar
 
