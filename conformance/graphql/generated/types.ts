@@ -254,13 +254,13 @@ export type QueryatArgs = {
   readonly value: Scalars['DateTime']['input']
 }
 export interface CoercedInputTypes {}
-import type { FieldSpec, ResolverMap } from '@loutrejs/graphql/data'
+import type * as $LoutreData from '@loutrejs/graphql/data'
 export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: Exclude<T[P], undefined>
 }
 export interface SchemaFields<Context extends object> {
   Mutation: {
-    update: FieldSpec<
+    update: $LoutreData.FieldSpec<
       ResolversParentTypes['Mutation'],
       MutationupdateArgs,
       Scalars['String']['output'],
@@ -268,25 +268,25 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Query: {
-    at: FieldSpec<
+    at: $LoutreData.FieldSpec<
       ResolversParentTypes['Query'],
       QueryatArgs,
       Scalars['DateTime']['output'],
       Context
     >
-    cleanupCount: FieldSpec<
+    cleanupCount: $LoutreData.FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       Scalars['Int']['output'],
       Context
     >
-    hello: FieldSpec<
+    hello: $LoutreData.FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       Scalars['String']['output'],
       Context
     >
-    nullableTicks: FieldSpec<
+    nullableTicks: $LoutreData.FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       Maybe<ReadonlyArray<Maybe<ResolversParentTypes['Tick']>>>,
@@ -294,7 +294,7 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Subscription: {
-    ticks: FieldSpec<
+    ticks: $LoutreData.FieldSpec<
       ResolversParentTypes['Subscription'],
       Record<string, never>,
       ResolversParentTypes['Tick'],
@@ -302,13 +302,13 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Tick: {
-    hidden: FieldSpec<
+    hidden: $LoutreData.FieldSpec<
       ResolversParentTypes['Tick'],
       Record<string, never>,
       Scalars['String']['output'],
       Context
     >
-    sequence: FieldSpec<
+    sequence: $LoutreData.FieldSpec<
       ResolversParentTypes['Tick'],
       Record<string, never>,
       Scalars['Int']['output'],
@@ -316,7 +316,8 @@ export interface SchemaFields<Context extends object> {
     >
   }
 }
-export type Resolvers<Context extends object = object> = ResolverMap<
-  StandardResolvers<Context>,
-  Omit<SchemaFields<Context>, 'Subscription'>
->
+export type Resolvers<Context extends object = object> =
+  $LoutreData.ResolverMap<
+    StandardResolvers<Context>,
+    Omit<SchemaFields<Context>, 'Subscription'>
+  >
