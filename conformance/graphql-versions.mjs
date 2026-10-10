@@ -56,9 +56,9 @@ try {
       enum Status { ACTIVE INACTIVE }
       input Options { at:DateTime = "2026-01-01", role:Role = ADMIN }
       type Child { value:Int! } type Parent { id:ID!, child:Child! }
-      type Query { parents:[Parent!]!, check(options:Options! = {}):String!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!] }
+      type Query { parents:[Parent!]!, check(options:Options! = {}):String!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], failure:String }
       type Mutation { change:Parent! }
-      type Subscription { ticks:Parent! }`,
+      type Subscription { ticks:Parent!, rejected:Parent! }`,
     )
     await writeFile(
       join(cwd, 'operation.graphql'),
@@ -91,10 +91,11 @@ try {
           status: ()=>'ACTIVE', optionalStatus: ()=>null,
           statuses: { load: parents=>parents.map(()=>['ACTIVE',null,'INACTIVE']) },
           optionalStatuses: ()=>['INACTIVE'],
+          failure: ()=>{throw new Error('private failure')},
         },
         Parent: { child: {requires:['id'],load:(parents,{context,signal})=>{signal.throwIfAborted();context.state.calls++;return parents.map(()=>({value:context.state.revision}))}} },
         Mutation: { change: (_parent,_args,context)=>{context.state.revision++;return context.state.parent} },
-        Subscription: { ticks: {
+        Subscription: { rejected: {subscribe: ()=>{throw new Error('private subscription failure')},resolve:(value: import('./context.js').Parent)=>value}, ticks: {
           subscribe: async function*(_parent,_args,context) {
             try {
               context.state.revision++;yield context.state.parent
@@ -116,7 +117,7 @@ try {
       import { resolvers } from './resolvers.js'
       const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
       export const state={parent:{id:'same'},revision:0,calls:0,cleanups:0}
-      const Module=defineModule(()=>({executions:[graphql.endpoint({name:'Compatibility',path:'/graphql',manifest,transports:{http:true,websocket:true},factory:()=>({context:({signal})=>({signal,state})})})]}))
+      const Module=defineModule(()=>({executions:[graphql.endpoint({name:'Compatibility',path:'/graphql',manifest,transports:{http:true,websocket:true},factory:()=>({context:({signal})=>({signal,state}),formatError:(error,input)=>({message:error.originalError?'Internal server error':error.message,extensions:{transport:input.transport}})})})]}))
       export default defineApplication({modules:[Module()]})`,
     )
     await writeFile(
@@ -136,6 +137,13 @@ try {
       try {
         assert.deepEqual(await request('{check}'),{data:{check:'2026-01-01T00:00:00.000Z:2'}})
         assert.deepEqual(await request('{status optionalStatus statuses optionalStatuses}'),{data:{status:'ACTIVE',optionalStatus:null,statuses:['ACTIVE',null,'INACTIVE'],optionalStatuses:['INACTIVE']}})
+        for(const [transport,result] of [['http',await request('{failure}')],['websocket',await operation('{failure}')]]) {
+          assert.deepEqual(result,{data:{failure:null},errors:[{message:'Internal server error',locations:[{line:1,column:2}],path:['failure'],extensions:{transport}}]})
+        }
+        const rejected=await operation('subscription{rejected{id}}')
+        assert.equal(rejected.errors[0].message,'Internal server error')
+        assert.deepEqual(rejected.errors[0].path,['rejected'])
+        assert.deepEqual(rejected.errors[0].extensions,{transport:'websocket'})
         assert.deepEqual(await request('{parents{child{value}}}'),{data:{parents:[{child:{value:0}},{child:{value:0}}]}})
         assert.deepEqual(await operation('{parents{child{value}}}'),{data:{parents:[{child:{value:0}},{child:{value:0}}]}})
         assert.deepEqual(await request('mutation{a:change{child{value}} b:change{child{value}}}'),{data:{a:{child:{value:1}},b:{child:{value:2}}}})
@@ -149,7 +157,7 @@ try {
         stop()
         for(let attempt=0;attempt<100;attempt++) {if((await request('{cleanups}')).data.cleanups===1)break;await new Promise(resolve=>setTimeout(resolve,10))}
         assert.equal((await request('{cleanups}')).data.cleanups,1)
-        console.log('GraphQL '+version+' Manifest / Scalar / Batch / HTTP / WS / Mutation / Subscription Event Scope: passed')
+        console.log('GraphQL '+version+' Manifest / Scalar / Enum / Batch / Error Formatting / HTTP / WS / Mutation / Subscription Event Scope: passed')
       } finally {await client.dispose();await app.close()}`,
     )
     try {

@@ -1,4 +1,4 @@
-import { parse } from 'graphql'
+import { parse, type GraphQLError, type GraphQLFormattedError } from 'graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
 import { graphql } from '@loutrejs/graphql'
 import {
@@ -33,6 +33,23 @@ const both = graphql.endpoint({
   manifest,
   transports: { http: true, websocket: true },
   factory: () => ({
+    formatError(error, input) {
+      const typedError: GraphQLError = error
+      const request: Request = input.request
+      if (input.transport === 'websocket') {
+        const id: string = input.operationId
+        void id
+      } else {
+        const state: Readonly<Record<string, unknown>> = input.state
+        void state
+      }
+      const formatted: GraphQLFormattedError = {
+        message: typedError.message,
+        extensions: { code: 'APP_ERROR' },
+      }
+      void request
+      return formatted
+    },
     context(input) {
       const request: Request = input.request
       const signal: AbortSignal = input.signal
@@ -108,4 +125,24 @@ graphql.endpoint({
   manifest,
   // @ts-expect-error rootValueを返すfactoryは拒否する
   factory: () => ({ context: () => ({}), rootValue: {} }),
+})
+graphql.endpoint({
+  name: 'AsyncFormatter',
+  path: '/graphql',
+  manifest,
+  factory: () => ({
+    context: () => ({}),
+    // @ts-expect-error formatErrorは同期的なGraphQLFormattedErrorを返す
+    formatError: async () => ({ message: 'error' }),
+  }),
+})
+graphql.endpoint({
+  name: 'MissingMessage',
+  path: '/graphql',
+  manifest,
+  factory: () => ({
+    context: () => ({}),
+    // @ts-expect-error 整形済みエラーにはmessageが必要
+    formatError: () => ({ extensions: {} }),
+  }),
 })

@@ -150,6 +150,38 @@ args.amountはSDLからnumber、contextはAppContextとして推論します。�
 
 manifestはOpaque Typeです。schema / typeDefs / rootValueをendpointへ渡す経路はありません。makeExecutableSchema()や手動prepareは不要です。BindingはApplicationが保守するModuleへ記述します。生成ModuleはResolverをimportしません。Resolverからはgenerated/typesをtype-only importします。Binding Moduleの値をResolverから逆importしないでください。
 
+## 入力検証とエラー整形
+
+SDLが保証するのは型・nullability・GraphQLのcoercionです。文字数・配列の要素数・日付の業務制約などは、利用者がZodやdomainの検証で扱います。Loutreは業務用のvalidation APIを追加しません。例えばResolverで`z.object({ first: z.number().int().min(1).max(100) }).parse(args)`を呼び、検証済みの値をApplication Serviceへ渡せます。
+
+endpointのfactoryが返す任意の`formatError(error, input)`で、HTTP / WebSocket共通の公開エラーとログを設定できます。errorはGraphQLErrorで、Resolver・load・subscribeが投げた例外はoriginalErrorで確認できます。inputはcontextと同じtransport別のrequest / signal情報です。WebSocketではoperationId / connectionParams、HTTPではstateも参照できます。
+
+```ts
+import { ZodError } from 'zod'
+
+factory: () => ({
+  context: ({ signal }) => ({ signal }),
+  formatError(error, input) {
+    if (error.originalError instanceof ZodError) {
+      return {
+        message: '入力が不正です。',
+        extensions: {
+          code: 'BAD_USER_INPUT',
+          details: error.originalError.issues,
+        },
+      }
+    }
+    if (!error.originalError) return error.toJSON()
+    console.error(`[GraphQL ${input.transport}]`, error.originalError)
+    return { message: 'Internal server error' }
+  },
+})
+```
+
+formatErrorは同期的にGraphQLFormattedErrorを返します。parse・validation・変数のcoercion・Field実行のエラー、およびSubscription開始時と各Delivery EventのGraphQLエラーが対象です。path / locationsは指定しなければ元の値を保持し、extensionsは返した値だけを公開します。data・HTTP status・WebSocket frame種別・Non-nullの伝播は変更しません。未設定の場合はGraphQL標準のエラーを返します。
+
+Subscription iteratorの障害はRuntimeの観測にも記録し、WebSocketのerror frameを整形してそのOperationを終了します。context生成やformatError自身の例外は通常のRuntime Failureとして扱います。HTTP middlewareの認証応答やWebSocketのprotocol違反は、それぞれのTransportの処理です。
+
 ## Read-throughとBatch
 
 引数を持たないFieldは、Parentの同名own data propertyにundefined以外の値があれば再利用します。null / [] / false / 0 / ''もLoadedです。prototypeやgetterは自動readしません。

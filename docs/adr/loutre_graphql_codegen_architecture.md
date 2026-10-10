@@ -638,6 +638,8 @@ Runtime TestではBatchの順序・分割、先読み値の再利用、authorize
 
 ## 15. Consequences and Open Questions
 
+入力の業務制約はApplication / domainの責務とし、Zod等の検証手段をFrameworkが置き換えない。公開するエラー詳細やログ方針もApplicationが決め、RuntimeはHTTP / WebSocket共通の任意のformatErrorを提供する。GraphQLのdata・path・nullabilityとTransportの終了規約は維持する。
+
 ### Benefits
 
 - **SDLを唯一のSchema情報源**にし、型とRuntime Manifestを同時生成できる。

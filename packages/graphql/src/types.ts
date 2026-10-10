@@ -1,5 +1,6 @@
 import type { HttpRawDefinition } from '@loutrejs/loutre/http'
 import type { GraphQLManifest } from './manifest-internal.js'
+import type { GraphQLError, GraphQLFormattedError } from 'graphql'
 
 export interface GraphQLHttpContextInput {
   readonly transport: 'http'
@@ -22,6 +23,10 @@ export type GraphQLContextInput =
 
 export interface GraphQLRuntime<TContext extends object = object> {
   context(input: GraphQLContextInput): TContext | Promise<TContext>
+  formatError?(
+    error: GraphQLError,
+    input: GraphQLContextInput,
+  ): GraphQLFormattedError
   // 既存のfactoryから構造的型付けで旧指定が紛れ込むことも拒否する。
   readonly rootValue?: never
 }

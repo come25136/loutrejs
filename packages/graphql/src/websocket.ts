@@ -12,7 +12,8 @@ import {
   type ExecutionArgs,
   type ExecutionResult,
 } from 'graphql'
-import type { GraphQLRuntime } from './types.js'
+import type { GraphQLRuntime, GraphQLWebSocketContextInput } from './types.js'
+import { formatGraphQLError } from './errors.js'
 import type { BoundManifest } from './manifest-internal.js'
 import {
   executeManifest,
@@ -21,6 +22,7 @@ import {
 } from './execution.js'
 
 interface Operation {
+  readonly input: GraphQLWebSocketContextInput
   readonly controller: AbortController
   readonly lease: ExecutionOperationLease
   cleanup?: () => Promise<unknown>
@@ -79,7 +81,14 @@ export async function serveGraphQLWebSocket(
         kind: 'graphql.operation',
         name: payload.operationName || id,
       })
-      const operation: Operation = { controller, lease, finished: false }
+      const input: GraphQLWebSocketContextInput = {
+        transport: 'websocket',
+        request: context.request,
+        connectionParams: connection.connectionParams,
+        operationId: id,
+        signal: controller.signal,
+      }
+      const operation: Operation = { controller, lease, input, finished: false }
       operations.set(id, operation)
       lease.annotate?.({
         'graphql.session.id': context.session.id,
@@ -110,15 +119,7 @@ export async function serveGraphQLWebSocket(
       ]
       if (errors.length > 0) return errors
       if (!ast) return [new GraphQLError('Unable to identify operation')]
-      const contextValue = await run(operation, () =>
-        runtime.context({
-          transport: 'websocket',
-          request: context.request,
-          connectionParams: connection.connectionParams,
-          operationId: id,
-          signal: controller.signal,
-        }),
-      )
+      const contextValue = await run(operation, () => runtime.context(input))
       const args: ExecutionArgs = {
         schema,
         document,
@@ -161,9 +162,30 @@ export async function serveGraphQLWebSocket(
       if (operation.controller.signal.aborted) await iterator.return!()
       return iterator
     },
-    async onError(_connection, id) {
-      await operations.get(id)?.cleanup?.()
-      finish(id)
+    onNext(_connection, id, _payload, _args, result) {
+      const operation = operations.get(id)!
+      if (!runtime.formatError || !result.errors) return
+      return {
+        ...(result.data === undefined ? {} : { data: result.data }),
+        ...(result.extensions === undefined
+          ? {}
+          : { extensions: result.extensions }),
+        errors: result.errors.map((error) =>
+          formatGraphQLError(runtime, error, operation.input),
+        ),
+      }
+    },
+    async onError(_connection, id, _payload, errors) {
+      const operation = operations.get(id)!
+      try {
+        if (runtime.formatError)
+          return errors.map((error) =>
+            formatGraphQLError(runtime, error, operation.input),
+          )
+      } finally {
+        await operation.cleanup?.()
+        finish(id)
+      }
     },
     async onComplete(_connection, id) {
       await operations.get(id)?.cleanup?.()

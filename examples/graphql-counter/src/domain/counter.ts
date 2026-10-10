@@ -9,6 +9,8 @@ export interface CounterChanged {
   readonly counterChanged: Counter
 }
 
+export class CounterRangeError extends Error {}
+
 export class CounterStore {
   readonly #events = new EventEmitter()
   #value = 0
@@ -32,7 +34,9 @@ export class CounterStore {
 
   reset(value: number): Counter {
     if (!Number.isInteger(value) || value < -2147483648 || value > 2147483647) {
-      throw new Error('カウンターはGraphQL Intの範囲で指定してください。')
+      throw new CounterRangeError(
+        'カウンターはGraphQL Intの範囲で指定してください。',
+      )
     }
     this.#value = value
     const counter = this.current()

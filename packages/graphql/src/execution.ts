@@ -99,6 +99,7 @@ export async function subscribeManifest(
     }
   } catch (error) {
     sourceView.close()
+    if (error instanceof GraphQL.GraphQLError) return { errors: [error] }
     throw error
   }
   if (!(Symbol.asyncIterator in source)) {

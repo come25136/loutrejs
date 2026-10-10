@@ -50,5 +50,10 @@ export function validateRuntime(runtime: GraphQLRuntime): GraphQLRuntime {
     throw new TypeError(
       'rootValueは廃止しました。schemaへresolve / subscribeを登録してください。',
     )
+  if (
+    runtime.formatError !== undefined &&
+    typeof runtime.formatError !== 'function'
+  )
+    throw new TypeError('GraphQL formatErrorは関数を指定してください。')
   return runtime
 }

@@ -23,7 +23,7 @@ HTTPはhttp://127.0.0.1:3000/graphql、WebSocketはws://127.0.0.1:3000/graphql�
 - [src/domain/step.ts](./src/domain/step.ts): 関連するStepの一括取得。
 - [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): 生成したResolvers<AppContext>型と直接書いたload設定を使い、Counter.stepをstepIdからBatchで解決。
 - [src/graphql/context.ts](./src/graphql/context.ts): domain serviceとoperationのsignal。Batch ScopeはFrameworkがOperation / Delivery Eventごとに生成。
-- [src/endpoint.ts](./src/endpoint.ts): Binding済みManifestとDIをcontextへ接続。
+- [src/endpoint.ts](./src/endpoint.ts): Binding済みManifestとDIをcontextへ接続し、HTTP / WebSocket共通のエラー整形を設定。
 - [src/graphql/manifest.ts](./src/graphql/manifest.ts): 生成Schemaと手書きResolverのBinding。
 
 domainのCounterにはGraphQLのstep objectがありません。mappersによってresolverのparentをdomain型として扱い、stepIdで関連domainを取得します。取得・保存方法はGraphQLの契約に含めません。このexampleでは状態をメモリに持ち、再起動すると0へ戻ります。
@@ -60,6 +60,8 @@ curl http://127.0.0.1:3000/graphql \
 ```
 
 mutation { reset { value } }で0へ戻せます。
+
+`increment(amount: 2147483647)`を二回実行するとdomainの範囲検証により失敗します。`formatError`は既知のCounterRangeErrorを`extensions.code: BAD_USER_INPUT`とともに公開し、予期しない例外はログへ記録して`Internal server error`を返します。入力検証と公開する詳細はアプリ側で決めます。[エラー整形](../../docs/graphql-codegen.md#入力検証とエラー整形)も参照してください。
 
 Queryで`first: counter { step { amount } } second: counter { step { amount } }`を選択すると、同じoperationの取得が一回のbatchにまとまります。別QueryでstepBatchCountを前後に確認してください。
 

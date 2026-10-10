@@ -5,8 +5,13 @@ import {
   GraphQLScalarType,
   GraphQLObjectType,
   GraphQLSchema,
+  GraphQLError,
 } from 'graphql'
-import { graphql, type GraphQLContextInput } from '@loutrejs/graphql'
+import {
+  graphql,
+  type GraphQLContextInput,
+  type GraphQLRuntime,
+} from '@loutrejs/graphql'
 import {
   bootstrapApplication,
   defineApplication,
@@ -126,6 +131,8 @@ async function fixture(
     makeContext?: (
       input: GraphQLContextInput,
     ) => Record<string, unknown> | Promise<Record<string, unknown>>
+    formatError?: GraphQLRuntime['formatError']
+    failure?: Error
   } = {},
 ) {
   const stream = source()
@@ -144,7 +151,7 @@ async function fixture(
     secret: 'hidden',
   })
   queryFields.failure!.resolve = () => {
-    throw new Error('resolver failure')
+    throw options.failure ?? new Error('resolver failure')
   }
   schema.getMutationType()!.getFields().update!.resolve = (
     _parent,
@@ -171,6 +178,7 @@ async function fixture(
           : { connectionInitWaitTimeout: options.initTimeout ?? 1000 },
     },
     factory: (greeting = inject(Service)) => ({
+      ...(options.formatError ? { formatError: options.formatError } : {}),
       context(input) {
         contexts.push(input)
         return (
@@ -271,6 +279,94 @@ async function fixture(
 }
 
 describe('GraphQL HTTP', () => {
+  it('利用者の整形で内部エラーを隠し、path・locations・HTTP statusとdataを保持する', async () => {
+    const internal = new GraphQLError('private failure', {
+      extensions: { private: 'secret' },
+    })
+    const formatError = vi.fn<NonNullable<GraphQLRuntime['formatError']>>(
+      (error, input) => {
+        expect(input.transport).toBe('http')
+        expect(input.signal.aborted).toBe(false)
+        return {
+          message: error.originalError
+            ? 'Internal server error'
+            : error.message,
+        }
+      },
+    )
+    const api = await fixture({ formatError, failure: internal })
+    try {
+      const response = await api.fetchGraphQL('{hello failure}')
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        data: { hello: 'hello DI', failure: null },
+        errors: [
+          {
+            message: 'Internal server error',
+            path: ['failure'],
+            locations: [{ line: 1, column: 8 }],
+          },
+        ],
+      })
+      expect(formatError).toHaveBeenCalledTimes(1)
+      expect(formatError.mock.calls[0]![0].originalError).toBe(internal)
+      for (const query of ['{', '{unknown}', 'mutation {update}']) {
+        const rejected = await api.fetchGraphQL(query)
+        expect(rejected.status).toBe(400)
+        expect((await rejected.json()).errors).toHaveLength(1)
+      }
+      expect(formatError).toHaveBeenCalledTimes(4)
+      const variables = await api.fetchGraphQL(
+        'mutation Update($value: String!) {update(value: $value)}',
+        {
+          body: JSON.stringify({
+            query: 'mutation Update($value: String!) {update(value: $value)}',
+            variables: { value: 1 },
+          }),
+        },
+      )
+      expect(variables.status).toBe(200)
+      expect((await variables.json()).errors).toHaveLength(1)
+      const malformed = await api.fetchGraphQL('', { body: '{' })
+      expect(malformed.status).toBe(400)
+      expect((await malformed.json()).errors).toHaveLength(1)
+      expect(formatError).toHaveBeenCalledTimes(6)
+    } finally {
+      await api.app.close()
+    }
+  })
+
+  it('既知の業務エラーの公開詳細を利用者が選べる', async () => {
+    class InvalidInput extends Error {
+      readonly details = ['firstは100以下にしてください。']
+    }
+    const failure = new InvalidInput('入力が不正です。')
+    const api = await fixture({
+      failure,
+      formatError(error) {
+        const cause = error.originalError
+        return cause instanceof InvalidInput
+          ? {
+              message: cause.message,
+              extensions: { code: 'BAD_USER_INPUT', details: cause.details },
+            }
+          : error.toJSON()
+      },
+    })
+    try {
+      expect(await (await api.fetchGraphQL('{failure}')).json()).toMatchObject({
+        errors: [
+          {
+            message: failure.message,
+            extensions: { code: 'BAD_USER_INPUT', details: failure.details },
+            path: ['failure'],
+          },
+        ],
+      })
+    } finally {
+      await api.app.close()
+    }
+  })
   it('Query・Mutation・selection projectionとDIをGraphQL.jsで実行する', async () => {
     const fixtureApi = await fixture()
     try {
@@ -457,6 +553,184 @@ describe('GraphQL HTTP', () => {
 })
 
 describe('GraphQL WebSocket', () => {
+  it('parse・validation・Query・Subscriptionのエラーを同じ整形へ渡し、接続とoperationの寿命を保つ', async () => {
+    const formatError = vi.fn<NonNullable<GraphQLRuntime['formatError']>>(
+      (error, input) => {
+        expect(input.transport).toBe('websocket')
+        expect(input.signal.aborted).toBe(false)
+        return { message: '公開メッセージ', extensions: { code: 'APP_ERROR' } }
+      },
+    )
+    const api = await fixture({ formatError })
+    try {
+      const connection = await api.open()
+      connection.send({
+        type: 'connection_init',
+        payload: { token: 'test-token' },
+      })
+      await connection.wait('connection_ack')
+      for (const [id, query] of [
+        ['parse', '{'],
+        ['validation', '{unknown}'],
+        ['query', '{failure}'],
+        ['subscription', 'subscription {trips{id name}}'],
+      ]) {
+        connection.send({ type: 'subscribe', id, payload: { query } })
+      }
+      await connection.wait('error', 'parse')
+      await connection.wait('error', 'validation')
+      await connection.wait('complete', 'query')
+      await vi.waitFor(() => expect(api.contexts).toHaveLength(2))
+      api.stream.push({ trips: { id: '1', name: null } })
+      await connection.wait('next', 'subscription')
+      const event = connection.sent.find(
+        (message) => message.type === 'next' && message.id === 'subscription',
+      )!
+      expect(event.payload).toMatchObject({
+        data: null,
+        errors: [
+          {
+            message: '公開メッセージ',
+            extensions: { code: 'APP_ERROR' },
+            path: ['trips', 'name'],
+          },
+        ],
+      })
+      expect(formatError).toHaveBeenCalledTimes(4)
+      expect(
+        formatError.mock.calls.map(([, input]) =>
+          input.transport === 'websocket' ? input.operationId : '',
+        ),
+      ).toEqual(
+        expect.arrayContaining([
+          'parse',
+          'validation',
+          'query',
+          'subscription',
+        ]),
+      )
+      expect(formatError.mock.calls[0]![1]).toMatchObject({
+        connectionParams: { token: 'test-token' },
+      })
+      api.stream.push({ trips: { id: '2', name: 'recovered' } })
+      await vi.waitFor(() =>
+        expect(
+          connection.sent.filter(
+            (message) =>
+              message.type === 'next' && message.id === 'subscription',
+          ),
+        ).toHaveLength(2),
+      )
+      expect(formatError).toHaveBeenCalledTimes(4)
+      connection.send({ type: 'complete', id: 'subscription' })
+      await vi.waitFor(() =>
+        expect(api.stream.cleanup).toHaveBeenCalledTimes(1),
+      )
+      expect(
+        api.trace.traces
+          .filter((trace) => trace.kind === 'graphql.operation')
+          .every(
+            (trace) =>
+              trace.complete.mock.calls.length === 1 &&
+              trace.fail.mock.calls.length === 0,
+          ),
+      ).toBe(true)
+    } finally {
+      await api.app.close()
+    }
+  })
+
+  it('Subscriptionの開始エラーを整形し、その後もQueryを受け付ける', async () => {
+    const failure = new Error('private subscription failure')
+    const formatError = vi.fn<NonNullable<GraphQLRuntime['formatError']>>(
+      (error) => {
+        expect(error.originalError).toBe(failure)
+        return { message: '購読を開始できません。' }
+      },
+    )
+    const api = await fixture({
+      formatError,
+      subscription() {
+        throw failure
+      },
+    })
+    try {
+      const connection = await api.open()
+      connection.send({ type: 'connection_init' })
+      await connection.wait('connection_ack')
+      connection.send({
+        type: 'subscribe',
+        id: 'subscription',
+        payload: { query: 'subscription {trips{id}}' },
+      })
+      await connection.wait('complete', 'subscription')
+      expect(
+        connection.sent.find((message) => message.id === 'subscription')!
+          .payload,
+      ).toMatchObject({
+        errors: [{ message: '購読を開始できません。', path: ['trips'] }],
+      })
+      expect(formatError).toHaveBeenCalledTimes(1)
+      connection.send({
+        type: 'subscribe',
+        id: 'healthy',
+        payload: { query: '{hello}' },
+      })
+      await connection.wait('complete', 'healthy')
+      expect(
+        connection.sent.find((message) => message.id === 'healthy')!.payload,
+      ).toEqual({ data: { hello: 'hello DI' } })
+    } finally {
+      await api.app.close()
+    }
+  })
+  it('Subscription iteratorの障害を整形して終了し、sourceを一回だけcleanupする', async () => {
+    const failure = new Error('private stream failure')
+    const cleanup = vi.fn(async () => ({
+      done: true as const,
+      value: undefined,
+    }))
+    const formatError = vi.fn<NonNullable<GraphQLRuntime['formatError']>>(
+      (error) => {
+        expect(error.originalError).toBe(failure)
+        return { message: '購読を継続できません。' }
+      },
+    )
+    const iterator: AsyncIterableIterator<unknown> = {
+      [Symbol.asyncIterator]() {
+        return this
+      },
+      async next() {
+        throw failure
+      },
+      return: cleanup,
+    }
+    const api = await fixture({ formatError, subscription: () => iterator })
+    try {
+      const connection = await api.open()
+      connection.send({ type: 'connection_init' })
+      await connection.wait('connection_ack')
+      connection.send({
+        type: 'subscribe',
+        id: 'broken',
+        payload: { query: 'subscription {trips{id}}' },
+      })
+      await connection.wait('error', 'broken')
+      expect(
+        connection.sent.find((message) => message.id === 'broken')!.payload,
+      ).toEqual([{ message: '購読を継続できません。' }])
+      expect(formatError).toHaveBeenCalledTimes(1)
+      expect(cleanup).toHaveBeenCalledTimes(1)
+      const operation = api.trace.traces.find(
+        (trace) => trace.kind === 'graphql.operation',
+      )!
+      expect(operation.fail).toHaveBeenCalledWith(failure)
+      expect(operation.complete).toHaveBeenCalledTimes(1)
+    } finally {
+      await api.app.close()
+    }
+    expect(cleanup).toHaveBeenCalledTimes(1)
+  })
   it('subprotocolをnegotiationし、init/ack、Query・Mutationを実行する', async () => {
     const api = await fixture()
     try {

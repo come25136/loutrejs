@@ -15,6 +15,8 @@ import { getManifest } from './manifest-internal.js'
 import type { GraphQLManifest } from './manifest-internal.js'
 import type { GraphQLRuntime } from './types.js'
 import { executeManifest } from './execution.js'
+import { formatHttpError } from './errors.js'
+import type { GraphQLHttpContextInput } from './types.js'
 
 import type { GraphQLEndpointDefinition } from './types.js'
 export type {
@@ -106,9 +108,16 @@ export function defineGraphQLEndpoint<
         },
         factory: () => {
           const runtime = validateRuntime(definition.factory())
-          return (context) =>
-            createHandler<Record<string, unknown>>({
+          return (context) => {
+            const input: GraphQLHttpContextInput = {
+              transport: 'http',
+              request: context.request,
+              signal: context.request.signal,
+              state: context.state,
+            }
+            return createHandler<Record<string, unknown>>({
               schema: bound.schema,
+              formatError: (error) => formatHttpError(runtime, error, input),
               execute: async (args) => {
                 const operation = context.execution.beginOperation({
                   kind: 'graphql.operation',
@@ -130,13 +139,9 @@ export function defineGraphQLEndpoint<
                 }
               },
               context: async () =>
-                (await runtime.context({
-                  transport: 'http',
-                  request: context.request,
-                  signal: context.request.signal,
-                  state: context.state,
-                })) as Record<string, unknown>,
+                (await runtime.context(input)) as Record<string, unknown>,
             })(context.request)
+          }
         },
       }),
     )
