@@ -23,6 +23,7 @@ import {
 } from './data-internal.js'
 import { storeManifest, type GraphQLManifest } from './manifest-internal.js'
 import { validateEndpointSchema } from './validation.js'
+import type { Resolver, TypeResolverInput } from './data-types.js'
 
 export type { GraphQLManifest } from './manifest-internal.js'
 export function bindManifest<Context extends object = object>(input: {
@@ -76,13 +77,21 @@ export function bindManifest<Context extends object = object>(input: {
       ) {
         if (typeof resolver !== 'function')
           throw new TypeError(`${name}.__resolveTypeは関数にしてください。`)
-        type.resolveType = resolver as GraphQLTypeResolver<unknown, unknown>
+        const resolveType = resolver as (
+          input: TypeResolverInput<unknown, unknown>,
+        ) => ReturnType<GraphQLTypeResolver<unknown, unknown>>
+        type.resolveType = (parent, context, info) =>
+          resolveType({ parent, context, info })
         continue
       }
       if (fieldName === '__isTypeOf' && isObjectType(type)) {
         if (typeof resolver !== 'function')
           throw new TypeError(`${name}.__isTypeOfは関数にしてください。`)
-        type.isTypeOf = resolver as GraphQLIsTypeOfFn<unknown, unknown>
+        const isTypeOf = resolver as (
+          input: TypeResolverInput<unknown, unknown>,
+        ) => ReturnType<GraphQLIsTypeOfFn<unknown, unknown>>
+        type.isTypeOf = (parent, context, info) =>
+          isTypeOf({ parent, context, info })
         continue
       }
       const field = !isUnionType(type) && type.getFields()[fieldName]
@@ -162,12 +171,8 @@ export function bindManifest<Context extends object = object>(input: {
         )
       if (!resolve && !subscribe)
         throw new TypeError(`${name}.${fieldName}のResolverが不正です。`)
-      field.resolve = resolve as
-        | GraphQLFieldResolver<unknown, unknown>
-        | undefined
-      field.subscribe = subscribe as
-        | GraphQLFieldResolver<unknown, unknown>
-        | undefined
+      field.resolve = resolve ? fieldResolver(resolve) : undefined
+      field.subscribe = subscribe ? fieldResolver(subscribe) : undefined
     }
   }
   for (const type of Object.values(schema.getTypeMap())) {
@@ -206,6 +211,14 @@ export function bindManifest<Context extends object = object>(input: {
   validateEndpointSchema(schema)
   registerSchemaMetadata(schema, metadata)
   return storeManifest({ schema, metadata })
+}
+
+function fieldResolver(
+  callback: Function,
+): GraphQLFieldResolver<unknown, unknown> {
+  const resolver = callback as Resolver<unknown, unknown, unknown, unknown>
+  return (parent, args, context, info) =>
+    resolver({ parent, args, context, info })
 }
 
 function copyScalarProperty<Key extends keyof GraphQLScalarType>(

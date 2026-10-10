@@ -32,7 +32,7 @@ strategyをEAGER / LAZY / HYBRIDへ変えて比較できます。別Queryの`{ p
 - [contracts/orders.graphql](./contracts/orders.graphql): 公開契約とdefault引数。
 - [graphql.config.ts](./graphql.config.ts): SDL・domain mapping・生成先。
 - [src/domain/commerce.ts](./src/domain/commerce.ts): ページング、先読み、Tenant / Revisionを含む複合キーでの取得。
-- [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): 標準のresolve、infoからの選択Field取得、直接書けるload / requires / authorize。
+- [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): object引数のresolve、infoからの選択Field取得、直接書けるload / requires / authorize。
 - [src/app.ts](./src/app.ts): manifestとDIの接続。
 - [src/graphql/manifest.ts](./src/graphql/manifest.ts): 生成Schemaと手書きResolverのBinding。
 

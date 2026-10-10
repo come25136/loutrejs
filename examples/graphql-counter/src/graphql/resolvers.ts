@@ -4,20 +4,19 @@ import type { CounterChanged } from '../domain/counter.js'
 
 export const resolvers = {
   Query: {
-    counter: (_parent, _args, context) => context.counter.current(),
-    activeSubscriptions: (_parent, _args, context) =>
-      context.counter.activeSubscriptions,
-    stepBatchCount: (_parent, _args, context) => context.steps.batchCount,
+    counter: ({ context }) => context.counter.current(),
+    activeSubscriptions: ({ context }) => context.counter.activeSubscriptions,
+    stepBatchCount: ({ context }) => context.steps.batchCount,
   },
   Mutation: {
-    increment: (_parent, { amount }, context) =>
+    increment: ({ args: { amount }, context }) =>
       context.counter.increment(amount),
-    reset: (_parent, { value }, context) => context.counter.reset(value),
+    reset: ({ args: { value }, context }) => context.counter.reset(value),
   },
   Counter: {
     step: {
       requires: ['stepId'],
-      load: async (counters, { context, signal }) => {
+      load: async ({ parents: counters, context, signal }) => {
         const values = await context.steps.findByIds(
           counters.map((counter) => counter.stepId),
           signal,
@@ -31,9 +30,9 @@ export const resolvers = {
   },
   Subscription: {
     counterChanged: {
-      subscribe: (_parent, _args, context) =>
-        context.counter.watch(context.signal),
-      resolve: (event: CounterChanged) => event.counterChanged,
+      subscribe: ({ context }) => context.counter.watch(context.signal),
+      resolve: ({ parent: event }: { parent: CounterChanged }) =>
+        event.counterChanged,
     },
   },
 } satisfies Resolvers<AppContext>

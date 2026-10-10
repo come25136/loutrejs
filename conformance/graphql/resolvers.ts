@@ -8,15 +8,15 @@ export const resolvers = {
     parseValue: (value) => new Date(String(value)),
   }),
   Query: {
-    at: (_parent, args) => args.value,
+    at: ({ args }) => args.value,
     nullableTicks: () => [null],
     hello: () => 'Hello World',
-    cleanupCount: (_parent, _args, context) => context.state.cleanupCount,
+    cleanupCount: ({ context }) => context.state.cleanupCount,
   },
-  Mutation: { update: (_parent, { value }) => value },
+  Mutation: { update: ({ args: { value } }) => value },
   Subscription: {
     ticks: {
-      subscribe: async function* (_parent, _args, context) {
+      subscribe: async function* ({ context }) {
         try {
           yield { sequence: 1, hidden: 'private' }
           yield { sequence: 2, hidden: 'private' }
@@ -30,7 +30,11 @@ export const resolvers = {
           context.state.cleanupCount++
         }
       },
-      resolve: (event: { sequence: number; hidden: string }) => event,
+      resolve: ({
+        parent: event,
+      }: {
+        parent: { sequence: number; hidden: string }
+      }) => event,
     },
   },
 } satisfies Resolvers<AppContext>

@@ -7,8 +7,24 @@ import {
   isScalarType,
   isSpecifiedScalarType,
   type GraphQLSchema,
+  type GraphQLFieldResolver,
 } from 'graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
+import type { ResolverInput, TypeResolverInput } from '@loutrejs/graphql/data'
+
+function fieldResolver(
+  resolver: GraphQLFieldResolver<unknown, unknown> | undefined,
+) {
+  return resolver
+    ? ({
+        parent,
+        args,
+        context,
+        info,
+      }: ResolverInput<unknown, Record<string, unknown>, unknown>) =>
+        resolver(parent, args, context, info)
+    : undefined
+}
 
 export function manifestFromSchema(schema: GraphQLSchema) {
   const resolvers: Record<string, unknown> = {}
@@ -23,8 +39,11 @@ export function manifestFromSchema(schema: GraphQLSchema) {
           .map(([name, field]) => [
             name,
             field.subscribe
-              ? { resolve: field.resolve, subscribe: field.subscribe }
-              : field.resolve,
+              ? {
+                  resolve: fieldResolver(field.resolve),
+                  subscribe: fieldResolver(field.subscribe),
+                }
+              : fieldResolver(field.resolve),
           ]),
       )
       if (Object.keys(fields).length) resolvers[type.name] = fields
@@ -32,7 +51,22 @@ export function manifestFromSchema(schema: GraphQLSchema) {
     if ((isInterfaceType(type) || isUnionType(type)) && type.resolveType)
       resolvers[type.name] = {
         ...(resolvers[type.name] as object),
-        __resolveType: type.resolveType,
+        __resolveType: ({
+          parent,
+          context,
+          info,
+        }: TypeResolverInput<unknown, unknown>) =>
+          type.resolveType!(parent, context, info, type),
+      }
+    if (isObjectType(type) && type.isTypeOf)
+      resolvers[type.name] = {
+        ...(resolvers[type.name] as object),
+        __isTypeOf: ({
+          parent,
+          context,
+          info,
+        }: TypeResolverInput<unknown, unknown>) =>
+          type.isTypeOf!(parent, context, info),
       }
   }
   return bindManifest({

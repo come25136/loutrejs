@@ -15,7 +15,7 @@ const explicit = bindManifest<AppContext>({
   resolvers: {
     Query: {},
     Counter: {
-      step(parent, args, context, info) {
+      step({ parent, args, context, info }) {
         const domain: Counter = parent
         const signal: AbortSignal = context.signal
         const field: GraphQLResolveInfo = info
@@ -33,7 +33,7 @@ const explicit = bindManifest<AppContext>({
       },
     },
     Mutation: {
-      increment(_parent, args, context) {
+      increment({ args, context }) {
         const amount: number = args.amount
         const store: AppContext['counter'] = context.counter
         // @ts-expect-error coerced amountはnumber
@@ -46,9 +46,9 @@ const explicit = bindManifest<AppContext>({
     },
     Subscription: {
       counterChanged: {
-        subscribe: (_parent, _args, context) =>
-          context.counter.watch(context.signal),
-        resolve: (event: { counterChanged: Counter }) => event.counterChanged,
+        subscribe: ({ context }) => context.counter.watch(context.signal),
+        resolve: ({ parent: event }: { parent: { counterChanged: Counter } }) =>
+          event.counterChanged,
       },
     },
   },
@@ -58,7 +58,7 @@ const inferred = bindManifest({
   schemaDocument,
   resolvers: {
     Query: {
-      counter: (_parent, _args, context) => {
+      counter: ({ context }) => {
         const applicationIndependent: object = context
         // @ts-expect-error SDLはApplicationのContextを持たない
         context.counter
@@ -69,6 +69,25 @@ const inferred = bindManifest({
   },
 })
 void inferred
+
+bindManifest<AppContext>({
+  schemaDocument,
+  resolvers: {
+    Query: {
+      // @ts-expect-error 位置引数のResolverは公開コントラクトに含めない
+      counter: (_parent: unknown, _args: unknown, context: AppContext) =>
+        context.counter.current(),
+    },
+    Subscription: {
+      counterChanged: {
+        // @ts-expect-error subscribeもobject引数へ統一する
+        subscribe: (_parent: unknown, _args: unknown, context: AppContext) =>
+          context.counter.watch(context.signal),
+        resolve: () => ({ value: 0, stepId: 'default' }),
+      },
+    },
+  },
+})
 
 bindManifest<AppContext>({
   schemaDocument,
@@ -109,7 +128,7 @@ const custom = bindManifest<{ readonly label: string }>({
   schemaDocument,
   resolvers: {
     Query: {
-      counter: (_parent, _args, context) => {
+      counter: ({ context }) => {
         const label: string = context.label
         // @ts-expect-error 指定したContextへ切り替わる
         context.counter
@@ -145,7 +164,7 @@ bindOrders<OrderContext>({
     OrderItem: {
       product: {
         requires: ['productId', 'tenant', 'revision'],
-        load(items, { context, signal, args, selection }) {
+        load({ parents: items, context, signal, args, selection }) {
           const tenant: string | undefined = items[0]?.tenant
           const keys: Record<string, never> = args
           const field: string = selection.fieldName
@@ -162,7 +181,7 @@ bindOrders<OrderContext>({
       },
     },
     Query: {
-      orders(_parent, args, context) {
+      orders({ args, context }) {
         const offset: number = args.pagination.offset
         const strategy: 'EAGER' | 'LAZY' | 'HYBRID' = args.strategy
         // @ts-expect-error nested defaultはundefinedを含まないnumber
@@ -187,11 +206,26 @@ bindOrders<OrderContext>({
     },
   },
 })
+bindOrders<OrderContext>({
+  schemaDocument: ordersDocument,
+  resolvers: {
+    OrderItem: {
+      product: {
+        // @ts-expect-error loadの位置引数を拒否しparentsもobject内で受け取る
+        load: (parents: readonly unknown[], input: unknown) => {
+          void parents
+          void input
+          return []
+        },
+      },
+    },
+  },
+})
 bindConformance<object>({
   schemaDocument: conformanceDocument,
   resolvers: {
     Query: {
-      at(_parent, args) {
+      at({ args }) {
         const value: Date = args.value
         // @ts-expect-error coerced ScalarはDate
         const invalidValue: string = args.value

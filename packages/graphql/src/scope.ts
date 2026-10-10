@@ -125,15 +125,13 @@ class Scope {
       this.#stats.calls++
       this.#stats.parents += chunk.length
       try {
-        const values = await batch.definition.options.load(
-          chunk.map((request) => request.parent),
-          {
-            args: batch.args,
-            context: this.#context,
-            signal: this.#signal,
-            selection: batch.selection,
-          },
-        )
+        const values = await batch.definition.options.load({
+          parents: chunk.map((request) => request.parent),
+          args: batch.args,
+          context: this.#context,
+          signal: this.#signal,
+          selection: batch.selection,
+        })
         if (!Array.isArray(values) || values.length !== chunk.length)
           throw new TypeError(
             `${batch.definition.identity}.loadはParentと同じ要素数の配列を返してください。`,

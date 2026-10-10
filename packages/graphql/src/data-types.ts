@@ -21,18 +21,22 @@ export type ReadResult<T> =
   | { readonly kind: 'loaded'; readonly value: T }
   | { readonly kind: 'missing' }
 export type Resolver<P, A, R, C> = (
-  parent: P,
-  args: A,
-  context: C,
-  info: GraphQLResolveInfo,
+  input: ResolverInput<P, A, C>,
 ) => R | Promise<R>
-export interface ReadInput<P, A, C> {
+export interface ResolverInput<P, A, C> {
   readonly parent: P
   readonly args: A
   readonly context: C
   readonly info: GraphQLResolveInfo
 }
-export interface LoadInput<A, C> {
+export type ReadInput<P, A, C> = ResolverInput<P, A, C>
+export interface TypeResolverInput<P, C> {
+  readonly parent: P
+  readonly context: C
+  readonly info: GraphQLResolveInfo
+}
+export interface LoadInput<P, A, C> {
+  readonly parents: readonly P[]
   readonly args: A
   readonly context: C
   readonly signal: AbortSignal
@@ -45,8 +49,7 @@ export interface FieldOptions<P, A, R, C> {
   readonly authorize?: (input: ReadInput<P, A, C>) => void | Promise<void>
   readonly read?: (input: ReadInput<P, A, C>) => ReadResult<R>
   readonly load: (
-    parents: readonly P[],
-    input: LoadInput<A, C>,
+    input: LoadInput<P, A, C>,
   ) => readonly (R | Error)[] | Promise<readonly (R | Error)[]>
   readonly maxBatchSize?: number
 }

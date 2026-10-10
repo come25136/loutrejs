@@ -90,7 +90,7 @@ graphql.endpoint({
 - `graphql.endpoint({ manifest })`をPublic APIのコントラクトとし、アプリ側から`schema`や`typeDefs`を渡す方式は廃止してよい。
 - `manifest`のPublic Typeは **`Opaque Type`** とする。GraphQL SchemaとData ResolutionのCompiled Metadataを保持するが、アプリケーションは内部構造に依存せず`graphql.endpoint({ manifest })`を使用する。これはTypeScriptのAPI境界に関する方針であり、Runtime Objectの内部情報を一切参照できないという意味ではなく、Security Boundaryでもない。
 - `@loutrejs/graphql/data`は`getFieldSelection(info)`と明示read用の`loaded` / `missing`を提供する。
-- 通常のResolverはGraphQL標準の`resolve(parent, args, context, info)`を使う。Batch取得を行うFieldには`{ requires, read, load, authorize, maxBatchSize }`を直接書く。
+- 通常のResolverは`resolve({ parent, args, context, info })`を使う。Batch取得を行うFieldには`{ requires, read, load, authorize, maxBatchSize }`を直接書く。
 - 型付き`bindManifest<AppContext>`と`Resolvers<AppContext>`がSDLとDomain MapperからParent / Args / Resultを推論する。FieldごとのGeneric Type指定は要求しない。
 
 ### 2.3 Generated Files and Circular Imports
@@ -243,7 +243,7 @@ import type { AppContext } from './context.js'
 export const resolvers = {
   Query: {
     orders: {
-      resolve: (_parent, args, context, info) =>
+      resolve: ({ args, context, info }) =>
         context.orders.search({
           ...args,
           selection: getFieldSelection(info),
@@ -254,7 +254,7 @@ export const resolvers = {
   OrderItem: {
     product: {
       requires: ['productId'],
-      load: async (items, { context, signal }) => {
+      load: async ({ parents: items, context, signal }) => {
         const ids = [...new Set(items.map((item) => item.productId))]
         const byId = await context.catalog.findByIds(ids, { signal })
         return items.map((item) => {
@@ -305,7 +305,7 @@ export interface SchemaFields<Context extends object> {
 }
 ```
 
-生成した標準Resolver型と`SchemaFields<Context>`をmapped typeで組み合わせ、各Fieldに通常のResolverまたは`FieldOptions<Parent, Args, Result, Context>`を許可する。`requires`は`keyof Parent`、`load`の戻り値は`readonly (Result | Error)[] | Promise<readonly (Result | Error)[]>`へ制約する。`resolve`はGraphQL標準の引数形式を維持する。
+生成した標準Resolver型と`SchemaFields<Context>`をmapped typeで組み合わせ、各Fieldに通常のResolverまたは`FieldOptions<Parent, Args, Result, Context>`を許可する。`requires`は`keyof Parent`、`load`の戻り値は`readonly (Result | Error)[] | Promise<readonly (Result | Error)[]>`へ制約する。`resolve`と`subscribe`は`{ parent, args, context, info }`を受け取る。GraphQL.jsの位置引数との変換はRuntimeが行う。
 
 ```ts
 export type Resolvers<Context extends object = object> = ResolverMap<
@@ -322,9 +322,11 @@ Subscriptionのroot Fieldは標準の`{ subscribe, resolve }`で定義し、Batc
 - `requires: ['productID']`のようなParent Domainに存在しないPropertyはTypeScript Error。`requires`の型チェックには対象TypeのDomain Mapperが必要。
 - Non-null Fieldの`load()`は`null`を返せない。Nullable Fieldだけ`R | null`を許可。Runtimeデータは別途検証する。
 - `read`の`loaded(value)`のValueと`resolve`のreturn valueも生成された`Result`型で制約する。
-- 既存のStandard Resolver/Default Resolverとの混在を許可する。Runtime Binding時にResolverの配置からSchemaのFieldへ設定を結び付ける。
+- object引数のResolverとGraphQLのDefault Resolverとの混在を許可する。Runtime Binding時にResolverの配置からSchemaのFieldへ設定を結び付ける。
 - アプリケーションから`manifest.ts`のvalueを逆importしてはいけない。
 - Domain Mapper、Custom ScalarのInput/Output型、SDL nullability、GraphQLのListとElement nullabilityはSchemaFieldsの生成時に考慮する。
+
+Resolverの公開コントラクトはobject引数へ統一する。`resolve` / `subscribe`は`{ parent, args, context, info }`、`load`は`{ parents, args, context, signal, selection }`、`__resolveType` / `__isTypeOf`は`{ parent, context, info }`を受け取る。GraphQL.jsとの接続時に位置引数を変換し、利用者は必要なpropertyだけを選べる。ScalarはGraphQLScalarTypeの標準コントラクトを維持する。
 
 ## 5. Read-through Field Resolution
 
@@ -341,7 +343,7 @@ Field Authorization
    ▼
 read（明示的 or Argumentsなしのown data propertyの自動判定）
    ├── loaded → その値を返す
-   └── missing → requiresを検証 → Batch Scheduler → load(parents[])
+   └── missing → requiresを検証 → Batch Scheduler → load({ parents, args, context, signal, selection })
 ```
 
 ```ts
@@ -355,15 +357,13 @@ interface FieldOptions<Parent, Args, Result, Context> {
     context: Context
     info: GraphQLResolveInfo
   }) => ReadResult<Result>
-  load: (
-    parents: readonly Parent[],
-    input: {
-      args: Args
-      context: Context
-      signal: AbortSignal
-      selection: FieldSelection
-    },
-  ) => Promise<readonly Result[]> | readonly Result[]
+  load: (input: {
+    parents: readonly Parent[]
+    args: Args
+    context: Context
+    signal: AbortSignal
+    selection: FieldSelection
+  }) => Promise<readonly (Result | Error)[]> | readonly (Result | Error)[]
   // 引数の正規化とBatchの分離はExecution Scope側で自動管理する。
   maxBatchSize?: number
 }
@@ -387,14 +387,14 @@ const posts = {
     parent.postsPage?.first === args.first
       ? data.loaded(parent.postsPage.items)
       : data.missing,
-  load: (users, { args, context, signal }) =>
+  load: ({ parents: users, args, context, signal }) =>
     context.posts.findForUsers(users, { first: args.first, signal }),
 } satisfies NonNullable<Resolvers<AppContext>['User']>['posts']
 ```
 
 ### 5.3 Standard Resolver
 
-`resolve(parent, args, context, info)`から`getFieldSelection(info)`を呼び、選択Fieldと内部依存情報をRepositoryへ渡す。関連データの先読み、検索条件、sort、totalCount、Pagination、TransactionはDomain/Repositoryが決める。ライブラリはSQLを作らない。
+`resolve({ parent, args, context, info })`から`getFieldSelection(info)`を呼び、選択Fieldと内部依存情報をRepositoryへ渡す。関連データの先読み、検索条件、sort、totalCount、Pagination、TransactionはDomain/Repositoryが決める。ライブラリはSQLを作らない。
 
 ## 6. Selection Analyzer
 

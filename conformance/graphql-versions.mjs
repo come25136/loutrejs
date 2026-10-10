@@ -56,9 +56,10 @@ try {
       enum Status { ACTIVE INACTIVE }
       enum Context { LOCAL REMOTE }
       input Options { at:DateTime = "2026-01-01", role:Role = ADMIN }
-      type Child { value:Int! } type Parent { id:ID!, child:Child! }
+      interface Node { id:ID! } union Result = Parent
+      type Child { value:Int! } type Parent implements Node { id:ID!, child:Child! }
       type FieldSpec { id:ID! } type ResolverMap { id:ID! }
-      type Query { spec:FieldSpec!, map:ResolverMap!, parents:[Parent!]!, failures:[Parent]!, check(options:Options! = {}):String!, role(value:Role!):Role!, batchRoles(values:[Role!]!):[Role!]!, echo(value:Int!):Int!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], contextValue:Context!, failure:String }
+      type Query { node:Node!, result:Result!, spec:FieldSpec!, map:ResolverMap!, parents:[Parent!]!, failures:[Parent]!, check(options:Options! = {}):String!, role(value:Role!):Role!, batchRoles(values:[Role!]!):[Role!]!, echo(value:Int!):Int!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], contextValue:Context!, failure:String }
       type Mutation { change:Parent! }
       type Subscription { ticks:Parent!, rejected:Parent! }`,
     )
@@ -89,31 +90,34 @@ try {
         Status: { ACTIVE:0, INACTIVE:2 },
         DateTime: new GraphQLScalarType({name:'DateTime',serialize: value => (value as Date).toISOString(),parseValue:value=>new Date(String(value))}),
         Query: {
-          spec: ()=>({id:'spec'}), map: {load:parents=>parents.map(()=>({id:'map'}))},
-          parents: (_parent,_args,context)=>[context.state.parent,context.state.parent],
+          node: ({context})=>context.state.parent, result: ({context})=>context.state.parent,
+          spec: ()=>({id:'spec'}), map: {load:({parents})=>parents.map(()=>({id:'map'}))},
+          parents: ({context})=>[context.state.parent,context.state.parent],
           failures: ()=>[{id:'first'},{id:'failed'},{id:'third'}],
-          check: (_parent,{options})=>options.at!.toISOString()+':'+options.role!.toFixed(0),
-          role: (_parent,{value})=>{const numeric:number=value;return numeric===2?Role.ADMIN:Role.MEMBER},
-          batchRoles: { load: (parents,{args})=>{const numeric:readonly number[]=args.values;return parents.map(()=>numeric.map(value=>value===2?Role.ADMIN:Role.MEMBER))} },
-          echo: (_parent,{value})=>value,
-          cleanups: (_parent,_args,context)=>context.state.cleanups,
+          check: ({args:{options}})=>options.at!.toISOString()+':'+options.role!.toFixed(0),
+          role: ({args:{value}})=>{const numeric:number=value;return numeric===2?Role.ADMIN:Role.MEMBER},
+          batchRoles: { load: ({parents,args})=>{const numeric:readonly number[]=args.values;return parents.map(()=>numeric.map(value=>value===2?Role.ADMIN:Role.MEMBER))} },
+          echo: ({args:{value}})=>value,
+          cleanups: ({context})=>context.state.cleanups,
           status: ()=>0, optionalStatus: ()=>null,
-          statuses: { load: parents=>parents.map(()=>[0,null,2]) },
+          statuses: { load: ({parents})=>parents.map(()=>[0,null,2]) },
           optionalStatuses: ()=>[2],
-          contextValue: { load: parents=>parents.map(()=>'LOCAL') },
+          contextValue: { load: ({parents})=>parents.map(()=>'LOCAL') },
           failure: ()=>{throw new Error('private failure')},
         },
-        Parent: { child: {requires:['id'],load:(parents,{context,signal})=>{signal.throwIfAborted();context.state.calls++;return parents.map(parent=>parent.id==='failed'?new Error('private child failure'):({value:context.state.revision}))}} },
-        Mutation: { change: (_parent,_args,context)=>{context.state.revision++;return context.state.parent} },
-        Subscription: { rejected: {subscribe: ()=>{throw new Error('private subscription failure')},resolve:(value: import('./context.js').Parent)=>value}, ticks: {
-          subscribe: async function*(_parent,_args,context) {
+        Node: { __resolveType: ({parent,context,info})=>{const id:string=parent.id;context.signal.throwIfAborted();if(!id||!info.fieldName)throw new Error('type resolver input');return 'Parent'} },
+        Result: { __resolveType: ({parent,context,info})=>{const id:string=parent.id;context.signal.throwIfAborted();if(!id||!info.fieldName)throw new Error('type resolver input');return 'Parent'} },
+        Parent: { __isTypeOf: ({parent,info,context})=>{const id:string=parent.id;context.signal.throwIfAborted();return !!id&&!!info.fieldName}, child: {requires:['id'],load:({parents,context,signal})=>{signal.throwIfAborted();context.state.calls++;return parents.map(parent=>parent.id==='failed'?new Error('private child failure'):({value:context.state.revision}))}} },
+        Mutation: { change: ({context})=>{context.state.revision++;return context.state.parent} },
+        Subscription: { rejected: {subscribe: ()=>{throw new Error('private subscription failure')},resolve:({parent: value}: {parent: import('./context.js').Parent})=>value}, ticks: {
+          subscribe: async function*({context}) {
             try {
               context.state.revision++;yield context.state.parent
               context.state.revision++;yield context.state.parent
               if(!context.signal.aborted) await new Promise<void>(resolve=>context.signal.addEventListener('abort',()=>resolve(),{once:true}))
             } finally {context.state.cleanups++}
           },
-          resolve: (value: import('./context.js').Parent)=>value,
+          resolve: ({parent: value}: {parent: import('./context.js').Parent})=>value,
         } },
       } satisfies Resolvers<AppContext>`,
     )
@@ -147,6 +151,9 @@ try {
       try {
         assert.deepEqual(await request('{check}'),{data:{check:'2026-01-01T00:00:00.000Z:2'}})
         assert.deepEqual(await request('{spec{id} map{id}}'),{data:{spec:{id:'spec'},map:{id:'map'}}})
+        for(const result of [await request('{node{__typename id} result{__typename ...on Parent{id}}}'),await operation('{node{__typename id} result{__typename ...on Parent{id}}}')]) {
+          assert.deepEqual(result,{data:{node:{__typename:'Parent',id:'same'},result:{__typename:'Parent',id:'same'}}})
+        }
         for(const result of [await request('{role(value:ADMIN) batchRoles(values:[MEMBER,ADMIN])}'),await operation('{role(value:ADMIN) batchRoles(values:[MEMBER,ADMIN])}')]) {
           assert.deepEqual(result,{data:{role:'ADMIN',batchRoles:['MEMBER','ADMIN']}})
         }

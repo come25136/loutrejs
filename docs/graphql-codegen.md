@@ -74,7 +74,7 @@ import type { AppContext } from './context.js'
 export const resolvers = {
   Query: {
     orders: {
-      resolve: (_parent, args, context, info) =>
+      resolve: ({ args, context, info }) =>
         context.orders.search({
           ...args,
           selection: getFieldSelection(info),
@@ -85,7 +85,7 @@ export const resolvers = {
   OrderItem: {
     product: {
       requires: ['productId'],
-      load: async (items, { context, signal }) => {
+      load: async ({ parents: items, context, signal }) => {
         const products = await context.catalog.findByIds(
           [...new Set(items.map((item) => item.productId))],
           { signal },
@@ -101,7 +101,9 @@ export const resolvers = {
 } satisfies Resolvers<AppContext>
 ```
 
-通常のResolver関数と{ resolve }はGraphQL標準の(parent, args, context, info)を受け取ります。Subscriptionは{ subscribe, resolve }を使います。Batch取得を行うFieldには{ requires, read, load, authorize, maxBatchSize }を直接書きます。loadとresolve / subscribeは併用できず、Subscriptionのroot Fieldは標準のsubscribe / resolveで定義します。
+通常のResolver関数と`{ resolve }`は`{ parent, args, context, info }`を受け取ります。Subscriptionの`subscribe`と`resolve`も同じ形式です。Batch取得を行うFieldには{ requires, read, load, authorize, maxBatchSize }を直接書きます。loadとresolve / subscribeは併用できず、Subscriptionのroot Fieldはsubscribe / resolveで定義します。
+
+`load`は`{ parents, args, context, signal, selection }`を受け取ります。`__resolveType`と`__isTypeOf`は`{ parent, context, info }`です。必要なpropertyだけを分割代入でき、引数の順序を覚える必要はありません。GraphQL.jsの位置引数への変換はBinding時にRuntimeが行います。ScalarはGraphQLScalarTypeの標準コントラクトを使います。
 
 ```ts
 import { graphql } from '@loutrejs/graphql'
@@ -138,11 +140,10 @@ const manifest = bindManifest<AppContext>({
   schemaDocument,
   resolvers: {
     Query: {
-      counter: (_parent, _args, context) => context.counter.current(),
+      counter: ({ context }) => context.counter.current(),
     },
     Mutation: {
-      increment: (_parent, args, context) =>
-        context.counter.increment(args.amount),
+      increment: ({ args, context }) => context.counter.increment(args.amount),
     },
   },
 })
@@ -201,7 +202,7 @@ const posts = {
     parent.postsPage?.first === args.first
       ? data.loaded(parent.postsPage.items)
       : data.missing,
-  load: (users, { args, context, signal }) =>
+  load: ({ parents: users, args, context, signal }) =>
     context.posts.findForUsers(users, { first: args.first, signal }),
   maxBatchSize: 100,
 } satisfies NonNullable<Resolvers<AppContext>['User']>['posts']

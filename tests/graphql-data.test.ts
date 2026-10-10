@@ -1,8 +1,9 @@
-import { parse, GraphQLScalarType, type GraphQLFieldResolver } from 'graphql'
+import { parse, GraphQLScalarType } from 'graphql'
 import {
   data,
   getFieldSelection,
   type FieldOptions,
+  type Resolver,
   type FieldSelection,
 } from '@loutrejs/graphql/data'
 import { bindManifest } from '@loutrejs/graphql/runtime'
@@ -14,11 +15,11 @@ import {
 
 const basic = `type Child { id: ID!, name: String! } type Parent { id: ID!, child: Child } type Query { parents: [Parent!]! }`
 type TestResolver =
-  | GraphQLFieldResolver<any, any>
+  | Resolver<any, any, any, any>
   | FieldOptions<any, any, any, any>
   | {
-      subscribe: GraphQLFieldResolver<any, any>
-      resolve: GraphQLFieldResolver<any, any>
+      subscribe?: Resolver<any, any, any, any>
+      resolve: Resolver<any, any, any, any>
     }
   | number
 function fixture(
@@ -66,18 +67,99 @@ function fixture(
   }
 }
 
+it('通常ResolverとBatchへ一つのobjectを渡し、Parent・coerced Args・Context・info・Selectionを保つ', async () => {
+  const parent = { id: 'p', childId: 'c' }
+  const load = vi.fn(({ parents, args, context, signal, selection }) => {
+    expect(parents).toEqual([parent])
+    expect(args).toEqual({ prefix: 'default' })
+    expect(context.label).toBe('context')
+    expect(signal.aborted).toBe(false)
+    expect(selection.fieldName).toBe('child')
+    return parents.map((item: typeof parent) => ({
+      id: item.childId,
+      name: args.prefix,
+    }))
+  })
+  const resolve = vi.fn(({ context, info, args, parent: root }) => {
+    expect(context.label).toBe('context')
+    expect(info.fieldName).toBe('parents')
+    expect(args).toEqual({})
+    expect(root).toBeUndefined()
+    return [parent]
+  })
+  const direct = vi.fn(({ args, parent: item, info, context }) => {
+    expect(item).toBe(parent)
+    expect(info.fieldName).toBe('label')
+    return `${context.label}:${item.id}:${args.suffix}`
+  })
+  const f = fixture(
+    basic.replace(
+      'child: Child',
+      'child(prefix:String = "default"): Child, label(suffix:String = "suffix"):String!',
+    ),
+    () => ({
+      Query: { parents: { resolve } },
+      Parent: { child: { requires: ['childId'], load }, label: direct },
+    }),
+    { label: 'context' },
+  )
+  expect(await f.query('{parents{label child{id name}}}')).toEqual({
+    data: {
+      parents: [
+        { label: 'context:p:suffix', child: { id: 'c', name: 'default' } },
+      ],
+    },
+  })
+  for (const callback of [resolve, direct, load]) {
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(callback.mock.calls[0]).toHaveLength(1)
+  }
+})
+
+it('__resolveTypeと__isTypeOfもobjectからParent・Context・infoを参照する', async () => {
+  const parent = { id: 'p' }
+  const resolveType = vi.fn(({ parent: value, context, info }) => {
+    expect(value).toBe(parent)
+    expect(context.label).toBe('context')
+    expect(['node', 'result']).toContain(info.fieldName)
+    return 'Parent'
+  })
+  const isTypeOf = vi.fn(({ parent: value, info, context }) => {
+    expect(value).toBe(parent)
+    expect(info.fieldName).toBeDefined()
+    return context.label === 'context'
+  })
+  const f = fixture(
+    'interface Node {id:ID!} type Parent implements Node {id:ID!} union Result = Parent type Query {node:Node!,result:Result!}',
+    () => ({
+      Query: { node: () => parent, result: () => parent },
+      Node: { __resolveType: resolveType },
+      Result: { __resolveType: resolveType },
+      Parent: { __isTypeOf: isTypeOf },
+    }),
+    { label: 'context' },
+  )
+  expect(await f.query('{node{id} result{...on Parent{id}}}')).toEqual({
+    data: { node: { id: 'p' }, result: { id: 'p' } },
+  })
+  expect(resolveType).toHaveBeenCalledTimes(2)
+  expect(isTypeOf).toHaveBeenCalledTimes(2)
+  for (const callback of [resolveType, isTypeOf])
+    for (const call of callback.mock.calls) expect(call).toHaveLength(1)
+})
+
 it('200個のParentを順序を保ってmaxBatchSizeで分割し、resolveのinfoからRequiredを取得する', async () => {
   const parents = Array.from({ length: 200 }, (_, id) => ({
     id: String(id),
     childId: `child-${id}`,
   }))
-  const load = vi.fn((values: readonly any[]) =>
+  const load = vi.fn(({ parents: values }: { parents: readonly any[] }) =>
     values.map((parent) => ({ id: parent.childId, name: parent.id })),
   )
   let selection: FieldSelection | undefined
   const f = fixture(basic, () => ({
     Query: {
-      parents: (_parent, _args, _context, info) => {
+      parents: ({ info }) => {
         selection = getFieldSelection(info)
         return parents
       },
@@ -95,9 +177,9 @@ it('200個のParentを順序を保ってmaxBatchSizeで分割し、resolveのinf
   expect(
     (result.data!.parents as any[]).map((parent) => parent.child.id),
   ).toEqual(parents.map((parent) => parent.childId))
-  expect(load.mock.calls.map(([values]) => values.length)).toEqual([
-    64, 64, 64, 8,
-  ])
+  expect(load.mock.calls.map(([{ parents: values }]) => values.length)).toEqual(
+    [64, 64, 64, 8],
+  )
   expect(selection!.children[0]).toMatchObject({
     fieldName: 'child',
     requires: ['childId'],
@@ -165,7 +247,7 @@ it('prototypeとgetterを自動readで実行せず、未取得値をloadする',
 })
 
 it('引数付きFieldの自動reuseを禁止し、引数に一致する明示readだけ再利用する', async () => {
-  const load = vi.fn((_parents: readonly any[], { args }: any) => [
+  const load = vi.fn(({ args }: any) => [
     { id: String(args.first), name: 'load' },
   ])
   const f = fixture(
@@ -284,8 +366,9 @@ it('Authorizationをread / reuse / loadより先に適用する', async () => {
 })
 
 it('object key順・default引数・aliasを正規化し、異なる引数を混同しない', async () => {
-  const load = vi.fn((parents: readonly any[], { args }: any) =>
-    parents.map(() => ({ id: String(args.options.first), name: 'n' })),
+  const load = vi.fn(
+    ({ parents, args }: { parents: readonly any[]; args: any }) =>
+      parents.map(() => ({ id: String(args.options.first), name: 'n' })),
   )
   const sdl =
     basic.replace('child: Child', 'child(options: Options! = {}): Child') +
@@ -302,11 +385,11 @@ it('object key順・default引数・aliasを正規化し、異なる引数を混
     ).errors,
   ).toBeUndefined()
   expect(load).toHaveBeenCalledTimes(2)
-  expect(load.mock.calls.map(([parents]) => parents.length)).toEqual([2, 2])
+  expect(load.mock.calls.map(([{ parents }]) => parents.length)).toEqual([2, 2])
 })
 
 it('Dateを返すCustom Scalar引数を安全に別Batchへ分離する', async () => {
-  const load = vi.fn((parents: readonly any[]) =>
+  const load = vi.fn(({ parents }: { parents: readonly any[] }) =>
     parents.map(() => ({ id: '1', name: '1' })),
   )
   const f = fixture(
@@ -333,7 +416,7 @@ it('Dateを返すCustom Scalar引数を安全に別Batchへ分離する', async 
 })
 
 it('互換性のないSelectionを別Batchにし、aliasだけでは分割しない', async () => {
-  const load = vi.fn((parents: readonly any[]) =>
+  const load = vi.fn(({ parents }: { parents: readonly any[] }) =>
     parents.map(() => ({ id: '1', name: 'n' })),
   )
   const f = fixture(basic, () => ({
@@ -347,11 +430,11 @@ it('互換性のないSelectionを別Batchにし、aliasだけでは分割しな
       )
     ).errors,
   ).toBeUndefined()
-  expect(load.mock.calls.map(([parents]) => parents.length)).toEqual([2, 2])
+  expect(load.mock.calls.map(([{ parents }]) => parents.length)).toEqual([2, 2])
 })
 
 it('同じIDの異なるtenant / revisionのParentを共有せず、完了値をcacheしない', async () => {
-  const load = vi.fn((parents: readonly any[]) =>
+  const load = vi.fn(({ parents }: { parents: readonly any[] }) =>
     parents.map((parent) => ({
       id: parent.id,
       name: `${parent.tenant}-${parent.revision}`,
@@ -411,7 +494,7 @@ it('SubscriptionのDelivery EventごとにScopeを作り、同じParentの更新
           revision++
           yield [parent]
         },
-        resolve: (value: unknown) => value,
+        resolve: ({ parent: event }: { parent: unknown }) => event,
       },
     },
     Parent: { child: { load } },
@@ -430,7 +513,7 @@ it('SubscriptionのDelivery EventごとにScopeを作り、同じParentの更新
 })
 
 it('並行Operationを別Scopeにし、中断後は新しいBatchを実行しない', async () => {
-  const load = vi.fn((parents: readonly any[]) =>
+  const load = vi.fn(({ parents }: { parents: readonly any[] }) =>
     parents.map(() => ({ id: '1', name: 'n' })),
   )
   const f = fixture(basic, () => ({
@@ -441,7 +524,7 @@ it('並行Operationを別Scopeにし、中断後は新しいBatchを実行しな
     f.query('{parents{child{id}}}'),
     f.query('{parents{child{id}}}'),
   ])
-  expect(load.mock.calls.map(([parents]) => parents.length)).toEqual([2, 2])
+  expect(load.mock.calls.map(([{ parents }]) => parents.length)).toEqual([2, 2])
   const pending = f.query('{parents{child{id}}}')
   f.controller.abort(new Error('cancel'))
   expect((await pending).errors).toBeDefined()
@@ -454,7 +537,7 @@ it('fragment / directive / abstract typeを選択Field情報へ反映し、__typ
     'interface Node { id:ID! } type Parent implements Node {id:ID!,child:Child} type Other implements Node{id:ID!,other:String} type Child{id:ID!,name:String!} type Query{node:Node!}'
   const f = fixture(sdl, () => ({
     Query: {
-      node: (_parent, _args, _context, info) => {
+      node: ({ info }) => {
         selection = getFieldSelection(info)
         return { __typename: 'Parent', id: 'p' }
       },
@@ -538,10 +621,11 @@ it('Scalar / enum Binding後のdefault Argumentsをcoerceし、Abstract TypeのR
       }),
       Role: { MEMBER: 1, ADMIN: 2 },
       Query: {
-        check: (
-          _parent: unknown,
-          { options }: { options: { at: Date; role: number } },
-        ) => `${options.at.toISOString()}:${options.role}`,
+        check: ({
+          args: { options },
+        }: {
+          args: { options: { at: Date; role: number } }
+        }) => `${options.at.toISOString()}:${options.role}`,
       },
     }),
   )
@@ -564,8 +648,7 @@ it('Execution Context ViewでClassのprivate field / getter / methodを壊さな
     'type Query { value:String! }',
     () => ({
       Query: {
-        value: (_parent, _args, context) =>
-          `${context.value}:${context.read()}`,
+        value: ({ context }) => `${context.value}:${context.read()}`,
       },
     }),
     Object.freeze(new Context()),
@@ -576,7 +659,7 @@ it('Execution Context ViewでClassのprivate field / getter / methodを壊さな
 })
 
 it('Opaque Scalarのplain objectと循環値も保守的に分離する', async () => {
-  const load = vi.fn((parents: readonly any[]) =>
+  const load = vi.fn(({ parents }: { parents: readonly any[] }) =>
     parents.map(() => ({ id: '1', name: 'n' })),
   )
   const sdl =

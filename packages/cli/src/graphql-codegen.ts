@@ -418,13 +418,79 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
     comments: false,
   })
   const argumentNames = new Set(args.map((arg) => arg.name))
-  for (const statement of module.body)
+  const inputTemplate = await parseTypeScript(
+    'type Callback = (input: { readonly parent: unknown }) => unknown',
+    { syntax: 'typescript' },
+  )
+  const inputAlias = inputTemplate.body[0]
+  const inputFunction =
+    inputAlias?.type === 'TsTypeAliasDeclaration' &&
+    inputAlias.typeAnnotation.type === 'TsFunctionType'
+      ? inputAlias.typeAnnotation
+      : undefined
+  const inputParameter = inputFunction?.params[0]
+  const inputLiteral =
+    inputParameter?.type === 'Identifier' &&
+    inputParameter.typeAnnotation?.typeAnnotation.type === 'TsTypeLiteral'
+      ? inputParameter.typeAnnotation.typeAnnotation
+      : undefined
+  const inputProperty = inputLiteral?.members[0]
+  if (
+    inputParameter?.type !== 'Identifier' ||
+    !inputLiteral ||
+    inputProperty?.type !== 'TsPropertySignature' ||
+    inputProperty.key.type !== 'Identifier'
+  )
+    throw new Error('Resolverのobject引数型を構築できません。')
+  const inputKey = inputProperty.key
+  const callbacks = new Set([
+    'ResolverFn',
+    'SubscriptionSubscribeFn',
+    'SubscriptionResolveFn',
+    'TypeResolveFn',
+    'IsTypeOfResolverFn',
+    'DirectiveResolverFn',
+  ])
+  for (const statement of module.body) {
     if (
       statement.type === 'ExportDeclaration' &&
-      statement.declaration.type === 'TsTypeAliasDeclaration' &&
-      statement.declaration.id.value === 'Resolvers'
-    )
-      statement.declaration.id.value = 'StandardResolvers'
+      statement.declaration.type === 'TsTypeAliasDeclaration'
+    ) {
+      const declaration = statement.declaration
+      if (declaration.id.value === 'Resolvers')
+        declaration.id.value = 'StandardResolvers'
+      if (callbacks.has(declaration.id.value)) {
+        const callback = declaration.typeAnnotation
+        if (callback.type !== 'TsFunctionType')
+          throw new Error(`Resolver型の形式が不正です: ${declaration.id.value}`)
+        const members = callback.params.map((parameter) => {
+          if (parameter.type !== 'Identifier' || !parameter.typeAnnotation)
+            throw new Error(
+              `Resolver引数の形式が不正です: ${declaration.id.value}`,
+            )
+          return {
+            ...inputProperty,
+            key: {
+              ...inputKey,
+              value: parameter.value === 'obj' ? 'parent' : parameter.value,
+            },
+            optional: parameter.optional,
+            typeAnnotation: parameter.typeAnnotation,
+          }
+        })
+        callback.params = [
+          {
+            ...inputParameter,
+            typeAnnotation: {
+              type: 'TsTypeAnnotation',
+              span: inputLiteral.span,
+              typeAnnotation: { ...inputLiteral, members },
+            },
+          },
+        ]
+      }
+    }
+  }
   content =
     (
       await printTypeScript({

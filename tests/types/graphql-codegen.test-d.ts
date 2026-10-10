@@ -19,13 +19,13 @@ void stepId
 
 const resolvers = {
   Counter: {
-    step: (_parent, _args, context) =>
+    step: ({ context }) =>
       context.steps
         .findByIds(['default'], context.signal)
         .then((values) => values[0]!),
   },
   Mutation: {
-    increment: (_parent, args, context) => {
+    increment: ({ args, context }) => {
       const amount: number = args.amount
       return context.counter.increment(amount)
     },
@@ -66,7 +66,7 @@ import { data, getFieldSelection } from '@loutrejs/graphql/data'
 
 const alternate = {
   Query: {
-    productBatchCount: (_parent, _args, context) => {
+    productBatchCount: ({ context }) => {
       const label: string = context.label
       // @ts-expect-error 同じSchemaでもApplicationごとにContextを選べる
       context.commerce
@@ -78,7 +78,7 @@ void alternate
 const mapped = {
   Query: {
     orders: {
-      resolve: (_parent, args, context, info) => {
+      resolve: ({ args, context, info }) => {
         const offset: number = args.pagination.offset
         const limit: number = args.pagination.limit
         const service: OrderContext['commerce'] = context.commerce
@@ -99,7 +99,7 @@ const mapped = {
       requires: ['productId', 'revision', 'tenant'],
       read: ({ parent }) =>
         parent.product ? data.loaded(parent.product) : data.missing,
-      load: (parents, { context, signal, selection }) => {
+      load: ({ parents, context, signal, selection }) => {
         const items: readonly OrderItem[] = parents
         const path: string = selection.fieldName
         void path
@@ -188,7 +188,7 @@ void perParentError
 import type { Resolvers as ConformanceResolvers } from '../../conformance/graphql/generated/types.js'
 type AtResolver = NonNullable<ConformanceResolvers['Query']>['at']
 const at = {
-  resolve: (_parent, args) => {
+  resolve: ({ args }) => {
     const date: Date = args.value
     return date
   },

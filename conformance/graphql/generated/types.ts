@@ -67,24 +67,25 @@ export type Resolver<
 > =
   | ResolverFn<TResult, TParent, TContext, TArgs>
   | ResolverWithResolve<TResult, TParent, TContext, TArgs>
-export type ResolverFn<TResult, TParent, TContext, TArgs> = (
-  parent: TParent,
-  args: TArgs,
-  context: TContext,
-  info: GraphQLResolveInfo,
-) => Promise<TResult> | TResult
-export type SubscriptionSubscribeFn<TResult, TParent, TContext, TArgs> = (
-  parent: TParent,
-  args: TArgs,
-  context: TContext,
-  info: GraphQLResolveInfo,
-) => AsyncIterable<TResult> | Promise<AsyncIterable<TResult>>
-export type SubscriptionResolveFn<TResult, TParent, TContext, TArgs> = (
-  parent: TParent,
-  args: TArgs,
-  context: TContext,
-  info: GraphQLResolveInfo,
-) => TResult | Promise<TResult>
+export type ResolverFn<TResult, TParent, TContext, TArgs> = (input: {
+  readonly parent: TParent
+  readonly args: TArgs
+  readonly context: TContext
+  readonly info: GraphQLResolveInfo
+}) => Promise<TResult> | TResult
+export type SubscriptionSubscribeFn<TResult, TParent, TContext, TArgs> =
+  (input: {
+    readonly parent: TParent
+    readonly args: TArgs
+    readonly context: TContext
+    readonly info: GraphQLResolveInfo
+  }) => AsyncIterable<TResult> | Promise<AsyncIterable<TResult>>
+export type SubscriptionResolveFn<TResult, TParent, TContext, TArgs> = (input: {
+  readonly parent: TParent
+  readonly args: TArgs
+  readonly context: TContext
+  readonly info: GraphQLResolveInfo
+}) => TResult | Promise<TResult>
 export interface SubscriptionSubscriberObject<
   TResult,
   TKey extends string,
@@ -137,32 +138,32 @@ export type TypeResolveFn<
   TTypes,
   TParent = Record<PropertyKey, never>,
   TContext = Record<PropertyKey, never>,
-> = (
-  parent: TParent,
-  context: TContext,
-  info: GraphQLResolveInfo,
-) => Maybe<TTypes> | Promise<Maybe<TTypes>>
+> = (input: {
+  readonly parent: TParent
+  readonly context: TContext
+  readonly info: GraphQLResolveInfo
+}) => Maybe<TTypes> | Promise<Maybe<TTypes>>
 export type IsTypeOfResolverFn<
   T = Record<PropertyKey, never>,
   TContext = Record<PropertyKey, never>,
-> = (
-  obj: T,
-  context: TContext,
-  info: GraphQLResolveInfo,
-) => boolean | Promise<boolean>
+> = (input: {
+  readonly parent: T
+  readonly context: TContext
+  readonly info: GraphQLResolveInfo
+}) => boolean | Promise<boolean>
 export type NextResolverFn<T> = () => Promise<T>
 export type DirectiveResolverFn<
   TResult = Record<PropertyKey, never>,
   TParent = Record<PropertyKey, never>,
   TContext = Record<PropertyKey, never>,
   TArgs = Record<PropertyKey, never>,
-> = (
-  next: NextResolverFn<TResult>,
-  parent: TParent,
-  args: TArgs,
-  context: TContext,
-  info: GraphQLResolveInfo,
-) => TResult | Promise<TResult>
+> = (input: {
+  readonly next: NextResolverFn<TResult>
+  readonly parent: TParent
+  readonly args: TArgs
+  readonly context: TContext
+  readonly info: GraphQLResolveInfo
+}) => TResult | Promise<TResult>
 export type ResolversTypes = {
   Query: ResolverTypeWrapper<Record<PropertyKey, never>>
   String: ResolverTypeWrapper<Scalars['String']['output']>
