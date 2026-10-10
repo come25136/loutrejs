@@ -325,7 +325,7 @@ export type QueryResolvers<
   >
   productBatchCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>
 }
-export type Resolvers<ContextType = object> = {
+export type StandardResolvers<ContextType = object> = {
   PageInfo?: PageInfoResolvers<ContextType>
   OrderConnection?: OrderConnectionResolvers<ContextType>
   Order?: OrderResolvers<ContextType>
@@ -350,7 +350,7 @@ export interface CoercedInputTypes {
     readonly limit: Scalars['Int']['input']
   }
 }
-import type { FieldSpec } from '@loutrejs/graphql/data'
+import type { FieldSpec, ResolverMap } from '@loutrejs/graphql/data'
 export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: Exclude<T[P], undefined>
 }
@@ -506,3 +506,7 @@ export interface SchemaFields<Context extends object> {
     >
   }
 }
+export type Resolvers<Context extends object = object> = ResolverMap<
+  StandardResolvers<Context>,
+  SchemaFields<Context>
+>

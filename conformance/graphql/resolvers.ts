@@ -1,8 +1,6 @@
 import type { AppContext } from './context.js'
 import { GraphQLScalarType } from 'graphql'
-import { createData } from './generated/data.js'
 import type { Resolvers } from './generated/types.js'
-const d = createData<AppContext>()
 export const resolvers = {
   DateTime: new GraphQLScalarType({
     name: 'DateTime',
@@ -10,8 +8,8 @@ export const resolvers = {
     parseValue: (value) => new Date(String(value)),
   }),
   Query: {
-    at: d.Query.at.source(({ args }) => args.value),
-    nullableTicks: d.Query.nullableTicks.source(() => [null]),
+    at: (_parent, args) => args.value,
+    nullableTicks: () => [null],
     hello: () => 'Hello World',
     cleanupCount: (_parent, _args, context) => context.state.cleanupCount,
   },

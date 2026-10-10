@@ -1,6 +1,6 @@
 # GraphQL Orders Example
 
-手書きBindingと生成Typed Field Builderで、架空のECの注文一覧を提供するNode.js serverです。メモリ内のdomainを使い、保存方式を前提にしません。
+手書きBindingと生成Resolver型で、架空のECの注文一覧を提供するNode.js serverです。メモリ内のdomainを使い、保存方式を前提にしません。
 
 ## 起動
 
@@ -17,7 +17,7 @@ HTTPはhttp://127.0.0.1:3000/graphql、WebSocketはws://127.0.0.1:3000/graphql�
 
 ## 注文一覧と取得戦略
 
-150注文から先頭100注文を選び、各注文に2明細があります。ページ確定はdomain serviceが行います。EAGERは顧客と商品、HYBRIDは顧客を先読みし、LAZYは関連domainをField Builderのloadで取得します。3戦略の公開結果は同じです。
+150注文から先頭100注文を選び、各注文に2明細があります。ページ確定はdomain serviceが行います。EAGERは顧客と商品、HYBRIDは顧客を先読みし、LAZYは関連domainをFieldのloadで取得します。3戦略の公開結果は同じです。
 
 ```sh
 curl http://127.0.0.1:3000/graphql \
@@ -30,9 +30,9 @@ strategyをEAGER / LAZY / HYBRIDへ変えて比較できます。別Queryの`{ p
 ## 読む順序
 
 - [contracts/orders.graphql](./contracts/orders.graphql): 公開契約とdefault引数。
-- [graphql.config.ts](./graphql.config.ts): domain mapping・Context・Resolver Moduleと生成先。
+- [graphql.config.ts](./graphql.config.ts): SDL・domain mapping・生成先。
 - [src/domain/commerce.ts](./src/domain/commerce.ts): ページング、先読み、Tenant / Revisionを含む複合キーでの取得。
-- [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): Generic Type引数なしのsource / field、requires、Authorization。
+- [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): 標準のresolve、infoからの選択Field取得、直接書けるload / requires / authorize。
 - [src/app.ts](./src/app.ts): manifestとDIの接続。
 - [src/graphql/manifest.ts](./src/graphql/manifest.ts): 生成Schemaと手書きResolverのBinding。
 

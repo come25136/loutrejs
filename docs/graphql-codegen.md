@@ -1,6 +1,6 @@
 # GraphQLの生成とData Resolution
 
-SDLを契約として共有し、CLIで型・Static Schema・Typed Field Builderを同じ入力から生成します。ApplicationがbindManifestでSchemaとResolverを接続し、返されたmanifestをendpointへ渡します。生成ModuleはApplicationをimportせず、Schema構築とResolver BindingはApplicationの初期化時に一回行います。
+SDLを契約として共有し、CLIで型・Static Schema・型付きBindingを同じ入力から生成します。ApplicationがbindManifestでSchemaとResolverを接続し、返されたmanifestをendpointへ渡します。生成ModuleはApplicationをimportせず、Schema構築とResolver BindingはApplicationの初期化時に一回行います。
 
 ```sh
 npm install @loutrejs/loutre @loutrejs/graphql graphql
@@ -44,7 +44,7 @@ loutre graphql generate --config graphql.config.ts --watch
 loutre graphql generate --config graphql.config.ts --check
 ```
 
-server targetはtypes.ts・data.ts・schema-ast.ts・bindings.tsを同一世代で生成します。client targetは名前付きOperation / FragmentのVariables・選択結果・TypedDocumentNodeを生成します。client projectには`@graphql-typed-document-node/core`も追加してください。
+server targetはtypes.ts・schema-ast.ts・bindings.tsを同一世代で生成します。client targetは名前付きOperation / FragmentのVariables・選択結果・TypedDocumentNodeを生成します。client projectには`@graphql-typed-document-node/core`も追加してください。
 
 生成物には@generatedが付きます。全targetの生成・整形・検証とtemp出力を終えてから更新し、更新中の失敗では全targetを前の正常世代へ戻します。`--check`は生成済み内容全体と比較し、書き込みません。watchはSDL・Operation・設定の追加 / 変更 / 削除を追跡し、エラー後の正常な世代を保持します。生成directoryへ人間のsource fileを置かないでください。Resolver実装の変更はApplicationの再起動 / HMRでBindingし直します。
 
@@ -52,7 +52,7 @@ server targetはtypes.ts・data.ts・schema-ast.ts・bindings.tsを同一世代�
 
 mappersは公開GraphQL Typeとdomain Typeの対応です。例えばOrderItemのdomainはproductIdを持ち、SDLではproduct: Product!を公開できます。mappingは型生成だけへ適用し、RuntimeのObject変換や保存方法は決めません。同名のimportにはaliasが付きます。
 
-mappersはserver専用です。ApplicationのContextは設定へ含めず、createData<AppContext>()とResolvers<AppContext>で指定します。Field BuilderのParent / Args / ResultはSchemaFieldsから推論します。ArgsはGraphQLがcoerceした値で、Input Object内のdefault値も型へ反映します。
+mappersはserver専用です。ApplicationのContextは設定へ含めず、bindManifest<AppContext>またはResolvers<AppContext>で指定します。ResolverのParent / Args / ResultはSDLとdomain mappingから推論します。ArgsはGraphQLがcoerceした値で、Input Object内のdefault値も型へ反映します。
 
 Custom Scalarはtargetごとにinput / outputを指定します。未指定のScalarをanyへ落としません。
 
@@ -65,20 +65,23 @@ clientでは通信上の表現に合わせてDateTimeをstringにします。ser
 ## ResolverとManifest
 
 ```ts
-import { createData } from './generated/data.js'
+import { getFieldSelection } from '@loutrejs/graphql/data'
 import type { Resolvers } from './generated/types.js'
 import type { AppContext } from './context.js'
 
-const d = createData<AppContext>()
-
 export const resolvers = {
   Query: {
-    orders: d.Query.orders.source(({ args, context, demand, signal }) =>
-      context.orders.search({ ...args, demand, signal }),
-    ),
+    orders: {
+      resolve: (_parent, args, context, info) =>
+        context.orders.search({
+          ...args,
+          selection: getFieldSelection(info),
+          signal: context.signal,
+        }),
+    },
   },
   OrderItem: {
-    product: d.OrderItem.product.field({
+    product: {
       requires: ['productId'],
       load: async (items, { context, signal }) => {
         const products = await context.catalog.findByIds(
@@ -91,12 +94,12 @@ export const resolvers = {
           return product
         })
       },
-    }),
+    },
   },
 } satisfies Resolvers<AppContext>
 ```
 
-通常のResolver / default property Resolverも使用できます。Query / Mutationのroot Fieldへresolve、Subscriptionへsubscribeとresolveを登録します。Data Builderの.source()はAsyncIterableを作るAPIではないため、Subscription Sourceには標準のsubscribe Resolverを使います。
+通常のResolver関数と{ resolve }はGraphQL標準の(parent, args, context, info)を受け取ります。Subscriptionは{ subscribe, resolve }を使います。Batch取得を行うFieldには{ requires, read, load, authorize, maxBatchSize }を直接書きます。loadとresolve / subscribeは併用できず、Subscriptionのroot Fieldは標準のsubscribe / resolveで定義します。
 
 ```ts
 import { graphql } from '@loutrejs/graphql'
@@ -145,7 +148,7 @@ const manifest = bindManifest<AppContext>({
 
 args.amountはSDLからnumber、contextはAppContextとして推論します。存在しないType / Field、誤った戻り値は型エラーになります。分割Moduleでは引き続きsatisfies Resolvers<AppContext>で実装を検査できます。共通runtimeのbindManifestは低水準のBinding関数で、Schema専用の型付けは生成helperが担当します。
 
-manifestはOpaque Typeです。schema / typeDefs / rootValueをendpointへ渡す経路はありません。makeExecutableSchema()や手動prepareは不要です。BindingはApplicationが保守するModuleへ記述します。生成ModuleはResolverをimportしません。Resolverからはgenerated/dataをvalue importし、generated/typesをtype-only importします。Binding Moduleの値をResolverから逆importしないでください。data ModuleのimportだけではSchema構築やResolver Moduleのimportを開始しません。
+manifestはOpaque Typeです。schema / typeDefs / rootValueをendpointへ渡す経路はありません。makeExecutableSchema()や手動prepareは不要です。BindingはApplicationが保守するModuleへ記述します。生成ModuleはResolverをimportしません。Resolverからはgenerated/typesをtype-only importします。Binding Moduleの値をResolverから逆importしないでください。
 
 ## Read-throughとBatch
 
@@ -156,7 +159,7 @@ manifestはOpaque Typeです。schema / typeDefs / rootValueをendpointへ渡す
 ```ts
 import { data } from '@loutrejs/graphql/data'
 
-const posts = d.User.posts.field({
+const posts = {
   requires: ['id'],
   read: ({ parent, args }) =>
     parent.postsPage?.first === args.first
@@ -165,7 +168,7 @@ const posts = d.User.posts.field({
   load: (users, { args, context, signal }) =>
     context.posts.findForUsers(users, { first: args.first, signal }),
   maxBatchSize: 100,
-})
+} satisfies NonNullable<Resolvers<AppContext>['User']>['posts']
 ```
 
 loaded(undefined)は拒否します。未取得のときだけrequiresを確認し、loadへ同じ順序のParent配列を渡します。loadは同じ要素数・順番でResultを返してください。内部キー欠落や要素数不一致はGraphQL Field Errorになります。
@@ -176,17 +179,17 @@ BatchはExecution Scope・Field Definition・coerced Argumentsで分類します
 
 ## AuthorizationとExecution Scope
 
-.field({ authorize })はread / reuse / loadより先に実行します。既存Resolverを包む場合は`data.authorize(resolver, check)`でMetadataを引き継げます。任意のwrapperがMetadataを失った場合、そのData Resolverの実行を拒否します。Sourceの先読みでもRepository側のAuthorizationを守ってください。
+Batch設定のauthorizeはread / reuse / loadより先に実行します。resolveによる先読みでもRepository側のAuthorizationを守ってください。
 
 ScopeはHTTP / WebSocket QueryのOperationごと、Mutationのroot Fieldごと、SubscriptionのDelivery Eventごとに作ります。別HTTP Requestや同じWebSocket接続の並行OperationでもBatchを共有しません。手動scopeとAsyncLocalStorageは不要です。
 
-Source / loadのsignalへHTTP Abort・WS complete / disconnect / drainを伝播します。外部I/Oもそのsignalに協調して停止してください。GraphQLのError Path・Non-null / List semantics・IntrospectionはGraphQL.jsへ委譲します。
+contextとloadのsignalへHTTP Abort・WS complete / disconnect / drainを伝播します。外部I/Oもそのsignalに協調して停止してください。GraphQLのError Path・Non-null / List semantics・IntrospectionはGraphQL.jsへ委譲します。
 
-## Demandと観測
+## 選択Fieldと観測
 
-.source()のdemandはField SelectionのTreeです。各NodeにparentType / fieldName / responseKeys / args / children / requires / prefetchableがあります。Alias、Fragment、Inline Fragment、skip / include、Variables、default引数、Interface / Unionの具体型を考慮します。__typenameへ内部依存を追加しません。defer / streamは明示的に拒否します。
+resolveのinfoからgetFieldSelection(info)を呼ぶと、Field SelectionのTreeを取得できます。各NodeにparentType / fieldName / responseKeys / args / children / requires / prefetchableがあります。Alias、Fragment、Inline Fragment、skip / include、Variables、default引数、Interface / Unionの具体型を考慮します。__typenameへ内部依存を追加しません。defer / streamは明示的に拒否します。
 
-Demandは先読みの判断材料です。SQL、Pagination、totalCount、Transaction / SnapshotはRepositoryが決めます。Partial Domain Valueの自動Hydrationは行わないため、子孫の不足をResolverが補えない場合は完全なdomain objectを返してください。
+選択Field情報は先読みの判断材料です。SQL、Pagination、totalCount、Transaction / SnapshotはRepositoryが決めます。Partial Domain Valueの自動Hydrationは行わないため、子孫の不足をResolverが補えない場合は完全なdomain objectを返してください。
 
 Operation Traceにはgraphql.data.field.reused_count、graphql.data.batch.call_count、graphql.data.batch.parent_count、graphql.data.batch.duration_msを集計します。Batch数やSQL数が常に1になる性能保証はありません。
 

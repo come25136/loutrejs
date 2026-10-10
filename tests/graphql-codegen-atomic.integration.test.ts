@@ -40,7 +40,7 @@ it('全fileをstageし、後続targetのpublish失敗時は全targetの正常世
     expect(await invoke(), stderr.join('\n')).toBe(0)
     const paths = [
       'client.ts',
-      ...['types.ts', 'data.ts', 'schema-ast.ts', 'bindings.ts'].map(
+      ...['types.ts', 'schema-ast.ts', 'bindings.ts'].map(
         (name) => `generated/${name}`,
       ),
     ]

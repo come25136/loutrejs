@@ -1,14 +1,8 @@
+import { parse, GraphQLScalarType, type GraphQLFieldResolver } from 'graphql'
 import {
-  buildASTSchema,
-  parse,
-  GraphQLScalarType,
-  isObjectType,
-  isInterfaceType,
-} from 'graphql'
-import {
-  createSchemaData,
   data,
-  type FieldSpec,
+  getFieldSelection,
+  type FieldOptions,
   type FieldSelection,
 } from '@loutrejs/graphql/data'
 import { bindManifest } from '@loutrejs/graphql/runtime'
@@ -19,38 +13,22 @@ import {
 } from '../packages/graphql/src/execution.js'
 
 const basic = `type Child { id: ID!, name: String! } type Parent { id: ID!, child: Child } type Query { parents: [Parent!]! }`
-type DynamicFields = Record<
-  string,
-  Record<string, FieldSpec<any, any, any, any>>
->
+type TestResolver =
+  | GraphQLFieldResolver<any, any>
+  | FieldOptions<any, any, any, any>
+  | {
+      subscribe: GraphQLFieldResolver<any, any>
+      resolve: GraphQLFieldResolver<any, any>
+    }
+  | number
 function fixture(
   sdl: string,
-  build: (d: ReturnType<typeof createSchemaData<DynamicFields>>) => object,
+  build: () => Record<string, GraphQLScalarType | Record<string, TestResolver>>,
   context: object = {},
 ) {
-  const document = parse(sdl, { noLocation: true })
-  const schema = buildASTSchema(document)
-  const identities = Object.fromEntries(
-    Object.values(schema.getTypeMap())
-      .filter(
-        (type) =>
-          (isObjectType(type) || isInterfaceType(type)) &&
-          !type.name.startsWith('__'),
-      )
-      .map((type) => [
-        type.name,
-        Object.fromEntries(
-          Object.keys((type as any).getFields()).map((name) => [
-            name,
-            `${type.name}.${name}`,
-          ]),
-        ),
-      ]),
-  )
-  const d = createSchemaData<DynamicFields>(identities)
   const manifest = bindManifest({
-    schemaDocument: document,
-    resolvers: build(d),
+    schemaDocument: parse(sdl, { noLocation: true }),
+    resolvers: build(),
   })
   const bound = getManifest(manifest)
   const controller = new AbortController()
@@ -88,7 +66,7 @@ function fixture(
   }
 }
 
-it('200個のParentを順序を保ってmaxBatchSizeで分割し、SourceへRequiredを渡す', async () => {
+it('200個のParentを順序を保ってmaxBatchSizeで分割し、resolveのinfoからRequiredを取得する', async () => {
   const parents = Array.from({ length: 200 }, (_, id) => ({
     id: String(id),
     childId: `child-${id}`,
@@ -96,20 +74,20 @@ it('200個のParentを順序を保ってmaxBatchSizeで分割し、SourceへRequ
   const load = vi.fn((values: readonly any[]) =>
     values.map((parent) => ({ id: parent.childId, name: parent.id })),
   )
-  let demand: FieldSelection | undefined
-  const f = fixture(basic, (d) => ({
+  let selection: FieldSelection | undefined
+  const f = fixture(basic, () => ({
     Query: {
-      parents: d.Query!.parents!.source((input) => {
-        demand = input.demand
+      parents: (_parent, _args, _context, info) => {
+        selection = getFieldSelection(info)
         return parents
-      }),
+      },
     },
     Parent: {
-      child: d.Parent!.child!.field({
+      child: {
         requires: ['childId'],
         load,
         maxBatchSize: 64,
-      }),
+      },
     },
   }))
   const result = await f.query('{ parents { child { id name } } }')
@@ -120,7 +98,7 @@ it('200個のParentを順序を保ってmaxBatchSizeで分割し、SourceへRequ
   expect(load.mock.calls.map(([values]) => values.length)).toEqual([
     64, 64, 64, 8,
   ])
-  expect(demand!.children[0]).toMatchObject({
+  expect(selection!.children[0]).toMatchObject({
     fieldName: 'child',
     requires: ['childId'],
     prefetchable: true,
@@ -135,7 +113,7 @@ it('null・空配列・false・0・空文字を先読み値として再利用す
   const load = vi.fn(() => [])
   const f = fixture(
     'type Parent { nullable: String, children: [String!]!, flag: Boolean!, count: Int!, text: String! } type Query { parent: Parent! }',
-    (d) => ({
+    () => ({
       Query: {
         parent: () => ({
           nullable: null,
@@ -148,7 +126,7 @@ it('null・空配列・false・0・空文字を先読み値として再利用す
       Parent: Object.fromEntries(
         ['nullable', 'children', 'flag', 'count', 'text'].map((name) => [
           name,
-          d.Parent![name]!.field({ load }),
+          { load },
         ]),
       ),
     }),
@@ -172,12 +150,12 @@ it('prototypeとgetterを自動readで実行せず、未取得値をloadする',
   })
   const parent = Object.create({ child: { id: 'wrong', name: 'wrong' } })
   Object.defineProperty(parent, 'child', { get: getter })
-  const f = fixture(basic, (d) => ({
+  const f = fixture(basic, () => ({
     Query: { parents: () => [parent] },
     Parent: {
-      child: d.Parent!.child!.field({
+      child: {
         load: () => [{ id: 'loaded', name: 'loaded' }],
-      }),
+      },
     },
   }))
   expect(await f.query('{ parents { child { id } } }')).toEqual({
@@ -192,9 +170,9 @@ it('引数付きFieldの自動reuseを禁止し、引数に一致する明示rea
   ])
   const f = fixture(
     basic.replace('child: Child', 'child(first: Int! = 1): Child'),
-    (d) => ({
+    () => ({
       Query: { parents: () => [{ child: { id: 'unsafe', name: 'unsafe' } }] },
-      Parent: { child: d.Parent!.child!.field({ load }) },
+      Parent: { child: { load } },
     }),
   )
   expect(await f.query('{ parents { child { id } } }')).toEqual({
@@ -203,20 +181,20 @@ it('引数付きFieldの自動reuseを禁止し、引数に一致する明示rea
   expect(load).toHaveBeenCalledOnce()
   const read = fixture(
     basic.replace('child: Child', 'child(first: Int! = 1): Child'),
-    (d) => ({
+    () => ({
       Query: {
         parents: () => [
           { page: { first: 1, value: { id: 'safe', name: 'safe' } } },
         ],
       },
       Parent: {
-        child: d.Parent!.child!.field({
+        child: {
           read: ({ parent, args }) =>
             parent.page.first === args.first
               ? data.loaded(parent.page.value)
               : data.missing,
           load,
-        }),
+        },
       },
     }),
   )
@@ -228,32 +206,36 @@ it('引数付きFieldの自動reuseを禁止し、引数に一致する明示rea
 
 it('内部キー欠落と戻り値の要素数不一致をGraphQL Field Errorへ変換する', async () => {
   const load = vi.fn(() => [])
-  const missing = fixture(basic, (d) => ({
+  const missing = fixture(basic, () => ({
     Query: { parents: () => [{}] },
-    Parent: { child: d.Parent!.child!.field({ requires: ['childId'], load }) },
+    Parent: { child: { requires: ['childId'], load } },
   }))
   const result = await missing.query('{ parents { child { id } } }')
   expect(result.errors![0]).toMatchObject({ path: ['parents', 0, 'child'] })
   expect(result.errors![0]!.message).toContain('childId')
   expect(load).not.toHaveBeenCalled()
-  const mismatch = fixture(basic, (d) => ({
+  const mismatch = fixture(basic, () => ({
     Query: { parents: () => [{}, {}] },
-    Parent: { child: d.Parent!.child!.field({ load }) },
+    Parent: { child: { load } },
   }))
   expect(
     (await mismatch.query('{ parents { child { id } } }')).errors,
   ).toHaveLength(2)
 })
 
-it('Authorizationをread / reuse / loadより先に適用し、wrapperのMetadataを保つ', async () => {
+it('Authorizationをread / reuse / loadより先に適用する', async () => {
   const read = vi.fn(() => data.loaded({ id: 'private', name: 'private' }))
   const load = vi.fn(() => [])
-  const f = fixture(basic, (d) => ({
+  const f = fixture(basic, () => ({
     Query: { parents: () => [{ child: { id: 'private' } }] },
     Parent: {
-      child: data.authorize(d.Parent!.child!.field({ read, load }), () => {
-        throw new Error('Forbidden')
-      }),
+      child: {
+        read,
+        load,
+        authorize: () => {
+          throw new Error('Forbidden')
+        },
+      },
     },
   }))
   const result = await f.query('{ parents { child { id } } }')
@@ -269,9 +251,9 @@ it('object key順・default引数・aliasを正規化し、異なる引数を混
   const sdl =
     basic.replace('child: Child', 'child(options: Options! = {}): Child') +
     ' input Options { first: Int! = 1, reverse: Boolean! = false }'
-  const f = fixture(sdl, (d) => ({
+  const f = fixture(sdl, () => ({
     Query: { parents: () => [{ id: '1' }, { id: '2' }] },
-    Parent: { child: d.Parent!.child!.field({ load }) },
+    Parent: { child: { load } },
   }))
   expect(
     (
@@ -291,14 +273,14 @@ it('Dateを返すCustom Scalar引数を安全に別Batchへ分離する', async 
   const f = fixture(
     basic.replace('child: Child', 'child(at: DateTime!): Child') +
       ' scalar DateTime',
-    (d) => ({
+    () => ({
       DateTime: new GraphQLScalarType({
         name: 'DateTime',
         serialize: (value) => String(value),
         parseValue: (value) => new Date(String(value)),
       }),
       Query: { parents: () => [{}, {}] },
-      Parent: { child: d.Parent!.child!.field({ load }) },
+      Parent: { child: { load } },
     }),
   )
   expect(
@@ -315,9 +297,9 @@ it('互換性のないSelectionを別Batchにし、aliasだけでは分割しな
   const load = vi.fn((parents: readonly any[]) =>
     parents.map(() => ({ id: '1', name: 'n' })),
   )
-  const f = fixture(basic, (d) => ({
+  const f = fixture(basic, () => ({
     Query: { parents: () => [{}, {}] },
-    Parent: { child: d.Parent!.child!.field({ load }) },
+    Parent: { child: { load } },
   }))
   expect(
     (
@@ -340,9 +322,9 @@ it('同じIDの異なるtenant / revisionのParentを共有せず、完了値を
     { id: 'same', tenant: 'a', revision: 1 },
     { id: 'same', tenant: 'b', revision: 2 },
   ]
-  const f = fixture(basic, (d) => ({
+  const f = fixture(basic, () => ({
     Query: { parents: () => parents },
-    Parent: { child: d.Parent!.child!.field({ load }) },
+    Parent: { child: { load } },
   }))
   expect(await f.query('{parents{child{name}}}')).toEqual({
     data: { parents: [{ child: { name: 'a-1' } }, { child: { name: 'b-2' } }] },
@@ -358,7 +340,7 @@ it('Mutation root field間で同じParentの取得済み値を共有しない', 
   let revision = 0
   const parent = { id: '1' }
   const load = vi.fn(() => [{ id: '1', name: String(revision) }])
-  const f = fixture(basic + ' type Mutation { change: [Parent!]! }', (d) => ({
+  const f = fixture(basic + ' type Mutation { change: [Parent!]! }', () => ({
     Query: { parents: () => [parent] },
     Mutation: {
       change: () => {
@@ -366,7 +348,7 @@ it('Mutation root field間で同じParentの取得済み値を共有しない', 
         return [parent]
       },
     },
-    Parent: { child: d.Parent!.child!.field({ load }) },
+    Parent: { child: { load } },
   }))
   expect(
     await f.query('mutation{ a:change {child{name}} b:change {child{name}} }'),
@@ -380,24 +362,21 @@ it('SubscriptionのDelivery EventごとにScopeを作り、同じParentの更新
   let revision = 0
   const parent = { id: '1' }
   const load = vi.fn(() => [{ id: '1', name: String(revision) }])
-  const f = fixture(
-    basic + ' type Subscription { ticks: [Parent!]! }',
-    (d) => ({
-      Query: { parents: () => [parent] },
-      Subscription: {
-        ticks: {
-          subscribe: async function* () {
-            revision++
-            yield [parent]
-            revision++
-            yield [parent]
-          },
-          resolve: (value: unknown) => value,
+  const f = fixture(basic + ' type Subscription { ticks: [Parent!]! }', () => ({
+    Query: { parents: () => [parent] },
+    Subscription: {
+      ticks: {
+        subscribe: async function* () {
+          revision++
+          yield [parent]
+          revision++
+          yield [parent]
         },
+        resolve: (value: unknown) => value,
       },
-      Parent: { child: d.Parent!.child!.field({ load }) },
-    }),
-  )
+    },
+    Parent: { child: { load } },
+  }))
   const stream = await f.subscribe('subscription{ticks{child{name}}}')
   if (!(Symbol.asyncIterator in stream))
     throw new Error('Subscription streamが必要です。')
@@ -415,9 +394,9 @@ it('並行Operationを別Scopeにし、中断後は新しいBatchを実行しな
   const load = vi.fn((parents: readonly any[]) =>
     parents.map(() => ({ id: '1', name: 'n' })),
   )
-  const f = fixture(basic, (d) => ({
+  const f = fixture(basic, () => ({
     Query: { parents: () => [{}, {}] },
-    Parent: { child: d.Parent!.child!.field({ load }) },
+    Parent: { child: { load } },
   }))
   await Promise.all([
     f.query('{parents{child{id}}}'),
@@ -430,22 +409,22 @@ it('並行Operationを別Scopeにし、中断後は新しいBatchを実行しな
   expect(load).toHaveBeenCalledTimes(2)
 })
 
-it('fragment / directive / abstract typeをDemandへ反映し、__typenameに依存を追加しない', async () => {
-  let demand: FieldSelection | undefined
+it('fragment / directive / abstract typeを選択Field情報へ反映し、__typenameに依存を追加しない', async () => {
+  let selection: FieldSelection | undefined
   const sdl =
     'interface Node { id:ID! } type Parent implements Node {id:ID!,child:Child} type Other implements Node{id:ID!,other:String} type Child{id:ID!,name:String!} type Query{node:Node!}'
-  const f = fixture(sdl, (d) => ({
+  const f = fixture(sdl, () => ({
     Query: {
-      node: d.Query!.node!.source((input) => {
-        demand = input.demand
+      node: (_parent, _args, _context, info) => {
+        selection = getFieldSelection(info)
         return { __typename: 'Parent', id: 'p' }
-      }),
+      },
     },
     Parent: {
-      child: d.Parent!.child!.field({
+      child: {
         requires: ['id'],
         load: () => [{ id: '1', name: 'n' }],
-      }),
+      },
     },
   }))
   expect(
@@ -457,51 +436,52 @@ it('fragment / directive / abstract typeをDemandへ反映し、__typenameに依
     ).errors,
   ).toBeUndefined()
   expect(
-    demand!.children.some(
+    selection!.children.some(
       (field) => field.fieldName === 'other' && field.parentType === 'Other',
     ),
   ).toBe(true)
   expect(
-    demand!.children.filter((field) => field.fieldName === 'child'),
+    selection!.children.filter((field) => field.fieldName === 'child'),
   ).toHaveLength(1)
   expect(
-    demand!.children.find((field) => field.fieldName === '__typename')!
+    selection!.children.find((field) => field.fieldName === '__typename')!
       .requires,
   ).toEqual([])
   expect(
-    demand!.children.find((field) => field.fieldName === 'child')!.requires,
+    selection!.children.find((field) => field.fieldName === 'child')!.requires,
   ).toEqual(['id'])
 })
 
-it('Data ResolverのField Identity不一致とunknown FieldをBinding時に拒否する', () => {
+it('存在しないFieldと不正なBatch設定をBinding時に拒否する', () => {
   expect(() =>
-    fixture(basic, (d) => ({
+    fixture(basic, () => ({
       Query: { parents: () => [] },
-      Parent: { absent: d.Parent!.child!.field({ load: () => [] }) },
+      Parent: { absent: { load: () => [] } },
     })),
   ).toThrow('存在しないResolver Field')
-  expect(() =>
-    fixture(basic, (d) => ({
-      Query: { parents: d.Parent!.child!.source(() => []) },
-    })),
-  ).toThrow('Field Identity')
+  for (const options of [
+    { load: null },
+    { load: () => [], maxBatchSize: 0 },
+    { load: () => [], resolve: () => null },
+    { load: () => [], subscribe: () => null },
+    { load: () => [], authorize: true },
+    { load: () => [], read: true },
+    { load: () => [], requires: 'id' },
+    { resolve: () => null, authorize: () => {} },
+  ])
+    expect(() =>
+      bindManifest({
+        schemaDocument: parse(basic),
+        resolvers: { Parent: { child: options } },
+      }),
+    ).toThrow()
 })
 
-it('Metadataを失うwrapperとincremental directiveを明示的に拒否する', async () => {
-  const f = fixture(basic, (d) => {
-    const resolver = d.Parent!.child!.field({
-      load: () => [{ id: '1', name: '1' }],
-    })
-    return {
-      Query: { parents: () => [{}] },
-      Parent: {
-        child: (...args: Parameters<typeof resolver>) => resolver(...args),
-      },
-    }
-  })
-  expect((await f.query('{parents{child{id}}}')).errors![0]!.message).toContain(
-    'Metadata',
-  )
+it('incremental directiveとloaded(undefined)を明示的に拒否する', async () => {
+  const f = fixture(basic, () => ({
+    Query: { parents: () => [{}] },
+    Parent: { child: { load: () => [{ id: '1', name: '1' }] } },
+  }))
   expect(
     (await f.query('{parents @defer{child{id}}}')).errors![0]!.message,
   ).toContain('@defer')
@@ -543,11 +523,10 @@ it('Execution Context ViewでClassのprivate field / getter / methodを壊さな
   }
   const f = fixture(
     'type Query { value:String! }',
-    (d) => ({
+    () => ({
       Query: {
-        value: d.Query!.value!.source(
-          ({ context }) => `${context.value}:${context.read()}`,
-        ),
+        value: (_parent, _args, context) =>
+          `${context.value}:${context.read()}`,
       },
     }),
     Object.freeze(new Context()),
@@ -564,7 +543,7 @@ it('Opaque Scalarのplain objectと循環値も保守的に分離する', async 
   const sdl =
     basic.replace('child: Child', 'child(token: Token!): Child') +
     ' scalar Token'
-  const f = fixture(sdl, (d) => ({
+  const f = fixture(sdl, () => ({
     Token: new GraphQLScalarType({
       name: 'Token',
       serialize: (value) => String(value),
@@ -575,7 +554,7 @@ it('Opaque Scalarのplain objectと循環値も保守的に分離する', async 
       },
     }),
     Query: { parents: () => [{}, {}] },
-    Parent: { child: d.Parent!.child!.field({ load }) },
+    Parent: { child: { load } },
   }))
   expect(
     (

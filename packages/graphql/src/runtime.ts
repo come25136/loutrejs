@@ -16,7 +16,11 @@ import {
   type GraphQLInputField,
   type DocumentNode,
 } from 'graphql'
-import { getData, type DataDefinition } from './data-internal.js'
+import {
+  invokeData,
+  registerSchemaMetadata,
+  type DataDefinition,
+} from './data-internal.js'
 import { storeManifest, type GraphQLManifest } from './manifest-internal.js'
 import { validateEndpointSchema } from './validation.js'
 
@@ -86,6 +90,61 @@ export function bindManifest<Context extends object = object>(input: {
         throw new TypeError(
           `Schemaに存在しないResolver Fieldです: ${name}.${fieldName}`,
         )
+      if (resolver && typeof resolver === 'object' && 'load' in resolver) {
+        if ('resolve' in resolver || 'subscribe' in resolver)
+          throw new TypeError(
+            `${name}.${fieldName}のloadとresolve / subscribeは併用できません。`,
+          )
+        if (schema.getSubscriptionType() === type)
+          throw new TypeError(
+            'Subscriptionのroot Fieldは標準subscribe / resolve Resolverを使用してください。',
+          )
+        const options = resolver as DataDefinition['options']
+        if (typeof options.load !== 'function')
+          throw new TypeError(`${name}.${fieldName}.loadは関数にしてください。`)
+        if (
+          options.maxBatchSize !== undefined &&
+          (!Number.isSafeInteger(options.maxBatchSize) ||
+            options.maxBatchSize < 1)
+        )
+          throw new TypeError(
+            `${name}.${fieldName}.maxBatchSizeは正の整数にしてください。`,
+          )
+        if (
+          options.requires !== undefined &&
+          (!Array.isArray(options.requires) ||
+            options.requires.some(
+              (key) => typeof key !== 'string' || !key.length,
+            ))
+        )
+          throw new TypeError(`${name}.${fieldName}.requiresが不正です。`)
+        for (const key of ['authorize', 'read'] as const)
+          if (options[key] !== undefined && typeof options[key] !== 'function')
+            throw new TypeError(
+              `${name}.${fieldName}.${key}は関数にしてください。`,
+            )
+        const definition: DataDefinition = Object.freeze({
+          identity: `${name}.${fieldName}`,
+          options: Object.freeze({
+            ...options,
+            requires: Object.freeze([...(options.requires ?? [])]),
+          }),
+        })
+        field.resolve = (parent, args, context, info) =>
+          invokeData(definition, parent, args, context, info)
+        metadata.set(definition.identity, definition)
+        continue
+      }
+      if (
+        resolver &&
+        typeof resolver === 'object' &&
+        ['requires', 'read', 'authorize', 'maxBatchSize'].some(
+          (key) => key in resolver,
+        )
+      )
+        throw new TypeError(
+          `${name}.${fieldName}のBatch設定にはloadが必要です。`,
+        )
       const object = resolver as
         | { resolve?: unknown; subscribe?: unknown }
         | undefined
@@ -109,25 +168,6 @@ export function bindManifest<Context extends object = object>(input: {
       field.subscribe = subscribe as
         | GraphQLFieldResolver<unknown, unknown>
         | undefined
-      const definition = getData(resolve)
-      if (getData(subscribe))
-        throw new TypeError(
-          'Subscription Sourceは標準subscribe Resolverを使用してください。',
-        )
-      if (definition) {
-        if (definition.identity !== `${name}.${fieldName}`)
-          throw new TypeError(
-            `Data ResolverのField Identityが一致しません: ${name}.${fieldName}`,
-          )
-        if (
-          definition.kind === 'field' &&
-          definition.options.requires?.some(
-            (key) => typeof key !== 'string' || !key.length,
-          )
-        )
-          throw new TypeError(`${name}.${fieldName}.requiresが不正です。`)
-        metadata.set(definition.identity, definition)
-      }
     }
   }
   for (const type of Object.values(schema.getTypeMap())) {
@@ -164,6 +204,7 @@ export function bindManifest<Context extends object = object>(input: {
     }
   }
   validateEndpointSchema(schema)
+  registerSchemaMetadata(schema, metadata)
   return storeManifest({ schema, metadata })
 }
 

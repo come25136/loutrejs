@@ -2,7 +2,7 @@ import { registerExecutor, type DataDefinition } from './data-internal.js'
 import type { FieldSelection } from './data-types.js'
 import type { BoundManifest } from './manifest-internal.js'
 import { normalizeFieldArguments } from './arguments.js'
-import { analyzeDemand, selectionKey } from './demand.js'
+import { analyzeSelection, selectionKey } from './selection.js'
 
 export interface DataStatistics {
   reused: number
@@ -29,7 +29,7 @@ interface Request {
 interface Batch {
   readonly requests: Request[]
   readonly dedup: WeakMap<object, Promise<unknown>>
-  readonly definition: Extract<DataDefinition, { kind: 'field' }>
+  readonly definition: DataDefinition
   readonly args: unknown
   readonly selection: FieldSelection
 }
@@ -60,7 +60,7 @@ class Scope {
     this.#batches.clear()
   }
   load(
-    definition: Extract<DataDefinition, { kind: 'field' }>,
+    definition: DataDefinition,
     parent: unknown,
     args: unknown,
     selection: FieldSelection,
@@ -202,19 +202,10 @@ export function executionView(
         definition
       )
         throw new TypeError(
-          'Data Resolver MetadataがBinding後に欠落または置換されています。Authorizationにはdata.authorize()を使用してください。',
+          'Batch設定がBinding後に欠落または置換されています。',
         )
       scopedSignal.throwIfAborted()
-      const demand = analyzeDemand(info, bound.metadata)
-      if (definition.kind === 'source')
-        return definition.source({
-          parent,
-          args,
-          context: activeContext,
-          info,
-          demand,
-          signal: scopedSignal,
-        })
+      const selection = analyzeSelection(info, bound.metadata)
       if (definition.options.authorize)
         await definition.options.authorize({
           parent,
@@ -283,12 +274,12 @@ export function executionView(
         definition,
         parent,
         args,
-        demand,
+        selection,
         normalizeFieldArguments(
           args as Record<string, unknown>,
           info.parentType.getFields()[info.fieldName]!.args,
         ),
-        selectionKey(demand, info.schema),
+        selectionKey(selection, info.schema),
       )
     },
   )

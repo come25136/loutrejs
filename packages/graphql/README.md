@@ -32,11 +32,11 @@ export const endpoint = graphql.endpoint({
 
 factoryとcontextは必須です。manifestが要求するContextを返してください。schema / typeDefs / rootValueを渡す経路は廃止しています。
 
-生成したcreateData<AppContext>()でSchema-specific Typed Field Builderを利用できます。ApplicationのContextを型引数で指定し、Parent / Args / ResultをSDLとdomain mappingから推論し、.source()はDemandをRepositoryへ渡し、.field()は先読み値のreuseとBatch取得を扱います。通常のGraphQL Resolverとの混在も可能です。
+Resolverは標準のresolve(parent, args, context, info)を使い、getFieldSelection(info)で先読み用の選択Field情報を取得できます。Batch取得を行うFieldには{ requires, read, load, authorize, maxBatchSize }を直接書きます。生成Resolvers<AppContext>とbindManifest<AppContext>がParent / Args / ResultをSDLとdomain mappingから推論します。
 
 HTTP contextの入力はtransport / request / signal / middleware stateです。WebSocketはtransport / opening request / connectionParams / operationId / operation signalを渡します。DI Serviceと長寿命ContextのlifetimeはBatch QueueのScopeとは別です。BatchはQuery Operation、Mutation root Field、Subscription Delivery Eventごとに分離します。
 
-HTTP前段の認証やrate limitはtransports.http.middlewaresへ指定します。raw endpointを短絡するmiddlewareはFetch Responseを返します。Field Authorizationは.field({ authorize })またはdata.authorize()でreuseにも適用してください。
+HTTP前段の認証やrate limitはtransports.http.middlewaresへ指定します。raw endpointを短絡するmiddlewareはFetch Responseを返します。Batch設定のauthorizeで先読み値のreuseにも認可を適用してください。
 
 WebSocketはgraphql-transport-ws subprotocolを使用します。Subscription Sourceと外部I/Oはsignalに協調して停止してください。complete / 切断 / drainでAbortとiterator.returnを伝播します。
 

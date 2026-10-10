@@ -360,14 +360,11 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
         (isObjectType(type) || isInterfaceType(type)),
     )
     .toSorted((left, right) => left.name.localeCompare(right.name))
-  const identities: Record<string, Record<string, string>> = {}
   const fields = types
     .map((type) => {
-      identities[type.name] = {}
       const items = Object.values(type.getFields())
         .toSorted((left, right) => left.name.localeCompare(right.name))
         .map((field) => {
-          identities[type.name]![field.name] = `${type.name}.${field.name}`
           const args = field.args.length
             ? `${type.name}${field.name}Args`
             : 'Record<string, never>'
@@ -389,6 +386,13 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
     comments: false,
   })
   const argumentNames = new Set(args.map((arg) => arg.name))
+  for (const statement of module.body)
+    if (
+      statement.type === 'ExportDeclaration' &&
+      statement.declaration.type === 'TsTypeAliasDeclaration' &&
+      statement.declaration.id.value === 'Resolvers'
+    )
+      statement.declaration.id.value = 'StandardResolvers'
   content =
     (
       await printTypeScript({
@@ -411,10 +415,13 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
     )
     .join('\n')
   content += `\nexport interface CoercedInputTypes { ${inputObjects} }\n`
-  const extra = `\nimport type { FieldSpec } from '@loutrejs/graphql/data'\nexport type CoercedArguments<T, K extends keyof T> = Omit<T, K> & { readonly [P in K]-?: Exclude<T[P], undefined> }\nexport interface SchemaFields<Context extends object> { ${fields} }\n`
+  const subscription = schema.getSubscriptionType()
+  const batchFields = subscription
+    ? `Omit<SchemaFields<Context>, '${subscription.name}'>`
+    : 'SchemaFields<Context>'
+  const extra = `\nimport type { FieldSpec, ResolverMap } from '@loutrejs/graphql/data'\nexport type CoercedArguments<T, K extends keyof T> = Omit<T, K> & { readonly [P in K]-?: Exclude<T[P], undefined> }\nexport interface SchemaFields<Context extends object> { ${fields} }\nexport type Resolvers<Context extends object = object> = ResolverMap<StandardResolvers<Context>, ${batchFields}>\n`
   const outputs = {
     'types.ts': content + extra,
-    'data.ts': `import { createSchemaData } from '@loutrejs/graphql/data'\nimport type { SchemaFields } from './types.js'\nexport const createData = <Context extends object>() => createSchemaData<SchemaFields<Context>>(${JSON.stringify(identities)})`,
     'schema-ast.ts': `import type { DocumentNode } from 'graphql'\nexport const schemaDocument: DocumentNode = ${JSON.stringify(blueprint)}`,
     'bindings.ts': `import type { DocumentNode } from 'graphql'\nimport { bindManifest as bindRuntimeManifest, type GraphQLManifest } from '@loutrejs/graphql/runtime'\nimport type { Resolvers } from './types.js'\nexport function bindManifest<Context extends object>(input: { readonly schemaDocument: DocumentNode; readonly resolvers: Resolvers<Context> }): GraphQLManifest<Context> { return bindRuntimeManifest<Context>(input) }`,
   }
@@ -493,6 +500,7 @@ export async function generate(
     generation.files.map((file) => ({ ...file, name: generation.name })),
   )
   const changed: string[] = []
+  const obsoleteRoots = new Set<string>()
   for (const output of outputs) {
     const previous = await existingContent(output.path)
     if (previous !== undefined && !previous.startsWith(generatedHeader))
@@ -507,9 +515,18 @@ export async function generate(
         onlyFiles: true,
         dot: true,
       })
-      for (const path of existing)
-        if (!generation.files.some((file) => file.path === path))
-          throw new Error(`生成directoryに管理外のfileがあります: ${path}`)
+      for (const path of existing) {
+        if (generation.files.some((file) => file.path === path)) continue
+        if (
+          path === resolve(generation.root, 'data.ts') &&
+          (await existingContent(path))?.startsWith(generatedHeader)
+        ) {
+          changed.push(path)
+          obsoleteRoots.add(generation.root)
+          continue
+        }
+        throw new Error(`生成directoryに管理外のfileがあります: ${path}`)
+      }
     }
   }
   if (!check && changed.length) {
@@ -523,7 +540,10 @@ export async function generate(
     }[] = []
     try {
       for (const generation of generations) {
-        if (!generation.files.some((file) => changed.includes(file.path)))
+        if (
+          !generation.files.some((file) => changed.includes(file.path)) &&
+          !obsoleteRoots.has(generation.root)
+        )
           continue
         await mkdir(dirname(generation.root), { recursive: true })
         const temporary = `${generation.root}.${randomUUID()}.tmp`

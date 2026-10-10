@@ -240,7 +240,7 @@ export interface DateTimeScalarConfig extends GraphQLScalarTypeConfig<
 > {
   name: 'DateTime'
 }
-export type Resolvers<ContextType = object> = {
+export type StandardResolvers<ContextType = object> = {
   Query?: QueryResolvers<ContextType>
   Mutation?: MutationResolvers<ContextType>
   Tick?: TickResolvers<ContextType>
@@ -254,7 +254,7 @@ export type QueryatArgs = {
   readonly value: Scalars['DateTime']['input']
 }
 export interface CoercedInputTypes {}
-import type { FieldSpec } from '@loutrejs/graphql/data'
+import type { FieldSpec, ResolverMap } from '@loutrejs/graphql/data'
 export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: Exclude<T[P], undefined>
 }
@@ -316,3 +316,7 @@ export interface SchemaFields<Context extends object> {
     >
   }
 }
+export type Resolvers<Context extends object = object> = ResolverMap<
+  StandardResolvers<Context>,
+  Omit<SchemaFields<Context>, 'Subscription'>
+>

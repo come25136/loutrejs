@@ -48,7 +48,7 @@ export class CommerceService {
     filter: { readonly customerId?: string | null }
     pagination: { readonly offset: number; readonly limit: number }
     strategy: 'EAGER' | 'LAZY' | 'HYBRID'
-    demand: FieldSelection
+    selection: FieldSelection
     signal: AbortSignal
   }): OrderConnection {
     input.signal.throwIfAborted()
@@ -72,7 +72,7 @@ export class CommerceService {
     )
     const page = orders.slice(offset, offset + limit)
     const selected =
-      input.demand.children.find((field) => field.fieldName === 'edges')
+      input.selection.children.find((field) => field.fieldName === 'edges')
         ?.children ?? []
     const customerSelected = selected.some(
       (field) => field.fieldName === 'customer',

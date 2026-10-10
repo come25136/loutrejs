@@ -345,7 +345,25 @@ describe('GraphQL CLI', () => {
   }, 20000)
 })
 
-it('TypeScript設定からBinding用のschemaとdataを生成し、Applicationのimportを含めない', async () => {
+it('旧生成物のdata.tsを削除し、手書きのdata.tsは保護する', async () => {
+  const f = await fixture()
+  expect(await f.invoke(['generate', '--config', 'config.json'])).toBe(0)
+  const path = join(f.cwd, 'generated/data.ts')
+  const previous = `${generatedHeader}export const createData = () => ({})\n`
+  await writeFile(path, previous)
+  expect(
+    await f.invoke(['generate', '--config', 'config.json', '--check']),
+  ).toBe(1)
+  expect(await readFile(path, 'utf8')).toBe(previous)
+  expect(await f.invoke(['generate', '--config', 'config.json'])).toBe(0)
+  await expect(readFile(path)).rejects.toMatchObject({ code: 'ENOENT' })
+  const handwritten = 'export const userData = {}\n'
+  await writeFile(path, handwritten)
+  expect(await f.invoke(['generate', '--config', 'config.json'])).toBe(1)
+  expect(await readFile(path, 'utf8')).toBe(handwritten)
+})
+
+it('TypeScript設定から型付きBindingとschemaを生成し、Applicationのimportを含めない', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'loutre-graphql-config-'))
   directories.push(cwd)
   await writeFile(join(cwd, 'schema.graphql'), 'type Query { hello: String! }')
@@ -364,7 +382,6 @@ it('TypeScript設定からBinding用のschemaとdataを生成し、Application�
     })
   expect(await invoke(), stderr.join('\n')).toBe(0)
   const schema = await readFile(join(cwd, 'generated/schema-ast.ts'), 'utf8')
-  const builder = await readFile(join(cwd, 'generated/data.ts'), 'utf8')
   const types = await readFile(join(cwd, 'generated/types.ts'), 'utf8')
   const bindings = await readFile(join(cwd, 'generated/bindings.ts'), 'utf8')
   expect(schema).not.toContain("from '../resolvers")
@@ -377,9 +394,6 @@ it('TypeScript設定からBinding用のschemaとdataを生成し、Application�
   expect(bindings).not.toContain('../resolvers')
   expect(schema).not.toContain(' as unknown')
   expect(schema).toContain('schemaDocument: DocumentNode')
-  expect(builder).toContain('<Context extends object>')
-  expect(builder).not.toContain('resolvers')
-  expect(builder).not.toContain('manifest')
   expect(types).not.toContain('bindManifest')
   expect(types).toContain('import type')
   expect(types).not.toContain('../context')

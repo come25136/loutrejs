@@ -142,6 +142,25 @@ graphql.endpoint({
 bindOrders<OrderContext>({
   schemaDocument: ordersDocument,
   resolvers: {
+    OrderItem: {
+      product: {
+        requires: ['productId', 'tenant', 'revision'],
+        load(items, { context, signal, args, selection }) {
+          const tenant: string | undefined = items[0]?.tenant
+          const keys: Record<string, never> = args
+          const field: string = selection.fieldName
+          // @ts-expect-error loadのParentもdomain mappingから推論する
+          const invalidTenant: number | undefined = items[0]?.tenant
+          // @ts-expect-error Contextに存在しないpropertyを拒否する
+          context.absent
+          void tenant
+          void keys
+          void field
+          void invalidTenant
+          return context.commerce.findProducts(items, signal)
+        },
+      },
+    },
     Query: {
       orders(_parent, args, context) {
         const offset: number = args.pagination.offset
@@ -154,7 +173,7 @@ bindOrders<OrderContext>({
         return context.commerce.search({
           ...args,
           signal: context.signal,
-          demand: {
+          selection: {
             parentType: 'Query',
             fieldName: 'orders',
             responseKeys: ['orders'],

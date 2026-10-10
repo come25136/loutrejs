@@ -14,9 +14,13 @@ import {
 } from 'graphql'
 import type { FieldSelection } from './data-types.js'
 import type { DataDefinition } from './data-internal.js'
+import { getSchemaMetadata } from './data-internal.js'
 import { normalizeFieldArguments } from './arguments.js'
 
-export function analyzeDemand(
+export function getFieldSelection(info: GraphQLResolveInfo): FieldSelection {
+  return analyzeSelection(info, getSchemaMetadata(info.schema) ?? new Map())
+}
+export function analyzeSelection(
   info: GraphQLResolveInfo,
   metadata: ReadonlyMap<string, DataDefinition>,
 ): FieldSelection {
@@ -60,8 +64,8 @@ export function analyzeDemand(
           args: field
             ? getArgumentValues(field, node, info.variableValues)
             : {},
-          requires: data?.kind === 'field' ? (data.options.requires ?? []) : [],
-          prefetchable: data?.kind === 'field',
+          requires: data?.options.requires ?? [],
+          prefetchable: data !== undefined,
           children: field
             ? children(
                 node.selectionSet?.selections ?? [],
@@ -131,8 +135,8 @@ export function analyzeDemand(
     fieldName: info.fieldName,
     responseKeys: [root.alias?.value ?? info.fieldName],
     args,
-    requires: data?.kind === 'field' ? (data.options.requires ?? []) : [],
-    prefetchable: data?.kind === 'field',
+    requires: data?.options.requires ?? [],
+    prefetchable: data !== undefined,
     children: children(
       info.fieldNodes.flatMap((node) => node.selectionSet?.selections ?? []),
       getNamedType(info.returnType),

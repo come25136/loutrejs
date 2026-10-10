@@ -1,13 +1,10 @@
-import { createData } from '../generated/data.js'
 import type { Resolvers } from '../generated/types.js'
 import type { AppContext } from './context.js'
 import type { CounterChanged } from '../domain/counter.js'
 
-const d = createData<AppContext>()
-
 export const resolvers = {
   Query: {
-    counter: d.Query.counter.source(({ context }) => context.counter.current()),
+    counter: (_parent, _args, context) => context.counter.current(),
     activeSubscriptions: (_parent, _args, context) =>
       context.counter.activeSubscriptions,
     stepBatchCount: (_parent, _args, context) => context.steps.batchCount,
@@ -18,7 +15,7 @@ export const resolvers = {
     reset: (_parent, { value }, context) => context.counter.reset(value),
   },
   Counter: {
-    step: d.Counter.step.field({
+    step: {
       requires: ['stepId'],
       load: async (counters, { context, signal }) => {
         const values = await context.steps.findByIds(
@@ -30,7 +27,7 @@ export const resolvers = {
           return step
         })
       },
-    }),
+    },
   },
   Subscription: {
     counterChanged: {

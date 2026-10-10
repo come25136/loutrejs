@@ -1,22 +1,23 @@
-import type { GraphQLResolveInfo } from 'graphql'
-import type { FieldOptions, SourceInput } from './data-types.js'
+import type { GraphQLResolveInfo, GraphQLSchema } from 'graphql'
+import type { FieldOptions } from './data-types.js'
 
-export type DataDefinition = {
+export interface DataDefinition {
   readonly identity: string
-} & (
-  | {
-      readonly kind: 'field'
-      readonly options: FieldOptions<any, any, any, any>
-    }
-  | {
-      readonly kind: 'source'
-      readonly source: (
-        input: SourceInput<unknown, unknown, unknown>,
-      ) => unknown
-    }
-)
-
-const definitions = new WeakMap<Function, DataDefinition>()
+  readonly options: FieldOptions<any, any, any, any>
+}
+const schemas = new WeakMap<
+  GraphQLSchema,
+  ReadonlyMap<string, DataDefinition>
+>()
+export function registerSchemaMetadata(
+  schema: GraphQLSchema,
+  metadata: ReadonlyMap<string, DataDefinition>,
+) {
+  schemas.set(schema, metadata)
+}
+export function getSchemaMetadata(schema: GraphQLSchema) {
+  return schemas.get(schema)
+}
 type Invoke = (
   definition: DataDefinition,
   parent: unknown,
@@ -25,36 +26,23 @@ type Invoke = (
   info: GraphQLResolveInfo,
 ) => unknown
 const executors = new WeakMap<object, Invoke>()
-
-export function registerData(resolver: Function, definition: DataDefinition) {
-  definitions.set(resolver, definition)
-}
-export function getData(resolver: unknown) {
-  return typeof resolver === 'function' ? definitions.get(resolver) : undefined
-}
-export function inheritData(source: Function, target: Function) {
-  const definition = getData(source)
-  if (definition) registerData(target, definition)
-}
 export function registerExecutor(context: object, invoke: Invoke) {
   executors.set(context, invoke)
 }
 export function invokeData(
-  resolver: Function,
+  definition: DataDefinition,
   parent: unknown,
   args: unknown,
   context: unknown,
   info: GraphQLResolveInfo,
-  identity: string,
 ) {
   const executor =
     typeof context === 'object' && context !== null
       ? executors.get(context)
       : undefined
-  const definition = getData(resolver)
-  if (!executor || !definition || definition.identity !== identity)
+  if (!executor)
     throw new TypeError(
-      'Data ResolverはBinding済みManifestのExecution Adapter内で実行してください。',
+      'Batch ResolverはBinding済みManifestのExecution Adapter内で実行してください。',
     )
   return executor(definition, parent, args, context, info)
 }

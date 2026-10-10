@@ -38,11 +38,9 @@ export interface LoadInput<A, C> {
   readonly signal: AbortSignal
   readonly selection: FieldSelection
 }
-export interface SourceInput<P, A, C> extends ReadInput<P, A, C> {
-  readonly signal: AbortSignal
-  readonly demand: FieldSelection
-}
 export interface FieldOptions<P, A, R, C> {
+  readonly resolve?: never
+  readonly subscribe?: never
   readonly requires?: readonly Extract<keyof P, string>[]
   readonly authorize?: (input: ReadInput<P, A, C>) => void | Promise<void>
   readonly read?: (input: ReadInput<P, A, C>) => ReadResult<R>
@@ -52,21 +50,23 @@ export interface FieldOptions<P, A, R, C> {
   ) => readonly R[] | Promise<readonly R[]>
   readonly maxBatchSize?: number
 }
-export interface FieldBuilder<P, A, R, C> {
-  field(options: FieldOptions<P, A, R, C>): Resolver<P, A, R, C>
-  source(
-    resolve: (input: SourceInput<P, A, C>) => R | Promise<R>,
-  ): Resolver<P, A, R, C>
+type BatchOptions<Spec> =
+  Spec extends FieldSpec<infer P, infer A, infer R, infer C>
+    ? FieldOptions<P, A, R, C>
+    : never
+type StandardBinding<Binding> = Binding & {
+  readonly load?: never
+  readonly requires?: never
+  readonly read?: never
+  readonly authorize?: never
+  readonly maxBatchSize?: never
 }
-export type SchemaData<Fields> = {
-  readonly [T in keyof Fields]: {
-    readonly [F in keyof Fields[T]]: Fields[T][F] extends FieldSpec<
-      infer P,
-      infer A,
-      infer R,
-      infer C
-    >
-      ? FieldBuilder<P, A, R, C>
-      : never
-  }
+export type ResolverMap<StandardResolvers, Fields> = {
+  [T in keyof StandardResolvers]: T extends keyof Fields
+    ? {
+        [F in keyof NonNullable<StandardResolvers[T]>]:
+          | StandardBinding<NonNullable<StandardResolvers[T]>[F]>
+          | (F extends keyof Fields[T] ? BatchOptions<Fields[T][F]> : never)
+      }
+    : StandardResolvers[T]
 }

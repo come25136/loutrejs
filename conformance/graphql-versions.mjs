@@ -77,20 +77,18 @@ try {
     await writeFile(
       join(cwd, 'src/resolvers.ts'),
       `import { GraphQLScalarType } from 'graphql'
-      import { createData } from './generated/data.js'
       import type { Resolvers } from './generated/types.js'
       import type { AppContext } from './context.js'
-      const d = createData<AppContext>()
       const enumResolvers = { Role: { MEMBER:1, ADMIN:2 } }
       export const resolvers = {
         ...enumResolvers,
         DateTime: new GraphQLScalarType({name:'DateTime',serialize: value => (value as Date).toISOString(),parseValue:value=>new Date(String(value))}),
         Query: {
-          parents: d.Query.parents.source(({ context })=>[context.state.parent,context.state.parent]),
+          parents: (_parent,_args,context)=>[context.state.parent,context.state.parent],
           check: (_parent,{options})=>options.at!.toISOString()+':'+options.role,
           cleanups: (_parent,_args,context)=>context.state.cleanups,
         },
-        Parent: { child: d.Parent.child.field({requires:['id'],load:(parents,{context,signal})=>{signal.throwIfAborted();context.state.calls++;return parents.map(()=>({value:context.state.revision}))}}) },
+        Parent: { child: {requires:['id'],load:(parents,{context,signal})=>{signal.throwIfAborted();context.state.calls++;return parents.map(()=>({value:context.state.revision}))}} },
         Mutation: { change: (_parent,_args,context)=>{context.state.revision++;return context.state.parent} },
         Subscription: { ticks: {
           subscribe: async function*(_parent,_args,context) {
