@@ -133,6 +133,7 @@ async function fixture(
     ) => Record<string, unknown> | Promise<Record<string, unknown>>
     formatError?: GraphQLRuntime['formatError']
     failure?: Error
+    afterSend?: (message: Record<string, unknown>) => Promise<void>
   } = {},
 ) {
   const stream = source()
@@ -204,7 +205,11 @@ async function fixture(
       const channel = createWebSocketDriverChannel({
         protocol: protocol ?? '',
         async send(message) {
-          sent.push(JSON.parse(message.data as string))
+          const payload: Record<string, unknown> = JSON.parse(
+            message.data as string,
+          )
+          sent.push(payload)
+          await options.afterSend?.(payload)
         },
         async close(code = 1000, reason = '') {
           channel.finish({ code, reason, wasClean: true })
@@ -553,6 +558,101 @@ describe('GraphQL HTTP', () => {
 })
 
 describe('GraphQL WebSocket', () => {
+  it.each([
+    ['{hello}', 'complete'],
+    ['{unknown}', 'error'],
+  ])(
+    '終了frame %sの送信中でもoperation IDを再利用できる',
+    async (query, ending) => {
+      let release!: () => void
+      const sending = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let blocked = false
+      const api = await fixture({
+        afterSend: async (message) => {
+          if (!blocked && message.id === 'reuse' && message.type === ending) {
+            blocked = true
+            await sending
+          }
+        },
+      })
+      try {
+        const connection = await api.open()
+        connection.send({ type: 'connection_init' })
+        await connection.wait('connection_ack')
+        connection.send({ type: 'subscribe', id: 'reuse', payload: { query } })
+        await connection.wait(ending, 'reuse')
+        connection.send({
+          type: 'subscribe',
+          id: 'reuse',
+          payload: { query: '{hello}' },
+        })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        release()
+        await vi.waitFor(() =>
+          expect(
+            connection.sent.filter(
+              (message) =>
+                message.id === 'reuse' && message.type === 'complete',
+            ),
+          ).toHaveLength(ending === 'complete' ? 2 : 1),
+        )
+        expect(
+          api.trace.traces.filter(
+            (trace) => trace.kind === 'graphql.operation',
+          ),
+        ).toHaveLength(2)
+      } finally {
+        release()
+        await api.app.close()
+      }
+    },
+  )
+
+  it.each([false, true])(
+    'SubscriptionのformatErrorが失敗したら再度整形せず、sourceとoperationを終了する（再整形可=%s）',
+    async (fallback) => {
+      const failure = new Error('formatter failure')
+      const formatError = vi.fn<NonNullable<GraphQLRuntime['formatError']>>(
+        (error) => {
+          if (fallback && error.originalError === failure)
+            return { message: 'formatter failureを公開しない' }
+          throw failure
+        },
+      )
+      const api = await fixture({ formatError })
+      try {
+        const connection = await api.open()
+        connection.send({ type: 'connection_init' })
+        await connection.wait('connection_ack')
+        connection.send({
+          type: 'subscribe',
+          id: 'broken',
+          payload: { query: 'subscription {trips{id name}}' },
+        })
+        await vi.waitFor(() => expect(api.contexts).toHaveLength(1))
+        api.stream.push({ trips: { id: '1', name: null } })
+        expect((await connection.channel.connection.closed).code).toBe(1011)
+        expect(formatError).toHaveBeenCalledTimes(1)
+        expect(
+          connection.sent.filter(
+            (message) => message.type === 'next' || message.type === 'error',
+          ),
+        ).toEqual([])
+        await vi.waitFor(() =>
+          expect(api.stream.cleanup).toHaveBeenCalledTimes(1),
+        )
+        const operation = api.trace.traces.find(
+          (trace) => trace.kind === 'graphql.operation',
+        )!
+        expect(operation.fail).toHaveBeenCalledExactlyOnceWith(failure)
+        expect(operation.complete).toHaveBeenCalledTimes(1)
+      } finally {
+        await api.app.close()
+      }
+    },
+  )
   it('parse・validation・Query・Subscriptionのエラーを同じ整形へ渡し、接続とoperationの寿命を保つ', async () => {
     const formatError = vi.fn<NonNullable<GraphQLRuntime['formatError']>>(
       (error, input) => {

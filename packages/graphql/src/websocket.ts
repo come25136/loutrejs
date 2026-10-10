@@ -11,6 +11,7 @@ import {
   GraphQLError,
   type ExecutionArgs,
   type ExecutionResult,
+  type GraphQLFormattedError,
 } from 'graphql'
 import type { GraphQLRuntime, GraphQLWebSocketContextInput } from './types.js'
 import { formatGraphQLError } from './errors.js'
@@ -26,6 +27,7 @@ interface Operation {
   readonly controller: AbortController
   readonly lease: ExecutionOperationLease
   cleanup?: () => Promise<unknown>
+  formattingFailure?: { readonly error: unknown }
   finished: boolean
 }
 
@@ -70,6 +72,19 @@ export async function serveGraphQLWebSocket(
   }
   const run = <T>(operation: Operation | undefined, invoke: () => T): T =>
     operation?.lease.run ? operation.lease.run(invoke) : invoke()
+  const format = (
+    operation: Operation,
+    error: GraphQLError,
+  ): GraphQLFormattedError => {
+    if (operation.formattingFailure) throw operation.formattingFailure.error
+    try {
+      return formatGraphQLError(runtime, error, operation.input)
+    } catch (failure) {
+      operation.formattingFailure = { error: failure }
+      operation.lease.fail?.(failure)
+      throw failure
+    }
+  }
   const server = makeServer({
     schema,
     ...(options.connectionInitWaitTimeout === undefined
@@ -170,18 +185,14 @@ export async function serveGraphQLWebSocket(
         ...(result.extensions === undefined
           ? {}
           : { extensions: result.extensions }),
-        errors: result.errors.map((error) =>
-          formatGraphQLError(runtime, error, operation.input),
-        ),
+        errors: result.errors.map((error) => format(operation, error)),
       }
     },
     async onError(_connection, id, _payload, errors) {
       const operation = operations.get(id)!
       try {
         if (runtime.formatError)
-          return errors.map((error) =>
-            formatGraphQLError(runtime, error, operation.input),
-          )
+          return errors.map((error) => format(operation, error))
       } finally {
         await operation.cleanup?.()
         finish(id)
@@ -215,7 +226,8 @@ export async function serveGraphQLWebSocket(
         operations.get(message.id)?.controller.abort()
       if (message.type === MessageType.Subscribe) {
         id = message.id
-        if (operations.get(id)?.controller.signal.aborted)
+        const operation = operations.get(id)
+        if (!operation || operation.controller.signal.aborted)
           predecessor = operationTasks.get(id)
       }
     } catch {
@@ -226,7 +238,7 @@ export async function serveGraphQLWebSocket(
       .catch(async (error: unknown) => {
         if (!context.signal.aborted) {
           for (const operation of operations.values())
-            operation.lease.fail?.(error)
+            if (!operation.formattingFailure) operation.lease.fail?.(error)
           await context.close(1011, 'Internal server error')
         }
       })
