@@ -253,19 +253,19 @@ export type MutationresetArgs = {
   readonly value: Scalars['Int']['input']
 }
 export interface CoercedInputTypes {}
-import type { FieldSpec, ResolverMap } from '@loutrejs/graphql/data'
+import type * as $LoutreData from '@loutrejs/graphql/data'
 export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: Exclude<T[P], undefined>
 }
 export interface SchemaFields<Context extends object> {
   Counter: {
-    step: FieldSpec<
+    step: $LoutreData.FieldSpec<
       ResolversParentTypes['Counter'],
       Record<string, never>,
       ResolversParentTypes['Step'],
       Context
     >
-    value: FieldSpec<
+    value: $LoutreData.FieldSpec<
       ResolversParentTypes['Counter'],
       Record<string, never>,
       Scalars['Int']['output'],
@@ -273,13 +273,13 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Mutation: {
-    increment: FieldSpec<
+    increment: $LoutreData.FieldSpec<
       ResolversParentTypes['Mutation'],
       MutationincrementArgs,
       ResolversParentTypes['Counter'],
       Context
     >
-    reset: FieldSpec<
+    reset: $LoutreData.FieldSpec<
       ResolversParentTypes['Mutation'],
       MutationresetArgs,
       ResolversParentTypes['Counter'],
@@ -287,19 +287,19 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Query: {
-    activeSubscriptions: FieldSpec<
+    activeSubscriptions: $LoutreData.FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       Scalars['Int']['output'],
       Context
     >
-    counter: FieldSpec<
+    counter: $LoutreData.FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       ResolversParentTypes['Counter'],
       Context
     >
-    stepBatchCount: FieldSpec<
+    stepBatchCount: $LoutreData.FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       Scalars['Int']['output'],
@@ -307,13 +307,13 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Step: {
-    amount: FieldSpec<
+    amount: $LoutreData.FieldSpec<
       ResolversParentTypes['Step'],
       Record<string, never>,
       Scalars['Int']['output'],
       Context
     >
-    id: FieldSpec<
+    id: $LoutreData.FieldSpec<
       ResolversParentTypes['Step'],
       Record<string, never>,
       Scalars['ID']['output'],
@@ -321,7 +321,7 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Subscription: {
-    counterChanged: FieldSpec<
+    counterChanged: $LoutreData.FieldSpec<
       ResolversParentTypes['Subscription'],
       Record<string, never>,
       ResolversParentTypes['Counter'],
@@ -329,7 +329,8 @@ export interface SchemaFields<Context extends object> {
     >
   }
 }
-export type Resolvers<Context extends object = object> = ResolverMap<
-  StandardResolvers<Context>,
-  Omit<SchemaFields<Context>, 'Subscription'>
->
+export type Resolvers<Context extends object = object> =
+  $LoutreData.ResolverMap<
+    StandardResolvers<Context>,
+    Omit<SchemaFields<Context>, 'Subscription'>
+  >

@@ -339,7 +339,7 @@ export type StandardResolvers<ContextType = object> = {
 export type QueryordersArgs = {
   readonly filter: CoercedInputTypes['OrderFilter']
   readonly pagination: CoercedInputTypes['PaginationInput']
-  readonly strategy: Strategy
+  readonly strategy: ResolversTypes['Strategy']
 }
 export interface CoercedInputTypes {
   OrderFilter: {
@@ -350,19 +350,19 @@ export interface CoercedInputTypes {
     readonly limit: Scalars['Int']['input']
   }
 }
-import type { FieldSpec, ResolverMap } from '@loutrejs/graphql/data'
+import type * as $LoutreData from '@loutrejs/graphql/data'
 export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: Exclude<T[P], undefined>
 }
 export interface SchemaFields<Context extends object> {
   Account: {
-    id: FieldSpec<
+    id: $LoutreData.FieldSpec<
       ResolversParentTypes['Account'],
       Record<string, never>,
       Scalars['ID']['output'],
       Context
     >
-    name: FieldSpec<
+    name: $LoutreData.FieldSpec<
       ResolversParentTypes['Account'],
       Record<string, never>,
       Scalars['String']['output'],
@@ -370,13 +370,13 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Category: {
-    id: FieldSpec<
+    id: $LoutreData.FieldSpec<
       ResolversParentTypes['Category'],
       Record<string, never>,
       Scalars['ID']['output'],
       Context
     >
-    name: FieldSpec<
+    name: $LoutreData.FieldSpec<
       ResolversParentTypes['Category'],
       Record<string, never>,
       Scalars['String']['output'],
@@ -384,13 +384,13 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Customer: {
-    account: FieldSpec<
+    account: $LoutreData.FieldSpec<
       ResolversParentTypes['Customer'],
       Record<string, never>,
       ResolversParentTypes['Account'],
       Context
     >
-    id: FieldSpec<
+    id: $LoutreData.FieldSpec<
       ResolversParentTypes['Customer'],
       Record<string, never>,
       Scalars['ID']['output'],
@@ -398,19 +398,19 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Order: {
-    customer: FieldSpec<
+    customer: $LoutreData.FieldSpec<
       ResolversParentTypes['Order'],
       Record<string, never>,
       ResolversParentTypes['Customer'],
       Context
     >
-    id: FieldSpec<
+    id: $LoutreData.FieldSpec<
       ResolversParentTypes['Order'],
       Record<string, never>,
       Scalars['ID']['output'],
       Context
     >
-    items: FieldSpec<
+    items: $LoutreData.FieldSpec<
       ResolversParentTypes['Order'],
       Record<string, never>,
       ReadonlyArray<ResolversParentTypes['OrderItem']>,
@@ -418,19 +418,19 @@ export interface SchemaFields<Context extends object> {
     >
   }
   OrderConnection: {
-    edges: FieldSpec<
+    edges: $LoutreData.FieldSpec<
       ResolversParentTypes['OrderConnection'],
       Record<string, never>,
       ReadonlyArray<ResolversParentTypes['Order']>,
       Context
     >
-    pageInfo: FieldSpec<
+    pageInfo: $LoutreData.FieldSpec<
       ResolversParentTypes['OrderConnection'],
       Record<string, never>,
       ResolversParentTypes['PageInfo'],
       Context
     >
-    totalCount: FieldSpec<
+    totalCount: $LoutreData.FieldSpec<
       ResolversParentTypes['OrderConnection'],
       Record<string, never>,
       Scalars['Int']['output'],
@@ -438,19 +438,19 @@ export interface SchemaFields<Context extends object> {
     >
   }
   OrderItem: {
-    id: FieldSpec<
+    id: $LoutreData.FieldSpec<
       ResolversParentTypes['OrderItem'],
       Record<string, never>,
       Scalars['ID']['output'],
       Context
     >
-    product: FieldSpec<
+    product: $LoutreData.FieldSpec<
       ResolversParentTypes['OrderItem'],
       Record<string, never>,
       ResolversParentTypes['Product'],
       Context
     >
-    quantity: FieldSpec<
+    quantity: $LoutreData.FieldSpec<
       ResolversParentTypes['OrderItem'],
       Record<string, never>,
       Scalars['Int']['output'],
@@ -458,13 +458,13 @@ export interface SchemaFields<Context extends object> {
     >
   }
   PageInfo: {
-    hasNextPage: FieldSpec<
+    hasNextPage: $LoutreData.FieldSpec<
       ResolversParentTypes['PageInfo'],
       Record<string, never>,
       Scalars['Boolean']['output'],
       Context
     >
-    hasPreviousPage: FieldSpec<
+    hasPreviousPage: $LoutreData.FieldSpec<
       ResolversParentTypes['PageInfo'],
       Record<string, never>,
       Scalars['Boolean']['output'],
@@ -472,19 +472,19 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Product: {
-    category: FieldSpec<
+    category: $LoutreData.FieldSpec<
       ResolversParentTypes['Product'],
       Record<string, never>,
       ResolversParentTypes['Category'],
       Context
     >
-    id: FieldSpec<
+    id: $LoutreData.FieldSpec<
       ResolversParentTypes['Product'],
       Record<string, never>,
       Scalars['ID']['output'],
       Context
     >
-    name: FieldSpec<
+    name: $LoutreData.FieldSpec<
       ResolversParentTypes['Product'],
       Record<string, never>,
       Scalars['String']['output'],
@@ -492,13 +492,13 @@ export interface SchemaFields<Context extends object> {
     >
   }
   Query: {
-    orders: FieldSpec<
+    orders: $LoutreData.FieldSpec<
       ResolversParentTypes['Query'],
       QueryordersArgs,
       ResolversParentTypes['OrderConnection'],
       Context
     >
-    productBatchCount: FieldSpec<
+    productBatchCount: $LoutreData.FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       Scalars['Int']['output'],
@@ -506,7 +506,5 @@ export interface SchemaFields<Context extends object> {
     >
   }
 }
-export type Resolvers<Context extends object = object> = ResolverMap<
-  StandardResolvers<Context>,
-  SchemaFields<Context>
->
+export type Resolvers<Context extends object = object> =
+  $LoutreData.ResolverMap<StandardResolvers<Context>, SchemaFields<Context>>

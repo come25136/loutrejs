@@ -57,7 +57,8 @@ try {
       enum Context { LOCAL REMOTE }
       input Options { at:DateTime = "2026-01-01", role:Role = ADMIN }
       type Child { value:Int! } type Parent { id:ID!, child:Child! }
-      type Query { parents:[Parent!]!, failures:[Parent]!, check(options:Options! = {}):String!, role(value:Role!):Role!, batchRoles(values:[Role!]!):[Role!]!, echo(value:Int!):Int!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], contextValue:Context!, failure:String }
+      type FieldSpec { id:ID! } type ResolverMap { id:ID! }
+      type Query { spec:FieldSpec!, map:ResolverMap!, parents:[Parent!]!, failures:[Parent]!, check(options:Options! = {}):String!, role(value:Role!):Role!, batchRoles(values:[Role!]!):[Role!]!, echo(value:Int!):Int!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], contextValue:Context!, failure:String }
       type Mutation { change:Parent! }
       type Subscription { ticks:Parent!, rejected:Parent! }`,
     )
@@ -88,6 +89,7 @@ try {
         Status: { ACTIVE:0, INACTIVE:2 },
         DateTime: new GraphQLScalarType({name:'DateTime',serialize: value => (value as Date).toISOString(),parseValue:value=>new Date(String(value))}),
         Query: {
+          spec: ()=>({id:'spec'}), map: {load:parents=>parents.map(()=>({id:'map'}))},
           parents: (_parent,_args,context)=>[context.state.parent,context.state.parent],
           failures: ()=>[{id:'first'},{id:'failed'},{id:'third'}],
           check: (_parent,{options})=>options.at!.toISOString()+':'+options.role!.toFixed(0),
@@ -144,6 +146,7 @@ try {
       const operation=query=>new Promise((resolve,reject)=>{let value;client.subscribe({query},{next:result=>{value=result},error:reject,complete:()=>resolve(value)})})
       try {
         assert.deepEqual(await request('{check}'),{data:{check:'2026-01-01T00:00:00.000Z:2'}})
+        assert.deepEqual(await request('{spec{id} map{id}}'),{data:{spec:{id:'spec'},map:{id:'map'}}})
         for(const result of [await request('{role(value:ADMIN) batchRoles(values:[MEMBER,ADMIN])}'),await operation('{role(value:ADMIN) batchRoles(values:[MEMBER,ADMIN])}')]) {
           assert.deepEqual(result,{data:{role:'ADMIN',batchRoles:['MEMBER','ADMIN']}})
         }
