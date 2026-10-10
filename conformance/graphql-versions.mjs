@@ -57,7 +57,7 @@ try {
       enum Context { LOCAL REMOTE }
       input Options { at:DateTime = "2026-01-01", role:Role = ADMIN }
       type Child { value:Int! } type Parent { id:ID!, child:Child! }
-      type Query { parents:[Parent!]!, check(options:Options! = {}):String!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], contextValue:Context!, failure:String }
+      type Query { parents:[Parent!]!, failures:[Parent]!, check(options:Options! = {}):String!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], contextValue:Context!, failure:String }
       type Mutation { change:Parent! }
       type Subscription { ticks:Parent!, rejected:Parent! }`,
     )
@@ -87,6 +87,7 @@ try {
         DateTime: new GraphQLScalarType({name:'DateTime',serialize: value => (value as Date).toISOString(),parseValue:value=>new Date(String(value))}),
         Query: {
           parents: (_parent,_args,context)=>[context.state.parent,context.state.parent],
+          failures: ()=>[{id:'first'},{id:'failed'},{id:'third'}],
           check: (_parent,{options})=>options.at!.toISOString()+':'+options.role,
           cleanups: (_parent,_args,context)=>context.state.cleanups,
           status: ()=>'ACTIVE', optionalStatus: ()=>null,
@@ -95,7 +96,7 @@ try {
           contextValue: { load: parents=>parents.map(()=>'LOCAL') },
           failure: ()=>{throw new Error('private failure')},
         },
-        Parent: { child: {requires:['id'],load:(parents,{context,signal})=>{signal.throwIfAborted();context.state.calls++;return parents.map(()=>({value:context.state.revision}))}} },
+        Parent: { child: {requires:['id'],load:(parents,{context,signal})=>{signal.throwIfAborted();context.state.calls++;return parents.map(parent=>parent.id==='failed'?new Error('private child failure'):({value:context.state.revision}))}} },
         Mutation: { change: (_parent,_args,context)=>{context.state.revision++;return context.state.parent} },
         Subscription: { rejected: {subscribe: ()=>{throw new Error('private subscription failure')},resolve:(value: import('./context.js').Parent)=>value}, ticks: {
           subscribe: async function*(_parent,_args,context) {
@@ -142,6 +143,13 @@ try {
         assert.deepEqual(await request('{contextValue}'),{data:{contextValue:'LOCAL'}})
         for(const [transport,result] of [['http',await request('{failure}')],['websocket',await operation('{failure}')]]) {
           assert.deepEqual(result,{data:{failure:null},errors:[{message:'Internal server error',locations:[{line:1,column:2}],path:['failure'],extensions:{transport}}]})
+        }
+        for(const [transport,result] of [['http',await request('{failures{child{value}}}')],['websocket',await operation('{failures{child{value}}}')]]) {
+          assert.deepEqual(result.data,{failures:[{child:{value:0}},null,{child:{value:0}}]})
+          assert.equal(result.errors.length,1)
+          assert.deepEqual(result.errors[0].path,['failures',1,'child'])
+          assert.equal(result.errors[0].message,'Internal server error')
+          assert.deepEqual(result.errors[0].extensions,{transport})
         }
         const rejected=await operation('subscription{rejected{id}}')
         assert.equal(rejected.errors[0].message,'Internal server error')

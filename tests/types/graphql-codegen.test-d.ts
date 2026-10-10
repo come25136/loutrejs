@@ -180,6 +180,10 @@ const fromRead = {
   load: () => [product],
 } satisfies ProductResolver
 void fromRead
+const perParentError = {
+  load: () => [product, new Error('対象のProductを取得できません。')],
+} satisfies ProductResolver
+void perParentError
 
 import type { Resolvers as ConformanceResolvers } from '../../conformance/graphql/generated/types.js'
 type AtResolver = NonNullable<ConformanceResolvers['Query']>['at']

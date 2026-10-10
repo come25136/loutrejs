@@ -205,6 +205,8 @@ const posts = {
 
 loaded(undefined)は拒否します。未取得のときだけrequiresを確認し、loadへ同じ順序のParent配列を渡します。loadは同じ要素数・順番でResultを返してください。内部キー欠落や要素数不一致はGraphQL Field Errorになります。
 
+loadの戻り値にはParentごとにErrorを含められます。その要素だけをGraphQL Field Errorとして扱い、pathとnullabilityに従って結果へ反映します。load自体が例外を投げた場合は、そのBatch全体のFieldが失敗します。
+
 BatchはExecution Scope・Field Definition・coerced Argumentsで分類します。AliasやObject key順、default値の指定方法では分割しません。Date / Class Instance等の同値性が不明な引数は保守的に分離します。異なるSelectionも分離し、loadへselectionを渡します。同期的に集まった要求をMicrotask境界でflushし、maxBatchSizeで分割します。非同期に完了するParentでは複数Batchになることがあります。
 
 同一Parent Objectの同一要求は処理中だけ共有できます。完了値や同一IDだけを根拠にしたEntity Cacheは持ちません。RepositoryではParentごとのTenant / Authorization / Revisionを保持し、必要なら複合キーで重複を除いてください。

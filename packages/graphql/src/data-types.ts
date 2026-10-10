@@ -47,7 +47,7 @@ export interface FieldOptions<P, A, R, C> {
   readonly load: (
     parents: readonly P[],
     input: LoadInput<A, C>,
-  ) => readonly R[] | Promise<readonly R[]>
+  ) => readonly (R | Error)[] | Promise<readonly (R | Error)[]>
   readonly maxBatchSize?: number
 }
 type BatchOptions<Spec> =

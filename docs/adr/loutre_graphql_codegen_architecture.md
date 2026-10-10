@@ -305,7 +305,7 @@ export interface SchemaFields<Context extends object> {
 }
 ```
 
-生成した標準Resolver型と`SchemaFields<Context>`をmapped typeで組み合わせ、各Fieldに通常のResolverまたは`FieldOptions<Parent, Args, Result, Context>`を許可する。`requires`は`keyof Parent`、`load`の戻り値は`readonly Result[] | Promise<readonly Result[]>`へ制約する。`resolve`はGraphQL標準の引数形式を維持する。
+生成した標準Resolver型と`SchemaFields<Context>`をmapped typeで組み合わせ、各Fieldに通常のResolverまたは`FieldOptions<Parent, Args, Result, Context>`を許可する。`requires`は`keyof Parent`、`load`の戻り値は`readonly (Result | Error)[] | Promise<readonly (Result | Error)[]>`へ制約する。`resolve`はGraphQL標準の引数形式を維持する。
 
 ```ts
 export type Resolvers<Context extends object = object> = ResolverMap<

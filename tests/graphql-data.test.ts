@@ -223,6 +223,45 @@ it('内部キー欠落と戻り値の要素数不一致をGraphQL Field Errorへ
   ).toHaveLength(2)
 })
 
+it.each([
+  ['child: Child', false],
+  ['child: Child!', true],
+] as const)(
+  'Batch内の個別Errorを%sのnullabilityと各Parentのpathへ反映する',
+  async (field, nonNull) => {
+    const failure = new Error('対象の子を取得できません。')
+    const load = vi.fn(() => [
+      { id: 'first', name: 'ok' },
+      failure,
+      { id: 'third', name: 'ok' },
+    ])
+    const f = fixture(basic.replace('child: Child', field), () => ({
+      Query: {
+        parents: () => [{ id: 'first' }, { id: 'second' }, { id: 'third' }],
+      },
+      Parent: { child: { load } },
+    }))
+    const result = await f.query('{parents{id child{id}}}')
+    expect(load).toHaveBeenCalledTimes(1)
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors![0]).toMatchObject({
+      originalError: failure,
+      path: ['parents', 1, 'child'],
+    })
+    expect(result.data).toEqual(
+      nonNull
+        ? null
+        : {
+            parents: [
+              { id: 'first', child: { id: 'first' } },
+              { id: 'second', child: null },
+              { id: 'third', child: { id: 'third' } },
+            ],
+          },
+    )
+  },
+)
+
 it('Authorizationをread / reuse / loadより先に適用する', async () => {
   const read = vi.fn(() => data.loaded({ id: 'private', name: 'private' }))
   const load = vi.fn(() => [])
