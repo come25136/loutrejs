@@ -47,7 +47,12 @@
       "@loutrejs/node": ["./packages/node/src/index.ts"],
       "@loutrejs/bullmq": ["./packages/bullmq/src/index.ts"],
       "@loutrejs/cli": ["./packages/cli/src/index.ts"],
-      "@loutrejs/loutre/http/openapi": ["./packages/loutre/src/http/openapi.ts"]
+      "@loutrejs/loutre/http/openapi": [
+        "./packages/loutre/src/http/openapi.ts"
+      ],
+      "@loutrejs/graphql": ["./packages/graphql/src/index.ts"],
+      "@loutrejs/graphql/data": ["./packages/graphql/src/data.ts"],
+      "@loutrejs/graphql/runtime": ["./packages/graphql/src/runtime.ts"]
     },
     "types": ["node", "vitest/globals"]
   },

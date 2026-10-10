@@ -41,6 +41,9 @@ export default defineConfig({
       ),
       '@loutrejs/loutre/http': resolve('packages/loutre/src/http/index.ts'),
       '@loutrejs/loutre': resolve('packages/loutre/src/index.ts'),
+      '@loutrejs/graphql/data': resolve('packages/graphql/src/data.ts'),
+      '@loutrejs/graphql/runtime': resolve('packages/graphql/src/runtime.ts'),
+      '@loutrejs/graphql': resolve('packages/graphql/src/index.ts'),
       '@loutrejs/node': resolve('packages/node/src/index.ts'),
       '@loutrejs/bullmq': resolve('packages/bullmq/src/index.ts'),
       '@loutrejs/cli': resolve('packages/cli/src/index.ts'),
@@ -48,6 +51,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    server: { deps: { inline: ['graphql', 'graphql-http', 'graphql-ws'] } },
     include: ['tests/**/*.test.ts', 'website/tests/**/*.test.ts'],
   },
 })

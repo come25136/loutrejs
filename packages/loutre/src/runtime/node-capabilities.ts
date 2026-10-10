@@ -5,6 +5,7 @@ export const nodeRuntimeSupport = {
   runtime: 'node',
   capabilities: new Set([
     'http.server',
+    'websocket.server',
     'http.request.streaming',
     'http.response.streaming',
     'stream.readable',

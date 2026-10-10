@@ -8,7 +8,8 @@
       "@loutrejs/node",
       "@loutrejs/bullmq",
       "@loutrejs/cli",
-      "create-loutre"
+      "create-loutre",
+      "@loutrejs/graphql"
     ]
   ],
   "linked": [],

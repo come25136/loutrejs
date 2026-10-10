@@ -28,5 +28,8 @@
     "type": "git",
     "url": "https://github.com/come25136/loutrejs",
     "directory": "packages/node"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
   }
 }

@@ -1,13 +1,15 @@
+import { createDenoWebSocketDriver } from './websocket-native.js'
+import {
+  serverTransportBindings,
+  dispatchServerRequest,
+} from './server-transports.js'
 import {
   createKernelApplication,
   type ApplicationDefinition,
   type BootstrapArguments,
   type KernelHostedApplication,
-  type RequireApplicationExtension,
 } from '../application/index.js'
 import type { RuntimeCapabilityBinding } from '../core/index.js'
-import { bindApplicationCapability } from '../application/kernel-internal.js'
-import { httpExecutionExtension } from '../http/index.js'
 import { LOUTRE_VERSION, startStartupPresentation } from '../presentation.js'
 import { assertRuntimeEngine } from '../runtime/engine.js'
 import { serverUrl } from '../runtime/server-url.js'
@@ -16,13 +18,10 @@ import {
   initialServerPort,
 } from '../runtime/server-port.js'
 
-type HttpApplication<TDefinition extends ApplicationDefinition> =
-  RequireApplicationExtension<TDefinition, typeof httpExecutionExtension>
-
 type DenoServer = { shutdown(): Promise<void> }
 
 export type DenoRuntimeOptions<TDefinition extends ApplicationDefinition> = {
-  readonly application: HttpApplication<TDefinition>
+  readonly application: TDefinition
   readonly environment?: unknown
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
   readonly forceShutdownTimeoutMs?: number
@@ -56,6 +55,7 @@ export const denoRuntime = {
   runtime: 'deno',
   capabilities: new Set([
     'http.server',
+    'websocket.server',
     'http.request.streaming',
     'http.response.streaming',
     'stream.readable',
@@ -73,21 +73,16 @@ function bind<const TDefinition extends ApplicationDefinition>(
   options: DenoRuntimeOptions<TDefinition>,
 ): DenoBinding {
   assertRuntimeEngine('deno')
-  if (
-    options.application.model.extensions.get(httpExecutionExtension) ===
-    undefined
-  ) {
-    throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: denoRuntime.bind() requires the HTTP Execution Extension.',
-    )
-  }
+
   const application = createKernelApplication<TDefinition>({
     ...options,
     application: options.application,
     capabilities: [
-      bindApplicationCapability(options.application.model, 'http.server', {
-        runtime: 'deno',
-      }),
+      ...serverTransportBindings(
+        options.application.model,
+        'deno',
+        createDenoWebSocketDriver(),
+      ),
       ...(options.capabilities ?? []),
     ],
     environment:
@@ -98,9 +93,7 @@ function bind<const TDefinition extends ApplicationDefinition>(
     async fetch(request) {
       initialization ??= application.init()
       await initialization
-      return (
-        application as unknown as { readonly http: DenoHttpRequestHandler }
-      ).http.fetch(request)
+      return dispatchServerRequest(application, request)
     },
     close: (signal) => application.close(signal),
   }
@@ -124,22 +117,15 @@ async function create<const TDefinition extends ApplicationDefinition>(
     },
   )
 
-  if (
-    options.application.model.extensions.get(httpExecutionExtension) ===
-    undefined
-  ) {
-    throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: denoRuntime.create() requires the HTTP Execution Extension.',
-    )
-  }
-
   const hosted = createKernelApplication<TDefinition>({
     ...options,
     application: options.application,
     capabilities: [
-      bindApplicationCapability(options.application.model, 'http.server', {
-        runtime: 'deno',
-      }),
+      ...serverTransportBindings(
+        options.application.model,
+        'deno',
+        createDenoWebSocketDriver(),
+      ),
       ...(options.capabilities ?? []),
     ],
     environment:
@@ -147,8 +133,6 @@ async function create<const TDefinition extends ApplicationDefinition>(
   })
   await hosted.init()
   const application = hosted as DenoRuntimeApplication<TDefinition>
-  const http = (hosted as unknown as { readonly http: DenoHttpRequestHandler })
-    .http
 
   const closeApplication = application.close.bind(application)
   let server: DenoServer | undefined
@@ -239,7 +223,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
                 : { hostname: serveOptions.hostname }),
               onListen: () => undefined,
             },
-            createDenoFetchDriver(http),
+            (request) => dispatchServerRequest(hosted, request),
           )
           break
         } catch (error) {
@@ -297,20 +281,6 @@ function registerDenoShutdownHooks(
     deno.addSignalListener(signal, handler)
   }
   return remove
-}
-
-interface DenoHttpRequestHandler {
-  initialize?(): Promise<void>
-  fetch(request: Request): Promise<Response>
-}
-
-function createDenoFetchDriver(application: DenoHttpRequestHandler) {
-  let initialization: Promise<void> | undefined
-  return async (request: Request): Promise<Response> => {
-    initialization ??= application.initialize?.() ?? Promise.resolve()
-    await initialization
-    return application.fetch(request)
-  }
 }
 
 function denoEnvironment(): unknown {

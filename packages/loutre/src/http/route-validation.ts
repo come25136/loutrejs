@@ -21,7 +21,14 @@ export function findHttpRouteConflicts<TRoute extends HttpRouteDescriptor>(
       route.method,
       parseHttpPath(route.path),
     )
-    const existing = dispatches.get(dispatch)
+    const existing =
+      dispatches.get(dispatch) ??
+      [...dispatches.values()].find(
+        (candidate) =>
+          (route.method === '*' || candidate.method === '*') &&
+          createHttpDispatchKey('*', parseHttpPath(candidate.path)) ===
+            createHttpDispatchKey('*', parseHttpPath(route.path)),
+      )
     if (existing) {
       conflicts.push({ existing, route })
       continue

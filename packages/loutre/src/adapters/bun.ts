@@ -1,13 +1,18 @@
 import {
+  createBunWebSocketDriver,
+  type BunUpgradeServer,
+} from './websocket-native.js'
+import {
+  serverTransportBindings,
+  dispatchServerRequest,
+} from './server-transports.js'
+import {
   createKernelApplication,
   type ApplicationDefinition,
   type BootstrapArguments,
   type KernelHostedApplication,
-  type RequireApplicationExtension,
 } from '../application/index.js'
 import type { RuntimeCapabilityBinding } from '../core/index.js'
-import { bindApplicationCapability } from '../application/kernel-internal.js'
-import { httpExecutionExtension } from '../http/index.js'
 import {
   LOUTRE_VERSION,
   detectPresentationTerminal,
@@ -20,15 +25,13 @@ import {
   initialServerPort,
 } from '../runtime/server-port.js'
 
-type HttpApplication<TDefinition extends ApplicationDefinition> =
-  RequireApplicationExtension<TDefinition, typeof httpExecutionExtension>
-
 type BunServer = {
   stop(closeActiveConnections?: boolean): void | Promise<void>
+  unref?(): void
 }
 
 export type BunCreateOptions<TDefinition extends ApplicationDefinition> = {
-  readonly application: HttpApplication<TDefinition>
+  readonly application: TDefinition
   readonly environment?: unknown
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
   readonly forceShutdownTimeoutMs?: number
@@ -54,6 +57,7 @@ export const bunRuntime = {
   runtime: 'bun',
   capabilities: new Set([
     'http.server',
+    'websocket.server',
     'http.request.streaming',
     'http.response.streaming',
     'stream.readable',
@@ -81,30 +85,22 @@ async function create<const TDefinition extends ApplicationDefinition>(
     },
   )
 
-  if (
-    options.application.model.extensions.get(httpExecutionExtension) ===
-    undefined
-  ) {
-    throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: bunRuntime.create() requires the HTTP Execution Extension.',
-    )
-  }
-
+  const websocketDriver = createBunWebSocketDriver()
   const hosted = createKernelApplication<TDefinition>({
     ...options,
     application: options.application,
     capabilities: [
-      bindApplicationCapability(options.application.model, 'http.server', {
-        runtime: 'bun',
-      }),
+      ...serverTransportBindings(
+        options.application.model,
+        'bun',
+        websocketDriver.driver,
+      ),
       ...(options.capabilities ?? []),
     ],
     environment: 'environment' in options ? options.environment : environment,
   })
   await hosted.init()
   const application = hosted as BunRuntimeApplication<TDefinition>
-  const http = (hosted as unknown as { readonly http: BunHttpRequestHandler })
-    .http
 
   const closeApplication = application.close.bind(application)
   let server: BunServer | undefined
@@ -121,18 +117,37 @@ async function create<const TDefinition extends ApplicationDefinition>(
       removeShutdownHooks?.()
       removeShutdownHooks = undefined
       const errors: unknown[] = []
-      if (server) {
-        try {
-          await server.stop(true)
-          server = undefined
-        } catch (error) {
-          errors.push(error)
-        }
-      }
       try {
         await closeApplication(signal)
       } catch (error) {
         errors.push(error)
+      }
+      if (server && errors.length === 0) {
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+          // Bun 1.3のserver側WebSocket close後はstopが未完了になるため、Kernel drain後も無期限には待たない。
+          // https://github.com/oven-sh/bun/issues/36223
+          await Promise.race([
+            Promise.resolve(server.stop(false)),
+            new Promise<void>((resolve, reject) => {
+              timer = setTimeout(() => {
+                try {
+                  const forced = server!.stop(true)
+                  server!.unref?.()
+                  void Promise.resolve(forced).then(resolve, reject)
+                  resolve()
+                } catch (error) {
+                  reject(error)
+                }
+              }, options.forceShutdownTimeoutMs ?? 5_000)
+            }),
+          ])
+          server = undefined
+        } catch (error) {
+          errors.push(error)
+        } finally {
+          clearTimeout(timer)
+        }
       }
       if (errors.length > 0) {
         throw new AggregateError(errors, 'Bun runtime shutdown failed')
@@ -172,7 +187,14 @@ async function create<const TDefinition extends ApplicationDefinition>(
             ...(serveOptions.hostname === undefined
               ? {}
               : { hostname: serveOptions.hostname }),
-            fetch: createBunFetchDriver(http),
+            fetch: (request, upgradeServer) =>
+              websocketDriver.fetch(
+                hosted,
+                request,
+                upgradeServer,
+                dispatchServerRequest,
+              ),
+            websocket: websocketDriver.websocket,
           })
           break
         } catch (error) {
@@ -223,20 +245,6 @@ function registerBunShutdownHooks(
   return remove
 }
 
-interface BunHttpRequestHandler {
-  initialize?(): Promise<void>
-  fetch(request: Request): Promise<Response>
-}
-
-function createBunFetchDriver(application: BunHttpRequestHandler) {
-  let initialization: Promise<void> | undefined
-  return async (request: Request): Promise<Response> => {
-    initialization ??= application.initialize?.() ?? Promise.resolve()
-    await initialization
-    return application.fetch(request)
-  }
-}
-
 function bunGlobal():
   | {
       env?: Record<string, string | undefined>
@@ -244,7 +252,11 @@ function bunGlobal():
       serve(options: {
         port: number
         hostname?: string
-        fetch(request: Request): Response | Promise<Response>
+        fetch(
+          request: Request,
+          server: BunUpgradeServer,
+        ): Response | undefined | Promise<Response | undefined>
+        websocket: ReturnType<typeof createBunWebSocketDriver>['websocket']
       }): { stop(closeActiveConnections?: boolean): void | Promise<void> }
     }
   | undefined {
@@ -255,7 +267,11 @@ function bunGlobal():
         serve(options: {
           port: number
           hostname?: string
-          fetch(request: Request): Response | Promise<Response>
+          fetch(
+            request: Request,
+            server: BunUpgradeServer,
+          ): Response | undefined | Promise<Response | undefined>
+          websocket: ReturnType<typeof createBunWebSocketDriver>['websocket']
         }): { stop(closeActiveConnections?: boolean): void | Promise<void> }
       }
     | undefined

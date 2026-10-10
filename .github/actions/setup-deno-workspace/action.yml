@@ -20,7 +20,9 @@ runs:
       shell: bash
       # Deno 2.9.5 は有効な package-lock.json の変換に失敗するため、npm lockfile は読み込ませない。
       # Security Dependabot PR は脆弱性修正を優先し、公開後7日の待機を解除する。
+      # runtime / initializer検証ではwebsiteをbuildせず、その依存の再解決を避ける。
       run: |
+        deno eval 'const path = "package.json"; const manifest = JSON.parse(Deno.readTextFileSync(path)); manifest.workspaces = manifest.workspaces.filter((workspace) => workspace !== "website"); Deno.writeTextFileSync(path, JSON.stringify(manifest, null, 2) + "\n")'
         if test "${SECURITY_DEPENDABOT_PR:-false}" = 'true'; then
           deno install --no-lock --minimum-dependency-age 0
         else

@@ -1,0 +1,22 @@
+query Snapshot {
+  counter {
+    value
+    step {
+      amount
+    }
+  }
+  activeSubscriptions
+}
+mutation Add($amount: Int!) {
+  increment(amount: $amount) {
+    value
+  }
+}
+subscription Watch {
+  counterChanged {
+    value
+    step {
+      amount
+    }
+  }
+}

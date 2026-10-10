@@ -1,0 +1,42 @@
+{
+  "name": "@loutrejs/graphql",
+  "version": "0.7.0",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./data": {
+      "types": "./dist/data.d.ts",
+      "import": "./dist/data.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    }
+  },
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "peerDependencies": {
+    "@loutrejs/loutre": "^0.7.0",
+    "graphql": "^16.11.0 || ^17.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/come25136/loutrejs",
+    "directory": "packages/graphql"
+  },
+  "dependencies": {
+    "graphql-http": "^1.23.1",
+    "graphql-ws": "^6.3.0"
+  }
+}
