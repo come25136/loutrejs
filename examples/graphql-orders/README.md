@@ -1,6 +1,6 @@
 # GraphQL Orders Example
 
-生成Runtime ManifestとTyped Field Builderで、架空のECの注文一覧を提供するNode.js serverです。メモリ内のdomainを使い、保存方式を前提にしません。
+手書きBindingと生成Typed Field Builderで、架空のECの注文一覧を提供するNode.js serverです。メモリ内のdomainを使い、保存方式を前提にしません。
 
 ## 起動
 
@@ -34,7 +34,7 @@ strategyをEAGER / LAZY / HYBRIDへ変えて比較できます。別Queryの`{ p
 - [src/domain/commerce.ts](./src/domain/commerce.ts): ページング、先読み、Tenant / Revisionを含む複合キーでの取得。
 - [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): Generic Type引数なしのsource / field、requires、Authorization。
 - [src/app.ts](./src/app.ts): manifestとDIの接続。
-- [operations/orders.graphql](./operations/orders.graphql): TypedDocumentNodeへ生成するOperation。
+- [src/graphql/manifest.ts](./src/graphql/manifest.ts): 生成Schemaと手書きResolverのBinding。
 
 GraphQLが公開しないproductId / tenant / revisionをOrderItemのdomainに持ちます。loadはParent順へ値を対応させ、同じ商品IDでもTenant / Revisionを混ぜません。authorizeは先読み値のreuseにも適用します。
 

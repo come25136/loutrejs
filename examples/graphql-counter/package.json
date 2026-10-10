@@ -15,7 +15,6 @@
     "generate:check": "loutre graphql generate --config graphql.config.ts --check"
   },
   "dependencies": {
-    "@graphql-typed-document-node/core": "^3.2.0",
     "@loutrejs/graphql": "0.7.0",
     "@loutrejs/loutre": "0.7.0",
     "@loutrejs/node": "0.7.0",

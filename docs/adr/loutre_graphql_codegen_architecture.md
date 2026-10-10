@@ -9,7 +9,7 @@
 
 ## 1. Context
 
-GraphQL SDLからResolver型をCodegenしても、実行時のSchemaとResolver bindingを別途組み立てる設計では、**CodegenとRuntime Schema構築で二重の入口**が存在する。また、GraphQLでネストしたデータを取得すると、次の3方式が混在する。
+GraphQL SDLからResolver型だけをCodegenすると、Runtimeへ同じSDLを読み込む定型処理が残る。Static SchemaもCLIから生成し、生成物と人間が実装するResolverの接続をApplicationで明示する。また、GraphQLでネストしたデータを取得すると、次の3方式が混在する。
 
 1. 親Resolverが内部キーを返し、子Resolverが関連データを取得する。
 2. 親ResolverがJOINや先読みで子の値まで返す。
@@ -17,13 +17,13 @@ GraphQL SDLからResolver型をCodegenしても、実行時のSchemaとResolver 
 
 現行PR #112のように、SDL/Codegenと実行時Schema、手書きDataLoaderを別々に管理すると、整合性確認と定型実装が増える。
 
-本ADRでは、**CLIによるGraphQLコンパイルを唯一の正規入口**とし、型定義と実行用Runtime Manifestを同じ入力から生成する。ManifestがSchema・Resolver・Data Resolutionの接続点になる。複雑な業務検索やSQL戦略そのものはアプリケーションに残す。
+本ADRでは、**CLIによるGraphQLコンパイルを唯一の正規入口**とし、型定義・Static Schema・Typed Field Builderを同じ入力から生成する。利用者が`bindManifest({ schemaDocument, resolvers })`を書き、ManifestをSchema・Resolver・Data Resolutionの接続点にする。複雑な業務検索やSQL戦略そのものはアプリケーションに残す。
 
 代表例には架空のECサイトの注文一覧クエリを使用する。実在するアプリケーションやプロダクト固有のSchemaには依存しない。
 
 ## 2. Decision
 
-### 2.1 CLI-generated Runtime Manifest
+### 2.1 CLI-generated SchemaとApplication-owned Binding
 
 **`graphql.schema()`および`data.prepare()`は採用しない。** また、アプリ開発者に`makeExecutableSchema()`を呼ばせない。
 
@@ -34,12 +34,12 @@ schema.graphql ─────────────┐
 config（paths, mappers）────┤             │
 client operations ──────────┘             ├── generated/types.ts
                                           ├── generated/schema-ast.ts
-                                          ├── generated/manifest.ts
+                                          ├── generated/data.ts
                                           └── generated/client.ts （必要な場合）
 
                          Runtime Initialization / Workers Cold Start
 resolvers.ts ──────┐
-                   ├── generated/manifest.ts
+                   ├── Applicationのmanifest.ts
 schema-ast.ts ─────┘       │
                            ▼
                bindManifest()（1回）
@@ -57,8 +57,8 @@ schema-ast.ts ─────┘       │
                 Demand Analysis / Batch Execution
 ```
 
-- **型の生成**と**Runtime Manifestの生成**は同じCLI呼び出し、同じSDLを基準に行う。
-- 生成物は**型だけでなく、Runtimeに必要なStatic Schema情報とResolver Bindingコード**を含む。
+- **型の生成**と**Static Schemaの生成**は同じCLI呼び出し、同じSDLを基準に行う。
+- 生成物は**型だけでなく、Runtimeに必要なStatic Schema情報とTyped Field Builder**を含む。
 - GraphQLSchemaはRuntime Initialization時に1回構築する。GraphQL.jsの`GraphQLSchema`インスタンス、Resolver関数、DI済みContextはJSONへ完全にserializeできないため、**Runtime Initializationが不要になるとは約束しない**。
 - RequestごとにSDLのparse、Schema構築、Resolver定義のグローバル再走査を行わない。
 - SQL/ORMのJOINや取得戦略はアプリケーションのRepositoryが選ぶ。
@@ -67,11 +67,11 @@ schema-ast.ts ─────┘       │
 
 ### 2.2 Public API
 
-正規の実行入口は生成Manifestだけにする。
+正規の実行入口は`bindManifest()`が返すOpaque Manifestにする。
 
 ```ts
 import { graphql } from '@loutrejs/graphql'
-import { manifest } from './graphql/generated/manifest.js'
+import { manifest } from './graphql/manifest.js'
 
 graphql.endpoint({
   name: 'CommerceApi',
@@ -99,19 +99,19 @@ graphql.endpoint({
 src/graphql/
 ├── schema.graphql               # 人間が保守する公開SDL
 ├── resolvers.ts                 # 人間が実装する関数
+├── manifest.ts                  # 人間がschemaDocumentとresolversをbindManifestで接続
 ├── graphql.config.ts            # CLI設定（SDL/operations/mapper/output等）
 └── generated/                  # すべてCLI出力、手編集しない
     ├── types.ts                # Resolver型、SchemaFields、Domain/Context型。value importなし
     ├── data.ts                 # Field Builderの型付きFactory。Resolver/Manifestをimportしない
     ├── schema-ast.ts           # locを除去した静的GraphQL Document AST
-    ├── manifest.ts             # Resolverのruntime import・binding・manifest export
     └── client.ts               # client targetが指定された場合
 ```
 
 開発者は通常`manifest.ts`からmanifestをimportする。`resolvers.ts`は**`generated/data.ts`の`createData()`をvalue import**し、`generated/types.ts`の`Resolvers`を`import type`する。`data.ts`は`types.ts`をtype-only importし、Resolver/Manifestの値をimportしない。
 
 ```text
-generated/manifest.ts ───────► resolvers.ts
+manifest.ts ───────► resolvers.ts
           │                          │
           │                          ├──(value)──► generated/data.ts
           │                          │                  │
@@ -120,13 +120,13 @@ generated/manifest.ts ───────► resolvers.ts
           └──────────► generated/schema-ast.ts
 ```
 
-これにより、生成ManifestがResolverを実行時importしても、ResolverがManifestの実行時値を参照する循環を避けられる。
+生成ModuleはApplicationのResolverをimportしない。ApplicationのManifest Moduleが接続先を選び、ResolverからManifestを逆importしないことで循環を避ける。
 
 - `types.ts`にManifestのvalue importやResolverのvalue importを含めない。`data.ts`にもResolver/Manifestのvalue importを含めない。
 - Field Builderは型とField Identityを保持する。`generated/data.ts`をimportするだけではGraphQLSchemaの生成やアプリのResolver Module importを開始しない。
 - `createData()`はSchema固有のField Builderだけを構築し、Execution ScopeやBatch Queueは生成しない。
 - `resolvers.ts`が`manifest.ts`から値をimportすることはサポート対象外とする（起動時に検出できるケースはエラー）。
-- 開発者は生成ディレクトリを手編集しない。生成ファイルへ `// @generated` と入力の指紋を付ける。
+- 開発者は生成ディレクトリを手編集しない。生成ファイルへ `// @generated` とfingerprintを付ける。
 - CLI 1回で複数のGenerated Filesを出力してよい。**「型込み」は同一生成処理・同一Schema入力を意味し、必ず1ファイルに詰める意味ではない。**
 
 ## 3. Build-time / Runtime Responsibility Boundaries
@@ -139,7 +139,7 @@ generated/manifest.ts ───────► resolvers.ts
 2. Custom Scalar、Input/Output型、Domain Mapper、Resolver型、`SchemaFields`（Fieldごとの`Parent` / `Args` / `Result` / `Context`）を生成する。
 3. `SchemaFields`にBindingされたSchema-specific Typed Field Builderを`generated/data.ts`へ生成する。
 4. `GraphQLSchema`を組み立てるための**Static Blueprint**（事前生成したAST・Type/Field情報）を生成する。
-5. Resolver ModuleのimportパスとBindingコードを生成する。
+5. 生成ModuleへApplicationのimportやBindingコードを含めない。
 6. Client TargetがあればTypedDocumentNode/Variables/Result型を生成する。
 7. 入力変更による生成差分を確定的に出力する（決定的な並び・ハッシュ・原子的ファイル更新）。
 
@@ -152,33 +152,30 @@ generated/manifest.ts ───────► resolvers.ts
 | SDLの型、引数、nullability、directive定義                                             | CLI生成時                 |
 | Fieldごとの`Parent` / `Args` / `Result` / `Context`型とTyped Field Builder            | CLI生成時                 |
 | 名前付きOperation / Fragment / client output型                                        | CLI生成時                 |
-| SchemaのField名とResolver Module import先                                             | CLI生成時                 |
+| SchemaのField名                                                                       | CLI生成時                 |
 | Resolver関数の実体、`data.field()`の`requires`、`read`、`load`、Authorization Wrapper | **Runtime Binding**       |
 | GraphQL Operationの実際のVariables / Selections                                       | **Operation Execution時** |
 | 取得済み値、Batch Queue、snapshot、Abort                                              | **Field Execution時**     |
 
 ### 3.2 Runtime Binding（アプリ起動時に1回）
 
-生成された`manifest.ts`は、**起動時にResolver Moduleをimportし、Data Resolver MetadataをSchemaのFieldへBindingする**。実装は`@loutrejs/graphql/runtime`等の非公開内部関数へ委譲する。
+Applicationの`manifest.ts`は、**起動時に生成SchemaとResolver Moduleをimportし、`bindManifest()`でData Resolver MetadataをSchemaのFieldへBindingする**。`bindManifest`は`@loutrejs/graphql/runtime`のPublic APIとする。CLI設定にResolver Moduleのpathは要求しない。
 
-概念的な生成物:
+Applicationで記述するBinding:
 
 ```ts
-// generated/manifest.ts — CLIが出力。手編集禁止。
+// manifest.ts — Applicationが保守する。
 import { bindManifest } from '@loutrejs/graphql/runtime'
-import { schemaDocument } from './schema-ast.js'
-import { resolvers } from '../resolvers.js'
-
-export type * from './types.js'
+import { schemaDocument } from './generated/schema-ast.js'
+import { resolvers } from './resolvers.js'
 
 export const manifest = bindManifest({
   schemaDocument,
   resolvers,
-  // 型/フィールドなどのコンパイル済み静的メタデータを含む
 })
 ```
 
-これは概念API。`schemaDocument`はSDL文字列ではなくCLIでparse済みのASTを静的モジュールとして生成する。Runtime Bindingで`buildASTSchema()`相当の処理とResolver Bindingを行う。**TypeScriptの型を実行時に反射する仕組みは導入しない。**
+生成schemaDocumentはContextの型を持ち、bindManifestからendpointまで型を引き継ぐ。`schemaDocument`はSDL文字列ではなくCLIでparse済みのASTを静的モジュールとして生成する。Runtime Bindingで`buildASTSchema()`相当の処理とResolver Bindingを行う。**TypeScriptの型を実行時に反射する仕組みは導入しない。**
 
 Runtime Bindは次を検証する。
 
@@ -282,7 +279,6 @@ export const resolvers = {
 // graphql.config.ts — Config APIは概念例
 export default {
   schema: './schema.graphql',
-  resolvers: './resolvers.ts',
   contextType: '../app-context.ts#AppContext',
   mappers: {
     OrderConnection: '../domain/order.ts#OrderConnectionDomain',
@@ -363,7 +359,7 @@ type SchemaData<Fields> = {
 - Non-null Fieldの`load()`は`null`を返せない。Nullable Fieldだけ`R | null`を許可。Runtimeデータは別途検証する。
 - `read`の`loaded(value)`のValueと`.source()`のreturn valueも生成された`Result`型で制約する。
 - 既存のStandard Resolver/Default Resolverとの混在を許可する。Runtime Binding時のMetadata登録は生成Field Identityにひもづける。
-- `generated/data.ts`はSchemaとConfigを再生成すると更新される。アプリケーションから`generated/manifest.ts`のvalueを逆importしてはいけない。
+- `generated/data.ts`はSchemaとConfigを再生成すると更新される。アプリケーションから`manifest.ts`のvalueを逆importしてはいけない。
 - Domain Mapper、Custom ScalarのInput/Output型、SDL nullability、GraphQLのListとElement nullabilityはSchemaFieldsの生成時に考慮する。
 
 ## 5. Read-through Field Resolution
@@ -605,10 +601,10 @@ loutre graphql generate --config graphql.config.ts --check
 loutre graphql generate --config graphql.config.ts --watch
 ```
 
-- `server` targetは`types.ts`＋`data.ts`＋`schema-ast.ts`＋`manifest.ts`を**整合した1世代として**生成する。`client` targetが指定された場合はOperation/Fragmentの型とdocumentを追加生成する。
+- `server` targetは`types.ts`＋`data.ts`＋`schema-ast.ts`を**整合した1世代として**生成する。`client` targetが指定された場合はOperation/Fragmentの型とdocumentを追加生成する。
 - CLIの設定でSDL paths、Resolver Module path、`contextType`、Domain Mapper、Custom Scalar、Operation paths、出力先を宣言する。
-- CLIによる生成はdeterministic。入力指紋を生成物へ記録し、`--check`で生成済み内容との差分を検出する。
-- 生成に失敗した場合は、`types.ts`だけ新しい／`data.ts`や`manifest.ts`だけ古い状態を作らない。temp出力→全ファイル検証→原子的更新を基本にする。
+- CLIによる生成はdeterministic。fingerprintを生成物のheaderへ記録する。これは生成入力の識別用で、Runtimeの検証には使わない。`--check`は生成済み内容全体との差分を検出する。
+- 生成に失敗した場合は、`types.ts`だけ新しい／`data.ts`や`schema-ast.ts`だけ古い状態を作らない。temp出力→全ファイル検証→原子的更新を基本にする。
 - `--watch`は入力の変更を監視して正しい世代へ更新し、直前の正常出力を保護する。Resolver実装コードの変更がMetadataに影響するときはアプリのHMRまたは再起動時に再Bindingする。
 - SDLのunknown type、operation/fragmentの不正、scalar mapper不足は生成時エラー。
 - Runtime Bindingで初めて判明するResolver Metadata不整合は**起動時エラー**。CLIが任意のTypeScript関数の意味を理解できると仮定しない。
@@ -638,7 +634,7 @@ loutre graphql generate --config graphql.config.ts --watch
 
 ## 12. Implementation Order（PR #112）
 
-1. **CLI / Manifest形式:** `types.ts`・`data.ts`・`schema-ast.ts`・`manifest.ts`の同一世代生成、config/API、生成の原子性・`--check`・watch。
+1. **CLI / Manifest形式:** `types.ts`・`data.ts`・`schema-ast.ts`の同一世代生成、config/API、生成の原子性・`--check`・watch。
 2. **Typed Field Builder:** `SchemaFields`、`createSchemaData`、Field/SourceのType Inference、Domain Mapper/Context/Custom Scalar/nullableのType Test。
 3. **Runtime Binding:** ManifestからGraphQLSchemaを1回構築し、Standard Resolver / Data Resolverを結合・検証。`graphql.endpoint({ manifest })`を正式入口にする。value import循環を防ぐ。
 4. **Read-through / Batch:** `read`、`requires`、`load`、引数の自動正規化、Execution ScopeによるBatchの分離・中断・Authorization。
@@ -652,7 +648,7 @@ loutre graphql generate --config graphql.config.ts --watch
 
 | ID  | 条件                                | 合格基準                                                                                                                   |
 | --- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| M01 | 生成CLI                             | `generate`が`types.ts`・`data.ts`・Static Schema・manifestの整合した世代を生成                                             |
+| M01 | 生成CLI                             | `generate`が`types.ts`・`data.ts`・Static Schemaの整合した世代を生成                                                       |
 | M02 | 正規Runtime入口                     | `graphql.endpoint({ manifest })`でHTTP/WSを提供し、`graphql.schema()`を要求しない                                          |
 | M03 | Circular Import                     | `manifest → resolvers → generated/data`のvalue importと`generated/types`へのtype-only importでESM初期化時の循環障害がない  |
 | M07 | Type Inference                      | `d.OrderItem.product.field`と`d.Query.orders.source`で`Parent` / `Args` / `Result` / `Context`をGeneric Type指定なしで推論 |
@@ -688,16 +684,16 @@ loutre graphql generate --config graphql.config.ts --watch
 
 PoCではGenerated Types相当の`SchemaFields`、TypeScriptのmapped/conditional typeによる`FieldBuilder`、`createSchemaData()`、Generated Data Module、`Resolvers`型、Generated Manifest Moduleを用意した。**本PoCはBuilder Type InferenceとESM Importの検証用Stub**であり、Loutreの本番Data Resolution、GraphQL.js Execution、Batch Schedulerを実装したものではない。
 
-| 検証                                                                   | 結果                                                                    |
-| ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `.field()`で`Parent`/`Args`/`Result`/`Context`を自動推論               | PASS（TypeScript Compiler）                                             |
-| `.source()`でcoerced Args / Context / Resultを自動推論                 | PASS（TypeScript Compiler）                                             |
-| `satisfies Resolvers`へ両Builderの返却関数を代入                       | PASS（TypeScript Compiler）                                             |
-| `requires`の誤字・Schemaに存在しないType/Field                         | PASS（`@ts-expect-error`を伴うNegative Type Test）                      |
-| Non-null Fieldへ`null`、誤ったResult、誤った`read` Value               | PASS（Negative Type Test）                                              |
-| Nullable Fieldの`null` Result                                          | PASS（TypeScript Compiler / Runtime Stub）                              |
-| `generated/manifest.ts → resolvers.ts → generated/data.ts`のESM import | PASS（Node.js Smoke Test）                                              |
-| Preloaded Value reuse / Missing Value loadのStub分岐                   | PASS（Node.js Smoke Test。Preloaded時Catalog呼び出し0回、Missing時1回） |
+| 検証                                                         | 結果                                                                    |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `.field()`で`Parent`/`Args`/`Result`/`Context`を自動推論     | PASS（TypeScript Compiler）                                             |
+| `.source()`でcoerced Args / Context / Resultを自動推論       | PASS（TypeScript Compiler）                                             |
+| `satisfies Resolvers`へ両Builderの返却関数を代入             | PASS（TypeScript Compiler）                                             |
+| `requires`の誤字・Schemaに存在しないType/Field               | PASS（`@ts-expect-error`を伴うNegative Type Test）                      |
+| Non-null Fieldへ`null`、誤ったResult、誤った`read` Value     | PASS（Negative Type Test）                                              |
+| Nullable Fieldの`null` Result                                | PASS（TypeScript Compiler / Runtime Stub）                              |
+| `manifest.ts → resolvers.ts → generated/data.ts`のESM import | PASS（Node.js Smoke Test）                                              |
+| Preloaded Value reuse / Missing Value loadのStub分岐         | PASS（Node.js Smoke Test。Preloaded時Catalog呼び出し0回、Missing時1回） |
 
 `@ts-expect-error`をすべて残した状態で`tsc --project tsconfig.json --pretty false`（`strict` / `noEmit` / `exactOptionalPropertyTypes`設定）がExit Code 0となり、誤ったコードへのExpected Diagnosticが検証された。Node.jsで生成相当のManifestをimportし、Eager/LazyのResolverが実行できた。
 
@@ -708,7 +704,7 @@ PoCではGenerated Types相当の`SchemaFields`、TypeScriptのmapped/conditiona
 ### Benefits
 
 - **SDLを唯一のSchema情報源**にし、型とRuntime Manifestを同時生成できる。
-- `graphql.schema()`なしで、生成ManifestをRuntimeの正式な引数にできる。
+- `graphql.schema()`なしで、Binding済みManifestをRuntimeの正式な引数にできる。
 - Resolverの動的Metadataは起動時の1回のbindingへ集約できる。
 - 生成されたSchema-specific Typed Field Builderで`Parent` / `Args` / `Result` / `Context`のGeneric Type指定を不要にできる。
 - Eager / Lazy / Batchを同じGraphQL Field Definitionで扱える。

@@ -1,7 +1,7 @@
 import { graphql } from '@loutrejs/graphql'
 import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
 import { CommerceService } from './domain/commerce.js'
-import { manifest } from './generated/manifest.js'
+import { manifest } from './graphql/manifest.js'
 export const OrdersModule = defineModule(
   ({ path }: { readonly path: string }) => ({
     providers: [CommerceService],

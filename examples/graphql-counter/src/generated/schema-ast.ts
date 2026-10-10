@@ -1,45 +1,47 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// 入力指紋: afedce8c88d098bf929f905c1cde61aa5d8a5575d70deba73c161afc82969154
-import type { DocumentNode } from 'graphql'
-export const schemaDocument = {
-  kind: 'Document',
+// fingerprint: ec21de3ef8c94c1ebc2ef45a5a0f20a9f959c83d377081109ac89fcebce60e9a
+import { Kind } from 'graphql'
+import type { GraphQLSchemaDocument } from '@loutrejs/graphql/runtime'
+import type { SchemaContext } from './types.js'
+export const schemaDocument: GraphQLSchemaDocument<SchemaContext> = {
+  kind: Kind.DOCUMENT,
   definitions: [
     {
-      kind: 'ObjectTypeDefinition',
+      kind: Kind.OBJECT_TYPE_DEFINITION,
       name: {
-        kind: 'Name',
+        kind: Kind.NAME,
         value: 'Counter',
       },
       fields: [
         {
-          kind: 'FieldDefinition',
+          kind: Kind.FIELD_DEFINITION,
           name: {
-            kind: 'Name',
+            kind: Kind.NAME,
             value: 'value',
           },
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'Int',
               },
             },
           },
         },
         {
-          kind: 'FieldDefinition',
+          kind: Kind.FIELD_DEFINITION,
           name: {
-            kind: 'Name',
+            kind: Kind.NAME,
             value: 'step',
           },
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'Step',
               },
             },
@@ -48,41 +50,41 @@ export const schemaDocument = {
       ],
     },
     {
-      kind: 'ObjectTypeDefinition',
+      kind: Kind.OBJECT_TYPE_DEFINITION,
       name: {
-        kind: 'Name',
+        kind: Kind.NAME,
         value: 'Step',
       },
       fields: [
         {
-          kind: 'FieldDefinition',
+          kind: Kind.FIELD_DEFINITION,
           name: {
-            kind: 'Name',
+            kind: Kind.NAME,
             value: 'id',
           },
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'ID',
               },
             },
           },
         },
         {
-          kind: 'FieldDefinition',
+          kind: Kind.FIELD_DEFINITION,
           name: {
-            kind: 'Name',
+            kind: Kind.NAME,
             value: 'amount',
           },
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'Int',
               },
             },
@@ -91,58 +93,58 @@ export const schemaDocument = {
       ],
     },
     {
-      kind: 'ObjectTypeDefinition',
+      kind: Kind.OBJECT_TYPE_DEFINITION,
       name: {
-        kind: 'Name',
+        kind: Kind.NAME,
         value: 'Query',
       },
       fields: [
         {
-          kind: 'FieldDefinition',
+          kind: Kind.FIELD_DEFINITION,
           name: {
-            kind: 'Name',
+            kind: Kind.NAME,
             value: 'counter',
           },
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'Counter',
               },
             },
           },
         },
         {
-          kind: 'FieldDefinition',
+          kind: Kind.FIELD_DEFINITION,
           name: {
-            kind: 'Name',
+            kind: Kind.NAME,
             value: 'activeSubscriptions',
           },
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'Int',
               },
             },
           },
         },
         {
-          kind: 'FieldDefinition',
+          kind: Kind.FIELD_DEFINITION,
           name: {
-            kind: 'Name',
+            kind: Kind.NAME,
             value: 'stepBatchCount',
           },
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'Int',
               },
             },
@@ -151,87 +153,87 @@ export const schemaDocument = {
       ],
     },
     {
-      kind: 'ObjectTypeDefinition',
+      kind: Kind.OBJECT_TYPE_DEFINITION,
       name: {
-        kind: 'Name',
+        kind: Kind.NAME,
         value: 'Mutation',
       },
       fields: [
         {
-          kind: 'FieldDefinition',
+          kind: Kind.FIELD_DEFINITION,
           name: {
-            kind: 'Name',
+            kind: Kind.NAME,
             value: 'increment',
           },
           arguments: [
             {
-              kind: 'InputValueDefinition',
+              kind: Kind.INPUT_VALUE_DEFINITION,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'amount',
               },
               type: {
-                kind: 'NonNullType',
+                kind: Kind.NON_NULL_TYPE,
                 type: {
-                  kind: 'NamedType',
+                  kind: Kind.NAMED_TYPE,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'Int',
                   },
                 },
               },
               defaultValue: {
-                kind: 'IntValue',
+                kind: Kind.INT,
                 value: '1',
               },
             },
           ],
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'Counter',
               },
             },
           },
         },
         {
-          kind: 'FieldDefinition',
+          kind: Kind.FIELD_DEFINITION,
           name: {
-            kind: 'Name',
+            kind: Kind.NAME,
             value: 'reset',
           },
           arguments: [
             {
-              kind: 'InputValueDefinition',
+              kind: Kind.INPUT_VALUE_DEFINITION,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'value',
               },
               type: {
-                kind: 'NonNullType',
+                kind: Kind.NON_NULL_TYPE,
                 type: {
-                  kind: 'NamedType',
+                  kind: Kind.NAMED_TYPE,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'Int',
                   },
                 },
               },
               defaultValue: {
-                kind: 'IntValue',
+                kind: Kind.INT,
                 value: '0',
               },
             },
           ],
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'Counter',
               },
             },
@@ -240,24 +242,24 @@ export const schemaDocument = {
       ],
     },
     {
-      kind: 'ObjectTypeDefinition',
+      kind: Kind.OBJECT_TYPE_DEFINITION,
       name: {
-        kind: 'Name',
+        kind: Kind.NAME,
         value: 'Subscription',
       },
       fields: [
         {
-          kind: 'FieldDefinition',
+          kind: Kind.FIELD_DEFINITION,
           name: {
-            kind: 'Name',
+            kind: Kind.NAME,
             value: 'counterChanged',
           },
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'Counter',
               },
             },
@@ -266,4 +268,4 @@ export const schemaDocument = {
       ],
     },
   ],
-} as unknown as DocumentNode
+}

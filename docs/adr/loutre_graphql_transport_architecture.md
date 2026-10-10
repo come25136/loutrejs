@@ -58,10 +58,10 @@ Package Distribution ADRのpublic package制限は、このpackage追加に合�
 
 基本APIは`graphql.endpoint()`とする。
 
-Schemaとresolverの結合は[GraphQL Codegen ADR](loutre_graphql_codegen_architecture.md)の生成Manifestへ委譲する。
+Schemaとresolverの結合は[GraphQL Codegen ADR](loutre_graphql_codegen_architecture.md)のApplicationのbindManifestへ委譲する。
 
 ```ts
-import { manifest } from './generated/manifest.js'
+import { manifest } from './graphql/manifest.js'
 
 const GraphQLApi = graphql.endpoint({
   name: 'GraphQLApi',

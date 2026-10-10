@@ -1,5 +1,6 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// 入力指紋: 6f08754bf07e2e63d6deabb3ee6a04a91860a052abcbf2bd0b847e1b93b293f1
+// fingerprint: 40e7ac12dd6e3ff1be44d54590aa180cfcbec999906aee6e2b1ac14143cd0dfa
+import { Kind, OperationTypeNode } from 'graphql'
 type Exact<
   T extends {
     [key: string]: unknown
@@ -99,48 +100,51 @@ export type WatchSubscription = {
     }
   }
 }
-export const SnapshotDocument = {
-  kind: 'Document',
+export const SnapshotDocument: DocumentNode<
+  SnapshotQuery,
+  SnapshotQueryVariables
+> = {
+  kind: Kind.DOCUMENT,
   definitions: [
     {
-      kind: 'OperationDefinition',
-      operation: 'query',
+      kind: Kind.OPERATION_DEFINITION,
+      operation: OperationTypeNode.QUERY,
       name: {
-        kind: 'Name',
+        kind: Kind.NAME,
         value: 'Snapshot',
       },
       selectionSet: {
-        kind: 'SelectionSet',
+        kind: Kind.SELECTION_SET,
         selections: [
           {
-            kind: 'Field',
+            kind: Kind.FIELD,
             name: {
-              kind: 'Name',
+              kind: Kind.NAME,
               value: 'counter',
             },
             selectionSet: {
-              kind: 'SelectionSet',
+              kind: Kind.SELECTION_SET,
               selections: [
                 {
-                  kind: 'Field',
+                  kind: Kind.FIELD,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'value',
                   },
                 },
                 {
-                  kind: 'Field',
+                  kind: Kind.FIELD,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'step',
                   },
                   selectionSet: {
-                    kind: 'SelectionSet',
+                    kind: Kind.SELECTION_SET,
                     selections: [
                       {
-                        kind: 'Field',
+                        kind: Kind.FIELD,
                         name: {
-                          kind: 'Name',
+                          kind: Kind.NAME,
                           value: 'amount',
                         },
                       },
@@ -151,9 +155,9 @@ export const SnapshotDocument = {
             },
           },
           {
-            kind: 'Field',
+            kind: Kind.FIELD,
             name: {
-              kind: 'Name',
+              kind: Kind.NAME,
               value: 'activeSubscriptions',
             },
           },
@@ -161,33 +165,33 @@ export const SnapshotDocument = {
       },
     },
   ],
-} as unknown as DocumentNode<SnapshotQuery, SnapshotQueryVariables>
-export const AddDocument = {
-  kind: 'Document',
+}
+export const AddDocument: DocumentNode<AddMutation, AddMutationVariables> = {
+  kind: Kind.DOCUMENT,
   definitions: [
     {
-      kind: 'OperationDefinition',
-      operation: 'mutation',
+      kind: Kind.OPERATION_DEFINITION,
+      operation: OperationTypeNode.MUTATION,
       name: {
-        kind: 'Name',
+        kind: Kind.NAME,
         value: 'Add',
       },
       variableDefinitions: [
         {
-          kind: 'VariableDefinition',
+          kind: Kind.VARIABLE_DEFINITION,
           variable: {
-            kind: 'Variable',
+            kind: Kind.VARIABLE,
             name: {
-              kind: 'Name',
+              kind: Kind.NAME,
               value: 'amount',
             },
           },
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'Int',
               },
             },
@@ -195,37 +199,37 @@ export const AddDocument = {
         },
       ],
       selectionSet: {
-        kind: 'SelectionSet',
+        kind: Kind.SELECTION_SET,
         selections: [
           {
-            kind: 'Field',
+            kind: Kind.FIELD,
             name: {
-              kind: 'Name',
+              kind: Kind.NAME,
               value: 'increment',
             },
             arguments: [
               {
-                kind: 'Argument',
+                kind: Kind.ARGUMENT,
                 name: {
-                  kind: 'Name',
+                  kind: Kind.NAME,
                   value: 'amount',
                 },
                 value: {
-                  kind: 'Variable',
+                  kind: Kind.VARIABLE,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'amount',
                   },
                 },
               },
             ],
             selectionSet: {
-              kind: 'SelectionSet',
+              kind: Kind.SELECTION_SET,
               selections: [
                 {
-                  kind: 'Field',
+                  kind: Kind.FIELD,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'value',
                   },
                 },
@@ -236,49 +240,52 @@ export const AddDocument = {
       },
     },
   ],
-} as unknown as DocumentNode<AddMutation, AddMutationVariables>
-export const WatchDocument = {
-  kind: 'Document',
+}
+export const WatchDocument: DocumentNode<
+  WatchSubscription,
+  WatchSubscriptionVariables
+> = {
+  kind: Kind.DOCUMENT,
   definitions: [
     {
-      kind: 'OperationDefinition',
-      operation: 'subscription',
+      kind: Kind.OPERATION_DEFINITION,
+      operation: OperationTypeNode.SUBSCRIPTION,
       name: {
-        kind: 'Name',
+        kind: Kind.NAME,
         value: 'Watch',
       },
       selectionSet: {
-        kind: 'SelectionSet',
+        kind: Kind.SELECTION_SET,
         selections: [
           {
-            kind: 'Field',
+            kind: Kind.FIELD,
             name: {
-              kind: 'Name',
+              kind: Kind.NAME,
               value: 'counterChanged',
             },
             selectionSet: {
-              kind: 'SelectionSet',
+              kind: Kind.SELECTION_SET,
               selections: [
                 {
-                  kind: 'Field',
+                  kind: Kind.FIELD,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'value',
                   },
                 },
                 {
-                  kind: 'Field',
+                  kind: Kind.FIELD,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'step',
                   },
                   selectionSet: {
-                    kind: 'SelectionSet',
+                    kind: Kind.SELECTION_SET,
                     selections: [
                       {
-                        kind: 'Field',
+                        kind: Kind.FIELD,
                         name: {
-                          kind: 'Name',
+                          kind: Kind.NAME,
                           value: 'amount',
                         },
                       },
@@ -292,4 +299,4 @@ export const WatchDocument = {
       },
     },
   ],
-} as unknown as DocumentNode<WatchSubscription, WatchSubscriptionVariables>
+}

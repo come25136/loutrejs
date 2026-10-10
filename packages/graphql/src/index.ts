@@ -1,4 +1,8 @@
-import type { ExecutionDefinition, ExecutionGroup } from '@loutrejs/loutre'
+import type {
+  ExecutionDefinition,
+  ExecutionGroup,
+  StandardSchemaV1,
+} from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import {
   websocket,
@@ -50,7 +54,7 @@ export type GraphQLEndpoint<
     : ExecutionDefinition<typeof http.extension>)[]
 >
 
-const textSchema = {
+const textSchema: StandardSchemaV1<string, string> = {
   '~standard': {
     version: 1 as const,
     vendor: '@loutrejs/graphql',
@@ -58,7 +62,6 @@ const textSchema = {
       typeof value === 'string'
         ? { value }
         : { issues: [{ message: 'text messageが必要です。' }] },
-    types: undefined as unknown as { input: string; output: string },
   },
 }
 

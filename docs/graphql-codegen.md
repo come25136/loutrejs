@@ -1,6 +1,6 @@
 # GraphQLの生成とData Resolution
 
-SDLを契約として共有し、CLIで型とRuntime Manifestを同じ入力から生成します。Applicationは生成したmanifestをendpointへ渡します。Resolver ModuleやDIをCLIから実行せず、Schema構築とResolver Bindingは生成Moduleの初期化時に一回行います。
+SDLを契約として共有し、CLIで型・Static Schema・Typed Field Builderを同じ入力から生成します。ApplicationがbindManifestでSchemaとResolverを接続し、返されたmanifestをendpointへ渡します。生成ModuleはApplicationをimportせず、Schema構築とResolver BindingはApplicationの初期化時に一回行います。
 
 ```sh
 npm install @loutrejs/loutre @loutrejs/graphql graphql
@@ -19,7 +19,6 @@ export default {
     server: {
       kind: 'server',
       schema: ['contracts/**/*.graphql'],
-      resolvers: 'src/graphql/resolvers.ts',
       output: 'src/graphql/generated',
       contextType: '../context.js#AppContext',
       mappers: {
@@ -37,7 +36,7 @@ export default {
 } satisfies GraphQLCodegenConfig
 ```
 
-schema / documents / resolvers / outputは設定fileからの相対pathです。contextType / mapperのimportは生成types.tsからの相対pathです。Resolver Moduleは`resolvers`をnamed exportします。serverの出力directoryは生成専用とし、client outputもその外へ置きます。
+schema / documents / outputは設定fileからの相対pathです。contextType / mapperのimportは生成types.tsからの相対pathです。Resolver Moduleは`resolvers`をnamed exportします。serverの出力directoryは生成専用とし、client outputもその外へ置きます。serverだけならclient targetを指定する必要はありません。
 
 ```sh
 loutre graphql generate --config graphql.config.ts
@@ -46,9 +45,9 @@ loutre graphql generate --config graphql.config.ts --watch
 loutre graphql generate --config graphql.config.ts --check
 ```
 
-server targetはtypes.ts・data.ts・schema-ast.ts・manifest.tsを同一世代で生成します。client targetは名前付きOperation / FragmentのVariables・選択結果・TypedDocumentNodeを生成します。client projectには`@graphql-typed-document-node/core`も追加してください。
+server targetはtypes.ts・data.ts・schema-ast.tsを同一世代で生成します。client targetは名前付きOperation / FragmentのVariables・選択結果・TypedDocumentNodeを生成します。client projectには`@graphql-typed-document-node/core`も追加してください。
 
-生成物には@generatedと入力指紋が付きます。全targetの生成・整形・検証とtemp出力を終えてから更新し、更新中の失敗では全targetを前の正常世代へ戻します。`--check`は書き込みません。watchはSDL・Operation・設定の追加 / 変更 / 削除を追跡し、エラー後の正常な世代を保持します。生成directoryへ人間のsource fileを置かないでください。Resolver実装の変更はApplicationの再起動 / HMRでBindingし直します。
+生成物には@generatedとfingerprintが付きます。fingerprintは生成入力の識別用headerで、Runtimeへ渡さず、Binding時の照合にも使いません。全targetの生成・整形・検証とtemp出力を終えてから更新し、更新中の失敗では全targetを前の正常世代へ戻します。`--check`は書き込みません。watchはSDL・Operation・設定の追加 / 変更 / 削除を追跡し、エラー後の正常な世代を保持します。生成directoryへ人間のsource fileを置かないでください。Resolver実装の変更はApplicationの再起動 / HMRでBindingし直します。
 
 ## Domain MapperとScalar
 
@@ -102,7 +101,11 @@ export const resolvers = {
 ```ts
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { manifest } from './generated/manifest.js'
+import { bindManifest } from '@loutrejs/graphql/runtime'
+import { schemaDocument } from './generated/schema-ast.js'
+import { resolvers } from './resolvers.js'
+
+const manifest = bindManifest({ schemaDocument, resolvers })
 
 export const endpoint = graphql.endpoint({
   name: 'Commerce',
@@ -118,7 +121,7 @@ export const endpoint = graphql.endpoint({
 })
 ```
 
-manifestはOpaque Typeです。schema / typeDefs / rootValueをendpointへ渡す経路はありません。makeExecutableSchema()や手動prepareは不要です。生成manifestはResolverをvalue importします。Resolverからはgenerated/dataをvalue importし、generated/typesをtype-only importします。generated/manifestの値を逆importしないでください。data ModuleのimportだけではSchema構築やResolver Moduleのimportを開始しません。
+manifestはOpaque Typeです。schema / typeDefs / rootValueをendpointへ渡す経路はありません。makeExecutableSchema()や手動prepareは不要です。BindingはApplicationが保守するModuleへ記述します。生成ModuleはResolverをimportしません。Resolverからはgenerated/dataをvalue importし、generated/typesをtype-only importします。Binding Moduleの値をResolverから逆importしないでください。data ModuleのimportだけではSchema構築やResolver Moduleのimportを開始しません。
 
 ## Read-throughとBatch
 

@@ -3,7 +3,6 @@ import type { FieldOptions, SourceInput } from './data-types.js'
 
 export type DataDefinition = {
   readonly identity: string
-  readonly fingerprint: string
 } & (
   | {
       readonly kind: 'field'
@@ -55,7 +54,7 @@ export function invokeData(
   const definition = getData(resolver)
   if (!executor || !definition || definition.identity !== identity)
     throw new TypeError(
-      'Data Resolverは生成ManifestのExecution Adapter内で実行してください。',
+      'Data ResolverはBinding済みManifestのExecution Adapter内で実行してください。',
     )
   return executor(definition, parent, args, context, info)
 }

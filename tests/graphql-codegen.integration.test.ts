@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { runCli } from '@loutrejs/cli'
-import { buildASTSchema, graphql as execute } from 'graphql'
+import { buildASTSchema, graphql as execute, Kind } from 'graphql'
 import { generatedHeader } from '../packages/cli/src/graphql-codegen.js'
 
 const directories: string[] = []
@@ -38,7 +38,6 @@ async function fixture() {
         kind: 'server',
         schema: ['*.graphql'],
         output: 'generated',
-        resolvers: 'resolvers.ts',
         contextType: '../context.js#AppContext',
         mappers: { User: '../domain.js#User' },
         scalars: { DateTime: { input: 'Date', output: 'Date' } },
@@ -173,12 +172,9 @@ describe('GraphQL CLI', () => {
       'utf8',
     )
     const document = Function(
-      'return (' +
-        staticSchema
-          .split('export const schemaDocument =')[1]!
-          .replace(/ as unknown as DocumentNode\s*$/, '') +
-        ')',
-    )()
+      'Kind',
+      'return (' + staticSchema.split(' = ')[1]! + ')',
+    )(Kind)
     const schema = buildASTSchema(document)
     schema.getQueryType()!.getFields().user!.resolve = () => ({
       id: '1',
@@ -348,7 +344,7 @@ describe('GraphQL CLI', () => {
   }, 20000)
 })
 
-it('TypeScript設定から整合したManifestを生成し、Resolver Moduleとvalue importを実行しない', async () => {
+it('TypeScript設定からBinding用のschemaとdataを生成し、Applicationのimportを含めない', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'loutre-graphql-config-'))
   directories.push(cwd)
   await writeFile(join(cwd, 'schema.graphql'), 'type Query { hello: String! }')
@@ -356,7 +352,7 @@ it('TypeScript設定から整合したManifestを生成し、Resolver Moduleとv
     join(cwd, 'resolvers.ts'),
     'throw new Error("ResolverをCLIから実行しない")',
   )
-  const config = `import type { GraphQLCodegenConfig } from '@loutrejs/cli'; export default {targets:{server:{kind:'server',schema:['schema.graphql'],resolvers:'resolvers.ts',contextType:'../context.js#Context',output:'generated'}}} satisfies GraphQLCodegenConfig`
+  const config = `import type { GraphQLCodegenConfig } from '@loutrejs/cli'; export default {targets:{server:{kind:'server',schema:['schema.graphql'],contextType:'../context.js#Context',output:'generated'}}} satisfies GraphQLCodegenConfig`
   await writeFile(join(cwd, 'config.ts'), config)
   const stderr: string[] = []
   const invoke = () =>
@@ -366,10 +362,12 @@ it('TypeScript設定から整合したManifestを生成し、Resolver Moduleとv
       stderr: (value) => stderr.push(value),
     })
   expect(await invoke(), stderr.join('\n')).toBe(0)
-  const manifest = await readFile(join(cwd, 'generated/manifest.ts'), 'utf8')
+  const schema = await readFile(join(cwd, 'generated/schema-ast.ts'), 'utf8')
   const builder = await readFile(join(cwd, 'generated/data.ts'), 'utf8')
   const types = await readFile(join(cwd, 'generated/types.ts'), 'utf8')
-  expect(manifest).toContain("from '../resolvers.js'")
+  expect(schema).not.toContain('resolvers')
+  expect(schema).not.toContain(' as unknown')
+  expect(schema).toContain('GraphQLSchemaDocument<SchemaContext>')
   expect(builder).not.toContain('resolvers')
   expect(builder).not.toContain('manifest')
   expect(types).not.toContain('bindManifest')

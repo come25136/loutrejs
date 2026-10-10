@@ -22,9 +22,25 @@ try {
       ]),
     )
     dependencies.graphql = version
+    dependencies.typescript = '7.0.2'
+    dependencies['@types/node'] = '26.6.2'
+    dependencies['@graphql-typed-document-node/core'] = '3.2.0'
     await writeFile(
       join(cwd, 'package.json'),
       JSON.stringify({ type: 'module', private: true, dependencies }),
+    )
+    await writeFile(
+      join(cwd, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          target: 'ES2024',
+          module: 'NodeNext',
+          strict: true,
+          skipLibCheck: true,
+          noEmit: true,
+        },
+        include: ['src/**/*.ts'],
+      }),
     )
     await writeFile(
       join(cwd, 'schema.graphql'),
@@ -43,7 +59,7 @@ try {
     await writeFile(
       join(cwd, 'config.ts'),
       `export default { targets: {
-      server: { kind:'server',schema:['schema.graphql'],resolvers:'src/resolvers.ts',contextType:'../context.js#AppContext',mappers:{Parent:'../context.js#Parent'},scalars:{DateTime:'Date'},output:'src/generated' },
+      server: { kind:'server',schema:['schema.graphql'],contextType:'../context.js#AppContext',mappers:{Parent:'../context.js#Parent'},scalars:{DateTime:'Date'},output:'src/generated' },
       client: { kind:'client',schema:['schema.graphql'],documents:['operation.graphql'],scalars:{DateTime:'string'},output:'src/client.ts' }
     } }`,
     )
@@ -57,9 +73,10 @@ try {
       import { createData } from './generated/data.js'
       import type { Resolvers } from './generated/types.js'
       const d = createData()
+      const enumResolvers = { Role: { MEMBER:1, ADMIN:2 } }
       export const resolvers = {
+        ...enumResolvers,
         DateTime: new GraphQLScalarType({name:'DateTime',serialize: value => (value as Date).toISOString(),parseValue:value=>new Date(String(value))}),
-        Role: { MEMBER:1, ADMIN:2 },
         Query: {
           parents: d.Query.parents.source(({ context })=>[context.state.parent,context.state.parent]),
           check: (_parent,{options})=>options.at!.toISOString()+':'+options.role,
@@ -83,7 +100,10 @@ try {
       join(cwd, 'src/app.ts'),
       `import { defineApplication,defineModule } from '@loutrejs/loutre'
       import { graphql } from '@loutrejs/graphql'
-      import { manifest } from './generated/manifest.js'
+      import { bindManifest } from '@loutrejs/graphql/runtime'
+      import { schemaDocument } from './generated/schema-ast.js'
+      import { resolvers } from './resolvers.js'
+      const manifest = bindManifest({ schemaDocument, resolvers })
       export const state={parent:{id:'same'},revision:0,calls:0,cleanups:0}
       const Module=defineModule(()=>({executions:[graphql.endpoint({name:'Compatibility',path:'/graphql',manifest,transports:{http:true,websocket:true},factory:()=>({context:({signal})=>({signal,state})})})]}))
       export default defineApplication({modules:[Module()]})`,
@@ -137,6 +157,7 @@ try {
         [cli, 'graphql', 'generate', '--config', 'config.ts', '--check'],
         { cwd },
       )
+      await run(join(cwd, 'node_modules/.bin/tsc'), [], { cwd })
       await run(
         process.execPath,
         [cli, 'build', 'src/app.ts', '--out-dir', 'built'],
@@ -148,9 +169,12 @@ try {
       })
       process.stdout.write(result.stdout)
     } catch (error) {
-      throw new Error(`GraphQL ${version}: ${error.stderr ?? error.message}`, {
-        cause: error,
-      })
+      throw new Error(
+        `GraphQL ${version}: ${error.stderr || error.stdout || error.message}`,
+        {
+          cause: error,
+        },
+      )
     }
   }
 } finally {

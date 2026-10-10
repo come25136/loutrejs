@@ -1,5 +1,5 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// 入力指紋: cf90e99265a2c18b6472caacadf5ec71c01e740b310b7e3c69ec5128b423eb8b
+// fingerprint: c86c2a17a6ef154ebb41485c38f78004a165ee5eed17a651c3696773a53cc218
 import type {
   GraphQLResolveInfo,
   GraphQLScalarType,
@@ -261,6 +261,7 @@ import type { AppContext as LoutreContext } from '../context.js'
 export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: Exclude<T[P], undefined>
 }
+export type SchemaContext = LoutreContext
 export interface SchemaFields {
   Mutation: {
     update: FieldSpec<

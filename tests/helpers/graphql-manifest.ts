@@ -38,6 +38,5 @@ export function manifestFromSchema(schema: GraphQLSchema) {
   return bindManifest({
     schemaDocument: parse(printSchema(schema), { noLocation: true }),
     resolvers,
-    fingerprint: 'test',
   })
 }

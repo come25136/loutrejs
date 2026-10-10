@@ -61,10 +61,6 @@
                 "type": "string",
                 "minLength": 1
               },
-              "resolvers": {
-                "type": "string",
-                "minLength": 1
-              },
               "contextType": {
                 "type": "string",
                 "minLength": 1
@@ -80,13 +76,7 @@
                 }
               }
             },
-            "required": [
-              "schema",
-              "kind",
-              "output",
-              "resolvers",
-              "contextType"
-            ],
+            "required": ["schema", "kind", "output", "contextType"],
             "additionalProperties": false
           },
           {

@@ -1,6 +1,6 @@
 import { graphql } from '@loutrejs/graphql'
 import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
-import { manifest } from './graphql/generated/manifest.js'
+import { manifest } from './graphql/manifest.js'
 import { OrdersModule } from '../examples/graphql-orders/src/app.js'
 import { ConformanceState } from './graphql/context.js'
 

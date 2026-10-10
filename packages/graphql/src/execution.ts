@@ -78,6 +78,9 @@ export async function subscribeManifest(
   }
   const compatible = GraphQL as typeof GraphQL & {
     validateSubscriptionArgs?: typeof GraphQL.validateSubscriptionArgs
+    createSourceEventStream: (
+      input: ExecutionArgs,
+    ) => ReturnType<typeof GraphQL.createSourceEventStream>
   }
   let validated: ValidatedSubscriptionArgs | undefined
   let source
@@ -91,10 +94,8 @@ export async function subscribeManifest(
       validated = result
       source = await GraphQL.createSourceEventStream(validated)
     } else {
-      const create = GraphQL.createSourceEventStream as unknown as (
-        input: ExecutionArgs,
-      ) => Promise<ExecutionResult | AsyncIterable<unknown>>
-      source = await create(sourceArgs)
+      // v16は未検証ExecutionArgsを受け取るため、v17の宣言だけでは表現できない。
+      source = await compatible.createSourceEventStream(sourceArgs)
     }
   } catch (error) {
     sourceView.close()

@@ -12,7 +12,6 @@ import { websocket } from '@loutrejs/loutre/websocket'
 const manifest = bindManifest({
   schemaDocument: parse('type Query { hello: String }'),
   resolvers: { Query: { hello: () => 'Hello' } },
-  fingerprint: 'test',
 })
 const factory = () => ({ context: () => ({}) })
 const httpOnly = graphql.endpoint({

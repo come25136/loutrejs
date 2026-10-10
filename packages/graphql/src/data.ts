@@ -20,12 +20,9 @@ export function loaded<T>(
   return { kind: 'loaded', value } as ReadResult<T>
 }
 
-export function createSchemaData<Fields>(
-  identities: {
-    readonly [T in keyof Fields]: { readonly [F in keyof Fields[T]]: string }
-  },
-  fingerprint: string,
-): SchemaData<Fields> {
+export function createSchemaData<Fields>(identities: {
+  readonly [T in keyof Fields]: { readonly [F in keyof Fields[T]]: string }
+}): SchemaData<Fields> {
   const registry = Object.fromEntries(
     Object.entries(identities as Record<string, Record<string, string>>).map(
       ([type, fields]) => [
@@ -57,7 +54,6 @@ export function createSchemaData<Fields>(
                     invokeData(resolve, parent, args, context, info, identity)
                   registerData(resolve, {
                     identity,
-                    fingerprint,
                     kind: 'field',
                     options: Object.freeze({
                       ...options,
@@ -80,7 +76,6 @@ export function createSchemaData<Fields>(
                     invokeData(resolve, parent, args, context, info, identity)
                   registerData(resolve, {
                     identity,
-                    fingerprint,
                     kind: 'source',
                     source,
                   })

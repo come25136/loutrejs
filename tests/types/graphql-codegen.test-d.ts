@@ -6,7 +6,7 @@ import type {
 import {
   AddDocument,
   SnapshotDocument,
-} from '../../examples/graphql-counter/src/client/generated.js'
+} from '../../conformance/graphql/client/counter.js'
 import type { AppContext } from '../../examples/graphql-counter/src/graphql/context.js'
 
 const counter: ResolversParentTypes['Counter'] = { value: 1, stepId: 'default' }
@@ -62,7 +62,7 @@ import type {
 } from '../../examples/graphql-orders/src/domain/commerce.js'
 import type { AppContext as OrderContext } from '../../examples/graphql-orders/src/graphql/context.js'
 import { graphql } from '@loutrejs/graphql'
-import { manifest } from '../../examples/graphql-orders/src/generated/manifest.js'
+import { manifest } from '../../examples/graphql-orders/src/graphql/manifest.js'
 import { data } from '@loutrejs/graphql/data'
 
 const d = createData()

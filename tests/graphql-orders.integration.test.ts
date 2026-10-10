@@ -1,14 +1,14 @@
 import { nodeRuntime } from '@loutrejs/node'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { graphql } from '@loutrejs/graphql'
-import { manifest } from '../examples/graphql-orders/src/generated/manifest.js'
+import { manifest } from '../examples/graphql-orders/src/graphql/manifest.js'
 import { CommerceService } from '../examples/graphql-orders/src/domain/commerce.js'
 import { print } from 'graphql'
-import { OrdersWithDetailsDocument } from '../examples/graphql-orders/src/client/generated.js'
+import { OrdersWithDetailsDocument } from '../conformance/graphql/client/orders.js'
 import { createClient } from 'graphql-ws'
 import WebSocket from 'ws'
 
-it('生成Manifestの100注文 / 200明細がEager・Lazy・Hybridで一致し、HTTPとWSのOperation間を分離する', async () => {
+it('手書きBindingの100注文 / 200明細がEager・Lazy・Hybridで一致し、HTTPとWSのOperation間を分離する', async () => {
   const commerce = new CommerceService()
   const calls = vi.spyOn(commerce, 'findProducts')
   const endpoint = graphql.endpoint({

@@ -1,6 +1,6 @@
 # @loutrejs/graphql
 
-CLIで生成したRuntime Manifestを、LoutreのHTTP / WebSocket Executionへ接続します。HTTPはgraphql-http、WebSocketはgraphql-ws、GraphQL ExecutionはGraphQL.jsへ委譲します。
+CLIが生成したStatic SchemaをResolverとbindManifestで接続し、LoutreのHTTP / WebSocket Executionへ接続します。HTTPはgraphql-http、WebSocketはgraphql-ws、GraphQL ExecutionはGraphQL.jsへ委譲します。
 
 ```sh
 npm install @loutrejs/loutre @loutrejs/graphql graphql
@@ -10,7 +10,11 @@ npm install --save-dev @loutrejs/cli
 ```ts
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { manifest } from './generated/manifest.js'
+import { bindManifest } from '@loutrejs/graphql/runtime'
+import { schemaDocument } from './generated/schema-ast.js'
+import { resolvers } from './resolvers.js'
+
+const manifest = bindManifest({ schemaDocument, resolvers })
 import { CounterStore } from './domain/counter.js'
 
 export const endpoint = graphql.endpoint({

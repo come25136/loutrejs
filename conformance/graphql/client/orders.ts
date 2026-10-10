@@ -1,5 +1,6 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// 入力指紋: 0c8526bd8d6de2fff5c4cdee99247687bf5433a3e67325d95aad741c80d9be5c
+// fingerprint: d72e36db5933fb651202bfd3c282bcca7964488d4f3cad3b5a0a8b94c278d9bd
+import { Kind, OperationTypeNode } from 'graphql'
 type Exact<
   T extends {
     [key: string]: unknown
@@ -140,32 +141,35 @@ export type OrdersWithDetailsQuery = {
     }>
   }
 }
-export const OrdersWithDetailsDocument = {
-  kind: 'Document',
+export const OrdersWithDetailsDocument: DocumentNode<
+  OrdersWithDetailsQuery,
+  OrdersWithDetailsQueryVariables
+> = {
+  kind: Kind.DOCUMENT,
   definitions: [
     {
-      kind: 'OperationDefinition',
-      operation: 'query',
+      kind: Kind.OPERATION_DEFINITION,
+      operation: OperationTypeNode.QUERY,
       name: {
-        kind: 'Name',
+        kind: Kind.NAME,
         value: 'OrdersWithDetails',
       },
       variableDefinitions: [
         {
-          kind: 'VariableDefinition',
+          kind: Kind.VARIABLE_DEFINITION,
           variable: {
-            kind: 'Variable',
+            kind: Kind.VARIABLE,
             name: {
-              kind: 'Name',
+              kind: Kind.NAME,
               value: 'strategy',
             },
           },
           type: {
-            kind: 'NonNullType',
+            kind: Kind.NON_NULL_TYPE,
             type: {
-              kind: 'NamedType',
+              kind: Kind.NAMED_TYPE,
               name: {
-                kind: 'Name',
+                kind: Kind.NAME,
                 value: 'Strategy',
               },
             },
@@ -173,57 +177,57 @@ export const OrdersWithDetailsDocument = {
         },
       ],
       selectionSet: {
-        kind: 'SelectionSet',
+        kind: Kind.SELECTION_SET,
         selections: [
           {
-            kind: 'Field',
+            kind: Kind.FIELD,
             name: {
-              kind: 'Name',
+              kind: Kind.NAME,
               value: 'orders',
             },
             arguments: [
               {
-                kind: 'Argument',
+                kind: Kind.ARGUMENT,
                 name: {
-                  kind: 'Name',
+                  kind: Kind.NAME,
                   value: 'strategy',
                 },
                 value: {
-                  kind: 'Variable',
+                  kind: Kind.VARIABLE,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'strategy',
                   },
                 },
               },
               {
-                kind: 'Argument',
+                kind: Kind.ARGUMENT,
                 name: {
-                  kind: 'Name',
+                  kind: Kind.NAME,
                   value: 'pagination',
                 },
                 value: {
-                  kind: 'ObjectValue',
+                  kind: Kind.OBJECT,
                   fields: [
                     {
-                      kind: 'ObjectField',
+                      kind: Kind.OBJECT_FIELD,
                       name: {
-                        kind: 'Name',
+                        kind: Kind.NAME,
                         value: 'offset',
                       },
                       value: {
-                        kind: 'IntValue',
+                        kind: Kind.INT,
                         value: '0',
                       },
                     },
                     {
-                      kind: 'ObjectField',
+                      kind: Kind.OBJECT_FIELD,
                       name: {
-                        kind: 'Name',
+                        kind: Kind.NAME,
                         value: 'limit',
                       },
                       value: {
-                        kind: 'IntValue',
+                        kind: Kind.INT,
                         value: '100',
                       },
                     },
@@ -232,42 +236,42 @@ export const OrdersWithDetailsDocument = {
               },
             ],
             selectionSet: {
-              kind: 'SelectionSet',
+              kind: Kind.SELECTION_SET,
               selections: [
                 {
-                  kind: 'Field',
+                  kind: Kind.FIELD,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'totalCount',
                   },
                 },
                 {
-                  kind: 'Field',
+                  kind: Kind.FIELD,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'pageInfo',
                   },
                   selectionSet: {
-                    kind: 'SelectionSet',
+                    kind: Kind.SELECTION_SET,
                     selections: [
                       {
-                        kind: 'Field',
+                        kind: Kind.FIELD,
                         name: {
-                          kind: 'Name',
+                          kind: Kind.NAME,
                           value: 'hasPreviousPage',
                         },
                       },
                       {
-                        kind: 'Field',
+                        kind: Kind.FIELD,
                         name: {
-                          kind: 'Name',
+                          kind: Kind.NAME,
                           value: 'hasNextPage',
                         },
                       },
                       {
-                        kind: 'Field',
+                        kind: Kind.FIELD,
                         name: {
-                          kind: 'Name',
+                          kind: Kind.NAME,
                           value: '__typename',
                         },
                       },
@@ -275,64 +279,64 @@ export const OrdersWithDetailsDocument = {
                   },
                 },
                 {
-                  kind: 'Field',
+                  kind: Kind.FIELD,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: 'edges',
                   },
                   selectionSet: {
-                    kind: 'SelectionSet',
+                    kind: Kind.SELECTION_SET,
                     selections: [
                       {
-                        kind: 'Field',
+                        kind: Kind.FIELD,
                         name: {
-                          kind: 'Name',
+                          kind: Kind.NAME,
                           value: 'id',
                         },
                       },
                       {
-                        kind: 'Field',
+                        kind: Kind.FIELD,
                         name: {
-                          kind: 'Name',
+                          kind: Kind.NAME,
                           value: 'customer',
                         },
                         selectionSet: {
-                          kind: 'SelectionSet',
+                          kind: Kind.SELECTION_SET,
                           selections: [
                             {
-                              kind: 'Field',
+                              kind: Kind.FIELD,
                               name: {
-                                kind: 'Name',
+                                kind: Kind.NAME,
                                 value: 'id',
                               },
                             },
                             {
-                              kind: 'Field',
+                              kind: Kind.FIELD,
                               name: {
-                                kind: 'Name',
+                                kind: Kind.NAME,
                                 value: 'account',
                               },
                               selectionSet: {
-                                kind: 'SelectionSet',
+                                kind: Kind.SELECTION_SET,
                                 selections: [
                                   {
-                                    kind: 'Field',
+                                    kind: Kind.FIELD,
                                     name: {
-                                      kind: 'Name',
+                                      kind: Kind.NAME,
                                       value: 'id',
                                     },
                                   },
                                   {
-                                    kind: 'Field',
+                                    kind: Kind.FIELD,
                                     name: {
-                                      kind: 'Name',
+                                      kind: Kind.NAME,
                                       value: 'name',
                                     },
                                   },
                                   {
-                                    kind: 'Field',
+                                    kind: Kind.FIELD,
                                     name: {
-                                      kind: 'Name',
+                                      kind: Kind.NAME,
                                       value: '__typename',
                                     },
                                   },
@@ -340,9 +344,9 @@ export const OrdersWithDetailsDocument = {
                               },
                             },
                             {
-                              kind: 'Field',
+                              kind: Kind.FIELD,
                               name: {
-                                kind: 'Name',
+                                kind: Kind.NAME,
                                 value: '__typename',
                               },
                             },
@@ -350,71 +354,71 @@ export const OrdersWithDetailsDocument = {
                         },
                       },
                       {
-                        kind: 'Field',
+                        kind: Kind.FIELD,
                         name: {
-                          kind: 'Name',
+                          kind: Kind.NAME,
                           value: 'items',
                         },
                         selectionSet: {
-                          kind: 'SelectionSet',
+                          kind: Kind.SELECTION_SET,
                           selections: [
                             {
-                              kind: 'Field',
+                              kind: Kind.FIELD,
                               name: {
-                                kind: 'Name',
+                                kind: Kind.NAME,
                                 value: 'id',
                               },
                             },
                             {
-                              kind: 'Field',
+                              kind: Kind.FIELD,
                               name: {
-                                kind: 'Name',
+                                kind: Kind.NAME,
                                 value: 'quantity',
                               },
                             },
                             {
-                              kind: 'Field',
+                              kind: Kind.FIELD,
                               name: {
-                                kind: 'Name',
+                                kind: Kind.NAME,
                                 value: 'product',
                               },
                               selectionSet: {
-                                kind: 'SelectionSet',
+                                kind: Kind.SELECTION_SET,
                                 selections: [
                                   {
-                                    kind: 'Field',
+                                    kind: Kind.FIELD,
                                     name: {
-                                      kind: 'Name',
+                                      kind: Kind.NAME,
                                       value: 'id',
                                     },
                                   },
                                   {
-                                    kind: 'Field',
+                                    kind: Kind.FIELD,
                                     name: {
-                                      kind: 'Name',
+                                      kind: Kind.NAME,
                                       value: 'name',
                                     },
                                   },
                                   {
-                                    kind: 'Field',
+                                    kind: Kind.FIELD,
                                     name: {
-                                      kind: 'Name',
+                                      kind: Kind.NAME,
                                       value: 'category',
                                     },
                                     selectionSet: {
-                                      kind: 'SelectionSet',
+                                      kind: Kind.SELECTION_SET,
                                       selections: [
                                         {
-                                          kind: 'Field',
+                                          kind: Kind.FIELD,
                                           name: {
-                                            kind: 'Name',
+                                            kind: Kind.NAME,
                                             value: 'name',
                                           },
                                         },
                                         {
-                                          kind: 'Field',
+                                          kind: Kind.FIELD,
                                           name: {
-                                            kind: 'Name',
+                                            kind: Kind.NAME,
                                             value: '__typename',
                                           },
                                         },
@@ -422,9 +426,9 @@ export const OrdersWithDetailsDocument = {
                                     },
                                   },
                                   {
-                                    kind: 'Field',
+                                    kind: Kind.FIELD,
                                     name: {
-                                      kind: 'Name',
+                                      kind: Kind.NAME,
                                       value: '__typename',
                                     },
                                   },
@@ -432,9 +436,9 @@ export const OrdersWithDetailsDocument = {
                               },
                             },
                             {
-                              kind: 'Field',
+                              kind: Kind.FIELD,
                               name: {
-                                kind: 'Name',
+                                kind: Kind.NAME,
                                 value: '__typename',
                               },
                             },
@@ -442,9 +446,9 @@ export const OrdersWithDetailsDocument = {
                         },
                       },
                       {
-                        kind: 'Field',
+                        kind: Kind.FIELD,
                         name: {
-                          kind: 'Name',
+                          kind: Kind.NAME,
                           value: '__typename',
                         },
                       },
@@ -452,9 +456,9 @@ export const OrdersWithDetailsDocument = {
                   },
                 },
                 {
-                  kind: 'Field',
+                  kind: Kind.FIELD,
                   name: {
-                    kind: 'Name',
+                    kind: Kind.NAME,
                     value: '__typename',
                   },
                 },
@@ -465,7 +469,4 @@ export const OrdersWithDetailsDocument = {
       },
     },
   ],
-} as unknown as DocumentNode<
-  OrdersWithDetailsQuery,
-  OrdersWithDetailsQueryVariables
->
+}

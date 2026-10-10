@@ -18,13 +18,13 @@ HTTPはhttp://127.0.0.1:3000/graphql、WebSocketはws://127.0.0.1:3000/graphql�
 ## Serverの構成
 
 - [contracts/counter.graphql](./contracts/counter.graphql): 共有するAPI契約。
-- [graphql.config.ts](./graphql.config.ts): server / client生成、context型、domain mapping。
+- [graphql.config.ts](./graphql.config.ts): server型生成、context型、domain mapping。
 - [src/domain/counter.ts](./src/domain/counter.ts): valueとstepIdを持つdomainと変更通知。
 - [src/domain/step.ts](./src/domain/step.ts): 関連するStepの一括取得。
 - [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): 生成したcreateData()とResolvers型を使い、Counter.stepをstepIdからBatchで解決。
 - [src/graphql/context.ts](./src/graphql/context.ts): domain serviceとoperationのsignal。Batch ScopeはFrameworkがOperation / Delivery Eventごとに生成。
-- [src/endpoint.ts](./src/endpoint.ts): 生成ManifestとDIをcontextへ接続。
-- [operations/snapshot.graphql](./operations/snapshot.graphql): 別の利用側でも共有SDLから型を生成できるoperation。
+- [src/endpoint.ts](./src/endpoint.ts): Binding済みManifestとDIをcontextへ接続。
+- [src/graphql/manifest.ts](./src/graphql/manifest.ts): 生成Schemaと手書きResolverのBinding。
 
 domainのCounterにはGraphQLのstep objectがありません。mappersによってresolverのparentをdomain型として扱い、stepIdで関連domainを取得します。取得・保存方法はGraphQLの契約に含めません。このexampleでは状態をメモリに持ち、再起動すると0へ戻ります。
 

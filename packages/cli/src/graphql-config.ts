@@ -27,7 +27,6 @@ export const graphQLCodegenConfig = z.strictObject({
               (value) => !value.endsWith('.ts'),
               'serverの出力先は生成専用directoryにしてください。',
             ),
-          resolvers: z.string().min(1),
           contextType: z.string().min(1),
           mappers: z.record(z.string(), z.string().min(1)).optional(),
         }),

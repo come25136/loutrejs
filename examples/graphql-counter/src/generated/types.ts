@@ -1,5 +1,5 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// 入力指紋: afedce8c88d098bf929f905c1cde61aa5d8a5575d70deba73c161afc82969154
+// fingerprint: ec21de3ef8c94c1ebc2ef45a5a0f20a9f959c83d377081109ac89fcebce60e9a
 import type { GraphQLResolveInfo } from 'graphql'
 import type { Counter as CounterDomain } from '../domain/counter.js'
 import type { Step as StepDomain } from '../domain/step.js'
@@ -260,6 +260,7 @@ import type { AppContext as LoutreContext } from '../graphql/context.js'
 export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: Exclude<T[P], undefined>
 }
+export type SchemaContext = LoutreContext
 export interface SchemaFields {
   Counter: {
     step: FieldSpec<

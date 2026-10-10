@@ -2,7 +2,7 @@ import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
 import { CounterStore } from './domain/counter.js'
 import { StepService } from './domain/step.js'
-import { manifest } from './generated/manifest.js'
+import { manifest } from './graphql/manifest.js'
 import type { AppContext } from './graphql/context.js'
 
 export const CounterEndpoint = graphql.endpoint({

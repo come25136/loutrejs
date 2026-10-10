@@ -8,7 +8,6 @@ import {
   isInputObjectType,
   getNamedType,
   valueFromAST,
-  type DocumentNode,
   type GraphQLFieldResolver,
   type GraphQLScalarType,
   type GraphQLTypeResolver,
@@ -17,14 +16,20 @@ import {
   type GraphQLInputField,
 } from 'graphql'
 import { getData, type DataDefinition } from './data-internal.js'
-import { storeManifest, type GraphQLManifest } from './manifest-internal.js'
+import {
+  storeManifest,
+  type GraphQLManifest,
+  type GraphQLSchemaDocument,
+} from './manifest-internal.js'
 import { validateEndpointSchema } from './validation.js'
 
-export type { GraphQLManifest } from './manifest-internal.js'
+export type {
+  GraphQLManifest,
+  GraphQLSchemaDocument,
+} from './manifest-internal.js'
 export function bindManifest<Context extends object = object>(input: {
-  readonly schemaDocument: DocumentNode
+  readonly schemaDocument: GraphQLSchemaDocument<Context>
   readonly resolvers: object
-  readonly fingerprint: string
 }): GraphQLManifest<Context> {
   const schema = buildASTSchema(input.schemaDocument)
   const metadata = new Map<string, DataDefinition>()
@@ -37,7 +42,7 @@ export function bindManifest<Context extends object = object>(input: {
     if (isScalarType(type)) {
       if (!binding || typeof binding !== 'object')
         throw new TypeError(`${name}にScalar Resolverが必要です。`)
-      const scalar = binding as GraphQLScalarType
+      const scalar = binding as Partial<GraphQLScalarType>
       for (const key of [
         'serialize',
         'parseValue',
@@ -47,9 +52,7 @@ export function bindManifest<Context extends object = object>(input: {
         'coerceInputLiteral',
         'specifiedByURL',
       ] as const) {
-        const value = (scalar as unknown as Record<string, unknown>)[key]
-        if (value !== undefined)
-          (type as unknown as Record<string, unknown>)[key] = value
+        copyScalarProperty(type, scalar, key)
       }
       continue
     }
@@ -118,12 +121,9 @@ export function bindManifest<Context extends object = object>(input: {
           'Subscription Sourceは標準subscribe Resolverを使用してください。',
         )
       if (definition) {
-        if (
-          definition.identity !== `${name}.${fieldName}` ||
-          definition.fingerprint !== input.fingerprint
-        )
+        if (definition.identity !== `${name}.${fieldName}`)
           throw new TypeError(
-            `Data ResolverのField Identityまたは生成世代が一致しません: ${name}.${fieldName}`,
+            `Data ResolverのField Identityが一致しません: ${name}.${fieldName}`,
           )
         if (
           definition.kind === 'field' &&
@@ -170,5 +170,14 @@ export function bindManifest<Context extends object = object>(input: {
     }
   }
   validateEndpointSchema(schema)
-  return storeManifest({ schema, metadata, fingerprint: input.fingerprint })
+  return storeManifest({ schema, metadata })
+}
+
+function copyScalarProperty<Key extends keyof GraphQLScalarType>(
+  target: GraphQLScalarType,
+  source: Partial<GraphQLScalarType>,
+  key: Key,
+) {
+  const value = source[key]
+  if (value !== undefined) target[key] = value
 }

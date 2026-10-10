@@ -30,6 +30,8 @@ import {
   validate,
   type DocumentNode,
   type GraphQLSchema,
+  Kind,
+  OperationTypeNode,
 } from 'graphql'
 import { codegen } from '@graphql-codegen/core'
 import * as typescript from '@graphql-codegen/typescript'
@@ -37,7 +39,11 @@ import * as resolvers from '@graphql-codegen/typescript-resolvers'
 import * as operations from '@graphql-codegen/typescript-operations'
 import * as documentNode from '@graphql-codegen/typed-document-node'
 import { format } from 'oxfmt'
-import { parse as parseTypeScript, print as printTypeScript } from '@swc/core'
+import {
+  parse as parseTypeScript,
+  print as printTypeScript,
+  type Expression,
+} from '@swc/core'
 import {
   loadGraphQLConfig,
   type GraphQLCodegenTarget,
@@ -129,13 +135,6 @@ function stripLocations(value: unknown): unknown {
     )
   return value
 }
-function modulePath(from: string, to: string) {
-  const path = relative(from, to)
-    .split(sep)
-    .join('/')
-    .replace(/\.(?:ts|mts)$/, '.js')
-  return path.startsWith('.') ? path : `./${path}`
-}
 function resultType(type: GraphQLType): string {
   const inner = (value: GraphQLType): string =>
     isListType(value)
@@ -182,7 +181,99 @@ async function formattedOutput(
   })
   const aliases = new Map<string, string>()
   const body = []
+  const names = new Set<string>()
+  const templateModule = await parseTypeScript('const value = Kind.NAME', {
+    syntax: 'typescript',
+  })
+  const templateStatement = templateModule.body[0]
+  const template =
+    templateStatement?.type === 'VariableDeclaration'
+      ? templateStatement.declarations[0]?.init
+      : undefined
+  if (
+    template?.type !== 'MemberExpression' ||
+    template.object.type !== 'Identifier' ||
+    template.property.type !== 'Identifier'
+  )
+    throw new Error('GraphQL ASTの定数参照を構築できません。')
+  const namespaceTemplate = template.object
+  const memberTemplate = template.property
+  const constants = (expression: Expression): Expression => {
+    if (expression.type === 'ArrayExpression') {
+      for (const item of expression.elements)
+        if (item) item.expression = constants(item.expression)
+    } else if (expression.type === 'ObjectExpression') {
+      for (const property of expression.properties) {
+        if (property.type !== 'KeyValueProperty') continue
+        const key =
+          property.key.type === 'Identifier' ||
+          property.key.type === 'StringLiteral'
+            ? property.key.value
+            : undefined
+        const values =
+          key === 'kind'
+            ? Kind
+            : key === 'operation'
+              ? OperationTypeNode
+              : undefined
+        const literal =
+          property.value.type === 'StringLiteral' ? property.value : undefined
+        const constant =
+          values && literal
+            ? Object.entries(values).find(
+                ([, value]) => value === literal.value,
+              )?.[0]
+            : undefined
+        if (constant && literal) {
+          const namespace = key === 'kind' ? 'Kind' : 'OperationTypeNode'
+          property.value = {
+            ...template,
+            object: { ...namespaceTemplate, value: namespace },
+            property: { ...memberTemplate, value: constant },
+          }
+          names.add(namespace)
+        } else property.value = constants(property.value)
+      }
+    }
+    return expression
+  }
   for (const statement of module.body) {
+    if (
+      statement.type === 'ExportDeclaration' &&
+      statement.declaration.type === 'VariableDeclaration'
+    ) {
+      for (const declaration of statement.declaration.declarations) {
+        const init = declaration.init
+        if (
+          declaration.id.type === 'Identifier' &&
+          init?.type === 'TsAsExpression' &&
+          init.typeAnnotation.type === 'TsTypeReference' &&
+          init.typeAnnotation.typeName.type === 'Identifier' &&
+          init.typeAnnotation.typeName.value === 'DocumentNode' &&
+          init.expression.type === 'TsAsExpression' &&
+          init.expression.typeAnnotation.type === 'TsKeywordType' &&
+          init.expression.typeAnnotation.kind === 'unknown'
+        ) {
+          declaration.id = {
+            ...declaration.id,
+            typeAnnotation: {
+              type: 'TsTypeAnnotation',
+              span: init.span,
+              typeAnnotation: init.typeAnnotation,
+            },
+          }
+          declaration.init = init.expression.expression
+        }
+        if (
+          declaration.id.type === 'Identifier' &&
+          'typeAnnotation' in declaration.id &&
+          declaration.id.typeAnnotation?.typeAnnotation.type ===
+            'TsTypeReference' &&
+          declaration.init
+        )
+          declaration.init = constants(declaration.init)
+      }
+    }
     if (
       statement.type === 'ExportDeclaration' &&
       statement.declaration.type === 'TsTypeAliasDeclaration'
@@ -200,10 +291,19 @@ async function formattedOutput(
     }
     body.push(statement)
   }
-  const normalized = await printTypeScript({ ...module, body })
+  const constantModule = names.size
+    ? await parseTypeScript(
+        `import { ${[...names].join(', ')} } from 'graphql'`,
+        { syntax: 'typescript' },
+      )
+    : undefined
+  const normalized = await printTypeScript({
+    ...module,
+    body: [...(constantModule?.body ?? []), ...body],
+  })
   const formatted = await format(
     path,
-    `${generatedHeader}// 入力指紋: ${fingerprint}\n${normalized.code}`,
+    `${generatedHeader}// fingerprint: ${fingerprint}\n${normalized.code}`,
     {
       singleQuote: true,
       semi: false,
@@ -228,7 +328,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify({
-        version: 2,
+        version: 3,
         target,
         blueprint,
         documents: docs.map((doc) => stripLocations(doc.document)),
@@ -271,12 +371,6 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
       files: [await formattedOutput(output, content, fingerprint)],
       inputs: [...files, ...inputs],
     }
-  const resolverModule = resolve(cwd, target.resolvers)
-  if (
-    [output, resolverModule].some((value) => value === cwd) ||
-    resolverModule.startsWith(`${output}${sep}`)
-  )
-    throw new Error('Resolver Moduleは生成directoryの外に置いてください。')
   const types = Object.values(schema.getTypeMap())
     .filter(
       (type): type is GraphQLObjectType | GraphQLInterfaceType =>
@@ -338,12 +432,11 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
   const contextImport = target.contextType.split('#')
   const contextName =
     contextImport.length === 2 ? 'LoutreContext' : target.contextType
-  const extra = `\nimport type { FieldSpec } from '@loutrejs/graphql/data'\n${contextImport.length === 2 ? `import type { ${contextImport[1]} as LoutreContext } from '${contextImport[0]}'` : ''}\nexport type CoercedArguments<T, K extends keyof T> = Omit<T, K> & { readonly [P in K]-?: Exclude<T[P], undefined> }\nexport interface SchemaFields { ${fields.replaceAll(', AppContext>', `, ${contextName}>`)} }\n`
+  const extra = `\nimport type { FieldSpec } from '@loutrejs/graphql/data'\n${contextImport.length === 2 ? `import type { ${contextImport[1]} as LoutreContext } from '${contextImport[0]}'` : ''}\nexport type CoercedArguments<T, K extends keyof T> = Omit<T, K> & { readonly [P in K]-?: Exclude<T[P], undefined> }\nexport type SchemaContext = ${contextName}\nexport interface SchemaFields { ${fields.replaceAll(', AppContext>', `, ${contextName}>`)} }\n`
   const outputs = {
     'types.ts': content + extra,
-    'data.ts': `import { createSchemaData } from '@loutrejs/graphql/data'\nimport type { SchemaFields } from './types.js'\nexport const createData = () => createSchemaData<SchemaFields>(${JSON.stringify(identities)}, '${fingerprint}')`,
-    'schema-ast.ts': `import type { DocumentNode } from 'graphql'\nexport const schemaDocument = ${JSON.stringify(blueprint)} as unknown as DocumentNode`,
-    'manifest.ts': `import { bindManifest } from '@loutrejs/graphql/runtime'\nimport { schemaDocument } from './schema-ast.js'\nimport { resolvers } from '${modulePath(output, resolverModule)}'\nimport type { SchemaFields } from './types.js'\nexport type * from './types.js'\nexport const manifest = bindManifest<SchemaFields['${schema.getQueryType()!.name}']['${Object.keys(schema.getQueryType()!.getFields())[0]}']['context']>({ schemaDocument, resolvers, fingerprint: '${fingerprint}' })`,
+    'data.ts': `import { createSchemaData } from '@loutrejs/graphql/data'\nimport type { SchemaFields } from './types.js'\nexport const createData = () => createSchemaData<SchemaFields>(${JSON.stringify(identities)})`,
+    'schema-ast.ts': `import type { GraphQLSchemaDocument } from '@loutrejs/graphql/runtime'\nimport type { SchemaContext } from './types.js'\nexport const schemaDocument: GraphQLSchemaDocument<SchemaContext> = ${JSON.stringify(blueprint)}`,
   }
   return {
     name: 'server',

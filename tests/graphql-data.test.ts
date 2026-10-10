@@ -47,11 +47,10 @@ function fixture(
         ),
       ]),
   )
-  const d = createSchemaData<DynamicFields>(identities, 'test')
+  const d = createSchemaData<DynamicFields>(identities)
   const manifest = bindManifest({
     schemaDocument: document,
     resolvers: build(d),
-    fingerprint: 'test',
   })
   const bound = getManifest(manifest)
   const controller = new AbortController()
@@ -474,7 +473,7 @@ it('fragment / directive / abstract typeをDemandへ反映し、__typenameに依
   ).toEqual(['id'])
 })
 
-it('Data ResolverのField Identity / 生成世代不一致とunknown FieldをBinding時に拒否する', () => {
+it('Data ResolverのField Identity不一致とunknown FieldをBinding時に拒否する', () => {
   expect(() =>
     fixture(basic, (d) => ({
       Query: { parents: () => [] },
@@ -486,16 +485,6 @@ it('Data ResolverのField Identity / 生成世代不一致とunknown FieldをBin
       Query: { parents: d.Parent!.child!.source(() => []) },
     })),
   ).toThrow('Field Identity')
-  const d = createSchemaData<DynamicFields>(
-    { Parent: { child: 'Parent.child' } },
-    'old',
-  )
-  expect(() =>
-    fixture(basic, () => ({
-      Query: { parents: () => [] },
-      Parent: { child: d.Parent!.child!.field({ load: () => [] }) },
-    })),
-  ).toThrow('生成世代')
 })
 
 it('Metadataを失うwrapperとincremental directiveを明示的に拒否する', async () => {
