@@ -64,6 +64,41 @@ async function fixture() {
 }
 
 describe('GraphQL CLI', () => {
+  it.each([{ MEMBER: 0, ADMIN: 2 }, '../domain.js#Role'])(
+    'serverのEnum対応%sを引数・Input Object・通常とBatchの戻り値へ反映する',
+    async (enumMapping) => {
+      const f = await fixture()
+      await writeFile(
+        join(f.cwd, 'schema.graphql'),
+        'enum Role { MEMBER ADMIN } input Options { role:Role = ADMIN } type Query { role(value:Role!, options:Options):Role! }',
+      )
+      await writeFile(
+        join(f.cwd, 'config.json'),
+        JSON.stringify({
+          targets: {
+            server: {
+              kind: 'server',
+              schema: ['schema.graphql'],
+              output: 'generated',
+              enumValues: { Role: enumMapping },
+            },
+          },
+        }),
+      )
+      expect(
+        await f.invoke(['generate', '--config', 'config.json']),
+        f.stderr.join('\n'),
+      ).toBe(0)
+      const types = await readFile(join(f.cwd, 'generated/types.ts'), 'utf8')
+      expect(types).toContain("value: ResolversTypes['Role']")
+      expect(types).toContain("role: InputMaybe<ResolversTypes['Role']>")
+      expect(types).toContain("ResolversTypes['Role'],")
+      expect(types).not.toContain('Role: null')
+      if (typeof enumMapping === 'string')
+        expect(types).toContain("from '../domain.js'")
+      else expect(types).toContain('export type Role = 0 | 2')
+    },
+  )
   it('Enumの戻り値をnullable・listも含めてEnum型として生成する', async () => {
     const f = await fixture()
     await writeFile(
@@ -229,6 +264,9 @@ describe('GraphQL CLI', () => {
     'mapper',
     'operation',
     'clientMapper',
+    'enumType',
+    'enumValue',
+    'clientEnumValues',
     'unknownOption',
     'duplicateOutput',
     'anonymous',
@@ -251,6 +289,11 @@ describe('GraphQL CLI', () => {
       )
     if (mode === 'clientMapper')
       config.targets.client.mappers = { User: '../domain.js#User' }
+    if (mode === 'enumType') config.targets.server.enumValues = { User: {} }
+    if (mode === 'enumValue')
+      config.targets.server.enumValues = { Role: { UNKNOWN: 1 } }
+    if (mode === 'clientEnumValues')
+      config.targets.client.enumValues = { Role: { MEMBER: 1 } }
     if (mode === 'unknownOption') config.targets.server.plugin = 'custom'
     if (mode === 'duplicateOutput')
       config.targets.client.output = config.targets.server.output

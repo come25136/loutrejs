@@ -28,6 +28,15 @@ export const graphQLCodegenConfig = z.strictObject({
               'serverの出力先は生成専用directoryにしてください。',
             ),
           mappers: z.record(z.string(), z.string().min(1)).optional(),
+          enumValues: z
+            .record(
+              z.string(),
+              z.union([
+                z.string().min(1),
+                z.record(z.string(), z.union([z.string(), z.number()])),
+              ]),
+            )
+            .optional(),
         }),
         z.strictObject({
           ...base,

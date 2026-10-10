@@ -57,7 +57,7 @@ try {
       enum Context { LOCAL REMOTE }
       input Options { at:DateTime = "2026-01-01", role:Role = ADMIN }
       type Child { value:Int! } type Parent { id:ID!, child:Child! }
-      type Query { parents:[Parent!]!, failures:[Parent]!, check(options:Options! = {}):String!, echo(value:Int!):Int!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], contextValue:Context!, failure:String }
+      type Query { parents:[Parent!]!, failures:[Parent]!, check(options:Options! = {}):String!, role(value:Role!):Role!, batchRoles(values:[Role!]!):[Role!]!, echo(value:Int!):Int!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], contextValue:Context!, failure:String }
       type Mutation { change:Parent! }
       type Subscription { ticks:Parent!, rejected:Parent! }`,
     )
@@ -68,32 +68,36 @@ try {
     await writeFile(
       join(cwd, 'config.ts'),
       `export default { targets: {
-      server: { kind:'server',schema:['schema.graphql'],mappers:{Parent:'../context.js#Parent'},scalars:{DateTime:'Date'},output:'src/generated' },
+      server: { kind:'server',schema:['schema.graphql'],mappers:{Parent:'../context.js#Parent'},enumValues:{Role:'../context.js#Role',Status:{ACTIVE:0,INACTIVE:2}},scalars:{DateTime:'Date'},output:'src/generated' },
       client: { kind:'client',schema:['schema.graphql'],documents:['operation.graphql'],scalars:{DateTime:'string'},output:'src/client.ts' }
     } }`,
     )
     await writeFile(
       join(cwd, 'src/context.ts'),
-      `export interface Parent { id:string } export interface AppContext { signal:AbortSignal; state:{ parent:Parent; revision:number; calls:number; cleanups:number } }`,
+      `export enum Role { MEMBER=0, ADMIN=2 } export interface Parent { id:string } export interface AppContext { signal:AbortSignal; state:{ parent:Parent; revision:number; calls:number; cleanups:number } }`,
     )
     await writeFile(
       join(cwd, 'src/resolvers.ts'),
       `import { GraphQLScalarType } from 'graphql'
       import type { Resolvers } from './generated/types.js'
       import type { AppContext } from './context.js'
-      const enumResolvers = { Role: { MEMBER:1, ADMIN:2 } }
+      import { Role } from './context.js'
+      const enumResolvers = { Role: { MEMBER:Role.MEMBER, ADMIN:Role.ADMIN } }
       export const resolvers = {
         ...enumResolvers,
+        Status: { ACTIVE:0, INACTIVE:2 },
         DateTime: new GraphQLScalarType({name:'DateTime',serialize: value => (value as Date).toISOString(),parseValue:value=>new Date(String(value))}),
         Query: {
           parents: (_parent,_args,context)=>[context.state.parent,context.state.parent],
           failures: ()=>[{id:'first'},{id:'failed'},{id:'third'}],
-          check: (_parent,{options})=>options.at!.toISOString()+':'+options.role,
+          check: (_parent,{options})=>options.at!.toISOString()+':'+options.role!.toFixed(0),
+          role: (_parent,{value})=>{const numeric:number=value;return numeric===2?Role.ADMIN:Role.MEMBER},
+          batchRoles: { load: (parents,{args})=>{const numeric:readonly number[]=args.values;return parents.map(()=>numeric.map(value=>value===2?Role.ADMIN:Role.MEMBER))} },
           echo: (_parent,{value})=>value,
           cleanups: (_parent,_args,context)=>context.state.cleanups,
-          status: ()=>'ACTIVE', optionalStatus: ()=>null,
-          statuses: { load: parents=>parents.map(()=>['ACTIVE',null,'INACTIVE']) },
-          optionalStatuses: ()=>['INACTIVE'],
+          status: ()=>0, optionalStatus: ()=>null,
+          statuses: { load: parents=>parents.map(()=>[0,null,2]) },
+          optionalStatuses: ()=>[2],
           contextValue: { load: parents=>parents.map(()=>'LOCAL') },
           failure: ()=>{throw new Error('private failure')},
         },
@@ -140,6 +144,9 @@ try {
       const operation=query=>new Promise((resolve,reject)=>{let value;client.subscribe({query},{next:result=>{value=result},error:reject,complete:()=>resolve(value)})})
       try {
         assert.deepEqual(await request('{check}'),{data:{check:'2026-01-01T00:00:00.000Z:2'}})
+        for(const result of [await request('{role(value:ADMIN) batchRoles(values:[MEMBER,ADMIN])}'),await operation('{role(value:ADMIN) batchRoles(values:[MEMBER,ADMIN])}')]) {
+          assert.deepEqual(result,{data:{role:'ADMIN',batchRoles:['MEMBER','ADMIN']}})
+        }
         assert.deepEqual(await request('{status optionalStatus statuses optionalStatuses}'),{data:{status:'ACTIVE',optionalStatus:null,statuses:['ACTIVE',null,'INACTIVE'],optionalStatuses:['INACTIVE']}})
         assert.deepEqual(await request('{contextValue}'),{data:{contextValue:'LOCAL'}})
         for(const [accept,status] of [['application/graphql-response+json',400],['application/json',200]]) {

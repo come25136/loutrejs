@@ -100,6 +100,19 @@ function validateTarget(target: GraphQLCodegenTarget, schema: GraphQLSchema) {
           `mappers.${name}はschemaのobject / interface型を指定してください。`,
         )
     }
+    for (const [name, mapping] of Object.entries(target.enumValues ?? {})) {
+      const type = schema.getType(name)
+      if (!type || !isEnumType(type))
+        throw new Error(
+          `enumValues.${name}はschemaのEnum型を指定してください。`,
+        )
+      if (typeof mapping !== 'string') {
+        const values = new Set(type.getValues().map((value) => value.name))
+        for (const value of Object.keys(mapping))
+          if (!values.has(value))
+            throw new Error(`enumValues.${name}.${value}はschemaにありません。`)
+      }
+    }
   }
   for (const name of Object.keys(target.scalars ?? {})) {
     const type = schema.getType(name)
@@ -155,7 +168,7 @@ function inputType(type: GraphQLInputType): string {
         ? `Scalars['${value.name}']['input']`
         : isInputObjectType(value)
           ? `CoercedInputTypes['${value.name}']`
-          : value.toString()
+          : `ResolversTypes['${value.toString()}']`
   return isNonNullType(type) ? inner(type.ofType) : `InputMaybe<${inner(type)}>`
 }
 function inputProperties(
@@ -333,6 +346,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
       ? {
           contextType: 'object',
           mappers: target.mappers ?? {},
+          enumValues: target.enumValues ?? {},
           mapperTypeSuffix: 'Domain',
         }
       : {}),
@@ -345,7 +359,22 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
     pluginMap: { typescript, resolvers, operations, documentNode },
     plugins:
       target.kind === 'server'
-        ? [{ typescript: {} }, { resolvers: {} }]
+        ? [
+            { typescript: {} },
+            {
+              resolvers: {
+                // literal対応を渡すと上流pluginがResolversTypesをnullにするため、生成済みEnum型を参照する。
+                enumValues: Object.fromEntries(
+                  Object.entries(target.enumValues ?? {}).map(
+                    ([name, mapping]) => [
+                      name,
+                      typeof mapping === 'string' ? mapping : name,
+                    ],
+                  ),
+                ),
+              },
+            },
+          ]
         : [{ typescript: {} }, { operations: {} }, { documentNode: {} }],
   })
   const output = resolve(cwd, target.output)

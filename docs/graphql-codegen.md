@@ -62,6 +62,8 @@ Custom Scalarはtargetごとにinput / outputを指定します。未指定のSc
 
 clientでは通信上の表現に合わせてDateTimeをstringにします。serverではGraphQLScalarTypeのparse / serialize処理をresolversへ登録します。Union / Interfaceの`__resolveType`、Objectの`__isTypeOf`、Enumの値対応も同じResolver Moduleへ登録できます。生成時にdomain Moduleは実行せず、参照先の存在と型の整合性はTypeScript検査で確認します。
 
+Enumの内部値がSDLの名前と異なる場合は、server targetの`enumValues`に対応を指定します。例えば`enumValues: { Role: { MEMBER: 0, ADMIN: 2 } }`、または`enumValues: { Role: '../../domain/role.js#Role' }`でdomainのEnum型を参照できます。Resolverの引数・Input Object・通常とBatchの戻り値へ反映されます。実際の値対応は利用者が`resolvers.Role`へ登録してください。clientは通信上のSDL名を使うため、`enumValues`を指定しません。
+
 ## ResolverとManifest
 
 ```ts
