@@ -61,10 +61,6 @@
                 "type": "string",
                 "minLength": 1
               },
-              "contextType": {
-                "type": "string",
-                "minLength": 1
-              },
               "mappers": {
                 "type": "object",
                 "propertyNames": {
@@ -76,7 +72,7 @@
                 }
               }
             },
-            "required": ["schema", "kind", "output", "contextType"],
+            "required": ["schema", "kind", "output"],
             "additionalProperties": false
           },
           {

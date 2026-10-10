@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises'
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  rm,
+  readFile,
+  copyFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { execFile } from 'node:child_process'
@@ -59,7 +66,7 @@ try {
     await writeFile(
       join(cwd, 'config.ts'),
       `export default { targets: {
-      server: { kind:'server',schema:['schema.graphql'],contextType:'../context.js#AppContext',mappers:{Parent:'../context.js#Parent'},scalars:{DateTime:'Date'},output:'src/generated' },
+      server: { kind:'server',schema:['schema.graphql'],mappers:{Parent:'../context.js#Parent'},scalars:{DateTime:'Date'},output:'src/generated' },
       client: { kind:'client',schema:['schema.graphql'],documents:['operation.graphql'],scalars:{DateTime:'string'},output:'src/client.ts' }
     } }`,
     )
@@ -72,7 +79,8 @@ try {
       `import { GraphQLScalarType } from 'graphql'
       import { createData } from './generated/data.js'
       import type { Resolvers } from './generated/types.js'
-      const d = createData()
+      import type { AppContext } from './context.js'
+      const d = createData<AppContext>()
       const enumResolvers = { Role: { MEMBER:1, ADMIN:2 } }
       export const resolvers = {
         ...enumResolvers,
@@ -94,15 +102,17 @@ try {
           },
           resolve: (value: import('./context.js').Parent)=>value,
         } },
-      } satisfies Resolvers`,
+      } satisfies Resolvers<AppContext>`,
     )
     await writeFile(
       join(cwd, 'src/app.ts'),
       `import { defineApplication,defineModule } from '@loutrejs/loutre'
       import { graphql } from '@loutrejs/graphql'
-      import { bindManifest, schemaDocument } from './generated/schema-ast.js'
+      import { bindManifest } from './generated/bindings.js'
+      import { schemaDocument } from '../shared-contract/schema-ast.js'
+      import type { AppContext } from './context.js'
       import { resolvers } from './resolvers.js'
-      const manifest = bindManifest({ schemaDocument, resolvers })
+      const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
       export const state={parent:{id:'same'},revision:0,calls:0,cleanups:0}
       const Module=defineModule(()=>({executions:[graphql.endpoint({name:'Compatibility',path:'/graphql',manifest,transports:{http:true,websocket:true},factory:()=>({context:({signal})=>({signal,state})})})]}))
       export default defineApplication({modules:[Module()]})`,
@@ -155,6 +165,11 @@ try {
         process.execPath,
         [cli, 'graphql', 'generate', '--config', 'config.ts', '--check'],
         { cwd },
+      )
+      await mkdir(join(cwd, 'shared-contract'))
+      await copyFile(
+        join(cwd, 'src/generated/schema-ast.ts'),
+        join(cwd, 'shared-contract/schema-ast.ts'),
       )
       await run(join(cwd, 'node_modules/.bin/tsc'), [], { cwd })
       await run(

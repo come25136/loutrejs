@@ -1,12 +1,5 @@
-import type { GraphQLSchema, DocumentNode } from 'graphql'
+import type { GraphQLSchema } from 'graphql'
 import type { DataDefinition } from './data-internal.js'
-
-declare const schemaContext: unique symbol
-export interface GraphQLSchemaDocument<
-  Context extends object = object,
-> extends DocumentNode {
-  readonly [schemaContext]?: Context
-}
 
 declare const manifestBrand: unique symbol
 export interface GraphQLManifest<Context extends object = object> {

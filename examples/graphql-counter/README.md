@@ -18,10 +18,10 @@ HTTPはhttp://127.0.0.1:3000/graphql、WebSocketはws://127.0.0.1:3000/graphql�
 ## Serverの構成
 
 - [contracts/counter.graphql](./contracts/counter.graphql): 共有するAPI契約。
-- [graphql.config.ts](./graphql.config.ts): server型生成、context型、domain mapping。
+- [graphql.config.ts](./graphql.config.ts): server型生成とdomain mapping。
 - [src/domain/counter.ts](./src/domain/counter.ts): valueとstepIdを持つdomainと変更通知。
 - [src/domain/step.ts](./src/domain/step.ts): 関連するStepの一括取得。
-- [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): 生成したcreateData()とResolvers型を使い、Counter.stepをstepIdからBatchで解決。
+- [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): 生成したcreateData<AppContext>()とResolvers<AppContext>型を使い、Counter.stepをstepIdからBatchで解決。
 - [src/graphql/context.ts](./src/graphql/context.ts): domain serviceとoperationのsignal。Batch ScopeはFrameworkがOperation / Delivery Eventごとに生成。
 - [src/endpoint.ts](./src/endpoint.ts): Binding済みManifestとDIをcontextへ接続。
 - [src/graphql/manifest.ts](./src/graphql/manifest.ts): 生成Schemaと手書きResolverのBinding。

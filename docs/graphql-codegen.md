@@ -20,7 +20,6 @@ export default {
       kind: 'server',
       schema: ['contracts/**/*.graphql'],
       output: 'src/graphql/generated',
-      contextType: '../context.js#AppContext',
       mappers: {
         OrderItem: '../../domain/order.js#OrderItem',
         Product: '../../domain/product.js#Product',
@@ -36,7 +35,7 @@ export default {
 } satisfies GraphQLCodegenConfig
 ```
 
-schema / documents / outputは設定fileからの相対pathです。contextType / mapperのimportは生成types.tsからの相対pathです。Resolver Moduleは`resolvers`をnamed exportします。serverの出力directoryは生成専用とし、client outputもその外へ置きます。serverだけならclient targetを指定する必要はありません。
+schema / documents / outputは設定fileからの相対pathです。mapperのimportは生成types.tsからの相対pathです。Resolver Moduleは`resolvers`をnamed exportします。serverの出力directoryは生成専用とし、client outputもその外へ置きます。serverだけならclient targetを指定する必要はありません。
 
 ```sh
 loutre graphql generate --config graphql.config.ts
@@ -45,7 +44,7 @@ loutre graphql generate --config graphql.config.ts --watch
 loutre graphql generate --config graphql.config.ts --check
 ```
 
-server targetはtypes.ts・data.ts・schema-ast.tsを同一世代で生成します。client targetは名前付きOperation / FragmentのVariables・選択結果・TypedDocumentNodeを生成します。client projectには`@graphql-typed-document-node/core`も追加してください。
+server targetはtypes.ts・data.ts・schema-ast.ts・bindings.tsを同一世代で生成します。client targetは名前付きOperation / FragmentのVariables・選択結果・TypedDocumentNodeを生成します。client projectには`@graphql-typed-document-node/core`も追加してください。
 
 生成物には@generatedとfingerprintが付きます。fingerprintは生成入力の識別用headerで、Runtimeへ渡さず、Binding時の照合にも使いません。全targetの生成・整形・検証とtemp出力を終えてから更新し、更新中の失敗では全targetを前の正常世代へ戻します。`--check`は書き込みません。watchはSDL・Operation・設定の追加 / 変更 / 削除を追跡し、エラー後の正常な世代を保持します。生成directoryへ人間のsource fileを置かないでください。Resolver実装の変更はApplicationの再起動 / HMRでBindingし直します。
 
@@ -53,7 +52,7 @@ server targetはtypes.ts・data.ts・schema-ast.tsを同一世代で生成しま
 
 mappersは公開GraphQL Typeとdomain Typeの対応です。例えばOrderItemのdomainはproductIdを持ち、SDLではproduct: Product!を公開できます。mappingは型生成だけへ適用し、RuntimeのObject変換や保存方法は決めません。同名のimportにはaliasが付きます。
 
-contextType / mappersはserver専用です。Field BuilderのParent / Args / Result / ContextはSchemaFieldsから推論します。ArgsはGraphQLがcoerceした値で、Input Object内のdefault値も型へ反映します。
+mappersはserver専用です。ApplicationのContextは設定へ含めず、createData<AppContext>()とResolvers<AppContext>で指定します。Field BuilderのParent / Args / ResultはSchemaFieldsから推論します。ArgsはGraphQLがcoerceした値で、Input Object内のdefault値も型へ反映します。
 
 Custom Scalarはtargetごとにinput / outputを指定します。未指定のScalarをanyへ落としません。
 
@@ -61,15 +60,16 @@ Custom Scalarはtargetごとにinput / outputを指定します。未指定のSc
 { "scalars": { "DateTime": { "input": "Date", "output": "Date" } } }
 ```
 
-clientでは通信上の表現に合わせてDateTimeをstringにします。serverではGraphQLScalarTypeのparse / serialize処理をresolversへ登録します。Union / Interfaceの`__resolveType`、Objectの`__isTypeOf`、Enumの値対応も同じResolver Moduleへ登録できます。生成時にdomain / context Moduleは実行せず、参照先の存在と型の整合性はTypeScript検査で確認します。
+clientでは通信上の表現に合わせてDateTimeをstringにします。serverではGraphQLScalarTypeのparse / serialize処理をresolversへ登録します。Union / Interfaceの`__resolveType`、Objectの`__isTypeOf`、Enumの値対応も同じResolver Moduleへ登録できます。生成時にdomain Moduleは実行せず、参照先の存在と型の整合性はTypeScript検査で確認します。
 
 ## ResolverとManifest
 
 ```ts
 import { createData } from './generated/data.js'
 import type { Resolvers } from './generated/types.js'
+import type { AppContext } from './context.js'
 
-const d = createData()
+const d = createData<AppContext>()
 
 export const resolvers = {
   Query: {
@@ -93,7 +93,7 @@ export const resolvers = {
       },
     }),
   },
-} satisfies Resolvers
+} satisfies Resolvers<AppContext>
 ```
 
 通常のResolver / default property Resolverも使用できます。Query / Mutationのroot Fieldへresolve、Subscriptionへsubscribeとresolveを登録します。Data Builderの.source()はAsyncIterableを作るAPIではないため、Subscription Sourceには標準のsubscribe Resolverを使います。
@@ -101,10 +101,12 @@ export const resolvers = {
 ```ts
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { bindManifest, schemaDocument } from './generated/schema-ast.js'
+import { bindManifest } from './generated/bindings.js'
+import { schemaDocument } from './generated/schema-ast.js'
+import type { AppContext } from './context.js'
 import { resolvers } from './resolvers.js'
 
-const manifest = bindManifest({ schemaDocument, resolvers })
+const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 
 export const endpoint = graphql.endpoint({
   name: 'Commerce',
@@ -120,10 +122,11 @@ export const endpoint = graphql.endpoint({
 })
 ```
 
-schema-ast.tsはSchema専用のbindManifestもexportします。inline ResolverへParent / coerced Args / Result / Contextを付けるため、Bindingにはこの生成helperをimportします。Contextは設定のcontextTypeをdefaultとして使い、明示的に差し替える場合はbindManifest<AppContext>と指定できます。例えばCounter serverでは次のように記述できます。
+schema-ast.tsはSDL由来のASTだけをexportし、ContextやResolver型へ依存しません。Schema専用のbindManifestはbindings.tsからimportします。inline ResolverへParent / coerced Args / Result / Contextを付けるため、ApplicationでbindManifest<AppContext>と指定します。例えばCounter serverでは次のように記述できます。
 
 ```ts
-import { bindManifest, schemaDocument } from './generated/schema-ast.js'
+import { bindManifest } from './generated/bindings.js'
+import { schemaDocument } from './generated/schema-ast.js'
 import type { AppContext } from './context.js'
 
 const manifest = bindManifest<AppContext>({
@@ -140,7 +143,7 @@ const manifest = bindManifest<AppContext>({
 })
 ```
 
-args.amountはSDLからnumber、contextはAppContextとして推論します。存在しないType / Field、誤った戻り値は型エラーになります。分割Moduleでは引き続きsatisfies Resolversで実装を検査できます。共通runtimeのbindManifestは低水準のBinding関数で、Schema専用の型付けは生成helperが担当します。
+args.amountはSDLからnumber、contextはAppContextとして推論します。存在しないType / Field、誤った戻り値は型エラーになります。分割Moduleでは引き続きsatisfies Resolvers<AppContext>で実装を検査できます。共通runtimeのbindManifestは低水準のBinding関数で、Schema専用の型付けは生成helperが担当します。
 
 manifestはOpaque Typeです。schema / typeDefs / rootValueをendpointへ渡す経路はありません。makeExecutableSchema()や手動prepareは不要です。BindingはApplicationが保守するModuleへ記述します。生成ModuleはResolverをimportしません。Resolverからはgenerated/dataをvalue importし、generated/typesをtype-only importします。Binding Moduleの値をResolverから逆importしないでください。data ModuleのimportだけではSchema構築やResolver Moduleのimportを開始しません。
 

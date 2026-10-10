@@ -4,7 +4,6 @@ export default {
     server: {
       kind: 'server',
       schema: ['contracts/*.graphql'],
-      contextType: '../graphql/context.js#AppContext',
       mappers: {
         OrderConnection: '../domain/commerce.js#OrderConnection',
         Order: '../domain/commerce.js#Order',

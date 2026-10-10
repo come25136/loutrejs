@@ -1,7 +1,8 @@
+import type { AppContext } from './context.js'
 import { GraphQLScalarType } from 'graphql'
 import { createData } from './generated/data.js'
 import type { Resolvers } from './generated/types.js'
-const d = createData()
+const d = createData<AppContext>()
 export const resolvers = {
   DateTime: new GraphQLScalarType({
     name: 'DateTime',
@@ -34,4 +35,4 @@ export const resolvers = {
       resolve: (event: { sequence: number; hidden: string }) => event,
     },
   },
-} satisfies Resolvers
+} satisfies Resolvers<AppContext>

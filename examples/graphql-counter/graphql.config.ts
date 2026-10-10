@@ -6,7 +6,6 @@ export default {
       kind: 'server',
       schema: ['contracts/*.graphql'],
       output: 'src/generated',
-      contextType: '../graphql/context.js#AppContext',
       mappers: {
         Counter: '../domain/counter.js#Counter',
         Step: '../domain/step.js#Step',

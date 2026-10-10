@@ -1,19 +1,14 @@
 import { graphql } from '@loutrejs/graphql'
 import type { GraphQLResolveInfo } from 'graphql'
-import {
-  bindManifest,
-  schemaDocument,
-} from '../../examples/graphql-counter/src/generated/schema-ast.js'
+import { bindManifest } from '../../examples/graphql-counter/src/generated/bindings.js'
+import { schemaDocument } from '../../examples/graphql-counter/src/generated/schema-ast.js'
 import type { AppContext } from '../../examples/graphql-counter/src/graphql/context.js'
 import type { Counter } from '../../examples/graphql-counter/src/domain/counter.js'
-import {
-  bindManifest as bindOrders,
-  schemaDocument as ordersDocument,
-} from '../../examples/graphql-orders/src/generated/schema-ast.js'
-import {
-  bindManifest as bindConformance,
-  schemaDocument as conformanceDocument,
-} from '../../conformance/graphql/generated/schema-ast.js'
+import { bindManifest as bindOrders } from '../../examples/graphql-orders/src/generated/bindings.js'
+import { schemaDocument as ordersDocument } from '../../examples/graphql-orders/src/generated/schema-ast.js'
+import type { AppContext as OrderContext } from '../../examples/graphql-orders/src/graphql/context.js'
+import { bindManifest as bindConformance } from '../../conformance/graphql/generated/bindings.js'
+import { schemaDocument as conformanceDocument } from '../../conformance/graphql/generated/schema-ast.js'
 
 const explicit = bindManifest<AppContext>({
   schemaDocument,
@@ -64,10 +59,11 @@ const inferred = bindManifest({
   resolvers: {
     Query: {
       counter: (_parent, _args, context) => {
-        const store: AppContext['counter'] = context.counter
-        // @ts-expect-error default Contextもanyへ落ちない
-        context.absent
-        return store.current()
+        const applicationIndependent: object = context
+        // @ts-expect-error SDLはApplicationのContextを持たない
+        context.counter
+        void applicationIndependent
+        return { value: 0, stepId: 'default' }
       },
     },
   },
@@ -143,7 +139,7 @@ graphql.endpoint({
   factory: () => ({ context: () => ({}) }),
 })
 
-bindOrders({
+bindOrders<OrderContext>({
   schemaDocument: ordersDocument,
   resolvers: {
     Query: {
@@ -172,7 +168,7 @@ bindOrders({
     },
   },
 })
-bindConformance({
+bindConformance<object>({
   schemaDocument: conformanceDocument,
   resolvers: {
     Query: {

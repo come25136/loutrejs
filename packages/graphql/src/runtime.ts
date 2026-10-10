@@ -14,21 +14,15 @@ import {
   type GraphQLIsTypeOfFn,
   type GraphQLArgument,
   type GraphQLInputField,
+  type DocumentNode,
 } from 'graphql'
 import { getData, type DataDefinition } from './data-internal.js'
-import {
-  storeManifest,
-  type GraphQLManifest,
-  type GraphQLSchemaDocument,
-} from './manifest-internal.js'
+import { storeManifest, type GraphQLManifest } from './manifest-internal.js'
 import { validateEndpointSchema } from './validation.js'
 
-export type {
-  GraphQLManifest,
-  GraphQLSchemaDocument,
-} from './manifest-internal.js'
+export type { GraphQLManifest } from './manifest-internal.js'
 export function bindManifest<Context extends object = object>(input: {
-  readonly schemaDocument: GraphQLSchemaDocument<Context>
+  readonly schemaDocument: DocumentNode
   readonly resolvers: object
 }): GraphQLManifest<Context> {
   const schema = buildASTSchema(input.schemaDocument)

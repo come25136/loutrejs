@@ -3,7 +3,7 @@ import type { Resolvers } from '../generated/types.js'
 import type { AppContext } from './context.js'
 import type { CounterChanged } from '../domain/counter.js'
 
-const d = createData()
+const d = createData<AppContext>()
 
 export const resolvers = {
   Query: {

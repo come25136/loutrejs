@@ -65,7 +65,14 @@ import { graphql } from '@loutrejs/graphql'
 import { manifest } from '../../examples/graphql-orders/src/graphql/manifest.js'
 import { data } from '@loutrejs/graphql/data'
 
-const d = createData()
+const d = createData<OrderContext>()
+const alternate = createData<{ readonly label: string }>()
+alternate.Query.productBatchCount.source(({ context }) => {
+  const label: string = context.label
+  // @ts-expect-error 同じSchemaでもApplicationごとにContextを選べる
+  context.commerce
+  return label.length
+})
 const mapped = {
   Query: {
     orders: d.Query.orders.source(({ args, context, demand, signal }) => {
@@ -92,7 +99,7 @@ const mapped = {
       },
     }),
   },
-} satisfies OrderResolvers
+} satisfies OrderResolvers<OrderContext>
 void mapped
 // @ts-expect-error SchemaにないTypeを拒否する
 d.UnknownType
@@ -131,7 +138,7 @@ const fromRead = d.OrderItem.product.field({
 void fromRead
 
 import { createData as createConformanceData } from '../../conformance/graphql/generated/data.js'
-const c = createConformanceData()
+const c = createConformanceData<object>()
 c.Query.at.source(({ args }) => {
   const date: Date = args.value
   return date

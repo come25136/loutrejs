@@ -35,12 +35,12 @@ it('全fileをstageし、後続targetのpublish失敗時は全targetの正常世
     await writeFile(join(cwd, 'operation.graphql'), 'query Hello { hello }')
     await writeFile(
       join(cwd, 'config.ts'),
-      `export default { targets: { server: { kind:'server', schema:['schema.graphql'],  contextType:'../context.js#AppContext', output:'generated' }, client:{kind:'client',schema:['schema.graphql'],documents:['operation.graphql'],output:'client.ts'} } }`,
+      `export default { targets: { server: { kind:'server', schema:['schema.graphql'],  output:'generated' }, client:{kind:'client',schema:['schema.graphql'],documents:['operation.graphql'],output:'client.ts'} } }`,
     )
     expect(await invoke(), stderr.join('\n')).toBe(0)
     const paths = [
       'client.ts',
-      ...['types.ts', 'data.ts', 'schema-ast.ts'].map(
+      ...['types.ts', 'data.ts', 'schema-ast.ts', 'bindings.ts'].map(
         (name) => `generated/${name}`,
       ),
     ]

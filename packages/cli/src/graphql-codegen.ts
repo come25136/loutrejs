@@ -328,7 +328,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify({
-        version: 4,
+        version: 5,
         target,
         blueprint,
         documents: docs.map((doc) => stripLocations(doc.document)),
@@ -346,7 +346,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
     scalars: target.scalars ?? {},
     ...(target.kind === 'server'
       ? {
-          contextType: target.contextType,
+          contextType: 'object',
           mappers: target.mappers ?? {},
           mapperTypeSuffix: 'Domain',
         }
@@ -389,7 +389,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
           const args = field.args.length
             ? `${type.name}${field.name}Args`
             : 'Record<string, never>'
-          return `${field.name}: FieldSpec<ResolversParentTypes['${type.name}'], ${args}, ${resultType(field.type)}, AppContext>`
+          return `${field.name}: FieldSpec<ResolversParentTypes['${type.name}'], ${args}, ${resultType(field.type)}, Context>`
         })
       return `${type.name}: { ${items.join('\n')} }`
     })
@@ -429,14 +429,12 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
     )
     .join('\n')
   content += `\nexport interface CoercedInputTypes { ${inputObjects} }\n`
-  const contextImport = target.contextType.split('#')
-  const contextName =
-    contextImport.length === 2 ? 'LoutreContext' : target.contextType
-  const extra = `\nimport type { FieldSpec } from '@loutrejs/graphql/data'\n${contextImport.length === 2 ? `import type { ${contextImport[1]} as LoutreContext } from '${contextImport[0]}'` : ''}\nexport type CoercedArguments<T, K extends keyof T> = Omit<T, K> & { readonly [P in K]-?: Exclude<T[P], undefined> }\nexport type SchemaContext = ${contextName}\nexport interface SchemaFields { ${fields.replaceAll(', AppContext>', `, ${contextName}>`)} }\n`
+  const extra = `\nimport type { FieldSpec } from '@loutrejs/graphql/data'\nexport type CoercedArguments<T, K extends keyof T> = Omit<T, K> & { readonly [P in K]-?: Exclude<T[P], undefined> }\nexport interface SchemaFields<Context extends object> { ${fields} }\n`
   const outputs = {
     'types.ts': content + extra,
-    'data.ts': `import { createSchemaData } from '@loutrejs/graphql/data'\nimport type { SchemaFields } from './types.js'\nexport const createData = () => createSchemaData<SchemaFields>(${JSON.stringify(identities)})`,
-    'schema-ast.ts': `import type { DocumentNode } from 'graphql'\nimport { bindManifest as bindRuntimeManifest, type GraphQLSchemaDocument, type GraphQLManifest } from '@loutrejs/graphql/runtime'\nimport type { SchemaContext, Resolvers } from './types.js'\nexport const schemaDocument: GraphQLSchemaDocument<SchemaContext> = ${JSON.stringify(blueprint)}\nexport function bindManifest<Context extends object = SchemaContext>(input: { readonly schemaDocument: DocumentNode; readonly resolvers: Resolvers<Context> }): GraphQLManifest<Context> { return bindRuntimeManifest<Context>(input) }`,
+    'data.ts': `import { createSchemaData } from '@loutrejs/graphql/data'\nimport type { SchemaFields } from './types.js'\nexport const createData = <Context extends object>() => createSchemaData<SchemaFields<Context>>(${JSON.stringify(identities)})`,
+    'schema-ast.ts': `import type { DocumentNode } from 'graphql'\nexport const schemaDocument: DocumentNode = ${JSON.stringify(blueprint)}`,
+    'bindings.ts': `import type { DocumentNode } from 'graphql'\nimport { bindManifest as bindRuntimeManifest, type GraphQLManifest } from '@loutrejs/graphql/runtime'\nimport type { Resolvers } from './types.js'\nexport function bindManifest<Context extends object>(input: { readonly schemaDocument: DocumentNode; readonly resolvers: Resolvers<Context> }): GraphQLManifest<Context> { return bindRuntimeManifest<Context>(input) }`,
   }
   return {
     name: 'server',

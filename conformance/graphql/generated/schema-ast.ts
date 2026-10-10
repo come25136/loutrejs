@@ -1,14 +1,8 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// fingerprint: 1019ddbefd93081317c0b508666094f140fcd3191c5394dcabbda6e414e0bdd2
+// fingerprint: 5dc16b678e7d8852024f3b58fe70385f66aff97681cdce56e7c4b1d8ec0f30d3
 import { Kind } from 'graphql'
 import type { DocumentNode } from 'graphql'
-import {
-  bindManifest as bindRuntimeManifest,
-  type GraphQLSchemaDocument,
-  type GraphQLManifest,
-} from '@loutrejs/graphql/runtime'
-import type { SchemaContext, Resolvers } from './types.js'
-export const schemaDocument: GraphQLSchemaDocument<SchemaContext> = {
+export const schemaDocument: DocumentNode = {
   kind: Kind.DOCUMENT,
   definitions: [
     {
@@ -229,10 +223,4 @@ export const schemaDocument: GraphQLSchemaDocument<SchemaContext> = {
       },
     },
   ],
-}
-export function bindManifest<Context extends object = SchemaContext>(input: {
-  readonly schemaDocument: DocumentNode
-  readonly resolvers: Resolvers<Context>
-}): GraphQLManifest<Context> {
-  return bindRuntimeManifest<Context>(input)
 }

@@ -10,12 +10,14 @@ npm install --save-dev @loutrejs/cli
 ```ts
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { bindManifest, schemaDocument } from './generated/schema-ast.js'
+import { bindManifest } from './generated/bindings.js'
+import { schemaDocument } from './generated/schema-ast.js'
+import type { AppContext } from './context.js'
 import { resolvers } from './resolvers.js'
 
 import { CounterStore } from './domain/counter.js'
 
-const manifest = bindManifest({ schemaDocument, resolvers })
+const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 
 export const endpoint = graphql.endpoint({
   name: 'Counter',
@@ -30,7 +32,7 @@ export const endpoint = graphql.endpoint({
 
 factoryとcontextは必須です。manifestが要求するContextを返してください。schema / typeDefs / rootValueを渡す経路は廃止しています。
 
-生成したcreateData()でSchema-specific Typed Field Builderを利用できます。Parent / Args / Result / ContextをSDLとdomain mappingから推論し、.source()はDemandをRepositoryへ渡し、.field()は先読み値のreuseとBatch取得を扱います。通常のGraphQL Resolverとの混在も可能です。
+生成したcreateData<AppContext>()でSchema-specific Typed Field Builderを利用できます。ApplicationのContextを型引数で指定し、Parent / Args / ResultをSDLとdomain mappingから推論し、.source()はDemandをRepositoryへ渡し、.field()は先読み値のreuseとBatch取得を扱います。通常のGraphQL Resolverとの混在も可能です。
 
 HTTP contextの入力はtransport / request / signal / middleware stateです。WebSocketはtransport / opening request / connectionParams / operationId / operation signalを渡します。DI Serviceと長寿命ContextのlifetimeはBatch QueueのScopeとは別です。BatchはQuery Operation、Mutation root Field、Subscription Delivery Eventごとに分離します。
 

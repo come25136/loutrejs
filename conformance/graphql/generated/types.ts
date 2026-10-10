@@ -1,11 +1,10 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// fingerprint: 1019ddbefd93081317c0b508666094f140fcd3191c5394dcabbda6e414e0bdd2
+// fingerprint: 5dc16b678e7d8852024f3b58fe70385f66aff97681cdce56e7c4b1d8ec0f30d3
 import type {
   GraphQLResolveInfo,
   GraphQLScalarType,
   GraphQLScalarTypeConfig,
 } from 'graphql'
-import type { AppContext } from '../context.js'
 export type Maybe<T> = T | null
 export type InputMaybe<T> = Maybe<T>
 export type RequireFields<T, K extends keyof T> = Omit<T, K> & {
@@ -186,7 +185,7 @@ export type ResolversParentTypes = {
   Boolean: Scalars['Boolean']['output']
 }
 export type QueryResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Query'] =
     ResolversParentTypes['Query'],
 > = {
@@ -205,7 +204,7 @@ export type QueryResolvers<
   >
 }
 export type MutationResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Mutation'] =
     ResolversParentTypes['Mutation'],
 > = {
@@ -217,7 +216,7 @@ export type MutationResolvers<
   >
 }
 export type TickResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Tick'] =
     ResolversParentTypes['Tick'],
 > = {
@@ -225,7 +224,7 @@ export type TickResolvers<
   hidden?: Resolver<ResolversTypes['String'], ParentType, ContextType>
 }
 export type SubscriptionResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Subscription'] =
     ResolversParentTypes['Subscription'],
 > = {
@@ -242,7 +241,7 @@ export interface DateTimeScalarConfig extends GraphQLScalarTypeConfig<
 > {
   name: 'DateTime'
 }
-export type Resolvers<ContextType = AppContext> = {
+export type Resolvers<ContextType = object> = {
   Query?: QueryResolvers<ContextType>
   Mutation?: MutationResolvers<ContextType>
   Tick?: TickResolvers<ContextType>
@@ -257,18 +256,16 @@ export type QueryatArgs = {
 }
 export interface CoercedInputTypes {}
 import type { FieldSpec } from '@loutrejs/graphql/data'
-import type { AppContext as LoutreContext } from '../context.js'
 export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: Exclude<T[P], undefined>
 }
-export type SchemaContext = LoutreContext
-export interface SchemaFields {
+export interface SchemaFields<Context extends object> {
   Mutation: {
     update: FieldSpec<
       ResolversParentTypes['Mutation'],
       MutationupdateArgs,
       Scalars['String']['output'],
-      LoutreContext
+      Context
     >
   }
   Query: {
@@ -276,25 +273,25 @@ export interface SchemaFields {
       ResolversParentTypes['Query'],
       QueryatArgs,
       Scalars['DateTime']['output'],
-      LoutreContext
+      Context
     >
     cleanupCount: FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       Scalars['Int']['output'],
-      LoutreContext
+      Context
     >
     hello: FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       Scalars['String']['output'],
-      LoutreContext
+      Context
     >
     nullableTicks: FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       Maybe<ReadonlyArray<Maybe<ResolversParentTypes['Tick']>>>,
-      LoutreContext
+      Context
     >
   }
   Subscription: {
@@ -302,7 +299,7 @@ export interface SchemaFields {
       ResolversParentTypes['Subscription'],
       Record<string, never>,
       ResolversParentTypes['Tick'],
-      LoutreContext
+      Context
     >
   }
   Tick: {
@@ -310,13 +307,13 @@ export interface SchemaFields {
       ResolversParentTypes['Tick'],
       Record<string, never>,
       Scalars['String']['output'],
-      LoutreContext
+      Context
     >
     sequence: FieldSpec<
       ResolversParentTypes['Tick'],
       Record<string, never>,
       Scalars['Int']['output'],
-      LoutreContext
+      Context
     >
   }
 }

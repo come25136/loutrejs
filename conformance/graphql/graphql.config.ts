@@ -17,7 +17,6 @@ export default {
       scalars: { DateTime: { input: 'Date', output: 'Date' } },
       schema: ['schema.graphql'],
       output: 'generated',
-      contextType: '../context.js#AppContext',
     },
   },
 }

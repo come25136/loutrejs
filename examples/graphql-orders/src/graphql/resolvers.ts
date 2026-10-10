@@ -1,6 +1,7 @@
+import type { AppContext } from './context.js'
 import { createData } from '../generated/data.js'
 import type { Resolvers } from '../generated/types.js'
-const d = createData()
+const d = createData<AppContext>()
 export const resolvers = {
   Query: {
     orders: d.Query.orders.source(({ args, context, demand, signal }) =>
@@ -31,4 +32,4 @@ export const resolvers = {
         context.commerce.findProducts(items, signal),
     }),
   },
-} satisfies Resolvers
+} satisfies Resolvers<AppContext>

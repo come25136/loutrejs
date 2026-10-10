@@ -38,7 +38,6 @@ async function fixture() {
         kind: 'server',
         schema: ['*.graphql'],
         output: 'generated',
-        contextType: '../context.js#AppContext',
         mappers: { User: '../domain.js#User' },
         scalars: { DateTime: { input: 'Date', output: 'Date' } },
       },
@@ -65,7 +64,7 @@ async function fixture() {
 }
 
 describe('GraphQL CLI', () => {
-  it('Applicationなしでdomain mappingとcontextのresolver型、選択fieldだけのclient型を生成する', async () => {
+  it('Applicationなしでdomain mappingとContextがgenericなResolver型、選択fieldだけのclient型を生成する', async () => {
     const f = await fixture()
     await writeFile(
       join(f.cwd, 'operation.graphql'),
@@ -78,7 +77,9 @@ describe('GraphQL CLI', () => {
     const server = await readFile(join(f.cwd, 'generated/types.ts'), 'utf8')
     const client = await readFile(join(f.cwd, 'client.ts'), 'utf8')
     expect(server).toContain('User as UserDomain')
-    expect(server).toContain('AppContext')
+    expect(server).not.toContain('AppContext')
+    expect(server).not.toContain('../context')
+    expect(server).toContain('ContextType = object')
     expect(server).toContain('input: Date')
     expect(server).toContain('export interface SchemaFields')
     expect(client).toContain('UserNameQueryVariables')
@@ -173,11 +174,7 @@ describe('GraphQL CLI', () => {
     )
     const document = Function(
       'Kind',
-      'return (' +
-        staticSchema
-          .split(' = ')[1]!
-          .split('export function bindManifest')[0]! +
-        ')',
+      'return (' + staticSchema.split(' = ')[1]! + ')',
     )(Kind)
     const schema = buildASTSchema(document)
     schema.getQueryType()!.getFields().user!.resolve = () => ({
@@ -356,7 +353,7 @@ it('TypeScript設定からBinding用のschemaとdataを生成し、Application�
     join(cwd, 'resolvers.ts'),
     'throw new Error("ResolverをCLIから実行しない")',
   )
-  const config = `import type { GraphQLCodegenConfig } from '@loutrejs/cli'; export default {targets:{server:{kind:'server',schema:['schema.graphql'],contextType:'../context.js#Context',output:'generated'}}} satisfies GraphQLCodegenConfig`
+  const config = `import type { GraphQLCodegenConfig } from '@loutrejs/cli'; export default {targets:{server:{kind:'server',schema:['schema.graphql'],output:'generated'}}} satisfies GraphQLCodegenConfig`
   await writeFile(join(cwd, 'config.ts'), config)
   const stderr: string[] = []
   const invoke = () =>
@@ -369,14 +366,23 @@ it('TypeScript設定からBinding用のschemaとdataを生成し、Application�
   const schema = await readFile(join(cwd, 'generated/schema-ast.ts'), 'utf8')
   const builder = await readFile(join(cwd, 'generated/data.ts'), 'utf8')
   const types = await readFile(join(cwd, 'generated/types.ts'), 'utf8')
+  const bindings = await readFile(join(cwd, 'generated/bindings.ts'), 'utf8')
   expect(schema).not.toContain("from '../resolvers")
-  expect(schema).toContain('resolvers: Resolvers<Context>')
+  expect(schema).not.toContain('bindManifest')
+  expect(schema).not.toContain('./types.js')
+  expect(schema).not.toContain('@loutrejs/graphql')
+  expect(schema).not.toContain('Context')
+  expect(bindings).toContain('resolvers: Resolvers<Context>')
+  expect(bindings).not.toContain('../context')
+  expect(bindings).not.toContain('../resolvers')
   expect(schema).not.toContain(' as unknown')
-  expect(schema).toContain('GraphQLSchemaDocument<SchemaContext>')
+  expect(schema).toContain('schemaDocument: DocumentNode')
+  expect(builder).toContain('<Context extends object>')
   expect(builder).not.toContain('resolvers')
   expect(builder).not.toContain('manifest')
   expect(types).not.toContain('bindManifest')
   expect(types).toContain('import type')
+  expect(types).not.toContain('../context')
   const previous = types
   await writeFile(join(cwd, 'config.ts'), `import './resolvers.ts';${config}`)
   expect(await invoke()).toBe(1)

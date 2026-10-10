@@ -1,9 +1,8 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// fingerprint: 9998cd77979a3341de177c98c02b25aee37d1e626fd39c88098c24f92b94706b
+// fingerprint: 664162c93234a7bcc06c565920ca14d9fe9f4b7c3e89990bba965594316b6a3c
 import type { GraphQLResolveInfo } from 'graphql'
 import type { Counter as CounterDomain } from '../domain/counter.js'
 import type { Step as StepDomain } from '../domain/step.js'
-import type { AppContext } from '../graphql/context.js'
 export type Maybe<T> = T | null
 export type InputMaybe<T> = Maybe<T>
 export type RequireFields<T, K extends keyof T> = Omit<T, K> & {
@@ -187,7 +186,7 @@ export type ResolversParentTypes = {
   String: Scalars['String']['output']
 }
 export type CounterResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Counter'] =
     ResolversParentTypes['Counter'],
 > = {
@@ -195,7 +194,7 @@ export type CounterResolvers<
   step?: Resolver<ResolversTypes['Step'], ParentType, ContextType>
 }
 export type StepResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Step'] =
     ResolversParentTypes['Step'],
 > = {
@@ -203,7 +202,7 @@ export type StepResolvers<
   amount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>
 }
 export type QueryResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Query'] =
     ResolversParentTypes['Query'],
 > = {
@@ -212,7 +211,7 @@ export type QueryResolvers<
   stepBatchCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>
 }
 export type MutationResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Mutation'] =
     ResolversParentTypes['Mutation'],
 > = {
@@ -230,7 +229,7 @@ export type MutationResolvers<
   >
 }
 export type SubscriptionResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Subscription'] =
     ResolversParentTypes['Subscription'],
 > = {
@@ -241,7 +240,7 @@ export type SubscriptionResolvers<
     ContextType
   >
 }
-export type Resolvers<ContextType = AppContext> = {
+export type Resolvers<ContextType = object> = {
   Counter?: CounterResolvers<ContextType>
   Step?: StepResolvers<ContextType>
   Query?: QueryResolvers<ContextType>
@@ -256,24 +255,22 @@ export type MutationresetArgs = {
 }
 export interface CoercedInputTypes {}
 import type { FieldSpec } from '@loutrejs/graphql/data'
-import type { AppContext as LoutreContext } from '../graphql/context.js'
 export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: Exclude<T[P], undefined>
 }
-export type SchemaContext = LoutreContext
-export interface SchemaFields {
+export interface SchemaFields<Context extends object> {
   Counter: {
     step: FieldSpec<
       ResolversParentTypes['Counter'],
       Record<string, never>,
       ResolversParentTypes['Step'],
-      LoutreContext
+      Context
     >
     value: FieldSpec<
       ResolversParentTypes['Counter'],
       Record<string, never>,
       Scalars['Int']['output'],
-      LoutreContext
+      Context
     >
   }
   Mutation: {
@@ -281,13 +278,13 @@ export interface SchemaFields {
       ResolversParentTypes['Mutation'],
       MutationincrementArgs,
       ResolversParentTypes['Counter'],
-      LoutreContext
+      Context
     >
     reset: FieldSpec<
       ResolversParentTypes['Mutation'],
       MutationresetArgs,
       ResolversParentTypes['Counter'],
-      LoutreContext
+      Context
     >
   }
   Query: {
@@ -295,19 +292,19 @@ export interface SchemaFields {
       ResolversParentTypes['Query'],
       Record<string, never>,
       Scalars['Int']['output'],
-      LoutreContext
+      Context
     >
     counter: FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       ResolversParentTypes['Counter'],
-      LoutreContext
+      Context
     >
     stepBatchCount: FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       Scalars['Int']['output'],
-      LoutreContext
+      Context
     >
   }
   Step: {
@@ -315,13 +312,13 @@ export interface SchemaFields {
       ResolversParentTypes['Step'],
       Record<string, never>,
       Scalars['Int']['output'],
-      LoutreContext
+      Context
     >
     id: FieldSpec<
       ResolversParentTypes['Step'],
       Record<string, never>,
       Scalars['ID']['output'],
-      LoutreContext
+      Context
     >
   }
   Subscription: {
@@ -329,7 +326,7 @@ export interface SchemaFields {
       ResolversParentTypes['Subscription'],
       Record<string, never>,
       ResolversParentTypes['Counter'],
-      LoutreContext
+      Context
     >
   }
 }

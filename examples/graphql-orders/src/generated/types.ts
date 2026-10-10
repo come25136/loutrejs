@@ -1,5 +1,5 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
-// fingerprint: 702a128e52c3eba92e691a4969f3cf6c4b5debefafd122d5fce8c373d11ec18f
+// fingerprint: 1d64979b639c80b938d5db39ecf8f238fd8bc42f5ada36e18769e36b99358026
 import type { GraphQLResolveInfo } from 'graphql'
 import type {
   OrderConnection as OrderConnectionDomain,
@@ -10,7 +10,6 @@ import type {
   Product as ProductDomain,
   Category as CategoryDomain,
 } from '../domain/commerce.js'
-import type { AppContext } from '../graphql/context.js'
 export type Maybe<T> = T | null
 export type InputMaybe<T> = Maybe<T>
 export type RequireFields<T, K extends keyof T> = Omit<T, K> & {
@@ -239,7 +238,7 @@ export type ResolversParentTypes = {
   Query: Record<PropertyKey, never>
 }
 export type PageInfoResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['PageInfo'] =
     ResolversParentTypes['PageInfo'],
 > = {
@@ -247,7 +246,7 @@ export type PageInfoResolvers<
   hasNextPage?: Resolver<ResolversTypes['Boolean'], ParentType, ContextType>
 }
 export type OrderConnectionResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['OrderConnection'] =
     ResolversParentTypes['OrderConnection'],
 > = {
@@ -260,7 +259,7 @@ export type OrderConnectionResolvers<
   >
 }
 export type OrderResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Order'] =
     ResolversParentTypes['Order'],
 > = {
@@ -273,7 +272,7 @@ export type OrderResolvers<
   >
 }
 export type CustomerResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Customer'] =
     ResolversParentTypes['Customer'],
 > = {
@@ -281,7 +280,7 @@ export type CustomerResolvers<
   account?: Resolver<ResolversTypes['Account'], ParentType, ContextType>
 }
 export type AccountResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Account'] =
     ResolversParentTypes['Account'],
 > = {
@@ -289,7 +288,7 @@ export type AccountResolvers<
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>
 }
 export type OrderItemResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['OrderItem'] =
     ResolversParentTypes['OrderItem'],
 > = {
@@ -298,7 +297,7 @@ export type OrderItemResolvers<
   product?: Resolver<ResolversTypes['Product'], ParentType, ContextType>
 }
 export type ProductResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Product'] =
     ResolversParentTypes['Product'],
 > = {
@@ -307,7 +306,7 @@ export type ProductResolvers<
   category?: Resolver<ResolversTypes['Category'], ParentType, ContextType>
 }
 export type CategoryResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Category'] =
     ResolversParentTypes['Category'],
 > = {
@@ -315,7 +314,7 @@ export type CategoryResolvers<
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>
 }
 export type QueryResolvers<
-  ContextType = AppContext,
+  ContextType = object,
   ParentType extends ResolversParentTypes['Query'] =
     ResolversParentTypes['Query'],
 > = {
@@ -327,7 +326,7 @@ export type QueryResolvers<
   >
   productBatchCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>
 }
-export type Resolvers<ContextType = AppContext> = {
+export type Resolvers<ContextType = object> = {
   PageInfo?: PageInfoResolvers<ContextType>
   OrderConnection?: OrderConnectionResolvers<ContextType>
   Order?: OrderResolvers<ContextType>
@@ -353,24 +352,22 @@ export interface CoercedInputTypes {
   }
 }
 import type { FieldSpec } from '@loutrejs/graphql/data'
-import type { AppContext as LoutreContext } from '../graphql/context.js'
 export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: Exclude<T[P], undefined>
 }
-export type SchemaContext = LoutreContext
-export interface SchemaFields {
+export interface SchemaFields<Context extends object> {
   Account: {
     id: FieldSpec<
       ResolversParentTypes['Account'],
       Record<string, never>,
       Scalars['ID']['output'],
-      LoutreContext
+      Context
     >
     name: FieldSpec<
       ResolversParentTypes['Account'],
       Record<string, never>,
       Scalars['String']['output'],
-      LoutreContext
+      Context
     >
   }
   Category: {
@@ -378,13 +375,13 @@ export interface SchemaFields {
       ResolversParentTypes['Category'],
       Record<string, never>,
       Scalars['ID']['output'],
-      LoutreContext
+      Context
     >
     name: FieldSpec<
       ResolversParentTypes['Category'],
       Record<string, never>,
       Scalars['String']['output'],
-      LoutreContext
+      Context
     >
   }
   Customer: {
@@ -392,13 +389,13 @@ export interface SchemaFields {
       ResolversParentTypes['Customer'],
       Record<string, never>,
       ResolversParentTypes['Account'],
-      LoutreContext
+      Context
     >
     id: FieldSpec<
       ResolversParentTypes['Customer'],
       Record<string, never>,
       Scalars['ID']['output'],
-      LoutreContext
+      Context
     >
   }
   Order: {
@@ -406,19 +403,19 @@ export interface SchemaFields {
       ResolversParentTypes['Order'],
       Record<string, never>,
       ResolversParentTypes['Customer'],
-      LoutreContext
+      Context
     >
     id: FieldSpec<
       ResolversParentTypes['Order'],
       Record<string, never>,
       Scalars['ID']['output'],
-      LoutreContext
+      Context
     >
     items: FieldSpec<
       ResolversParentTypes['Order'],
       Record<string, never>,
       ReadonlyArray<ResolversParentTypes['OrderItem']>,
-      LoutreContext
+      Context
     >
   }
   OrderConnection: {
@@ -426,19 +423,19 @@ export interface SchemaFields {
       ResolversParentTypes['OrderConnection'],
       Record<string, never>,
       ReadonlyArray<ResolversParentTypes['Order']>,
-      LoutreContext
+      Context
     >
     pageInfo: FieldSpec<
       ResolversParentTypes['OrderConnection'],
       Record<string, never>,
       ResolversParentTypes['PageInfo'],
-      LoutreContext
+      Context
     >
     totalCount: FieldSpec<
       ResolversParentTypes['OrderConnection'],
       Record<string, never>,
       Scalars['Int']['output'],
-      LoutreContext
+      Context
     >
   }
   OrderItem: {
@@ -446,19 +443,19 @@ export interface SchemaFields {
       ResolversParentTypes['OrderItem'],
       Record<string, never>,
       Scalars['ID']['output'],
-      LoutreContext
+      Context
     >
     product: FieldSpec<
       ResolversParentTypes['OrderItem'],
       Record<string, never>,
       ResolversParentTypes['Product'],
-      LoutreContext
+      Context
     >
     quantity: FieldSpec<
       ResolversParentTypes['OrderItem'],
       Record<string, never>,
       Scalars['Int']['output'],
-      LoutreContext
+      Context
     >
   }
   PageInfo: {
@@ -466,13 +463,13 @@ export interface SchemaFields {
       ResolversParentTypes['PageInfo'],
       Record<string, never>,
       Scalars['Boolean']['output'],
-      LoutreContext
+      Context
     >
     hasPreviousPage: FieldSpec<
       ResolversParentTypes['PageInfo'],
       Record<string, never>,
       Scalars['Boolean']['output'],
-      LoutreContext
+      Context
     >
   }
   Product: {
@@ -480,19 +477,19 @@ export interface SchemaFields {
       ResolversParentTypes['Product'],
       Record<string, never>,
       ResolversParentTypes['Category'],
-      LoutreContext
+      Context
     >
     id: FieldSpec<
       ResolversParentTypes['Product'],
       Record<string, never>,
       Scalars['ID']['output'],
-      LoutreContext
+      Context
     >
     name: FieldSpec<
       ResolversParentTypes['Product'],
       Record<string, never>,
       Scalars['String']['output'],
-      LoutreContext
+      Context
     >
   }
   Query: {
@@ -500,13 +497,13 @@ export interface SchemaFields {
       ResolversParentTypes['Query'],
       QueryordersArgs,
       ResolversParentTypes['OrderConnection'],
-      LoutreContext
+      Context
     >
     productBatchCount: FieldSpec<
       ResolversParentTypes['Query'],
       Record<string, never>,
       Scalars['Int']['output'],
-      LoutreContext
+      Context
     >
   }
 }
