@@ -18,6 +18,7 @@ import {
   isObjectType,
   isInterfaceType,
   isScalarType,
+  isEnumType,
   parse,
   isNonNullType,
   isListType,
@@ -141,7 +142,9 @@ function resultType(type: GraphQLType): string {
       ? `ReadonlyArray<${resultType(value.ofType)}>`
       : isScalarType(value)
         ? `Scalars['${value.name}']['output']`
-        : `ResolversParentTypes['${value.toString()}']`
+        : isEnumType(value)
+          ? value.name
+          : `ResolversParentTypes['${value.toString()}']`
   return isNonNullType(type) ? inner(type.ofType) : `Maybe<${inner(type)}>`
 }
 function inputType(type: GraphQLInputType): string {

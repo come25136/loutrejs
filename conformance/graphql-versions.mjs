@@ -53,9 +53,10 @@ try {
       join(cwd, 'schema.graphql'),
       `scalar DateTime
       enum Role { MEMBER ADMIN }
+      enum Status { ACTIVE INACTIVE }
       input Options { at:DateTime = "2026-01-01", role:Role = ADMIN }
       type Child { value:Int! } type Parent { id:ID!, child:Child! }
-      type Query { parents:[Parent!]!, check(options:Options! = {}):String!, cleanups:Int! }
+      type Query { parents:[Parent!]!, check(options:Options! = {}):String!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!] }
       type Mutation { change:Parent! }
       type Subscription { ticks:Parent! }`,
     )
@@ -87,6 +88,9 @@ try {
           parents: (_parent,_args,context)=>[context.state.parent,context.state.parent],
           check: (_parent,{options})=>options.at!.toISOString()+':'+options.role,
           cleanups: (_parent,_args,context)=>context.state.cleanups,
+          status: ()=>'ACTIVE', optionalStatus: ()=>null,
+          statuses: { load: parents=>parents.map(()=>['ACTIVE',null,'INACTIVE']) },
+          optionalStatuses: ()=>['INACTIVE'],
         },
         Parent: { child: {requires:['id'],load:(parents,{context,signal})=>{signal.throwIfAborted();context.state.calls++;return parents.map(()=>({value:context.state.revision}))}} },
         Mutation: { change: (_parent,_args,context)=>{context.state.revision++;return context.state.parent} },
@@ -131,6 +135,7 @@ try {
       const operation=query=>new Promise((resolve,reject)=>{let value;client.subscribe({query},{next:result=>{value=result},error:reject,complete:()=>resolve(value)})})
       try {
         assert.deepEqual(await request('{check}'),{data:{check:'2026-01-01T00:00:00.000Z:2'}})
+        assert.deepEqual(await request('{status optionalStatus statuses optionalStatuses}'),{data:{status:'ACTIVE',optionalStatus:null,statuses:['ACTIVE',null,'INACTIVE'],optionalStatuses:['INACTIVE']}})
         assert.deepEqual(await request('{parents{child{value}}}'),{data:{parents:[{child:{value:0}},{child:{value:0}}]}})
         assert.deepEqual(await operation('{parents{child{value}}}'),{data:{parents:[{child:{value:0}},{child:{value:0}}]}})
         assert.deepEqual(await request('mutation{a:change{child{value}} b:change{child{value}}}'),{data:{a:{child:{value:1}},b:{child:{value:2}}}})

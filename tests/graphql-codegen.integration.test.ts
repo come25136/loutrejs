@@ -64,6 +64,43 @@ async function fixture() {
 }
 
 describe('GraphQL CLI', () => {
+  it('Enumの戻り値をnullable・listも含めてEnum型として生成する', async () => {
+    const f = await fixture()
+    await writeFile(
+      join(f.cwd, 'schema.graphql'),
+      `
+      enum Status { ACTIVE INACTIVE }
+      type Query { status: Status!, optionalStatus: Status, statuses: [Status]!, optionalStatuses: [Status!] }
+    `,
+    )
+    await writeFile(
+      join(f.cwd, 'config.json'),
+      JSON.stringify({
+        targets: {
+          server: {
+            kind: 'server',
+            schema: ['schema.graphql'],
+            output: 'generated',
+          },
+        },
+      }),
+    )
+    expect(
+      await f.invoke([
+        'generate',
+        '--config',
+        'config.json',
+        '--target',
+        'server',
+      ]),
+      f.stderr.join('\n'),
+    ).toBe(0)
+    const types = await readFile(join(f.cwd, 'generated/types.ts'), 'utf8')
+    expect(types).not.toContain("ResolversParentTypes['Status']")
+    expect(types).toContain('Maybe<ReadonlyArray<Status>>')
+    expect(types).toContain('ReadonlyArray<Maybe<Status>>')
+    expect(types).toContain('Maybe<Status>')
+  })
   it('Applicationなしでdomain mappingとContextがgenericなResolver型、選択fieldだけのclient型を生成する', async () => {
     const f = await fixture()
     await writeFile(
