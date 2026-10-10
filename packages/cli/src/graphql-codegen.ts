@@ -143,7 +143,7 @@ function resultType(type: GraphQLType): string {
       : isScalarType(value)
         ? `Scalars['${value.name}']['output']`
         : isEnumType(value)
-          ? value.name
+          ? `ResolversTypes['${value.name}']`
           : `ResolversParentTypes['${value.toString()}']`
   return isNonNullType(type) ? inner(type.ofType) : `Maybe<${inner(type)}>`
 }

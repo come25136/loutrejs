@@ -97,9 +97,9 @@ describe('GraphQL CLI', () => {
     ).toBe(0)
     const types = await readFile(join(f.cwd, 'generated/types.ts'), 'utf8')
     expect(types).not.toContain("ResolversParentTypes['Status']")
-    expect(types).toContain('Maybe<ReadonlyArray<Status>>')
-    expect(types).toContain('ReadonlyArray<Maybe<Status>>')
-    expect(types).toContain('Maybe<Status>')
+    expect(types).toContain("Maybe<ReadonlyArray<ResolversTypes['Status']>>")
+    expect(types).toContain("ReadonlyArray<Maybe<ResolversTypes['Status']>>")
+    expect(types).toContain("Maybe<ResolversTypes['Status']>")
   })
   it('Applicationなしでdomain mappingとContextがgenericなResolver型、選択fieldだけのclient型を生成する', async () => {
     const f = await fixture()

@@ -54,9 +54,10 @@ try {
       `scalar DateTime
       enum Role { MEMBER ADMIN }
       enum Status { ACTIVE INACTIVE }
+      enum Context { LOCAL REMOTE }
       input Options { at:DateTime = "2026-01-01", role:Role = ADMIN }
       type Child { value:Int! } type Parent { id:ID!, child:Child! }
-      type Query { parents:[Parent!]!, check(options:Options! = {}):String!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], failure:String }
+      type Query { parents:[Parent!]!, check(options:Options! = {}):String!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], contextValue:Context!, failure:String }
       type Mutation { change:Parent! }
       type Subscription { ticks:Parent!, rejected:Parent! }`,
     )
@@ -91,6 +92,7 @@ try {
           status: ()=>'ACTIVE', optionalStatus: ()=>null,
           statuses: { load: parents=>parents.map(()=>['ACTIVE',null,'INACTIVE']) },
           optionalStatuses: ()=>['INACTIVE'],
+          contextValue: { load: parents=>parents.map(()=>'LOCAL') },
           failure: ()=>{throw new Error('private failure')},
         },
         Parent: { child: {requires:['id'],load:(parents,{context,signal})=>{signal.throwIfAborted();context.state.calls++;return parents.map(()=>({value:context.state.revision}))}} },
@@ -137,6 +139,7 @@ try {
       try {
         assert.deepEqual(await request('{check}'),{data:{check:'2026-01-01T00:00:00.000Z:2'}})
         assert.deepEqual(await request('{status optionalStatus statuses optionalStatuses}'),{data:{status:'ACTIVE',optionalStatus:null,statuses:['ACTIVE',null,'INACTIVE'],optionalStatuses:['INACTIVE']}})
+        assert.deepEqual(await request('{contextValue}'),{data:{contextValue:'LOCAL'}})
         for(const [transport,result] of [['http',await request('{failure}')],['websocket',await operation('{failure}')]]) {
           assert.deepEqual(result,{data:{failure:null},errors:[{message:'Internal server error',locations:[{line:1,column:2}],path:['failure'],extensions:{transport}}]})
         }
