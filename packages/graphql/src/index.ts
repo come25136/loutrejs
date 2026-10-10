@@ -108,14 +108,15 @@ export function defineGraphQLEndpoint<
         },
         factory: () => {
           const runtime = validateRuntime(definition.factory())
-          return (context) => {
+          return async (context) => {
             const input: GraphQLHttpContextInput = {
               transport: 'http',
               request: context.request,
               signal: context.request.signal,
               state: context.state,
             }
-            return createHandler<Record<string, unknown>>({
+            let requestError = false
+            const response = await createHandler<Record<string, unknown>>({
               schema: bound.schema,
               formatError: (error) => formatHttpError(runtime, error, input),
               execute: async (args) => {
@@ -131,9 +132,12 @@ export function defineGraphQLEndpoint<
                       annotate: (attributes) =>
                         operation.annotate?.(attributes),
                     })
-                  return await (operation.run
+                  const result = await (operation.run
                     ? operation.run(invoke)
                     : invoke())
+                  requestError =
+                    result.data === undefined && !!result.errors?.length
+                  return result
                 } finally {
                   operation.complete()
                 }
@@ -141,6 +145,19 @@ export function defineGraphQLEndpoint<
               context: async () =>
                 (await runtime.context(input)) as Record<string, unknown>,
             })(context.request)
+            if (
+              requestError &&
+              response.status === 200 &&
+              response.headers
+                .get('content-type')
+                ?.startsWith('application/graphql-response+json')
+            )
+              return new Response(response.body, {
+                status: 400,
+                statusText: 'Bad Request',
+                headers: response.headers,
+              })
+            return response
           }
         },
       }),

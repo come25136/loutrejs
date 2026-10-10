@@ -284,6 +284,47 @@ async function fixture(
 }
 
 describe('GraphQL HTTP', () => {
+  it.each([
+    ['application/graphql-response+json', 400],
+    ['application/json', 200],
+  ])(
+    '変数coercionの失敗を%sのstatus %sで返し、実行時エラーと区別する',
+    async (accept, status) => {
+      const api = await fixture({ makeContext: () => ({ greeting: null }) })
+      try {
+        const response = await api.fetchGraphQL(
+          'mutation Update($value: String!) {update(value: $value)}',
+          {
+            headers: {
+              'content-type': 'application/json',
+              accept: String(accept),
+            },
+            body: JSON.stringify({
+              query: 'mutation Update($value: String!) {update(value: $value)}',
+              variables: { value: 1 },
+            }),
+          },
+        )
+        expect(response.status).toBe(status)
+        expect(await response.json()).toMatchObject({
+          errors: [{ message: expect.stringContaining('$value') }],
+        })
+        const failed = await api.fetchGraphQL('{hello}', {
+          headers: {
+            'content-type': 'application/json',
+            accept: String(accept),
+          },
+        })
+        expect(failed.status).toBe(200)
+        expect(await failed.json()).toMatchObject({
+          data: null,
+          errors: [{ path: ['hello'] }],
+        })
+      } finally {
+        await api.app.close()
+      }
+    },
+  )
   it('利用者の整形で内部エラーを隠し、path・locations・HTTP statusとdataを保持する', async () => {
     const internal = new GraphQLError('private failure', {
       extensions: { private: 'secret' },
@@ -330,7 +371,7 @@ describe('GraphQL HTTP', () => {
           }),
         },
       )
-      expect(variables.status).toBe(200)
+      expect(variables.status).toBe(400)
       expect((await variables.json()).errors).toHaveLength(1)
       const malformed = await api.fetchGraphQL('', { body: '{' })
       expect(malformed.status).toBe(400)

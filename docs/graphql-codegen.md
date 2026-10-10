@@ -182,6 +182,8 @@ formatErrorは同期的にGraphQLFormattedErrorを返します。parse・validat
 
 Subscription iteratorの障害はRuntimeの観測にも記録し、WebSocketのerror frameを整形してそのOperationを終了します。context生成やformatError自身の例外は通常のRuntime Failureとして扱います。HTTP middlewareの認証応答やWebSocketのprotocol違反は、それぞれのTransportの処理です。
 
+HTTPは`application/graphql-response+json`でdataを持たないGraphQLの実行前エラーを400で返します。Resolver実行時のGraphQLエラーは200です。`application/json`ではGraphQL request errorの200応答を維持します。
+
 ## Read-throughとBatch
 
 引数を持たないFieldは、Parentの同名own data propertyにundefined以外の値があれば再利用します。null / [] / false / 0 / ''もLoadedです。prototypeやgetterは自動readしません。

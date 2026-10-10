@@ -57,7 +57,7 @@ try {
       enum Context { LOCAL REMOTE }
       input Options { at:DateTime = "2026-01-01", role:Role = ADMIN }
       type Child { value:Int! } type Parent { id:ID!, child:Child! }
-      type Query { parents:[Parent!]!, failures:[Parent]!, check(options:Options! = {}):String!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], contextValue:Context!, failure:String }
+      type Query { parents:[Parent!]!, failures:[Parent]!, check(options:Options! = {}):String!, echo(value:Int!):Int!, cleanups:Int!, status:Status!, optionalStatus:Status, statuses:[Status]!, optionalStatuses:[Status!], contextValue:Context!, failure:String }
       type Mutation { change:Parent! }
       type Subscription { ticks:Parent!, rejected:Parent! }`,
     )
@@ -89,6 +89,7 @@ try {
           parents: (_parent,_args,context)=>[context.state.parent,context.state.parent],
           failures: ()=>[{id:'first'},{id:'failed'},{id:'third'}],
           check: (_parent,{options})=>options.at!.toISOString()+':'+options.role,
+          echo: (_parent,{value})=>value,
           cleanups: (_parent,_args,context)=>context.state.cleanups,
           status: ()=>'ACTIVE', optionalStatus: ()=>null,
           statuses: { load: parents=>parents.map(()=>['ACTIVE',null,'INACTIVE']) },
@@ -141,6 +142,14 @@ try {
         assert.deepEqual(await request('{check}'),{data:{check:'2026-01-01T00:00:00.000Z:2'}})
         assert.deepEqual(await request('{status optionalStatus statuses optionalStatuses}'),{data:{status:'ACTIVE',optionalStatus:null,statuses:['ACTIVE',null,'INACTIVE'],optionalStatuses:['INACTIVE']}})
         assert.deepEqual(await request('{contextValue}'),{data:{contextValue:'LOCAL'}})
+        for(const [accept,status] of [['application/graphql-response+json',400],['application/json',200]]) {
+          const response=await fetch(url,{method:'POST',headers:{'content-type':'application/json',accept},body:JSON.stringify({query:'query Echo($value:Int!){echo(value:$value)}',variables:{value:'bad'}})})
+          assert.equal(response.status,status)
+          const result=await response.json()
+          assert.equal(result.data,undefined)
+          assert.equal(result.errors.length,1)
+          assert.deepEqual(result.errors[0].extensions,{transport:'http'})
+        }
         for(const [transport,result] of [['http',await request('{failure}')],['websocket',await operation('{failure}')]]) {
           assert.deepEqual(result,{data:{failure:null},errors:[{message:'Internal server error',locations:[{line:1,column:2}],path:['failure'],extensions:{transport}}]})
         }
