@@ -19,3 +19,8 @@ runs:
     - name: Install dependencies
       shell: bash
       run: bun install --no-save
+
+    - name: Verify native compiler binding
+      shell: bash
+      run: |
+        bun --eval 'try { await import("@swc/core") } catch (error) { console.error(error); console.error(error.cause); process.exit(1) }'

@@ -47,7 +47,12 @@ if (presentation.LOUTRE_VERSION !== version) {
 }
 
 for (const manifest of publicPackages) {
-  const dependencyGroups = [manifest.dependencies, manifest.devDependencies]
+  const dependencyGroups = [
+    manifest.dependencies,
+    manifest.devDependencies,
+    manifest.peerDependencies,
+    manifest.optionalDependencies,
+  ]
   for (const dependencies of dependencyGroups) {
     if (!dependencies) continue
     for (const [name, range] of Object.entries(dependencies)) {
