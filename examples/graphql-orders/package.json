@@ -15,13 +15,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@loutrejs/graphql": "0.8.0",
-    "@loutrejs/loutre": "0.8.0",
-    "@loutrejs/node": "0.8.0",
+    "@loutrejs/graphql": "0.8.1",
+    "@loutrejs/loutre": "0.8.1",
+    "@loutrejs/node": "0.8.1",
     "graphql": "^17.0.2"
   },
   "devDependencies": {
-    "@loutrejs/cli": "0.8.0",
+    "@loutrejs/cli": "0.8.1",
     "graphql-ws": "^6.3.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
