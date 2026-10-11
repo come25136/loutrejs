@@ -31,7 +31,7 @@ Application Environment
 
 > **Environment Contract = Raw Environment から Application Environment への変換 Contract**
 
-Application code は `process.env` / `Bun.env` / `Deno.env` 等の runtime 固有 API を知らない。
+Application code は `process.env` / `Bun.env` 等の runtime 固有 API を知らない。
 
 Environment schema は Module が宣言し、raw Environment source は Runtime Adapter が供給する。
 
@@ -277,7 +277,6 @@ if (env.driver === 's3') {
 ```text
 Node      → process.env
 Bun       → runtime environment
-Deno      → Deno.env
 Cloudflare Workers → fetch(request, env, ctx) の env bindings
 Lambda    → Node process environment
 Electron  → main process environment
@@ -374,7 +373,7 @@ Prisma CLI が直接実行する `prisma.config.ts` は Loutre Application runti
 - [x] Graph Probe の Environment access は正常な Probe Boundary になる
 - [x] nested Probe Boundary 後も親の後続 default-parameter dependency を収集できる
 - [x] DB examples に framework都合の `Pool | undefined` / `Client | undefined` を残さない
-- [x] Node / Bun / Deno / Cloudflare Workers / AWS Lambda / Electron conformance を維持する
+- [x] Node / Bun / Cloudflare Workers / AWS Lambda / Electron conformance を維持する
 
 ---
 

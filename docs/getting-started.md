@@ -9,7 +9,7 @@ npm create loutre@latest my-app
 cd my-app
 ```
 
-You can also choose Bun, Deno, Cloudflare Workers, or AWS Lambda as the target.
+TargetにはNode.js、Bun、Cloudflare Workers、AWS Lambdaを選べます。
 
 ## Define an HTTP execution
 

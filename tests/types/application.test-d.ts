@@ -12,12 +12,16 @@ import { http } from '@loutrejs/loutre/http'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
-import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { nodeRuntime } from '@loutrejs/node'
 import type { MessagePortHostApi } from '@loutrejs/loutre/message-port'
 import { consume, cron, fixedDelay, queue, task } from '@loutrejs/loutre/tasks'
 import { z } from 'zod'
+import type { RuntimeEngine } from '@loutrejs/loutre/runtime'
+
+// @ts-expect-error Denoは公開Runtime identityから削除した
+const removedRuntime: RuntimeEngine = 'deno'
+void removedRuntime
 
 class AppEnv extends defineEnv(
   z.object({ PORT: z.coerce.number().default(3000) }).transform((env) => ({
@@ -172,9 +176,7 @@ nodeRuntime.create({
 bunRuntime.create({
   application: customHttpDefinition,
 })
-denoRuntime.create({
-  application: customHttpDefinition,
-})
+
 cloudflareWorkersRuntime.bind({
   application: customHttpDefinition,
 })
@@ -233,9 +235,7 @@ electronRuntime.attach({
 bunRuntime.create({ application: httpDefinition }).then((app) => {
   app.serve({ shutdownHooks: false })
 })
-denoRuntime.create({ application: httpDefinition }).then((app) => {
-  app.serve({ shutdownHooks: false })
-})
+
 nodeRuntime.create({
   application: workerDefinition,
   arguments: { instance: 'worker-1' },
@@ -245,9 +245,6 @@ nodeRuntime.create({
 nodeRuntime.serve
 // @ts-expect-error static serve APIは公開しない
 bunRuntime.serve
-// @ts-expect-error static serve APIは公開しない
-denoRuntime.serve
-
 const wrongInput = task<string, void>({
   name: 'wrong.input',
   factory: () => () => undefined,

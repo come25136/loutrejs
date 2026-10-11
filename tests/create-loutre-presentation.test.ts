@@ -42,7 +42,7 @@ describe('create-loutre startup presentation', () => {
     expect(output[0]).toContain('ʕ•ᴥ•ʔ Loutre')
   })
 
-  it.each<ProjectTarget>(['node', 'bun', 'deno'])(
+  it.each<ProjectTarget>(['node', 'bun'])(
     '%sのgenerated Hostはstartup presentationの責務を持たない',
     async (target) => {
       const main = await generateMain(target)

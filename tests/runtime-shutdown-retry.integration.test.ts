@@ -9,7 +9,6 @@ import {
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
-import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { silentLogger } from './helpers/silent-logger.js'
 
 describe('runtime shutdown retry', () => {
@@ -99,58 +98,6 @@ describe('runtime shutdown retry', () => {
       'provider.destroy',
     ])
     await expect(application.close()).resolves.toBeUndefined()
-  })
-
-  it('Deno adapterはsafe boundary到達失敗後のcloseをKernelへ再試行する', async () => {
-    vi.stubGlobal('Deno', {
-      env: { get: () => undefined, toObject: () => ({}) },
-      version: { deno: 'test' },
-    })
-    const fixture = retryableShutdownFixture()
-    const application = await denoRuntime.create({
-      application: fixture.definition,
-      forceShutdownTimeoutMs: 1,
-    })
-    fixture.start(application)
-
-    await expect(application.close()).rejects.toThrow(
-      'Deno runtime shutdown failed',
-    )
-    expect(fixture.events).toEqual(['extension.drain'])
-
-    fixture.complete()
-    await expect(application.close()).rejects.toThrow(
-      'Deno runtime shutdown failed',
-    )
-    expect(fixture.events).toEqual([
-      'extension.drain',
-      'extension.drain',
-      'extension.close',
-      'provider.destroy',
-    ])
-    await expect(application.close()).resolves.toBeUndefined()
-  })
-
-  it('Deno adapterはserver shutdownの一時失敗後にcloseを再試行する', async () => {
-    const shutdown = vi
-      .fn<() => Promise<void>>()
-      .mockRejectedValueOnce(new Error('server shutdown failed'))
-      .mockResolvedValue(undefined)
-    vi.stubGlobal('Deno', {
-      env: { get: () => undefined, toObject: () => ({}) },
-      version: { deno: 'test' },
-      serve: () => ({ shutdown }),
-    })
-    const application = await denoRuntime.create({
-      application: httpOnlyDefinition(),
-    })
-    await application.serve({ port: 3000, shutdownHooks: false })
-
-    await expect(application.close()).rejects.toThrow(
-      'Deno runtime shutdown failed',
-    )
-    await expect(application.close()).resolves.toBeUndefined()
-    expect(shutdown).toHaveBeenCalledTimes(2)
   })
 })
 

@@ -33,6 +33,24 @@ describe('create-loutre', () => {
     await rm(root, { recursive: true, force: true })
   })
 
+  it.each(['--target', '--package-manager'])(
+    '%sで削除済みのDenoを指定するとprojectを作成しない',
+    async (option) => {
+      const errors: string[] = []
+      const result = await runCreateLoutre(
+        ['demo', option, 'deno', '--no-install'],
+        createIO({ stderr: (value) => errors.push(value) }),
+      )
+      expect(result).not.toBe(0)
+      expect(errors.join('\n')).toContain('deno')
+      await expect(
+        readFile(join(root, 'demo/package.json')),
+      ).rejects.toMatchObject({
+        code: 'ENOENT',
+      })
+    },
+  )
+
   it('Loutre TaskとしてNode.js HTTP Applicationを生成する', async () => {
     const app = await bootstrapApplication({ application })
     try {
@@ -115,11 +133,7 @@ describe('create-loutre', () => {
       entry: 'bunRuntime.create',
       script: 'bun --watch src/main.ts',
     },
-    {
-      target: 'deno',
-      entry: 'denoRuntime.create',
-      script: 'deno run -A --watch src/main.ts',
-    },
+
     {
       target: 'cloudflare-workers',
       entry: 'cloudflareWorkersRuntime.bind',
@@ -153,13 +167,6 @@ describe('create-loutre', () => {
         expect(Object.values(manifest.scripts).join('\n')).toContain(script)
         expect(manifest.dependencies['@loutrejs/node']).toBeUndefined()
 
-        if (target === 'deno') {
-          const generatedApplication = await readFile(
-            join(result.targetDirectory, 'src/app.ts'),
-            'utf8',
-          )
-          expect(generatedApplication).toContain("from './hello/controller.ts'")
-        }
         if (target === 'cloudflare-workers') {
           const wrangler = await readFile(
             join(result.targetDirectory, 'wrangler.jsonc'),
@@ -212,11 +219,11 @@ describe('create-loutre', () => {
 
     expect(
       await runCreateLoutre(
-        ['demo', '--target', 'deno', '--package-manager', 'bun'],
+        ['demo', '--target', 'bun', '--package-manager', 'bun'],
         io,
       ),
     ).toBe(0)
-    expect(output).toContain('Target: Deno')
+    expect(output).toContain('Target: Bun')
     expect(output).toContain('Package manager: Bun')
     expect(output).toContain('  bun run dev')
   })
@@ -260,15 +267,15 @@ describe('create-loutre', () => {
           '--target',
           'bun',
           '--package-manager',
-          'deno',
+          'pnpm',
           '--no-install',
         ],
         io,
       ),
     ).toBe(0)
     expect(installed).toBe(false)
-    expect(output).toContain('  deno install')
-    expect(output).toContain('  deno task dev')
+    expect(output).toContain('  pnpm install')
+    expect(output).toContain('  pnpm run dev')
   })
 
   it('--yesなら既定targetと起動package managerを使う', async () => {

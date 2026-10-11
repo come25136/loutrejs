@@ -2,7 +2,6 @@ import { defineApplication } from '@loutrejs/loutre'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
-import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { nodeRuntime } from '@loutrejs/node'
 import { UsersModule } from '../integrations/http-crud/src/index.js'
@@ -41,13 +40,13 @@ describe('Runtime engine', () => {
     expect(startupOutput).not.toHaveBeenCalled()
   })
 
-  it('Deno上ではnodeRuntimeを拒否する', async () => {
+  it('未対応runtimeのNode互換globalをnodeRuntimeとして受け入れない', async () => {
     vi.stubGlobal('Deno', { version: { deno: '2.9.5' } })
 
     await expect(
       nodeRuntime.create({ application: usersDefinition() }),
     ).rejects.toThrow(
-      'LUTRE_RUNTIME_MISMATCH: Expected Node.js, detected Deno.',
+      'LUTRE_RUNTIME_MISMATCH: Expected Node.js, detected an unknown runtime.',
     )
     expect(startupOutput).not.toHaveBeenCalled()
   })
@@ -57,12 +56,6 @@ describe('Runtime engine', () => {
       bunRuntime.create({ application: usersDefinition() }),
     ).rejects.toThrow('LUTRE_RUNTIME_MISMATCH: Expected Bun, detected Node.js.')
     expect(startupOutput).not.toHaveBeenCalled()
-  })
-
-  it('Node.js上ではdenoRuntimeを拒否する', () => {
-    expect(() => denoRuntime.bind({ application: usersDefinition() })).toThrow(
-      'LUTRE_RUNTIME_MISMATCH: Expected Deno, detected Node.js.',
-    )
   })
 
   it('Node.js上ではcloudflareWorkersRuntimeを拒否する', () => {

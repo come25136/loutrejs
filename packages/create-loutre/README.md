@@ -8,11 +8,10 @@ Loutre Applicationをstarterから作成するproject initializerです。Runtim
 npm create loutre@latest my-app
 ```
 
-BunやDenoからも実行できます。
+Bunからも実行できます。
 
 ```sh
 bun create loutre my-app
-deno x -A npm:create-loutre@latest my-app
 ```
 
 対話形式でtargetとpackage managerを選択できます。
@@ -21,7 +20,6 @@ deno x -A npm:create-loutre@latest my-app
 
 - Node.js
 - Bun
-- Deno
 - Cloudflare Workers
 - AWS Lambda
 
@@ -31,7 +29,6 @@ deno x -A npm:create-loutre@latest my-app
 - pnpm
 - Yarn
 - Bun
-- Deno
 
 ## Non-interactive usage
 

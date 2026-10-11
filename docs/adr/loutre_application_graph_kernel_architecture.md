@@ -201,7 +201,7 @@ Node HTTPの例:
 
 `@loutrejs/node`へHTTP Contractやroute validation semanticsを持たせない。
 
-同様にCloudflare Workers、Deno、Bun等もExtensionが公開するuniversal Host APIをplatformへ接続する。
+同様にCloudflare Workers、Bun等もExtensionが公開するuniversal Host APIをplatformへ接続する。
 
 ## 7. Tooling / Graph IR
 

@@ -465,7 +465,7 @@ HTTPで1 Requestから複数Operationを処理できる実行経路がある場�
 
 Resolver定義はModule lifetime、Batch QueueはExecution lifetime。DIのService lifetimeと混同しない。
 
-アプリに手動`data.scope()`を要求せず、GraphQL Execution Adapterが内部Execution Scope/Context Viewを管理する。グローバル`AsyncLocalStorage`へ依存しない構成とし、Node/Bun/Deno/Workersで同じ境界を保証する。
+アプリに手動`data.scope()`を要求せず、GraphQL Execution Adapterが内部Execution Scope/Context Viewを管理する。グローバル`AsyncLocalStorage`へ依存しない構成とし、Node/Bun/Workersで同じ境界を保証する。
 
 ### 7.3 Subscription
 
@@ -568,7 +568,7 @@ loutre graphql generate --config graphql.config.ts --watch
 - 生成済みManifestは静的ESMとしてバンドル可能であること。Runtimeはファイルシステム、Node専用API、動的Schemaファイル読み込みに依存しない。
 - ASTを事前生成するため、**Cold Start時のSDL parseは省略できる**。ただしGraphQLSchemaの構築とResolver Bindingの初期化コストは残り得る。
 - `manifest`はモジュール単位で再利用できるが、実行時のScope/Batch状態は各Operation/Eventに閉じる。
-- Node/Bun/Deno/Workersで同じGraphQLとData Resolutionの動作をテストする。
+- Node/Bun/Workersで同じGraphQLとData Resolutionの動作をテストする。
 
 ## 11. Rejected Alternatives
 
@@ -592,7 +592,7 @@ loutre graphql generate --config graphql.config.ts --watch
 4. **Read-through / Batch:** `read`、`requires`、`load`、引数の自動正規化、Execution ScopeによるBatchの分離・中断・Authorization。
 5. **選択Field情報:** AST・fragment・alias・abstract type・引数の正規化。Manifest Metadataと結合。
 6. **Operation Scope:** HTTP Query、Mutation Root、WS Query/MutationとSubscription Event境界。GraphQL.js 16/17互換性検証。
-7. **Example / 運用:** 既存GraphQL exampleを新Manifest入口へ変更し、100注文・200明細fixture、Trace、Node/Bun/Deno/Workersテストを追加。
+7. **Example / 運用:** 既存GraphQL exampleを新Manifest入口へ変更し、100注文・200明細fixture、Trace、Node/Bun/Workersテストを追加。
 
 別PRへ分割せず、PR #112内で仕様を一貫して成立させる。
 
@@ -624,7 +624,7 @@ loutre graphql generate --config graphql.config.ts --watch
 | E07 | 異なるHTTPリクエスト                | 同じ引数・FieldでもBatch Schedulerを共有しない                                                                         |
 | E08 | 同一WebSocket接続の複数operation    | Operation単位でBatch Schedulerを分離する                                                                               |
 | E03 | Cancellation                        | HTTP Abort、WS complete、disconnect、drainでcleanupする                                                                |
-| E04 | Runtime Compatibility               | GraphQL.js 16/17、Node/Bun/Deno/Workersの統合テストを通す                                                              |
+| E04 | Runtime Compatibility               | GraphQL.js 16/17、Node/Bun/Workersの統合テストを通す                                                                   |
 | E05 | 注文fixture                         | Eager/Lazy/Hybridの3戦略が同じGraphQL結果を返す                                                                        |
 | E06 | トレース                            | Operation単位でreuse/batch/時間を観測できる                                                                            |
 

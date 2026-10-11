@@ -2,7 +2,6 @@ import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { checkRuntimeSupport } from '@loutrejs/loutre/runtime'
 import { http } from '@loutrejs/loutre/http'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
-import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { nodeRuntime } from '@loutrejs/node'
@@ -25,13 +24,6 @@ describe('Runtime conformance harness', () => {
   })
 
   it.each([
-    [
-      'Deno',
-      () => {
-        vi.stubGlobal('Deno', { version: { deno: '2.9.5' } })
-        return denoRuntime.bind({ application: usersDefinition() })
-      },
-    ],
     [
       'cloudflare-workers',
       () => {
@@ -223,7 +215,7 @@ describe('Runtime conformance harness', () => {
   it('runtime identityはversionから独立している', () => {
     expect(nodeRuntime.runtime).toBe('node')
     expect(bunRuntime.runtime).toBe('bun')
-    expect(denoRuntime.runtime).toBe('deno')
+
     expect(cloudflareWorkersRuntime.runtime).toBe('cloudflare-workers')
     expect(awsLambdaRuntime.runtime).toBe('aws-lambda')
     expect(electronRuntime.runtime).toBe('electron')
@@ -234,9 +226,7 @@ describe('Runtime conformance harness', () => {
     expect('serve' in nodeRuntime).toBe(false)
     expect(typeof bunRuntime.create).toBe('function')
     expect('serve' in bunRuntime).toBe(false)
-    expect(typeof denoRuntime.create).toBe('function')
-    expect('serve' in denoRuntime).toBe(false)
-    expect(typeof denoRuntime.bind).toBe('function')
+
     expect(typeof cloudflareWorkersRuntime.bind).toBe('function')
     expect(typeof awsLambdaRuntime.bind).toBe('function')
     expect(typeof electronRuntime.attach).toBe('function')
@@ -245,7 +235,7 @@ describe('Runtime conformance harness', () => {
   it('各Runtimeのatomic capabilityをApplication requirementと照合する', () => {
     for (const runtime of [
       nodeRuntime,
-      denoRuntime,
+
       bunRuntime,
       cloudflareWorkersRuntime,
       awsLambdaRuntime,

@@ -29,33 +29,12 @@ async function loadCliModule(distributionPath, sourcePath) {
     return await import(distributionPath)
   } catch (error) {
     if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error
-    if (host.runtime === 'deno') {
-      throw new Error(
-        'Build the packages before running the repository Loutre CLI with Deno.',
-        { cause: error },
-      )
-    }
     if (host.runtime === 'node') await import('tsx/esm')
     return import(sourcePath)
   }
 }
 
 function createCliHost() {
-  const deno = globalThis.Deno
-  if (deno?.version?.deno) {
-    const encoder = new TextEncoder()
-    return {
-      runtime: 'deno',
-      args: deno.args,
-      cwd: deno.cwd(),
-      stdout: (value) => deno.stdout.writeSync(encoder.encode(`${value}\n`)),
-      stderr: (value) => deno.stderr.writeSync(encoder.encode(`${value}\n`)),
-      setExitCode: (code) => {
-        deno.exitCode = code
-      },
-    }
-  }
-
   const runtimeProcess = globalThis.process
   if (!runtimeProcess) {
     throw new Error('Could not detect a runtime capable of running Loutre CLI.')

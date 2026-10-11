@@ -21,7 +21,6 @@ flowchart TB
 
   runtime --> node["Node.js"]
   runtime --> bun["Bun"]
-  runtime --> deno["Deno"]
   runtime --> workers["Cloudflare Workers"]
   runtime --> lambda["AWS Lambda"]
   runtime --> electron["Electron"]

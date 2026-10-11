@@ -235,48 +235,6 @@ jobs:
           "$BUN_BIN" conformance/bun.ts
           "$BUN_BIN" conformance/graphql-native.ts
 
-  deno-conformance:
-    name: Runtime Conformance / Deno 2.9.5
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup workspace
-        uses: ./.github/actions/setup-deno-workspace
-        with:
-          deno-version: 2.9.5
-
-      - name: Build packages with Deno
-        run: |
-          DENO_BIN="$(command -v deno)"
-          "$DENO_BIN" run -A scripts/clean-dist.mjs
-          "$DENO_BIN" run -A npm:typescript@7.0.2/tsc -p tsconfig.packages.json --pretty false
-          "$DENO_BIN" run -A scripts/prepare-packages.mjs
-
-      - name: Run Deno CLI conformance
-        run: |
-          DENO_BIN="$(command -v deno)"
-          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts conformance/graphql/graphql.config.ts; do
-            "$DENO_BIN" run -A packages/cli/bin/loutre.js graphql generate --config "$GRAPHQL_CONFIG_FILE" --check
-          done
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json
-
-      - name: Build Deno conformance applications
-        run: |
-          DENO_BIN="$(command -v deno)"
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/conformance/http-crud
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build integrations/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http
-          "$DENO_BIN" run -A packages/cli/bin/loutre.js build integrations/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port
-
-      - name: Run Deno conformance
-        run: |
-          DENO_BIN="$(command -v deno)"
-          "$DENO_BIN" run -A --sloppy-imports conformance/deno.ts
-          "$DENO_BIN" run -A --sloppy-imports conformance/graphql-native.ts
-
   cloudflare-workers-conformance:
     name: Runtime Conformance / Cloudflare Workers
     runs-on: ubuntu-latest
@@ -440,76 +398,6 @@ jobs:
           bun node_modules/create-loutre/bin/create-loutre.js bun-app --yes --no-install --target bun
           grep -q 'bunRuntime' bun-app/src/main.ts
 
-  deno-package-consumer:
-    name: Package Consumer / Deno 2.9.5
-    needs: quality-checks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup Deno 2.9.5
-        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
-        with:
-          deno-version: 2.9.5
-
-      - name: Verify Deno version
-        run: test "$(deno eval 'console.log(Deno.version.deno)')" = "2.9.5"
-
-      - name: Download package tarballs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: loutre-package-tarballs
-          path: ${{ runner.temp }}/loutre-package-tarballs
-
-      - name: Verify packed packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          tarballs="${RUNNER_TEMP}/loutre-package-tarballs"
-          consumer="${RUNNER_TEMP}/loutre-package-consumer-deno"
-          rm -rf "$consumer"
-          mkdir -p "$consumer/packages"
-
-          extract_package() {
-            local archive="$1"
-            local destination="$2"
-            mkdir -p "$consumer/packages/$destination"
-            tar -xzf "$archive" -C "$consumer/packages/$destination" --strip-components=1
-          }
-          extract_package "$tarballs"/loutrejs-loutre-*.tgz loutre
-          extract_package "$tarballs"/loutrejs-cli-*.tgz cli
-          extract_package "$tarballs"/create-loutre-*.tgz create-loutre
-
-          cd "$consumer"
-          cat > package.json <<'JSON'
-          {
-            "name": "loutre-package-consumer-deno",
-            "private": true,
-            "type": "module",
-            "workspaces": ["packages/*"],
-            "dependencies": {
-              "@loutrejs/loutre": "workspace:*",
-              "@loutrejs/cli": "workspace:*",
-              "create-loutre": "workspace:*"
-            }
-          }
-          JSON
-          cat > deno.json <<'JSON'
-          {
-            "nodeModulesDir": "manual"
-          }
-          JSON
-
-          if test "$SECURITY_DEPENDABOT_PR" = 'true'; then
-            deno install --minimum-dependency-age 0
-          else
-            deno install
-          fi
-          deno eval "import { denoRuntime } from '@loutrejs/loutre/runtime/deno'; if (denoRuntime.runtime !== 'deno') throw new Error('Deno runtime import failed')"
-          deno eval "import { http } from '@loutrejs/loutre/http'; if (!http) throw new Error('HTTP subpath import failed')"
-          deno eval "import { tasksExtension } from '@loutrejs/loutre/tasks'; if (!tasksExtension) throw new Error('Tasks subpath import failed')"
-          deno run -A node_modules/@loutrejs/cli/bin/loutre.js --help | grep -q '^Loutre CLI$'
-          deno run -A node_modules/create-loutre/bin/create-loutre.js deno-app --yes --no-install --target deno
-          grep -q 'denoRuntime' deno-app/src/main.ts
-
   bun-initializer:
     name: Native Initializer / Bun ${{ matrix.version }}
     needs: quality-checks
@@ -544,35 +432,6 @@ jobs:
           printf '%s\n' "$output" | grep -q "Package manager: Bun"
           grep -q "bunRuntime" bun-app/src/main.ts
 
-  deno-initializer:
-    name: Native Initializer / Deno 2.9.5
-    needs: quality-checks
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup workspace
-        uses: ./.github/actions/setup-deno-workspace
-        with:
-          deno-version: 2.9.5
-
-      - name: Download initializer build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: create-loutre-build
-          path: packages
-
-      - name: Create Deno project
-        shell: bash
-        run: |
-          rm -rf .tmp/create-loutre-native
-          mkdir -p .tmp/create-loutre-native
-          output="$(deno run -A packages/create-loutre/bin/create-loutre.js .tmp/create-loutre-native/deno-app --yes --no-install --target deno)"
-          printf '%s\n' "$output"
-          printf '%s\n' "$output" | grep -q "Package manager: Deno"
-          grep -q "denoRuntime" .tmp/create-loutre-native/deno-app/src/main.ts
-
   website:
     name: Website Static Export / Node.js 24.x
     runs-on: ubuntu-latest
@@ -598,15 +457,12 @@ jobs:
       - node-tests
       - examples-e2e
       - bun-conformance
-      - deno-conformance
       - cloudflare-workers-conformance
       - electron-conformance
       - aws-lambda-conformance
       - node-package-consumer
       - bun-package-consumer
-      - deno-package-consumer
       - bun-initializer
-      - deno-initializer
       - website
     runs-on: ubuntu-latest
     steps:

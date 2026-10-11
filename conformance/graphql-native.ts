@@ -1,9 +1,8 @@
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
-import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { graphQLConformanceApplication } from './graphql-application.js'
 import { verifyGraphQLTransports } from './graphql-client.js'
 
-const runtime = 'Bun' in globalThis ? bunRuntime : denoRuntime
+const runtime = bunRuntime
 for (const http of [true, false]) {
   const application = await runtime.create({
     application: graphQLConformanceApplication(http),

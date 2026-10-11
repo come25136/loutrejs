@@ -65,14 +65,13 @@ cd my-app
 npm run dev
 ```
 
-BunやDenoからもprojectを作成できます。
+Bunからもprojectを作成できます。
 
 ```sh
 bun create loutre my-app
-deno x -A npm:create-loutre@latest my-app
 ```
 
-Node.js、Bun、Deno、Cloudflare Workers、AWS Lambda向けのstarterを選択できます。
+Node.js、Bun、Cloudflare Workers、AWS Lambda向けのstarterを選択できます。
 
 ## Why Loutre
 
@@ -86,7 +85,6 @@ Application codeをRuntime固有APIから分離し、Host / Runtime Adapterか�
 
 - Node.js
 - Bun
-- Deno
 - Cloudflare Workers
 - AWS Lambda
 - Electron

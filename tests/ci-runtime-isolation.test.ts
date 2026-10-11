@@ -3,22 +3,19 @@ import { describe, expect, it } from 'vitest'
 
 const nativeSetupFiles = [
   '.github/actions/setup-bun-workspace/action.yml',
-  '.github/actions/setup-deno-workspace/action.yml',
 ] as const
 
 const nativeCiJobs = [
   'bun-conformance',
-  'deno-conformance',
+
   'bun-initializer',
-  'deno-initializer',
+
   'bun-package-consumer',
-  'deno-package-consumer',
 ] as const
 
 const packedConsumerJobs = [
   'node-package-consumer',
   'bun-package-consumer',
-  'deno-package-consumer',
 ] as const
 
 async function readCiJob(jobId: string): Promise<string> {
@@ -81,7 +78,7 @@ describe('native runtime CI isolation', () => {
     )
   })
 
-  it.each(['test:bun', 'test:deno'] as const)(
+  it.each(['test:bun'] as const)(
     '%sはNode/npm commandへ依存しない',
     async (script) => {
       const manifest = JSON.parse(await readFile('package.json', 'utf8')) as {

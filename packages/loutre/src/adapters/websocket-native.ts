@@ -6,32 +6,6 @@ import {
   type WebSocketDriverChannel,
 } from '../websocket/index.js'
 
-export function createDenoWebSocketDriver(): WebSocketServerDriver {
-  return {
-    runtime: 'deno',
-    async upgrade(request, { protocol }) {
-      const deno = (
-        globalThis as unknown as {
-          Deno: {
-            upgradeWebSocket(
-              request: Request,
-              options: { protocol?: string },
-            ): { response: Response; socket: EventWebSocket }
-          }
-        }
-      ).Deno
-      const { response, socket } = deno.upgradeWebSocket(
-        request,
-        protocol === undefined ? {} : { protocol },
-      )
-      return {
-        response,
-        connection: createEventWebSocketConnection(socket, protocol ?? ''),
-      }
-    },
-  }
-}
-
 export function createCloudflareWebSocketDriver(): WebSocketServerDriver {
   return {
     runtime: 'cloudflare-workers',

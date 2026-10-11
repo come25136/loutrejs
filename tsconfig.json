@@ -32,9 +32,6 @@
         "./packages/loutre/src/message-port/index.ts"
       ],
       "@loutrejs/loutre/runtime/bun": ["./packages/loutre/src/adapters/bun.ts"],
-      "@loutrejs/loutre/runtime/deno": [
-        "./packages/loutre/src/adapters/deno.ts"
-      ],
       "@loutrejs/loutre/runtime/cloudflare-workers": [
         "./packages/loutre/src/adapters/cloudflare-workers.ts"
       ],
