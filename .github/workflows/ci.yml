@@ -258,7 +258,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [42.9.3, 43.4.1, 44.7.0]
+        version: [42.9.3, 43.4.1, 44.5.1]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
