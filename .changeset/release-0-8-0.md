@@ -13,6 +13,8 @@ Resolverは`resolve({ parent, args, context, info })`、Subscriptionは同じobj
 
 CLIのOpenAPI生成がcontract-first entryに対応しました。Applicationを実行せずにHTTP Contractを共有でき、routeの重複検証とmethodの正規化を共通化しました。HTTP Contractの同一性を検証し、定義後のroute変更がtoolingへ影響しないようにしました。
 
-Node / Bun / Deno / Cloudflare WorkersのWebSocket実行を整備しました。依存packageを更新し、公開tarballのconsumer、GraphQL.js 16 / 17、server examplesのQuery / Mutation / SubscriptionとBatch取得を検証しています。
+破壊的変更としてDeno対応を削除しました。`@loutrejs/loutre/runtime/deno`とDenoのRuntime identity、CLI host / deployment target、create-loutreのtarget / package managerを削除しています。対応RuntimeはNode.js、Bun、Cloudflare Workers、AWS Lambda、Electronです。
+
+Node / Bun / Cloudflare WorkersのWebSocket実行を整備しました。依存packageを更新し、公開tarballのconsumer、GraphQL.js 16 / 17、server examplesのQuery / Mutation / SubscriptionとBatch取得を検証しています。
 
 GraphQLのserver生成物は`types.ts`・`schema-ast.ts`・`bindings.ts`です。`bindManifest<AppContext>({ schemaDocument, resolvers })`で手書きResolverを接続し、`graphql.endpoint({ manifest, factory })`で公開します。Clientの型とTypedDocumentNodeは明示的なclient targetで生成します。
