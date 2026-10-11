@@ -255,7 +255,7 @@ export type QueryatArgs = {
   readonly value: Scalars['DateTime']['input']
 }
 export interface CoercedInputTypes {}
-import type * as $LoutreData from '@loutrejs/graphql/data'
+import type * as $LoutreData from '@loutrejs/graphql'
 export type CoercedArguments<T, K extends keyof T> = Omit<T, K> & {
   readonly [P in K]-?: Exclude<T[P], undefined>
 }

@@ -67,7 +67,7 @@ Enumの内部値がSDLの名前と異なる場合は、server targetの`enumValu
 ## ResolverとManifest
 
 ```ts
-import { getFieldSelection } from '@loutrejs/graphql/data'
+import { getFieldSelection } from '@loutrejs/graphql'
 import type { Resolvers } from './generated/types.js'
 import type { AppContext } from './context.js'
 
@@ -194,7 +194,7 @@ HTTPは`application/graphql-response+json`でdataを持たないGraphQLの実行
 引数を宣言したFieldは省略呼出しでも自動reuseしません。先読みしたページ等との一致を明示readで確認します。
 
 ```ts
-import { data } from '@loutrejs/graphql/data'
+import { data } from '@loutrejs/graphql'
 
 const posts = {
   requires: ['id'],

@@ -89,7 +89,7 @@ graphql.endpoint({
 
 - `graphql.endpoint({ manifest })`をPublic APIのコントラクトとし、アプリ側から`schema`や`typeDefs`を渡す方式は廃止してよい。
 - `manifest`のPublic Typeは **`Opaque Type`** とする。GraphQL SchemaとData ResolutionのCompiled Metadataを保持するが、アプリケーションは内部構造に依存せず`graphql.endpoint({ manifest })`を使用する。これはTypeScriptのAPI境界に関する方針であり、Runtime Objectの内部情報を一切参照できないという意味ではなく、Security Boundaryでもない。
-- `@loutrejs/graphql/data`は`getFieldSelection(info)`と明示read用の`loaded` / `missing`を提供する。
+- `@loutrejs/graphql`は`getFieldSelection(info)`と明示read用の`loaded` / `missing`を提供する。利用者がtransportとResolver helperのimport先を区別する学習コストを避けるため、公開APIをpackage rootへ集約する。内部moduleの責務分離は維持する。
 - 通常のResolverは`resolve({ parent, args, context, info })`を使う。Batch取得を行うFieldには`{ requires, read, load, authorize, maxBatchSize }`を直接書く。
 - 型付き`bindManifest<AppContext>`と`Resolvers<AppContext>`がSDLとDomain MapperからParent / Args / Resultを推論する。FieldごとのGeneric Type指定は要求しない。
 
@@ -236,7 +236,7 @@ Resolverの位置に応じてSDLとDomain Mapperから型を取得する。Appli
 
 ```ts
 // src/graphql/resolvers.ts — 人間が記述
-import { getFieldSelection } from '@loutrejs/graphql/data'
+import { getFieldSelection } from '@loutrejs/graphql'
 import type { Resolvers } from './generated/types.js'
 import type { AppContext } from './context.js'
 

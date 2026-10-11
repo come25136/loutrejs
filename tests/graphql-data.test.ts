@@ -5,7 +5,7 @@ import {
   type FieldOptions,
   type Resolver,
   type FieldSelection,
-} from '@loutrejs/graphql/data'
+} from '@loutrejs/graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
 import { getManifest } from '../packages/graphql/src/manifest-internal.js'
 import {

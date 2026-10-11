@@ -27,6 +27,7 @@ export type {
   GraphQLEndpointDefinition,
 } from './types.js'
 export type { GraphQLManifest } from './manifest-internal.js'
+export * from './data.js'
 
 type TransportExecution<
   TTransports,

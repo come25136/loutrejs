@@ -60,9 +60,8 @@ import type {
   Product,
 } from '../../examples/graphql-orders/src/domain/commerce.js'
 import type { AppContext as OrderContext } from '../../examples/graphql-orders/src/graphql/context.js'
-import { graphql } from '@loutrejs/graphql'
+import { graphql, data, getFieldSelection } from '@loutrejs/graphql'
 import { manifest } from '../../examples/graphql-orders/src/graphql/manifest.js'
-import { data, getFieldSelection } from '@loutrejs/graphql/data'
 
 const alternate = {
   Query: {

@@ -1,4 +1,4 @@
-import type { FieldSelection } from '@loutrejs/graphql/data'
+import type { FieldSelection } from '@loutrejs/graphql'
 
 export interface Category {
   readonly id: string

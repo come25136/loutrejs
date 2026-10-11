@@ -10,7 +10,7 @@ import {
   type GraphQLFieldResolver,
 } from 'graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
-import type { ResolverInput, TypeResolverInput } from '@loutrejs/graphql/data'
+import type { ResolverInput, TypeResolverInput } from '@loutrejs/graphql'
 
 function fieldResolver(
   resolver: GraphQLFieldResolver<unknown, unknown> | undefined,

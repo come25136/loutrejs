@@ -517,7 +517,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
   const batchFields = subscription
     ? `Omit<SchemaFields<Context>, '${subscription.name}'>`
     : 'SchemaFields<Context>'
-  const extra = `\nimport type * as $LoutreData from '@loutrejs/graphql/data'\nexport type CoercedArguments<T, K extends keyof T> = Omit<T, K> & { readonly [P in K]-?: Exclude<T[P], undefined> }\nexport interface SchemaFields<Context extends object> { ${fields} }\nexport type Resolvers<Context extends object = object> = $LoutreData.ResolverMap<StandardResolvers<Context>, ${batchFields}>\n`
+  const extra = `\nimport type * as $LoutreData from '@loutrejs/graphql'\nexport type CoercedArguments<T, K extends keyof T> = Omit<T, K> & { readonly [P in K]-?: Exclude<T[P], undefined> }\nexport interface SchemaFields<Context extends object> { ${fields} }\nexport type Resolvers<Context extends object = object> = $LoutreData.ResolverMap<StandardResolvers<Context>, ${batchFields}>\n`
   const outputs = {
     'types.ts': content + extra,
     'schema-ast.ts': `import type { DocumentNode } from 'graphql'\nexport const schemaDocument: DocumentNode = ${JSON.stringify(blueprint)}`,
