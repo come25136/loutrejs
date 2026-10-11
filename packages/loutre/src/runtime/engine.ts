@@ -1,7 +1,6 @@
 export type RuntimeEngine =
   | 'node'
   | 'bun'
-  | 'deno'
   | 'cloudflare-workers'
   | 'aws-lambda'
   | 'electron'
@@ -10,7 +9,6 @@ export type RuntimeEngine =
 const runtimeLabels = {
   node: 'Node.js',
   bun: 'Bun',
-  deno: 'Deno',
   'cloudflare-workers': 'Cloudflare Workers',
   'aws-lambda': 'AWS Lambda',
   electron: 'Electron',
@@ -35,7 +33,7 @@ export function detectRuntimeEngine(): RuntimeEngine {
   ) {
     return 'bun'
   }
-  if (globals.Deno !== undefined) return 'deno'
+  if (globals.Deno !== undefined) return 'unknown'
   if (
     globals.navigator?.userAgent === 'Cloudflare-Workers' ||
     globals.WebSocketPair !== undefined

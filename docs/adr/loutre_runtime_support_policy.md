@@ -5,6 +5,8 @@
 - Base: `develop`
 - 日付: 2026-08-28 JST
 
+v0.8.0からDenoのRuntime adapter、CLI host、initializer supportを終了する。
+
 ## 0. 結論
 
 Loutreのruntime supportは、単一の「最新バージョン固定」ではなく、各runtime upstreamのrelease / support modelへ追従する。
@@ -14,7 +16,6 @@ runtime identityは実行環境の種類を表し、versionを含めない。
 ```text
 node
 bun
-deno
 cloudflare-workers
 aws-lambda
 electron
@@ -22,7 +23,7 @@ electron
 
 > **Runtime identity identifies the runtime family, not a runtime release.**
 
-versionはsupport policyとCI matrixが管理する。`node-26`、`bun-1.4-stable`、`deno-2.9-lts`、`electron-43`、`aws-lambda-nodejs24.x` のようなversion入りidentityは使用しない。
+versionはsupport policyとCI matrixが管理する。`node-26`、`bun-1.4-stable`、`electron-43`、`aws-lambda-nodejs24.x` のようなversion入りidentityは使用しない。
 
 ## 1. Current support snapshot
 
@@ -30,7 +31,6 @@ versionはsupport policyとCI matrixが管理する。`node-26`、`bun-1.4-stabl
 
 - Node.js: support中LTSは22 / 24、Primaryは24 LTS
 - Bun: current stable minor + previous stable minorとして1.3 / 1.4、Primaryは1.4
-- Deno: current LTS lineとして2.9 LTS
 - Electron: upstreamでsupport中のstable majorすべてとして42 / 43 / 44、Primaryは44
 - workerd: lockfile-pinned releaseを検証し、そのreleaseをPrimaryとする
 - AWS Lambda: AWSがGA提供するNode.js managed runtimeとしてnodejs22.x / nodejs24.x、Primaryはnodejs24.x
@@ -67,25 +67,25 @@ Node上で実行される公開packageはminimumをsemver rangeとして宣言�
 
 `24.x`のようにdevelopment baselineへpackage consumerを固定しない。
 
-`@loutrejs/loutre`はNode専用packageではないためNode engineを宣言しない。`@loutrejs/node`およびNodeで実行するexampleはNode minimumを宣言する。`@loutrejs/cli`はNode.js / Bun / Denoの複数host runtimeで実行するため、Node.jsだけを要求する`engines.node`は宣言しない。
+`@loutrejs/loutre`はNode専用packageではないためNode engineを宣言しない。`@loutrejs/node`およびNodeで実行するexampleはNode minimumを宣言する。`@loutrejs/cli`はNode.js / Bunの複数host runtimeで実行するため、Node.jsだけを要求する`engines.node`は宣言しない。
 
 `.nvmrc`はminimumではなくdevelopment baselineを表し、latest LTSを使用する。
 
 ### 2.1 CLI host runtime
 
-`@loutrejs/cli`のhost runtime supportはNode.js / Bun / Denoとする。各host runtimeのsupport versionは本ADRのNode.js / Bun / Deno policyへ追従する。
+`@loutrejs/cli`のhost runtime supportはNode.js / Bunとする。各host runtimeのsupport versionは本ADRのNode.js / Bun policyへ追従する。
 
 Source Location parser等のdeveloper tooling dependencyを理由にCLIのhost runtime baselineを個別に引き上げない。Source instrumentationのparser選定とportable runtime境界の詳細は[`loutre_source_location_instrumentation.md`](./loutre_source_location_instrumentation.md)を参照する。
 
-CLI implementationは3 runtimeで共通して利用可能なWeb APIとNode.js compatibility APIのsubsetへ制限し、Node専用packageをruntime dependencyとして要求しない。Node runtimeのCapability検査に必要なmetadataはruntime-neutralな`@loutrejs/loutre/runtime`から取得する。
+CLI implementationは2 runtimeで共通して利用可能なWeb APIとNode.js compatibility APIのsubsetへ制限し、Node専用packageをruntime dependencyとして要求しない。Node runtimeのCapability検査に必要なmetadataはruntime-neutralな`@loutrejs/loutre/runtime`から取得する。
 
-`bin/loutre.js`のshebangはnpm / npx ecosystemとの互換性のため`#!/usr/bin/env node`を維持する。これはCLI implementationのNode専用化を意味しない。Bunでnative実行する場合は`bunx --bun`または`bun run --bun`を使用し、Denoでは`deno x`、`deno run`、`deno task`のnpm binary compatibilityから実行する。
+`bin/loutre.js`のshebangはnpm / npx ecosystemとの互換性のため`#!/usr/bin/env node`を維持する。これはCLI implementationのNode専用化を意味しない。Bunでnative実行する場合は`bunx --bun`または`bun run --bun`を使用する。
 
 CIはCLIの`check` / `build` / `openapi`を各host runtime自身で実行し、Application runtime conformanceとは別にCLI host portabilityを検証する。
 
-Bun / Denoのruntime conformanceと`create-loutre` native initializerは、それぞれのruntime自身でdependency installと必要なpackage buildを行い、Node.js setupやnpm commandへ依存しない。Node.js系、AWS Lambda、Electron、Cloudflare Workersのconformanceは各検証に必要なNode.js toolingを明示的にsetupする。
+Bunのruntime conformanceと`create-loutre` native initializerは、それぞれのruntime自身でdependency installと必要なpackage buildを行い、Node.js setupやnpm commandへ依存しない。Node.js系、AWS Lambda、Electron、Cloudflare Workersのconformanceは各検証に必要なNode.js toolingを明示的にsetupする。
 
-公開packageはNode.jsで`npm pack`したtarballをartifactとして固定し、repository sourceをcheckoutしないconsumer jobでNode.js / Bun / Denoからinstall・runtime import・CLI実行・`create-loutre`実行を検証する。Denoはnpm tarballの`file:` dependencyをsupportしないため、tarballを展開したpackage directoryを公式`links`で解決する。
+公開packageはNode.jsで`npm pack`したtarballをartifactとして固定し、repository sourceをcheckoutしないconsumer jobでNode.js / Bunからinstall・runtime import・CLI実行・`create-loutre`実行を検証する。
 
 ## 3. Bun
 
@@ -105,18 +105,7 @@ minor更新時はmatrixをrolling updateする。
 
 runtime identityは常に `bun` とする。
 
-## 4. Deno
-
-Denoは公式LTS lineへ追従する。
-
-- supported baseline: current LTS
-- primary: current LTSのlatest patch
-
-2026-08-28時点ではDeno 2.9 LTSをsupportする。
-
-runtime identityは常に `deno` とする。
-
-## 5. Electron
+## 4. Electron
 
 Electronはupstreamがsupportしているstable majorをすべてsupportする。
 
@@ -126,7 +115,7 @@ upstream EOLに到達したmajorはLoutreのsupport matrixからも外す。特�
 
 runtime identityは常に `electron` とする。
 
-## 6. Cloudflare Workers / workerd
+## 5. Cloudflare Workers / workerd
 
 workerdは日付ベースのrelease cadenceを持つため、Loutre独自の長期minimum semverを定義しない。
 
@@ -138,7 +127,7 @@ adapterが特定compatibility date以降のsemanticsを要求する場合、そ�
 
 Loutreのruntime identityはサービス名を表す `cloudflare-workers` とする。`workerd`はCloudflare Workersを支える実エンジン名として、package versionやconformance実行時にのみ使用する。
 
-## 7. AWS Lambda
+## 6. AWS Lambda
 
 AWS Lambda adapterはAWSがGAとして提供しているNode.js managed runtimeをsupport対象とする。
 
@@ -155,7 +144,7 @@ nodejs24.x
 
 AWS Lambda adapterのidentityはmanaged runtime versionではなくサービスfamilyを表すため、常に `aws-lambda` とする。
 
-## 8. CI policy
+## 7. CI policy
 
 CIはsupport policyを実際に検証する。
 
@@ -170,9 +159,6 @@ Node.js
 Bun
 ├ 1.3.14
 └ 1.4.0
-
-Deno
-└ 2.9.5 LTS
 
 Electron
 ├ 42.10.1
@@ -189,14 +175,13 @@ AWS Lambda
 
 Node minimum API compatibilityはNode 22 runtime executionだけでなく、Node 22 type baselineでも検証する。repositoryのdevelopment型定義が新しくても、CIでNode 22の型定義へ一時的に差し替えてtypecheck / type tests / buildを実行する。
 
-## 9. Runtime identity
+## 8. Runtime identity
 
 Canonical identity:
 
 ```ts
 nodeRuntime.runtime === 'node'
 bunRuntime.runtime === 'bun'
-denoRuntime.runtime === 'deno'
 cloudflareWorkersRuntime.runtime === 'cloudflare-workers'
 awsLambdaRuntime.runtime === 'aws-lambda'
 electronRuntime.runtime === 'electron'

@@ -72,7 +72,7 @@ source変更時はApplication Graphを再構築し、Browserへpushします。w
 npm exec loutre -- build src/app.ts --out-dir dist/loutre
 ```
 
-`aws-lambda`、`cloudflare-workers`、`deno`ではdeployment entryも生成できます。
+`aws-lambda`、`cloudflare-workers`ではdeployment entryも生成できます。
 
 ```sh
 npm exec loutre -- build src/app.ts --runtime aws-lambda

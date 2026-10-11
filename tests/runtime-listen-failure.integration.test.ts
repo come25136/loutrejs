@@ -1,7 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import { defineApplication } from '@loutrejs/loutre'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
-import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { nodeRuntime } from '@loutrejs/node'
 import { UsersModule } from '../integrations/http-crud/src/index.js'
 import { silentLogger } from './helpers/silent-logger.js'
@@ -160,87 +159,6 @@ describe('runtime listen failure', () => {
     try {
       await app.serve({ hostname: '127.0.0.1', shutdownHooks: false })
       expectProcessSignalListeners(signalListeners, 0)
-    } finally {
-      await app.close('test-complete')
-    }
-  })
-
-  it('Denoは明示portのlisten失敗を再試行せずserve()からrejectする', async () => {
-    const ports: number[] = []
-    vi.stubGlobal('Deno', {
-      env: { get: () => undefined, toObject: () => ({}) },
-      version: { deno: '2.5.0' },
-      serve: ({ port }: { readonly port: number }) => {
-        ports.push(port)
-        throw addressInUseError()
-      },
-    })
-
-    const app = await denoRuntime.create({ application: usersDefinition() })
-    await expect(
-      app.serve({ hostname: '127.0.0.1', port: 3000 }),
-    ).rejects.toMatchObject({ code: 'EADDRINUSE' })
-    expect(ports).toEqual([3000])
-    expect(startupOutput).toHaveLength(1)
-    expect(startupOutput.join('\n')).not.toContain('Ready')
-  })
-
-  it('Denoはport省略時にEADDRINUSEごとにportをincrementする', async () => {
-    const ports: number[] = []
-    const signalListeners = new Map<string, () => void>()
-    vi.stubGlobal('Deno', {
-      env: {
-        get: (name: string) => (name === 'DENO_ENV' ? 'test' : undefined),
-        toObject: () => ({ DENO_ENV: 'test' }),
-      },
-      version: { deno: '2.5.0' },
-      addSignalListener: (signal: string, handler: () => void) => {
-        signalListeners.set(signal, handler)
-      },
-      removeSignalListener: (signal: string, handler: () => void) => {
-        if (signalListeners.get(signal) === handler)
-          signalListeners.delete(signal)
-      },
-      serve: ({ port }: { readonly port: number }) => {
-        ports.push(port)
-        if (port < 3002) throw addressInUseError()
-        return { shutdown: async () => undefined }
-      },
-    })
-
-    const app = await denoRuntime.create({ application: usersDefinition() })
-    try {
-      const listener = await app.serve({ hostname: '127.0.0.1' })
-      expect(ports).toEqual([3000, 3001, 3002])
-      expect(listener.port).toBe(3002)
-      expect(startupOutput.join('\n')).toContain(
-        'Server: http://127.0.0.1:3002',
-      )
-      expect(startupOutput.join('\n')).toContain('Runtime: Deno 2.5.0')
-      expect(startupOutput.join('\n')).toContain('Environment: test')
-      expect([...signalListeners.keys()]).toEqual(['SIGINT', 'SIGTERM'])
-    } finally {
-      await app.close('test-complete')
-      expect(signalListeners.size).toBe(0)
-    }
-  })
-
-  it('DenoはshutdownHooksをfalseにするとsignal listenerを登録しない', async () => {
-    const addSignalListener = vi.fn()
-    const removeSignalListener = vi.fn()
-    vi.stubGlobal('Deno', {
-      env: { get: () => undefined, toObject: () => ({}) },
-      version: { deno: '2.5.0' },
-      addSignalListener,
-      removeSignalListener,
-      serve: () => ({ shutdown: async () => undefined }),
-    })
-
-    const app = await denoRuntime.create({ application: usersDefinition() })
-    try {
-      await app.serve({ hostname: '127.0.0.1', shutdownHooks: false })
-      expect(addSignalListener).not.toHaveBeenCalled()
-      expect(removeSignalListener).not.toHaveBeenCalled()
     } finally {
       await app.close('test-complete')
     }

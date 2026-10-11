@@ -12,7 +12,7 @@ GraphQL対応にあたり、次の課題を解消する必要がある。
 
 - GraphQL over HTTPの仕様を既存HTTP Contractへ二重定義したくない
 - WebSocket subprotocol `graphql-transport-ws` をnegotiationできない
-- Node / Bun / Deno / Cloudflare WorkersでWebSocketをfirst-classにserveしたい
+- Node / Bun / Cloudflare WorkersでWebSocketをfirst-classにserveしたい
 - 1本のsocket上で複数GraphQL operationをmultiplexできるようにしたい
 - SubscriptionのAsyncIterable lifecycleとLoutreのdrain / tracingを整合させたい
 - GraphQL固有のprotocol semanticsをDurable Objectやdomain event routerへ漏らしたくない
@@ -298,7 +298,7 @@ session idはWebSocket Extensionが生成するserver-side opaque IDとし、pla
 
 Runtime adapterの「HTTP Extension必須」制約を撤廃する。
 
-Node / Bun / Deno / Cloudflare WorkersはApplicationが必要とするHTTP / WebSocket capabilityに応じてserveする。
+Node / Bun / Cloudflare WorkersはApplicationが必要とするHTTP / WebSocket capabilityに応じてserveする。
 
 ```text
 HTTP only
@@ -537,7 +537,7 @@ Application Modelへlive `GraphQLSchema` 全体をserializeしない。
 ## 実装順序
 
 1. WebSocket v2 + subprotocol negotiation
-2. Node / Bun / Deno / Cloudflare Workers WebSocket runtime
+2. Node / Bun / Cloudflare Workers WebSocket runtime
 3. HTTP raw endpoint + middleware state
 4. Composite Execution
 5. `@loutrejs/graphql` HTTP Query / Mutation対応
@@ -552,7 +552,7 @@ PR 1
 WebSocket Execution v2 + subprotocol
 
 PR 2
-Node / Bun / Deno / Cloudflare Workers WebSocket runtime
+Node / Bun / Cloudflare Workers WebSocket runtime
 
 PR 3
 HTTP raw protocol endpoint + ExecutionGroup
@@ -575,7 +575,7 @@ GraphQL operation tracing + conformance
 - Query / Mutation / SubscriptionをGraphQL over WebSocketで実行できる
 - `graphql-transport-ws` subprotocolを正しくnegotiationできる
 - Raw endpointで通常のLoutre middlewareとmiddleware stateを利用できる
-- Node / Bun / Deno / Cloudflare Workersで対応runtimeを提供できる
+- Node / Bun / Cloudflare Workersで対応runtimeを提供できる
 - WebSocket session IDとGraphQL operation IDをtrace上でcorrelationできる
 - Subscription停止時にiterator cleanupとAbortSignal propagationが行われる
 - Application drain時にactive Subscriptionがgracefulに終了する

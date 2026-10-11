@@ -35,7 +35,7 @@ Tasks、MessagePort、WebSocketは内部では独立したExecution Extensionと
 
 `@loutrejs/node`は独立packageとして維持し、`engines.node`でNode.jsのminimum versionを宣言する。Node adapterをmain packageのsubpathへ移すと、portableな`@loutrejs/loutre`全体へNode.js制約を課すか、package metadataで制約を表せなくなる。
 
-`@loutrejs/loutre`には`engines.node`を設定しない。Bun、Deno、Cloudflare Workersなどから利用できるportable packageであり続ける。Runtime versionのsupport範囲は[Runtime support policy](./loutre_runtime_support_policy.md)を正本とする。
+`@loutrejs/loutre`には`engines.node`を設定しない。Bun、Cloudflare Workersなどから利用できるportable packageであり続ける。Runtime versionのsupport範囲は[Runtime support policy](./loutre_runtime_support_policy.md)を正本とする。
 
 ## 維持する独立package
 

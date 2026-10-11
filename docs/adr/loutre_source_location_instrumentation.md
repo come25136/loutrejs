@@ -171,7 +171,7 @@ Source Location実装ではSWCをcompiler / bundlerとして使わず、主にpa
 
 Oxc採用に伴って一時的に導入したCLI Node.js `>=22.12.0`制約は撤回する。CLIのruntime support policyをparser dependency都合で狭めない。
 
-`@loutrejs/cli`はNode.js / Bun / Denoで動作するportable CLIであり、`engines.node`を宣言しない。runtime supportの正本は`loutre_runtime_support_policy.md`とする。
+`@loutrejs/cli`はNode.js / Bunで動作するportable CLIであり、`engines.node`を宣言しない。runtime supportの正本は`loutre_runtime_support_policy.md`とする。
 
 ## 8. Source span / Unicode
 

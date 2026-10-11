@@ -5,7 +5,7 @@ export const homeCopy = {
     hero: {
       title: ['TypeScript framework', 'for any runtime.'],
       lead: [
-        'Define one Application Model, then run it on Node.js, Bun, Deno, Cloudflare Workers, AWS Lambda, and Electron.',
+        'Define one Application Model, then run it on Node.js, Bun, Cloudflare Workers, AWS Lambda, and Electron.',
         'Loutre Dev lets you trace the structure and execution from that same model.',
       ],
       commandHint: 'Start local developer tooling',
@@ -55,7 +55,7 @@ export const homeCopy = {
       title: 'Develop on the runtime you prefer.',
       body: [
         'Keep the application model and choose the runtime that fits your environment.',
-        'Run the same code on Node.js, Bun, Deno, Cloudflare Workers, AWS Lambda, or Electron.',
+        'Run the same code on Node.js, Bun, Cloudflare Workers, AWS Lambda, or Electron.',
       ],
     },
     finalCta: {
@@ -113,7 +113,7 @@ export const homeCopy = {
       eyebrow: 'MULTI-RUNTIME',
       title: '好みのランタイムで、\nいつものフレームワークを。',
       body: [
-        'Node.js、Bun、Deno、Cloudflare Workers、AWS Lambda、Electronに対応。',
+        'Node.js、Bun、Cloudflare Workers、AWS Lambda、Electronに対応。',
         'ランタイムが変わっても、開発スタイルはそのまま。',
       ],
     },

@@ -16,7 +16,6 @@ export default application`
 const runtimes = [
   { name: 'Node.js', src: '/runtimes/nodejs.svg', width: 44, height: 50 },
   { name: 'Bun', src: '/runtimes/bun.svg', width: 80, height: 70 },
-  { name: 'Deno', src: '/runtimes/deno.svg', width: 441, height: 441 },
   {
     name: 'Cloudflare Workers',
     src: '/runtimes/cloudflare.svg',
@@ -38,9 +37,8 @@ const runtimes = [
 ] as const
 
 const runtimeConnections = [
-  { id: 'node', path: 'M 300 160 C 300 106 100 106 100 52' },
-  { id: 'bun', path: 'M 300 160 C 300 106 300 106 300 52' },
-  { id: 'deno', path: 'M 300 160 C 300 106 500 106 500 52' },
+  { id: 'node', path: 'M 300 160 C 300 106 150 106 150 52' },
+  { id: 'bun', path: 'M 300 160 C 300 106 450 106 450 52' },
   { id: 'cloudflare', path: 'M 300 306 C 300 360 100 360 100 408' },
   { id: 'lambda', path: 'M 300 306 C 300 360 300 360 300 408' },
   { id: 'electron', path: 'M 300 306 C 300 360 500 360 500 408' },
@@ -106,8 +104,8 @@ function RuntimeNode({
 function RuntimeDiagram() {
   return (
     <div className="relative mx-auto h-[440px] w-full max-w-[620px]">
-      <div className="absolute inset-x-0 top-0 z-10 grid grid-cols-3 gap-2 sm:gap-3">
-        {runtimes.slice(0, 3).map((runtime) => (
+      <div className="absolute inset-x-0 top-0 z-10 grid grid-cols-2 gap-2 sm:gap-3">
+        {runtimes.slice(0, 2).map((runtime) => (
           <RuntimeNode runtime={runtime} key={runtime.name} />
         ))}
       </div>
@@ -165,7 +163,7 @@ function RuntimeDiagram() {
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-10 grid grid-cols-3 gap-2 sm:gap-3">
-        {runtimes.slice(3).map((runtime) => (
+        {runtimes.slice(2).map((runtime) => (
           <RuntimeNode runtime={runtime} key={runtime.name} />
         ))}
       </div>

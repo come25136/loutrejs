@@ -298,10 +298,8 @@ function detectPackageManager(
 ): PackageManager {
   const globals = runtime as typeof globalThis & {
     readonly Bun?: unknown
-    readonly Deno?: unknown
   }
   if (globals.Bun !== undefined) return 'bun'
-  if (globals.Deno !== undefined) return 'deno'
 
   const name = userAgent?.split('/')[0]
   return (
@@ -331,8 +329,8 @@ function helpText(): string {
     'Usage: create-loutre [directory] [options]',
     '',
     'Options:',
-    '  --target <target>                    node | bun | deno | cloudflare-workers | aws-lambda',
-    '  --package-manager <package-manager>  npm | pnpm | yarn | bun | deno',
+    '  --target <target>                    node | bun | cloudflare-workers | aws-lambda',
+    '  --package-manager <package-manager>  npm | pnpm | yarn | bun',
     '  -y, --yes                            Use defaults for unspecified options',
     '  --no-install                         Skip dependency installation',
     '  -h, --help                           Show help',

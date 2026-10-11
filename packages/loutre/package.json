@@ -48,10 +48,6 @@
       "types": "./dist/adapters/bun.d.ts",
       "import": "./dist/adapters/bun.js"
     },
-    "./runtime/deno": {
-      "types": "./dist/adapters/deno.d.ts",
-      "import": "./dist/adapters/deno.js"
-    },
     "./runtime/cloudflare-workers": {
       "types": "./dist/adapters/cloudflare-workers.d.ts",
       "import": "./dist/adapters/cloudflare-workers.js"

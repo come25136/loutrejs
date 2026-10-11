@@ -16,7 +16,6 @@ import {
   type RuntimeSupportProfile,
 } from '@loutrejs/loutre/runtime'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
-import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
@@ -41,7 +40,6 @@ export type { GraphQLCodegenConfig } from './graphql-config.js'
 
 const runtimes: Readonly<Record<string, RuntimeSupportProfile>> = {
   node: nodeRuntimeSupport,
-  deno: denoRuntime,
   bun: bunRuntime,
   'cloudflare-workers': cloudflareWorkersRuntime,
   electron: electronRuntime,
@@ -49,7 +47,7 @@ const runtimes: Readonly<Record<string, RuntimeSupportProfile>> = {
 }
 
 const runtimeNames = Object.keys(runtimes)
-const deploymentRuntimes = ['aws-lambda', 'cloudflare-workers', 'deno'] as const
+const deploymentRuntimes = ['aws-lambda', 'cloudflare-workers'] as const
 type DeploymentRuntime = (typeof deploymentRuntimes)[number]
 type GraphSubject = 'all' | 'modules' | 'di' | 'http' | 'runtime' | 'executions'
 type MermaidThemeName = 'light' | 'dark'
@@ -496,15 +494,6 @@ function renderDeploymentEntry(runtime: DeploymentRuntime): string {
         "import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'",
         '',
         'export default cloudflareWorkersRuntime.bind({ application })',
-        '',
-      ].join('\n'),
-    )
-    .with('deno', () =>
-      [
-        "import application from './application.mjs'",
-        "import { denoRuntime } from '@loutrejs/loutre/runtime/deno'",
-        '',
-        'export default denoRuntime.bind({ application })',
         '',
       ].join('\n'),
     )
@@ -1563,11 +1552,11 @@ function helpText(): string {
     'Loutre CLI',
     '  loutre graphql generate|validate|diff --help',
     '  loutre check --entry <entry>',
-    '  loutre doctor [--runtime node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
+    '  loutre doctor [--runtime node|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
     '  loutre graph all|modules|di|executions|http|runtime --entry <entry> [--format text|json|mermaid] [--theme light|dark]',
     '  loutre dev --entry <entry> [--port 25136] [--origin <origin>] [--ignore <path>] -- <application command>',
     '  loutre explain <target> --entry <entry>',
-    '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers|deno] [--out-dir <directory>]',
+    '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers] [--out-dir <directory>]',
     '',
     'The dev command supervises your Host command and connects an opt-in DevtoolsModule to the local DevTools session.',
   ].join('\n')

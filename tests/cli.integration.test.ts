@@ -69,7 +69,6 @@ describe('Loutre CLI', () => {
   it.each([
     ['Node.js', undefined, 'node'],
     ['Bun', { Bun: { version: '1.3.7' } }, 'bun'],
-    ['Deno', { Deno: { version: { deno: '2.9.6' } } }, 'deno'],
   ])(
     'doctorでruntimeを省略すると実行中の%sを使用する',
     async (_runtime, globals, expected) => {
@@ -107,7 +106,7 @@ describe('Loutre CLI', () => {
       ),
     ).toBe(2)
     expect(output.stderr).toEqual([
-      'doctor --runtime must be one of: node, deno, bun, cloudflare-workers, electron, aws-lambda.',
+      'doctor --runtime must be one of: node, bun, cloudflare-workers, electron, aws-lambda.',
     ])
   })
 
@@ -1507,11 +1506,6 @@ describe('Loutre CLI', () => {
       "import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'",
       'export default cloudflareWorkersRuntime.bind({ application })',
     ],
-    [
-      'deno',
-      "import { denoRuntime } from '@loutrejs/loutre/runtime/deno'",
-      'export default denoRuntime.bind({ application })',
-    ],
   ])(
     'build --runtime %sでdeployment entryを生成する',
     async (runtime, runtimeImport, runtimeExport) => {
@@ -1551,7 +1545,7 @@ describe('Loutre CLI', () => {
       ),
     ).toBe(2)
     expect(output.stderr.join('\n')).toContain(
-      'build --runtime must be one of: aws-lambda, cloudflare-workers, deno.',
+      'build --runtime must be one of: aws-lambda, cloudflare-workers.',
     )
   })
 })

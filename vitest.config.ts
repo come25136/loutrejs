@@ -24,9 +24,6 @@ export default defineConfig({
       '@loutrejs/loutre/runtime/bun': resolve(
         'packages/loutre/src/adapters/bun.ts',
       ),
-      '@loutrejs/loutre/runtime/deno': resolve(
-        'packages/loutre/src/adapters/deno.ts',
-      ),
       '@loutrejs/loutre/runtime/cloudflare-workers': resolve(
         'packages/loutre/src/adapters/cloudflare-workers.ts',
       ),

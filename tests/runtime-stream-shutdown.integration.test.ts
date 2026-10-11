@@ -1,7 +1,6 @@
 import { nodeRuntime } from '@loutrejs/node'
 import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
-import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { z } from 'zod'
 import { reserveHttpPort } from './helpers/http-server.js'
@@ -40,58 +39,6 @@ describe('runtime streaming shutdown lifetime', () => {
 
     expect(listener.server.listening).toBe(false)
     expect(fixture.events).toEqual(['iterator.return', 'provider.destroy'])
-  })
-
-  it('Denoはshutdown開始後にKernel drainで未完了SSEを回収してからlistener完了を待つ', async () => {
-    const fixture = blockingSseFixture()
-    let handler:
-      | ((request: Request) => Response | Promise<Response>)
-      | undefined
-    let responseFinished: Promise<void> = Promise.resolve()
-    vi.stubGlobal('Deno', {
-      env: { get: () => undefined, toObject: () => ({}) },
-      version: { deno: 'test' },
-      serve: (
-        _options: unknown,
-        candidate: (request: Request) => Response | Promise<Response>,
-      ) => {
-        handler = candidate
-        return {
-          shutdown: () => {
-            fixture.events.push('server.shutdown')
-            return responseFinished
-          },
-        }
-      },
-    })
-    const application = await denoRuntime.create({
-      application: fixture.definition,
-      forceShutdownTimeoutMs: 50,
-    })
-    await application.serve({
-      port: 3000,
-      hostname: '127.0.0.1',
-      shutdownHooks: false,
-    })
-    if (!handler) throw new Error('Deno.serve handler was not registered')
-    const response = await handler(new Request('http://127.0.0.1:3000/events'))
-    const reader = response.body?.getReader()
-    if (!reader) throw new Error('SSE response body is missing')
-    await reader.read()
-    responseFinished = reader.read().then(
-      () => undefined,
-      () => undefined,
-    )
-
-    await expect(
-      withHangGuard(application.close(), 500),
-    ).resolves.toBeUndefined()
-
-    expect(fixture.events).toEqual([
-      'server.shutdown',
-      'iterator.return',
-      'provider.destroy',
-    ])
   })
 
   it('Bunのnative stopが完了しなくてもexecutionとproviderを回収して終了する', async () => {
