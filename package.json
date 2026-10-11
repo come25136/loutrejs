@@ -29,8 +29,8 @@
     "build:conformance-apps": "loutre build integrations/http-crud/src/app.ts --out-dir dist/conformance/http-crud && loutre build integrations/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http && loutre build integrations/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port",
     "build:conformance-apps:bun": "bun packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/conformance/http-crud && bun packages/cli/bin/loutre.js build integrations/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http && bun packages/cli/bin/loutre.js build integrations/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port",
     "build:conformance-apps:deno": "deno run -A packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/conformance/http-crud && deno run -A packages/cli/bin/loutre.js build integrations/streaming/src/http-app.ts --out-dir dist/conformance/streaming-http && deno run -A packages/cli/bin/loutre.js build integrations/streaming/src/message-port-app.ts --out-dir dist/conformance/streaming-message-port",
-    "test:deno": "deno task build:conformance-apps:deno && deno run -A --sloppy-imports conformance/deno.ts",
-    "test:bun": "bun run build:conformance-apps:bun && bun run conformance/bun.ts",
+    "test:deno": "deno task build:conformance-apps:deno && deno run -A --sloppy-imports conformance/deno.ts && deno run -A --sloppy-imports conformance/graphql-native.ts",
+    "test:bun": "bun run build:conformance-apps:bun && bun run conformance/bun.ts && bun run conformance/graphql-native.ts",
     "test:cloudflare-workers": "npm run build:conformance-apps && node conformance/run-cloudflare-workers.mjs",
     "test:electron": "npm run build:conformance-apps && node conformance/run-electron.mjs",
     "test:aws-lambda": "npm run build:conformance-apps && node conformance/aws-lambda.mjs",
@@ -44,7 +44,7 @@
     "test:unit": "vitest run --exclude '**/*.integration.test.ts' --exclude '**/*.e2e.test.ts'",
     "test:integration": "vitest run integration",
     "test:e2e": "vitest run e2e --testTimeout 60000",
-    "check:dependencies": "depcruise --config .dependency-cruiser.cjs packages/loutre/src packages/node/src packages/bullmq/src packages/cli/src packages/create-loutre/src"
+    "check:dependencies": "depcruise --config .dependency-cruiser.cjs packages/loutre/src packages/node/src packages/bullmq/src packages/cli/src packages/create-loutre/src packages/graphql/src"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
@@ -58,6 +58,8 @@
     "typescript": "^7.0.2",
     "vitest": "^5.0.2",
     "workerd": "^1.20260925.2",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "graphql": "^17.0.2",
+    "@types/ws": "^8.18.1"
   }
 }

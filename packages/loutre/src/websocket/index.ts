@@ -13,6 +13,9 @@ export {
 } from './errors.js'
 export type {
   WebSocketBranchDefinition,
+  WebSocketHandshakeDefinition,
+  WebSocketSession,
+  WebSocketUpgradeOptions,
   WebSocketCloseInfo,
   WebSocketCodecKind,
   WebSocketConnectionDriver,
@@ -31,3 +34,8 @@ export type {
   WebSocketServerDriver,
   WebSocketUpgradeResult,
 } from './extension.js'
+export {
+  createEventWebSocketConnection,
+  createWebSocketDriverChannel,
+} from './driver.js'
+export type { EventWebSocket, WebSocketDriverChannel } from './driver.js'

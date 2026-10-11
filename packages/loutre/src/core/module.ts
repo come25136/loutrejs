@@ -1,6 +1,6 @@
 import type { EnvClass } from './env.js'
 import type {
-  ExecutionDefinition,
+  ExecutionDeclaration,
   ExtensionOfDefinition,
   HostApiOfExtension,
 } from './extension.js'
@@ -13,7 +13,7 @@ export interface ModuleDefinition {
   readonly imports?: readonly ModuleInstance[]
   readonly environment?: readonly EnvClass[]
   readonly providers?: readonly ProviderDeclaration[]
-  readonly executions?: readonly ExecutionDefinition[]
+  readonly executions?: readonly ExecutionDeclaration[]
   readonly exports?: readonly unknown[]
   readonly lifecycle?: ModuleLifecycle
 }
@@ -27,7 +27,7 @@ export interface ModuleTypeInfo<
 }
 
 type DirectExtensions<TDefinition extends ModuleDefinition> =
-  TDefinition['executions'] extends readonly ExecutionDefinition[]
+  TDefinition['executions'] extends readonly ExecutionDeclaration[]
     ? ExtensionOfDefinition<TDefinition['executions'][number]>
     : never
 

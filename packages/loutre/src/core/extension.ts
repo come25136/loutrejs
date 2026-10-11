@@ -241,6 +241,48 @@ export interface ExecutionDefinition<
   readonly [executionDefinitionBrand]: true
 }
 
+export interface ExecutionGroup<
+  TExecutions extends readonly ExecutionDeclaration[] =
+    readonly ExecutionDeclaration[],
+> {
+  readonly kind: 'execution-group'
+  readonly name?: string
+  readonly executions: TExecutions
+}
+
+export type ExecutionDeclaration = ExecutionDefinition | ExecutionGroup
+
+export function flattenExecutions(declarations: readonly unknown[]): unknown[] {
+  const active = new Set<object>()
+  const visit = (values: readonly unknown[]): unknown[] =>
+    values.flatMap((value) => {
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('kind' in value) ||
+        value.kind !== 'execution-group'
+      )
+        return [value]
+      if (active.has(value))
+        throw new TypeError('ExecutionGroupに循環参照があります。')
+      if (!('executions' in value) || !Array.isArray(value.executions))
+        throw new TypeError(
+          'ExecutionGroup.executionsは配列である必要があります。',
+        )
+      active.add(value)
+      const executions = visit(value.executions)
+      active.delete(value)
+      return executions
+    })
+  return visit(declarations)
+}
+
+export interface ExecutionContextView {
+  readonly signal: AbortSignal
+  annotate(attributes: Readonly<Record<string, unknown>>): void
+  beginOperation(metadata: RuntimeOperationMetadata): ExecutionOperationLease
+}
+
 export function defineExecution<
   const TExtension extends ExecutionExtension,
   const TDefinition extends object,
@@ -272,7 +314,11 @@ export type ExtensionOfDefinition<TDefinition> = TDefinition extends {
   readonly extension: infer TExtension extends AnyExecutionExtension
 }
   ? TExtension
-  : never
+  : TDefinition extends ExecutionGroup<infer TExecutions>
+    ? ExecutionGroup extends TDefinition
+      ? AnyExecutionExtension
+      : ExtensionOfDefinition<TExecutions[number]>
+    : never
 
 export type AnyExecutionExtension = ExecutionExtension<any, any, any, any, any>
 

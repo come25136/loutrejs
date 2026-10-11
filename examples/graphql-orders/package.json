@@ -1,0 +1,29 @@
+{
+  "name": "@loutrejs/example-graphql-orders",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "check": "loutre check --entry src/app.ts",
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "generate": "loutre graphql generate --config graphql.config.ts",
+    "generate:check": "loutre graphql generate --config graphql.config.ts --check",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@loutrejs/graphql": "0.7.0",
+    "@loutrejs/loutre": "0.7.0",
+    "@loutrejs/node": "0.7.0",
+    "graphql": "^17.0.2"
+  },
+  "devDependencies": {
+    "@loutrejs/cli": "0.7.0",
+    "graphql-ws": "^6.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

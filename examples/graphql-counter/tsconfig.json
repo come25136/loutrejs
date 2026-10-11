@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/examples-graphql-counter",
+    "tsBuildInfoFile": "../../dist/examples-graphql-counter.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

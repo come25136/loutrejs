@@ -144,14 +144,16 @@ function httpOperationTargets(source: OpenApiSource): HttpOperationTarget[] {
   assertValidApplicationModel(source)
   const http = source.extensions.get(httpExecutionExtension)
   return (http?.executions ?? []).flatMap((execution) =>
-    execution.compiled.routes.map((route) => ({
-      procedure: route.name,
-      definition: {
-        ...route.definition,
-        method: route.method,
-        path: route.path,
-      },
-    })),
+    execution.compiled.routes
+      .filter((route) => !route.raw)
+      .map((route) => ({
+        procedure: route.name,
+        definition: {
+          ...route.definition,
+          method: route.method,
+          path: route.path,
+        },
+      })),
   )
 }
 

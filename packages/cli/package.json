@@ -8,26 +8,37 @@
   },
   "files": [
     "bin",
-    "dist"
+    "dist",
+    "graphql.codegen.schema.json"
   ],
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./graphql.codegen.schema.json": "./graphql.codegen.schema.json"
   },
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
   "dependencies": {
+    "@graphql-codegen/core": "^6.2.1",
+    "@graphql-codegen/typed-document-node": "^7.1.1",
+    "@graphql-codegen/typescript": "^6.1.0",
+    "@graphql-codegen/typescript-operations": "^6.1.9",
+    "@graphql-codegen/typescript-resolvers": "^6.1.0",
     "@loutrejs/loutre": "^0.7.0",
     "@swc/core": "^1.16.2",
     "chokidar": "^5.0.0",
     "esbuild": "^0.28.2",
+    "fast-glob": "^3.3.3",
+    "graphql": "^17.0.2",
+    "oxfmt": "^0.70.0",
     "ts-pattern": "^5.9.0",
-    "ws": "^8.21.3"
+    "ws": "^8.21.3",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",

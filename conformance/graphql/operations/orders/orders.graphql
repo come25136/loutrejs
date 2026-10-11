@@ -1,0 +1,38 @@
+query OrdersWithDetails($strategy: Strategy!) {
+  orders(strategy: $strategy, pagination: { offset: 0, limit: 100 }) {
+    totalCount
+    pageInfo {
+      hasPreviousPage
+      hasNextPage
+      __typename
+    }
+    edges {
+      id
+      customer {
+        id
+        account {
+          id
+          name
+          __typename
+        }
+        __typename
+      }
+      items {
+        id
+        quantity
+        product {
+          id
+          name
+          category {
+            name
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+}

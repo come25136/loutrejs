@@ -6,16 +6,14 @@ import {
   runInInjectionContext,
   validateSchema,
   type ExecutionDefinition,
+  type ExecutionContextView,
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
   type RuntimeCapabilityBinding,
   type SchemaOutput,
   type StandardSchemaV1,
 } from '../core/index.js'
-import type {
-  HttpExecutionRequestDefinition,
-  HttpExecutionResponseDefinition,
-} from '../http/index.js'
+import type { HttpRequestHeadDefinition } from '../http/request-head.js'
 import { IngressGate } from '../runtime/ingress-gate.js'
 import {
   WebSocketConnectionNotOpenError,
@@ -42,6 +40,7 @@ export interface WebSocketCloseInfo {
 }
 
 export interface WebSocketConnectionDriver {
+  readonly protocol: string
   readonly messages: AsyncIterable<WebSocketDataMessage>
   readonly closed: Promise<WebSocketCloseInfo>
   send(message: WebSocketDataMessage): Promise<void>
@@ -54,9 +53,21 @@ export interface WebSocketUpgradeResult {
   readonly connection: WebSocketConnectionDriver
 }
 
+export interface WebSocketUpgradeOptions {
+  readonly protocol?: string
+}
+
+export interface WebSocketSession {
+  readonly id: string
+  readonly protocol: string
+}
+
 export interface WebSocketServerDriver {
   readonly runtime: string
-  upgrade(request: Request): Promise<WebSocketUpgradeResult>
+  upgrade(
+    request: Request,
+    options: WebSocketUpgradeOptions,
+  ): Promise<WebSocketUpgradeResult>
 }
 
 export const WEBSOCKET_SERVER =
@@ -83,14 +94,16 @@ export type WebSocketIncomingMessage<TValue> =
 
 export interface WebSocketBranchDefinition {
   readonly path?: string
-  readonly responses?: Readonly<Record<string, HttpExecutionResponseDefinition>>
   readonly routes: WebSocketRouteTree
+}
+
+export interface WebSocketHandshakeDefinition extends HttpRequestHeadDefinition {
+  readonly protocols?: readonly string[]
 }
 
 export interface WebSocketRouteDefinition {
   readonly path: string
-  readonly request?: Omit<HttpExecutionRequestDefinition, 'body'>
-  readonly responses?: Readonly<Record<string, HttpExecutionResponseDefinition>>
+  readonly handshake?: WebSocketHandshakeDefinition
   readonly messages?: WebSocketMessageCodec
 }
 
@@ -125,7 +138,7 @@ type SendApi<TRoute extends WebSocketRouteDefinition> =
 
 type OpeningRequestInput<TRoute extends WebSocketRouteDefinition> = {
   readonly params: TRoute extends {
-    readonly request: {
+    readonly handshake: {
       readonly params: infer TParams extends Readonly<
         Record<string, StandardSchemaV1>
       >
@@ -134,12 +147,14 @@ type OpeningRequestInput<TRoute extends WebSocketRouteDefinition> = {
     ? { readonly [TName in keyof TParams]: SchemaOutput<TParams[TName]> }
     : Readonly<Record<string, string>>
   readonly query: TRoute extends {
-    readonly request: { readonly query: infer TQuery extends StandardSchemaV1 }
+    readonly handshake: {
+      readonly query: infer TQuery extends StandardSchemaV1
+    }
   }
     ? SchemaOutput<TQuery>
     : Readonly<Record<string, string | string[]>>
   readonly headers: TRoute extends {
-    readonly request: {
+    readonly handshake: {
       readonly headers: infer THeaders extends StandardSchemaV1
     }
   }
@@ -150,6 +165,10 @@ type OpeningRequestInput<TRoute extends WebSocketRouteDefinition> = {
 export type WebSocketHandlerContext<
   TRoute extends WebSocketRouteDefinition = WebSocketRouteDefinition,
 > = {
+  readonly request: Request
+  readonly session: WebSocketSession
+  readonly protocol: string
+  readonly execution: ExecutionContextView
   readonly input: OpeningRequestInput<TRoute> & IncomingApi<TRoute>
   readonly signal: AbortSignal
   readonly closed: Promise<WebSocketCloseInfo>
@@ -197,8 +216,7 @@ interface CompiledWebSocketRoute {
   readonly path: string
   readonly normalizedPath: string
   readonly segments: readonly HttpPathSegment[]
-  readonly request?: Omit<HttpExecutionRequestDefinition, 'body'>
-  readonly responses: Readonly<Record<string, HttpExecutionResponseDefinition>>
+  readonly handshake?: WebSocketHandshakeDefinition
   readonly messages?: WebSocketMessageCodec
 }
 
@@ -236,7 +254,7 @@ export const websocketExtension = defineExecutionExtension<
   WebSocketExtensionRuntime
 >({
   kind: 'execution-extension',
-  abiVersion: '1',
+  abiVersion: '2',
   name: 'loutre:websocket',
   compile(definition, context) {
     return {
@@ -316,9 +334,18 @@ export type WebSocketExecutionDefinition<
 > = WebSocketImplementationDefinition<TContract> &
   ExecutionDefinition<typeof websocketExtension>
 
+type WebSocketV2Tree<TTree extends WebSocketRouteTree> = {
+  readonly [K in keyof TTree]: TTree[K] extends WebSocketBranchDefinition
+    ? TTree[K] & {
+        readonly responses?: never
+        readonly routes: WebSocketV2Tree<TTree[K]['routes']>
+      }
+    : TTree[K] & { readonly request?: never; readonly responses?: never }
+}
+
 export function defineWebSocketContract<
   const TRoutes extends WebSocketRouteTree,
->(routes: TRoutes): WebSocketContract<TRoutes> {
+>(routes: TRoutes & WebSocketV2Tree<TRoutes>): WebSocketContract<TRoutes> {
   return Object.freeze({ kind: 'websocket-contract', routes })
 }
 
@@ -393,25 +420,18 @@ export const websocket = Object.freeze({
 function compileRouteTree(
   tree: WebSocketRouteTree,
   parentPath = '',
-  parentResponses: Readonly<
-    Record<string, HttpExecutionResponseDefinition>
-  > = {},
   prefix = '',
   routeNames = new Set<string>(),
 ): readonly CompiledWebSocketRoute[] {
   return Object.entries(tree).flatMap(([name, node]) => {
+    if ('request' in node || 'responses' in node)
+      throw new TypeError('WebSocket v2ではhandshakeを使用してください。')
     if (isBranch(node)) {
       const branchPath = node.path ?? ''
       if (branchPath !== '') parseHttpPath(branchPath)
-      assertNoInheritedResponseCollision(
-        name,
-        parentResponses,
-        node.responses ?? {},
-      )
       return compileRouteTree(
         node.routes,
         joinPath(parentPath, branchPath),
-        { ...parentResponses, ...node.responses },
         prefix ? `${prefix}.${name}` : name,
         routeNames,
       )
@@ -419,16 +439,10 @@ function compileRouteTree(
     parseHttpPath(node.path)
     const path = joinPath(parentPath, node.path)
     const segments = parseHttpPath(path)
-    assertExactPathParams(path, segments, node.request?.params)
-    assertNoInheritedResponseCollision(
-      name,
-      parentResponses,
-      node.responses ?? {},
-    )
+    assertExactPathParams(path, segments, node.handshake?.params)
     const routeName = prefix ? `${prefix}.${name}` : name
-    if (routeNames.has(routeName)) {
+    if (routeNames.has(routeName))
       throw new TypeError(`Duplicate nested WebSocket route name: ${routeName}`)
-    }
     routeNames.add(routeName)
     return [
       Object.freeze({
@@ -436,13 +450,9 @@ function compileRouteTree(
         path,
         normalizedPath: normalizeHttpPath(segments),
         segments,
-        ...(node.request === undefined
+        ...(node.handshake === undefined
           ? {}
-          : { request: snapshotWebSocketRequest(node.request) }),
-        responses: snapshotWebSocketResponses({
-          ...parentResponses,
-          ...node.responses,
-        }),
+          : { handshake: snapshotHandshake(node.handshake) }),
         ...(node.messages === undefined
           ? {}
           : { messages: Object.freeze({ ...node.messages }) }),
@@ -471,42 +481,18 @@ function assertExactPathParams(
   }
 }
 
-function assertNoInheritedResponseCollision(
-  nodeName: string,
-  inherited: Readonly<Record<string, HttpExecutionResponseDefinition>>,
-  declared: Readonly<Record<string, HttpExecutionResponseDefinition>>,
-): void {
-  for (const name of Object.keys(declared)) {
-    if (name in inherited) {
-      throw new TypeError(
-        `Duplicate inherited WebSocket response ${name} at ${nodeName}.`,
-      )
-    }
-  }
-}
-
-function snapshotWebSocketRequest(
-  request: Omit<HttpExecutionRequestDefinition, 'body'>,
-): Omit<HttpExecutionRequestDefinition, 'body'> {
+function snapshotHandshake(
+  handshake: WebSocketHandshakeDefinition,
+): WebSocketHandshakeDefinition {
   return Object.freeze({
-    ...request,
-    ...(request.params === undefined
+    ...handshake,
+    ...(handshake.params === undefined
       ? {}
-      : { params: Object.freeze({ ...request.params }) }),
+      : { params: Object.freeze({ ...handshake.params }) }),
+    ...(handshake.protocols === undefined
+      ? {}
+      : { protocols: Object.freeze([...handshake.protocols]) }),
   })
-}
-
-function snapshotWebSocketResponses(
-  responses: Readonly<Record<string, HttpExecutionResponseDefinition>>,
-): Readonly<Record<string, HttpExecutionResponseDefinition>> {
-  return Object.freeze(
-    Object.fromEntries(
-      Object.entries(responses).map(([name, response]) => [
-        name,
-        Object.freeze({ ...response }),
-      ]),
-    ),
-  )
 }
 
 function isBranch(
@@ -594,6 +580,18 @@ function createWebSocketRuntime(
       if (state !== 'running') {
         return Response.json({ error: 'Service Unavailable' }, { status: 503 })
       }
+      const offered = (request.headers.get('sec-websocket-protocol') ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+      const protocol = match.route.handshake?.protocols?.find((value) =>
+        offered.includes(value),
+      )
+      if (match.route.handshake?.protocols?.length && protocol === undefined) {
+        return new Response('WebSocket subprotocolが一致しません。', {
+          status: 400,
+        })
+      }
       const completePendingIngress = ingress.enter()
       if (!completePendingIngress) {
         return Response.json({ error: 'Service Unavailable' }, { status: 503 })
@@ -612,7 +610,10 @@ function createWebSocketRuntime(
       }
       let upgraded: WebSocketUpgradeResult
       try {
-        upgraded = await driver.upgrade(request)
+        upgraded = await driver.upgrade(
+          request,
+          protocol === undefined ? {} : { protocol },
+        )
       } catch (error) {
         lease.fail?.(error)
         lease.complete()
@@ -621,6 +622,8 @@ function createWebSocketRuntime(
       }
       const session = createSession(
         upgraded.connection,
+        request,
+        applicationRuntime,
         match.route,
         input,
         lease,
@@ -649,15 +652,20 @@ function createWebSocketRuntime(
         [...sessions].map(async (session) => {
           const graceful = session
             .close(1001, 'Going Away')
+            .then(() => session.completion)
             .then(() => true)
             .catch(() => false)
+          let timer: ReturnType<typeof setTimeout> | undefined
           const completed =
             gracefulTimeoutMs === 0
               ? false
               : await Promise.race([
                   graceful,
-                  delay(gracefulTimeoutMs).then(() => false),
+                  new Promise<boolean>((resolve) => {
+                    timer = setTimeout(() => resolve(false), gracefulTimeoutMs)
+                  }),
                 ])
+          clearTimeout(timer)
           if (!completed) await session.terminate()
           await session.completion.catch(() => undefined)
         }),
@@ -708,10 +716,10 @@ async function validateOpeningRequest(
   readonly query: unknown
   readonly headers: unknown
 }> {
-  const params = route.request?.params
+  const params = route.handshake?.params
     ? Object.fromEntries(
         await Promise.all(
-          Object.entries(route.request.params).map(async ([name, schema]) => [
+          Object.entries(route.handshake.params).map(async ([name, schema]) => [
             name,
             await validateSchema(schema, rawParams[name]),
           ]),
@@ -720,12 +728,12 @@ async function validateOpeningRequest(
     : rawParams
   const url = new URL(request.url)
   const rawQuery = decodeQuery(url.searchParams)
-  const query = route.request?.query
-    ? await validateSchema(route.request.query, rawQuery)
+  const query = route.handshake?.query
+    ? await validateSchema(route.handshake.query, rawQuery)
     : rawQuery
-  const headers = route.request?.headers
+  const headers = route.handshake?.headers
     ? await validateSchema(
-        route.request.headers,
+        route.handshake.headers,
         Object.fromEntries(request.headers),
       )
     : request.headers
@@ -750,6 +758,8 @@ function decodeQuery(
 
 function createSession(
   connection: WebSocketConnectionDriver,
+  request: Request,
+  applicationRuntime: ExecutionKernelRuntime,
   route: CompiledWebSocketRoute,
   input: {
     readonly params: Readonly<Record<string, unknown>>
@@ -762,6 +772,14 @@ function createSession(
     | undefined,
   runInExecution: (<T>(operation: () => T) => T) | undefined,
 ): { readonly active: ActiveSession; readonly completion: Promise<void> } {
+  const session = Object.freeze({
+    id: `ws_${crypto.randomUUID()}`,
+    protocol: connection.protocol,
+  })
+  lease.annotate?.({
+    'websocket.session.id': session.id,
+    'websocket.protocol': session.protocol,
+  })
   let state: 'open' | 'closing' | 'closed' = 'open'
   let transportFailed = false
   let sendTail = Promise.resolve()
@@ -813,6 +831,23 @@ function createSession(
   }
   const messages = decodeMessages(connection.messages, route.messages)
   const context = {
+    request,
+    session,
+    protocol: session.protocol,
+    execution: {
+      signal: lease.signal,
+      annotate: (attributes: Readonly<Record<string, unknown>>) =>
+        lease.annotate?.(attributes),
+      beginOperation: (
+        metadata: Parameters<
+          NonNullable<ExecutionKernelRuntime['beginOperation']>
+        >[0],
+      ) => {
+        const begin = () =>
+          applicationRuntime.beginOperation?.(metadata) ?? { complete() {} }
+        return lease.run ? lease.run(begin) : begin()
+      },
+    },
     input: {
       ...input,
       ...(route.messages?.input === undefined ? {} : { messages }),
@@ -940,8 +975,4 @@ function normalizeCloseInfo(info: WebSocketCloseInfo): WebSocketCloseInfo {
 function webSocketGracefulShutdownBudget(timeoutMs: number): number {
   if (timeoutMs <= 0) return 0
   return Math.min(5_000, Math.max(0, Math.floor(timeoutMs * 0.8)))
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }

@@ -10,12 +10,13 @@ Execution Extensionをsource moduleとして分離することと、利用者が
 
 ## Decision
 
-公開packageは次の5つに限定する。
+公開packageは次の6つに限定する。
 
 ```text
 @loutrejs/loutre
 @loutrejs/node
 @loutrejs/bullmq
+@loutrejs/graphql
 @loutrejs/cli
 create-loutre
 ```
@@ -44,9 +45,23 @@ Tasks、MessagePort、WebSocketは内部では独立したExecution Extensionと
 
 `create-loutre`はinitializer binaryとして独立したuser-facing lifecycleを持つため維持する。生成projectはExecution Extensionのsubpathを利用し、独立Extension packageを追加しない。
 
+## GraphQL integration
+
+`@loutrejs/graphql`はHTTPとWebSocket Executionを合成するprotocol integrationとして公開する。標準の`GraphQLSchema`とGraphQL ecosystemのpeer dependency境界を維持し、GraphQLを使わない利用者へparser/executorやprotocol libraryの依存を強制しない。設計判断の正本は[GraphQLトランスポート設計](./loutre_graphql_transport_architecture.md)とする。
+
+```mermaid
+flowchart TD
+  GraphQL["@loutrejs/graphql"] --> Loutre["peer: @loutrejs/loutre"]
+  GraphQL --> Schema["peer: graphql"]
+  GraphQL --> HTTP["graphql-http"]
+  GraphQL --> WS["graphql-ws"]
+  Node["@loutrejs/node"] --> Loutre
+  Node --> Native["ws"]
+```
+
 ## Package compatibility
 
-利用者のApplication、Execution Extension、Token、ProviderなどのliveなCore値やpublic型を`@loutrejs/loutre`とのpackage境界を越えて受け渡すpackageは、`@loutrejs/loutre`を通常の`dependencies`ではなくrequired `peerDependencies`として宣言する。現在この契約を持つのは`@loutrejs/node`と`@loutrejs/bullmq`である。これにより利用者とadapter/integrationが同じCore type universeとruntime instanceを共有し、package managerがprivateなLoutre copyをpackage配下へ導入することを避ける。
+利用者のApplication、Execution Extension、Token、ProviderなどのliveなCore値やpublic型を`@loutrejs/loutre`とのpackage境界を越えて受け渡すpackageは、`@loutrejs/loutre`を通常の`dependencies`ではなくrequired `peerDependencies`として宣言する。現在この契約を持つのは`@loutrejs/node`、`@loutrejs/bullmq`、`@loutrejs/graphql`である。これにより利用者とadapter/integrationが同じCore type universeとruntime instanceを共有し、package managerがprivateなLoutre copyをpackage配下へ導入することを避ける。
 
 互換rangeはSemantic Versioningのbreaking boundaryと一致させる。
 
@@ -79,6 +94,6 @@ Execution Extensionであること、source directoryを分けること、外部
 
 ## Consequences
 
-release、Changesets、tarball検証は5packageだけを対象とする。protocolごとのsource facadeと`package.json`のsubpath exportsを一致させ、public API boundaryを明示する。
+release、Changesets、tarball検証は6packageだけを対象とする。protocolごとのsource facadeと`package.json`のsubpath exportsを一致させ、public API boundaryを明示する。
 
 旧配布名`@loutrejs/tasks`、`@loutrejs/message-port`、`@loutrejs/websocket`は公開対象にせず、新しいcompatibility wrapperも設けない。

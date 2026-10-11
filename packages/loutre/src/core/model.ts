@@ -1,6 +1,7 @@
 import { diagnostic, isErrorDiagnostic, type Diagnostic } from './diagnostic.js'
 import {
   isExecutionDefinition,
+  flattenExecutions,
   type AnyExecutionExtension,
   type ExecutionContribution,
   type ExecutionDefinition,
@@ -169,12 +170,31 @@ export function buildApplicationModel(
     }
   }
 
+  const moduleExecutions = new Map<ModuleInstance, readonly unknown[]>()
+  for (const module of modules) {
+    try {
+      moduleExecutions.set(
+        module,
+        flattenExecutions(module.definition.executions ?? []),
+      )
+    } catch (error) {
+      diagnostics.push(
+        diagnostic(
+          'LUTRE_EXECUTION_GROUP_INVALID',
+          String(error),
+          moduleIds.get(module)!,
+        ),
+      )
+      moduleExecutions.set(module, [])
+    }
+  }
+
   const rootDefinitionOwners = new Map<
     ExecutionDefinition,
     Set<ModuleInstance>
   >()
   for (const module of modules) {
-    for (const value of module.definition.executions ?? []) {
+    for (const value of moduleExecutions.get(module) ?? []) {
       if (!isExecutionDefinition(value)) continue
       const owners =
         rootDefinitionOwners.get(value) ?? new Set<ModuleInstance>()
@@ -188,7 +208,7 @@ export function buildApplicationModel(
     Set<ModuleInstance>
   >()
   for (const module of modules) {
-    const queue = (module.definition.executions ?? []).filter(
+    const queue = (moduleExecutions.get(module) ?? []).filter(
       isExecutionDefinition,
     )
     const seen = new Set<ExecutionDefinition>()
@@ -245,7 +265,7 @@ export function buildApplicationModel(
 
   for (const module of modules) {
     const moduleId = moduleIds.get(module)!
-    const rootDefinitions = module.definition.executions ?? []
+    const rootDefinitions = moduleExecutions.get(module) ?? []
     const rootDefinitionIndexes = new Map<ExecutionDefinition, number>()
     for (const [definitionIndex, value] of rootDefinitions.entries()) {
       if (isExecutionDefinition(value) && !rootDefinitionIndexes.has(value)) {

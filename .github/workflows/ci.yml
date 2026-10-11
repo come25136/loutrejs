@@ -34,7 +34,7 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         shell: bash
         run: |
-          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- .changeset)"
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- .changeset ':(exclude).changeset/config.json' ':(exclude).changeset/README.md')"
           if test -z "$changed"; then
             exit 0
           fi
@@ -79,6 +79,12 @@ jobs:
       - name: Build packages
         run: npm run build
 
+      - name: Check GraphQL generated contracts
+        run: |
+          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts conformance/graphql/graphql.config.ts; do
+            node packages/cli/bin/loutre.js graphql generate --config "$GRAPHQL_CONFIG_FILE" --check
+          done
+
       - name: Verify release version
         run: node scripts/verify-release-version.mjs
 
@@ -87,6 +93,9 @@ jobs:
 
       - name: Pack published packages
         run: node scripts/pack-packages.mjs
+
+      - name: Verify GraphQL.js 16/17 consumers
+        run: node conformance/graphql-versions.mjs
 
       - name: Upload package tarballs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -206,6 +215,9 @@ jobs:
       - name: Run Bun CLI conformance
         run: |
           BUN_BIN="$(command -v bun)"
+          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts conformance/graphql/graphql.config.ts; do
+            "$BUN_BIN" packages/cli/bin/loutre.js graphql generate --config "$GRAPHQL_CONFIG_FILE" --check
+          done
           "$BUN_BIN" packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
           "$BUN_BIN" packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
           "$BUN_BIN" packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
@@ -221,6 +233,7 @@ jobs:
         run: |
           BUN_BIN="$(command -v bun)"
           "$BUN_BIN" conformance/bun.ts
+          "$BUN_BIN" conformance/graphql-native.ts
 
   deno-conformance:
     name: Runtime Conformance / Deno 2.9.5
@@ -244,6 +257,9 @@ jobs:
       - name: Run Deno CLI conformance
         run: |
           DENO_BIN="$(command -v deno)"
+          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts conformance/graphql/graphql.config.ts; do
+            "$DENO_BIN" run -A packages/cli/bin/loutre.js graphql generate --config "$GRAPHQL_CONFIG_FILE" --check
+          done
           "$DENO_BIN" run -A packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
           "$DENO_BIN" run -A packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/deno
           "$DENO_BIN" run -A packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/deno/openapi.json
@@ -259,6 +275,7 @@ jobs:
         run: |
           DENO_BIN="$(command -v deno)"
           "$DENO_BIN" run -A --sloppy-imports conformance/deno.ts
+          "$DENO_BIN" run -A --sloppy-imports conformance/graphql-native.ts
 
   cloudflare-workers-conformance:
     name: Runtime Conformance / Cloudflare Workers
@@ -295,7 +312,7 @@ jobs:
           node-version: 24.x
 
       - name: Install Electron ${{ matrix.version }}
-        run: npm install --no-save --package-lock=false electron@${{ matrix.version }}
+        run: npm install --no-save --no-audit --no-fund electron@${{ matrix.version }}
 
       - name: Build packages
         run: npm run build
@@ -356,6 +373,7 @@ jobs:
           npm init -y >/dev/null
           npm install "${RUNNER_TEMP}/loutre-package-tarballs"/*.tgz --no-audit --no-fund
 
+          node --input-type=module -e "import { graphql } from '@loutrejs/graphql'; if (!graphql.endpoint) throw new Error('GraphQL package import failed')"
           node --input-type=module -e "import { nodeRuntime } from '@loutrejs/node'; if (nodeRuntime.runtime !== 'node') throw new Error('Node runtime import failed')"
           node --input-type=module -e "import { http } from '@loutrejs/loutre/http'; if (!http) throw new Error('HTTP subpath import failed')"
           node node_modules/@loutrejs/cli/bin/loutre.js --help | grep -q '^Loutre CLI$'

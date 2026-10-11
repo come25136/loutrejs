@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      mode: ${{ steps.changesets.outputs.mode }}
+      mode: ${{ steps.release-mode.outputs.mode }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,6 +37,19 @@ jobs:
       - name: Select Changesets mode
         id: changesets
         uses: changesets/action/select-mode@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
+
+      - name: Skip publishing a completed release version
+        id: release-mode
+        env:
+          CHANGESETS_MODE: ${{ steps.changesets.outputs.mode }}
+        shell: bash
+        run: |
+          release_mode="$CHANGESETS_MODE"
+          release_version="$(node -p 'require("./packages/loutre/package.json").version')"
+          if test "$release_mode" = 'publish' && git show-ref --verify --quiet "refs/tags/v${release_version}"; then
+            release_mode='none'
+          fi
+          echo "mode=$release_mode" >> "$GITHUB_OUTPUT"
 
   version:
     name: Update release PR
@@ -113,6 +126,7 @@ jobs:
           packages=(
             '@loutrejs/loutre'
             '@loutrejs/node'
+            '@loutrejs/graphql'
             '@loutrejs/bullmq'
             '@loutrejs/cli'
             'create-loutre'

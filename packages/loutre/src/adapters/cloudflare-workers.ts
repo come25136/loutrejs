@@ -1,22 +1,21 @@
+import { createCloudflareWebSocketDriver } from './websocket-native.js'
+import {
+  serverTransportBindings,
+  dispatchServerRequest,
+} from './server-transports.js'
 import {
   createKernelApplication,
   type ApplicationDefinition,
   type BootstrapArguments,
   type KernelHostedApplication,
-  type RequireApplicationExtension,
 } from '../application/index.js'
 import type { RuntimeCapabilityBinding } from '../core/index.js'
-import { bindApplicationCapability } from '../application/kernel-internal.js'
-import { httpExecutionExtension } from '../http/index.js'
 import { assertRuntimeEngine } from '../runtime/engine.js'
-
-type HttpApplication<TDefinition extends ApplicationDefinition> =
-  RequireApplicationExtension<TDefinition, typeof httpExecutionExtension>
 
 export type CloudflareWorkersBindOptions<
   TDefinition extends ApplicationDefinition,
 > = {
-  readonly application: HttpApplication<TDefinition>
+  readonly application: TDefinition
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
 } & BootstrapArguments<TDefinition>
 
@@ -34,6 +33,7 @@ export const cloudflareWorkersRuntime = {
   compatibilityDateMinimum: '2026-08-04',
   capabilities: new Set([
     'http.server',
+    'websocket.server',
     'http.request.streaming',
     'http.response.streaming',
     'stream.readable',
@@ -49,14 +49,6 @@ function bind<const TDefinition extends ApplicationDefinition>(
   options: CloudflareWorkersBindOptions<TDefinition>,
 ): CloudflareWorkersBinding {
   assertRuntimeEngine('cloudflare-workers')
-  if (
-    options.application.model.extensions.get(httpExecutionExtension) ===
-    undefined
-  ) {
-    throw new Error(
-      'LUTRE_RUNTIME_HTTP_REQUIRED: cloudflareWorkersRuntime.bind() requires the HTTP Execution Extension.',
-    )
-  }
 
   let application: KernelHostedApplication<TDefinition> | undefined
   let initialization: Promise<unknown> | undefined
@@ -65,32 +57,26 @@ function bind<const TDefinition extends ApplicationDefinition>(
       ...options,
       application: options.application,
       capabilities: [
-        bindApplicationCapability(options.application.model, 'http.server', {
-          runtime: 'cloudflare-workers',
-        }),
+        ...serverTransportBindings(
+          options.application.model,
+          'cloudflare-workers',
+          createCloudflareWebSocketDriver(),
+        ),
         ...(options.capabilities ?? []),
       ],
       environment,
     })
     initialization ??= application.init()
     await initialization
-    return (
-      application as unknown as {
-        readonly http: CloudflareWorkersHttpRequestHandler
-      }
-    ).http
+    return application
   }
 
   return {
     async fetch(request, environment) {
-      return (await resolve(environment)).fetch(request)
+      return dispatchServerRequest(await resolve(environment), request)
     },
     async close(signal?: string) {
       await application?.close(signal)
     },
   }
-}
-
-interface CloudflareWorkersHttpRequestHandler {
-  fetch(request: Request): Promise<Response>
 }

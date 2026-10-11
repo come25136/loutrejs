@@ -2,6 +2,7 @@ import { nodeRuntime } from '@loutrejs/node'
 import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { denoRuntime } from '@loutrejs/loutre/runtime/deno'
+import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { z } from 'zod'
 import { reserveHttpPort } from './helpers/http-server.js'
 import { silentLogger } from './helpers/silent-logger.js'
@@ -90,6 +91,54 @@ describe('runtime streaming shutdown lifetime', () => {
       'server.shutdown',
       'iterator.return',
       'provider.destroy',
+    ])
+  })
+
+  it('Bunのnative stopが完了しなくてもexecutionとproviderを回収して終了する', async () => {
+    const fixture = blockingSseFixture()
+    let handler:
+      | ((
+          request: Request,
+          server: never,
+        ) => Response | undefined | Promise<Response | undefined>)
+      | undefined
+    vi.stubGlobal('Bun', {
+      env: {},
+      version: 'test',
+      serve(options: { fetch: NonNullable<typeof handler> }) {
+        handler = options.fetch
+        return {
+          stop(force: boolean) {
+            fixture.events.push(`server.stop(${force})`)
+            return new Promise<void>(() => {})
+          },
+          unref() {
+            fixture.events.push('server.unref')
+          },
+        }
+      },
+    })
+    const application = await bunRuntime.create({
+      application: fixture.definition,
+      forceShutdownTimeoutMs: 50,
+    })
+    await application.serve({ port: 3000, shutdownHooks: false })
+    const response = await handler!(
+      new Request('http://127.0.0.1:3000/events'),
+      undefined as never,
+    )
+    const reader = response!.body!.getReader()
+    await reader.read()
+    await expect(
+      withHangGuard(application.close(), 500),
+    ).resolves.toBeUndefined()
+    await application.close()
+    expect(fixture.events).toEqual([
+      'iterator.return',
+      'provider.destroy',
+      'server.stop(false)',
+      'server.stop(true)',
+      'server.unref',
     ])
   })
 })

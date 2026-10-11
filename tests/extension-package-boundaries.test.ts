@@ -6,6 +6,7 @@ const repository = resolve(import.meta.dirname, '..')
 const publicPackageNames = [
   '@loutrejs/loutre',
   '@loutrejs/node',
+  '@loutrejs/graphql',
   '@loutrejs/bullmq',
   '@loutrejs/cli',
   'create-loutre',
@@ -19,7 +20,7 @@ type PackageManifest = {
 }
 
 describe('npm package境界', () => {
-  it('公開対象を5packageに限定する', async () => {
+  it('公開対象を6packageに限定する', async () => {
     const packageDirectories = await readdir(resolve(repository, 'packages'))
     const manifests = await Promise.all(
       packageDirectories.map(async (directory) =>
@@ -73,7 +74,8 @@ describe('npm package境界', () => {
     const node = await readPackageManifest('node')
     const bullmq = await readPackageManifest('bullmq')
 
-    for (const manifest of [node, bullmq]) {
+    const graphql = await readPackageManifest('graphql')
+    for (const manifest of [node, bullmq, graphql]) {
       expect(manifest.dependencies?.['@loutrejs/loutre']).toBeUndefined()
       expect(manifest.peerDependencies?.['@loutrejs/loutre']).toBe(
         compatibleRange,

@@ -5,16 +5,16 @@ LoutreはChangesetsでreleaseを管理します。ただしChangesetは各featur
 ## 通常のrelease
 
 1. release対象の`main`差分を前回tagから確認し、release versionとrelease noteを決めます。
-2. `chore(release): prepare X.Y.Z` PRを作り、そのPRだけで`.changeset/**`を更新します。
-3. release Changesetには公開対象5packageをすべて明示し、同じSemVer bumpへ揃えます。
+2. `chore(release): prepare X.Y.Z` PRを作り、そのPRでrelease note用Changesetを作成します。
+3. release Changesetには公開対象6packageをすべて明示し、同じSemVer bumpへ揃えます。
 4. release準備PRを`main`へmergeします。
 5. Release workflowがChangesetを消費して`chore(release): version packages` PRを作成または更新します。
 6. version PRでpackage version、internal dependency、lockfile、CHANGELOG、generated versionを確認します。
 7. version PRをmergeするとRelease workflowが公開packageをnpmへpublishし、同じversionの`vX.Y.Z` tagとGitHub Releaseを作成します。
 
-feature / fix / refactor / docsなど通常のPRでは`.changeset/**`を変更しません。CIも`chore(release): ...`以外のPRによる`.changeset/**`変更を拒否します。
+feature / fix / refactor / docsなど通常のPRではrelease note用Changesetを変更しません。CIも`chore(release): ...`以外のPRによるrelease note用Changeset変更を拒否します。
 
-`@loutrejs/loutre`、`@loutrejs/node`、`@loutrejs/bullmq`、`@loutrejs/cli`、`create-loutre`はfixed groupのため、常に同じversionでreleaseします。
+`@loutrejs/loutre`、`@loutrejs/node`、`@loutrejs/bullmq`、`@loutrejs/graphql`、`@loutrejs/cli`、`create-loutre`はfixed groupのため、常に同じversionでreleaseします。
 
 ## npm認証
 
@@ -29,3 +29,5 @@ Release workflowは`id-token: write`でOIDC認証し、長期npm tokenは使用�
 ## Branch
 
 `main`をrelease可能なtrunkとして扱います。通常のPR、release準備PR、Changesetsのversion PRはいずれも`main`へmergeします。
+
+package構成の変更に伴う`config.json`と本ガイドの更新は通常PRで行います。release note用Changesetはrelease PRに集約します。

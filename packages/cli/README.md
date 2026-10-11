@@ -10,15 +10,16 @@ npm install --save-dev @loutrejs/cli
 
 ## Commands
 
-| Command   | Description                                      |
-| --------- | ------------------------------------------------ |
-| `check`   | Application Graphをvalidation                    |
-| `doctor`  | runtime capabilityとの互換性を確認               |
-| `graph`   | modules / DI / http / executions / runtimeを表示 |
-| `dev`     | ApplicationをDevTools付きで起動                  |
-| `explain` | Graph上のtargetを説明                            |
-| `build`   | Application bundleとdeployment entryを生成       |
-| `openapi` | OpenAPI 3.2 documentを生成                       |
+| Command   | Description                                             |
+| --------- | ------------------------------------------------------- |
+| `graphql` | SDLからserver / clientの型生成、watch、検証、互換性比較 |
+| `check`   | Application Graphをvalidation                           |
+| `doctor`  | runtime capabilityとの互換性を確認                      |
+| `graph`   | modules / DI / http / executions / runtimeを表示        |
+| `dev`     | ApplicationをDevTools付きで起動                         |
+| `explain` | Graph上のtargetを説明                                   |
+| `build`   | Application bundleとdeployment entryを生成              |
+| `openapi` | OpenAPI 3.2 documentを生成                              |
 
 ## Usage
 
@@ -98,3 +99,13 @@ API titleとversionは`package.json`から読み取られ、`--title` / `--api-v
 ## License
 
 [MIT](https://github.com/come25136/loutrejs/blob/main/LICENSE)
+
+## GraphQL
+
+```sh
+loutre graphql generate --config graphql.config.ts
+loutre graphql generate --config graphql.config.ts --check
+loutre graphql generate --config graphql.config.ts --watch
+```
+
+Applicationを起動せず、共有SDLからserverの型・Typed Field Builder・Static Schemaと、指定されたclient targetののOperation型を生成します。serverではdomain mappingとcontext型を指定でき、clientでは選択fieldの結果とvariablesを型付けします。設定と契約共有の手順は[GraphQLの型生成](../../docs/graphql-codegen.md)を参照してください。

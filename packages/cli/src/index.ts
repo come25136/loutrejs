@@ -35,11 +35,9 @@ import {
 } from './dev/server.js'
 import { startDevApplicationSupervisor } from './dev/run-supervisor.js'
 
-export interface CliIO {
-  readonly cwd: string
-  readonly stdout: (value: string) => void
-  readonly stderr: (value: string) => void
-}
+import type { CliIO } from './cli-io.js'
+export type { CliIO } from './cli-io.js'
+export type { GraphQLCodegenConfig } from './graphql-config.js'
 
 const runtimes: Readonly<Record<string, RuntimeSupportProfile>> = {
   node: nodeRuntimeSupport,
@@ -150,6 +148,10 @@ export async function runCli(
   rawArgs: readonly string[],
   io: CliIO,
 ): Promise<number> {
+  if (rawArgs[0] === 'graphql') {
+    const { runGraphQLCli } = await import('./graphql-cli.js')
+    return runGraphQLCli(rawArgs.slice(1), io)
+  }
   const separator = rawArgs.indexOf('--')
   const args = separator < 0 ? rawArgs : rawArgs.slice(0, separator)
   const passthroughArgs = separator < 0 ? [] : rawArgs.slice(separator + 1)
@@ -1559,6 +1561,7 @@ function isOrigin(value: string): boolean {
 function helpText(): string {
   return [
     'Loutre CLI',
+    '  loutre graphql generate|validate|diff --help',
     '  loutre check --entry <entry>',
     '  loutre doctor [--runtime node|deno|bun|cloudflare-workers|electron|aws-lambda] --entry <entry>',
     '  loutre graph all|modules|di|executions|http|runtime --entry <entry> [--format text|json|mermaid] [--theme light|dark]',
