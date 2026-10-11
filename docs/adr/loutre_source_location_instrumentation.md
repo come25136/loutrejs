@@ -167,7 +167,9 @@ Source Location実装ではSWCをcompiler / bundlerとして使わず、主にpa
 
 初期実装では`oxc-parser`を利用したが、Source Locationのfalse positiveを避けるには単なるsyntax parseではなく**lexical binding identity**が必要になったため、`@swc/core`へ変更した。Oxcはpre-1.0であり、この用途のためにOxc固有の制約と独自scope追跡を維持する理由はない。
 
-この変更で、importされたLoutre APIと同名のparameter / local bindingをAST上で区別できる。CLI dependencyは`@swc/core: ^1.16.2`をbaselineとし、互換な新しいversionへ更新できる場合は通常どおり上げる。lockfile差分を小さくすることだけを理由にSWCを古いversionへ戻さない。
+この変更で、importされたLoutre APIと同名のparameter / local bindingをAST上で区別できる。CLI dependencyは`@swc/core: ^1.16.13`をbaselineとし、互換な新しいversionへ更新できる場合は通常どおり上げる。lockfile差分を小さくすることだけを理由にSWCを古いversionへ戻さない。
+
+Bun 1.3.14の`bun install`は`umask`を復元せず、依存のpostinstallが共有cacheを権限`777`で作る場合がある。SWCのnative carrierはこのcacheを拒否するため、Bun workspaceのCIでは権限`700`の専用directoryを`SWC_NATIVE_BINDING_CACHE`に指定する。共有cache全体の権限変更やSWCの旧version固定でこの問題を回避しない。
 
 Oxc採用に伴って一時的に導入したCLI Node.js `>=22.12.0`制約は撤回する。CLIのruntime support policyをparser dependency都合で狭めない。
 

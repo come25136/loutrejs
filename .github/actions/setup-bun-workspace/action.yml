@@ -16,6 +16,12 @@ runs:
       shell: bash
       run: test "$(bun --version)" = "${{ inputs.bun-version }}"
 
+    - name: Prepare private SWC native cache
+      shell: bash
+      run: |
+        SWC_CACHE_DIR="$(mktemp -d /tmp/loutre-swc-native.XXXXXX)"
+        printf 'SWC_NATIVE_BINDING_CACHE=%s\n' "$SWC_CACHE_DIR" >> "$GITHUB_ENV"
+
     - name: Install dependencies
       shell: bash
       run: bun install --no-save
