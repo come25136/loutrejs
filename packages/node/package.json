@@ -1,6 +1,6 @@
 {
   "name": "@loutrejs/node",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "license": "MIT",
   "type": "module",
   "files": [
@@ -22,7 +22,7 @@
     "node": ">=22"
   },
   "peerDependencies": {
-    "@loutrejs/loutre": "^0.8.0"
+    "@loutrejs/loutre": "^0.8.1"
   },
   "repository": {
     "type": "git",

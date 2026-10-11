@@ -70,7 +70,7 @@ describe('npm package境界', () => {
 
   it('Core値を共有するlibrary packageだけがmain packageをpeerとして要求する', async () => {
     const loutre = await readPackageManifest('loutre')
-    const compatibleRange = loutreCompatibilityRange(loutre.version)
+    const compatibleRange = `^${loutre.version}`
     const node = await readPackageManifest('node')
     const bullmq = await readPackageManifest('bullmq')
 
@@ -130,14 +130,4 @@ async function readPackageManifest(
       'utf8',
     ),
   ) as PackageManifest
-}
-
-function loutreCompatibilityRange(version: string): string {
-  const [majorText, minorText] = version.split('.')
-  const major = Number(majorText)
-  const minor = Number(minorText)
-  if (!Number.isInteger(major) || !Number.isInteger(minor)) {
-    throw new Error(`Invalid Loutre version: ${version}`)
-  }
-  return major === 0 ? `^0.${minor}.0` : `^${major}.0.0`
 }

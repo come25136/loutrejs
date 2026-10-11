@@ -1,5 +1,13 @@
 # @loutrejs/node
 
+## 0.8.1
+
+### Patch Changes
+
+- CLIのSWC依存を`^1.16.13`へ更新しました。Bun 1.3.14の依存インストール時に共有cacheが権限`777`で作られる問題に対し、CIではSWC専用の権限`700`のcacheを指定します。Bun 1.3 / 1.4のCLI、GraphQL型生成、HTTP / WebSocketと公開packageの利用を検証しています。
+- Updated dependencies
+  - @loutrejs/loutre@0.8.1
+
 ## 0.8.0
 
 ### Minor Changes
