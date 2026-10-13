@@ -52,9 +52,10 @@ describe('runtime streaming shutdown lifetime', () => {
     vi.stubGlobal('Bun', {
       env: {},
       version: 'test',
-      serve(options: { fetch: NonNullable<typeof handler> }) {
+      serve(options: { port: number; fetch: NonNullable<typeof handler> }) {
         handler = options.fetch
         return {
+          port: options.port,
           stop(force: boolean) {
             fixture.events.push(`server.stop(${force})`)
             return new Promise<void>(() => {})

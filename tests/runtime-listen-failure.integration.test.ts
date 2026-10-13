@@ -118,6 +118,31 @@ describe('runtime listen failure', () => {
     }
   })
 
+  it('Bunはport 0で割り当てられた実portをlistenerとReadyログに反映する', async () => {
+    const serve = vi.fn(() => ({ port: 43210, stop: () => undefined }))
+    vi.stubGlobal('Bun', { env: {}, version: 'test', serve })
+    const app = await bunRuntime.create({ application: usersDefinition() })
+
+    try {
+      const listener = await app.serve({
+        hostname: '127.0.0.1',
+        port: 0,
+        shutdownHooks: false,
+      })
+
+      expect(serve).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ port: 0, hostname: '127.0.0.1' }),
+      )
+      expect(listener.port).toBe(43210)
+      expect(startupOutput.join('\n')).toContain(
+        'Server: http://127.0.0.1:43210',
+      )
+      expect(startupOutput.join('\n')).toContain('Ready in')
+    } finally {
+      await app.close('test-complete')
+    }
+  })
+
   it('Bunは明示portのlisten失敗を再試行せずserve()からrejectする', async () => {
     const ports: number[] = []
     vi.stubGlobal('Bun', {
@@ -147,7 +172,7 @@ describe('runtime listen failure', () => {
       serve: ({ port }: { readonly port: number }) => {
         ports.push(port)
         if (port < 3002) throw addressInUseError()
-        return { stop: () => undefined }
+        return { port, stop: () => undefined }
       },
     })
 
@@ -173,7 +198,10 @@ describe('runtime listen failure', () => {
     vi.stubGlobal('Bun', {
       env: { NODE_ENV: 'test' },
       version: '1.2.3',
-      serve: () => ({ stop: () => undefined }),
+      serve: ({ port }: { readonly port: number }) => ({
+        port,
+        stop: () => undefined,
+      }),
     })
 
     const app = await bunRuntime.create({ application: usersDefinition() })
