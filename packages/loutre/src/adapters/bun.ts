@@ -26,6 +26,7 @@ import {
 } from '../runtime/server-port.js'
 
 type BunServer = {
+  readonly port: number
   stop(closeActiveConnections?: boolean): void | Promise<void>
   unref?(): void
 }
@@ -196,6 +197,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
               ),
             websocket: websocketDriver.websocket,
           })
+          port = server.port
           break
         } catch (error) {
           if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
@@ -257,7 +259,7 @@ function bunGlobal():
           server: BunUpgradeServer,
         ): Response | undefined | Promise<Response | undefined>
         websocket: ReturnType<typeof createBunWebSocketDriver>['websocket']
-      }): { stop(closeActiveConnections?: boolean): void | Promise<void> }
+      }): BunServer
     }
   | undefined {
   return (globalThis as typeof globalThis & { Bun?: unknown }).Bun as
@@ -272,7 +274,7 @@ function bunGlobal():
             server: BunUpgradeServer,
           ): Response | undefined | Promise<Response | undefined>
           websocket: ReturnType<typeof createBunWebSocketDriver>['websocket']
-        }): { stop(closeActiveConnections?: boolean): void | Promise<void> }
+        }): BunServer
       }
     | undefined
 }

@@ -193,6 +193,8 @@ async function create<const TDefinition extends ApplicationDefinition>(
       while (true) {
         try {
           await listenServer(server, port, serveOptions.hostname)
+          const address = server.address()
+          if (address && typeof address !== 'string') port = address.port
           break
         } catch (error) {
           if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {

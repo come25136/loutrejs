@@ -162,6 +162,7 @@ jobs:
           node packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
           node packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/node
           node packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/node/openapi.json
+          node conformance/cli-native-addon.mjs
 
       - name: Run Node.js conformance
         run: npm run test:node
@@ -217,6 +218,7 @@ jobs:
           "$BUN_BIN" packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
           "$BUN_BIN" packages/cli/bin/loutre.js build integrations/http-crud/src/app.ts --out-dir dist/cli-conformance/bun
           "$BUN_BIN" packages/cli/bin/loutre.js openapi --entry integrations/http-crud/src/app.ts > dist/cli-conformance/bun/openapi.json
+          "$BUN_BIN" conformance/cli-native-addon.mjs
 
       - name: Build Bun conformance applications
         run: |
