@@ -26,7 +26,7 @@ try {
   )
 
   const result = spawnSync(process.execPath, [cli, 'check', '--entry', entry], {
-    cwd: directory,
+    cwd: process.cwd(),
     encoding: 'utf8',
     timeout: 30_000,
   })
