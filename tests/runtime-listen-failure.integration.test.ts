@@ -23,6 +23,27 @@ describe('runtime listen failure', () => {
     vi.unstubAllGlobals()
   })
 
+  it('Nodeはport 0で割り当てられた実portをlistenerとReadyログに反映する', async () => {
+    const app = await nodeRuntime.create({ application: usersDefinition() })
+
+    try {
+      const listener = await app.serve({
+        hostname: '127.0.0.1',
+        port: 0,
+        shutdownHooks: false,
+      })
+
+      expect(listener.port).toBeGreaterThan(0)
+      expect(listener.server.address()).toMatchObject({ port: listener.port })
+      expect(startupOutput.join('\n')).toContain(
+        `Server: http://127.0.0.1:${listener.port}`,
+      )
+      expect(startupOutput.join('\n')).toContain('Ready in')
+    } finally {
+      await app.close('test-complete')
+    }
+  })
+
   it('Nodeは明示portが使用中ならpreludeだけを出してEADDRINUSEでrejectする', async () => {
     const occupied = createServer()
     await new Promise<void>((resolve, reject) => {
