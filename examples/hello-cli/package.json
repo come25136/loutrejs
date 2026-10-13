@@ -12,10 +12,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@loutrejs/loutre": "0.8.1"
+    "@loutrejs/loutre": "0.8.2"
   },
   "devDependencies": {
-    "@loutrejs/cli": "0.8.1",
+    "@loutrejs/cli": "0.8.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

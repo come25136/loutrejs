@@ -18,14 +18,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@loutrejs/loutre": "0.8.1",
-    "@loutrejs/node": "0.8.1",
+    "@loutrejs/loutre": "0.8.2",
+    "@loutrejs/node": "0.8.2",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@loutrejs/cli": "0.8.1",
+    "@loutrejs/cli": "0.8.2",
     "prisma": "7.10.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
