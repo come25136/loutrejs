@@ -40,7 +40,7 @@ export async function emitEntry(
     platform: options.nodeCompatibility ? 'node' : 'neutral',
     target: 'es2024',
     conditions: [],
-    mainFields: ['module', 'main'],
+    mainFields: options.nodeCompatibility ? ['main'] : ['module', 'main'],
     external: options.nodeCompatibility
       ? ['node:*', ...builtinModules]
       : ['node:*'],
@@ -53,10 +53,12 @@ export async function emitEntry(
       : {}),
     sourcemap: 'inline',
     metafile: true,
-    plugins:
-      options.sourceLocations === true
+    plugins: [
+      ...(options.nodeCompatibility ? [nodeDependencyPlugin()] : []),
+      ...(options.sourceLocations === true
         ? [sourceLocationPlugin(projectRoot)]
-        : [],
+        : []),
+    ],
   })
   return Object.keys(result.metafile.inputs).map((path) =>
     resolve(workingDirectory, path),
@@ -107,6 +109,38 @@ const loutrePackageRoots = [
   ),
   resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'loutre'),
 ] as const
+
+function nodeDependencyPlugin(): Plugin {
+  const resolving = Symbol('loutre-node-dependency')
+  return {
+    name: 'loutre-node-dependencies',
+    setup(build) {
+      build.onResolve({ filter: /.*/ }, async (args) => {
+        if (args.kind === 'entry-point' || args.pluginData === resolving) {
+          return undefined
+        }
+        const result = await build.resolve(args.path, {
+          importer: args.importer,
+          resolveDir: args.resolveDir,
+          kind: args.kind,
+          pluginData: resolving,
+        })
+        if (
+          result.external ||
+          !result.path.split(sep).includes('node_modules')
+        ) {
+          return undefined
+        }
+        // bare specifierは一時出力先から解決できず、bundleするとnative addonの配置を失う。
+        const path =
+          args.kind === 'require-call' || args.kind === 'require-resolve'
+            ? result.path
+            : pathToFileURL(result.path).href
+        return { path, external: true }
+      })
+    },
+  }
+}
 
 function sourceLocationPlugin(projectRoot: string): Plugin {
   return {
