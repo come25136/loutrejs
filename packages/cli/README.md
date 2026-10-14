@@ -2,8 +2,6 @@
 
 Loutre Applicationを検査・可視化・buildするDeveloper CLIです。Application DefinitionからGraphを読み取り、validation、runtime compatibility check、deployment artifact、OpenAPI documentを生成できます。
 
-Bunで実行する場合は1.4.0以上を使用してください。
-
 ## Install
 
 ```sh

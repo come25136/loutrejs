@@ -11,8 +11,6 @@ cd my-app
 
 TargetにはNode.js、Bun、Cloudflare Workers、AWS Lambdaを選べます。
 
-Bunを使う場合は1.4.0以上が必要です。
-
 ## Define an HTTP execution
 
 Keep HTTP semantics in the HTTP Extension and register the resulting execution in a Module.

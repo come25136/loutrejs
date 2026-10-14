@@ -65,7 +65,7 @@ cd my-app
 npm run dev
 ```
 
-Bun 1.4.0以上からもprojectを作成できます。
+Bunからもprojectを作成できます。
 
 ```sh
 bun create loutre my-app

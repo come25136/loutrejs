@@ -192,7 +192,6 @@ function developmentSection(options: StarterOptions): string {
   return [
     '## Development',
     '',
-    ...(isTarget('bun') ? ['Bun 1.4.0以上を使用してください。', ''] : []),
     '```sh',
     runScriptCommand(options.packageManager, 'dev'),
     '```',

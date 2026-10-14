@@ -8,7 +8,7 @@ Loutre Applicationをstarterから作成するproject initializerです。Runtim
 npm create loutre@latest my-app
 ```
 
-Bun 1.4.0以上からも実行できます。
+Bunからも実行できます。
 
 ```sh
 bun create loutre my-app
