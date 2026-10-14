@@ -268,7 +268,8 @@ function createMessagePortRuntime(
           id: `message-port:${execution.id}`,
           name: execution.id,
         },
-        resolve: (token) => applicationRuntime.resolve(token, execution.id),
+        resolve: (token, consumer) =>
+          applicationRuntime.resolve(token, { source: execution.id, consumer }),
       },
       () => execution.compiled.factory(),
     )

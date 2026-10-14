@@ -1,3 +1,4 @@
+import { task } from '@loutrejs/loutre/tasks'
 import {
   asModuleInstance,
   bootstrapApplication,
@@ -6,6 +7,7 @@ import {
   defineEnv,
   defineModule,
   inject,
+  hook,
   registerSourceLocation,
   token,
   provide,
@@ -115,9 +117,58 @@ describe('静的・動的Module API', () => {
       definition.model.edges.filter((edge) => edge.kind === 'imports'),
     ).toHaveLength(1)
     expect(calls).toBe(1)
-    expect(asModuleInstance(Legacy)).toBe(asModuleInstance(Legacy))
+    const nextDefinition = defineApplication({ modules: [Root, Legacy] })
+    expect(nextDefinition.model.diagnostics).toEqual([])
+    expect(calls).toBe(2)
+    expect(nextDefinition.model.providers[0]).not.toBe(
+      definition.model.providers[0],
+    )
+    expect(asModuleInstance(Legacy)).not.toBe(asModuleInstance(Legacy))
     expect(Legacy()).not.toBe(Legacy())
   })
+
+  it.each([true, false])(
+    'Provider・Execution・Lifecycleで同じimport visibilityを使う（export=%s）',
+    (exported) => {
+      class Repository {}
+      class Consumer {
+        readonly repository = inject(Repository)
+      }
+      let calls = 0
+      const Legacy = defineModule(() => {
+        calls += 1
+        return {
+          providers: [Repository],
+          exports: exported ? [Repository] : [],
+        }
+      })
+      const execution = task<void, void>({
+        name: 'probe',
+        factory:
+          (repository = inject(Repository)) =>
+          async () => {
+            void repository
+          },
+      })
+      const Root = defineModule({
+        imports: [Legacy],
+        providers: [Consumer],
+        executions: [execution],
+        lifecycle: {
+          onModuleInit: hook({ inject: [Repository], run: () => {} }),
+        },
+      })
+      const model = buildApplicationModel({ modules: [Root, Legacy] })
+      expect(calls).toBe(1)
+      if (exported) expect(model.diagnostics).toEqual([])
+      else
+        expect(
+          model.diagnostics.filter(
+            (item) => item.code === 'LUTRE_MODULE_VISIBILITY',
+          ),
+        ).toHaveLength(3)
+    },
+  )
 
   it('動的Moduleの明示instanceを引数が同じでも別参照として維持する', () => {
     const Dynamic = defineModule((name: string) => ({ name }))

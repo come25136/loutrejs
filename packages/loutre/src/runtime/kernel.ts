@@ -22,6 +22,7 @@ import {
   type RuntimeInvocationRegistration,
   type RuntimeOperationMetadata,
   type TokenLike,
+  type DependencyResolutionContext,
 } from '../core/index.js'
 import { Container } from './di.js'
 import { ExecutionTracker } from './execution-tracker.js'
@@ -219,11 +220,14 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     }
   }
 
-  resolve<TValue>(token: TokenLike<TValue>, source?: string): TValue {
+  resolve<TValue>(
+    token: TokenLike<TValue>,
+    context?: string | DependencyResolutionContext,
+  ): TValue {
     if (this.#state === 'created' || this.#state === 'stopped') {
       throw applicationStateError(this.#state)
     }
-    return this.container.resolve(token, source)
+    return this.container.resolve(token, context)
   }
 
   get<TValue>(token: TokenLike<TValue>): TValue {

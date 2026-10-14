@@ -1,6 +1,8 @@
 import {
   defineModule,
   defineApplication,
+  composeLayers,
+  defineLayer,
   bootstrapApplication,
   inject,
   injectInquirer,
@@ -297,11 +299,79 @@ describe('依存元consumerの取得', () => {
     const value = runInInjectionContext(
       {
         consumer,
-        resolve: (dependency) => container.resolve(dependency, consumer.id),
+        resolve: (dependency, requester) =>
+          container.resolve(dependency, {
+            source: consumer.id,
+            consumer: requester,
+          }),
       },
       () => inject(Dependency),
     )
     expect(value.inquirer).toBe(consumer)
+  })
+
+  it('LayerにもExecutionと同じ規則でconsumer metadataを渡す', async () => {
+    class AppLogger {
+      readonly consumer = injectInquirer()
+    }
+    const container = containerFor([
+      provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
+    ])
+    let consumer: DependencyConsumer | undefined
+    const layer = defineLayer({
+      name: 'auth',
+      factory:
+        (logger = inject(AppLogger)) =>
+        async (_context, next) => {
+          consumer = logger.consumer
+          await next()
+        },
+    })
+    await composeLayers({
+      context: {},
+      layers: [layer],
+      resolve: (dependency, context) => container.resolve(dependency, context),
+      terminal: async () => undefined,
+    })
+    expect(consumer).toEqual({
+      kind: 'layer',
+      id: 'layer:0:auth',
+      name: 'auth',
+    })
+  })
+
+  it('直接resolveはambientなconsumerを別Containerへ持ち込まない', () => {
+    class Dependency {
+      readonly inquirer = injectInquirer()
+    }
+    const first = containerFor([
+      provide(Dependency).useClass(Dependency, { scope: 'transient' }),
+    ])
+    const second = containerFor([
+      provide(Dependency).useClass(Dependency, { scope: 'transient' }),
+    ])
+    const consumer = { id: 'execution.test', name: 'Test' }
+    runInInjectionContext(
+      {
+        consumer,
+        resolve: (dependency, requester) =>
+          first.resolve(dependency, { consumer: requester }),
+      },
+      () => {
+        expect(inject(Dependency).inquirer).toBe(consumer)
+        expect(second.resolve(Dependency).inquirer).toBeUndefined()
+      },
+    )
+  })
+
+  it('factoryの構築metadataは未宣言のinjectを許可しない', () => {
+    const FACTORY = token<Clock>('factory.clock')
+    const container = containerFor([
+      provide(CLOCK).useValue({ id: 1 }),
+      provide(FACTORY).useFactory({ use: () => inject(CLOCK) }),
+    ])
+    expect(() => container.resolve(FACTORY)).toThrow(InjectionContextError)
+    expect(injectInquirer()).toBeUndefined()
   })
 
   it('factoryが例外を投げても依存元contextを復元する', () => {

@@ -559,8 +559,11 @@ function createTasksRuntime(
           id: `task:${compiled.name}`,
           name: compiled.name,
         },
-        resolve: (dependency) =>
-          applicationRuntime.resolve(dependency, execution.id),
+        resolve: (dependency, consumer) =>
+          applicationRuntime.resolve(dependency, {
+            source: execution.id,
+            consumer,
+          }),
       },
       () => compiled.factory(),
     )

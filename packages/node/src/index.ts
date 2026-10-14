@@ -22,6 +22,7 @@ import {
 } from '@loutrejs/loutre/presentation'
 import {
   Logger,
+  ProcessShutdownHooks,
   assertRuntimeEngine,
   canRetryOnNextPort,
   initialServerPort,
@@ -117,7 +118,6 @@ async function create<const TDefinition extends ApplicationDefinition>(
 
   const closeApplication = application.close.bind(application)
   let server: Server | undefined
-  let removeShutdownHooks: (() => void) | undefined
   const logger = options.application.logger ?? new Logger()
   let serving = false
   let closed = false
@@ -150,8 +150,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
     if (closingPromise) return closingPromise
 
     closingPromise = (async () => {
-      removeShutdownHooks?.()
-      removeShutdownHooks = undefined
+      shutdownHooks.dispose()
       const errors: unknown[] = []
       const serverClosing = beginServerClose()
       try {
@@ -193,7 +192,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
     }
     serving = true
     if (serveOptions.shutdownHooks !== undefined) {
-      configureShutdownHooks(serveOptions.shutdownHooks)
+      shutdownHooks.setEnabled(serveOptions.shutdownHooks)
     }
     try {
       server = createNodeHttpServerDriver(http)
@@ -241,44 +240,16 @@ async function create<const TDefinition extends ApplicationDefinition>(
     }
   }
 
-  const configureShutdownHooks = (enabled: boolean) => {
-    removeShutdownHooks?.()
-    removeShutdownHooks = enabled
-      ? registerNodeShutdownHooks(close, (error, signal) => {
-          logger.error('Node runtime shutdown failed', { error, signal })
-        })
-      : undefined
-  }
+  const shutdownHooks = new ProcessShutdownHooks({
+    source: process,
+    close,
+    onError: (error, signal) =>
+      logger.error('Node runtime shutdown failed', { error, signal }),
+  })
 
   Object.assign(application, { serve, close })
-  configureShutdownHooks(options.shutdownHooks !== false)
+  shutdownHooks.setEnabled(options.shutdownHooks !== false)
   return application
-}
-
-function registerNodeShutdownHooks(
-  close: (signal: string) => Promise<void>,
-  onError: (error: unknown, signal: string) => void,
-): () => void {
-  const handlers = new Map<NodeJS.Signals, () => void>()
-  const remove = () => {
-    for (const [signal, handler] of handlers) process.off(signal, handler)
-    handlers.clear()
-  }
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    const handler = () => {
-      remove()
-      void close(signal).catch((error: unknown) => {
-        try {
-          onError(error, signal)
-        } catch (reportingError) {
-          console.error('Node runtime shutdown failed', error, reportingError)
-        }
-      })
-    }
-    handlers.set(signal, handler)
-    process.once(signal, handler)
-  }
-  return remove
 }
 
 interface NodeHttpRequestHandler {

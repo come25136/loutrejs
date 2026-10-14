@@ -1,3 +1,5 @@
+import { ProcessShutdownHooks } from '../runtime/shutdown-hooks.js'
+import { Logger } from '../runtime/logger.js'
 import {
   createBunWebSocketDriver,
   type BunUpgradeServer,
@@ -35,6 +37,7 @@ export type BunCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: TDefinition
   readonly environment?: unknown
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
+  readonly shutdownHooks?: boolean
   readonly forceShutdownTimeoutMs?: number
 } & BootstrapArguments<TDefinition>
 
@@ -105,7 +108,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
 
   const closeApplication = application.close.bind(application)
   let server: BunServer | undefined
-  let removeShutdownHooks: (() => void) | undefined
+  const logger = options.application.logger ?? new Logger()
   let serving = false
   let closed = false
   let closingPromise: Promise<void> | undefined
@@ -115,8 +118,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
     if (closingPromise) return closingPromise
 
     closingPromise = (async () => {
-      removeShutdownHooks?.()
-      removeShutdownHooks = undefined
+      shutdownHooks.dispose()
       const errors: unknown[] = []
       try {
         await closeApplication(signal)
@@ -165,7 +167,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
   const serve = async (
     serveOptions: BunServeOptions = {},
   ): Promise<BunListenerHandle> => {
-    if (closed) {
+    if (closed || closingPromise) {
       throw new Error('LUTRE_APP_STOPPED: Application is stopped.')
     }
     if (serving) {
@@ -178,6 +180,9 @@ async function create<const TDefinition extends ApplicationDefinition>(
       throw new Error('LUTRE_BUN_UNAVAILABLE: Bun.serve() is not available.')
     }
     serving = true
+    if (serveOptions.shutdownHooks !== undefined) {
+      shutdownHooks.setEnabled(serveOptions.shutdownHooks)
+    }
     try {
       const requestedPort = serveOptions.port
       let port = initialServerPort(requestedPort)
@@ -213,10 +218,6 @@ async function create<const TDefinition extends ApplicationDefinition>(
         environment: environment.NODE_ENV ?? 'development',
         startupDurationMs: performance.now() - startedAt,
       })
-      removeShutdownHooks =
-        serveOptions.shutdownHooks === false
-          ? undefined
-          : registerBunShutdownHooks(close)
       return { port }
     } catch (error) {
       await close().catch(() => undefined)
@@ -224,27 +225,16 @@ async function create<const TDefinition extends ApplicationDefinition>(
     }
   }
 
-  Object.assign(application, { serve, close })
-  return application
-}
+  const shutdownHooks = new ProcessShutdownHooks({
+    source: process,
+    close,
+    onError: (error, signal) =>
+      logger.error('Bun runtime shutdown failed', { error, signal }),
+  })
 
-function registerBunShutdownHooks(
-  close: (signal: string) => Promise<void>,
-): () => void {
-  const handlers = new Map<NodeJS.Signals, () => void>()
-  const remove = () => {
-    for (const [signal, handler] of handlers) process.off(signal, handler)
-    handlers.clear()
-  }
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    const handler = () => {
-      remove()
-      void close(signal)
-    }
-    handlers.set(signal, handler)
-    process.once(signal, handler)
-  }
-  return remove
+  Object.assign(application, { serve, close })
+  shutdownHooks.setEnabled(options.shutdownHooks !== false)
+  return application
 }
 
 function bunGlobal():

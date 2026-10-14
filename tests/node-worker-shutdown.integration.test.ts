@@ -1,3 +1,4 @@
+import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { Server } from 'node:http'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
@@ -164,5 +165,63 @@ describe('Node workerの終了フック', () => {
     } finally {
       await app.close()
     }
+  })
+})
+
+describe('Bun workerの終了フック', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.stubGlobal('Bun', {
+      env: {},
+      version: 'test',
+      serve: () => ({ port: 43210, stop: () => {} }),
+    })
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it.each(signals)(
+    'HTTPなしで%sをlifecycleへ渡し、handlerを解除する',
+    async (signal) => {
+      const baseline = listeners()
+      const baselineCounts = counts()
+      const shutdown = vi.fn()
+      const app = await bunRuntime.create({ application: worker(shutdown) })
+      try {
+        const index = signals.indexOf(signal)
+        const handler = process
+          .rawListeners(signal)
+          .find((candidate) => !baseline[index]!.includes(candidate))!
+        Reflect.apply(handler, process, [signal])
+        await app.close()
+        expect(shutdown).toHaveBeenCalledExactlyOnceWith(signal)
+        expect(counts()).toEqual(baselineCounts)
+      } finally {
+        await app.close()
+      }
+    },
+  )
+
+  it('createで無効にした終了フックをserveでも維持し、明示指定で有効にできる', async () => {
+    const baseline = counts()
+    const first = await bunRuntime.create({
+      application: worker(() => {}),
+      shutdownHooks: false,
+    })
+    const second = await bunRuntime.create({
+      application: worker(() => {}),
+      shutdownHooks: false,
+    })
+    try {
+      await first.serve({ port: 0 })
+      expect(counts()).toEqual(baseline)
+      await second.serve({ port: 0, shutdownHooks: true })
+      expect(counts()).toEqual(baseline.map((count) => count + 1))
+    } finally {
+      await Promise.all([first.close(), second.close()])
+    }
+    expect(counts()).toEqual(baseline)
   })
 })

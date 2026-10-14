@@ -1,3 +1,4 @@
+import type { DependencyResolutionContext } from './injection.js'
 import type { Diagnostic } from './diagnostic.js'
 import type {
   RuntimeExecutionMetadata,
@@ -111,7 +112,10 @@ export interface ExecutionKernelRuntime {
     metadata: RuntimeOperationMetadata,
     invocation?: RuntimeInvocationRegistration,
   ): ExecutionOperationLease
-  resolve<TValue>(token: TokenLike<TValue>, source?: string): TValue
+  resolve<TValue>(
+    token: TokenLike<TValue>,
+    context?: string | DependencyResolutionContext,
+  ): TValue
 }
 
 export interface ExecutionExtensionDrainContext {

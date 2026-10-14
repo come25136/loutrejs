@@ -1,0 +1,31 @@
+# Provider構築・Module正規化・Runtime終了処理の所有権
+
+- 状態: IMPLEMENTED
+- 日付: 2026-10-14 JST
+- 対象: #132、#133、#135
+
+## 背景
+
+Loutreの設計では、canonical Application Modelが構造の正本、ContainerがProvider構築の所有者、Runtime Adapterがplatform resourceの所有者である。機能追加でもこの責務を維持し、ambientな状態によって異なるApplicationの処理が結び付くことを避ける。
+
+## 依存元は構築時のmetadataとして渡す
+
+`injectInquirer()`はProvider構築時の直接の依存元を返す。ログ呼び出し時の追跡や非同期contextの伝播は導入しない。consumerごとにmetadataを保持する独自loggerにはtransient scopeを使い、backendの共有はapplication scopeで扱える。
+
+依存を要求するInjection ContextからContainerへ、consumerと診断・Logger用のsourceを明示的に渡す。ContainerがambientなInjection Contextを読む設計は採用しない。直接の解決に別Containerのconsumerが紛れ込むためである。class、factory、Execution、Layerで同じ伝播規則を使う。
+
+factoryは構築metadataを参照できるが、依存は既存の`inject`配列で宣言する。metadata参照を可能にするためだけに、必ず例外を投げる偽のresolverは設けない。依存解決可能なcontextと構築metadataだけのcontextは、resolverの有無で表現する。Modelに現れない実行時だけの依存追加は認めない。
+
+## Moduleの正規化結果はModel構築が所有する
+
+静的Moduleの参照と動的Moduleの明示instanceをGraphのidentityとして扱う。引数なしの旧templateは、Model構築ごとに一つのinstanceへ正規化する。Module収集、import edge、visibilityは同じ正規化済みimport graphを利用する。
+
+process全体のcacheは採用しない。独立したApplicationのModelを構築した際に、旧factoryの結果まで共有すると、構築時点の設定やfactoryが生成する値を意図せず再利用するためである。
+
+## 終了フックはplatform resourceとしてAdapterが所有する
+
+Kernelはsignalの文字列を受け取って終了lifecycleを実行する。processへのsignal登録はNode / Bun Adapterが所有し、HTTP listenerの有無から切り離す。
+
+signal登録の重複排除・解除・終了失敗の観測は、signal sourceを引数で受け取る共通の管理処理へまとめる。共通処理はprocessやHTTPへ依存しない。platformごとのlistener停止とKernel drainは各Adapterが引き続き所有する。
+
+手動closeまたはsignalを受けた後は、終了フックを再登録しない。Applicationごとに自分のhandlerだけを解除する。`process.exit()`による強制終了は、他のApplicationや埋め込みhostが所有するresourceまで終了するため採用しない。

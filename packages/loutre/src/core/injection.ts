@@ -8,10 +8,15 @@ export interface DependencyConsumerDescriptor {
 
 export type DependencyConsumer = TokenLike | DependencyConsumerDescriptor
 
+export interface DependencyResolutionContext {
+  readonly source?: string
+  readonly consumer?: DependencyConsumer
+}
+
 export interface InjectionContext {
   readonly consumer: DependencyConsumer
   readonly inquirer?: DependencyConsumer
-  readonly resolve: <T>(token: TokenLike<T>) => T
+  readonly resolve?: <T>(token: TokenLike<T>, consumer: DependencyConsumer) => T
   readonly record?: (
     consumer: DependencyConsumer,
     dependency: TokenLike,
@@ -20,7 +25,7 @@ export interface InjectionContext {
 
 const injectionContextKey = Symbol.for('loutre.injection-context')
 
-export function currentInjectionContext(): InjectionContext | undefined {
+function currentInjectionContext(): InjectionContext | undefined {
   return (globalThis as Record<PropertyKey, unknown>)[injectionContextKey] as
     | InjectionContext
     | undefined
@@ -52,7 +57,7 @@ export class InjectionContextError extends Error {
 
   constructor(token: TokenLike) {
     super(
-      `inject(${typeof token === 'function' ? token.name : token.id}) was called outside a Loutre injection context.`,
+      `inject(${typeof token === 'function' ? token.name : token.id}) requires a Loutre injection context with a dependency resolver.`,
     )
     this.name = 'InjectionContextError'
   }
@@ -62,9 +67,9 @@ export function inject<TToken extends TokenLike>(
   token: TToken,
 ): TokenValue<TToken> {
   const context = currentInjectionContext()
-  if (!context) throw new InjectionContextError(token)
+  if (!context?.resolve) throw new InjectionContextError(token)
   context.record?.(context.consumer, token)
-  return context.resolve(token) as TokenValue<TToken>
+  return context.resolve(token, context.consumer) as TokenValue<TToken>
 }
 
 export function injectInquirer(): DependencyConsumer | undefined {

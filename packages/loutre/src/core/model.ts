@@ -389,7 +389,7 @@ export function buildApplicationModel(
             providerModule &&
             provider.moduleId !== moduleId &&
             !moduleDeclaresToken(module, dependency) &&
-            !isTokenVisible(module, providerModule, dependency)
+            !isTokenVisible(context, module, providerModule, dependency)
           ) {
             diagnostics.push(
               diagnostic(

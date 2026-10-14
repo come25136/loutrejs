@@ -30,3 +30,9 @@ export type { ApplicationKernelRuntimeOptions } from './kernel.js'
 export { nodeRuntimeSupport } from './node-capabilities.js'
 export { canRetryOnNextPort, initialServerPort } from './server-port.js'
 export { serverUrl } from './server-url.js'
+export { ProcessShutdownHooks } from './shutdown-hooks.js'
+export type {
+  ProcessShutdownHooksOptions,
+  ProcessSignalSource,
+  ShutdownSignal,
+} from './shutdown-hooks.js'

@@ -1,6 +1,5 @@
 import { collectInjectedDependencies } from '../injection.js'
 import { diagnostic } from '../diagnostic.js'
-import { asModuleInstance } from '../module.js'
 import { normalizeProvider, type ProviderDescriptor } from '../provider.js'
 import type { TokenLike } from '../token.js'
 import { tokenName } from '../token.js'
@@ -49,8 +48,8 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
         ? {}
         : { description: module.definition.description }),
     })
-    for (const imported of module.definition.imports ?? []) {
-      const target = moduleIds.get(asModuleInstance(imported))
+    for (const imported of context.imports.get(module) ?? []) {
+      const target = moduleIds.get(imported)
       if (target) edges.push({ from: moduleId, to: target, kind: 'imports' })
     }
     for (const declaration of module.definition.providers ?? []) {

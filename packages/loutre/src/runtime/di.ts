@@ -1,6 +1,4 @@
-import { currentInjectionContext } from '../core/injection.js'
 import {
-  InjectionContextError,
   isArgsClass,
   isEnvClass,
   runInInjectionContext,
@@ -9,6 +7,7 @@ import {
   type Class,
   type EnvClass,
   type DependencyConsumer,
+  type DependencyResolutionContext,
   type ProviderDescriptor,
   type TokenLike,
 } from '../core/index.js'
@@ -118,8 +117,13 @@ export class Container {
     this.#arguments.set(argumentsContract, value)
   }
 
-  resolve<T>(token: TokenLike<T>, source?: string): T {
-    return this.#resolve(token, source, [], currentInjectionContext()?.consumer)
+  resolve<T>(
+    token: TokenLike<T>,
+    context?: string | DependencyResolutionContext,
+  ): T {
+    const resolution =
+      typeof context === 'string' ? { source: context } : context
+    return this.#resolve(token, resolution?.source, [], resolution?.consumer)
   }
 
   get<T>(token: TokenLike<T>): T {
@@ -266,10 +270,6 @@ export class Container {
             {
               consumer: candidate.provide,
               ...(inquirer === undefined ? {} : { inquirer }),
-              resolve: (token) => {
-                // factoryの依存をModelで検証するinject宣言に限定し、実行時だけの依存追加を許さない。
-                throw new InjectionContextError(token)
-              },
             },
             () => candidate.useFactory(...dependencies),
           )

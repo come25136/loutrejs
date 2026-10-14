@@ -69,6 +69,7 @@ export {
 export type {
   DependencyConsumer,
   DependencyConsumerDescriptor,
+  DependencyResolutionContext,
   InjectionContext,
 } from './injection.js'
 export { hook } from './lifecycle.js'

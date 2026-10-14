@@ -182,27 +182,7 @@ class UsersService {
 
 Cross-module dependencies require an explicit `exports` / `imports` path. Visibility is validated while the model is built, before Runtime startup.
 
-### 独自loggerなどで依存元を取得する
-
-`injectInquirer()`は、同期的なprovider構築中にそのproviderを直接要求したconsumerを返します。class providerとfactory providerの両方で使えます。class・custom tokenはそのtoken自体、Executionからの要求は`id`・`name`を持つdescriptorです。別名tokenで登録したconsumerでは、implementation classではなく登録tokenを返します。
-
-```ts
-import { inject, injectInquirer, provide } from '@loutrejs/loutre'
-import { Logger } from '@loutrejs/loutre/runtime'
-
-class AppLogger {
-  readonly consumer = injectInquirer()
-  readonly logger = inject(Logger)
-}
-
-const loggerProvider = provide(AppLogger).useClass(AppLogger, {
-  scope: 'transient',
-})
-```
-
-`ServiceA`が`inject(AppLogger)`すると`AppLogger.consumer`は`ServiceA`になります。組み込みLoggerの`context.source`は従来どおり`AppLogger`です。factory providerでも`use`内から取得でき、依存は従来どおり`inject: [...]`で宣言します。
-
-Applicationの初期構築などconsumerがいない直接解決時と注入context外では`undefined`です。application scopeは共有されるため、consumerごとのmetadataが必要ならtransientを使ってください。取得した値は構築時に保存し、非同期処理の中から取得しないでください。Model構築の依存収集時にもconsumerはないため、依存の宣言をこの値で分岐させないでください。
+依存元metadataの利用方法は[独自loggerなどで依存元を取得する](./ja/architecture.md#独自loggerなどで依存元を取得する)、責務の判断は[所有権ADR](./adr/loutre_construction_and_runtime_ownership.md)を参照してください。
 
 ## Environment and Arguments
 

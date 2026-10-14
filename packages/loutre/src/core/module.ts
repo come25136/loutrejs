@@ -134,13 +134,6 @@ function createModuleTemplate<Args, TDefinition extends ModuleDefinition>(
   return template
 }
 
-const normalizedTemplates = new WeakMap<ModuleTemplate<void>, ModuleInstance>()
-
 export function asModuleInstance(module: ModuleInput): ModuleInstance {
-  if (module.kind === 'module-instance') return module
-  const existing = normalizedTemplates.get(module)
-  if (existing) return existing
-  const instance = module()
-  normalizedTemplates.set(module, instance)
-  return instance
+  return module.kind === 'module-instance' ? module : module()
 }
