@@ -108,6 +108,7 @@ export type {
   ModuleExtensions,
   ModuleHostApis,
   ModuleInstance,
+  ModuleInput,
   ModuleTemplate,
   ModuleTypeInfo,
 } from './module.js'

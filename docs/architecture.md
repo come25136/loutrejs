@@ -72,7 +72,7 @@ The main package exposes these important subpaths:
 
 ```ts
 const application = defineApplication({
-  modules: [AppModule()],
+  modules: [AppModule],
   arguments: AppArgs,
 })
 ```
@@ -82,11 +82,11 @@ An Application Definition does not own a listener, timer, or process. It contain
 A Module declares Providers and Execution Definitions:
 
 ```ts
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   environment: [AppEnv],
   providers: [UsersService],
   executions: [UsersHttp, heartbeat],
-}))
+})
 ```
 
 Execution Definitions are branded by their owning Extension. During model construction, the Extension compiles each definition into a protocol-neutral execution contribution containing its dependency edges, required Runtime Capabilities, compiled payload, and Graph metadata. An Extension may also expose same-Extension execution references; Core follows that reference closure recursively, so registering a Trigger automatically includes the Task it invokes without retaining raw definitions in the compiled model.
@@ -151,9 +151,9 @@ export const heartbeat = fixedDelay({
   task: cleanup,
 })
 
-const WorkerModule = defineModule(() => ({
+const WorkerModule = defineModule({
   executions: [heartbeat],
-}))
+})
 ```
 
 A hosted Application receives the Extension-owned `tasks` API only when the model contains Tasks executions.
@@ -213,9 +213,9 @@ class AppEnv extends defineEnv(
   z.object({ PORT: z.coerce.number().int().positive() }),
 ) {}
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   environment: [AppEnv],
-}))
+})
 ```
 
 Runtime adapters provide the environment source. `bootstrapApplication()` can receive an explicit source for tests or embedded execution.

@@ -78,17 +78,19 @@ import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { GreetingHttp } from './greetings/controller.js'
 import { GreetingService } from './greetings/service.js'
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   providers: [GreetingService],
   executions: [GreetingHttp],
-}))
+})
 
 export default defineApplication({
-  modules: [AppModule()],
+  modules: [AppModule],
 })
 ```
 
 `defineApplication()` builds the canonical Application Model. HTTP route details remain owned by the HTTP Extension; Core stores the execution contribution without protocol-specific branching.
+
+静的・動的Moduleの使い分けと共有参照は[静的Moduleと動的Module](./ja/getting-started.md#静的moduleと動的module)を参照してください。
 
 ## Test through the portable Kernel host
 
@@ -156,10 +158,10 @@ export class AppEnv extends defineEnv(
   z.object({ PORT: z.coerce.number().int().positive().default(3000) }),
 ) {}
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   environment: [AppEnv],
   executions: [GreetingHttp],
-}))
+})
 ```
 
 Node.js can then use the validated value after Application initialization:
@@ -191,11 +193,11 @@ export const heartbeat = fixedDelay({
   task: cleanup,
 })
 
-const WorkerModule = defineModule(() => ({
+const WorkerModule = defineModule({
   executions: [heartbeat],
-}))
+})
 
-export default defineApplication({ modules: [WorkerModule()] })
+export default defineApplication({ modules: [WorkerModule] })
 ```
 
 Registering the Trigger is enough: the Tasks Extension declares its referenced Task, and Core includes that Task in the canonical Application Model automatically.
@@ -240,14 +242,14 @@ const orderConsumer = consume({
   task: processOrder,
 })
 
-const QueueModule = defineModule(() => ({
+const QueueModule = defineModule({
   providers: [
     bindBullMqQueue(orders, {
       connection: { host: '127.0.0.1', port: 6379 },
     }),
   ],
   executions: [processOrder, orderConsumer],
-}))
+})
 ```
 
 ## Inspect the Application Model

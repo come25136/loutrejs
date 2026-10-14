@@ -43,11 +43,11 @@ const HealthHttp = http.implementation({
   }),
 })
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   executions: [HealthHttp],
-}))
+})
 
-export default defineApplication({ modules: [AppModule()] })
+export default defineApplication({ modules: [AppModule] })
 ```
 
 ## Kernel bootstrap

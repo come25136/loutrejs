@@ -4,11 +4,11 @@ import { DrizzleDatabase } from './database/drizzle.js'
 import { UsersController } from './users/controller.js'
 import { UserRepository } from './users/repository.js'
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   name: 'DatabaseDrizzlePostgresExample',
   environment: [AppEnv],
   providers: [DrizzleDatabase, UserRepository],
   executions: [UsersController],
-}))
+})
 
-export default defineApplication({ modules: [AppModule()] })
+export default defineApplication({ modules: [AppModule] })

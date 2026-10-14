@@ -6,14 +6,14 @@ import type {
   ExecutionExtension,
   HostApiOfExtension,
   ModuleExtensions,
-  ModuleInstance,
+  ModuleInput,
   SchemaInput,
 } from '../core/index.js'
 import { buildApplicationModel } from '../core/index.js'
 import type { Logger } from '../runtime/index.js'
 
 export interface ApplicationDefinitionOptions<
-  TModules extends readonly ModuleInstance[],
+  TModules extends readonly ModuleInput[],
   TArguments extends ArgsClass | undefined,
 > {
   readonly modules: TModules
@@ -22,7 +22,7 @@ export interface ApplicationDefinitionOptions<
 }
 
 export interface ApplicationDefinition<
-  TModules extends readonly ModuleInstance[] = readonly ModuleInstance[],
+  TModules extends readonly ModuleInput[] = readonly ModuleInput[],
   TArguments extends ArgsClass | undefined = ArgsClass | undefined,
 > {
   readonly kind: 'application-definition'
@@ -33,7 +33,7 @@ export interface ApplicationDefinition<
 }
 
 export function defineApplication<
-  const TModules extends readonly ModuleInstance[],
+  const TModules extends readonly ModuleInput[],
   const TArguments extends ArgsClass | undefined = undefined,
 >(
   options: ApplicationDefinitionOptions<TModules, TArguments>,

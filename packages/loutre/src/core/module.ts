@@ -10,7 +10,7 @@ import { environmentProvider, type ProviderDeclaration } from './provider.js'
 export interface ModuleDefinition {
   readonly name?: string
   readonly description?: string
-  readonly imports?: readonly ModuleInstance[]
+  readonly imports?: readonly ModuleInput[]
   readonly environment?: readonly EnvClass[]
   readonly providers?: readonly ProviderDeclaration[]
   readonly executions?: readonly ExecutionDeclaration[]
@@ -32,7 +32,7 @@ type DirectExtensions<TDefinition extends ModuleDefinition> =
     : never
 
 type ImportedExtensions<TDefinition extends ModuleDefinition> =
-  TDefinition['imports'] extends readonly ModuleInstance[]
+  TDefinition['imports'] extends readonly ModuleInput[]
     ? ModuleExtensions<TDefinition['imports'][number]>
     : never
 
@@ -43,7 +43,9 @@ export type ExtensionsOfModuleDefinition<
 export type ModuleExtensions<TModule> =
   TModule extends ModuleInstance<infer TDefinition>
     ? ExtensionsOfModuleDefinition<TDefinition>
-    : never
+    : TModule extends ModuleTemplate<void, infer TDefinition>
+      ? ExtensionsOfModuleDefinition<TDefinition>
+      : never
 
 export type ModuleHostApis<TModule> = HostApiOfExtension<
   ModuleExtensions<TModule>
@@ -77,10 +79,29 @@ export type ModuleTemplate<
   readonly [moduleTypeInfo]?: ModuleTypeInfo<TDefinition>
 }
 
+export type ModuleInput = ModuleInstance | ModuleTemplate<void>
+
+export function defineModule<const TDefinition extends ModuleDefinition>(
+  definition: TDefinition,
+): ModuleInstance<TDefinition>
+
 export function defineModule<
   Args = void,
   const TDefinition extends ModuleDefinition = ModuleDefinition,
->(factory: (args: Args) => TDefinition): ModuleTemplate<Args, TDefinition> {
+>(factory: (args: Args) => TDefinition): ModuleTemplate<Args, TDefinition>
+
+export function defineModule(
+  definition: ModuleDefinition | ((args: any) => ModuleDefinition),
+): ModuleInstance | AnyModuleTemplate {
+  const factory =
+    typeof definition === 'function' ? definition : () => definition
+  const template = createModuleTemplate(factory)
+  return typeof definition === 'function' ? template : template()
+}
+
+function createModuleTemplate<Args, TDefinition extends ModuleDefinition>(
+  factory: (args: Args) => TDefinition,
+): ModuleTemplate<Args, TDefinition> {
   const instantiate = (args: Args): ModuleInstance<TDefinition> => {
     const declared = factory(args)
     const environment = [...new Set(declared.environment ?? [])]
@@ -113,8 +134,13 @@ export function defineModule<
   return template
 }
 
-export function asModuleInstance(
-  module: ModuleInstance | ModuleTemplate<void>,
-): ModuleInstance {
-  return module.kind === 'module-instance' ? module : module()
+const normalizedTemplates = new WeakMap<ModuleTemplate<void>, ModuleInstance>()
+
+export function asModuleInstance(module: ModuleInput): ModuleInstance {
+  if (module.kind === 'module-instance') return module
+  const existing = normalizedTemplates.get(module)
+  if (existing) return existing
+  const instance = module()
+  normalizedTemplates.set(module, instance)
+  return instance
 }

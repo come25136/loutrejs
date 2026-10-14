@@ -72,7 +72,7 @@ main packageの主要subpathは次の通りです。
 
 ```ts
 const application = defineApplication({
-  modules: [AppModule()],
+  modules: [AppModule],
   arguments: AppArgs,
 })
 ```
@@ -82,11 +82,11 @@ Application Definitionはlistener、timer、processを所有しません。Runti
 ModuleにはProviderとExecution Definitionを登録します。
 
 ```ts
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   environment: [AppEnv],
   providers: [UsersService],
   executions: [UsersHttp, heartbeat],
-}))
+})
 ```
 
 Execution Definitionは所有するExtensionでbrandされます。Model構築時にExtensionがdependency edge、必要Runtime Capability、compiled payload、Graph metadataをprotocol-neutralなexecution contributionへcompileします。Extensionは同じExtension内のexecution参照も公開でき、Coreがそのclosureを再帰的に辿るため、Triggerだけを登録すれば参照先Taskも自動でModelへ含まれます。compile済みModelへraw Definitionは保持しません。
@@ -151,9 +151,9 @@ export const heartbeat = fixedDelay({
   task: cleanup,
 })
 
-const WorkerModule = defineModule(() => ({
+const WorkerModule = defineModule({
   executions: [heartbeat],
-}))
+})
 ```
 
 Tasks executionを含むApplicationにはExtension-ownedな`tasks` Host APIが合成されます。
@@ -189,9 +189,9 @@ class AppEnv extends defineEnv(
   z.object({ PORT: z.coerce.number().int().positive() }),
 ) {}
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   environment: [AppEnv],
-}))
+})
 ```
 
 Runtime adapterが実環境のsourceを渡し、testやembedded executionでは`bootstrapApplication()`へ明示sourceを渡せます。

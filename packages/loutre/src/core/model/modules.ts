@@ -36,7 +36,8 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
       }
       moduleNames.add(module.definition.name)
     }
-    const moduleSource = getSourceLocation(module.template)
+    const moduleSource =
+      getSourceLocation(module) ?? getSourceLocation(module.template)
     nodes.push({
       kind: 'module',
       id: moduleId,
