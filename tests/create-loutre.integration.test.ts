@@ -33,6 +33,27 @@ describe('create-loutre', () => {
     await rm(root, { recursive: true, force: true })
   })
 
+  it('未対応のBunではprojectの生成を始めない', async () => {
+    vi.stubGlobal('Bun', { version: '1.3.14' })
+    try {
+      const stdout = vi.fn()
+      await expect(
+        runCreateLoutre(
+          ['demo', '--yes', '--no-install'],
+          createIO({ stdout }),
+        ),
+      ).rejects.toThrow('LUTRE_RUNTIME_VERSION')
+      expect(stdout).not.toHaveBeenCalled()
+      await expect(
+        readFile(join(root, 'demo/package.json')),
+      ).rejects.toMatchObject({
+        code: 'ENOENT',
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it.each(['--target', '--package-manager'])(
     '%sで削除済みのDenoを指定するとprojectを作成しない',
     async (option) => {

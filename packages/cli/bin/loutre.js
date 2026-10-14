@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 
-import { assertSupportedBunVersion } from '@loutrejs/loutre/runtime'
-
-assertSupportedBunVersion()
-
 const host = createCliHost()
 const args = host.args
 

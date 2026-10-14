@@ -2,6 +2,7 @@ import { createKernelApplication } from '@loutrejs/loutre'
 import { bootstrapApplication } from '@loutrejs/loutre'
 import { bindHttpServer } from '@loutrejs/loutre/http'
 import { runCli } from '@loutrejs/cli'
+import { runOpenApiCli } from '../packages/cli/src/openapi-cli.js'
 import { startDevApplicationSupervisor } from '../packages/cli/src/dev/run-supervisor.js'
 import {
   mkdir,
@@ -16,6 +17,23 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 describe('Loutre CLI', () => {
+  it.each([runCli, runOpenApiCli])(
+    '%sは未対応のBunでcommandの処理を始めない',
+    async (run) => {
+      vi.stubGlobal('Bun', { version: '1.3.14' })
+      try {
+        const output = io()
+        await expect(run(['--help'], output.value)).rejects.toThrow(
+          'LUTRE_RUNTIME_VERSION',
+        )
+        expect(output.stdout).toEqual([])
+        expect(output.stderr).toEqual([])
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    },
+  )
+
   function io() {
     const stdout: string[] = []
     const stderr: string[] = []
