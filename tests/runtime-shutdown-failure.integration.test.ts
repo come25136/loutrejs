@@ -49,7 +49,7 @@ describe('Runtime終了失敗時のplatform resource', () => {
       if (name === 'Bun')
         vi.stubGlobal('Bun', {
           env: {},
-          version: 'test',
+          version: '1.4.0',
           serve: () => ({ port: 43210, stop }),
         })
       const definition = failingApplication(events, error)
@@ -102,7 +102,7 @@ describe('Runtime終了失敗時のplatform resource', () => {
       const events: string[] = []
       const serve = vi.fn(() => ({ port: 43210, stop: () => {} }))
       if (name === 'Bun')
-        vi.stubGlobal('Bun', { env: {}, version: 'test', serve })
+        vi.stubGlobal('Bun', { env: {}, version: '1.4.0', serve })
       const definition = failingApplication(
         events,
         new Error('lifecycle failed'),
@@ -186,7 +186,7 @@ describe('Runtime終了失敗時のplatform resource', () => {
       .mockResolvedValue(undefined)
     vi.stubGlobal('Bun', {
       env: {},
-      version: 'test',
+      version: '1.4.0',
       serve: () => ({ port: 43210, stop }),
     })
     const app = await bunRuntime.create({

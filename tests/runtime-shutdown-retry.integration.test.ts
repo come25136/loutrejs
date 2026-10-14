@@ -95,7 +95,7 @@ describe('runtime shutdown retry', () => {
     const stop = vi.fn(() => pendingStop)
     vi.stubGlobal('Bun', {
       env: {},
-      version: 'test',
+      version: '1.4.0',
       serve: () => ({ port: 43210, stop }),
     })
     const fixture = retryableShutdownFixture()
@@ -159,7 +159,7 @@ describe('runtime shutdown retry', () => {
   })
 
   it('Bun adapterはsafe boundary到達失敗後のcloseをKernelへ再試行する', async () => {
-    vi.stubGlobal('Bun', { env: {}, version: 'test' })
+    vi.stubGlobal('Bun', { env: {}, version: '1.4.0' })
     const fixture = retryableShutdownFixture()
     const application = await bunRuntime.create({
       application: fixture.definition,

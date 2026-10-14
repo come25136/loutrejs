@@ -4,6 +4,8 @@ LoutreのApplication Graph Kernelです。Application Definition / Model、Modul
 
 HTTP、Task、MessagePort、WebSocketは同じpackageのsubpathからExecution Extensionとして提供します。
 
+Bun Runtimeは1.4.0以上を対象にしています。
+
 ## Install
 
 ```sh

@@ -38,4 +38,4 @@ Kernelは終了失敗を`ApplicationShutdownError`として報告し、`safeClea
 
 Node / Bunは終了開始時に新規HTTP受付を止める。Kernelが安全な境界へ到達した場合は、lifecycle失敗後もnative closeの完了を待ち、Kernelとplatformのエラーを集約する。NodeのDevtools transportはKernelの終了成否によらず解放する。
 
-境界未到達の場合は、native closeの未完了を無期限に待たず終了失敗を返す。Bunの`stop(true)`による強制切断とProvider cleanupは行わず、既存executionが完了してから手動`close()`で再試行する。Kernelのdraining状態と、そのexecutionが使うresourceの寿命を維持するためである。
+境界未到達の場合は、native closeの未完了を無期限に待たず終了失敗を返す。既存executionが完了してから手動`close()`で再試行し、Kernelのdraining状態と、そのexecutionが使うresourceの寿命を維持する。境界到達後はnative closeの完了を待ち、Bun 1.3の停止不具合を補うタイマー・強制切断は設けない。Bunのminimumを1.4.0へ引き上げた判断は[Runtime support policy](./loutre_runtime_support_policy.md#3-bun)を参照する。

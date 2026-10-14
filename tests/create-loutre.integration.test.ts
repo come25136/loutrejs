@@ -167,6 +167,9 @@ describe('create-loutre', () => {
         expect(Object.values(manifest.scripts).join('\n')).toContain(script)
         expect(manifest.dependencies['@loutrejs/node']).toBeUndefined()
 
+        if (target === 'bun')
+          expect(manifest.engines).toEqual({ bun: '>=1.4.0' })
+
         if (target === 'cloudflare-workers') {
           const wrangler = await readFile(
             join(result.targetDirectory, 'wrangler.jsonc'),

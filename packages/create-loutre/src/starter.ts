@@ -109,6 +109,7 @@ function targetManifest(target: ProjectTarget): TargetManifest {
         start: 'bun dist/main.js',
       },
       devDependencies: { '@types/bun': '^1.4.0' },
+      engines: { bun: '>=1.4.0' },
       types: ['bun'],
     }))
     .with('cloudflare-workers', () => ({
@@ -191,6 +192,7 @@ function developmentSection(options: StarterOptions): string {
   return [
     '## Development',
     '',
+    ...(isTarget('bun') ? ['Bun 1.4.0以上を使用してください。', ''] : []),
     '```sh',
     runScriptCommand(options.packageManager, 'dev'),
     '```',

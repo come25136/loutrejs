@@ -120,7 +120,7 @@ describe('runtime listen failure', () => {
 
   it('Bunはport 0で割り当てられた実portをlistenerとReadyログに反映する', async () => {
     const serve = vi.fn(() => ({ port: 43210, stop: () => undefined }))
-    vi.stubGlobal('Bun', { env: {}, version: 'test', serve })
+    vi.stubGlobal('Bun', { env: {}, version: '1.4.0', serve })
     const app = await bunRuntime.create({ application: usersDefinition() })
 
     try {
@@ -147,7 +147,7 @@ describe('runtime listen failure', () => {
     const ports: number[] = []
     vi.stubGlobal('Bun', {
       env: { NODE_ENV: 'test' },
-      version: '1.2.3',
+      version: '1.4.0',
       serve: ({ port }: { readonly port: number }) => {
         ports.push(port)
         throw addressInUseError()
@@ -168,7 +168,7 @@ describe('runtime listen failure', () => {
     const ports: number[] = []
     vi.stubGlobal('Bun', {
       env: { NODE_ENV: 'test' },
-      version: '1.2.3',
+      version: '1.4.0',
       serve: ({ port }: { readonly port: number }) => {
         ports.push(port)
         if (port < 3002) throw addressInUseError()
@@ -184,7 +184,7 @@ describe('runtime listen failure', () => {
       expect(startupOutput.join('\n')).toContain(
         'Server: http://127.0.0.1:3002',
       )
-      expect(startupOutput.join('\n')).toContain('Runtime: Bun 1.2.3')
+      expect(startupOutput.join('\n')).toContain('Runtime: Bun 1.4.0')
       expect(startupOutput.join('\n')).toContain('Environment: test')
       expectProcessSignalListeners(signalListeners, 1)
     } finally {
@@ -197,7 +197,7 @@ describe('runtime listen failure', () => {
     const signalListeners = currentProcessSignalListenerCounts()
     vi.stubGlobal('Bun', {
       env: { NODE_ENV: 'test' },
-      version: '1.2.3',
+      version: '1.4.0',
       serve: ({ port }: { readonly port: number }) => ({
         port,
         stop: () => undefined,

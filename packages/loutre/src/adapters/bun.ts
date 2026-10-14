@@ -31,7 +31,6 @@ import {
 type BunServer = {
   readonly port: number
   stop(closeActiveConnections?: boolean): void | Promise<void>
-  unref?(): void
 }
 
 export type BunCreateOptions<TDefinition extends ApplicationDefinition> = {
@@ -136,31 +135,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
     },
     closeApplication,
     closeResources: async (safeCleanupBoundaryReached, serverClosing) => {
-      if (!safeCleanupBoundaryReached || !server) return
-      const closingServer = server
-      let timer: ReturnType<typeof setTimeout> | undefined
-      try {
-        // Bun 1.3のserver側WebSocket close後はstopが未完了になるため、Kernel drain後も無期限には待たない。
-        // https://github.com/oven-sh/bun/issues/36223
-        await Promise.race([
-          serverClosing,
-          new Promise<void>((resolve, reject) => {
-            timer = setTimeout(() => {
-              try {
-                const forced = closingServer.stop(true)
-                closingServer.unref?.()
-                void Promise.resolve(forced).then(resolve, reject)
-                resolve()
-              } catch (error) {
-                reject(error)
-              }
-            }, options.forceShutdownTimeoutMs ?? 5_000)
-          }),
-        ])
-        if (server === closingServer) server = undefined
-      } finally {
-        clearTimeout(timer)
-      }
+      if (safeCleanupBoundaryReached) await serverClosing
     },
   })
   const close = shutdown.close.bind(shutdown)

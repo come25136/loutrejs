@@ -68,7 +68,7 @@ describe('Loutre CLI', () => {
 
   it.each([
     ['Node.js', undefined, 'node'],
-    ['Bun', { Bun: { version: '1.3.7' } }, 'bun'],
+    ['Bun', { Bun: { version: '1.4.0' } }, 'bun'],
   ])(
     'doctorでruntimeを省略すると実行中の%sを使用する',
     async (_runtime, globals, expected) => {

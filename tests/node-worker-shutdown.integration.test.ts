@@ -173,7 +173,7 @@ describe('Bun workerの終了フック', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
     vi.stubGlobal('Bun', {
       env: {},
-      version: 'test',
+      version: '1.4.0',
       serve: () => ({ port: 43210, stop: () => {} }),
     })
   })

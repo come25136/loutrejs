@@ -11,7 +11,11 @@ export { Container, DependencyResolutionError } from './di.js'
 export type { ContainerOptions } from './di.js'
 export { normalizeUnknownError } from './error.js'
 export type { NormalizedApplicationError } from './error.js'
-export { assertRuntimeEngine, detectRuntimeEngine } from './engine.js'
+export {
+  assertRuntimeEngine,
+  assertSupportedBunVersion,
+  detectRuntimeEngine,
+} from './engine.js'
 export type { RuntimeEngine } from './engine.js'
 export {
   ConsoleLoggerBackend,
