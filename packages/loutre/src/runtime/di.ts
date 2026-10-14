@@ -1,4 +1,6 @@
+import { currentInjectionContext } from '../core/injection.js'
 import {
+  InjectionContextError,
   isArgsClass,
   isEnvClass,
   runInInjectionContext,
@@ -6,6 +8,7 @@ import {
   type ArgsClass,
   type Class,
   type EnvClass,
+  type DependencyConsumer,
   type ProviderDescriptor,
   type TokenLike,
 } from '../core/index.js'
@@ -116,7 +119,7 @@ export class Container {
   }
 
   resolve<T>(token: TokenLike<T>, source?: string): T {
-    return this.#resolve(token, source)
+    return this.#resolve(token, source, [], currentInjectionContext()?.consumer)
   }
 
   get<T>(token: TokenLike<T>): T {
@@ -169,6 +172,7 @@ export class Container {
     token: TokenLike<T>,
     source?: string,
     lineage: readonly TokenLike[] = [],
+    inquirer?: DependencyConsumer,
   ): T {
     const cycleStart = lineage.indexOf(token)
     if (cycleStart >= 0) {
@@ -202,12 +206,12 @@ export class Container {
 
     const nextLineage = [...lineage, token]
     if (provider.scope !== 'application') {
-      return this.#create(provider, nextLineage) as T
+      return this.#create(provider, nextLineage, inquirer) as T
     }
     if (this.#applicationCache.has(token)) {
       return this.#applicationCache.get(token) as T
     }
-    const instance = this.#create(provider, nextLineage)
+    const instance = this.#create(provider, nextLineage, inquirer)
     this.#applicationCache.set(token, instance)
     return instance as T
   }
@@ -215,6 +219,7 @@ export class Container {
   #create(
     provider: ProviderDescriptor,
     lineage: readonly TokenLike[],
+    inquirer?: DependencyConsumer,
   ): unknown {
     try {
       return match(provider)
@@ -239,15 +244,35 @@ export class Container {
           )
         })
         .with({ kind: 'class' }, (candidate) => {
-          const value = this.#instantiate(candidate.useClass, lineage)
+          const value = this.#instantiate(
+            candidate.useClass,
+            lineage,
+            candidate.provide,
+            inquirer,
+          )
           this.#hooks.created?.(candidate, value)
           return value
         })
         .with({ kind: 'factory' }, (candidate) => {
           const dependencies = candidate.inject.map((token) =>
-            this.#resolve(token, tokenName(candidate.provide), lineage),
+            this.#resolve(
+              token,
+              tokenName(candidate.provide),
+              lineage,
+              candidate.provide,
+            ),
           )
-          const value = candidate.useFactory(...dependencies)
+          const value = runInInjectionContext(
+            {
+              consumer: candidate.provide,
+              ...(inquirer === undefined ? {} : { inquirer }),
+              resolve: (token) => {
+                // factoryの依存をModelで検証するinject宣言に限定し、実行時だけの依存追加を許さない。
+                throw new InjectionContextError(token)
+              },
+            },
+            () => candidate.useFactory(...dependencies),
+          )
           if (isThenable(value)) {
             throw new DependencyResolutionError(
               'LUTRE_DI_ASYNC_FACTORY: Async factory providers are not supported. Move asynchronous resource initialization to application lifecycle.',
@@ -261,6 +286,7 @@ export class Container {
             candidate.select.contract,
             tokenName(candidate.provide),
             lineage,
+            candidate.provide,
           ) as Record<string, unknown>
           const selected = input[candidate.select.key]
           const implementation = candidate.mapping[selected as PropertyKey]
@@ -269,7 +295,12 @@ export class Container {
               `No conditional Provider matches ${candidate.select.key}=${String(selected)}`,
             )
           }
-          const value = this.#instantiate(implementation, lineage)
+          const value = this.#instantiate(
+            implementation,
+            lineage,
+            candidate.provide,
+            inquirer,
+          )
           this.#hooks.created?.(candidate, value)
           return value
         })
@@ -282,7 +313,12 @@ export class Container {
     }
   }
 
-  #instantiate<T>(target: Class<T>, lineage: readonly TokenLike[]): T {
+  #instantiate<T>(
+    target: Class<T>,
+    lineage: readonly TokenLike[],
+    consumer: TokenLike,
+    inquirer?: DependencyConsumer,
+  ): T {
     if (target.length > 0) {
       throw new DependencyResolutionError(
         `LUTRE_DI_CONSTRUCTOR: ${target.name} has required constructor parameters. Declare framework dependencies with constructor default parameters using inject().`,
@@ -290,8 +326,10 @@ export class Container {
     }
     return runInInjectionContext(
       {
-        consumer: target,
-        resolve: (token) => this.#resolve(token, target.name, lineage),
+        consumer,
+        ...(inquirer === undefined ? {} : { inquirer }),
+        resolve: (token) =>
+          this.#resolve(token, target.name, lineage, consumer),
       },
       () => new target(),
     )

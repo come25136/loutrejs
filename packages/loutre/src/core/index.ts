@@ -62,6 +62,7 @@ export type {
 export {
   collectInjectedDependencies,
   inject,
+  injectInquirer,
   InjectionContextError,
   runInInjectionContext,
 } from './injection.js'

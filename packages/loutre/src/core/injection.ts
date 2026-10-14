@@ -10,6 +10,7 @@ export type DependencyConsumer = TokenLike | DependencyConsumerDescriptor
 
 export interface InjectionContext {
   readonly consumer: DependencyConsumer
+  readonly inquirer?: DependencyConsumer
   readonly resolve: <T>(token: TokenLike<T>) => T
   readonly record?: (
     consumer: DependencyConsumer,
@@ -19,7 +20,7 @@ export interface InjectionContext {
 
 const injectionContextKey = Symbol.for('loutre.injection-context')
 
-function currentInjectionContext(): InjectionContext | undefined {
+export function currentInjectionContext(): InjectionContext | undefined {
   return (globalThis as Record<PropertyKey, unknown>)[injectionContextKey] as
     | InjectionContext
     | undefined
@@ -64,6 +65,10 @@ export function inject<TToken extends TokenLike>(
   if (!context) throw new InjectionContextError(token)
   context.record?.(context.consumer, token)
   return context.resolve(token) as TokenValue<TToken>
+}
+
+export function injectInquirer(): DependencyConsumer | undefined {
+  return currentInjectionContext()?.inquirer
 }
 
 function dependencyProbeTarget() {}
