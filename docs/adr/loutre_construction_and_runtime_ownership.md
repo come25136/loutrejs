@@ -29,3 +29,13 @@ Kernelはsignalの文字列を受け取って終了lifecycleを実行する。pr
 signal登録の重複排除・解除・終了失敗の観測は、signal sourceを引数で受け取る共通の管理処理へまとめる。共通処理はprocessやHTTPへ依存しない。platformごとのlistener停止とKernel drainは各Adapterが引き続き所有する。
 
 手動closeまたはsignalを受けた後は、終了フックを再登録しない。Applicationごとに自分のhandlerだけを解除する。`process.exit()`による強制終了は、他のApplicationや埋め込みhostが所有するresourceまで終了するため採用しない。
+
+## 終了開始とcleanup境界を区別する
+
+Adapterが終了を始めた事実は、終了処理の成功・失敗と分けて保持する。Kernelが停止済みでもprovider lifecycleやnative resourceの終了が失敗することがあるため、例外だけを見て稼働中へ戻さない。`close()`の再試行は許可し、`serve()`による再開は拒否する。
+
+Kernelは終了失敗を`ApplicationShutdownError`として報告し、`safeCleanupBoundaryReached`でactive executionとExtension drainが安全なcleanup境界に到達したかを示す。Adapterがエラーのmessageを解析して判断する方式は採用しない。
+
+Node / Bunは終了開始時に新規HTTP受付を止める。Kernelが安全な境界へ到達した場合は、lifecycle失敗後もnative closeの完了を待ち、Kernelとplatformのエラーを集約する。NodeのDevtools transportはKernelの終了成否によらず解放する。
+
+境界未到達の場合は、native closeの未完了を無期限に待たず終了失敗を返す。Bunの`stop(true)`による強制切断とProvider cleanupは行わず、既存executionが完了してから手動`close()`で再試行する。Kernelのdraining状態と、そのexecutionが使うresourceの寿命を維持するためである。

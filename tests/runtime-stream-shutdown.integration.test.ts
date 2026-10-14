@@ -82,9 +82,9 @@ describe('runtime streaming shutdown lifetime', () => {
     ).resolves.toBeUndefined()
     await application.close()
     expect(fixture.events).toEqual([
+      'server.stop(false)',
       'iterator.return',
       'provider.destroy',
-      'server.stop(false)',
       'server.stop(true)',
       'server.unref',
     ])

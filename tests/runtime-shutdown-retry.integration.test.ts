@@ -47,6 +47,91 @@ describe('runtime shutdown retry', () => {
     await expect(application.close()).resolves.toBeUndefined()
   })
 
+  it('Nodeはsafe boundary未到達時にnative closeを無期限に待たず、再serveも拒否する', async () => {
+    const fixture = retryableShutdownFixture()
+    const application = await nodeRuntime.create({
+      application: fixture.definition,
+      forceShutdownTimeoutMs: 1,
+    })
+    const listener = await application.serve({ port: 0, shutdownHooks: false })
+    const originalClose = listener.server.close.bind(listener.server)
+    let completeNativeClose: (() => void) | undefined
+    listener.server.close = ((callback?: (error?: Error) => void) =>
+      originalClose((error) => {
+        completeNativeClose = () => callback?.(error)
+      })) as typeof listener.server.close
+    fixture.start(application)
+    try {
+      await expect(application.close()).rejects.toMatchObject({
+        errors: [
+          expect.objectContaining({ safeCleanupBoundaryReached: false }),
+        ],
+      })
+      expect(fixture.events).toEqual(['extension.drain'])
+      await expect(application.serve({ port: 0 })).rejects.toThrow(
+        'LUTRE_APP_STOPPED',
+      )
+      await vi.waitFor(() => expect(completeNativeClose).toBeDefined())
+      completeNativeClose!()
+      fixture.complete()
+      await expect(application.close()).rejects.toThrow(
+        'Node runtime shutdown failed',
+      )
+      await application.close()
+      expect(fixture.events).toContain('provider.destroy')
+    } finally {
+      completeNativeClose?.()
+      fixture.complete()
+      await application.close().catch(() => {})
+      await application.close()
+    }
+  })
+
+  it('Bunはdraining中に受付だけを止め、safe boundary到達前に強制stopしない', async () => {
+    let completeNativeStop: (() => void) | undefined
+    const pendingStop = new Promise<void>((resolve) => {
+      completeNativeStop = resolve
+    })
+    const stop = vi.fn(() => pendingStop)
+    vi.stubGlobal('Bun', {
+      env: {},
+      version: 'test',
+      serve: () => ({ port: 43210, stop }),
+    })
+    const fixture = retryableShutdownFixture()
+    const application = await bunRuntime.create({
+      application: fixture.definition,
+      forceShutdownTimeoutMs: 1,
+    })
+    await application.serve({ port: 0, shutdownHooks: false })
+    fixture.start(application)
+    try {
+      await expect(application.close()).rejects.toMatchObject({
+        errors: [
+          expect.objectContaining({ safeCleanupBoundaryReached: false }),
+        ],
+      })
+      expect(stop).toHaveBeenCalledExactlyOnceWith(false)
+      expect(fixture.events).toEqual(['extension.drain'])
+      await expect(application.serve({ port: 0 })).rejects.toThrow(
+        'LUTRE_APP_STOPPED',
+      )
+      completeNativeStop!()
+      fixture.complete()
+      await expect(application.close()).rejects.toThrow(
+        'Bun runtime shutdown failed',
+      )
+      await application.close()
+      expect(stop).toHaveBeenCalledExactlyOnceWith(false)
+      expect(fixture.events).toContain('provider.destroy')
+    } finally {
+      completeNativeStop?.()
+      fixture.complete()
+      await application.close().catch(() => {})
+      await application.close()
+    }
+  })
+
   it('Node adapterはserver closeの一時失敗後にcloseを再試行する', async () => {
     const application = await nodeRuntime.create({
       application: httpOnlyDefinition(),

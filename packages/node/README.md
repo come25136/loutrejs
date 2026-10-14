@@ -29,7 +29,9 @@ await app.close()
 
 TaskやQueueを持つApplicationも`nodeRuntime.create({ application })`で起動できます。`serve()`を呼ぶ必要はありません。
 
-SIGINT / SIGTERMを受けると`app.close(signal)`を実行し、Task・Queueの停止と終了lifecycleへsignalを渡します。手動の`close()`でもsignal handlerを解除します。終了失敗はApplicationのLoggerへ`error`と`signal`を記録し、手動の`close()`では例外として返します。Runtimeは`process.exit()`を呼ばないため、利用側で作成したtimerや外部resourceは終了lifecycleで解放してください。
+SIGINT / SIGTERMを受けると`app.close(signal)`を実行し、Task・Queueの停止と終了lifecycleへsignalを渡します。手動の`close()`でもsignal handlerを解除します。終了失敗はApplicationのLoggerへ`error`と`signal`を記録し、手動の`close()`では例外として返します。終了を開始したApplicationは、`close()`が失敗しても`serve()`で再開できません。lifecycle失敗後もlistenerとDevtools transportを回収し、エラーを集約します。drainが安全なcleanup境界に到達できない場合は、受付を停止したまま既存executionを保持し、完了後に`close()`を再試行できます。
+
+Runtimeは`process.exit()`を呼ばないため、利用側で作成したtimerや外部resourceは終了lifecycleで解放してください。
 
 埋め込み用途やテストでは`nodeRuntime.create({ application, shutdownHooks: false })`で無効にできます。既存の`serve({ shutdownHooks })`は指定時に設定を上書きし、省略時は`create()`の設定を維持します。
 

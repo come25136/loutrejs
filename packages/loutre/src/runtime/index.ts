@@ -36,3 +36,5 @@ export type {
   ProcessSignalSource,
   ShutdownSignal,
 } from './shutdown-hooks.js'
+export { ApplicationShutdownError, RuntimeShutdown } from './shutdown.js'
+export type { RuntimeShutdownOptions } from './shutdown.js'

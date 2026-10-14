@@ -1,3 +1,4 @@
+import { ApplicationShutdownError } from './shutdown.js'
 import {
   assertValidApplicationModel,
   loadArgs,
@@ -371,10 +372,10 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         await this.#executions.waitForIdle(this.#forceShutdownTimeoutMs)
       } catch (error) {
         errors.push(error)
-        throw new AggregateError(
+        throw new ApplicationShutdownError(
           errors,
           'Application shutdown did not reach a safe cleanup boundary.',
-          { cause: error },
+          { cause: error, safeCleanupBoundaryReached: false },
         )
       }
     }
@@ -382,10 +383,10 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       const cause = errors.find(
         (error) => error instanceof ExtensionDrainTimeoutError,
       )
-      throw new AggregateError(
+      throw new ApplicationShutdownError(
         errors,
         'Application shutdown did not reach a safe cleanup boundary.',
-        { cause },
+        { cause, safeCleanupBoundaryReached: false },
       )
     }
     for (const { extension } of [...this.model.extensions].toReversed()) {
@@ -397,7 +398,11 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     this.#state = 'stopped'
     await closeInstrumentation(this.#instrumentation)
     if (errors.length > 0) {
-      throw new AggregateError(errors, 'Application shutdown failed.')
+      throw new ApplicationShutdownError(
+        errors,
+        'Application shutdown failed.',
+        { safeCleanupBoundaryReached: true },
+      )
     }
   }
 

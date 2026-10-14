@@ -23,6 +23,7 @@ import {
 import {
   Logger,
   ProcessShutdownHooks,
+  RuntimeShutdown,
   assertRuntimeEngine,
   canRetryOnNextPort,
   initialServerPort,
@@ -120,8 +121,6 @@ async function create<const TDefinition extends ApplicationDefinition>(
   let server: Server | undefined
   const logger = options.application.logger ?? new Logger()
   let serving = false
-  let closed = false
-  let closingPromise: Promise<void> | undefined
   let serverClosingPromise: Promise<void> | undefined
   let serverListeningPromise: Promise<void> | undefined
 
@@ -145,44 +144,35 @@ async function create<const TDefinition extends ApplicationDefinition>(
     return serverClosingPromise
   }
 
-  const close = (signal?: string): Promise<void> => {
-    if (closed) return Promise.resolve()
-    if (closingPromise) return closingPromise
-
-    closingPromise = (async () => {
+  const shutdown = new RuntimeShutdown({
+    message: 'Node runtime shutdown failed',
+    beginClose: () => {
       shutdownHooks.dispose()
-      const errors: unknown[] = []
-      const serverClosing = beginServerClose()
-      try {
-        await closeApplication(signal)
-      } catch (error) {
-        errors.push(error)
-      }
-      if (errors.length === 0) {
-        try {
-          await serverClosing
-        } catch (error) {
-          errors.push(error)
-        } finally {
-          devtools?.closeTransport()
-        }
-      }
-      if (errors.length > 0) {
-        throw new AggregateError(errors, 'Node runtime shutdown failed')
-      }
-      closed = true
-    })().catch((error: unknown) => {
-      closingPromise = undefined
-      throw error
-    })
-
-    return closingPromise
-  }
+      return beginServerClose()
+    },
+    closeApplication,
+    closeResources: async (safeCleanupBoundaryReached, serverClosing) => {
+      const results = await Promise.allSettled([
+        safeCleanupBoundaryReached ? serverClosing : Promise.resolve(),
+        Promise.resolve().then(() => devtools?.closeTransport()),
+      ])
+      const errors = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      )
+      if (errors.length === 1) throw errors[0]
+      if (errors.length > 1)
+        throw new AggregateError(
+          errors,
+          'Node platform resource shutdown failed',
+        )
+    },
+  })
+  const close = shutdown.close.bind(shutdown)
 
   const serve = async (
     serveOptions: NodeServeOptions = {},
   ): Promise<NodeListenerHandle> => {
-    if (closed || closingPromise) {
+    if (shutdown.started) {
       throw new Error('LUTRE_APP_STOPPED: Application is stopped.')
     }
     if (serving) {
@@ -207,7 +197,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
             serveOptions.hostname,
           )
           await serverListeningPromise
-          if (closed || closingPromise) {
+          if (shutdown.started) {
             throw new Error('LUTRE_APP_STOPPED: Application is stopped.')
           }
           const address = server.address()
@@ -215,8 +205,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
           break
         } catch (error) {
           if (
-            closed ||
-            closingPromise ||
+            shutdown.started ||
             requestedPort !== undefined ||
             !canRetryOnNextPort(error, port)
           ) {

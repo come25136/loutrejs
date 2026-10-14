@@ -1,3 +1,4 @@
+import { RuntimeShutdown } from '../runtime/shutdown.js'
 import { ProcessShutdownHooks } from '../runtime/shutdown-hooks.js'
 import { Logger } from '../runtime/logger.js'
 import {
@@ -110,64 +111,64 @@ async function create<const TDefinition extends ApplicationDefinition>(
   let server: BunServer | undefined
   const logger = options.application.logger ?? new Logger()
   let serving = false
-  let closed = false
-  let closingPromise: Promise<void> | undefined
+  let serverClosingPromise: Promise<void> | undefined
 
-  const close = (signal?: string): Promise<void> => {
-    if (closed) return Promise.resolve()
-    if (closingPromise) return closingPromise
-
-    closingPromise = (async () => {
-      shutdownHooks.dispose()
-      const errors: unknown[] = []
-      try {
-        await closeApplication(signal)
-      } catch (error) {
-        errors.push(error)
-      }
-      if (server && errors.length === 0) {
-        let timer: ReturnType<typeof setTimeout> | undefined
-        try {
-          // Bun 1.3のserver側WebSocket close後はstopが未完了になるため、Kernel drain後も無期限には待たない。
-          // https://github.com/oven-sh/bun/issues/36223
-          await Promise.race([
-            Promise.resolve(server.stop(false)),
-            new Promise<void>((resolve, reject) => {
-              timer = setTimeout(() => {
-                try {
-                  const forced = server!.stop(true)
-                  server!.unref?.()
-                  void Promise.resolve(forced).then(resolve, reject)
-                  resolve()
-                } catch (error) {
-                  reject(error)
-                }
-              }, options.forceShutdownTimeoutMs ?? 5_000)
-            }),
-          ])
-          server = undefined
-        } catch (error) {
-          errors.push(error)
-        } finally {
-          clearTimeout(timer)
-        }
-      }
-      if (errors.length > 0) {
-        throw new AggregateError(errors, 'Bun runtime shutdown failed')
-      }
-      closed = true
+  const beginServerClose = (): Promise<void> => {
+    if (serverClosingPromise) return serverClosingPromise
+    if (!server) return Promise.resolve()
+    const closingServer = server
+    serverClosingPromise = (async () => {
+      await closingServer.stop(false)
+      if (server === closingServer) server = undefined
     })().catch((error: unknown) => {
-      closingPromise = undefined
+      serverClosingPromise = undefined
       throw error
     })
-
-    return closingPromise
+    void serverClosingPromise.catch(() => undefined)
+    return serverClosingPromise
   }
+
+  const shutdown = new RuntimeShutdown({
+    message: 'Bun runtime shutdown failed',
+    beginClose: () => {
+      shutdownHooks.dispose()
+      return beginServerClose()
+    },
+    closeApplication,
+    closeResources: async (safeCleanupBoundaryReached, serverClosing) => {
+      if (!safeCleanupBoundaryReached || !server) return
+      const closingServer = server
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        // Bun 1.3のserver側WebSocket close後はstopが未完了になるため、Kernel drain後も無期限には待たない。
+        // https://github.com/oven-sh/bun/issues/36223
+        await Promise.race([
+          serverClosing,
+          new Promise<void>((resolve, reject) => {
+            timer = setTimeout(() => {
+              try {
+                const forced = closingServer.stop(true)
+                closingServer.unref?.()
+                void Promise.resolve(forced).then(resolve, reject)
+                resolve()
+              } catch (error) {
+                reject(error)
+              }
+            }, options.forceShutdownTimeoutMs ?? 5_000)
+          }),
+        ])
+        if (server === closingServer) server = undefined
+      } finally {
+        clearTimeout(timer)
+      }
+    },
+  })
+  const close = shutdown.close.bind(shutdown)
 
   const serve = async (
     serveOptions: BunServeOptions = {},
   ): Promise<BunListenerHandle> => {
-    if (closed || closingPromise) {
+    if (shutdown.started) {
       throw new Error('LUTRE_APP_STOPPED: Application is stopped.')
     }
     if (serving) {
