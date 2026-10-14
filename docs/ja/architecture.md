@@ -200,7 +200,9 @@ const loggerProvider = provide(AppLogger).useClass(AppLogger, {
 
 `ServiceA`が`inject(AppLogger)`すると`AppLogger.consumer`は`ServiceA`になります。組み込みLoggerの`context.source`は従来どおり`AppLogger`です。factory providerでも`use`内から取得でき、依存は従来どおり`inject: [...]`で宣言します。
 
-Applicationの初期構築などconsumerがいない直接解決時と注入context外では`undefined`です。application scopeは共有されるため、consumerごとのmetadataが必要ならtransientを使ってください。取得した値は構築時に保存し、非同期処理の中から取得しないでください。Model構築の依存収集時にもconsumerはないため、依存の宣言をこの値で分岐させないでください。
+Applicationの初期構築などconsumerがいない直接解決時と注入context外では`undefined`です。application scopeは共有されるため、consumerごとのmetadataが必要ならtransientを使ってください。取得した値は構築時に保存し、非同期処理の中から取得しないでください。`injectInquirer()`はloggerのラベルなどの構築metadata専用です。Model構築時の依存収集にはconsumerが存在しないため、`inject()`するtokenや依存の有無をこの値で分岐させることはAPI契約外です。metadataを保存するコードと依存の宣言を分け、必要な依存は無条件で宣言してください。
+
+たとえば`injectInquirer() ? inject(Repository) : undefined`は利用できません。このような契約違反を自動検出・拒否する機構は未実装で、[Issue #139](https://github.com/come25136/loutrejs/issues/139)でModelとRuntimeの一致を検証する方針を扱います。
 
 ## EnvironmentとArguments
 

@@ -72,6 +72,7 @@ export function inject<TToken extends TokenLike>(
   return context.resolve(token, context.consumer) as TokenValue<TToken>
 }
 
+/** 依存宣言をconsumerで分岐させるとModelのprobeでは収集できないため、構築metadataの取得に限定する。 */
 export function injectInquirer(): DependencyConsumer | undefined {
   return currentInjectionContext()?.inquirer
 }

@@ -388,3 +388,49 @@ describe('依存元consumerの取得', () => {
     expect(() => inject(BROKEN)).toThrow(InjectionContextError)
   })
 })
+
+describe('consumer metadataとModelの依存宣言', () => {
+  it.each([true, false])(
+    'metadata保存と無条件injectはModelのvisibilityを維持する（export=%s）',
+    async (exported) => {
+      class Repository {}
+      class AppLogger {
+        readonly consumer = injectInquirer()
+        readonly repository = inject(Repository)
+      }
+      class Service {
+        readonly logger = inject(AppLogger)
+      }
+      const repository = defineModule({
+        providers: [Repository],
+        exports: exported ? [Repository] : [],
+      })
+      const feature = defineModule({
+        imports: [repository],
+        providers: [
+          provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
+          Service,
+        ],
+      })
+      const definition = defineApplication({ modules: [feature] })
+      const provider = definition.model.nodes.find(
+        (node) => node.kind === 'provider' && node.token === AppLogger,
+      )
+      expect(provider).toMatchObject({ dependencies: [Repository] })
+      if (!exported) {
+        expect(definition.model.diagnostics).toContainEqual(
+          expect.objectContaining({ code: 'LUTRE_MODULE_VISIBILITY' }),
+        )
+        return
+      }
+      expect(definition.model.diagnostics).toEqual([])
+      const app = await bootstrapApplication({ application: definition })
+      try {
+        expect(app.get(Service).logger.consumer).toBe(Service)
+        expect(app.get(Service).logger.repository).toBe(app.get(Repository))
+      } finally {
+        await app.close()
+      }
+    },
+  )
+})
