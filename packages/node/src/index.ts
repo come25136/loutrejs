@@ -21,6 +21,7 @@ import {
   startStartupPresentation,
 } from '@loutrejs/loutre/presentation'
 import {
+  Logger,
   assertRuntimeEngine,
   canRetryOnNextPort,
   initialServerPort,
@@ -32,6 +33,7 @@ export type NodeCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: TDefinition
   readonly environment?: unknown
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
+  readonly shutdownHooks?: boolean
   readonly forceShutdownTimeoutMs?: number
 } & BootstrapArguments<TDefinition>
 
@@ -116,16 +118,21 @@ async function create<const TDefinition extends ApplicationDefinition>(
   const closeApplication = application.close.bind(application)
   let server: Server | undefined
   let removeShutdownHooks: (() => void) | undefined
+  const logger = options.application.logger ?? new Logger()
   let serving = false
   let closed = false
   let closingPromise: Promise<void> | undefined
   let serverClosingPromise: Promise<void> | undefined
+  let serverListeningPromise: Promise<void> | undefined
 
   const beginServerClose = (): Promise<void> => {
     if (serverClosingPromise) return serverClosingPromise
-    if (!server?.listening) return Promise.resolve()
+    if (!server) return Promise.resolve()
     const closingServer = server
-    serverClosingPromise = closeServer(closingServer).then(
+    serverClosingPromise = (async () => {
+      await serverListeningPromise?.catch(() => undefined)
+      if (closingServer.listening) await closeServer(closingServer)
+    })().then(
       () => {
         if (server === closingServer) server = undefined
       },
@@ -176,7 +183,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
   const serve = async (
     serveOptions: NodeServeOptions = {},
   ): Promise<NodeListenerHandle> => {
-    if (closed) {
+    if (closed || closingPromise) {
       throw new Error('LUTRE_APP_STOPPED: Application is stopped.')
     }
     if (serving) {
@@ -185,6 +192,9 @@ async function create<const TDefinition extends ApplicationDefinition>(
       )
     }
     serving = true
+    if (serveOptions.shutdownHooks !== undefined) {
+      configureShutdownHooks(serveOptions.shutdownHooks)
+    }
     try {
       server = createNodeHttpServerDriver(http)
       if (websocket) websocketDriver.attach(server, websocket)
@@ -192,12 +202,25 @@ async function create<const TDefinition extends ApplicationDefinition>(
       let port = initialServerPort(requestedPort)
       while (true) {
         try {
-          await listenServer(server, port, serveOptions.hostname)
+          serverListeningPromise = listenServer(
+            server,
+            port,
+            serveOptions.hostname,
+          )
+          await serverListeningPromise
+          if (closed || closingPromise) {
+            throw new Error('LUTRE_APP_STOPPED: Application is stopped.')
+          }
           const address = server.address()
           if (address && typeof address !== 'string') port = address.port
           break
         } catch (error) {
-          if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
+          if (
+            closed ||
+            closingPromise ||
+            requestedPort !== undefined ||
+            !canRetryOnNextPort(error, port)
+          ) {
             throw error
           }
           port += 1
@@ -211,10 +234,6 @@ async function create<const TDefinition extends ApplicationDefinition>(
         startupDurationMs: performance.now() - startedAt,
       })
 
-      removeShutdownHooks =
-        serveOptions.shutdownHooks === false
-          ? undefined
-          : registerNodeShutdownHooks(close)
       return { server, port }
     } catch (error) {
       await close().catch(() => undefined)
@@ -222,12 +241,23 @@ async function create<const TDefinition extends ApplicationDefinition>(
     }
   }
 
+  const configureShutdownHooks = (enabled: boolean) => {
+    removeShutdownHooks?.()
+    removeShutdownHooks = enabled
+      ? registerNodeShutdownHooks(close, (error, signal) => {
+          logger.error('Node runtime shutdown failed', { error, signal })
+        })
+      : undefined
+  }
+
   Object.assign(application, { serve, close })
+  configureShutdownHooks(options.shutdownHooks !== false)
   return application
 }
 
 function registerNodeShutdownHooks(
   close: (signal: string) => Promise<void>,
+  onError: (error: unknown, signal: string) => void,
 ): () => void {
   const handlers = new Map<NodeJS.Signals, () => void>()
   const remove = () => {
@@ -237,7 +267,13 @@ function registerNodeShutdownHooks(
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     const handler = () => {
       remove()
-      void close(signal)
+      void close(signal).catch((error: unknown) => {
+        try {
+          onError(error, signal)
+        } catch (reportingError) {
+          console.error('Node runtime shutdown failed', error, reportingError)
+        }
+      })
     }
     handlers.set(signal, handler)
     process.once(signal, handler)

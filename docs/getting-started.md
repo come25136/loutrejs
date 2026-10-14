@@ -203,10 +203,10 @@ Registering the Trigger is enough: the Tasks Extension declares its referenced T
 Run a Task manually or start Trigger execution through the Extension-owned Host API:
 
 ```ts
-import { bootstrapApplication } from '@loutrejs/loutre'
+import { nodeRuntime } from '@loutrejs/node'
 import application, { cleanup } from './app.js'
 
-const app = await bootstrapApplication({ application })
+const app = await nodeRuntime.create({ application })
 await app.tasks.run(cleanup)
 await app.tasks.start()
 ```

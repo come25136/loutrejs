@@ -201,10 +201,10 @@ Triggerだけを登録すれば十分です。Tasks Extensionが参照先Taskを
 Taskのmanual executionとTrigger起動はExtension-owned Host APIから行います。
 
 ```ts
-import { bootstrapApplication } from '@loutrejs/loutre'
+import { nodeRuntime } from '@loutrejs/node'
 import application, { cleanup } from './app.js'
 
-const app = await bootstrapApplication({ application })
+const app = await nodeRuntime.create({ application })
 await app.tasks.run(cleanup)
 await app.tasks.start()
 ```
