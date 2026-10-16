@@ -9,6 +9,7 @@ import {
   type ExecutionContextView,
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
+  type ExecutionRuntimeBinding,
   type RuntimeCapabilityBinding,
   type SchemaOutput,
   type StandardSchemaV1,
@@ -509,10 +510,7 @@ function joinPath(parent: string, child: string): string {
 }
 
 function createWebSocketRuntime(
-  executions: readonly {
-    readonly id: string
-    readonly compiled: CompiledWebSocketExecution
-  }[],
+  bindings: readonly ExecutionRuntimeBinding<CompiledWebSocketExecution>[],
   driver: WebSocketServerDriver,
   applicationRuntime: ExecutionKernelRuntime,
 ): WebSocketExtensionRuntime {
@@ -528,7 +526,7 @@ function createWebSocketRuntime(
   const sessions = new Set<ActiveSession>()
   let state: 'running' | 'draining' | 'stopped' = 'running'
   const ingress = new IngressGate()
-  for (const execution of executions) {
+  for (const { execution, resolve } of bindings) {
     handlers.set(
       execution.id,
       runInInjectionContext(
@@ -538,14 +536,14 @@ function createWebSocketRuntime(
             id: `websocket:${execution.id}`,
             name: execution.id,
           },
-          resolve: (token) => applicationRuntime.resolve(token, execution.id),
+          resolve: (token, consumer) => resolve(token, { consumer }),
         },
         () => execution.compiled.factory() as never,
       ),
     )
   }
-  const routes = executions
-    .flatMap((execution) =>
+  const routes = bindings
+    .flatMap(({ execution }) =>
       execution.compiled.routes.map((route): RuntimeWebSocketRoute => ({
         executionId: execution.id,
         route,

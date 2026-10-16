@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { ApplicationDefinition, ApplicationModel } from '@loutrejs/loutre'
 import { isHttpContract } from '@loutrejs/loutre/http'
+import { assertSupportedBunVersion } from '@loutrejs/loutre/runtime'
 import {
   generateOpenApi,
   type OpenApiSource,
@@ -18,6 +19,7 @@ export async function runOpenApiCli(
   args: readonly string[],
   io: OpenApiCliIO,
 ): Promise<number> {
+  assertSupportedBunVersion()
   if (args.includes('--help') || args.includes('-h')) {
     io.stdout(openApiHelpText())
     return 0

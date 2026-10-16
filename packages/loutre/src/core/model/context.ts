@@ -1,7 +1,9 @@
 import type { Diagnostic } from '../diagnostic.js'
-import type { ModuleInstance } from '../module.js'
-import { asModuleInstance } from '../module.js'
-import type { ModuleTemplate } from '../module.js'
+import {
+  asModuleInstance,
+  type ModuleInput,
+  type ModuleInstance,
+} from '../module.js'
 import type { ProviderDescriptor } from '../provider.js'
 import type { TokenLike } from '../token.js'
 import type {
@@ -15,6 +17,7 @@ import type {
 export interface ModelBuildContext {
   readonly options: ApplicationModelBuildOptions
   readonly modules: readonly ModuleInstance[]
+  readonly imports: ReadonlyMap<ModuleInstance, readonly ModuleInstance[]>
   readonly moduleIds: ReadonlyMap<ModuleInstance, string>
   readonly nodes: ApplicationModelNode[]
   readonly edges: ApplicationModelEdge[]
@@ -25,26 +28,33 @@ export interface ModelBuildContext {
   nextProviderId(): string
 }
 
-function collectModules(
-  roots: readonly (ModuleInstance | ModuleTemplate<void>)[],
-): ModuleInstance[] {
-  const result: ModuleInstance[] = []
-  const seen = new Set<ModuleInstance>()
-  const visit = (candidate: ModuleInstance | ModuleTemplate<void>) => {
-    const module = asModuleInstance(candidate)
-    if (seen.has(module)) return
-    seen.add(module)
-    for (const imported of module.definition.imports ?? []) visit(imported)
-    result.push(module)
+function collectModules(roots: readonly ModuleInput[]) {
+  const modules: ModuleInstance[] = []
+  const imports = new Map<ModuleInstance, readonly ModuleInstance[]>()
+  const instances = new Map<ModuleInput, ModuleInstance>()
+  const normalize = (input: ModuleInput): ModuleInstance => {
+    const existing = instances.get(input)
+    if (existing) return existing
+    const instance = asModuleInstance(input)
+    instances.set(input, instance)
+    return instance
+  }
+  const visit = (input: ModuleInput) => {
+    const module = normalize(input)
+    if (imports.has(module)) return
+    const imported = (module.definition.imports ?? []).map(normalize)
+    imports.set(module, imported)
+    for (const child of imported) visit(child)
+    modules.push(module)
   }
   for (const root of roots) visit(root)
-  return result
+  return { modules, imports }
 }
 
 export function createModelBuildContext(
   options: ApplicationModelBuildOptions,
 ): ModelBuildContext {
-  const modules = collectModules(options.modules)
+  const { modules, imports } = collectModules(options.modules)
   const moduleIds = new Map(
     modules.map((module, index) => [module, `module:${index + 1}`]),
   )
@@ -52,6 +62,7 @@ export function createModelBuildContext(
   return {
     options,
     modules,
+    imports,
     moduleIds,
     nodes: [],
     edges: [],

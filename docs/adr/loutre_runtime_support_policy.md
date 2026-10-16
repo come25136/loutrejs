@@ -1,9 +1,10 @@
 # ADR: Runtime Support Policy
 
-- 状態: **ACCEPTED / DESIGN FROZEN**
+- 状態: **ACCEPTED**
 - 対象: Loutre v0.1
 - Base: `develop`
 - 日付: 2026-08-28 JST
+- 更新: 2026-10-15 JST
 
 v0.8.0からDenoのRuntime adapter、CLI host、initializer supportを終了する。
 
@@ -27,10 +28,10 @@ versionはsupport policyとCI matrixが管理する。`node-26`、`bun-1.4-stabl
 
 ## 1. Current support snapshot
 
-2026-08-28時点のsupport baselineは次の通り。
+2026-08-28時点のbaselineに、2026-10-15のBun minimum更新を反映したsupport範囲は次の通り。
 
 - Node.js: support中LTSは22 / 24、Primaryは24 LTS
-- Bun: current stable minor + previous stable minorとして1.3 / 1.4、Primaryは1.4
+- Bun: minimumは1.4.0、Primaryは現行stableの1.4
 - Electron: upstreamでsupport中のstable majorすべてとして42 / 43 / 44、Primaryは44
 - workerd: lockfile-pinned releaseを検証し、そのreleaseをPrimaryとする
 - AWS Lambda: AWSがGA提供するNode.js managed runtimeとしてnodejs22.x / nodejs24.x、Primaryはnodejs24.x
@@ -89,21 +90,19 @@ Bunのruntime conformanceと`create-loutre` native initializerは、それぞれ
 
 ## 3. Bun
 
-BunにはNode.jsと同じLTS modelを要求しない。
+Bunのminimum supportは1.4.0とし、Primaryは現行stable releaseとする。以前の「current stable minorとprevious stable minorを対象にする」方針から変更し、Bun 1.3のsupportは終了する。
 
-Loutreはcurrent stable minorとprevious stable minorをsupportする。
+Bun 1.3ではserver側からWebSocketを閉じるとnative `stop()`が完了しないため、frameworkにタイマー・強制stop・event loop参照解除の回避処理が必要だった。Bun 1.4.0では同じ再現が正常に完了する。旧runtimeの既知不具合をframeworkで補うより、minimumを引き上げてnative lifecycleをそのまま扱うことを優先する。
 
-2026-08-28時点ではBun 1.3 / 1.4をCIで検証する。
-
-minor更新時はmatrixをrolling updateする。
+CIはminimumの1.4.0と採用済みの現行stableを検証する。同じversionの場合は一度だけ検証し、新しいstableを採用したときにmatrixへ追加する。minimumの変更は本ADRとCI、generated projectのrequirementを同時に更新する。
 
 ```text
-1.3 + 1.4
-    ↓
-1.4 + 1.5
+1.4.0 (minimum / Primary)
+    ↓ 新しいstableの採用時
+1.4.0 (minimum) + 新しいstable (Primary)
 ```
 
-runtime identityは常に `bun` とする。
+Bun向けgenerated projectは`engines.bun: >=1.4.0`を宣言する。portable packageにはruntimeを限定するengine constraintを追加せず、Bun AdapterとCLI / initializerの実行入口で1.4.0未満を拒否する。runtime identityはversionを含めず、常に`bun`とする。
 
 ## 4. Electron
 
@@ -148,7 +147,7 @@ AWS Lambda adapterのidentityはmanaged runtime versionではなくサービスf
 
 CIはsupport policyを実際に検証する。
 
-2026-08-28時点のmatrix:
+Bun minimum更新後のmatrix（他runtimeは既存のbaseline）:
 
 ```text
 Node.js
@@ -157,7 +156,6 @@ Node.js
 └ 26.x (forward compatibility)
 
 Bun
-├ 1.3.14
 └ 1.4.0
 
 Electron

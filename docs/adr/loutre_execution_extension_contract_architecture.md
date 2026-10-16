@@ -307,7 +307,7 @@ Runtime support profileに記録する文字列はruntime featureの記述にも
 
 ```ts
 interface ExecutionExtensionRuntimeContext<TCompiled> {
-  readonly executions: readonly ExecutionContribution<TCompiled>[]
+  readonly executions: readonly ExecutionRuntimeBinding<TCompiled>[]
   readonly capabilities: RuntimeCapabilityBindings
   readonly applicationRuntime: ExecutionKernelRuntime
 }
@@ -452,7 +452,7 @@ WebSocket等のlong-lived executionでは、drainによるprotocol-specific grac
 
 `drain()`が失敗したfailure pathではactive executionが自然終了する保証を失うため、Kernelは残るLeaseをabortしてcooperative cancellationを要求する。`drain()`自体が永久pendingになる場合もfailure pathの外へ逃がさず、各Extensionの`drain()`を`forceShutdownTimeoutMs`（既定値5秒）で期限切れにし、`LUTRE_EXTENSION_DRAIN_TIMEOUT`としてdrain failureに扱う。その後もactive registryから強制削除せず、active executions == 0を安全境界として維持する。
 
-active executions == 0の待機は、`drain()`の成否にかかわらず`forceShutdownTimeoutMs`で期限を設ける。`drain()`成功は停止要求の受付完了を表し、個々のExecutionの完了までは保証しないためである。期限内にactive executions == 0へ到達すればExtension `close()`とProvider cleanupを続行し、drain errorまたはdrain timeoutを最後の`AggregateError`へ保持する。期限を超えた場合はExtension `close()`とProvider cleanupを実行せず、Applicationを`draining`に保ったまま`AggregateError`を返す。残存Executionが後で`complete()`した後はshutdownを再試行できる。このfailure pathでは「完了していないExecutionが利用中のProviderをcleanupしない」ことをtotal completionより優先する。
+active executions == 0の待機は、`drain()`の成否にかかわらず`forceShutdownTimeoutMs`で期限を設ける。`drain()`成功は停止要求の受付完了を表し、個々のExecutionの完了までは保証しないためである。期限内にactive executions == 0へ到達すればExtension `close()`とProvider cleanupを続行し、drain errorまたはdrain timeoutを最後の`ApplicationShutdownError`へ保持する。期限を超えた場合はExtension `close()`とProvider cleanupを実行せず、Applicationを`draining`に保ったまま同errorを返す。errorの`retryAfter`は、残存Executionの完了と進行中drainのsettleを通知する。手動closeは呼び出し元が再試行でき、signal起点はこの通知を使って自動継続する。終了処理の所有権とhostの最終強制終了期限との区別は[Runtime終了処理の所有権](./loutre_construction_and_runtime_ownership.md#終了開始とcleanup境界を区別する)を正本とする。完了していないExecutionが利用中のProviderはcleanupしない。
 
 初期化rollbackでは、構築済みProvider instanceと初期化完了済みModuleを追跡する。未到達ModuleのLifecycle hookを実行せず、cleanup dependency解決を通じて未初期化Providerを新規constructしない。
 

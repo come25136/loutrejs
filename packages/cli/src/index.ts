@@ -10,6 +10,7 @@ import type {
 import { hasErrorDiagnostics } from '@loutrejs/loutre'
 import { devtoolsOptionsOf } from '@loutrejs/loutre/devtools'
 import {
+  assertSupportedBunVersion,
   checkRuntimeSupport,
   detectRuntimeEngine,
   nodeRuntimeSupport,
@@ -146,6 +147,7 @@ export async function runCli(
   rawArgs: readonly string[],
   io: CliIO,
 ): Promise<number> {
+  assertSupportedBunVersion()
   if (rawArgs[0] === 'graphql') {
     const { runGraphQLCli } = await import('./graphql-cli.js')
     return runGraphQLCli(rawArgs.slice(1), io)

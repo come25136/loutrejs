@@ -38,16 +38,16 @@ const orderConsumer = consume({
   task: processOrder,
 })
 
-const QueueModule = defineModule(() => ({
+const QueueModule = defineModule({
   providers: [
     bindBullMqQueue(orders, {
       connection: { host: '127.0.0.1', port: 6379 },
     }),
   ],
   executions: [orderConsumer],
-}))
+})
 
-export default defineApplication({ modules: [QueueModule()] })
+export default defineApplication({ modules: [QueueModule] })
 ```
 
 Trigger execution is started through the Tasks Extension Host API:

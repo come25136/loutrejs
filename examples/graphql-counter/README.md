@@ -17,7 +17,7 @@ HTTPはhttp://127.0.0.1:3000/graphql、WebSocketはws://127.0.0.1:3000/graphql�
 
 ## Serverの構成
 
-- [contracts/counter.graphql](./contracts/counter.graphql): 共有するAPI契約。
+- [contracts/counter.graphql](./contracts/counter.graphql): 共有するAPI contract。
 - [graphql.config.ts](./graphql.config.ts): server型生成とdomain mapping。
 - [src/domain/counter.ts](./src/domain/counter.ts): valueとstepIdを持つdomainと変更通知。
 - [src/domain/step.ts](./src/domain/step.ts): 関連するStepの一括取得。

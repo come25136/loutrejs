@@ -2,7 +2,7 @@
 
 A minimal long-running Application using the official Tasks Execution Extension.
 
-Only the `fixedDelay` trigger is registered in `Module.executions`; its referenced `hello` Task is included automatically in the Application Model. `src/main.ts` starts the portable Kernel Application with `bootstrapApplication()` and starts trigger execution through `app.tasks.start()`.
+`Module.executions`へ登録するのは`fixedDelay` Triggerだけです。参照先の`hello` TaskはApplication Modelへ自動で含まれます。`src/main.ts`は`nodeRuntime.create()`で起動し、`app.tasks.start()`でTriggerを開始します。SIGINT / SIGTERMによるTask停止と終了lifecycleはNode Runtimeが管理します。
 
 From this example directory, start the worker in development mode:
 

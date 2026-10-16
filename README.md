@@ -32,12 +32,12 @@ LoutreではApplication DefinitionをRuntime固有の起動処理から分離し
 たとえば、HTTP executionと定期Taskを同じApplication Modelへ登録します。
 
 ```ts
-const WorkerModule = defineModule(() => ({
+const WorkerModule = defineModule({
   executions: [cleanup, heartbeat],
-}))
+})
 
 export default defineApplication({
-  modules: [ApiModule(), WorkerModule()],
+  modules: [ApiModule, WorkerModule],
 })
 ```
 

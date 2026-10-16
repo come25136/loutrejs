@@ -23,6 +23,7 @@ export type {
   AnyExecutionExtension,
   ExecutionCompileContext,
   ExecutionContribution,
+  ExecutionRuntimeBinding,
   ExecutionDefinition,
   ExecutionDeclaration,
   ExecutionGroup,
@@ -62,12 +63,15 @@ export type {
 export {
   collectInjectedDependencies,
   inject,
+  injectInquirer,
   InjectionContextError,
   runInInjectionContext,
 } from './injection.js'
 export type {
   DependencyConsumer,
   DependencyConsumerDescriptor,
+  DependencyResolutionContext,
+  DependencyResolver,
   InjectionContext,
 } from './injection.js'
 export { hook } from './lifecycle.js'
@@ -107,6 +111,7 @@ export type {
   ModuleExtensions,
   ModuleHostApis,
   ModuleInstance,
+  ModuleInput,
   ModuleTemplate,
   ModuleTypeInfo,
 } from './module.js'

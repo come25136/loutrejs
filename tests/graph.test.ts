@@ -58,7 +58,7 @@ describe('Application Model graph', () => {
       (node) => node.kind === 'provider' && node.token === STORAGE,
     )
 
-    expect(storage).toMatchObject({ dependencies: [MISSING] })
+    expect(storage).toMatchObject({ dependencies: [Env, MISSING] })
     expect(model.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_PROVIDER_DEPENDENCY_MISSING' }),
     )

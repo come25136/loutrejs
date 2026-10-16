@@ -11,7 +11,11 @@ export { Container, DependencyResolutionError } from './di.js'
 export type { ContainerOptions } from './di.js'
 export { normalizeUnknownError } from './error.js'
 export type { NormalizedApplicationError } from './error.js'
-export { assertRuntimeEngine, detectRuntimeEngine } from './engine.js'
+export {
+  assertRuntimeEngine,
+  assertSupportedBunVersion,
+  detectRuntimeEngine,
+} from './engine.js'
 export type { RuntimeEngine } from './engine.js'
 export {
   ConsoleLoggerBackend,
@@ -30,3 +34,11 @@ export type { ApplicationKernelRuntimeOptions } from './kernel.js'
 export { nodeRuntimeSupport } from './node-capabilities.js'
 export { canRetryOnNextPort, initialServerPort } from './server-port.js'
 export { serverUrl } from './server-url.js'
+export { ProcessShutdownHooks } from './shutdown-hooks.js'
+export type {
+  ProcessShutdownHooksOptions,
+  ProcessSignalSource,
+  ShutdownSignal,
+} from './shutdown-hooks.js'
+export { ApplicationShutdownError, RuntimeShutdown } from './shutdown.js'
+export type { RuntimeShutdownOptions } from './shutdown.js'

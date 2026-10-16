@@ -22,7 +22,7 @@ export function resolveModuleExports(context: ModelBuildContext): void {
       if (
         provider &&
         providerModule &&
-        isTokenVisible(module, providerModule, exported as TokenLike)
+        isTokenVisible(context, module, providerModule, exported as TokenLike)
       ) {
         edges.push({ from: moduleId, to: provider.id, kind: 'exports' })
         continue
@@ -84,7 +84,7 @@ export function resolveProviderDependencies(context: ModelBuildContext): void {
           targetModule &&
           target.moduleId !== provider.moduleId &&
           !moduleDeclaresToken(sourceModule, dependency) &&
-          !isTokenVisible(sourceModule, targetModule, dependency)
+          !isTokenVisible(context, sourceModule, targetModule, dependency)
         ) {
           diagnostics.push(
             diagnostic(

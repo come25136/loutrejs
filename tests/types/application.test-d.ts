@@ -262,3 +262,41 @@ cron({
   timezone: 'UTC',
   task: wrongTrigger,
 })
+
+const StaticHttpModule = defineModule({ executions: [HealthHttp] })
+const DynamicWorkerModule = defineModule((name: string) => ({
+  name,
+  executions: [calculate],
+}))
+const StaticRootModule = defineModule({
+  imports: [StaticHttpModule, DynamicWorkerModule('Worker')],
+})
+const staticApp = createKernelApplication({
+  application: defineApplication({ modules: [StaticRootModule] }),
+})
+staticApp.http.fetch(new Request('http://localhost/health'))
+const taskResult: Promise<number> = staticApp.tasks.run(calculate, 1)
+void taskResult
+// @ts-expect-error 静的Moduleにインスタンス化の括弧は不要
+StaticHttpModule()
+// @ts-expect-error 動的Moduleの引数はstring
+DynamicWorkerModule(123)
+// @ts-expect-error 動的Moduleは引数を渡してからApplicationへ登録する
+defineApplication({ modules: [DynamicWorkerModule] })
+// @ts-expect-error 動的Moduleは引数を渡してからimportsへ登録する
+defineModule({ imports: [DynamicWorkerModule] })
+const staticHttpApp = createKernelApplication({
+  application: defineApplication({ modules: [StaticHttpModule] }),
+})
+staticHttpApp.http.fetch(new Request('http://localhost/health'))
+// @ts-expect-error HTTPのみの静的ModuleにはTasks Host APIは無い
+staticHttpApp.tasks
+const legacyTemplateApp = createKernelApplication({
+  application: defineApplication({ modules: [HttpModule] }),
+})
+legacyTemplateApp.http.fetch(new Request('http://localhost/health'))
+nodeRuntime.create({
+  application: workerDefinition,
+  arguments: { instance: 'worker' },
+  shutdownHooks: false,
+})

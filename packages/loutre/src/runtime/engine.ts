@@ -59,8 +59,30 @@ export function assertRuntimeEngine(
   expected: Exclude<RuntimeEngine, 'unknown'>,
 ): void {
   const actual = detectRuntimeEngine()
-  if (actual === expected) return
+  if (actual === expected) {
+    assertSupportedBunVersion()
+    return
+  }
   throw new Error(
     `LUTRE_RUNTIME_MISMATCH: Expected ${runtimeLabels[expected]}, detected ${runtimeLabels[actual]}.`,
+  )
+}
+
+export function assertSupportedBunVersion(): void {
+  if (detectRuntimeEngine() !== 'bun') return
+  const globals = globalThis as typeof globalThis & {
+    readonly Bun?: { readonly version?: string }
+    readonly process?: { readonly versions?: { readonly bun?: string } }
+  }
+  const version = globals.Bun?.version ?? globals.process?.versions?.bun
+  const release = version?.match(/^(\d+)\.(\d+)\.(\d+)(?:\+[\w.-]+)?$/)
+  if (
+    release &&
+    (Number(release[1]) > 1 ||
+      (Number(release[1]) === 1 && Number(release[2]) >= 4))
+  )
+    return
+  throw new Error(
+    `LUTRE_RUNTIME_VERSION: Bun ${version ?? 'unknown'} is not supported. Bun >=1.4.0 (stable) is required.`,
   )
 }

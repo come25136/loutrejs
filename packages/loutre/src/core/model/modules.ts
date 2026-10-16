@@ -1,6 +1,5 @@
 import { collectInjectedDependencies } from '../injection.js'
 import { diagnostic } from '../diagnostic.js'
-import { asModuleInstance } from '../module.js'
 import { normalizeProvider, type ProviderDescriptor } from '../provider.js'
 import type { TokenLike } from '../token.js'
 import { tokenName } from '../token.js'
@@ -36,7 +35,8 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
       }
       moduleNames.add(module.definition.name)
     }
-    const moduleSource = getSourceLocation(module.template)
+    const moduleSource =
+      getSourceLocation(module) ?? getSourceLocation(module.template)
     nodes.push({
       kind: 'module',
       id: moduleId,
@@ -48,8 +48,8 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
         ? {}
         : { description: module.definition.description }),
     })
-    for (const imported of module.definition.imports ?? []) {
-      const target = moduleIds.get(asModuleInstance(imported))
+    for (const imported of context.imports.get(module) ?? []) {
+      const target = moduleIds.get(imported)
       if (target) edges.push({ from: moduleId, to: target, kind: 'imports' })
     }
     for (const declaration of module.definition.providers ?? []) {
@@ -121,8 +121,9 @@ function collectProviderDependencies(
       Object.freeze([...candidate.inject]),
     )
     .with({ kind: 'conditional' }, (candidate) => {
-      const dependencies = new Set<TokenLike>()
-      for (const implementation of Object.values(candidate.mapping)) {
+      const dependencies = new Set<TokenLike>([candidate.select.contract])
+      for (const key of Reflect.ownKeys(candidate.mapping)) {
+        const implementation = candidate.mapping[key]!
         for (const dependency of collectInjectedDependencies(
           candidate.provide,
           () => Reflect.construct(implementation, []),

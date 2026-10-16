@@ -1,4 +1,5 @@
-import { asModuleInstance, type ModuleInstance } from '../module.js'
+import type { ModuleInstance } from '../module.js'
+import type { ModelBuildContext } from './context.js'
 import { normalizeProvider } from '../provider.js'
 import type { TokenLike } from '../token.js'
 
@@ -12,6 +13,7 @@ export function moduleDeclaresToken(
 }
 
 export function isTokenVisible(
+  context: ModelBuildContext,
   source: ModuleInstance,
   target: ModuleInstance,
   token: TokenLike,
@@ -19,11 +21,11 @@ export function isTokenVisible(
 ): boolean {
   if (visited.has(source)) return false
   visited.add(source)
-  for (const importedValue of source.definition.imports ?? []) {
-    const imported = asModuleInstance(importedValue)
+  for (const imported of context.imports.get(source) ?? []) {
     if (!imported.definition.exports?.includes(token)) continue
     if (imported === target) return true
-    if (isTokenVisible(imported, target, token, new Set(visited))) return true
+    if (isTokenVisible(context, imported, target, token, new Set(visited)))
+      return true
   }
   return false
 }

@@ -53,7 +53,7 @@ export function resolveLifecycleDependencies(context: ModelBuildContext): void {
           providerModule &&
           provider.moduleId !== lifecycle.moduleId &&
           !moduleDeclaresToken(sourceModule, dependency) &&
-          !isTokenVisible(sourceModule, providerModule, dependency)
+          !isTokenVisible(context, sourceModule, providerModule, dependency)
         ) {
           diagnostics.push(
             diagnostic(
