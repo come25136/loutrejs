@@ -41,8 +41,9 @@ describe('runtime streaming shutdown lifetime', () => {
     expect(fixture.events).toEqual(['iterator.return', 'provider.destroy'])
   })
 
-  it('Bunのnative stopが完了しなくてもexecutionとproviderを回収して終了する', async () => {
+  it('BunはKernel drainでSSEを回収した後にnative stopの完了を待つ', async () => {
     const fixture = blockingSseFixture()
+    let completeNativeStop: (() => void) | undefined
     let handler:
       | ((
           request: Request,
@@ -51,17 +52,16 @@ describe('runtime streaming shutdown lifetime', () => {
       | undefined
     vi.stubGlobal('Bun', {
       env: {},
-      version: 'test',
+      version: '1.4.0',
       serve(options: { port: number; fetch: NonNullable<typeof handler> }) {
         handler = options.fetch
         return {
           port: options.port,
           stop(force: boolean) {
             fixture.events.push(`server.stop(${force})`)
-            return new Promise<void>(() => {})
-          },
-          unref() {
-            fixture.events.push('server.unref')
+            return new Promise<void>((resolve) => {
+              completeNativeStop = resolve
+            })
           },
         }
       },
@@ -77,16 +77,20 @@ describe('runtime streaming shutdown lifetime', () => {
     )
     const reader = response!.body!.getReader()
     await reader.read()
-    await expect(
-      withHangGuard(application.close(), 500),
-    ).resolves.toBeUndefined()
+    const closing = application.close()
+    let settled = false
+    void closing.then(() => {
+      settled = true
+    })
+    await vi.waitFor(() => expect(fixture.events).toContain('provider.destroy'))
+    expect(settled).toBe(false)
+    completeNativeStop!()
+    await expect(withHangGuard(closing, 500)).resolves.toBeUndefined()
     await application.close()
     expect(fixture.events).toEqual([
+      'server.stop(false)',
       'iterator.return',
       'provider.destroy',
-      'server.stop(false)',
-      'server.stop(true)',
-      'server.unref',
     ])
   })
 })

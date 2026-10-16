@@ -3,13 +3,13 @@ import { UserRepository } from './auth/repository.js'
 import { AppEnv } from './config/env.js'
 import { ProfileController } from './profile/controller.js'
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   environment: [AppEnv],
   providers: [UserRepository],
   description: 'Example profile API protected by Basic authentication',
   executions: [ProfileController],
-}))
+})
 
 export default defineApplication({
-  modules: [AppModule()],
+  modules: [AppModule],
 })

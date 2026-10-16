@@ -1,3 +1,6 @@
+import { RuntimeShutdown } from '../runtime/shutdown.js'
+import { ProcessShutdownHooks } from '../runtime/shutdown-hooks.js'
+import { Logger } from '../runtime/logger.js'
 import {
   createBunWebSocketDriver,
   type BunUpgradeServer,
@@ -28,13 +31,13 @@ import {
 type BunServer = {
   readonly port: number
   stop(closeActiveConnections?: boolean): void | Promise<void>
-  unref?(): void
 }
 
 export type BunCreateOptions<TDefinition extends ApplicationDefinition> = {
   readonly application: TDefinition
   readonly environment?: unknown
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
+  readonly shutdownHooks?: boolean
   readonly forceShutdownTimeoutMs?: number
 } & BootstrapArguments<TDefinition>
 
@@ -105,67 +108,42 @@ async function create<const TDefinition extends ApplicationDefinition>(
 
   const closeApplication = application.close.bind(application)
   let server: BunServer | undefined
-  let removeShutdownHooks: (() => void) | undefined
+  const logger = options.application.logger ?? new Logger()
   let serving = false
-  let closed = false
-  let closingPromise: Promise<void> | undefined
+  let serverClosingPromise: Promise<void> | undefined
 
-  const close = (signal?: string): Promise<void> => {
-    if (closed) return Promise.resolve()
-    if (closingPromise) return closingPromise
-
-    closingPromise = (async () => {
-      removeShutdownHooks?.()
-      removeShutdownHooks = undefined
-      const errors: unknown[] = []
-      try {
-        await closeApplication(signal)
-      } catch (error) {
-        errors.push(error)
-      }
-      if (server && errors.length === 0) {
-        let timer: ReturnType<typeof setTimeout> | undefined
-        try {
-          // Bun 1.3のserver側WebSocket close後はstopが未完了になるため、Kernel drain後も無期限には待たない。
-          // https://github.com/oven-sh/bun/issues/36223
-          await Promise.race([
-            Promise.resolve(server.stop(false)),
-            new Promise<void>((resolve, reject) => {
-              timer = setTimeout(() => {
-                try {
-                  const forced = server!.stop(true)
-                  server!.unref?.()
-                  void Promise.resolve(forced).then(resolve, reject)
-                  resolve()
-                } catch (error) {
-                  reject(error)
-                }
-              }, options.forceShutdownTimeoutMs ?? 5_000)
-            }),
-          ])
-          server = undefined
-        } catch (error) {
-          errors.push(error)
-        } finally {
-          clearTimeout(timer)
-        }
-      }
-      if (errors.length > 0) {
-        throw new AggregateError(errors, 'Bun runtime shutdown failed')
-      }
-      closed = true
+  const beginServerClose = (): Promise<void> => {
+    if (serverClosingPromise) return serverClosingPromise
+    if (!server) return Promise.resolve()
+    const closingServer = server
+    serverClosingPromise = (async () => {
+      await closingServer.stop(false)
+      if (server === closingServer) server = undefined
     })().catch((error: unknown) => {
-      closingPromise = undefined
+      serverClosingPromise = undefined
       throw error
     })
-
-    return closingPromise
+    void serverClosingPromise.catch(() => undefined)
+    return serverClosingPromise
   }
+
+  const shutdown = new RuntimeShutdown({
+    message: 'Bun runtime shutdown failed',
+    beginClose: () => {
+      shutdownHooks.dispose()
+      return beginServerClose()
+    },
+    closeApplication,
+    closeResources: async (safeCleanupBoundaryReached, serverClosing) => {
+      if (safeCleanupBoundaryReached) await serverClosing
+    },
+  })
+  const close = shutdown.close.bind(shutdown)
 
   const serve = async (
     serveOptions: BunServeOptions = {},
   ): Promise<BunListenerHandle> => {
-    if (closed) {
+    if (shutdown.started) {
       throw new Error('LUTRE_APP_STOPPED: Application is stopped.')
     }
     if (serving) {
@@ -178,6 +156,9 @@ async function create<const TDefinition extends ApplicationDefinition>(
       throw new Error('LUTRE_BUN_UNAVAILABLE: Bun.serve() is not available.')
     }
     serving = true
+    if (serveOptions.shutdownHooks !== undefined) {
+      shutdownHooks.setEnabled(serveOptions.shutdownHooks)
+    }
     try {
       const requestedPort = serveOptions.port
       let port = initialServerPort(requestedPort)
@@ -213,10 +194,6 @@ async function create<const TDefinition extends ApplicationDefinition>(
         environment: environment.NODE_ENV ?? 'development',
         startupDurationMs: performance.now() - startedAt,
       })
-      removeShutdownHooks =
-        serveOptions.shutdownHooks === false
-          ? undefined
-          : registerBunShutdownHooks(close)
       return { port }
     } catch (error) {
       await close().catch(() => undefined)
@@ -224,27 +201,16 @@ async function create<const TDefinition extends ApplicationDefinition>(
     }
   }
 
-  Object.assign(application, { serve, close })
-  return application
-}
+  const shutdownHooks = new ProcessShutdownHooks({
+    source: process,
+    close,
+    onError: (error, signal) =>
+      logger.error('Bun runtime shutdown failed', { error, signal }),
+  })
 
-function registerBunShutdownHooks(
-  close: (signal: string) => Promise<void>,
-): () => void {
-  const handlers = new Map<NodeJS.Signals, () => void>()
-  const remove = () => {
-    for (const [signal, handler] of handlers) process.off(signal, handler)
-    handlers.clear()
-  }
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    const handler = () => {
-      remove()
-      void close(signal)
-    }
-    handlers.set(signal, handler)
-    process.once(signal, handler)
-  }
-  return remove
+  Object.assign(application, { serve, close })
+  shutdownHooks.setEnabled(options.shutdownHooks !== false)
+  return application
 }
 
 function bunGlobal():

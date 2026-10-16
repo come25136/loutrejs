@@ -109,6 +109,7 @@ function targetManifest(target: ProjectTarget): TargetManifest {
         start: 'bun dist/main.js',
       },
       devDependencies: { '@types/bun': '^1.4.0' },
+      engines: { bun: '>=1.4.0' },
       types: ['bun'],
     }))
     .with('cloudflare-workers', () => ({

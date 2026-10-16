@@ -4,11 +4,11 @@ import { PostgresDatabase } from './database/postgres.js'
 import { UsersController } from './users/controller.js'
 import { UserRepository } from './users/repository.js'
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   name: 'DatabasePostgresExample',
   environment: [AppEnv],
   providers: [PostgresDatabase, UserRepository],
   executions: [UsersController],
-}))
+})
 
-export default defineApplication({ modules: [AppModule()] })
+export default defineApplication({ modules: [AppModule] })

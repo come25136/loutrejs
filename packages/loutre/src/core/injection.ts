@@ -8,9 +8,15 @@ export interface DependencyConsumerDescriptor {
 
 export type DependencyConsumer = TokenLike | DependencyConsumerDescriptor
 
+export interface DependencyResolutionContext {
+  readonly source?: string
+  readonly consumer?: DependencyConsumer
+}
+
 export interface InjectionContext {
   readonly consumer: DependencyConsumer
-  readonly resolve: <T>(token: TokenLike<T>) => T
+  readonly inquirer?: DependencyConsumer
+  readonly resolve?: <T>(token: TokenLike<T>, consumer: DependencyConsumer) => T
   readonly record?: (
     consumer: DependencyConsumer,
     dependency: TokenLike,
@@ -51,7 +57,7 @@ export class InjectionContextError extends Error {
 
   constructor(token: TokenLike) {
     super(
-      `inject(${typeof token === 'function' ? token.name : token.id}) was called outside a Loutre injection context.`,
+      `inject(${typeof token === 'function' ? token.name : token.id}) requires a Loutre injection context with a dependency resolver.`,
     )
     this.name = 'InjectionContextError'
   }
@@ -61,9 +67,14 @@ export function inject<TToken extends TokenLike>(
   token: TToken,
 ): TokenValue<TToken> {
   const context = currentInjectionContext()
-  if (!context) throw new InjectionContextError(token)
+  if (!context?.resolve) throw new InjectionContextError(token)
   context.record?.(context.consumer, token)
-  return context.resolve(token) as TokenValue<TToken>
+  return context.resolve(token, context.consumer) as TokenValue<TToken>
+}
+
+/** 依存宣言をconsumerで分岐させるとModelのprobeでは収集できないため、構築metadataの取得に限定する。 */
+export function injectInquirer(): DependencyConsumer | undefined {
+  return currentInjectionContext()?.inquirer
 }
 
 function dependencyProbeTarget() {}

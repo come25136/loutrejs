@@ -1,3 +1,4 @@
+import { ApplicationShutdownError } from './shutdown.js'
 import {
   assertValidApplicationModel,
   loadArgs,
@@ -22,6 +23,7 @@ import {
   type RuntimeInvocationRegistration,
   type RuntimeOperationMetadata,
   type TokenLike,
+  type DependencyResolutionContext,
 } from '../core/index.js'
 import { Container } from './di.js'
 import { ExecutionTracker } from './execution-tracker.js'
@@ -219,11 +221,14 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     }
   }
 
-  resolve<TValue>(token: TokenLike<TValue>, source?: string): TValue {
+  resolve<TValue>(
+    token: TokenLike<TValue>,
+    context?: string | DependencyResolutionContext,
+  ): TValue {
     if (this.#state === 'created' || this.#state === 'stopped') {
       throw applicationStateError(this.#state)
     }
-    return this.container.resolve(token, source)
+    return this.container.resolve(token, context)
   }
 
   get<TValue>(token: TokenLike<TValue>): TValue {
@@ -367,10 +372,14 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         await this.#executions.waitForIdle(this.#forceShutdownTimeoutMs)
       } catch (error) {
         errors.push(error)
-        throw new AggregateError(
+        throw new ApplicationShutdownError(
           errors,
           'Application shutdown did not reach a safe cleanup boundary.',
-          { cause: error },
+          {
+            cause: error,
+            safeCleanupBoundaryReached: false,
+            retryAfter: this.#waitForShutdownProgress(),
+          },
         )
       }
     }
@@ -378,10 +387,14 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       const cause = errors.find(
         (error) => error instanceof ExtensionDrainTimeoutError,
       )
-      throw new AggregateError(
+      throw new ApplicationShutdownError(
         errors,
         'Application shutdown did not reach a safe cleanup boundary.',
-        { cause },
+        {
+          cause,
+          safeCleanupBoundaryReached: false,
+          retryAfter: this.#waitForShutdownProgress(),
+        },
       )
     }
     for (const { extension } of [...this.model.extensions].toReversed()) {
@@ -393,8 +406,21 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     this.#state = 'stopped'
     await closeInstrumentation(this.#instrumentation)
     if (errors.length > 0) {
-      throw new AggregateError(errors, 'Application shutdown failed.')
+      throw new ApplicationShutdownError(
+        errors,
+        'Application shutdown failed.',
+        { safeCleanupBoundaryReached: true },
+      )
     }
+  }
+
+  async #waitForShutdownProgress(): Promise<void> {
+    await Promise.allSettled([
+      this.#executions.waitForIdle(),
+      ...[...this.#extensionDrainOperations.values()].map(
+        ({ result }) => result,
+      ),
+    ])
   }
 
   #startExtensionDrain(

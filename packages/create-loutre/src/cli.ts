@@ -3,6 +3,7 @@ import { relative } from 'node:path'
 import { select, text } from '@clack/prompts'
 import { Command, CommanderError, Option } from 'commander'
 import { bootstrapApplication } from '@loutrejs/loutre'
+import { assertSupportedBunVersion } from '@loutrejs/loutre/runtime'
 import {
   detectPresentationTerminal,
   renderLoutreBrand,
@@ -51,6 +52,7 @@ export async function runCreateLoutre(
   args: readonly string[],
   io: CreateLoutreCliIO = createProcessIO(),
 ): Promise<number> {
+  assertSupportedBunVersion()
   const parsed = parseArgs(args)
   if ('error' in parsed) {
     io.stderr(parsed.error)

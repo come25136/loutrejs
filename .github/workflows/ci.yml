@@ -190,7 +190,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [1.3.14, 1.4.0]
+        version: [1.4.0]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -232,6 +232,7 @@ jobs:
           BUN_BIN="$(command -v bun)"
           "$BUN_BIN" conformance/bun.ts
           "$BUN_BIN" conformance/graphql-native.ts
+          "$BUN_BIN" conformance/worker-shutdown.mjs
 
   cloudflare-workers-conformance:
     name: Runtime Conformance / Cloudflare Workers
@@ -342,7 +343,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [1.3.14, 1.4.0]
+        version: [1.4.0]
     runs-on: ubuntu-latest
     steps:
       - name: Setup Bun ${{ matrix.version }}
@@ -402,7 +403,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [1.3.14, 1.4.0]
+        version: [1.4.0]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

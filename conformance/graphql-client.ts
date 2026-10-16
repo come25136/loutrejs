@@ -2,7 +2,6 @@ export async function verifyGraphQLTransports(
   url: string,
   http: boolean,
   drain: () => Promise<void>,
-  closeCodes: readonly number[] = [1001],
 ): Promise<void> {
   await verifyOrderResolution(
     new URL(http ? '/commerce' : '/commerce-ws-only', url).href,
@@ -144,10 +143,7 @@ export async function verifyGraphQLTransports(
       ),
     )
     await withTimeout(drain(), 15000)
-    assert(
-      closeCodes.includes((await withTimeout(closed, 5000)).code),
-      'graceful shutdown',
-    )
+    assert((await withTimeout(closed, 5000)).code === 1001, 'graceful shutdown')
   } finally {
     if (socket.readyState === WebSocket.OPEN) socket.close()
   }

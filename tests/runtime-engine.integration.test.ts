@@ -6,6 +6,7 @@ import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { nodeRuntime } from '@loutrejs/node'
 import { UsersModule } from '../integrations/http-crud/src/index.js'
 import { EventsMessagePortModule } from '../integrations/streaming/src/index.js'
+import { assertSupportedBunVersion } from '@loutrejs/loutre/runtime'
 import { silentLogger } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>
@@ -39,6 +40,27 @@ describe('Runtime engine', () => {
     ).rejects.toThrow('LUTRE_RUNTIME_MISMATCH: Expected Node.js, detected Bun.')
     expect(startupOutput).not.toHaveBeenCalled()
   })
+
+  it.each(['1.3.14', '1.4.0-canary.1', 'unknown'])(
+    'Bun %sはApplicationやlistenerを起動する前に拒否する',
+    async (version) => {
+      const serve = vi.fn()
+      vi.stubGlobal('Bun', { version, serve })
+      await expect(
+        bunRuntime.create({ application: usersDefinition() }),
+      ).rejects.toThrow('LUTRE_RUNTIME_VERSION')
+      expect(startupOutput).not.toHaveBeenCalled()
+      expect(serve).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each(['1.4.0', '1.4.1', '1.5.0'])(
+    'Bun %sは最低バージョンを満たす',
+    (version) => {
+      vi.stubGlobal('Bun', { version })
+      expect(() => assertSupportedBunVersion()).not.toThrow()
+    },
+  )
 
   it('未対応runtimeのNode互換globalをnodeRuntimeとして受け入れない', async () => {
     vi.stubGlobal('Deno', { version: { deno: '2.9.5' } })

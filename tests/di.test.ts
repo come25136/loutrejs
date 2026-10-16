@@ -1,13 +1,25 @@
 import {
   defineModule,
+  defineApplication,
+  composeLayers,
+  defineLayer,
+  bootstrapApplication,
   inject,
+  injectInquirer,
+  tokenName,
+  runInInjectionContext,
+  type DependencyConsumer,
   InjectionContextError,
   provide,
   normalizeProvider,
   token,
   type ProviderDeclaration,
 } from '@loutrejs/loutre'
-import { Container, DependencyResolutionError } from '@loutrejs/loutre/runtime'
+import {
+  Container,
+  DependencyResolutionError,
+  Logger,
+} from '@loutrejs/loutre/runtime'
 
 interface Clock {
   readonly id: number
@@ -170,4 +182,255 @@ describe('同期DI Container', () => {
     const mock = { id: 99 }
     expect(new ClockReader(mock).clock).toBe(mock)
   })
+})
+
+describe('依存元consumerの取得', () => {
+  it('Model構築とApplication起動を通してconsumerを取得できる', async () => {
+    class AppLogger {
+      readonly consumer = injectInquirer()
+    }
+    class Service {
+      readonly logger = inject(AppLogger)
+    }
+    const module = defineModule(() => ({
+      providers: [
+        provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
+        Service,
+      ],
+    }))()
+    const app = await bootstrapApplication({
+      application: defineApplication({ modules: [module] }),
+    })
+    try {
+      expect(app.get(Service).logger.consumer).toBe(Service)
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('transient classへconsumerのtokenを渡し、Loggerのsourceを維持する', () => {
+    class AppLogger {
+      constructor(
+        readonly inquirer = injectInquirer(),
+        readonly logger = inject(Logger),
+      ) {}
+    }
+    class ServiceA {
+      constructor(readonly logger = inject(AppLogger)) {}
+    }
+    class ServiceB {
+      constructor(readonly logger = inject(AppLogger)) {}
+    }
+    const container = containerFor([
+      provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
+      ServiceA,
+      ServiceB,
+    ])
+    const first = container.resolve(ServiceA).logger
+    const second = container.resolve(ServiceB).logger
+    expect(first).not.toBe(second)
+    expect(first.inquirer).toBe(ServiceA)
+    expect(second.inquirer).toBe(ServiceB)
+    expect(tokenName(first.inquirer as typeof ServiceA)).toBe('ServiceA')
+    expect(first.logger.context.source).toBe('AppLogger')
+    expect(second.logger.context.source).toBe('AppLogger')
+    expect(container.resolve(AppLogger).inquirer).toBeUndefined()
+    expect(injectInquirer()).toBeUndefined()
+  })
+
+  it('factoryと入れ子classで直接の依存元を取得し、外側のcontextを復元する', () => {
+    const FACTORY = token<{
+      inquirer: DependencyConsumer | undefined
+      nested: Nested
+    }>('factory')
+    class Nested {
+      readonly inquirer = injectInquirer()
+    }
+    class Consumer {
+      readonly before = injectInquirer()
+      readonly value = inject(FACTORY)
+      readonly after = injectInquirer()
+    }
+    class Root {
+      readonly consumer = inject(Consumer)
+    }
+    const container = containerFor([
+      provide(Nested).useClass(Nested, { scope: 'transient' }),
+      provide(FACTORY).useFactory({
+        scope: 'transient',
+        inject: [Nested],
+        use: (nested: Nested) => ({ inquirer: injectInquirer(), nested }),
+      }),
+      Consumer,
+      Root,
+    ])
+    const consumer = container.resolve(Root).consumer
+    expect(consumer.value.inquirer).toBe(Consumer)
+    expect(consumer.value.nested.inquirer).toBe(FACTORY)
+    expect(consumer.before).toBe(Root)
+    expect(consumer.after).toBe(Root)
+    expect(container.resolve(FACTORY).inquirer).toBeUndefined()
+    expect(injectInquirer()).toBeUndefined()
+  })
+
+  it('useClassの別名consumerはimplementationではなく登録tokenを渡す', () => {
+    const ALIAS = token<Consumer>('consumer.alias')
+    class Dependency {
+      readonly inquirer = injectInquirer()
+    }
+    class Consumer {
+      readonly dependency = inject(Dependency)
+    }
+    const container = containerFor([
+      provide(Dependency).useClass(Dependency, { scope: 'transient' }),
+      provide(ALIAS).useClass(Consumer),
+    ])
+    expect(container.resolve(ALIAS).dependency.inquirer).toBe(ALIAS)
+  })
+
+  it('Executionのdescriptorをconsumerとして引き継ぐ', () => {
+    class Dependency {
+      readonly inquirer = injectInquirer()
+    }
+    const container = containerFor([
+      provide(Dependency).useClass(Dependency, { scope: 'transient' }),
+    ])
+    const consumer = { id: 'execution.test', name: 'Test', kind: 'execution' }
+    const value = runInInjectionContext(
+      {
+        consumer,
+        resolve: (dependency, requester) =>
+          container.resolve(dependency, {
+            source: consumer.id,
+            consumer: requester,
+          }),
+      },
+      () => inject(Dependency),
+    )
+    expect(value.inquirer).toBe(consumer)
+  })
+
+  it('LayerにもExecutionと同じ規則でconsumer metadataを渡す', async () => {
+    class AppLogger {
+      readonly consumer = injectInquirer()
+    }
+    const container = containerFor([
+      provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
+    ])
+    let consumer: DependencyConsumer | undefined
+    const layer = defineLayer({
+      name: 'auth',
+      factory:
+        (logger = inject(AppLogger)) =>
+        async (_context, next) => {
+          consumer = logger.consumer
+          await next()
+        },
+    })
+    await composeLayers({
+      context: {},
+      layers: [layer],
+      resolve: (dependency, context) => container.resolve(dependency, context),
+      terminal: async () => undefined,
+    })
+    expect(consumer).toEqual({
+      kind: 'layer',
+      id: 'layer:0:auth',
+      name: 'auth',
+    })
+  })
+
+  it('直接resolveはambientなconsumerを別Containerへ持ち込まない', () => {
+    class Dependency {
+      readonly inquirer = injectInquirer()
+    }
+    const first = containerFor([
+      provide(Dependency).useClass(Dependency, { scope: 'transient' }),
+    ])
+    const second = containerFor([
+      provide(Dependency).useClass(Dependency, { scope: 'transient' }),
+    ])
+    const consumer = { id: 'execution.test', name: 'Test' }
+    runInInjectionContext(
+      {
+        consumer,
+        resolve: (dependency, requester) =>
+          first.resolve(dependency, { consumer: requester }),
+      },
+      () => {
+        expect(inject(Dependency).inquirer).toBe(consumer)
+        expect(second.resolve(Dependency).inquirer).toBeUndefined()
+      },
+    )
+  })
+
+  it('factoryの構築metadataは未宣言のinjectを許可しない', () => {
+    const FACTORY = token<Clock>('factory.clock')
+    const container = containerFor([
+      provide(CLOCK).useValue({ id: 1 }),
+      provide(FACTORY).useFactory({ use: () => inject(CLOCK) }),
+    ])
+    expect(() => container.resolve(FACTORY)).toThrow(InjectionContextError)
+    expect(injectInquirer()).toBeUndefined()
+  })
+
+  it('factoryが例外を投げても依存元contextを復元する', () => {
+    const BROKEN = token<unknown>('broken')
+    const container = containerFor([
+      provide(BROKEN).useFactory({
+        use: () => {
+          throw new Error('factory failed')
+        },
+      }),
+    ])
+    expect(() => container.resolve(BROKEN)).toThrow('factory failed')
+    expect(injectInquirer()).toBeUndefined()
+    expect(() => inject(BROKEN)).toThrow(InjectionContextError)
+  })
+})
+
+describe('consumer metadataとModelの依存宣言', () => {
+  it.each([true, false])(
+    'metadata保存と無条件injectはModelのvisibilityを維持する（export=%s）',
+    async (exported) => {
+      class Repository {}
+      class AppLogger {
+        readonly consumer = injectInquirer()
+        readonly repository = inject(Repository)
+      }
+      class Service {
+        readonly logger = inject(AppLogger)
+      }
+      const repository = defineModule({
+        providers: [Repository],
+        exports: exported ? [Repository] : [],
+      })
+      const feature = defineModule({
+        imports: [repository],
+        providers: [
+          provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
+          Service,
+        ],
+      })
+      const definition = defineApplication({ modules: [feature] })
+      const provider = definition.model.nodes.find(
+        (node) => node.kind === 'provider' && node.token === AppLogger,
+      )
+      expect(provider).toMatchObject({ dependencies: [Repository] })
+      if (!exported) {
+        expect(definition.model.diagnostics).toContainEqual(
+          expect.objectContaining({ code: 'LUTRE_MODULE_VISIBILITY' }),
+        )
+        return
+      }
+      expect(definition.model.diagnostics).toEqual([])
+      const app = await bootstrapApplication({ application: definition })
+      try {
+        expect(app.get(Service).logger.consumer).toBe(Service)
+        expect(app.get(Service).logger.repository).toBe(app.get(Repository))
+      } finally {
+        await app.close()
+      }
+    },
+  )
 })

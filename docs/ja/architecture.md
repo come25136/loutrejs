@@ -44,7 +44,7 @@ HTTP、Task、MessagePort、WebSocket、Queue consumerなどのexecution semanti
 | 公開package        | Role                                                         |
 | ------------------ | ------------------------------------------------------------ |
 | `@loutrejs/loutre` | Application Graph Kernel、DI、Lifecycle、Runtime abstraction |
-| `@loutrejs/node`   | Node.js HTTP Runtime Adapter                                 |
+| `@loutrejs/node`   | Node.js Runtime Adapter                                      |
 | `@loutrejs/bullmq` | BullMQ Queue Consumer Driver                                 |
 | `@loutrejs/cli`    | Graph inspection、validation、build、deployment tooling      |
 | `create-loutre`    | project initializer                                          |
@@ -72,7 +72,7 @@ main packageの主要subpathは次の通りです。
 
 ```ts
 const application = defineApplication({
-  modules: [AppModule()],
+  modules: [AppModule],
   arguments: AppArgs,
 })
 ```
@@ -82,11 +82,11 @@ Application Definitionはlistener、timer、processを所有しません。Runti
 ModuleにはProviderとExecution Definitionを登録します。
 
 ```ts
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   environment: [AppEnv],
   providers: [UsersService],
   executions: [UsersHttp, heartbeat],
-}))
+})
 ```
 
 Execution Definitionは所有するExtensionでbrandされます。Model構築時にExtensionがdependency edge、必要Runtime Capability、compiled payload、Graph metadataをprotocol-neutralなexecution contributionへcompileします。Extensionは同じExtension内のexecution参照も公開でき、Coreがそのclosureを再帰的に辿るため、Triggerだけを登録すれば参照先Taskも自動でModelへ含まれます。compile済みModelへraw Definitionは保持しません。
@@ -151,9 +151,9 @@ export const heartbeat = fixedDelay({
   task: cleanup,
 })
 
-const WorkerModule = defineModule(() => ({
+const WorkerModule = defineModule({
   executions: [heartbeat],
-}))
+})
 ```
 
 Tasks executionを含むApplicationにはExtension-ownedな`tasks` Host APIが合成されます。
@@ -180,6 +180,30 @@ class UsersService {
 
 別ModuleのProviderへ依存する場合は`exports` / `imports`を明示します。visibilityはRuntime起動前のModel構築時に検証されます。
 
+### 独自loggerなどで依存元を取得する
+
+`injectInquirer()`は、同期的なprovider構築中にそのproviderを直接要求したconsumerを返します。class providerとfactory providerの両方で使えます。class・custom tokenはそのtoken自体、Executionからの要求は`id`・`name`を持つdescriptorです。別名tokenで登録したconsumerでは、implementation classではなく登録tokenを返します。
+
+```ts
+import { inject, injectInquirer, provide } from '@loutrejs/loutre'
+import { Logger } from '@loutrejs/loutre/runtime'
+
+class AppLogger {
+  readonly consumer = injectInquirer()
+  readonly logger = inject(Logger)
+}
+
+const loggerProvider = provide(AppLogger).useClass(AppLogger, {
+  scope: 'transient',
+})
+```
+
+`ServiceA`が`inject(AppLogger)`すると`AppLogger.consumer`は`ServiceA`になります。組み込みLoggerの`context.source`は従来どおり`AppLogger`です。factory providerでも`use`内から取得でき、依存は従来どおり`inject: [...]`で宣言します。
+
+Applicationの初期構築などconsumerがいない直接解決時と注入context外では`undefined`です。application scopeは共有されるため、consumerごとのmetadataが必要ならtransientを使ってください。取得した値は構築時に保存し、非同期処理の中から取得しないでください。`injectInquirer()`はloggerのラベルなどの構築metadata専用です。Model構築時の依存収集にはconsumerが存在しないため、`inject()`するtokenや依存の有無をこの値で分岐させることはAPI contract外です。metadataを保存するコードと依存の宣言を分け、必要な依存は無条件で宣言してください。
+
+たとえば`injectInquirer() ? inject(Repository) : undefined`は利用できません。このような契約違反を自動検出・拒否する機構は未実装で、[Issue #139](https://github.com/come25136/loutrejs/issues/139)でModelとRuntimeの一致を検証する方針を扱います。
+
 ## EnvironmentとArguments
 
 Runtime inputはtyped contractとして宣言し、Provider constructionより先にbindします。
@@ -189,9 +213,9 @@ class AppEnv extends defineEnv(
   z.object({ PORT: z.coerce.number().int().positive() }),
 ) {}
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   environment: [AppEnv],
-}))
+})
 ```
 
 Runtime adapterが実環境のsourceを渡し、testやembedded executionでは`bootstrapApplication()`へ明示sourceを渡せます。
@@ -204,7 +228,7 @@ portableなKernel-hosted Applicationは`bootstrapApplication()`で起動しま�
 const app = await bootstrapApplication({ application })
 ```
 
-Runtime adapterはその外側でplatform ownershipを追加します。Node.jsならHTTP listenerをadapterが所有します。
+Runtime adapterはその外側でplatform ownershipを追加します。Node.js / BunではHTTP listenerとprocess signalの終了フックをadapterが所有し、HTTPを持たないworkerにも同じ終了処理を適用します。`create({ shutdownHooks: false })`で終了フックを無効にできます。
 
 ```ts
 const app = await nodeRuntime.create({ application })
@@ -226,6 +250,8 @@ loutre doctor --entry src/app.ts --runtime node
 ```
 
 OpenAPIもExecution Extensionのprojectionです。CoreはHTTP route semanticsを知りません。
+
+Provider構築、Module正規化、終了フックの責務を分けた判断は[所有権ADR](../adr/loutre_construction_and_runtime_ownership.md)を参照してください。
 
 ## Design invariant
 

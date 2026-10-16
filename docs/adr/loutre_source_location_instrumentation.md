@@ -169,7 +169,7 @@ Source Location実装ではSWCをcompiler / bundlerとして使わず、主にpa
 
 この変更で、importされたLoutre APIと同名のparameter / local bindingをAST上で区別できる。CLI dependencyは`@swc/core: ^1.16.13`をbaselineとし、互換な新しいversionへ更新できる場合は通常どおり上げる。lockfile差分を小さくすることだけを理由にSWCを古いversionへ戻さない。
 
-Bun 1.3.14の`bun install`は`umask`を復元せず、依存のpostinstallが共有cacheを権限`777`で作る場合がある。SWCのnative carrierはこのcacheを拒否するため、Bun workspaceのCIでは権限`700`の専用directoryを`SWC_NATIVE_BINDING_CACHE`に指定する。共有cache全体の権限変更やSWCの旧version固定でこの問題を回避しない。
+Bunのminimumは1.4.0とする。1.3向けに用意した専用native cacheの指定は終了し、Bun 1.4の通常installでSWC bindingを検証する。runtime supportの判断は[Runtime support policy](./loutre_runtime_support_policy.md#3-bun)を正本とする。
 
 Oxc採用に伴って一時的に導入したCLI Node.js `>=22.12.0`制約は撤回する。CLIのruntime support policyをparser dependency都合で狭めない。
 

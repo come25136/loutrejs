@@ -1,0 +1,45 @@
+# Provider構築・Module正規化・Runtime終了処理の所有権
+
+- 状態: IMPLEMENTED
+- 日付: 2026-10-14 JST
+- 対象: #132、#133、#135
+
+## 背景
+
+Loutreの設計では、canonical Application Modelが構造の正本、ContainerがProvider構築の所有者、Runtime Adapterがplatform resourceの所有者である。機能追加でもこの責務を維持し、ambientな状態によって異なるApplicationの処理が結び付くことを避ける。
+
+## 依存元は構築時のmetadataとして渡す
+
+`injectInquirer()`はProvider構築時の直接の依存元を返す。ログ呼び出し時の追跡や非同期contextの伝播は導入しない。consumerごとにmetadataを保持する独自loggerにはtransient scopeを使い、backendの共有はapplication scopeで扱える。
+
+依存を要求するInjection ContextからContainerへ、consumerと診断・Logger用のsourceを明示的に渡す。ContainerがambientなInjection Contextを読む設計は採用しない。直接の解決に別Containerのconsumerが紛れ込むためである。class、factory、Execution、Layerで同じ伝播規則を使う。
+
+factoryは構築metadataを参照できるが、依存は既存の`inject`配列で宣言する。metadata参照を可能にするためだけに、必ず例外を投げる偽のresolverは設けない。依存解決可能なcontextと構築metadataだけのcontextは、resolverの有無で表現する。Modelに現れない実行時だけの依存追加は認めない。
+
+## Moduleの正規化結果はModel構築が所有する
+
+静的Moduleの参照と動的Moduleの明示instanceをGraphのidentityとして扱う。引数なしの旧templateは、Model構築ごとに一つのinstanceへ正規化する。Module収集、import edge、visibilityは同じ正規化済みimport graphを利用する。
+
+process全体のcacheは採用しない。独立したApplicationのModelを構築した際に、旧factoryの結果まで共有すると、構築時点の設定やfactoryが生成する値を意図せず再利用するためである。
+
+## 終了フックはplatform resourceとしてAdapterが所有する
+
+Kernelはsignalの文字列を受け取って終了lifecycleを実行する。processへのsignal登録はNode / Bun Adapterが所有し、HTTP listenerの有無から切り離す。
+
+signal登録の重複排除・解除・終了失敗の観測は、signal sourceを引数で受け取る共通の管理処理へまとめる。共通処理はprocessやHTTPへ依存しない。platformごとのlistener停止とKernel drainは各Adapterが引き続き所有する。
+
+手動closeまたはsignalを受けた後は、終了フックを再登録しない。Applicationごとに自分のhandlerだけを解除する。`process.exit()`による強制終了は、他のApplicationや埋め込みhostが所有するresourceまで終了するため採用しない。
+
+## 終了開始とcleanup境界を区別する
+
+Adapterが終了を始めた事実は、終了処理の成功・失敗と分けて保持する。Kernelが停止済みでもprovider lifecycleやnative resourceの終了が失敗することがあるため、例外だけを見て稼働中へ戻さない。`close()`の再試行は許可し、`serve()`による再開は拒否する。
+
+Kernelは終了失敗を`ApplicationShutdownError`として報告し、`safeCleanupBoundaryReached`でactive executionとExtension drainが安全なcleanup境界に到達したかを示す。Adapterがエラーのmessageを解析して判断する方式は採用しない。
+
+Node / Bunは終了開始時に新規HTTP受付を止める。Kernelが安全な境界へ到達した場合は、lifecycle失敗後もnative closeの完了を待ち、Kernelとplatformのエラーを集約する。NodeのDevtools transportはKernelの終了成否によらず解放する。
+
+境界未到達の場合、`close()`はnative closeの未完了を無期限に待たず終了失敗を返し、Kernelのdraining状態と実行中のresourceを維持する。Kernelは実行と進行中drainの完了を通知する`ApplicationShutdownError.retryAfter`を提供し、共通のRuntimeShutdownはplatform errorと集約した後もこの通知を保持する。signal起点では共通の終了フックが通知を待ち、元のsignalを渡して自動再試行する。手動`close()`はboundedな試行として従来どおり失敗を返し、呼び出し元が再試行を管理できる。
+
+再開条件の所有者は実行とdrainを追跡するKernelであり、Adapterやsignal handlerにタイマーによるpollingやexecutionの別registryを設けない。Extension drainがrejectしても、その試行は完了しているため再開通知を妨げず、次の試行でKernelがcleanup可否と失敗を判断する。signalの待機中に実行やdrainが永久に終わらなければProviderは保持する。`forceShutdownTimeoutMs`は各試行の待機期限であり、host全体の強制終了期限とは分ける。最終的な強制終了はhostの責務とし、frameworkから`process.exit()`は呼ばない。
+
+境界到達後はnative closeの完了を待ち、Bun 1.3の停止不具合を補うタイマー・強制切断は設けない。Bunのminimumを1.4.0へ引き上げた判断は[Runtime support policy](./loutre_runtime_support_policy.md#3-bun)を参照する。

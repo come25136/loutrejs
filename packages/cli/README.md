@@ -44,9 +44,9 @@ Applicationへ`DevtoolsModule()`を追加し、`loutre dev`から普段のApplic
 import { defineModule } from '@loutrejs/loutre'
 import { DevtoolsModule } from '@loutrejs/loutre/devtools'
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   imports: [DevtoolsModule()],
-}))
+})
 ```
 
 ```sh

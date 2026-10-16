@@ -78,17 +78,34 @@ import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { GreetingHttp } from './greetings/controller.js'
 import { GreetingService } from './greetings/service.js'
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   providers: [GreetingService],
   executions: [GreetingHttp],
-}))
+})
 
 export default defineApplication({
-  modules: [AppModule()],
+  modules: [AppModule],
 })
 ```
 
 `defineApplication()`がcanonical Application Modelを構築します。HTTP routeの詳細はHTTP Extensionが所有し、Coreはprotocol固有の分岐を持ちません。
+
+### 静的Moduleと動的Module
+
+引数のないModuleは`defineModule({ ... })`で定義し、返されたinstanceをそのまま`modules`や`imports`へ渡します。設定が必要なModuleはfactoryを渡して、利用時に引数を指定します。
+
+```ts
+const UsersModule = defineModule({ providers: [UsersService] })
+const DatabaseModule = defineModule((options: { url: string }) => ({
+  providers: [provide(DatabaseUrl).useValue(options.url)],
+  exports: [DatabaseUrl],
+}))
+const AppModule = defineModule({
+  imports: [UsersModule, DatabaseModule({ url: 'postgres://localhost/app' })],
+})
+```
+
+同じinstanceの参照はGraph内で共有されます。動的factoryを明示的に呼ぶたびに別instanceが作られるので、共有したい場合は結果を変数に保存してください。旧形式の`defineModule(() => ({ ... }))()`も利用できます。引数なしの旧templateを直接`modules`や`imports`へ渡す場合は、Model構築ごとに同じtemplateを一つのinstanceとして正規化します。異なるApplicationの構築間ではfactoryの結果を共有しません。
 
 ## portable Kernel Hostからテストする
 
@@ -154,10 +171,10 @@ export class AppEnv extends defineEnv(
   z.object({ PORT: z.coerce.number().int().positive().default(3000) }),
 ) {}
 
-const AppModule = defineModule(() => ({
+const AppModule = defineModule({
   environment: [AppEnv],
   executions: [GreetingHttp],
-}))
+})
 ```
 
 Application初期化後はvalidation済みの値を利用できます。
@@ -189,11 +206,11 @@ export const heartbeat = fixedDelay({
   task: cleanup,
 })
 
-const WorkerModule = defineModule(() => ({
+const WorkerModule = defineModule({
   executions: [heartbeat],
-}))
+})
 
-export default defineApplication({ modules: [WorkerModule()] })
+export default defineApplication({ modules: [WorkerModule] })
 ```
 
 Triggerだけを登録すれば十分です。Tasks Extensionが参照先Taskを宣言し、CoreがそのTaskをcanonical Application Modelへ自動で含めます。
@@ -201,10 +218,10 @@ Triggerだけを登録すれば十分です。Tasks Extensionが参照先Taskを
 Taskのmanual executionとTrigger起動はExtension-owned Host APIから行います。
 
 ```ts
-import { bootstrapApplication } from '@loutrejs/loutre'
+import { nodeRuntime } from '@loutrejs/node'
 import application, { cleanup } from './app.js'
 
-const app = await bootstrapApplication({ application })
+const app = await nodeRuntime.create({ application })
 await app.tasks.run(cleanup)
 await app.tasks.start()
 ```
@@ -238,14 +255,14 @@ const orderConsumer = consume({
   task: processOrder,
 })
 
-const QueueModule = defineModule(() => ({
+const QueueModule = defineModule({
   providers: [
     bindBullMqQueue(orders, {
       connection: { host: '127.0.0.1', port: 6379 },
     }),
   ],
   executions: [processOrder, orderConsumer],
-}))
+})
 ```
 
 ## Application Modelを確認する

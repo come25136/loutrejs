@@ -1,5 +1,8 @@
 import type { RuntimeCapability } from './extension.js'
-import { runInInjectionContext } from './injection.js'
+import {
+  runInInjectionContext,
+  type DependencyResolutionContext,
+} from './injection.js'
 import type { TokenLike } from './token.js'
 import type { Type } from './type.js'
 
@@ -51,7 +54,7 @@ export function composeLayers<TContext extends object, TOutcome>(options: {
   readonly layers: readonly GenericLayer<any, any, TOutcome>[]
   readonly resolve: <TValue>(
     token: TokenLike<TValue>,
-    source?: string,
+    context?: string | DependencyResolutionContext,
   ) => TValue
   readonly terminal: (
     context: TContext & GenericLayerContext<Record<string, unknown>>,
@@ -65,7 +68,8 @@ export function composeLayers<TContext extends object, TOutcome>(options: {
           id: `layer:${index}:${layer.name}`,
           name: layer.name,
         },
-        resolve: (token) => options.resolve(token, layer.name),
+        resolve: (token, consumer) =>
+          options.resolve(token, { source: layer.name, consumer }),
       },
       () => layer.factory(),
     ),
