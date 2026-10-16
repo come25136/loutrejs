@@ -57,7 +57,7 @@ Browser Control WebSocketは許可Originを検証する。公式サイトとloca
 
 Application channelはloopbackかつBrowser Originなしの接続だけを受け付ける。Browser用tokenやsession handshakeをsecurity boundaryにはしない。
 
-Node adapterからの接続も`ws://127.0.0.1`へ限定する。環境変数が指す任意hostやDNS名を信頼するとTraceの送信先とInspector commandの受信元を外部へ変更できるため、portとpathだけを固定hostのURLへ反映する。不正な接続設定ではDevTools transportを無効化し、Applicationの実行を継続する。
+Node adapterの接続先は、起動環境を管理する利用者が`LOUTRE_DEV_ENDPOINT`で指定する。CLIは既定でlocal Dev serverのURLを渡すが、Node adapterは接続先をloopbackへ限定しない。この環境変数は信頼する運用設定であり、HTTP requestなどの未信頼入力を転記してはならない。Traceの送信先とInspector commandの受信元を指定するため、接続相手の信頼性と通信経路は利用者が管理する。
 
 CLIは対象Application Definitionをローカルで評価するため、信頼していないprojectで`loutre dev`を実行しない。Websiteへlive handler、Provider instance、native resourceを渡さない。
 
