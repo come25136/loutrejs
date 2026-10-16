@@ -10,6 +10,7 @@ export type DependencyConsumer = TokenLike | DependencyConsumerDescriptor
 
 export interface DependencyResolutionContext {
   readonly source?: string
+  readonly executionId?: string
   readonly consumer?: DependencyConsumer
 }
 
@@ -72,7 +73,7 @@ export function inject<TToken extends TokenLike>(
   return context.resolve(token, context.consumer) as TokenValue<TToken>
 }
 
-/** 依存宣言をconsumerで分岐させるとModelのprobeでは収集できないため、構築metadataの取得に限定する。 */
+/** Modelに現れない依存は解決できないため、依存宣言の分岐ではなく構築metadataの取得に使う。 */
 export function injectInquirer(): DependencyConsumer | undefined {
   return currentInjectionContext()?.inquirer
 }

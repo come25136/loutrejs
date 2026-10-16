@@ -121,8 +121,9 @@ function collectProviderDependencies(
       Object.freeze([...candidate.inject]),
     )
     .with({ kind: 'conditional' }, (candidate) => {
-      const dependencies = new Set<TokenLike>()
-      for (const implementation of Object.values(candidate.mapping)) {
+      const dependencies = new Set<TokenLike>([candidate.select.contract])
+      for (const key of Reflect.ownKeys(candidate.mapping)) {
+        const implementation = candidate.mapping[key]!
         for (const dependency of collectInjectedDependencies(
           candidate.provide,
           () => Reflect.construct(implementation, []),

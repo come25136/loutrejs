@@ -188,6 +188,7 @@ describe('依存元consumerの取得', () => {
   it('Model構築とApplication起動を通してconsumerを取得できる', async () => {
     class AppLogger {
       readonly consumer = injectInquirer()
+      readonly logger = inject(Logger)
     }
     class Service {
       readonly logger = inject(AppLogger)
@@ -203,6 +204,7 @@ describe('依存元consumerの取得', () => {
     })
     try {
       expect(app.get(Service).logger.consumer).toBe(Service)
+      expect(app.get(Service).logger.logger.context.source).toBe('AppLogger')
     } finally {
       await app.close()
     }

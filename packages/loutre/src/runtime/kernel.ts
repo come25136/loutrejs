@@ -25,7 +25,11 @@ import {
   type TokenLike,
   type DependencyResolutionContext,
 } from '../core/index.js'
-import { Container } from './di.js'
+import {
+  Container,
+  DependencyResolutionError,
+  assertDeclaredDependency,
+} from './di.js'
 import { ExecutionTracker } from './execution-tracker.js'
 import { Logger } from './logger.js'
 
@@ -59,6 +63,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   readonly #extensionRuntimes = new Map<symbol, ExecutionExtensionRuntime>()
   readonly #providerInstances = new Map<string, unknown[]>()
   readonly #providerNodes = new Map<ProviderDescriptor, ProviderModelNode>()
+  readonly #executionDependencies = new Map<string, readonly TokenLike[]>()
   readonly #initializedModuleIds = new Set<string>()
   readonly #executions = new ExecutionTracker()
   readonly #extensionDrainOperations = new Map<
@@ -81,6 +86,9 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     for (const node of this.model.nodes) {
       if (node.kind === 'provider') this.#providerNodes.set(node.provider, node)
     }
+    for (const execution of this.model.executions) {
+      this.#executionDependencies.set(execution.id, execution.dependencies)
+    }
     this.capabilities = new RuntimeCapabilityRegistry(
       options.capabilities ?? [],
     )
@@ -100,6 +108,12 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     }
     this.container = new Container(model.providers, {
       logger: options.logger ?? new Logger(),
+      dependencies: new Map(
+        [...this.#providerNodes.values()].map((node) => [
+          node.token,
+          node.dependencies,
+        ]),
+      ),
       hooks: {
         created: (provider, value) =>
           this.#notifyProviderCreated(provider, value),
@@ -223,11 +237,22 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
 
   resolve<TValue>(
     token: TokenLike<TValue>,
-    context?: string | DependencyResolutionContext,
+    context: DependencyResolutionContext & { readonly executionId: string },
   ): TValue {
     if (this.#state === 'created' || this.#state === 'stopped') {
       throw applicationStateError(this.#state)
     }
+    const executionId = context?.executionId
+    const dependencies =
+      executionId === undefined
+        ? undefined
+        : this.#executionDependencies.get(executionId)
+    if (executionId === undefined || !dependencies) {
+      throw new DependencyResolutionError(
+        `LUTRE_DI_EXECUTION_CONTEXT: Resolving ${tokenName(token)} requires a canonical executionId in DependencyResolutionContext (received ${executionId ?? 'undefined'}).`,
+      )
+    }
+    assertDeclaredDependency(executionId, token, dependencies)
     return this.container.resolve(token, context)
   }
 

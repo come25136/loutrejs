@@ -541,6 +541,7 @@ function createWebSocketRuntime(
           resolve: (token, consumer) =>
             applicationRuntime.resolve(token, {
               source: execution.id,
+              executionId: execution.id,
               consumer,
             }),
         },

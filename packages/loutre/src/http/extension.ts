@@ -1438,6 +1438,7 @@ function createHttpExtensionRuntime(
           resolve: (token, consumer) =>
             applicationRuntime.resolve(token, {
               source: execution.id,
+              executionId: execution.id,
               consumer,
             }),
         },
@@ -1681,7 +1682,10 @@ function createHttpExtensionRuntime(
             context,
             layers: match.route.middlewares,
             resolve: (token, source) =>
-              applicationRuntime.resolve(token, source),
+              applicationRuntime.resolve(token, {
+                ...(typeof source === 'string' ? { source } : source),
+                executionId: match.executionId,
+              }),
             terminal: async (middlewareContext) => {
               const handlerName = `${match.executionId}.${match.route.name}`
               const handlerOperation = applicationRuntime.beginOperation?.(

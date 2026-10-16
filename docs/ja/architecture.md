@@ -202,7 +202,23 @@ const loggerProvider = provide(AppLogger).useClass(AppLogger, {
 
 Applicationの初期構築などconsumerがいない直接解決時と注入context外では`undefined`です。application scopeは共有されるため、consumerごとのmetadataが必要ならtransientを使ってください。取得した値は構築時に保存し、非同期処理の中から取得しないでください。`injectInquirer()`はloggerのラベルなどの構築metadata専用です。Model構築時の依存収集にはconsumerが存在しないため、`inject()`するtokenや依存の有無をこの値で分岐させることはAPI contract外です。metadataを保存するコードと依存の宣言を分け、必要な依存は無条件で宣言してください。
 
-たとえば`injectInquirer() ? inject(Repository) : undefined`は利用できません。このような契約違反を自動検出・拒否する機構は未実装で、[Issue #139](https://github.com/come25136/loutrejs/issues/139)でModelとRuntimeの一致を検証する方針を扱います。
+たとえば`injectInquirer() ? inject(Repository) : undefined`は利用できません。RuntimeがModelにない依存を要求すると、解決前に`LUTRE_DI_UNDECLARED_DEPENDENCY`で拒否します。エラーには依存を要求したProviderまたはExecutionと、要求されたtokenが含まれます。依存先が既にcacheされている場合や、組み込み`Logger`の場合にも同じ規則を適用します。
+
+### Modelの依存宣言と実行時の照合
+
+Modelの依存宣言は、Runtimeが要求できるtokenの集合です。すべての宣言を毎回使う必要はありません。Model構築時に未解決の依存とModule visibilityを検証し、実行時に宣言外のtokenを解決させないことで、実行時だけのprivate依存を防ぎます。Model構築時に通らなかった分岐は、実際にその分岐を実行した時点で拒否されます。
+
+| 構築対象                    | 宣言する依存                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------- |
+| class provider              | 同期構築中の`inject()`から収集したtoken。登録tokenを依存元として照合します。                       |
+| factory provider            | 明示的な`inject: [...]`配列。`use`内の`inject()`は`LUTRE_DI_CONTEXT`で拒否します。                 |
+| conditional provider        | 選択元のEnv / Args contractと、全候補classの依存の和集合。未選択の候補もvisibility検証の対象です。 |
+| Execution / HTTP Layer      | ExtensionがModelへ収録したExecutionの`dependencies`。HTTP Layerの依存は所属Executionに含めます。   |
+| value / Env / Args provider | 構築中の動的な依存はありません。                                                                   |
+
+組み込み`Logger`などframework-provided tokenも、通常のtokenと同様に依存宣言が必要です。frameworkによる提供はProvider登録の省略を可能にするもので、宣言照合の免除ではありません。Lifecycle hookの依存は従来どおり明示的な`inject`配列で宣言します。
+
+独自Execution Extensionは、`applicationRuntime.resolve(token, { executionId: execution.id, source, consumer })`のように、Modelへ収録されたExecutionのIDを渡してください。`source`はログ・診断用、`consumer`は構築metadata用で、照合に使うidentityとは分けます。IDの省略・不明なIDは`LUTRE_DI_EXECUTION_CONTEXT`で拒否します。Layerも所有するExecutionのIDを渡します。単独の低水準`Container`にはModelがないため、宣言照合には`ContainerOptions.dependencies`でModelのProvider依存一覧を渡す必要があります。Application経由ではKernelが必ず設定します。
 
 ## EnvironmentとArguments
 

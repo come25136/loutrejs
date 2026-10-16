@@ -1,0 +1,27 @@
+# canonical ModelとRuntimeの依存宣言の整合
+
+- 状態: IMPLEMENTED
+- 日付: 2026-10-16 JST
+- 対象: #139
+
+## 背景
+
+Modelの依存収集時には、実際のconsumerやEnv / Argsの値が存在しない。構築metadataや注入値を条件に別の依存を要求すると、Modelにedgeがなくvisibility検証を受けていないprivate ProviderをRuntimeが解決できてしまう。
+
+## 判断
+
+依存の正本はcanonical Application Modelとし、Runtimeは実際の解決要求がその宣言に含まれることを確認する。未解決の依存とvisibilityの判定はModel構築が所有し、ContainerにModuleの別graphや依存probeを持たせない。ContainerはKernelから渡されたProviderの依存宣言を照合し、KernelはExecutionの依存宣言を照合する。照合はcache参照やframework-provided tokenの提供より前に行う。
+
+依存宣言は実行時に要求できるtokenの上限とする。conditional providerの全候補やExecution内の複数Layerは、実行ごとに使う依存が異なるため、実行時の集合との完全一致は要求しない。Modelに含まれる全候補の依存は事前にvisibility検証を受ける。conditional providerの選択元contractも実際に解決する依存であり、Modelへ含める。
+
+Execution Extensionは解決要求にcanonicalな`executionId`を明示する。表示名、protocol固有のconsumer descriptor、ログのsourceからidentityを推測しない。HTTP Layerは所属Executionの宣言を使用する。IDが省略された要求を無条件に許可すると、未知のconsumerを経由して宣言照合を回避できるため拒否する。Extensionの公開型でもIDを必須とする。
+
+factory providerは既存の明示的な`inject`配列を維持し、factory本体にはresolverを設けない。構築metadataの保存は依存を増やさないため許可する。framework-provided tokenはProvider登録を不要にするだけであり、依存宣言の例外にしない。利用側のAPI契約とエラーは[アーキテクチャガイド](../ja/architecture.md#modelの依存宣言と実行時の照合)を正本とする。
+
+## 採用しない方法
+
+特定consumerを仮定してprobe回数を増やしても、token・name・注入値による任意の分岐を列挙できない。metadataの読み取りを禁止すると、正規の独自loggerまで利用できなくなる。Runtimeで新しいedgeを追加すると、既に検証・公開したModelと異なるgraphが生まれる。これらは採用せず、未宣言の要求を実行した時点で解決前に拒否する。
+
+## 影響
+
+これまで偶然解決できていた構築時の依存分岐は、起動時またはLayerの構築時に失敗する。必要な依存は無条件に宣言し、依存を使う条件はhandlerなどの実行処理へ移す。既存の単独ContainerはModelを受け取らないため、その利用者が宣言一覧を与えた場合に照合する。ApplicationのKernelは必ずcanonicalな宣言を渡す。

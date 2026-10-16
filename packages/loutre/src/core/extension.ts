@@ -114,7 +114,7 @@ export interface ExecutionKernelRuntime {
   ): ExecutionOperationLease
   resolve<TValue>(
     token: TokenLike<TValue>,
-    context?: string | DependencyResolutionContext,
+    context: DependencyResolutionContext & { readonly executionId: string },
   ): TValue
 }
 
