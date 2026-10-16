@@ -205,6 +205,30 @@ async function createDevtoolsFetch(
 }
 
 describe('Node runtime DevTools bridge', () => {
+  it.each([
+    'not a URL',
+    'https://127.0.0.1:25136/__loutre/app',
+    'wss://127.0.0.1:25136/__loutre/app',
+    'ws://example.com:25136/__loutre/app',
+    'ws://localhost:25136/__loutre/app',
+    'ws://127.0.0.1.example.com:25136/__loutre/app',
+    'ws://127.0.0.1@192.0.2.1:25136/__loutre/app',
+    'ws://user:password@127.0.0.1:25136/__loutre/app',
+    'ws://127.0.0.1:25136/__loutre/app#fragment',
+  ])('許可されない接続先%sではtransportを作らない', (endpoint) => {
+    const connect = vi.fn()
+    vi.stubGlobal('WebSocket', connect)
+    vi.stubEnv('LOUTRE_DEV_ENDPOINT', endpoint)
+    vi.stubEnv('LOUTRE_DEV_RUN_ID', 'run_rejected_endpoint')
+    try {
+      expect(createNodeDevtoolsSession(application)).toBeUndefined()
+      expect(connect).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('非JSON化可能なmetadataをdropしてApplication processへ例外を波及させない', async () => {
     const transport = new WebSocketServer({ host: '127.0.0.1', port: 0 })
     await new Promise<void>((resolve, reject) => {

@@ -70,12 +70,16 @@ function isMissingDirectory(error: unknown): boolean {
 }
 
 function packageNameFor(targetDirectory: string): string {
-  const name = basename(targetDirectory)
+  const normalized = basename(targetDirectory)
     .trim()
     .toLowerCase()
     .replace(/\s+/gu, '-')
     .replace(/[^a-z0-9._-]+/gu, '-')
-    .replace(/^-+|-+$/gu, '')
+  let start = 0
+  let end = normalized.length
+  while (normalized[start] === '-') start += 1
+  while (end > start && normalized[end - 1] === '-') end -= 1
+  const name = normalized.slice(start, end)
 
   if (
     name.length === 0 ||
