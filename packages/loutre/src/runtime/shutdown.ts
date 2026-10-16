@@ -1,14 +1,19 @@
 export class ApplicationShutdownError extends AggregateError {
   readonly safeCleanupBoundaryReached: boolean
+  readonly retryAfter: Promise<void> | undefined
 
   constructor(
     errors: readonly unknown[],
     message: string,
-    options: ErrorOptions & { readonly safeCleanupBoundaryReached: boolean },
+    options: ErrorOptions & {
+      readonly safeCleanupBoundaryReached: boolean
+      readonly retryAfter?: Promise<void>
+    },
   ) {
     super(errors, message, options)
     this.name = 'ApplicationShutdownError'
     this.safeCleanupBoundaryReached = options.safeCleanupBoundaryReached
+    this.retryAfter = options.retryAfter
   }
 }
 
@@ -57,6 +62,7 @@ export class RuntimeShutdown {
       errors.push(error)
     }
     let safeCleanupBoundaryReached = false
+    let retryAfter: Promise<void> | undefined
     try {
       await this.#options.closeApplication(signal)
       safeCleanupBoundaryReached = true
@@ -65,6 +71,8 @@ export class RuntimeShutdown {
       safeCleanupBoundaryReached =
         error instanceof ApplicationShutdownError &&
         error.safeCleanupBoundaryReached
+      if (error instanceof ApplicationShutdownError)
+        retryAfter = error.retryAfter
     }
     try {
       await this.#options.closeResources(
@@ -75,7 +83,10 @@ export class RuntimeShutdown {
       errors.push(error)
     }
     if (errors.length > 0)
-      throw new AggregateError(errors, this.#options.message)
+      throw new ApplicationShutdownError(errors, this.#options.message, {
+        safeCleanupBoundaryReached,
+        ...(retryAfter === undefined ? {} : { retryAfter }),
+      })
     this.#closed = true
   }
 }

@@ -1,3 +1,5 @@
+import { ApplicationShutdownError } from './shutdown.js'
+
 export type ShutdownSignal = 'SIGINT' | 'SIGTERM'
 
 export interface ProcessSignalSource {
@@ -51,18 +53,37 @@ export class ProcessShutdownHooks {
   }
 
   async #close(signal: ShutdownSignal): Promise<void> {
-    try {
-      await this.#options.close(signal)
-    } catch (error) {
+    for (;;) {
       try {
-        this.#options.onError(error, signal)
-      } catch (reportingError) {
-        console.error(
-          'Runtime shutdown error reporter failed',
-          error,
-          reportingError,
+        await this.#options.close(signal)
+        return
+      } catch (error) {
+        this.#reportError(error, signal)
+        if (
+          !(error instanceof ApplicationShutdownError) ||
+          error.safeCleanupBoundaryReached ||
+          !error.retryAfter
         )
+          return
+        try {
+          await error.retryAfter
+        } catch (retryError) {
+          this.#reportError(retryError, signal)
+          return
+        }
       }
+    }
+  }
+
+  #reportError(error: unknown, signal: ShutdownSignal): void {
+    try {
+      this.#options.onError(error, signal)
+    } catch (reportingError) {
+      console.error(
+        'Runtime shutdown error reporter failed',
+        error,
+        reportingError,
+      )
     }
   }
 }

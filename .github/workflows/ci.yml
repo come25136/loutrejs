@@ -232,6 +232,7 @@ jobs:
           BUN_BIN="$(command -v bun)"
           "$BUN_BIN" conformance/bun.ts
           "$BUN_BIN" conformance/graphql-native.ts
+          "$BUN_BIN" conformance/worker-shutdown.mjs
 
   cloudflare-workers-conformance:
     name: Runtime Conformance / Cloudflare Workers

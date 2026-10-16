@@ -375,7 +375,11 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         throw new ApplicationShutdownError(
           errors,
           'Application shutdown did not reach a safe cleanup boundary.',
-          { cause: error, safeCleanupBoundaryReached: false },
+          {
+            cause: error,
+            safeCleanupBoundaryReached: false,
+            retryAfter: this.#waitForShutdownProgress(),
+          },
         )
       }
     }
@@ -386,7 +390,11 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       throw new ApplicationShutdownError(
         errors,
         'Application shutdown did not reach a safe cleanup boundary.',
-        { cause, safeCleanupBoundaryReached: false },
+        {
+          cause,
+          safeCleanupBoundaryReached: false,
+          retryAfter: this.#waitForShutdownProgress(),
+        },
       )
     }
     for (const { extension } of [...this.model.extensions].toReversed()) {
@@ -404,6 +412,15 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         { safeCleanupBoundaryReached: true },
       )
     }
+  }
+
+  async #waitForShutdownProgress(): Promise<void> {
+    await Promise.allSettled([
+      this.#executions.waitForIdle(),
+      ...[...this.#extensionDrainOperations.values()].map(
+        ({ result }) => result,
+      ),
+    ])
   }
 
   #startExtensionDrain(

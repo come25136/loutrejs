@@ -38,4 +38,8 @@ Kernelは終了失敗を`ApplicationShutdownError`として報告し、`safeClea
 
 Node / Bunは終了開始時に新規HTTP受付を止める。Kernelが安全な境界へ到達した場合は、lifecycle失敗後もnative closeの完了を待ち、Kernelとplatformのエラーを集約する。NodeのDevtools transportはKernelの終了成否によらず解放する。
 
-境界未到達の場合は、native closeの未完了を無期限に待たず終了失敗を返す。既存executionが完了してから手動`close()`で再試行し、Kernelのdraining状態と、そのexecutionが使うresourceの寿命を維持する。境界到達後はnative closeの完了を待ち、Bun 1.3の停止不具合を補うタイマー・強制切断は設けない。Bunのminimumを1.4.0へ引き上げた判断は[Runtime support policy](./loutre_runtime_support_policy.md#3-bun)を参照する。
+境界未到達の場合、`close()`はnative closeの未完了を無期限に待たず終了失敗を返し、Kernelのdraining状態と実行中のresourceを維持する。Kernelは実行と進行中drainの完了を通知する`ApplicationShutdownError.retryAfter`を提供し、共通のRuntimeShutdownはplatform errorと集約した後もこの通知を保持する。signal起点では共通の終了フックが通知を待ち、元のsignalを渡して自動再試行する。手動`close()`はboundedな試行として従来どおり失敗を返し、呼び出し元が再試行を管理できる。
+
+再開条件の所有者は実行とdrainを追跡するKernelであり、Adapterやsignal handlerにタイマーによるpollingやexecutionの別registryを設けない。Extension drainがrejectしても、その試行は完了しているため再開通知を妨げず、次の試行でKernelがcleanup可否と失敗を判断する。signalの待機中に実行やdrainが永久に終わらなければProviderは保持する。`forceShutdownTimeoutMs`は各試行の待機期限であり、host全体の強制終了期限とは分ける。最終的な強制終了はhostの責務とし、frameworkから`process.exit()`は呼ばない。
+
+境界到達後はnative closeの完了を待ち、Bun 1.3の停止不具合を補うタイマー・強制切断は設けない。Bunのminimumを1.4.0へ引き上げた判断は[Runtime support policy](./loutre_runtime_support_policy.md#3-bun)を参照する。
