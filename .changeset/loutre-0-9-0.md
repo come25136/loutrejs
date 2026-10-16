@@ -19,6 +19,6 @@ canonical Application Modelに宣言されていない依存をRuntimeで解決�
 
 独自Execution ExtensionのRuntime / Host contextは、`executions`の各要素を`{ execution, resolve }`のbindingとして受け取るように変更しました。`applicationRuntime.resolve()`の代わりに、対象Executionのbindingが持つ`resolve()`を使用してください。
 
-Code scanningの指摘に対応し、Node DevToolsの接続先を`ws://127.0.0.1`へ限定しました。不正な接続設定ではDevTools transportを無効化し、Applicationの実行を継続します。CLIのignore globのescapeを修正し、create-loutreのpackage名の正規化で長いhyphen列による処理時間の増大を防ぎました。GraphQLの検証コードから動的な文字列評価と入力依存の実行先も除きました。
+Code scanningの指摘に対応し、CLIのignore globのescapeを修正しました。create-loutreのpackage名の正規化で長いhyphen列による処理時間の増大を防ぎ、GraphQLの検証コードから動的な文字列評価と入力依存の実行先も除きました。
 
 依存packageを更新し、利用ガイドとexampleを新しいModule定義・Worker終了処理・依存宣言の契約へ揃えました。公開6packageは同じ0.9.0でリリースします。

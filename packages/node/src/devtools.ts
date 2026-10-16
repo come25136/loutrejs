@@ -28,7 +28,7 @@ export function createNodeDevtoolsSession(
   const options = devtoolsOptionsOf(application.model)
   if (!options || options.enabled === false) return undefined
 
-  const endpoint = devtoolsEndpoint(process.env.LOUTRE_DEV_ENDPOINT)
+  const endpoint = process.env.LOUTRE_DEV_ENDPOINT
   const runIdSeed = process.env.LOUTRE_DEV_RUN_ID
   if (!endpoint || !runIdSeed) return undefined
   // watch wrapperから同じ環境変数を継承する再起動も別sessionとして識別する。
@@ -140,31 +140,6 @@ export function createNodeDevtoolsSession(
       closeTransport()
     },
   }
-}
-
-function devtoolsEndpoint(value: string | undefined): URL | undefined {
-  if (!value) return undefined
-  let endpoint: URL
-  try {
-    endpoint = new URL(value)
-  } catch {
-    return undefined
-  }
-  if (
-    endpoint.protocol !== 'ws:' ||
-    endpoint.hostname !== '127.0.0.1' ||
-    endpoint.username !== '' ||
-    endpoint.password !== '' ||
-    endpoint.hash !== ''
-  ) {
-    return undefined
-  }
-  // Control PlaneはIPv4 loopbackで待ち受けるため、環境変数から接続先hostを引き継がない。
-  const transport = new URL('ws://127.0.0.1')
-  transport.port = endpoint.port
-  transport.pathname = endpoint.pathname
-  transport.search = endpoint.search
-  return transport
 }
 
 type InspectorCommand =

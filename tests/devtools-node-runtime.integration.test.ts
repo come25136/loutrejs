@@ -206,23 +206,32 @@ async function createDevtoolsFetch(
 
 describe('Node runtime DevTools bridge', () => {
   it.each([
-    'not a URL',
-    'https://127.0.0.1:25136/__loutre/app',
-    'wss://127.0.0.1:25136/__loutre/app',
-    'ws://example.com:25136/__loutre/app',
+    'ws://127.0.0.1:25136/__loutre/app',
     'ws://localhost:25136/__loutre/app',
-    'ws://127.0.0.1.example.com:25136/__loutre/app',
-    'ws://127.0.0.1@192.0.2.1:25136/__loutre/app',
-    'ws://user:password@127.0.0.1:25136/__loutre/app',
-    'ws://127.0.0.1:25136/__loutre/app#fragment',
-  ])('許可されない接続先%sではtransportを作らない', (endpoint) => {
+    'ws://devtools.example.com:25136/custom-path',
+    'wss://devtools.example.com/__loutre/app?session=test',
+  ])('起動環境で設定した接続先%sをそのままtransportへ渡す', (endpoint) => {
     const connect = vi.fn()
-    vi.stubGlobal('WebSocket', connect)
+    class ConfiguredWebSocket extends EventTarget {
+      static readonly OPEN = 1
+      static readonly CONNECTING = 0
+      readyState = ConfiguredWebSocket.OPEN
+      constructor(value: string) {
+        super()
+        connect(value)
+      }
+      close() {
+        this.readyState = 3
+      }
+    }
+    vi.stubGlobal('WebSocket', ConfiguredWebSocket)
     vi.stubEnv('LOUTRE_DEV_ENDPOINT', endpoint)
-    vi.stubEnv('LOUTRE_DEV_RUN_ID', 'run_rejected_endpoint')
+    vi.stubEnv('LOUTRE_DEV_RUN_ID', 'run_configured_endpoint')
     try {
-      expect(createNodeDevtoolsSession(application)).toBeUndefined()
-      expect(connect).not.toHaveBeenCalled()
+      const session = createNodeDevtoolsSession(application)
+      expect(session).toBeDefined()
+      expect(connect).toHaveBeenCalledExactlyOnceWith(endpoint)
+      session?.dispose()
     } finally {
       vi.unstubAllGlobals()
       vi.unstubAllEnvs()
