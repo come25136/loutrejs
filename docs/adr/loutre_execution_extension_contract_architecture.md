@@ -307,7 +307,7 @@ Runtime support profileに記録する文字列はruntime featureの記述にも
 
 ```ts
 interface ExecutionExtensionRuntimeContext<TCompiled> {
-  readonly executions: readonly ExecutionContribution<TCompiled>[]
+  readonly executions: readonly ExecutionRuntimeBinding<TCompiled>[]
   readonly capabilities: RuntimeCapabilityBindings
   readonly applicationRuntime: ExecutionKernelRuntime
 }

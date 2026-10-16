@@ -67,7 +67,7 @@ export function createKernelApplication<
             const host = modelExtension.extension.host
             if (!host) continue
             application[host.namespace] = host.create({
-              executions: modelExtension.executions,
+              executions: runtime.executionBindings(modelExtension.extension),
               runtime: runtime.extensionRuntime(modelExtension.extension),
               applicationRuntime: runtime,
             })

@@ -10,8 +10,14 @@ export type DependencyConsumer = TokenLike | DependencyConsumerDescriptor
 
 export interface DependencyResolutionContext {
   readonly source?: string
-  readonly executionId?: string
   readonly consumer?: DependencyConsumer
+}
+
+export interface DependencyResolver {
+  <TValue>(
+    token: TokenLike<TValue>,
+    context?: string | DependencyResolutionContext,
+  ): TValue
 }
 
 export interface InjectionContext {

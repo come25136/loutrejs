@@ -5,6 +5,8 @@ import {
   bootstrapApplication,
   defineApplication,
   defineEnv,
+  defineExecution,
+  defineExecutionExtension,
   defineModule,
   inject,
   injectInquirer,
@@ -12,10 +14,11 @@ import {
   provide,
   token,
   type DependencyConsumer,
+  type ExecutionRuntimeBinding,
 } from '@loutrejs/loutre'
 import { DependencyResolutionError, Logger } from '@loutrejs/loutre/runtime'
 import { bindHttpServer, http } from '@loutrejs/loutre/http'
-import { task } from '@loutrejs/loutre/tasks'
+import { task, tasksExtension } from '@loutrejs/loutre/tasks'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { bindWebSocketServer, websocket } from '@loutrejs/loutre/websocket'
 
@@ -432,7 +435,109 @@ describe('canonical Modelと実行時DIの依存照合', () => {
     }
   })
 
-  it('Executionの未指定・不明なidentityを拒否し、sourceで代用しない', async () => {
+  it('独自ExtensionとHostはcanonical Executionへの参照と同じresolverを受け取る', async () => {
+    let runtimeBinding: ExecutionRuntimeBinding | undefined
+    let hostBinding: ExecutionRuntimeBinding | undefined
+    const extension = defineExecutionExtension({
+      kind: 'execution-extension',
+      abiVersion: '1',
+      name: 'fixture:bound-resolver',
+      compile() {
+        return {
+          kind: 'execution' as const,
+          id: 'bound.fixture',
+          executionKind: 'fixture',
+          dependencies: [Logger],
+          capabilities: [],
+          compiled: null,
+        }
+      },
+      createRuntime({ executions }) {
+        runtimeBinding = executions[0]
+        expect(runtimeBinding?.resolve(Logger).context.source).toBe(
+          'bound.fixture',
+        )
+        return { close() {} }
+      },
+      host: {
+        namespace: 'fixture',
+        create({ executions }) {
+          hostBinding = executions[0]
+          return {}
+        },
+      },
+    })
+    const definition = defineApplication({
+      modules: [defineModule({ executions: [defineExecution(extension, {})] })],
+    })
+    const application = await bootstrapApplication({ application: definition })
+    try {
+      expect(runtimeBinding).toBe(hostBinding)
+      expect(runtimeBinding?.execution).toBe(definition.model.executions[0])
+      expect(Object.isFrozen(runtimeBinding)).toBe(true)
+      expect(definition.model.executions[0]).not.toHaveProperty('resolve')
+    } finally {
+      await application.close()
+    }
+  })
+
+  it('束縛したresolverは表示metadataで別Executionの宣言へ切り替わらない', async () => {
+    class Declared {}
+    class Hidden {}
+    const declared = task<void, void>({
+      name: 'declared',
+      factory:
+        (dependency = inject(Declared)) =>
+        async () => {
+          void dependency
+        },
+    })
+    const other = task<void, void>({
+      name: 'other',
+      factory:
+        (dependency = inject(Hidden)) =>
+        async () => {
+          void dependency
+        },
+    })
+    const definition = defineApplication({
+      modules: [
+        defineModule({ providers: [Declared], executions: [declared] }),
+        defineModule({ providers: [Hidden], executions: [other] }),
+      ],
+    })
+    const runtime = new ApplicationKernelRuntime(definition.model)
+    await runtime.initialize()
+    try {
+      const bindings = runtime.executionBindings(tasksExtension)
+      const first = bindings.find(
+        ({ execution }) => execution.id === 'task.declared',
+      )!
+      const second = bindings.find(
+        ({ execution }) => execution.id === 'task.other',
+      )!
+      expect(first.execution).toBe(
+        definition.model.executions.find(({ id }) => id === 'task.declared'),
+      )
+      expect(first.execution).not.toHaveProperty('resolve')
+      expect(runtime).not.toHaveProperty('resolve')
+      expect(first.resolve(Declared)).toBe(runtime.get(Declared))
+      expect(second.resolve(Hidden)).toBe(runtime.get(Hidden))
+      expect(() => first.resolve(Hidden, 'task.other')).toThrow(
+        'task.declared requested Hidden',
+      )
+      expect(() =>
+        first.resolve(Hidden, {
+          source: 'task.other',
+          consumer: { id: 'task.other', name: 'other' },
+        }),
+      ).toThrow('task.declared requested Hidden')
+    } finally {
+      await runtime.shutdown()
+    }
+  })
+
+  it('束縛したresolverの状態とinstanceはApplicationの寿命に従う', async () => {
     class Dependency {}
     const execution = task<void, void>({
       name: 'declared',
@@ -447,23 +552,23 @@ describe('canonical Modelと実行時DIの依存照合', () => {
         defineModule({ providers: [Dependency], executions: [execution] }),
       ],
     })
-    const runtime = new ApplicationKernelRuntime(definition.model)
-    await runtime.initialize()
+    const first = new ApplicationKernelRuntime(definition.model)
+    const second = new ApplicationKernelRuntime(definition.model)
+    const resolveFirst = first.executionBindings(tasksExtension)[0]!.resolve
+    const resolveSecond = second.executionBindings(tasksExtension)[0]!.resolve
+    expect(() => resolveFirst(Dependency)).toThrow('LUTRE_APPLICATION_STATE')
     try {
-      expect(() =>
-        Reflect.apply(runtime.resolve, runtime, [Dependency]),
-      ).toThrow('LUTRE_DI_EXECUTION_CONTEXT')
-      expect(() =>
-        Reflect.apply(runtime.resolve, runtime, [Dependency, 'task.declared']),
-      ).toThrow('LUTRE_DI_EXECUTION_CONTEXT')
-      expect(() =>
-        runtime.resolve(Dependency, { executionId: 'unknown' }),
-      ).toThrow('LUTRE_DI_EXECUTION_CONTEXT')
-      expect(
-        runtime.resolve(Dependency, { executionId: 'task.declared' }),
-      ).toBe(runtime.get(Dependency))
+      await first.initialize()
+      await second.initialize()
+      expect(resolveFirst(Dependency)).toBe(first.get(Dependency))
+      expect(resolveSecond(Dependency)).toBe(second.get(Dependency))
+      expect(resolveFirst(Dependency)).not.toBe(resolveSecond(Dependency))
+      await first.shutdown()
+      expect(() => resolveFirst(Dependency)).toThrow('LUTRE_APPLICATION_STATE')
+      expect(resolveSecond(Dependency)).toBe(second.get(Dependency))
     } finally {
-      await runtime.shutdown()
+      await first.shutdown()
+      await second.shutdown()
     }
   })
 })

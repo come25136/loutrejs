@@ -8,6 +8,7 @@ import {
   type ExecutionExtension,
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
+  type ExecutionRuntimeBinding,
   type SchemaOutput,
   type StandardSchemaV1,
 } from '../core/index.js'
@@ -240,10 +241,7 @@ function snapshotMessagePortRoutes(
 }
 
 function createMessagePortRuntime(
-  executions: readonly {
-    readonly id: string
-    readonly compiled: CompiledMessagePortExecution
-  }[],
+  bindings: readonly ExecutionRuntimeBinding<CompiledMessagePortExecution>[],
   applicationRuntime: ExecutionKernelRuntime,
 ): MessagePortExtensionRuntime {
   const routes = new Map<
@@ -260,7 +258,7 @@ function createMessagePortRuntime(
   const activeStreams = new Set<{
     abort(reason: unknown, deadline: number): Promise<void>
   }>()
-  for (const execution of executions) {
+  for (const { execution, resolve } of bindings) {
     const handlers = runInInjectionContext(
       {
         consumer: {
@@ -268,12 +266,7 @@ function createMessagePortRuntime(
           id: `message-port:${execution.id}`,
           name: execution.id,
         },
-        resolve: (token, consumer) =>
-          applicationRuntime.resolve(token, {
-            source: execution.id,
-            executionId: execution.id,
-            consumer,
-          }),
+        resolve: (token, consumer) => resolve(token, { consumer }),
       },
       () => execution.compiled.factory(),
     )

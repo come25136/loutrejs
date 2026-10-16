@@ -9,6 +9,8 @@ import {
   type ExecutionExtension,
   type ExecutionExtensionRuntime,
   type ExecutionKernelRuntime,
+  type ExecutionRuntimeBinding,
+  type DependencyResolver,
   type ExecutionLease,
   type ExecutionOperationLease,
   type LifecycleHook,
@@ -23,13 +25,8 @@ import {
   type RuntimeInvocationRegistration,
   type RuntimeOperationMetadata,
   type TokenLike,
-  type DependencyResolutionContext,
 } from '../core/index.js'
-import {
-  Container,
-  DependencyResolutionError,
-  assertDeclaredDependency,
-} from './di.js'
+import { Container, assertDeclaredDependency } from './di.js'
 import { ExecutionTracker } from './execution-tracker.js'
 import { Logger } from './logger.js'
 
@@ -63,7 +60,10 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   readonly #extensionRuntimes = new Map<symbol, ExecutionExtensionRuntime>()
   readonly #providerInstances = new Map<string, unknown[]>()
   readonly #providerNodes = new Map<ProviderDescriptor, ProviderModelNode>()
-  readonly #executionDependencies = new Map<string, readonly TokenLike[]>()
+  readonly #executionBindings = new Map<
+    symbol,
+    readonly ExecutionRuntimeBinding<any>[]
+  >()
   readonly #initializedModuleIds = new Set<string>()
   readonly #executions = new ExecutionTracker()
   readonly #extensionDrainOperations = new Map<
@@ -85,9 +85,6 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     this.model = assertValidApplicationModel(model)
     for (const node of this.model.nodes) {
       if (node.kind === 'provider') this.#providerNodes.set(node.provider, node)
-    }
-    for (const execution of this.model.executions) {
-      this.#executionDependencies.set(execution.id, execution.dependencies)
     }
     this.capabilities = new RuntimeCapabilityRegistry(
       options.capabilities ?? [],
@@ -119,6 +116,32 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
           this.#notifyProviderCreated(provider, value),
       },
     })
+    for (const { extension, executions } of this.model.extensions) {
+      this.#executionBindings.set(
+        extension.identity,
+        Object.freeze(
+          executions.map((execution) => {
+            const resolve: DependencyResolver = (token, context) => {
+              if (this.#state === 'created' || this.#state === 'stopped') {
+                throw applicationStateError(this.#state)
+              }
+              assertDeclaredDependency(
+                execution.id,
+                token,
+                execution.dependencies,
+              )
+              return this.container.resolve(token, {
+                source: execution.id,
+                ...(typeof context === 'string'
+                  ? { source: context }
+                  : context),
+              })
+            }
+            return Object.freeze({ execution, resolve })
+          }),
+        ),
+      )
+    }
   }
 
   initialize(): Promise<void> {
@@ -144,7 +167,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       await this.#initializeProviders()
       for (const modelExtension of this.model.extensions) {
         const runtime = await modelExtension.extension.createRuntime({
-          executions: modelExtension.executions,
+          executions: this.executionBindings(modelExtension.extension),
           capabilities: this.capabilities,
           applicationRuntime: this,
         })
@@ -235,25 +258,16 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     }
   }
 
-  resolve<TValue>(
-    token: TokenLike<TValue>,
-    context: DependencyResolutionContext & { readonly executionId: string },
-  ): TValue {
-    if (this.#state === 'created' || this.#state === 'stopped') {
-      throw applicationStateError(this.#state)
-    }
-    const executionId = context?.executionId
-    const dependencies =
-      executionId === undefined
-        ? undefined
-        : this.#executionDependencies.get(executionId)
-    if (executionId === undefined || !dependencies) {
-      throw new DependencyResolutionError(
-        `LUTRE_DI_EXECUTION_CONTEXT: Resolving ${tokenName(token)} requires a canonical executionId in DependencyResolutionContext (received ${executionId ?? 'undefined'}).`,
+  executionBindings<TCompiled>(
+    extension: ExecutionExtension<any, TCompiled, any, any, any>,
+  ): readonly ExecutionRuntimeBinding<TCompiled>[] {
+    const bindings = this.#executionBindings.get(extension.identity)
+    if (!bindings) {
+      throw new Error(
+        `LUTRE_EXTENSION_RUNTIME_MISSING: ${extension.name} is not declared in the Application Model.`,
       )
     }
-    assertDeclaredDependency(executionId, token, dependencies)
-    return this.container.resolve(token, context)
+    return bindings
   }
 
   get<TValue>(token: TokenLike<TValue>): TValue {

@@ -218,7 +218,11 @@ Modelの依存宣言は、Runtimeが要求できるtokenの集合です。すべ
 
 組み込み`Logger`などframework-provided tokenも、通常のtokenと同様に依存宣言が必要です。frameworkによる提供はProvider登録の省略を可能にするもので、宣言照合の免除ではありません。Lifecycle hookの依存は従来どおり明示的な`inject`配列で宣言します。
 
-独自Execution Extensionは、`applicationRuntime.resolve(token, { executionId: execution.id, source, consumer })`のように、Modelへ収録されたExecutionのIDを渡してください。`source`はログ・診断用、`consumer`は構築metadata用で、照合に使うidentityとは分けます。IDの省略・不明なIDは`LUTRE_DI_EXECUTION_CONTEXT`で拒否します。Layerも所有するExecutionのIDを渡します。単独の低水準`Container`にはModelがないため、宣言照合には`ContainerOptions.dependencies`でModelのProvider依存一覧を渡す必要があります。Application経由ではKernelが必ず設定します。
+独自Execution Extensionの`createRuntime`とHostの`create`は、`executions`として`ExecutionRuntimeBinding`の配列を受け取ります。各bindingの`execution`はcanonical ModelのExecutionへの参照、`resolve`はそのExecutionの依存宣言にKernelが束縛したresolverです。`const { execution, resolve } = executions[0]`のように取り出し、`resolve(token)`で解決します。Injection Contextからは`resolve(token, { consumer })`、Layerからは同じresolverを使います。照合するExecutionのIDを解決のたびに指定する必要はありません。
+
+`resolve`の既定の`source`はExecutionのIDです。任意の`source`はログ・診断用、`consumer`は構築metadata用で、どちらを指定しても照合する依存宣言は変わりません。`applicationRuntime`は実行・操作の追跡を担当し、依存解決の入口を持ちません。bindingはApplicationのRuntimeが所有し、Modelへresolverや実行状態を保存しません。Application停止後に保持していたresolverを呼ぶと`LUTRE_APPLICATION_STATE`で拒否します。
+
+単独の低水準`Container`にはModelがないため、宣言照合には`ContainerOptions.dependencies`でModelのProvider依存一覧を渡す必要があります。Application経由ではKernelが必ず設定します。
 
 ## EnvironmentとArguments
 

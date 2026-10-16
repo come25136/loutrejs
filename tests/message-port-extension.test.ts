@@ -226,12 +226,14 @@ describe('MessagePort Execution Extension', () => {
             },
           }
         },
-        resolve() {
-          return undefined as never
-        },
       }
       const runtime = await messagePortExtension.createRuntime({
-        executions: group.executions,
+        executions: group.executions.map((candidate) => ({
+          execution: candidate,
+          resolve: () => {
+            throw new Error('このfixtureは依存を宣言しない')
+          },
+        })),
         capabilities: new RuntimeCapabilityRegistry(),
         applicationRuntime,
       })

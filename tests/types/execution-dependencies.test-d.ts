@@ -1,14 +1,22 @@
-import { token, type ExecutionKernelRuntime } from '@loutrejs/loutre'
+import {
+  token,
+  type ExecutionKernelRuntime,
+  type ExecutionRuntimeBinding,
+} from '@loutrejs/loutre'
 
 const VALUE = token<number>('value')
 declare const runtime: ExecutionKernelRuntime
+declare const binding: ExecutionRuntimeBinding<{ label: string }>
 
-const value: number = runtime.resolve(VALUE, { executionId: 'execution.id' })
+const value: number = binding.resolve(VALUE)
+const label: string = binding.execution.compiled.label
 void value
+void label
+binding.resolve(VALUE, { source: 'logger-label' })
 
-// @ts-expect-error 所属Executionなしの解決は宣言照合できない。
+// @ts-expect-error Executionに束縛されていない解決経路を公開しない。
 runtime.resolve(VALUE)
-// @ts-expect-error 診断用のsourceはExecutionのidentityを代用しない。
-runtime.resolve(VALUE, { source: 'execution.id' })
-// @ts-expect-error 表示用のconsumerはExecutionのidentityを代用しない。
-runtime.resolve(VALUE, { consumer: { id: 'execution.id', name: 'example' } })
+// @ts-expect-error 解決のたびに別Executionのidentityを指定できない。
+binding.resolve(VALUE, { executionId: 'other' })
+// @ts-expect-error canonical Modelのcontributionへresolverを持ち込まない。
+binding.execution.resolve(VALUE)

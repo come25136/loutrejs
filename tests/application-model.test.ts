@@ -74,7 +74,9 @@ function createProbeExtension(events: string[] = []) {
       const driver = capabilities.get(PROBE_DRIVER)
       return {
         async invoke(id: string) {
-          const execution = executions.find((candidate) => candidate.id === id)
+          const execution = executions.find(
+            (candidate) => candidate.execution.id === id,
+          )?.execution
           if (!execution) throw new Error(`Unknown probe execution: ${id}`)
           const lease = applicationRuntime.beginExecution()
           try {
