@@ -11,6 +11,6 @@
     }
   },
   "dependencies": {
-    "@loutrejs/loutre": "0.8.2"
+    "@loutrejs/loutre": "0.9.0"
   }
 }
