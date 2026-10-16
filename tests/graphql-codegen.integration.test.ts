@@ -1,9 +1,11 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { spawn } from 'node:child_process'
+import { build } from 'esbuild'
 import { runCli } from '@loutrejs/cli'
-import { buildASTSchema, graphql as execute, Kind } from 'graphql'
+import { buildASTSchema, graphql as execute, type DocumentNode } from 'graphql'
 import { generatedHeader } from '../packages/cli/src/graphql-codegen.js'
 
 const directories: string[] = []
@@ -244,11 +246,24 @@ describe('GraphQL CLI', () => {
       join(f.cwd, 'generated/schema-ast.ts'),
       'utf8',
     )
-    const document = Function(
-      'Kind',
-      'return (' + staticSchema.split(' = ')[1]! + ')',
-    )(Kind)
-    const schema = buildASTSchema(document)
+    const modulePath = join(f.cwd, 'schema-ast.mjs')
+    await build({
+      stdin: {
+        contents: staticSchema,
+        loader: 'ts',
+        resolveDir: process.cwd(),
+      },
+      bundle: true,
+      platform: 'node',
+      format: 'esm',
+      outfile: modulePath,
+    })
+    const { schemaDocument } = (await import(
+      pathToFileURL(modulePath).href
+    )) as {
+      schemaDocument: DocumentNode
+    }
+    const schema = buildASTSchema(schemaDocument)
     schema.getQueryType()!.getFields().user!.resolve = () => ({
       id: '1',
       name: 'Loutre',

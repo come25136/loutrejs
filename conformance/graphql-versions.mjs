@@ -17,6 +17,13 @@ const packageVersion = JSON.parse(
   await readFile(new URL('../package.json', import.meta.url), 'utf8'),
 ).version
 const versions = (process.argv[3] ?? '16.14.2,17.0.2').split(',')
+for (const version of versions) {
+  if (!/^\d+\.\d+\.\d+$/u.test(version)) {
+    throw new Error(
+      `GraphQLの検証versionには固定versionを指定してください: ${version}`,
+    )
+  }
+}
 const directory = await mkdtemp(join(tmpdir(), 'loutre-graphql-versions-'))
 try {
   for (const version of versions) {
@@ -219,7 +226,11 @@ try {
         join(cwd, 'src/generated/schema-ast.ts'),
         join(cwd, 'shared-contract/schema-ast.ts'),
       )
-      await run(join(cwd, 'node_modules/.bin/tsc'), [], { cwd })
+      await run(
+        process.execPath,
+        [join(cwd, 'node_modules/typescript/bin/tsc')],
+        { cwd },
+      )
       await run(
         process.execPath,
         [cli, 'build', 'src/app.ts', '--out-dir', 'built'],
