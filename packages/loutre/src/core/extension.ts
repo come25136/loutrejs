@@ -1,4 +1,4 @@
-import type { DependencyResolutionContext } from './injection.js'
+import type { DependencyResolver } from './injection.js'
 import type { Diagnostic } from './diagnostic.js'
 import type {
   RuntimeExecutionMetadata,
@@ -112,10 +112,6 @@ export interface ExecutionKernelRuntime {
     metadata: RuntimeOperationMetadata,
     invocation?: RuntimeInvocationRegistration,
   ): ExecutionOperationLease
-  resolve<TValue>(
-    token: TokenLike<TValue>,
-    context?: string | DependencyResolutionContext,
-  ): TValue
 }
 
 export interface ExecutionExtensionDrainContext {
@@ -141,6 +137,11 @@ export interface ExecutionContribution<TCompiled = unknown> {
   readonly compiled: TCompiled
 }
 
+export interface ExecutionRuntimeBinding<TCompiled = unknown> {
+  readonly execution: ExecutionContribution<TCompiled>
+  readonly resolve: DependencyResolver
+}
+
 export interface ExecutionExtensionValidationContext<TCompiled = unknown> {
   readonly executions: readonly ExecutionContribution<TCompiled>[]
 }
@@ -150,7 +151,7 @@ export interface ExecutionProjectionContext<TCompiled = unknown> {
 }
 
 export interface ExecutionExtensionRuntimeContext<TCompiled = unknown> {
-  readonly executions: readonly ExecutionContribution<TCompiled>[]
+  readonly executions: readonly ExecutionRuntimeBinding<TCompiled>[]
   readonly capabilities: RuntimeCapabilityBindings
   readonly applicationRuntime: ExecutionKernelRuntime
 }
@@ -159,7 +160,7 @@ export interface HostExtensionContext<
   TCompiled = unknown,
   TRuntime extends ExecutionExtensionRuntime = ExecutionExtensionRuntime,
 > {
-  readonly executions: readonly ExecutionContribution<TCompiled>[]
+  readonly executions: readonly ExecutionRuntimeBinding<TCompiled>[]
   readonly runtime: TRuntime
   readonly applicationRuntime: ExecutionKernelRuntime
 }

@@ -23,6 +23,7 @@ export type {
   AnyExecutionExtension,
   ExecutionCompileContext,
   ExecutionContribution,
+  ExecutionRuntimeBinding,
   ExecutionDefinition,
   ExecutionDeclaration,
   ExecutionGroup,
@@ -70,6 +71,7 @@ export type {
   DependencyConsumer,
   DependencyConsumerDescriptor,
   DependencyResolutionContext,
+  DependencyResolver,
   InjectionContext,
 } from './injection.js'
 export { hook } from './lifecycle.js'

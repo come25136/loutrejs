@@ -9,6 +9,8 @@ import {
   type Diagnostic,
   type ExecutionDefinition,
   type ExecutionKernelRuntime,
+  type ExecutionRuntimeBinding,
+  type DependencyResolver,
   type ProviderDescriptor,
   type SchemaOutput,
   type StandardSchemaV1,
@@ -537,19 +539,16 @@ export function consume<
 }
 
 function createTasksRuntime(
-  executions: readonly {
-    readonly id: string
-    readonly compiled: TasksCompiledExecution
-  }[],
+  bindings: readonly ExecutionRuntimeBinding<TasksCompiledExecution>[],
   applicationRuntime: ExecutionKernelRuntime,
 ): TasksExtensionRuntime {
   const runtimes = new Map<symbol, (...arguments_: any[]) => any>()
   const runtimeExecutionIds = new Map<symbol, string>()
-  const triggers: TasksCompiledExecution[] = []
-  for (const execution of executions) {
+  const triggers: ExecutionRuntimeBinding<TasksCompiledExecution>[] = []
+  for (const { execution, resolve } of bindings) {
     const compiled = execution.compiled
     if (compiled.type !== 'task') {
-      triggers.push(compiled)
+      triggers.push({ execution, resolve })
       continue
     }
     const runtime = runInInjectionContext(
@@ -559,11 +558,7 @@ function createTasksRuntime(
           id: `task:${compiled.name}`,
           name: compiled.name,
         },
-        resolve: (dependency, consumer) =>
-          applicationRuntime.resolve(dependency, {
-            source: execution.id,
-            consumer,
-          }),
+        resolve: (dependency, consumer) => resolve(dependency, { consumer }),
       },
       () => compiled.factory(),
     )
@@ -682,9 +677,10 @@ function createTasksRuntime(
     const started: TriggerHandle[] = []
     const startup = (async () => {
       try {
-        for (const trigger of triggers) {
+        for (const { execution, resolve } of triggers) {
+          const trigger = execution.compiled
           if (trigger.type === 'task') continue
-          const handle = await startTrigger(trigger, run, applicationRuntime)
+          const handle = await startTrigger(trigger, run, resolve)
           started.push(handle)
           if (state !== 'running') {
             throw tasksStateError(state)
@@ -754,7 +750,7 @@ async function startTrigger(
     taskName: string,
     ...arguments_: any[]
   ) => Promise<unknown>,
-  applicationRuntime: ExecutionKernelRuntime,
+  resolve: DependencyResolver,
 ): Promise<TriggerHandle> {
   return match(trigger)
     .with({ type: 'cron' }, (candidate) => startCronTrigger(candidate, run))
@@ -762,7 +758,7 @@ async function startTrigger(
       startFixedDelayTrigger(candidate, run),
     )
     .with({ type: 'queue-consumer' }, (candidate) =>
-      startQueueTrigger(candidate, run, applicationRuntime),
+      startQueueTrigger(candidate, run, resolve),
     )
     .exhaustive()
 }
@@ -856,9 +852,9 @@ async function startQueueTrigger(
     taskName: string,
     ...arguments_: any[]
   ) => Promise<unknown>,
-  applicationRuntime: ExecutionKernelRuntime,
+  resolve: DependencyResolver,
 ): Promise<QueueConsumerHandle> {
-  const driver = applicationRuntime.resolve(trigger.queueDriver)
+  const driver = resolve(trigger.queueDriver)
   if (!driver || typeof driver.start !== 'function') {
     throw new Error(
       `LUTRE_QUEUE_DRIVER_INVALID: Queue ${trigger.queueName} driver is invalid.`,

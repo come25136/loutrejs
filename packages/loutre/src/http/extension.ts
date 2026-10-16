@@ -15,6 +15,8 @@ import {
   type ExecutionExtension,
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
+  type ExecutionRuntimeBinding,
+  type DependencyResolver,
   type GenericLayer,
   type RuntimeCapabilityBinding,
   type SchemaInput,
@@ -594,6 +596,7 @@ interface CompiledHttpExecution {
 }
 
 interface RuntimeHttpRoute {
+  readonly resolve: DependencyResolver
   readonly executionId: string
   readonly route: CompiledHttpRoute
 }
@@ -1413,10 +1416,7 @@ function assertValidHttpRouteDefinition(
 }
 
 function createHttpExtensionRuntime(
-  executions: readonly {
-    readonly id: string
-    readonly compiled: CompiledHttpExecution
-  }[],
+  bindings: readonly ExecutionRuntimeBinding<CompiledHttpExecution>[],
   applicationRuntime: ExecutionKernelRuntime,
 ): HttpExtensionRuntime {
   const ingress = new IngressGate()
@@ -1425,7 +1425,7 @@ function createHttpExtensionRuntime(
     string,
     ReturnType<CompiledHttpExecution['factory']>
   >()
-  for (const execution of executions) {
+  for (const { execution, resolve } of bindings) {
     handlers.set(
       execution.id,
       runInInjectionContext(
@@ -1435,21 +1435,18 @@ function createHttpExtensionRuntime(
             id: `http:${execution.id}`,
             name: execution.id,
           },
-          resolve: (token, consumer) =>
-            applicationRuntime.resolve(token, {
-              source: execution.id,
-              consumer,
-            }),
+          resolve: (token, consumer) => resolve(token, { consumer }),
         },
         () => execution.compiled.factory(),
       ),
     )
   }
-  const routes = executions
-    .flatMap((execution) =>
+  const routes = bindings
+    .flatMap(({ execution, resolve }) =>
       execution.compiled.routes.map((route): RuntimeHttpRoute => ({
         executionId: execution.id,
         route,
+        resolve,
       })),
     )
     .toSorted((left, right) =>
@@ -1680,8 +1677,7 @@ function createHttpExtensionRuntime(
           composeLayers({
             context,
             layers: match.route.middlewares,
-            resolve: (token, source) =>
-              applicationRuntime.resolve(token, source),
+            resolve: match.resolve,
             terminal: async (middlewareContext) => {
               const handlerName = `${match.executionId}.${match.route.name}`
               const handlerOperation = applicationRuntime.beginOperation?.(

@@ -1,0 +1,35 @@
+# canonical ModelとRuntimeの依存宣言の整合
+
+- 状態: IMPLEMENTED
+- 日付: 2026-10-16 JST
+- 対象: #139
+
+## 背景
+
+Modelの依存収集時には、実際のconsumerやEnv / Argsの値が存在しない。構築metadataや注入値を条件に別の依存を要求すると、Modelにedgeがなくvisibility検証を受けていないprivate ProviderをRuntimeが解決できてしまう。
+
+## 判断
+
+依存の正本はcanonical Application Modelとし、Runtimeは実際の解決要求がその宣言に含まれることを確認する。未解決の依存とvisibilityの判定はModel構築が所有し、ContainerにModuleの別graphや依存probeを持たせない。ContainerはKernelから渡されたProviderの依存宣言を照合し、KernelはExecutionの依存宣言を照合する。照合はcache参照やframework-provided tokenの提供より前に行う。
+
+依存宣言は実行時に要求できるtokenの上限とする。conditional providerの全候補やExecution内の複数Layerは、実行ごとに使う依存が異なるため、実行時の集合との完全一致は要求しない。Modelに含まれる全候補の依存は事前にvisibility検証を受ける。conditional providerの選択元contractも実際に解決する依存であり、Modelへ含める。
+
+Kernelはcanonical Executionへの参照と、その依存宣言に束縛したresolverを一つのruntime bindingとしてExtensionとHostへ渡す。HTTP LayerとQueue triggerも同じresolverを引き継ぐ。解決のたびに呼び出し側へidentityの指定を要求すると、各protocolに照合のための引数伝播と指定漏れの余地が増えるため採用しない。表示用のsourceとconsumer metadataは渡せるが、照合するExecutionの選択には使わない。共通のapplicationRuntimeには依存解決の入口を設けない。
+
+bindingはcanonical Executionを複製せず参照し、Modelにresolverを追加しない。Kernelごとにbindingを作り、Runtime初期化とHost構築で共有する。Applicationをまたぐcacheやambient contextからの所有者推測は採用しない。同じModelから複数Applicationを作ってもresolver・instance・停止状態が共有されないよう、これらの寿命はKernelに揃える。
+
+factory providerは既存の明示的な`inject`配列を維持し、factory本体にはresolverを設けない。構築metadataの保存は依存を増やさないため許可する。framework-provided tokenはProvider登録を不要にするだけであり、依存宣言の例外にしない。利用側のAPI契約とエラーは[アーキテクチャガイド](../ja/architecture.md#modelの依存宣言と実行時の照合)を正本とする。
+
+### bindingの保管責務
+
+bindingの生成・保持・共有はKernelが所有する。`#executionBindings`はExtensionとHostが同じbindingを利用するための索引に責務を限定し、依存宣言の正本をModelに保つ。routing、protocol固有の状態、requestごとの状態管理は各Extensionが所有し、この索引へ集約しない。
+
+bindingとresolverはKernelと同じ寿命を持ち、現時点では独立した生成方針もない。このため生成関数や専用managerへの分離は、所有者と保証を追う場所を増やす負担に見合わない。bindingに独立した寿命や複数の所有者で共有すべき生成方針が必要になった時点で、責務の分離を再評価する。
+
+## 採用しない方法
+
+特定consumerを仮定してprobe回数を増やしても、token・name・注入値による任意の分岐を列挙できない。metadataの読み取りを禁止すると、正規の独自loggerまで利用できなくなる。Runtimeで新しいedgeを追加すると、既に検証・公開したModelと異なるgraphが生まれる。これらは採用せず、未宣言の要求を実行した時点で解決前に拒否する。
+
+## 影響
+
+これまで偶然解決できていた構築時の依存分岐は、起動時またはLayerの構築時に失敗する。必要な依存は無条件に宣言し、依存を使う条件はhandlerなどの実行処理へ移す。既存の単独ContainerはModelを受け取らないため、その利用者が宣言一覧を与えた場合に照合する。ApplicationのKernelは必ずcanonicalな宣言を渡す。

@@ -27,6 +27,7 @@ export interface ContainerHooks {
 
 export interface ContainerOptions {
   readonly logger?: Logger
+  readonly dependencies?: ReadonlyMap<TokenLike, readonly TokenLike[]>
   readonly hooks?: ContainerHooks
   readonly environment?: ReadonlyMap<EnvClass, object>
   readonly arguments?: ReadonlyMap<ArgsClass, object>
@@ -36,6 +37,9 @@ export class Container {
   readonly #providers = new Map<TokenLike, ProviderDescriptor>()
   readonly #applicationCache = new Map<TokenLike, unknown>()
   readonly #logger: Logger
+  readonly #dependencies:
+    | ReadonlyMap<TokenLike, readonly TokenLike[]>
+    | undefined
   readonly #hooks: ContainerHooks
   readonly #environment = new Map<EnvClass, object>()
   readonly #arguments = new Map<ArgsClass, object>()
@@ -46,6 +50,8 @@ export class Container {
   ) {
     this.#logger =
       options instanceof Logger ? options : (options.logger ?? new Logger())
+    this.#dependencies =
+      options instanceof Logger ? undefined : options.dependencies
     this.#hooks = options instanceof Logger ? {} : (options.hooks ?? {})
     if (!(options instanceof Logger)) {
       for (const [environment, value] of options.environment ?? []) {
@@ -251,7 +257,7 @@ export class Container {
           const value = this.#instantiate(
             candidate.useClass,
             lineage,
-            candidate.provide,
+            candidate,
             inquirer,
           )
           this.#hooks.created?.(candidate, value)
@@ -259,12 +265,7 @@ export class Container {
         })
         .with({ kind: 'factory' }, (candidate) => {
           const dependencies = candidate.inject.map((token) =>
-            this.#resolve(
-              token,
-              tokenName(candidate.provide),
-              lineage,
-              candidate.provide,
-            ),
+            this.#resolveDependency(token, candidate, lineage),
           )
           const value = runInInjectionContext(
             {
@@ -282,11 +283,10 @@ export class Container {
           return value
         })
         .with({ kind: 'conditional' }, (candidate) => {
-          const input = this.#resolve(
+          const input = this.#resolveDependency(
             candidate.select.contract,
-            tokenName(candidate.provide),
+            candidate,
             lineage,
-            candidate.provide,
           ) as Record<string, unknown>
           const selected = input[candidate.select.key]
           const implementation = candidate.mapping[selected as PropertyKey]
@@ -298,7 +298,7 @@ export class Container {
           const value = this.#instantiate(
             implementation,
             lineage,
-            candidate.provide,
+            candidate,
             inquirer,
           )
           this.#hooks.created?.(candidate, value)
@@ -313,10 +313,26 @@ export class Container {
     }
   }
 
+  #resolveDependency<T>(
+    token: TokenLike<T>,
+    provider: ProviderDescriptor,
+    lineage: readonly TokenLike[],
+    source = tokenName(provider.provide),
+  ): T {
+    if (this.#dependencies) {
+      assertDeclaredDependency(
+        tokenName(provider.provide),
+        token,
+        this.#dependencies.get(provider.provide) ?? [],
+      )
+    }
+    return this.#resolve(token, source, lineage, provider.provide)
+  }
+
   #instantiate<T>(
     target: Class<T>,
     lineage: readonly TokenLike[],
-    consumer: TokenLike,
+    provider: ProviderDescriptor,
     inquirer?: DependencyConsumer,
   ): T {
     if (target.length > 0) {
@@ -326,10 +342,10 @@ export class Container {
     }
     return runInInjectionContext(
       {
-        consumer,
+        consumer: provider.provide,
         ...(inquirer === undefined ? {} : { inquirer }),
         resolve: (token) =>
-          this.#resolve(token, target.name, lineage, consumer),
+          this.#resolveDependency(token, provider, lineage, target.name),
       },
       () => new target(),
     )
@@ -352,4 +368,16 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
     'then' in value &&
     typeof (value as { then?: unknown }).then === 'function'
   )
+}
+
+export function assertDeclaredDependency(
+  consumer: string,
+  token: TokenLike,
+  dependencies: readonly TokenLike[],
+): void {
+  if (!dependencies.includes(token)) {
+    throw new DependencyResolutionError(
+      `LUTRE_DI_UNDECLARED_DEPENDENCY: ${consumer} requested ${tokenName(token)}, but it is not declared in the canonical Application Model. Declare dependencies unconditionally; construction metadata and runtime values must not add dependencies.`,
+    )
+  }
 }
