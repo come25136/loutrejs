@@ -170,7 +170,7 @@ MessagePortは`@loutrejs/loutre/message-port`、WebSocketは`@loutrejs/loutre/we
 
 ## DIとModule visibility
 
-Providerは既定でapplication scopeです。`inject()`で宣言したdependencyはApplication Modelへ記録されます。
+`inject()`を使うと、必要なサービスをLoutreから受け取れます。このように、サービスが必要とする別のサービスを渡す仕組みをDI（依存性の注入）と呼びます。Loutreに登録するサービスや値をProviderと呼び、既定では一つのApplication内で同じinstanceを共有します（application scope）。
 
 ```ts
 class UsersService {
@@ -178,11 +178,59 @@ class UsersService {
 }
 ```
 
-別ModuleのProviderへ依存する場合は`exports` / `imports`を明示します。visibilityはRuntime起動前のModel構築時に検証されます。
+別のModuleが持つサービスを使う場合は、提供側で`exports`、利用側で`imports`を指定します。これにより、どのModuleからサービスを利用できるかが決まります。この利用範囲をModule visibilityと呼びます。
+
+### Modelの依存宣言と実行時の照合
+
+LoutreはApplicationを起動する前に、`inject()`などから「どのサービスが、どのサービスを必要とするか」を調べます。その結果を記録したものがApplication Model（以下、Model）です。必要なサービスが登録されているか、別のModuleから利用してよいかを、この段階で確認します。
+
+実行時にも、その要求元の依存としてModelに記録されたサービスかを確認します。Providerとして登録されていても、その要求元の依存として記録されていないサービスを実行時だけ要求すると、`LUTRE_DI_UNDECLARED_DEPENDENCY`で拒否されます。エラーには要求元と、要求されたサービスの識別子が含まれます。これは、事前の確認を通っていないサービスを利用させないための規則です。
+
+記録したサービスを毎回すべて使う必要はありません。必要なサービスは常に同じように取得し、使うかどうかはメソッドやhandler内の処理で判断してください。
 
 ### 独自loggerなどで依存元を取得する
 
-`injectInquirer()`は、同期的なprovider構築中にそのproviderを直接要求したconsumerを返します。class providerとfactory providerの両方で使えます。class・custom tokenはそのtoken自体、Executionからの要求は`id`・`name`を持つdescriptorです。別名tokenで登録したconsumerでは、implementation classではなく登録tokenを返します。
+`injectInquirer()`は、今作っているサービスを直接要求した相手を返します。返された相手をconsumerと呼びます。ログに要求元の名前を付けるなどの補足情報（metadata）に使い、取得するサービスの切り替えには使わないでください。
+
+**NG: 依存元の有無で`inject()`を分岐する**
+
+```ts
+class MyService {
+  readonly repository = injectInquirer() ? inject(Repository) : undefined
+}
+```
+
+事前に依存関係を調べる段階では、`injectInquirer()`は`undefined`です。そのため、この例の`Repository`は依存としてModelに記録されません。別のサービスから要求されるなど、実際の構築で依存元が存在し、この分岐から`Repository`を要求した時点で`LUTRE_DI_UNDECLARED_DEPENDENCY`になります。
+
+**OK: 依存は無条件に宣言し、依存元の情報は別に保存する**
+
+```ts
+class MyService {
+  readonly repository = inject(Repository)
+  readonly consumer = injectInquirer()
+}
+```
+
+`Repository`は事前に依存として記録されます。保存した`consumer`はログなどに使えます。条件によって`Repository`を使うかどうかを変えたい場合は、依存の宣言を分岐させず、実際の処理で分岐します。
+
+```ts
+class MyService {
+  readonly repository = inject(Repository)
+
+  loadUsers(enabled: boolean) {
+    if (!enabled) return []
+    return this.repository.findAll()
+  }
+}
+```
+
+#### consumer情報の形式と保存
+
+`injectInquirer()`は、Providerを同期的に作っている間に使えます。要求元がクラスならそのクラス、登録用の識別子（custom token）ならそのtokenを返します。別名tokenで登録したサービスでは、実装クラスではなく登録tokenを返します。標準のAPIやTaskなどの処理からの要求では、`id`・`name`を持つオブジェクトを返します。
+
+依存元がない直接の構築時や、サービスを作っている場面の外では`undefined`です。取得した値は構築時に保存してください。非同期処理の中で呼び直しても、その処理の要求元を追跡することはできません。
+
+要求元ごとに異なる情報を保存する独自loggerには、要求のたびに新しいinstanceを作る`transient`を使います。application scopeでは、一つのinstanceと、構築時に保存したconsumerが共有されます。
 
 ```ts
 import { inject, injectInquirer, provide } from '@loutrejs/loutre'
@@ -198,31 +246,87 @@ const loggerProvider = provide(AppLogger).useClass(AppLogger, {
 })
 ```
 
-`ServiceA`が`inject(AppLogger)`すると`AppLogger.consumer`は`ServiceA`になります。組み込みLoggerの`context.source`は従来どおり`AppLogger`です。factory providerでも`use`内から取得でき、依存は従来どおり`inject: [...]`で宣言します。
+`ServiceA`が`inject(AppLogger)`すると、`AppLogger.consumer`は`ServiceA`です。組み込みLoggerの`context.source`は、そのLoggerを要求した`AppLogger`になります。factoryでも`use`内から`injectInquirer()`を使えますが、必要なサービスは登録時の`inject`配列で指定します。
 
-Applicationの初期構築などconsumerがいない直接解決時と注入context外では`undefined`です。application scopeは共有されるため、consumerごとのmetadataが必要ならtransientを使ってください。取得した値は構築時に保存し、非同期処理の中から取得しないでください。`injectInquirer()`はloggerのラベルなどの構築metadata専用です。Model構築時の依存収集にはconsumerが存在しないため、`inject()`するtokenや依存の有無をこの値で分岐させることはAPI contract外です。metadataを保存するコードと依存の宣言を分け、必要な依存は無条件で宣言してください。
+### Providerの登録方法ごとのルール
 
-たとえば`injectInquirer() ? inject(Repository) : undefined`は利用できません。RuntimeがModelにない依存を要求すると、解決前に`LUTRE_DI_UNDECLARED_DEPENDENCY`で拒否します。エラーには依存を要求したProviderまたはExecutionと、要求されたtokenが含まれます。依存先が既にcacheされている場合や、組み込み`Logger`の場合にも同じ規則を適用します。
+| 登録方法                                         | 依存の指定方法と確認内容                                                                                                                                     |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| クラスを登録する（class provider）               | フィールドやconstructorの既定引数に書いた`inject()`から、必要なサービスを調べます。                                                                          |
+| 関数でサービスを作る（factory provider）         | `inject: [...]`に必要なサービスを並べます。その順に`use`の引数へ渡されます。`use`内からの`inject()`は`LUTRE_DI_CONTEXT`で拒否されます。                      |
+| 設定に応じてクラスを選ぶ（conditional provider） | 選択に使う環境設定・起動引数（Env / Args）と、選択候補すべてのクラスの依存を確認します。選ばれない候補も、別Moduleのサービスを利用してよいかの確認対象です。 |
+| API・Taskなどの処理（Execution）                 | 標準のHTTP・Tasks・WebSocket・MessagePortでは、処理を組み立てる`factory`内の`inject()`から依存を調べます。実行時だけ別の依存を追加することはできません。     |
 
-### Modelの依存宣言と実行時の照合
+APIやTaskのhandlerでは、`factory`で取得したサービスを使います。handler内から`inject()`を呼んでサービスを取得する使い方はできません。
 
-Modelの依存宣言は、Runtimeが要求できるtokenの集合です。すべての宣言を毎回使う必要はありません。Model構築時に未解決の依存とModule visibilityを検証し、実行時に宣言外のtokenを解決させないことで、実行時だけのprivate依存を防ぎます。Model構築時に通らなかった分岐は、実際にその分岐を実行した時点で拒否されます。
+#### Env / Args・Logger・終了処理などの補足
 
-| 構築対象                    | 宣言する依存                                                                                       |
-| --------------------------- | -------------------------------------------------------------------------------------------------- |
-| class provider              | 同期構築中の`inject()`から収集したtoken。登録tokenを依存元として照合します。                       |
-| factory provider            | 明示的な`inject: [...]`配列。`use`内の`inject()`は`LUTRE_DI_CONTEXT`で拒否します。                 |
-| conditional provider        | 選択元のEnv / Args contractと、全候補classの依存の和集合。未選択の候補もvisibility検証の対象です。 |
-| Execution / HTTP Layer      | ExtensionがModelへ収録したExecutionの`dependencies`。HTTP Layerの依存は所属Executionに含めます。   |
-| value / Env / Args provider | 構築中の動的な依存はありません。                                                                   |
+- Env（環境設定）とArgs（起動時の引数）は、それぞれModuleの`environment`とApplicationの`arguments`に宣言します。`useValue()`で渡す値、Env、Args自体は、構築中に別のサービスを取得しません。
+- 組み込み`Logger`はLoutreが提供するためProvider登録を省略できますが、利用側で`inject(Logger)`やfactoryの`inject: [Logger]`と宣言する必要はあります。すでに作成済みのサービスを受け取る場合も、依存の宣言は必要です。
+- 初期化・終了処理のLifecycle hookは、`hook({ inject: [...], run: ... })`の`inject`配列で依存を指定します。
+- HTTPのmiddleware（HTTP Layer）の依存も、所属するAPIの依存として調べます。必要なサービスはmiddlewareの`factory`で取得し、実行時だけ追加しないでください。
 
-組み込み`Logger`などframework-provided tokenも、通常のtokenと同様に依存宣言が必要です。frameworkによる提供はProvider登録の省略を可能にするもので、宣言照合の免除ではありません。Lifecycle hookの依存は従来どおり明示的な`inject`配列で宣言します。
+### 独自Execution Extension開発者向け
 
-独自Execution Extensionの`createRuntime`とHostの`create`は、`executions`として`ExecutionRuntimeBinding`の配列を受け取ります。各bindingの`execution`はcanonical ModelのExecutionへの参照、`resolve`はそのExecutionの依存宣言にKernelが束縛したresolverです。`const { execution, resolve } = executions[0]`のように取り出し、`resolve(token)`で解決します。Injection Contextからは`resolve(token, { consumer })`、Layerからは同じresolverを使います。照合するExecutionのIDを解決のたびに指定する必要はありません。
+この節は、独自の処理形式をLoutreへ追加するExtensionの開発者向けです。標準のHTTP・Tasks・WebSocket・MessagePortを使うApplicationでは、この仕組みを意識した設定やAPI呼び出しは不要です。通常は前節までの`inject()`を使ってください。
 
-`resolve`の既定の`source`はExecutionのIDです。任意の`source`はログ・診断用、`consumer`は構築metadata用で、どちらを指定しても照合する依存宣言は変わりません。`applicationRuntime`は実行・操作の追跡を担当し、依存解決の入口を持ちません。bindingはApplicationのRuntimeが所有し、Modelへresolverや実行状態を保存しません。Application停止後に保持していたresolverを呼ぶと`LUTRE_APPLICATION_STATE`で拒否します。
+独自Extensionでは、`compile()`が返す`dependencies`に、その処理（Execution）が必要とするProviderを記録します。Applicationの起動・終了を管理するKernelは、各Executionの宣言に対応する専用のResolver（Providerを取り出す関数）を生成します。
 
-単独の低水準`Container`にはModelがないため、宣言照合には`ContainerOptions.dependencies`でModelのProvider依存一覧を渡す必要があります。Application経由ではKernelが必ず設定します。
+`createRuntime()`とHostの`create()`は、`executions`として`ExecutionRuntimeBinding`の配列を受け取ります。各要素は`{ execution, resolve }`です。`execution`はModelに記録されたExecutionへの参照、`resolve`はそのExecutionの依存宣言に対応する専用Resolverで、役割が異なります。
+
+要素があることを確認したうえで`const { execution, resolve } = executions[0]!`のように取得し、`resolve(Service)`でProviderを取り出せます。複数のExecutionがある場合は、それぞれの要素に付いたResolverを使います。毎回`executionId`を渡す必要はありません。
+
+次の例は、一つのExecutionを追加する最小例です。`compile()`の`dependencies: [Service]`と、`createRuntime()`の`resolve(Service)`が対応します。
+
+```ts
+import { defineExecutionExtension } from '@loutrejs/loutre'
+
+class Service {
+  greet() {
+    return 'Hello'
+  }
+}
+
+const greetingExtension = defineExecutionExtension({
+  kind: 'execution-extension',
+  name: 'example:greeting',
+  abiVersion: '1',
+  compile() {
+    return {
+      kind: 'execution',
+      id: 'greeting',
+      executionKind: 'example.greeting',
+      dependencies: [Service],
+      capabilities: [],
+      compiled: null,
+    }
+  },
+  createRuntime({ executions }) {
+    const handlers = executions.map(({ execution, resolve }) => {
+      const service = resolve(Service)
+      return { id: execution.id, run: () => service.greet() }
+    })
+    return {
+      handlers,
+      close() {},
+    }
+  },
+})
+```
+
+このExtensionを利用するときは、`Service`をModuleの`providers`へ、`defineExecution(greetingExtension, {})`を`executions`へ登録します。
+
+`dependencies`にないProviderを`resolve()`で要求すると、取り出す前に`LUTRE_DI_UNDECLARED_DEPENDENCY`になります。`resolve()`の`source`はログ・診断用（既定値はExecutionのID）、`consumer`は要求されたProviderへ渡す構築時のmetadataです。たとえば`resolve(Service, { source: 'greeting', consumer })`と指定しても、依存宣言の照合先は変わりません。
+
+HTTP LayerやQueue triggerなどへ解決処理を渡す場合も、所属するExecutionの同じResolverを引き継ぎます。`applicationRuntime`は実行・操作の追跡用で、`resolve()`を持ちません。
+
+ResolverはApplicationごとにKernelが生成・管理します。bindingはModelへの参照とResolverを組み合わせた実行時用の値であり、Model自体にResolverや実行状態を保存するものではありません。Application終了後に保持していたResolverを呼ぶと`LUTRE_APPLICATION_STATE`になります。
+
+責務の分担や、この構成を選んだ理由は[依存宣言の整合に関するADR](../adr/loutre_dependency_declaration_consistency.md)を参照してください。
+
+#### 低水準のContainerを直接使う場合
+
+通常のApplicationでは、KernelがProviderの依存宣言をContainerへ渡します。単独で`Container`を作る場合はModelを自動では受け取らないため、宣言を照合するには`ContainerOptions.dependencies`へModelのProvider依存一覧を渡す必要があります。
 
 ## EnvironmentとArguments
 
