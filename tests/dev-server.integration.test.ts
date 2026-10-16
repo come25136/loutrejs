@@ -522,20 +522,25 @@ describe('Loutre Devtools control channel', () => {
     }
   })
 
-  it('追加ignore pathの変更ではGraphをrebuildしない', async () => {
-    await mkdir(join(projectRoot, 'generated', 'nested'), { recursive: true })
+  it.each([
+    'generated',
+    'generated/**',
+    'generated/*/schema.?s',
+    'generated/[cache]/*.ts',
+  ])('追加ignore path %sの変更ではGraphをrebuildしない', async (ignored) => {
+    await mkdir(join(projectRoot, 'generated', '[cache]'), { recursive: true })
     let builds = 0
     const server = await startDevServer({
       projectRoot,
       entry: 'src/app.ts',
       port: 0,
-      ignore: ['generated'],
+      ignore: [ignored],
       loadGraph: async () => snapshot(`AppModule:${++builds}`),
     })
     try {
       await new Promise((resolve) => setTimeout(resolve, 100))
       await writeFile(
-        join(projectRoot, 'generated', 'nested', 'schema.ts'),
+        join(projectRoot, 'generated', '[cache]', 'schema.ts'),
         'ignored\n',
         'utf8',
       )

@@ -369,7 +369,7 @@ function globToRegExp(pattern: string): RegExp {
       source += '[^/]'
       continue
     }
-    source += character.replace(/[\^$.*+?()[\]{}|]/g, '\\$&')
+    source += character.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
   }
   return new RegExp(`${source}(?:/.*)?$`)
 }

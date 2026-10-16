@@ -57,6 +57,8 @@ Browser Control WebSocketは許可Originを検証する。公式サイトとloca
 
 Application channelはloopbackかつBrowser Originなしの接続だけを受け付ける。Browser用tokenやsession handshakeをsecurity boundaryにはしない。
 
+Node adapterからの接続も`ws://127.0.0.1`へ限定する。環境変数が指す任意hostやDNS名を信頼するとTraceの送信先とInspector commandの受信元を外部へ変更できるため、portとpathだけを固定hostのURLへ反映する。不正な接続設定ではDevTools transportを無効化し、Applicationの実行を継続する。
+
 CLIは対象Application Definitionをローカルで評価するため、信頼していないprojectで`loutre dev`を実行しない。Websiteへlive handler、Provider instance、native resourceを渡さない。
 
 ## Website境界

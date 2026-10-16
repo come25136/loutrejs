@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { bootstrapApplication } from '@loutrejs/loutre'
 import application, {
   createProject,
+  ProjectScaffolder,
 } from '../packages/create-loutre/src/app.js'
 import {
   runCreateLoutre,
@@ -31,6 +32,38 @@ describe('create-loutre', () => {
 
   afterEach(async () => {
     await rm(root, { recursive: true, force: true })
+  })
+
+  it('名前の前後のhyphenを除いてpackageを生成する', async () => {
+    const result = await new ProjectScaffolder().create({
+      cwd: root,
+      directory: '---My App---',
+      packageManager: 'npm',
+      target: 'node',
+    })
+    expect(result.packageName).toBe('my-app')
+    expect(
+      JSON.parse(
+        await readFile(join(result.targetDirectory, 'package.json'), 'utf8'),
+      ).name,
+    ).toBe('my-app')
+  })
+
+  it.each([
+    '---',
+    '.app',
+    '_app',
+    'a'.repeat(215),
+    `app${'-'.repeat(100_000)}tail`,
+  ])('不正なpackage名の候補%#をfile操作前に拒否する', async (directory) => {
+    await expect(
+      new ProjectScaffolder().create({
+        cwd: root,
+        directory,
+        packageManager: 'npm',
+        target: 'node',
+      }),
+    ).rejects.toThrow('Could not derive an npm package name')
   })
 
   it('未対応のBunではprojectの生成を始めない', async () => {
