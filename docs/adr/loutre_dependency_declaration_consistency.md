@@ -20,6 +20,12 @@ bindingはcanonical Executionを複製せず参照し、Modelにresolverを追�
 
 factory providerは既存の明示的な`inject`配列を維持し、factory本体にはresolverを設けない。構築metadataの保存は依存を増やさないため許可する。framework-provided tokenはProvider登録を不要にするだけであり、依存宣言の例外にしない。利用側のAPI契約とエラーは[アーキテクチャガイド](../ja/architecture.md#modelの依存宣言と実行時の照合)を正本とする。
 
+### bindingの保管責務
+
+bindingの生成・保持・共有はKernelが所有する。`#executionBindings`はExtensionとHostが同じbindingを利用するための索引に責務を限定し、依存宣言の正本をModelに保つ。routing、protocol固有の状態、requestごとの状態管理は各Extensionが所有し、この索引へ集約しない。
+
+bindingとresolverはKernelと同じ寿命を持ち、現時点では独立した生成方針もない。このため生成関数や専用managerへの分離は、所有者と保証を追う場所を増やす負担に見合わない。bindingに独立した寿命や複数の所有者で共有すべき生成方針が必要になった時点で、責務の分離を再評価する。
+
 ## 採用しない方法
 
 特定consumerを仮定してprobe回数を増やしても、token・name・注入値による任意の分岐を列挙できない。metadataの読み取りを禁止すると、正規の独自loggerまで利用できなくなる。Runtimeで新しいedgeを追加すると、既に検証・公開したModelと異なるgraphが生まれる。これらは採用せず、未宣言の要求を実行した時点で解決前に拒否する。
