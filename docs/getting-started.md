@@ -9,7 +9,7 @@ npm create loutre@latest my-app
 cd my-app
 ```
 
-TargetにはNode.js、Bun、Cloudflare Workers、AWS Lambdaを選べます。
+Choose Node.js, Bun, Cloudflare Workers, or AWS Lambda as your target.
 
 ## Define an HTTP execution
 
@@ -90,7 +90,7 @@ export default defineApplication({
 
 `defineApplication()` builds the canonical Application Model. HTTP route details remain owned by the HTTP Extension; Core stores the execution contribution without protocol-specific branching.
 
-静的・動的Moduleの使い分けと共有参照は[静的Moduleと動的Module](./ja/getting-started.md#静的moduleと動的module)を参照してください。
+For guidance on static versus dynamic Modules and shared references, see [Static and dynamic Modules (Japanese)](./ja/getting-started.md#静的moduleと動的module).
 
 ## Test through the portable Kernel host
 

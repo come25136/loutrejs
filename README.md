@@ -55,7 +55,7 @@ flowchart LR
   n1["trigger.hello-worker"]
 ```
 
-The Application Graph also supports validation of Modules, dependencies, Contracts, executions, and runtime capabilities, serving as the shared model for developer tooling and runtimes.
+The Application Graph is more than just a visualization. It validates Modules, dependencies, Contracts, executions, and runtime capabilities, serving as a shared model for developer tooling and runtimes.
 
 ## Quick Start
 
@@ -135,7 +135,7 @@ Tasks, MessagePort, and WebSocket are available as subpath imports from `@loutre
 ## Project Status
 
 > [!WARNING]
-> Loutre is currently v0.x. The public API may introduce breaking changes.
+> Loutre is currently in the v0.x series. Breaking changes to the public API may occur.
 
 The public API is evolving with a focus on design consistency. For production use, pin your version and review the release notes.
 

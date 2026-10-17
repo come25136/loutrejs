@@ -2,7 +2,7 @@
 
 A minimal long-running Application using the official Tasks Execution Extension.
 
-`Module.executions`へ登録するのは`fixedDelay` Triggerだけです。参照先の`hello` TaskはApplication Modelへ自動で含まれます。`src/main.ts`は`nodeRuntime.create()`で起動し、`app.tasks.start()`でTriggerを開始します。SIGINT / SIGTERMによるTask停止と終了lifecycleはNode Runtimeが管理します。
+Only the `fixedDelay` Trigger is registered in `Module.executions`. The referenced `hello` Task is automatically included in the Application Model. `src/main.ts` boots with `nodeRuntime.create()` and starts the Trigger with `app.tasks.start()`. The Node Runtime manages Task shutdown and the exit lifecycle on SIGINT or SIGTERM.
 
 From this example directory, start the worker in development mode:
 
