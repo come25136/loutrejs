@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/assets/loutre.svg" alt="Loutreのカワウソアイコン" width="180">
+  <img src="./docs/assets/loutre.svg" alt="Loutre otter icon" width="180">
 </p>
 
 <h1 align="center">Loutre</h1>
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  HTTP、Task、Trigger、Queueなどを明示的なApplication Graphとして組み立て、RuntimeとDeveloper Toolingから同じApplication modelを利用します。
+  Compose HTTP, Tasks, Triggers, Queues, and more into an explicit Application Graph, with a shared application model for runtimes and developer tooling.
 </p>
 
 <p align="center">
@@ -27,9 +27,9 @@
 
 ## Application Graph
 
-LoutreではApplication DefinitionをRuntime固有の起動処理から分離し、Application Graphへcompileします。HTTP endpointもbackground executionも同じGraphに参加するため、Runtimeと`loutre check`、`loutre graph`、OpenAPI、buildが同じ構成を参照できます。
+Loutre separates the Application Definition from runtime-specific startup code and compiles it into an Application Graph. HTTP endpoints and background executions belong to the same graph, so runtimes, `loutre check`, `loutre graph`, OpenAPI generation, and builds all use the same configuration.
 
-たとえば、HTTP executionと定期Taskを同じApplication Modelへ登録します。
+For example, register HTTP executions and scheduled Tasks in the same application model:
 
 ```ts
 const WorkerModule = defineModule({
@@ -41,13 +41,13 @@ export default defineApplication({
 })
 ```
 
-GraphはCLIからそのまま確認できます。
+Inspect the graph directly from the CLI:
 
 ```sh
 npm exec loutre -- graph executions --entry src/app.ts --format mermaid
 ```
 
-次の図は、この構成に対する`loutre graph`のMermaid出力です。
+The following diagram shows the Mermaid output from `loutre graph` for this configuration:
 
 ```mermaid
 flowchart LR
@@ -55,7 +55,7 @@ flowchart LR
   n1["trigger.hello-worker"]
 ```
 
-Application Graphは可視化専用の表現ではありません。Module、dependency、Contract、execution、Runtime capabilityを検査し、Developer ToolingとRuntimeの共通モデルとして利用します。
+The Application Graph also supports validation of Modules, dependencies, Contracts, executions, and runtime capabilities, serving as the shared model for developer tooling and runtimes.
 
 ## Quick Start
 
@@ -65,23 +65,23 @@ cd my-app
 npm run dev
 ```
 
-Bunからもprojectを作成できます。
+You can also create a project with Bun:
 
 ```sh
 bun create loutre my-app
 ```
 
-Node.js、Bun、Cloudflare Workers、AWS Lambda向けのstarterを選択できます。
+Choose a starter for Node.js, Bun, Cloudflare Workers, or AWS Lambda.
 
 ## Why Loutre
 
-Applicationが大きくなるほど、HTTP、background task、queue、configuration、DI、deploymentの境界は複雑になります。Loutreはそれらを個別の仕組みとして増やすのではなく、ひとつのApplication DefinitionとApplication Graphから扱います。
+As applications grow, the boundaries between HTTP, background tasks, queues, configuration, DI, and deployment become more complex. Loutre brings them together through a single Application Definition and Application Graph.
 
-構成を明示的なTypeScript codeとして保つことで、RuntimeとDeveloper Toolingが同じApplication modelを共有できます。Frameworkのmagicより、型と構造から追える設計を優先しています。
+Defining the configuration explicitly in TypeScript lets runtimes and developer tooling share the same application model. Loutre favors designs you can trace through types and structure over framework magic.
 
 ## Runtime Support
 
-Application codeをRuntime固有APIから分離し、Host / Runtime Adapterから実行環境へ接続します。
+Application code stays separate from runtime-specific APIs and connects to the execution environment through a Host / Runtime Adapter.
 
 - Node.js
 - Bun
@@ -89,36 +89,36 @@ Application codeをRuntime固有APIから分離し、Host / Runtime Adapterか�
 - AWS Lambda
 - Electron
 
-Runtimeごとの役割と対応範囲は[Getting Started](./docs/getting-started.md)と[Architecture](./docs/architecture.md)を参照してください。
+See [Getting Started](./docs/getting-started.md) and [Architecture](./docs/architecture.md) for each runtime's role and supported capabilities.
 
 ## Features
 
-- **Application Graph** — Module、dependency、Contract、execution、Runtime capabilityをひとつのGraphとして検査
-- **Unified execution model** — HTTP、Task、Trigger、Queueを同じApplication modelで表現
-- **Portable Application** — Application DefinitionとRuntime固有のAdapterを分離
-- **Type-safe composition** — Contract、DI、Pipeline、Environment、ArgumentsをTypeScriptで接続
-- **Explicit architecture** — decoratorやfilesystem discoveryに依存せず、構成をcodeから追跡可能
-- **Developer Tooling** — validation、Graph visualization、OpenAPI、deployment artifact生成を提供
+- **Application Graph** — Validate Modules, dependencies, Contracts, executions, and runtime capabilities as a single graph
+- **Unified execution model** — Represent HTTP, Tasks, Triggers, and Queues in the same application model
+- **Portable Application** — Separate the Application Definition from runtime-specific adapters
+- **Type-safe composition** — Connect Contracts, DI, Pipelines, Environment, and Arguments in TypeScript
+- **Explicit architecture** — Trace the configuration through code without relying on decorators or filesystem discovery
+- **Developer Tooling** — Validate applications, visualize graphs, and generate OpenAPI documents and deployment artifacts
 
 ## Examples
 
-実行可能なprojectを[`examples/`](./examples/)に置いています。
+Runnable projects are available in [`examples/`](./examples/).
 
-- [`hello-http`](./examples/hello-http/) — Contract、Implementation、DIを使うHTTP Application
-- [`hello-cli`](./examples/hello-cli/) — Argumentsを受け取りTaskを実行するApplication
-- [`hello-worker`](./examples/hello-worker/) — `fixedDelay` TriggerでTaskを定期実行するWorker
-- [`graphql-orders`](./examples/graphql-orders/) — 生成ManifestとTyped Field BuilderでEager / Lazy / Hybridを比較する注文server
-- [`graphql-counter`](./examples/graphql-counter/) — DIで共有する状態に対しQuery・Mutation・Subscriptionを提供するGraphQL server
-- [`basic-auth`](./examples/basic-auth/) / [`bearer-auth`](./examples/bearer-auth/) — HTTP認証
+- [`hello-http`](./examples/hello-http/) — An HTTP application using Contracts, Implementations, and DI
+- [`hello-cli`](./examples/hello-cli/) — An application that accepts Arguments and runs a Task
+- [`hello-worker`](./examples/hello-worker/) — A worker that runs a Task periodically with a `fixedDelay` Trigger
+- [`graphql-orders`](./examples/graphql-orders/) — An orders server comparing Eager / Lazy / Hybrid strategies with a generated Manifest and Typed Field Builder
+- [`graphql-counter`](./examples/graphql-counter/) — A GraphQL server providing Query, Mutation, and Subscription operations over state shared through DI
+- [`basic-auth`](./examples/basic-auth/) / [`bearer-auth`](./examples/bearer-auth/) — HTTP authentication
 - [`database-postgres`](./examples/database-postgres/) / [`database-drizzle-postgres`](./examples/database-drizzle-postgres/) / [`database-prisma-postgres`](./examples/database-prisma-postgres/) — Database integration
 
 ## Documentation
 
 - [Website](https://loutrejs.come25136.id)
-- [Getting Started](./docs/getting-started.md) — project作成、HTTP、Task、Runtime、CLI
-- [GraphQLの型生成](./docs/graphql-codegen.md) — SDL共有、型付きresolver、domain mapping、client operation
-- [Architecture](./docs/architecture.md) — Application Definition、Application Graph、Runtimeの境界
-- [Examples](./examples/) — HTTP、GraphQL、Auth、CORS、Worker、Database
+- [Getting Started](./docs/getting-started.md) — Project creation, HTTP, Tasks, runtimes, and the CLI
+- [GraphQL Type Generation](./docs/graphql-codegen.md) — Shared SDL, typed resolvers, domain mapping, and client operations
+- [Architecture](./docs/architecture.md) — Boundaries between the Application Definition, Application Graph, and runtimes
+- [Examples](./examples/) — HTTP, GraphQL, authentication, CORS, workers, and databases
 
 ## Packages
 
@@ -130,14 +130,14 @@ Runtimeごとの役割と対応範囲は[Getting Started](./docs/getting-started
 | [`@loutrejs/cli`](https://www.npmjs.com/package/@loutrejs/cli)       | Graph / build / OpenAPI tooling                 |
 | [`create-loutre`](https://www.npmjs.com/package/create-loutre)       | Project initializer                             |
 
-Tasks、MessagePort、WebSocketは独立packageではなく、`@loutrejs/loutre/tasks`、`@loutrejs/loutre/message-port`、`@loutrejs/loutre/websocket`からimportします。
+Tasks, MessagePort, and WebSocket are available as subpath imports from `@loutrejs/loutre/tasks`, `@loutrejs/loutre/message-port`, and `@loutrejs/loutre/websocket`, respectively, rather than as separate packages.
 
 ## Project Status
 
 > [!WARNING]
-> Loutreは現在v0.xです。Public APIには破壊的変更が入る可能性があります。
+> Loutre is currently v0.x. The public API may introduce breaking changes.
 
-設計の一貫性を優先しながらPublic APIを整備しています。Productionで利用する場合は、利用するversionを固定し、release notesを確認してください。
+The public API is evolving with a focus on design consistency. For production use, pin your version and review the release notes.
 
 ## Contributing
 
@@ -146,13 +146,13 @@ npm install
 npm run verify
 ```
 
-テストは責務ごとに3層へ分けています。
+Tests are organized into three layers by responsibility:
 
-- `npm run test:unit` — frameworkの部品単体を検証
-- `npm run test:integration` — `integrations/` のApplication / Moduleを使って境界を検証
-- `npm run test:e2e` — `examples/` の実コマンドを起動し、外部境界からproject全体を検証
+- `npm run test:unit` — Test individual framework components
+- `npm run test:integration` — Test boundaries using applications and Modules in `integrations/`
+- `npm run test:e2e` — Run actual commands in `examples/` and test complete projects through their external interfaces
 
-`integrations/` はテスト専用資産、`examples/` は利用者向けの実行可能projectです。
+`integrations/` contains test fixtures, while `examples/` contains runnable projects for users.
 
 ## License
 
