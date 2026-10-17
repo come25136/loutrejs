@@ -1,10 +1,10 @@
 # GraphQL Orders Example
 
-手書きBindingと生成Resolver型で、架空のECの注文一覧を提供するNode.js serverです。メモリ内のdomainを使い、保存方式を前提にしません。
+This Node.js server serves order listings for a fictional online store using handwritten bindings and generated Resolver types. It uses an in-memory domain model without assuming a particular persistence mechanism.
 
-## 起動
+## Run the Server
 
-Node.js 22以上でrepository rootから実行します。
+Use Node.js 22 or later and run these commands from the repository root.
 
 ```sh
 npm ci
@@ -13,11 +13,11 @@ npm run generate --workspace @loutrejs/example-graphql-orders
 npm run dev --workspace @loutrejs/example-graphql-orders
 ```
 
-HTTPはhttp://127.0.0.1:3000/graphql、WebSocketはws://127.0.0.1:3000/graphqlです。PORTで変更できます。
+HTTP is available at http://127.0.0.1:3000/graphql and WebSocket at ws://127.0.0.1:3000/graphql. Set `PORT` to change the port.
 
-## 注文一覧と取得戦略
+## Order Listings and Loading Strategies
 
-150注文から先頭100注文を選び、各注文に2明細があります。ページ確定はdomain serviceが行います。EAGERは顧客と商品、HYBRIDは顧客を先読みし、LAZYは関連domainをFieldのloadで取得します。3戦略の公開結果は同じです。
+The domain service selects the first 100 of 150 orders, with two line items per order. The domain service determines pagination. EAGER prefetches customers and products, HYBRID prefetches customers, and LAZY fetches related domain objects through field `load` functions. All three strategies produce the same public result.
 
 ```sh
 curl http://127.0.0.1:3000/graphql \
@@ -25,22 +25,22 @@ curl http://127.0.0.1:3000/graphql \
   --data '{"query":"query($strategy:Strategy!){ orders(strategy:$strategy,pagination:{offset:0,limit:100}){ totalCount pageInfo{hasNextPage} edges{id customer{account{name}} items{quantity product{name category{name}}}}}}","variables":{"strategy":"LAZY"}}'
 ```
 
-strategyをEAGER / LAZY / HYBRIDへ変えて比較できます。別Queryの`{ productBatchCount }`で商品loadのBatch呼出しを前後に確認できます。EAGERでは追加loadは0です。Batch数は非同期の完了時刻や選択内容でも変わるため、常に1回とは保証しません。
+Change `strategy` to EAGER, LAZY, or HYBRID to compare them. In a separate Query, check `{ productBatchCount }` before and after to count product-loading batch calls. EAGER requires no additional loads. Batch counts also depend on asynchronous completion timing and field selection, so a single batch is not guaranteed.
 
-## 読む順序
+## Suggested Reading Order
 
-- [contracts/orders.graphql](./contracts/orders.graphql): 公開契約とdefault引数。
-- [graphql.config.ts](./graphql.config.ts): SDL・domain mapping・生成先。
-- [src/domain/commerce.ts](./src/domain/commerce.ts): ページング、先読み、Tenant / Revisionを含む複合キーでの取得。
-- [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): object引数のresolve、infoからの選択Field取得、直接書けるload / requires / authorize。
-- [src/app.ts](./src/app.ts): manifestとDIの接続。
-- [src/graphql/manifest.ts](./src/graphql/manifest.ts): 生成Schemaと手書きResolverのBinding。
+- [contracts/orders.graphql](./contracts/orders.graphql): Public contract and default arguments.
+- [graphql.config.ts](./graphql.config.ts): SDL, domain mapping, and generated output paths.
+- [src/domain/commerce.ts](./src/domain/commerce.ts): Pagination, prefetching, and lookups keyed by a composite including Tenant and Revision.
+- [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): Object-style `resolve` arguments, field selections from `info`, and inline `load`, `requires`, and `authorize`.
+- [src/app.ts](./src/app.ts): Connects the manifest and DI.
+- [src/graphql/manifest.ts](./src/graphql/manifest.ts): Binds the generated schema to handwritten resolvers.
 
-GraphQLが公開しないproductId / tenant / revisionをOrderItemのdomainに持ちます。loadはParent順へ値を対応させ、同じ商品IDでもTenant / Revisionを混ぜません。authorizeは先読み値のreuseにも適用します。
+The OrderItem domain model contains `productId`, `tenant`, and `revision`, which are not exposed through GraphQL. `load` aligns values with the Parent order and never mixes different Tenant or Revision values, even for the same product ID. `authorize` also applies when reusing prefetched data.
 
 ```sh
 npm run generate:check --workspace @loutrejs/example-graphql-orders
 npm run typecheck --workspace @loutrejs/example-graphql-orders
 ```
 
-[生成とData Resolutionのガイド](../../docs/graphql-codegen.md)にAPIとExecution Scopeをまとめています。Subscriptionの利用は[Counter server](../graphql-counter/README.md)を参照してください。
+See the [Generation and Data Resolution Guide](../../docs/graphql-codegen.md) for the API and Execution Scope. For Subscriptions, see the [Counter server](../graphql-counter/README.md).
