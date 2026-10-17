@@ -193,7 +193,7 @@ describe('Environment Contract', () => {
       environment: [AppEnv],
       providers: [
         Service,
-        provide(TransientService).useClass(TransientService, {
+        provide(TransientService, {
           scope: 'transient',
         }),
       ],

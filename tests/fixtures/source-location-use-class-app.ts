@@ -16,7 +16,11 @@ const localProvider = provide(LOCAL).useClass(LocalService)
 
 const Module = defineModule(() => ({
   name: 'UseClassSourceModule',
-  providers: [LocalService, externalProvider, localProvider],
+  providers: [
+    provide(LocalService, { scope: 'transient' }),
+    externalProvider,
+    localProvider,
+  ],
 }))
 
 export default defineApplication({ modules: [Module()] })

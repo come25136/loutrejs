@@ -241,7 +241,7 @@ class AppLogger {
   readonly logger = inject(Logger)
 }
 
-const loggerProvider = provide(AppLogger).useClass(AppLogger, {
+const loggerProvider = provide(AppLogger, {
   scope: 'transient',
 })
 ```
@@ -249,6 +249,32 @@ const loggerProvider = provide(AppLogger).useClass(AppLogger, {
 `ServiceA`が`inject(AppLogger)`すると、`AppLogger.consumer`は`ServiceA`です。組み込みLoggerの`context.source`は、そのLoggerを要求した`AppLogger`になります。factoryでも`use`内から`injectInquirer()`を使えますが、必要なサービスは登録時の`inject`配列で指定します。
 
 ### Providerの登録方法ごとのルール
+
+Providerのscopeは`provide(token, { scope })`で指定します。省略時は`application`で解決結果をキャッシュし、`transient`ではキャッシュせずに解決します。
+
+```ts
+// 具象クラス自身を登録する
+provide(AppLogger, { scope: 'transient' })
+
+// tokenに別の実装クラスを登録する
+provide(LoggerService, { scope: 'transient' }).useClass(ConsoleLoggerService)
+
+// factoryや環境設定による選択でもscopeの指定位置は同じ
+provide(LoggerService, { scope: 'transient' }).useFactory({
+  inject: [LogWriter],
+  use: (writer) => new ConsoleLoggerService(writer),
+})
+provide(LoggerService, { scope: 'transient' }).select(AppEnv.key('logDriver'), {
+  console: ConsoleLoggerService,
+  file: FileLoggerService,
+})
+```
+
+custom tokenとabstract classには、`useClass()`・`useFactory()`・`select()`などで実装を指定します。`useValue()`でもscopeを指定できますが、返す値は常に登録時に渡した値です。transientは参照の一意性を保証しないため、factoryでも同じオブジェクトを返せます。`Application.get()`はapplication scopeのProviderに限られ、transientは依存注入で解決します。
+
+`useClass()`の第2引数、factory定義内、`select()`の第3引数ではscopeを指定できません。
+
+登録APIの設計判断と移行例は[Providerのscopeに関するADR](../adr/loutre_provider_registration_scope.md)を参照してください。
 
 | 登録方法                                         | 依存の指定方法と確認内容                                                                                                                                     |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |

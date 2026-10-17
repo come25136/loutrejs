@@ -23,7 +23,6 @@ export interface ValueProvider<
 > extends ProviderBase<TToken> {
   readonly kind: 'value'
   readonly useValue: TokenValue<TToken>
-  readonly scope: 'application'
 }
 
 export interface FactoryProvider<
@@ -62,28 +61,60 @@ export type ProviderDescriptor =
   | EnvironmentProvider
   | ArgumentsProvider
 
-export type ProviderDeclaration = Class | ProviderDescriptor
+export interface SelfClassProvider<
+  TToken extends Class = Class,
+> extends ProviderBase<TToken> {
+  readonly kind: 'self-class'
+}
+
+export type ProviderDeclaration = Class | SelfClassProvider | ProviderDescriptor
 
 export interface ProviderScopeOptions {
   readonly scope?: Scope
 }
 
-export interface FactoryDefinition<T> extends ProviderScopeOptions {
+export interface FactoryDefinition<T> {
   readonly inject?: readonly TokenLike[]
   readonly use: (...dependencies: any[]) => T
 }
 
-export function provide<TToken extends TokenLike>(token: TToken) {
+export interface ProviderBuilder<
+  TToken extends TokenLike,
+> extends ProviderBase<TToken> {
+  useClass(implementation: Class<TokenValue<TToken>>): ClassProvider<TToken>
+  useValue(value: TokenValue<TToken>): ValueProvider<TToken>
+  useFactory(
+    definition: FactoryDefinition<TokenValue<TToken>>,
+  ): FactoryProvider<TToken>
+  select<TKey extends PropertyKey>(
+    key: RuntimeInputKey<TKey>,
+    mapping: Readonly<Record<TKey, Class<TokenValue<TToken>>>>,
+  ): ConditionalProvider<TToken>
+}
+
+export function provide<TToken extends Class>(
+  token: TToken,
+  options?: ProviderScopeOptions,
+): SelfClassProvider<TToken> & ProviderBuilder<TToken>
+export function provide<TToken extends TokenLike>(
+  token: TToken,
+  options?: ProviderScopeOptions,
+): ProviderBuilder<TToken>
+export function provide<TToken extends TokenLike>(
+  token: TToken,
+  options: ProviderScopeOptions = {},
+) {
+  const scope = options.scope ?? 'application'
   return {
-    useClass(
-      implementation: Class<TokenValue<TToken>>,
-      options: ProviderScopeOptions = {},
-    ): ClassProvider<TToken> {
+    ...(typeof token === 'function' ? { kind: 'self-class' as const } : {}),
+    provide: token,
+    scope,
+    useClass(implementation: Class<TokenValue<TToken>>): ClassProvider<TToken> {
       return {
         kind: 'class',
         provide: token,
         useClass: implementation,
-        scope: options.scope ?? 'application',
+        scope,
       }
     },
 
@@ -92,7 +123,7 @@ export function provide<TToken extends TokenLike>(token: TToken) {
         kind: 'value',
         provide: token,
         useValue: value,
-        scope: 'application',
+        scope,
       }
     },
 
@@ -104,21 +135,20 @@ export function provide<TToken extends TokenLike>(token: TToken) {
         provide: token,
         inject: definition.inject ?? [],
         useFactory: definition.use,
-        scope: definition.scope ?? 'application',
+        scope,
       }
     },
 
     select<TKey extends PropertyKey>(
       key: RuntimeInputKey<TKey>,
       mapping: Readonly<Record<TKey, Class<TokenValue<TToken>>>>,
-      options: ProviderScopeOptions = {},
     ): ConditionalProvider<TToken> {
       return {
         kind: 'conditional',
         provide: token,
         select: key as RuntimeInputKey<PropertyKey>,
         mapping,
-        scope: options.scope ?? 'application',
+        scope,
       }
     },
   }
@@ -153,6 +183,15 @@ export function normalizeProvider(
       provide: declaration,
       useClass: declaration,
       scope: 'application',
+    }
+  }
+
+  if (declaration.kind === 'self-class') {
+    return {
+      kind: 'class',
+      provide: declaration.provide,
+      useClass: declaration.provide,
+      scope: declaration.scope,
     }
   }
 

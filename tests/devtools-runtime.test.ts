@@ -718,7 +718,7 @@ describe('DevTools runtime observation', () => {
     }
     const Module = defineModule(() => ({
       providers: [
-        provide(TransientRepository).useClass(TransientRepository, {
+        provide(TransientRepository, {
           scope: 'transient',
         }),
         Service,

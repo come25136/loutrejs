@@ -38,12 +38,14 @@ describe('canonical Modelと実行時DIの依存照合', () => {
       }
       const hidden = defineModule({
         providers: [
-          provide(HiddenDependency).useFactory({ scope, use: createHidden }),
+          provide(HiddenDependency, { scope }).useFactory({
+            use: createHidden,
+          }),
         ],
       })
       const feature = defineModule({
         providers: [
-          provide(ConsumerAware).useClass(ConsumerAware, {
+          provide(ConsumerAware, {
             scope: 'transient',
           }),
           Consumer,
@@ -83,7 +85,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
           defineModule({
             providers: [
               Declared,
-              provide(ConsumerAware).useClass(ConsumerAware, {
+              provide(ConsumerAware, {
                 scope: 'transient',
               }),
               branch === 'token' ? provide(ALIAS).useClass(Consumer) : Consumer,
@@ -114,7 +116,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
       modules: [
         defineModule({
           providers: [
-            provide(ConsumerAware).useClass(ConsumerAware, {
+            provide(ConsumerAware, {
               scope: 'transient',
             }),
             Consumer,
@@ -142,8 +144,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
           defineModule({
             providers: [
               Backend,
-              provide(LOG).useFactory({
-                scope: 'transient',
+              provide(LOG, { scope: 'transient' }).useFactory({
                 inject: [Backend],
                 use: (backend) => ({ backend, consumer: injectInquirer() }),
               }),
@@ -174,8 +175,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
         defineModule({ providers: [Hidden] }),
         defineModule({
           providers: [
-            provide(FACTORY).useFactory({
-              scope: 'transient',
+            provide(FACTORY, { scope: 'transient' }).useFactory({
               use: () => (injectInquirer() ? inject(Hidden) : {}),
             }),
             Consumer,
@@ -273,11 +273,9 @@ describe('canonical Modelと実行時DIの依存照合', () => {
         defineModule({
           environment: [Env],
           providers: [
-            provide(DRIVER).select(
-              Env.key('DRIVER'),
-              { a: Driver },
-              { scope: 'transient' },
-            ),
+            provide(DRIVER, { scope: 'transient' }).select(Env.key('DRIVER'), {
+              a: Driver,
+            }),
             Consumer,
           ],
         }),
@@ -343,8 +341,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
         modules: [
           defineModule({
             providers: [
-              provide(Hidden).useFactory({
-                scope: 'transient',
+              provide(Hidden, { scope: 'transient' }).useFactory({
                 use: createHidden,
               }),
             ],
@@ -410,8 +407,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
         modules: [
           defineModule({
             providers: [
-              provide(Hidden).useFactory({
-                scope: 'transient',
+              provide(Hidden, { scope: 'transient' }).useFactory({
                 use: createHidden,
               }),
             ],

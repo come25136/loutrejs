@@ -98,8 +98,7 @@ describe('同期DI Container', () => {
   it('transient scopeは解決ごとに別instanceを生成する', () => {
     let next = 0
     const container = containerFor([
-      provide(TRANSIENT).useFactory({
-        scope: 'transient',
+      provide(TRANSIENT, { scope: 'transient' }).useFactory({
         use: () => ({ id: ++next }),
       }),
     ])
@@ -113,8 +112,7 @@ describe('同期DI Container', () => {
       constructor(readonly value = inject(TRANSIENT)) {}
     }
     const container = containerFor([
-      provide(TRANSIENT).useFactory({
-        scope: 'transient',
+      provide(TRANSIENT, { scope: 'transient' }).useFactory({
         use: () => ({ id: ++next }),
       }),
       Consumer,
@@ -194,10 +192,7 @@ describe('依存元consumerの取得', () => {
       readonly logger = inject(AppLogger)
     }
     const module = defineModule(() => ({
-      providers: [
-        provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
-        Service,
-      ],
+      providers: [provide(AppLogger, { scope: 'transient' }), Service],
     }))()
     const app = await bootstrapApplication({
       application: defineApplication({ modules: [module] }),
@@ -224,7 +219,7 @@ describe('依存元consumerの取得', () => {
       constructor(readonly logger = inject(AppLogger)) {}
     }
     const container = containerFor([
-      provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
+      provide(AppLogger, { scope: 'transient' }),
       ServiceA,
       ServiceB,
     ])
@@ -257,9 +252,8 @@ describe('依存元consumerの取得', () => {
       readonly consumer = inject(Consumer)
     }
     const container = containerFor([
-      provide(Nested).useClass(Nested, { scope: 'transient' }),
-      provide(FACTORY).useFactory({
-        scope: 'transient',
+      provide(Nested, { scope: 'transient' }),
+      provide(FACTORY, { scope: 'transient' }).useFactory({
         inject: [Nested],
         use: (nested: Nested) => ({ inquirer: injectInquirer(), nested }),
       }),
@@ -284,7 +278,7 @@ describe('依存元consumerの取得', () => {
       readonly dependency = inject(Dependency)
     }
     const container = containerFor([
-      provide(Dependency).useClass(Dependency, { scope: 'transient' }),
+      provide(Dependency, { scope: 'transient' }),
       provide(ALIAS).useClass(Consumer),
     ])
     expect(container.resolve(ALIAS).dependency.inquirer).toBe(ALIAS)
@@ -295,7 +289,7 @@ describe('依存元consumerの取得', () => {
       readonly inquirer = injectInquirer()
     }
     const container = containerFor([
-      provide(Dependency).useClass(Dependency, { scope: 'transient' }),
+      provide(Dependency, { scope: 'transient' }),
     ])
     const consumer = { id: 'execution.test', name: 'Test', kind: 'execution' }
     const value = runInInjectionContext(
@@ -316,9 +310,7 @@ describe('依存元consumerの取得', () => {
     class AppLogger {
       readonly consumer = injectInquirer()
     }
-    const container = containerFor([
-      provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
-    ])
+    const container = containerFor([provide(AppLogger, { scope: 'transient' })])
     let consumer: DependencyConsumer | undefined
     const layer = defineLayer({
       name: 'auth',
@@ -346,12 +338,8 @@ describe('依存元consumerの取得', () => {
     class Dependency {
       readonly inquirer = injectInquirer()
     }
-    const first = containerFor([
-      provide(Dependency).useClass(Dependency, { scope: 'transient' }),
-    ])
-    const second = containerFor([
-      provide(Dependency).useClass(Dependency, { scope: 'transient' }),
-    ])
+    const first = containerFor([provide(Dependency, { scope: 'transient' })])
+    const second = containerFor([provide(Dependency, { scope: 'transient' })])
     const consumer = { id: 'execution.test', name: 'Test' }
     runInInjectionContext(
       {
@@ -409,10 +397,7 @@ describe('consumer metadataとModelの依存宣言', () => {
       })
       const feature = defineModule({
         imports: [repository],
-        providers: [
-          provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
-          Service,
-        ],
+        providers: [provide(AppLogger, { scope: 'transient' }), Service],
       })
       const definition = defineApplication({ modules: [feature] })
       const provider = definition.model.nodes.find(

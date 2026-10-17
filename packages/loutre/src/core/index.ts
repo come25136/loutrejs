@@ -131,6 +131,8 @@ export type {
   ProviderDeclaration,
   ProviderDescriptor,
   ProviderScopeOptions,
+  ProviderBuilder,
+  SelfClassProvider,
   Scope,
   ValueProvider,
 } from './provider.js'
