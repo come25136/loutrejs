@@ -1,15 +1,15 @@
-# GraphQLの生成とData Resolution
+# GraphQL Code Generation and Data Resolution
 
-SDLを契約として共有し、CLIで型・Static Schema・型付きBindingを同じ入力から生成します。ApplicationがbindManifestでSchemaとResolverを接続し、返されたmanifestをendpointへ渡します。生成ModuleはApplicationをimportせず、Schema構築とResolver BindingはApplicationの初期化時に一回行います。
+Share SDL as the contract, and use the CLI to generate types, a static schema, and typed bindings from the same input. The Application connects the schema and resolvers with `bindManifest` and passes the resulting manifest to the endpoint. Generated Modules do not import the Application; schema construction and resolver binding occur once during Application initialization.
 
 ```sh
 npm install @loutrejs/loutre @loutrejs/graphql graphql
 npm install --save-dev @loutrejs/cli
 ```
 
-## 設定と生成
+## Configuration and Generation
 
-`graphql.config.ts`に静的なobject literalをexportします。type-only importとsatisfiesを使えます。関数呼出し・spread・value importは評価しません。JSON設定も同じtargets形式で利用できます。
+Export a static object literal from `graphql.config.ts`. Type-only imports and `satisfies` are supported. Function calls, spreads, and value imports are not evaluated. JSON configuration uses the same `targets` structure.
 
 ```ts
 import type { GraphQLCodegenConfig } from '@loutrejs/cli'
@@ -35,7 +35,7 @@ export default {
 } satisfies GraphQLCodegenConfig
 ```
 
-schema / documents / outputは設定fileからの相対pathです。mapperのimportは生成types.tsからの相対pathです。Resolver Moduleは`resolvers`をnamed exportします。serverの出力directoryは生成専用とし、client outputもその外へ置きます。serverだけならclient targetを指定する必要はありません。
+`schema`, `documents`, and `output` paths are relative to the configuration file. Mapper imports are relative to the generated `types.ts`. Resolver Modules must provide a named export called `resolvers`. Reserve the server output directory for generated files, and keep the client output outside that directory. The client target is optional if you only need server generation.
 
 ```sh
 loutre graphql generate --config graphql.config.ts
@@ -44,27 +44,27 @@ loutre graphql generate --config graphql.config.ts --watch
 loutre graphql generate --config graphql.config.ts --check
 ```
 
-server targetはtypes.ts・schema-ast.ts・bindings.tsを同一世代で生成します。client targetは名前付きOperation / FragmentのVariables・選択結果・TypedDocumentNodeを生成します。client projectには`@graphql-typed-document-node/core`も追加してください。
+The server target generates `types.ts`, `schema-ast.ts`, and `bindings.ts` as one consistent generation. The client target generates Variables types, result types, and `TypedDocumentNode` for named Operations and Fragments. Also install `@graphql-typed-document-node/core` in client projects.
 
-生成物には@generatedが付きます。全targetの生成・整形・検証とtemp出力を終えてから更新し、更新中の失敗では全targetを前の正常世代へ戻します。`--check`は生成済み内容全体と比較し、書き込みません。watchはSDL・Operation・設定の追加 / 変更 / 削除を追跡し、エラー後の正常な世代を保持します。生成directoryへ人間のsource fileを置かないでください。Resolver実装の変更はApplicationの再起動 / HMRでBindingし直します。
+Generated files are marked with `@generated`. All targets are generated, formatted, and validated in temporary output before the files are updated. If an update fails, all targets are restored to the previous valid generation. `--check` compares all generated content without writing files. Watch mode tracks additions, changes, and deletions of SDL, Operations, and configuration while preserving the last valid generation after errors. Do not place handwritten source files in generated directories. Changes to resolver implementations are rebound when the Application restarts or reloads through HMR.
 
-## Domain MapperとScalar
+## Domain Mappers and Scalars
 
-mappersは公開GraphQL Typeとdomain Typeの対応です。例えばOrderItemのdomainはproductIdを持ち、SDLではproduct: Product!を公開できます。mappingは型生成だけへ適用し、RuntimeのObject変換や保存方法は決めません。同名のimportにはaliasが付きます。
+`mappers` describe how public GraphQL types map to domain types. For example, a domain `OrderItem` can contain `productId` while the SDL exposes `product: Product!`. Mapping affects only type generation; it does not define runtime object conversion or persistence. Conflicting import names are aliased.
 
-mappersはserver専用です。ApplicationのContextは設定へ含めず、bindManifest<AppContext>またはResolvers<AppContext>で指定します。ResolverのParent / Args / ResultはSDLとdomain mappingから推論します。ArgsはGraphQLがcoerceした値で、Input Object内のdefault値も型へ反映します。
+Mappers are server-only. The Application Context is not part of the configuration; specify it using `bindManifest<AppContext>` or `Resolvers<AppContext>`. Resolver Parent, Args, and Result types are inferred from SDL and domain mappings. Args use GraphQL-coerced values, including default values in Input Objects.
 
-Custom Scalarはtargetごとにinput / outputを指定します。未指定のScalarをanyへ落としません。
+Specify input and output types for custom Scalars separately for each target. Unspecified Scalars do not fall back to `any`.
 
 ```json
 { "scalars": { "DateTime": { "input": "Date", "output": "Date" } } }
 ```
 
-clientでは通信上の表現に合わせてDateTimeをstringにします。serverではGraphQLScalarTypeのparse / serialize処理をresolversへ登録します。Union / Interfaceの`__resolveType`、Objectの`__isTypeOf`、Enumの値対応も同じResolver Moduleへ登録できます。生成時にdomain Moduleは実行せず、参照先の存在と型の整合性はTypeScript検査で確認します。
+On the client, represent `DateTime` as a string to match its wire format. On the server, register `GraphQLScalarType` parsing and serialization in `resolvers`. You can also register Union/Interface `__resolveType`, Object `__isTypeOf`, and Enum value mappings in the same Resolver Module. Generation does not execute domain Modules; TypeScript checks that referenced imports exist and their types are compatible.
 
-Enumの内部値がSDLの名前と異なる場合は、server targetの`enumValues`に対応を指定します。例えば`enumValues: { Role: { MEMBER: 0, ADMIN: 2 } }`、または`enumValues: { Role: '../../domain/role.js#Role' }`でdomainのEnum型を参照できます。Resolverの引数・Input Object・通常とBatchの戻り値へ反映されます。実際の値対応は利用者が`resolvers.Role`へ登録してください。clientは通信上のSDL名を使うため、`enumValues`を指定しません。
+If an Enum's internal values differ from its SDL names, configure the mapping using `enumValues` in the server target, for example `enumValues: { Role: { MEMBER: 0, ADMIN: 2 } }` or `enumValues: { Role: '../../domain/role.js#Role' }` to reference a domain Enum type. The mapping is reflected in resolver arguments, Input Objects, and both normal and batch return types. Register the actual runtime value mapping in `resolvers.Role` yourself. The client uses the SDL names sent over the wire and does not configure `enumValues`.
 
-## ResolverとManifest
+## Resolvers and Manifests
 
 ```ts
 import { getFieldSelection } from '@loutrejs/graphql'
@@ -101,9 +101,9 @@ export const resolvers = {
 } satisfies Resolvers<AppContext>
 ```
 
-通常のResolver関数と`{ resolve }`は`{ parent, args, context, info }`を受け取ります。Subscriptionの`subscribe`と`resolve`も同じ形式です。Batch取得を行うFieldには{ requires, read, load, authorize, maxBatchSize }を直接書きます。loadとresolve / subscribeは併用できず、Subscriptionのroot Fieldはsubscribe / resolveで定義します。
+Plain resolver functions and `{ resolve }` receive `{ parent, args, context, info }`. Subscription `subscribe` and `resolve` use the same shape. For batched fields, specify `{ requires, read, load, authorize, maxBatchSize }` directly. `load` cannot be combined with `resolve` or `subscribe`. Define Subscription root fields using `subscribe` and `resolve`.
 
-`load`は`{ parents, args, context, signal, selection }`を受け取ります。`__resolveType`と`__isTypeOf`は`{ parent, context, info }`です。必要なpropertyだけを分割代入でき、引数の順序を覚える必要はありません。GraphQL.jsの位置引数への変換はBinding時にRuntimeが行います。ScalarはGraphQLScalarTypeの標準コントラクトを使います。
+`load` receives `{ parents, args, context, signal, selection }`. Both `__resolveType` and `__isTypeOf` receive `{ parent, context, info }`. Destructure only the properties you need; there is no positional argument order to memorize. At binding time, the runtime adapts these objects to GraphQL.js positional arguments. Scalars follow the standard `GraphQLScalarType` contract.
 
 ```ts
 import { graphql } from '@loutrejs/graphql'
@@ -129,7 +129,7 @@ export const endpoint = graphql.endpoint({
 })
 ```
 
-schema-ast.tsはSDL由来のASTだけをexportし、ContextやResolver型へ依存しません。Schema専用のbindManifestはbindings.tsからimportします。inline ResolverへParent / coerced Args / Result / Contextを付けるため、ApplicationでbindManifest<AppContext>と指定します。例えばCounter serverでは次のように記述できます。
+`schema-ast.ts` exports only the SDL-derived AST and does not depend on Context or Resolver types. Import the schema-specific `bindManifest` from `bindings.ts`. Use `bindManifest<AppContext>` in the Application to type inline resolvers with Parent, coerced Args, Result, and Context. For example, a Counter server can be defined as follows:
 
 ```ts
 import { bindManifest } from './generated/bindings.js'
@@ -149,15 +149,15 @@ const manifest = bindManifest<AppContext>({
 })
 ```
 
-args.amountはSDLからnumber、contextはAppContextとして推論します。存在しないType / Field、誤った戻り値は型エラーになります。分割Moduleでは引き続きsatisfies Resolvers<AppContext>で実装を検査できます。共通runtimeのbindManifestは低水準のBinding関数で、Schema専用の型付けは生成helperが担当します。
+`args.amount` is inferred as `number` from SDL, and `context` as `AppContext`. Unknown Types or Fields and invalid return values produce type errors. In separate Modules, continue using `satisfies Resolvers<AppContext>` to check implementations. The shared runtime's `bindManifest` is a lower-level binding function; the generated helper provides schema-specific typing.
 
-manifestはOpaque Typeです。schema / typeDefs / rootValueをendpointへ渡す経路はありません。makeExecutableSchema()や手動prepareは不要です。BindingはApplicationが保守するModuleへ記述します。生成ModuleはResolverをimportしません。Resolverからはgenerated/typesをtype-only importします。Binding Moduleの値をResolverから逆importしないでください。
+The manifest is an opaque type. Endpoints cannot accept `schema`, `typeDefs`, or `rootValue` directly. Neither `makeExecutableSchema()` nor manual preparation is necessary. Put bindings in a Module maintained by the Application. Generated Modules do not import resolvers. Resolvers should use type-only imports from `generated/types`; do not import values from the binding Module back into resolvers.
 
-## 入力検証とエラー整形
+## Input Validation and Error Formatting
 
-SDLが保証するのは型・nullability・GraphQLのcoercionです。文字数・配列の要素数・日付の業務制約などは、利用者がZodやdomainの検証で扱います。Loutreは業務用のvalidation APIを追加しません。例えばResolverで`z.object({ first: z.number().int().min(1).max(100) }).parse(args)`を呼び、検証済みの値をApplication Serviceへ渡せます。
+SDL guarantees types, nullability, and GraphQL coercion. Validate business constraints such as string length, array size, or date rules yourself, using Zod or domain-level validation. Loutre does not add a business validation API. For example, a resolver can call `z.object({ first: z.number().int().min(1).max(100) }).parse(args)` and pass validated values to an Application Service.
 
-endpointのfactoryが返す任意の`formatError(error, input)`で、HTTP / WebSocket共通の公開エラーとログを設定できます。errorはGraphQLErrorで、Resolver・load・subscribeが投げた例外はoriginalErrorで確認できます。inputはcontextと同じtransport別のrequest / signal情報です。WebSocketではoperationId / connectionParams、HTTPではstateも参照できます。
+The endpoint factory can optionally return `formatError(error, input)` to configure public errors and logging shared by HTTP and WebSocket. `error` is a `GraphQLError`; exceptions raised by resolvers, `load`, or `subscribe` are accessible through `originalError`. `input` contains transport-specific request and signal information, like Context creation. WebSocket also exposes `operationId` and `connectionParams`; HTTP exposes `state`.
 
 ```ts
 import { ZodError } from 'zod'
@@ -167,7 +167,7 @@ factory: () => ({
   formatError(error, input) {
     if (error.originalError instanceof ZodError) {
       return {
-        message: '入力が不正です。',
+        message: 'Invalid input.',
         extensions: {
           code: 'BAD_USER_INPUT',
           details: error.originalError.issues,
@@ -181,17 +181,17 @@ factory: () => ({
 })
 ```
 
-formatErrorは同期的にGraphQLFormattedErrorを返します。parse・validation・変数のcoercion・Field実行のエラー、およびSubscription開始時と各Delivery EventのGraphQLエラーが対象です。path / locationsは指定しなければ元の値を保持し、extensionsは返した値だけを公開します。data・HTTP status・WebSocket frame種別・Non-nullの伝播は変更しません。未設定の場合はGraphQL標準のエラーを返します。
+`formatError` synchronously returns a `GraphQLFormattedError`. It handles parsing, validation, variable coercion, field execution, Subscription startup, and GraphQL errors for each delivery event. If `path` or `locations` are omitted, the originals are retained; only returned `extensions` are exposed. This hook does not alter `data`, HTTP status codes, WebSocket frame types, or non-null propagation. If omitted, standard GraphQL errors are returned.
 
-Subscription iteratorの障害はRuntimeの観測にも記録し、WebSocketのerror frameを整形してそのOperationを終了します。context生成やformatError自身の例外は通常のRuntime Failureとして扱います。HTTP middlewareの認証応答やWebSocketのprotocol違反は、それぞれのTransportの処理です。
+Subscription iterator failures are also recorded in runtime observability. The operation terminates after its WebSocket error frame is formatted. Exceptions thrown while creating Context or by `formatError` itself are treated as ordinary runtime failures. HTTP middleware authentication responses and WebSocket protocol violations are handled by their respective transports.
 
-HTTPは`application/graphql-response+json`でdataを持たないGraphQLの実行前エラーを400で返します。Resolver実行時のGraphQLエラーは200です。`application/json`ではGraphQL request errorの200応答を維持します。
+With `application/graphql-response+json`, HTTP returns 400 for GraphQL errors occurring before execution that have no `data`. GraphQL errors during resolver execution return 200. With `application/json`, GraphQL request errors retain their 200 responses.
 
-## Read-throughとBatch
+## Read-through and Batching
 
-引数を持たないFieldは、Parentの同名own data propertyにundefined以外の値があれば再利用します。null / [] / false / 0 / ''もLoadedです。prototypeやgetterは自動readしません。
+For fields without arguments, an own data property on Parent with the same name is reused if its value is not `undefined`. `null`, `[]`, `false`, `0`, and `''` all count as loaded. Prototype properties and getters are not automatically read.
 
-引数を宣言したFieldは省略呼出しでも自動reuseしません。先読みしたページ等との一致を明示readで確認します。
+Fields declaring arguments are not automatically reused, even when called without explicit arguments. Use an explicit `read` to verify that prefetched data, such as a page, matches the requested arguments.
 
 ```ts
 import { data } from '@loutrejs/graphql'
@@ -208,39 +208,39 @@ const posts = {
 } satisfies NonNullable<Resolvers<AppContext>['User']>['posts']
 ```
 
-loaded(undefined)は拒否します。未取得のときだけrequiresを確認し、loadへ同じ順序のParent配列を渡します。loadは同じ要素数・順番でResultを返してください。内部キー欠落や要素数不一致はGraphQL Field Errorになります。
+`loaded(undefined)` is rejected. `requires` is checked only for missing data, and `load` receives the Parent array in its original order. Return the same number of Results in that same order. Missing required internal keys or a mismatched result count produce GraphQL field errors.
 
-loadの戻り値にはParentごとにErrorを含められます。その要素だけをGraphQL Field Errorとして扱い、pathとnullabilityに従って結果へ反映します。load自体が例外を投げた場合は、そのBatch全体のFieldが失敗します。
+A `load` result may contain an `Error` for an individual Parent. Only that element is treated as a GraphQL field error, reflected in the response according to its path and nullability. If `load` itself throws, the entire batch's fields fail.
 
-BatchはExecution Scope・Field Definition・coerced Argumentsで分類します。AliasやObject key順、default値の指定方法では分割しません。Date / Class Instance等の同値性が不明な引数は保守的に分離します。異なるSelectionも分離し、loadへselectionを渡します。同期的に集まった要求をMicrotask境界でflushし、maxBatchSizeで分割します。非同期に完了するParentでは複数Batchになることがあります。
+Batches are grouped by Execution Scope, Field Definition, and coerced Arguments. Aliases, object key order, and whether default values are explicitly supplied do not split batches. Arguments with uncertain equality, such as Dates or class instances, are conservatively separated. Different selections also form separate batches, with `selection` passed to `load`. Synchronously collected requests are flushed at a microtask boundary and split by `maxBatchSize`. Parents that resolve asynchronously may form multiple batches.
 
-同一Parent Objectの同一要求は処理中だけ共有できます。完了値や同一IDだけを根拠にしたEntity Cacheは持ちません。RepositoryではParentごとのTenant / Authorization / Revisionを保持し、必要なら複合キーで重複を除いてください。
+Identical requests for the same Parent object can share in-flight work. There is no entity cache based solely on completed values or matching IDs. Repositories must preserve per-Parent Tenant, Authorization, and Revision information, and deduplicate using composite keys where necessary.
 
-## AuthorizationとExecution Scope
+## Authorization and Execution Scope
 
-Batch設定のauthorizeはread / reuse / loadより先に実行します。resolveによる先読みでもRepository側のAuthorizationを守ってください。
+A batch field's `authorize` runs before `read`, reuse, or `load`. Enforce authorization in the Repository even for prefetched data returned by `resolve`.
 
-ScopeはHTTP / WebSocket QueryのOperationごと、Mutationのroot Fieldごと、SubscriptionのDelivery Eventごとに作ります。別HTTP Requestや同じWebSocket接続の並行OperationでもBatchを共有しません。手動scopeとAsyncLocalStorageは不要です。
+A scope is created per HTTP or WebSocket Query operation, per Mutation root field, and per Subscription delivery event. Batches are not shared across separate HTTP requests or concurrent operations on the same WebSocket connection. Manual scopes and `AsyncLocalStorage` are unnecessary.
 
-contextとloadのsignalへHTTP Abort・WS complete / disconnect / drainを伝播します。外部I/Oもそのsignalに協調して停止してください。GraphQLのError Path・Non-null / List semantics・IntrospectionはGraphQL.jsへ委譲します。
+HTTP aborts and WebSocket complete, disconnect, or drain signals are propagated to `context` and `load` via `signal`. Cooperatively stop external I/O using that signal. GraphQL error paths, non-null/list semantics, and introspection are delegated to GraphQL.js.
 
-## 選択Fieldと観測
+## Field Selection and Observability
 
-resolveのinfoからgetFieldSelection(info)を呼ぶと、Field SelectionのTreeを取得できます。各NodeにparentType / fieldName / responseKeys / args / children / requires / prefetchableがあります。Alias、Fragment、Inline Fragment、skip / include、Variables、default引数、Interface / Unionの具体型を考慮します。__typenameへ内部依存を追加しません。defer / streamは明示的に拒否します。
+Call `getFieldSelection(info)` from a resolver's `info` to obtain a Field Selection tree. Each node contains `parentType`, `fieldName`, `responseKeys`, `args`, `children`, `requires`, and `prefetchable`. The tree accounts for aliases, fragments, inline fragments, `skip`/`include`, variables, default arguments, and concrete Interface/Union types. It does not introduce an internal dependency on `__typename`. `defer` and `stream` are explicitly rejected.
 
-選択Field情報は先読みの判断材料です。SQL、Pagination、totalCount、Transaction / SnapshotはRepositoryが決めます。Partial Domain Valueの自動Hydrationは行わないため、子孫の不足をResolverが補えない場合は完全なdomain objectを返してください。
+Field selection information helps with prefetching decisions. The Repository determines SQL, pagination, `totalCount`, transactions, and snapshots. Loutre does not automatically hydrate partial domain values. Return complete domain objects if child resolvers cannot fill in missing descendant fields.
 
-Operation Traceにはgraphql.data.field.reused_count、graphql.data.batch.call_count、graphql.data.batch.parent_count、graphql.data.batch.duration_msを集計します。Batch数やSQL数が常に1になる性能保証はありません。
+Operation traces aggregate `graphql.data.field.reused_count`, `graphql.data.batch.call_count`, `graphql.data.batch.parent_count`, and `graphql.data.batch.duration_ms`. There is no guarantee that batch counts or SQL query counts will always be one.
 
-## SDLの共有とCI
+## Sharing SDL and CI
 
-contract workspaceまたはversion付きSDL packageを共有し、利用versionをlockfileで固定します。利用側はOperationを記述してclient型を生成できるため、server実装完了を待つ必要がありません。
+Share a contracts workspace or a versioned SDL package, and pin its version in the lockfile. Consumers can write Operations and generate client types without waiting for the server implementation to finish.
 
 ```sh
 loutre graphql validate --schema 'contracts/**/*.graphql'
 loutre graphql diff --before released/schema.graphql --after contracts/schema.graphql --json
 ```
 
-diffは破壊的変更でexit code 1を返し、Enum値追加等のdangerous changeは別に報告します。認可やserviceの振る舞いはSchema差分だけでは保証できません。分割SDL / extendへ対応し、Federation / stitchingは行いません。
+`diff` exits with code 1 for breaking changes and separately reports dangerous changes, such as adding Enum values. Schema diffs alone cannot guarantee authorization or service behavior. Split SDL files and `extend` are supported; Federation and stitching are not.
 
-生成物をcommitし、CIで--check、TypeScript、Integration Testを実行してください。[Counter server](../examples/graphql-counter/README.md)、[注文server](../examples/graphql-orders/README.md)、[ADR](./adr/loutre_graphql_codegen_architecture.md)に実例があります。
+Commit generated files and run `--check`, TypeScript checks, and integration tests in CI. See the [Counter server](../examples/graphql-counter/README.md), [Orders server](../examples/graphql-orders/README.md), and [architecture ADR (Japanese)](./adr/loutre_graphql_codegen_architecture.md) for examples.

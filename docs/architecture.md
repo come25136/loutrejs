@@ -51,7 +51,7 @@ HTTP, Tasks, MessagePort, WebSocket, Queue consumers, and similar execution sema
 
 The main package exposes these important subpaths:
 
-公開packageとsubpathを分ける判断理由は[package配布architecture ADR](./adr/loutre_package_distribution_architecture.md)を参照してください。
+For the rationale behind separating published packages from subpath exports, see the [package distribution architecture ADR (Japanese)](./adr/loutre_package_distribution_architecture.md).
 
 | Subpath                         | Role                                                 |
 | ------------------------------- | ---------------------------------------------------- |
@@ -182,7 +182,7 @@ class UsersService {
 
 Cross-module dependencies require an explicit `exports` / `imports` path. Visibility is validated while the model is built, before Runtime startup.
 
-依存元metadataの利用方法は[独自loggerなどで依存元を取得する](./ja/architecture.md#独自loggerなどで依存元を取得する)、責務の判断は[所有権ADR](./adr/loutre_construction_and_runtime_ownership.md)を参照してください。
+For using dependency-source metadata, see [Accessing dependency sources in custom loggers (Japanese)](./ja/architecture.md#独自loggerなどで依存元を取得する). For ownership responsibilities, see the [ownership ADR (Japanese)](./adr/loutre_construction_and_runtime_ownership.md).
 
 ## Environment and Arguments
 
