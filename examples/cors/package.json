@@ -15,7 +15,7 @@
   "dependencies": {
     "@loutrejs/loutre": "0.9.0",
     "@loutrejs/node": "0.9.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@loutrejs/cli": "0.9.0",

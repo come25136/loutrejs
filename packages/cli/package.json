@@ -25,12 +25,12 @@
   },
   "dependencies": {
     "@graphql-codegen/core": "^6.2.2",
-    "@graphql-codegen/typed-document-node": "^7.1.1",
+    "@graphql-codegen/typed-document-node": "^7.2.0",
     "@graphql-codegen/typescript": "^6.1.0",
     "@graphql-codegen/typescript-operations": "^6.1.10",
     "@graphql-codegen/typescript-resolvers": "^6.1.1",
     "@loutrejs/loutre": "^0.9.0",
-    "@swc/core": "^1.16.13",
+    "@swc/core": "^1.16.18",
     "chokidar": "^5.0.0",
     "esbuild": "^0.28.2",
     "fast-glob": "^3.3.3",
@@ -38,7 +38,7 @@
     "oxfmt": "^0.72.0",
     "ts-pattern": "^5.9.0",
     "ws": "^8.22.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/ws": "^8.18.2",
