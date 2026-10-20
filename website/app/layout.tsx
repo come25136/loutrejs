@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     template: '%s | Loutre',
   },
   description:
-    'A TypeScript framework for a variety of runtimes. Type inference and DevTools provide a simple development experience.',
+    'A multi-runtime TypeScript framework with typed HTTP and GraphQL APIs, WebSocket Subscriptions, Codegen, and DevTools.',
   alternates: {
     canonical: '/',
     languages: {
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     siteName: 'Loutre',
     title: 'Loutre — TypeScript Framework',
     description:
-      'A TypeScript framework for a variety of runtimes, with type inference and DevTools for a simple development experience.',
+      'Build typed HTTP and GraphQL APIs, real-time Subscriptions, and multi-runtime applications with Loutre DevTools.',
     images: [
       {
         url: '/og.png',
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Loutre — TypeScript Framework',
     description:
-      'A TypeScript framework for a variety of runtimes, with type inference and DevTools for a simple development experience.',
+      'Build typed HTTP and GraphQL APIs, real-time Subscriptions, and multi-runtime applications with Loutre DevTools.',
     images: ['/og.png'],
   },
 }

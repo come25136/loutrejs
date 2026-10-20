@@ -3,6 +3,7 @@ import { AgentSection } from './home/agent-section'
 import { ArchitectureSection } from './home/architecture-section'
 import { ExplicitGraphSection } from './home/explicit-graph-section'
 import { FinalCta } from './home/final-cta'
+import { GraphQLSection } from './home/graphql-section'
 import { Hero } from './home/hero'
 import { TypeInferenceSection } from './home/type-inference-section'
 import { RuntimeSection } from './home/runtime-section'
@@ -14,6 +15,7 @@ export function HomePage({ locale }: { readonly locale: Locale }) {
       <RuntimeSection locale={locale} />
       <ExplicitGraphSection locale={locale} />
       <TypeInferenceSection locale={locale} />
+      <GraphQLSection locale={locale} />
       <AgentSection locale={locale} />
       <ArchitectureSection locale={locale} />
       <FinalCta locale={locale} />

@@ -5,14 +5,15 @@ export const homeCopy = {
     hero: {
       title: ['TypeScript framework', 'for any runtime.'],
       lead: [
-        'Define one Application Model, then run it on Node.js, Bun, Cloudflare Workers, AWS Lambda, and Electron.',
-        'Loutre Dev lets you trace the structure and execution from that same model.',
+        'Build typed HTTP and GraphQL APIs with one Application Model across runtimes.',
+        'Combine type inference, live GraphQL Subscriptions, and DevTools in one framework.',
       ],
       commandHint: 'Start local developer tooling',
     },
     links: {
       github: 'GitHub',
       docs: 'Documentation',
+      graphql: 'GraphQL',
       architecture: 'Learn more',
     },
     explicitGraph: {
@@ -36,6 +37,27 @@ export const homeCopy = {
       body: 'Define the Contract once, and request and response handling stays typed throughout the implementation.',
       note: 'No declare / as / is needed to carry those types.',
       codeComment: 'inferred as string',
+    },
+    graphql: {
+      eyebrow: 'GRAPHQL',
+      title: 'GraphQL, from types to live data.',
+      body: 'Share an SDL contract, generate typed resolvers, and deliver Queries, Mutations, and Subscriptions through the same Application.',
+      docs: 'Explore GraphQL',
+      example: 'Explore the Counter example',
+      features: [
+        {
+          title: 'HTTP & WebSocket',
+          body: 'Queries and Mutations over HTTP, and live Subscriptions using graphql-transport-ws.',
+        },
+        {
+          title: 'SDL-first Codegen',
+          body: 'Generate Resolver types, a Static Schema, typed Bindings, and typed client Operations.',
+        },
+        {
+          title: 'Data Resolution',
+          body: 'Reuse prefetched Fields and batch related data per Execution Scope to reduce N+1 queries.',
+        },
+      ],
     },
     agent: {
       eyebrow: 'FOR AI AGENTS',
@@ -69,14 +91,15 @@ export const homeCopy = {
     hero: {
       title: ['ランタイムに縛られない', 'TypeScriptフレームワーク'],
       lead: [
-        'Loutreは型推論を活かしたAPIとDevToolsで、',
-        'シンプルな開発体験を提供します。',
+        'HTTP・GraphQL・リアルタイムなSubscriptionに対応。',
+        '型推論とDevToolsで、ランタイムをまたいだ開発をシンプルに。',
       ],
       commandHint: 'ローカル開発ツールを起動',
     },
     links: {
       github: 'GitHub',
       docs: 'ドキュメント',
+      graphql: 'GraphQL',
       architecture: '詳しく見る',
     },
     explicitGraph: {
@@ -95,6 +118,27 @@ export const homeCopy = {
       body: 'Contractに型を書くだけで、RequestもResponseも型がそのまま伝わります。',
       note: 'declare / as / is を使う必要もありません。',
       codeComment: 'stringとして推論される',
+    },
+    graphql: {
+      eyebrow: 'GRAPHQL',
+      title: 'GraphQLも、型安全に。リアルタイムに。',
+      body: 'SDLをコントラクトとして共有し、型付きResolverを生成。Query、Mutation、Subscriptionを同じApplicationで扱えます。',
+      docs: 'GraphQLの使い方',
+      example: 'Counterのサンプル',
+      features: [
+        {
+          title: 'HTTP & WebSocket',
+          body: 'HTTPでQueryとMutation、graphql-transport-wsでリアルタイムなSubscriptionを提供します。',
+        },
+        {
+          title: 'SDL-first Codegen',
+          body: 'SDLからResolver型、Static Schema、型付きBinding、Client Operationを生成できます。',
+        },
+        {
+          title: 'Data Resolution',
+          body: '先読み済みのFieldを再利用し、Execution ScopeごとのBatch取得でN+1問題を抑えます。',
+        },
+      ],
     },
     agent: {
       eyebrow: 'FOR AI AGENTS',

@@ -37,6 +37,9 @@ export function Hero({ locale }: { readonly locale: Locale }) {
               <TextLink href={`${prefix}/docs/getting-started/`}>
                 {copy.links.docs}
               </TextLink>
+              <TextLink href={`${prefix}/docs/graphql-codegen/`}>
+                {copy.links.graphql}
+              </TextLink>
             </div>
           </div>
           <div className="min-w-0 animate-reveal-up [animation-delay:140ms] motion-reduce:animate-none mt-4 xl:-mr-[20vw] xl:mt-64">
