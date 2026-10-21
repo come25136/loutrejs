@@ -33,6 +33,6 @@
   },
   "dependencies": {
     "graphql-http": "^1.23.1",
-    "graphql-ws": "^6.3.0"
+    "graphql-ws": "^6.4.0"
   }
 }
