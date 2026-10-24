@@ -60,7 +60,7 @@ export function BatchResolutionPreview({
                   x={item.x + 55}
                   y="38"
                   textAnchor="middle"
-                  fontSize="13"
+                  fontSize="16"
                   className="fill-ink"
                 >
                   Item {item.name}
@@ -88,7 +88,7 @@ export function BatchResolutionPreview({
               x="210"
               y="141"
               textAnchor="middle"
-              fontSize="13"
+              fontSize="16"
               className="fill-sky-600 dark:fill-sky-400"
             >
               load([A, B, C])
@@ -104,7 +104,7 @@ export function BatchResolutionPreview({
               x="210"
               y="207"
               textAnchor="middle"
-              fontSize="12"
+              fontSize="14"
               className="fill-ink-soft"
             >
               CatalogService

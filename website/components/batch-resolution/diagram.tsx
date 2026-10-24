@@ -39,7 +39,7 @@ function ResolutionFlow({
         x="180"
         y="14"
         textAnchor="middle"
-        fontSize="11"
+        fontSize="12"
         className="fill-ink-soft"
       >
         {copy.list}
@@ -93,7 +93,7 @@ function ResolutionFlow({
                   x={center}
                   y="107"
                   textAnchor="middle"
-                  fontSize="11"
+                  fontSize="12"
                   className="fill-ink font-mono"
                 >
                   resolve({item})
@@ -170,11 +170,11 @@ export function BatchResolutionDiagram({
       <p className="mb-7 max-w-3xl text-[15px] leading-8 text-ink-soft">
         {copy.lead}
       </p>
-      <div className="grid border-y border-line bg-surface-muted/30 sm:grid-cols-2">
+      <div className="grid border-y border-line bg-surface-muted/30 md:grid-cols-2">
         {[false, true].map((batched) => (
           <figure
             key={String(batched)}
-            className={`min-w-0 px-4 py-5 sm:px-5 ${batched ? 'border-t border-line sm:border-t-0 sm:border-l' : ''}`}
+            className={`min-w-0 px-4 py-5 sm:px-5 ${batched ? 'border-t border-line md:border-t-0 md:border-l' : ''}`}
           >
             <figcaption className="mb-6 flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold">

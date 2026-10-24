@@ -50,11 +50,11 @@ export function OssLicensesPage({ locale }: { locale: Locale }) {
                 className="group rounded-xl border border-line bg-paper px-5 py-4 shadow-[0_8px_24px_rgba(2,8,23,0.04)]"
                 key={`${entry.name}@${entry.version}`}
               >
-                <summary className="flex cursor-pointer list-none items-baseline justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                  <span className="font-mono text-sm font-semibold text-ink">
+                <summary className="flex cursor-pointer list-none flex-col items-start gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4 [&::-webkit-details-marker]:hidden">
+                  <span className="min-w-0 break-all font-mono text-sm font-semibold text-ink">
                     {entry.name}
                   </span>
-                  <span className="shrink-0 text-xs text-ink-soft">
+                  <span className="text-xs text-ink-soft">
                     {entry.version} · {entry.license}
                   </span>
                 </summary>
