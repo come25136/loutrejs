@@ -1,3 +1,4 @@
+import { load } from 'cheerio'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
@@ -12,9 +13,10 @@ describe('Batch Resolutionの比較図', () => {
       const html = renderToStaticMarkup(
         createElement(BatchResolutionDiagram, { copy }),
       )
-      const figures = [...html.matchAll(/<figure\b[\s\S]*?<\/figure>/g)].map(
-        ([figure]) => figure.replace(/<[^>]*>/g, ''),
-      )
+      const $ = load(html)
+      const figures = $('figure')
+        .toArray()
+        .map((figure) => $(figure).text())
       expect(figures).toHaveLength(2)
       expect(figures[0]).toContain(copy.individual)
       expect(figures[0]).toContain(`3${copy.callUnit}`)

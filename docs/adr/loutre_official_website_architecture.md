@@ -85,6 +85,10 @@ frameworkの変更とdocumentationの変更を同じpull requestで同期でき�
 動的なrequest context、Server Actions、runtime API、ISRなど、serverの存在を必要とするNext.js機能は公式サイトの前提にしない。
 将来それらが必要になった場合は、GitHub Pagesを維持できる範囲に無理に押し込まず、このADRを再検討する。
 
+## 表示内容の検証
+
+表示内容のテストでは、生成したHTMLを構文として解析してから見出しやテキストを検証する。正規表現でタグを削ると、属性中の記号や文字参照を誤って扱い、表示と異なる文字列を検証してしまうためである。
+
 ## Deployment
 
 GitHub Actionsをsite buildとGitHub Pages deploymentの境界とする。

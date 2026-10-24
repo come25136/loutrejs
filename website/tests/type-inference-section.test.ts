@@ -1,3 +1,4 @@
+import { load } from 'cheerio'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
@@ -15,7 +16,7 @@ describe('トップページのHTTP型推論の紹介', () => {
       expect(html).toContain('controller.ts')
       expect(html).toContain('language-typescript')
       expect(html).toContain('hljs-keyword')
-      const text = html.replace(/<[^>]*>/g, '')
+      const text = load(html).text()
       expect(text).toContain('ctx.input.params.name')
       expect(text).toContain('ctx.response.ok')
       expect(text).not.toContain('TERMINAL')

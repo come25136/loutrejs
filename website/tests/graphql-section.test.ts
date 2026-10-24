@@ -1,3 +1,4 @@
+import { load } from 'cheerio'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
@@ -46,10 +47,10 @@ describe('トップページのGraphQL紹介', () => {
         ),
       ).toBe(true)
 
-      const text = html.replace(/<[^>]*>/g, '')
+      const text = load(html).text()
       expect(text).toContain('increment(amount: Int!): Counter!')
       expect(text).toContain('args.amount')
-      expect(text).toContain('Resolvers')
+      expect(text).toContain('Resolvers<AppContext>')
       expect(text).not.toContain('TERMINAL')
       expect(text).not.toContain('UTF-8')
       expect(text).not.toContain(' — Loutre')

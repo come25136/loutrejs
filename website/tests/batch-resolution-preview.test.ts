@@ -1,3 +1,4 @@
+import { load } from 'cheerio'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
@@ -18,7 +19,7 @@ describe('トップページのBatch Resolution紹介', () => {
       expect(html).not.toContain('maxBatchSize')
       expect(html).not.toMatch(/<h[12]\b/)
       expect(html).toMatch(/<h3\b/)
-      const text = html.replace(/<[^>]*>/g, '')
+      const text = load(html).text()
       expect(text).toContain('N+1')
       expect(text).toContain('load')
       expect(text).toContain('Loutre')

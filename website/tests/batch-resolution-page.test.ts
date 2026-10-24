@@ -1,3 +1,4 @@
+import { load } from 'cheerio'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
@@ -21,7 +22,7 @@ describe('Batch Resolutionの機能詳細', () => {
         expect(html).toContain(`id="${id}"`)
         expect(html).toContain(`href="#${id}"`)
       }
-      const text = html.replace(/<[^>]*>/g, '')
+      const text = load(html).text()
       expect(text).toContain('load([A, B, C])')
       expect(text).toContain('parents: items')
       expect(text).toContain('findForItems')
