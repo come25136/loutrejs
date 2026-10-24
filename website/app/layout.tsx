@@ -5,9 +5,9 @@ import '@fontsource-variable/inter'
 import '@fontsource-variable/jetbrains-mono'
 import '@xyflow/react/dist/style.css'
 import { SiteChrome } from '../components/site-chrome'
+import { siteUrl } from '../lib/site'
 import './globals.css'
 
-const siteUrl = 'https://loutrejs.come25136.id'
 const googleAnalyticsId = 'G-46R1D6Y88K'
 
 export const metadata: Metadata = {
