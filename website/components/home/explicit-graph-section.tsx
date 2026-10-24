@@ -31,16 +31,11 @@ export function ExplicitGraphSection({ locale }: { readonly locale: Locale }) {
     <HomeSection className="bg-surface-muted/45 py-18 sm:py-24">
       <div className="shell grid grid-cols-[0.95fr_1.05fr] items-center gap-12 max-lg:grid-cols-1 lg:gap-16">
         <div>
-          <h2 className="text-[clamp(2rem,3.2vw,2.9rem)] leading-[1.08] font-bold tracking-[-0.055em]">
-            <span className="block lg:whitespace-nowrap">{copy.title[0]}</span>
-            <span className="block lg:whitespace-nowrap">{copy.title[1]}</span>
+          <h2 className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
+            {copy.title}
           </h2>
           <p className="mt-6 max-w-xl text-[15px] leading-7 text-ink-soft">
-            {copy.body.map((line) => (
-              <span className="block" key={line}>
-                {line}
-              </span>
-            ))}
+            {copy.body}
           </p>
         </div>
         <div className="relative grid grid-cols-[0.86fr_auto_1.14fr] items-stretch gap-5 max-sm:grid-cols-1">
