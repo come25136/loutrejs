@@ -1,7 +1,8 @@
 import type { Locale } from '../../lib/i18n'
 import { localePrefix } from '../../lib/i18n'
 import { homeCopy } from './home-copy'
-import { HomeSection, TextLink } from './shared'
+import { HomeSection } from './shared'
+import { TextLink } from '../text-link'
 
 const architectureNodes = [
   {
@@ -34,10 +35,7 @@ export function ArchitectureSection({ locale }: { readonly locale: Locale }) {
     <HomeSection className="py-18 sm:py-24">
       <div className="shell grid grid-cols-[1.05fr_0.95fr] items-center gap-12 max-lg:grid-cols-1 lg:gap-16">
         <div className="lg:order-2">
-          <p className="text-[10px] font-bold tracking-[0.18em] text-ink-muted">
-            {copy.architecture.eyebrow}
-          </p>
-          <h2 className="mt-5 whitespace-pre-line text-[clamp(2rem,3.2vw,2.9rem)] leading-[1.08] font-bold tracking-[-0.055em] lg:whitespace-pre">
+          <h2 className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
             {copy.architecture.title}
           </h2>
           <p className="mt-6 max-w-xl text-[15px] leading-7 text-ink-soft">

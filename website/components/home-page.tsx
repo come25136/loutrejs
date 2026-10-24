@@ -16,8 +16,8 @@ export function HomePage({ locale }: { readonly locale: Locale }) {
       <ExplicitGraphSection locale={locale} />
       <TypeInferenceSection locale={locale} />
       <GraphQLSection locale={locale} />
-      <AgentSection locale={locale} />
       <ArchitectureSection locale={locale} />
+      <AgentSection locale={locale} />
       <FinalCta locale={locale} />
     </main>
   )

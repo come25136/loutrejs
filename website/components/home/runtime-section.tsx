@@ -178,18 +178,11 @@ export function RuntimeSection({ locale }: { readonly locale: Locale }) {
     <HomeSection className="overflow-hidden bg-surface-muted py-18 sm:py-24">
       <div className="shell grid grid-cols-[1.1fr_0.9fr] items-center gap-12 max-lg:grid-cols-1 lg:gap-16">
         <div className="lg:order-2">
-          <p className="text-[10px] font-bold tracking-[0.18em] text-ink-muted">
-            {copy.eyebrow}
-          </p>
-          <h2 className="mt-5 max-w-xl whitespace-pre-line text-[clamp(2rem,3.2vw,3rem)] leading-[1.06] font-bold tracking-[-0.055em] lg:whitespace-pre">
+          <h2 className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
             {copy.title}
           </h2>
           <p className="mt-6 max-w-xl text-[15px] leading-7 text-ink-soft">
-            {copy.body.map((line) => (
-              <span className="block" key={line}>
-                {line}
-              </span>
-            ))}
+            {copy.body}
           </p>
         </div>
 
