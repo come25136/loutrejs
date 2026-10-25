@@ -20,7 +20,7 @@ export class AnalyticsSession {
       this.send('js', new Date())
       this.send('config', measurementId, {
         send_page_view: false,
-        debug_mode: debug,
+        ...(debug ? { debug_mode: true } : {}),
       })
       this.configured = true
     }
