@@ -83,6 +83,7 @@ export function CodeEditor({
   return (
     <div
       className="overflow-hidden rounded-md border border-[#333] bg-[#1f1f1f] text-[#ccc] shadow-[0_16px_48px_rgb(0_0_0/0.12)]"
+      role="group"
       aria-label={label}
     >
       <div className="grid lg:grid-cols-[172px_minmax(0,1fr)]">
@@ -110,6 +111,11 @@ export function CodeEditor({
                       <button
                         className={`flex w-full min-w-0 items-center gap-2 pr-2 pl-8 text-left hover:bg-[#2a2d2e] ${activePaths[paneIndex] === file.path ? 'bg-[#37373d] text-white' : ''}`}
                         onClick={() => activateFile(paneIndex, file.path)}
+                        aria-current={
+                          activePaths[paneIndex] === file.path
+                            ? 'true'
+                            : undefined
+                        }
                       >
                         <FileCode2
                           size={13}

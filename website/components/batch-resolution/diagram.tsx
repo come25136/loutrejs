@@ -181,9 +181,9 @@ export function BatchResolutionDiagram({
                 {batched ? copy.batched : copy.individual}
               </h3>
               <span
-                aria-label={copy.calls}
                 className={`shrink-0 font-mono text-sm ${batched ? 'text-copper-dark' : 'text-ink-soft'}`}
               >
+                <span className="sr-only">{copy.calls}: </span>
                 {batched ? 1 : 3}
                 {copy.callUnit}
               </span>
