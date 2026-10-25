@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest'
 import { AnalyticsSession, linkEvent, pageView } from '../lib/analytics'
 
 describe('公式サイトの利用計測', () => {
+  it('通常の閲覧にはデバッグ指定を含めず、検証時だけ有効にする', () => {
+    for (const debug of [false, true]) {
+      const events: unknown[][] = []
+      new AnalyticsSession((...args) => events.push(args)).view(
+        '/ja/',
+        '',
+        'トップ',
+        debug,
+      )
+      const config = events.find((event) => event[0] === 'config')?.[2]
+      expect(config).toEqual(
+        debug
+          ? { send_page_view: false, debug_mode: true }
+          : { send_page_view: false },
+      )
+    }
+  })
   it('初回・内部移動・戻るを各一回計測し同じパスの再描画では増やさない', () => {
     const events: unknown[][] = []
     const session = new AnalyticsSession((...args) => events.push(args))
