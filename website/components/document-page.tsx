@@ -9,7 +9,8 @@ import {
   getDocumentNavigation,
   type DocumentSlug,
 } from '../lib/documents'
-import { localizedPath, localePrefix, type Locale } from '../lib/i18n'
+import { localePrefix, type Locale } from '../lib/i18n'
+import { resolveDocumentHref } from '../lib/document-links'
 import { MermaidDiagram } from './mermaid-diagram'
 import { ScrollReveal } from './scroll-reveal'
 
@@ -37,27 +38,6 @@ const documentPageCopy = {
     onPageNavigation: 'ページ内ナビゲーション',
   },
 } satisfies Record<Locale, Record<string, string>>
-
-function resolveDocumentHref(href: string | undefined, locale: Locale) {
-  if (!href) {
-    return href
-  }
-
-  const markdownLink = /^\.\/([^/]+)\.md(#[\w-]+)?$/.exec(href)
-
-  if (markdownLink) {
-    return localizedPath(
-      locale,
-      `/docs/${markdownLink[1]}/${markdownLink[2] ?? ''}`,
-    )
-  }
-
-  if (href.startsWith('../examples')) {
-    return localizedPath(locale, '/examples/')
-  }
-
-  return href
-}
 
 type HastNode = {
   type: string

@@ -35,6 +35,24 @@ const examples = [
     },
   },
   {
+    name: 'GraphQL Counter',
+    slug: 'graphql-counter',
+    stackblitzUrl: null,
+    description: {
+      en: 'Typed Queries, Mutations, Subscriptions, DI, and batched field resolution',
+      ja: 'Query、Mutation、Subscription、DI、FieldのBatch取得を扱うGraphQL API',
+    },
+  },
+  {
+    name: 'GraphQL Orders',
+    slug: 'graphql-orders',
+    stackblitzUrl: null,
+    description: {
+      en: 'Compare eager, hybrid, and lazy loading with GraphQL Data Resolution',
+      ja: '先読み・部分先読み・遅延取得を比較するGraphQLのData Resolution',
+    },
+  },
+  {
     name: 'Nested Contract Auth',
     slug: 'nested-contract-auth',
     stackblitzUrl: null,
@@ -112,7 +130,7 @@ const examplesCopy = {
   en: {
     headingFirst: 'Learn Loutre',
     headingSecond: 'from working code',
-    categories: 'HTTP, CLI, Worker, Auth, and Database',
+    categories: 'HTTP, GraphQL, CLI, Worker, Auth, and Database',
     introduction: 'Explore focused examples for each use case',
     listLabel: 'Loutre examples',
     tryInStackBlitz: 'Try in StackBlitz',
@@ -121,7 +139,7 @@ const examplesCopy = {
   ja: {
     headingFirst: '動くコードから',
     headingSecond: 'Loutreを学ぶ',
-    categories: 'HTTP、CLI、Worker、Auth、Database',
+    categories: 'HTTP、GraphQL、CLI、Worker、Auth、Database',
     introduction: '用途別のサンプルから使い方を確認できます',
     listLabel: 'Loutreのサンプル一覧',
     tryInStackBlitz: 'StackBlitzで試す',

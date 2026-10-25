@@ -52,6 +52,8 @@ export class GreetingService {
 
 `src/greetings/controller.ts`:
 
+`contract`を渡すと、Handlerの入力と応答の型がContractから推論されます。この例では`ctx.input.params.name`は`string`となり、`ctx.response.ok()`には`message: string`を含むbodyを渡せます。
+
 ```ts
 import { inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'

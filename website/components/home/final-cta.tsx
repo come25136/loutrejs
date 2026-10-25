@@ -4,7 +4,8 @@ import Link from 'next/link'
 import type { Locale } from '../../lib/i18n'
 import { localePrefix } from '../../lib/i18n'
 import { homeCopy } from './home-copy'
-import { HomeSection, TextLink } from './shared'
+import { HomeSection } from './shared'
+import { TextLink } from '../text-link'
 
 const stackBlitzUrl =
   'https://stackblitz.com/fork/github/come25136/loutrejs/tree/main/examples/hello-http?startScript=dev&title=Loutre%20Hello%20HTTP&initialpath=%2FLoutre'
@@ -18,7 +19,7 @@ export function FinalCta({ locale }: { readonly locale: Locale }) {
       <div className="shell relative grid grid-cols-[1fr_0.55fr] items-center gap-8 max-sm:block md:gap-10">
         <div>
           <div className="max-sm:pr-28">
-            <h2 className="text-[clamp(2.3rem,4vw,3.5rem)] leading-tight font-bold tracking-[-0.06em] max-sm:text-[2rem]">
+            <h2 className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
               {copy.finalCta.title}
             </h2>
             <p className="mt-4 max-w-xl text-[15px] leading-7 text-ink-soft">
