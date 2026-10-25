@@ -49,6 +49,8 @@ Tasks、MessagePort、WebSocketは内部では独立したExecution Extensionと
 
 `@loutrejs/graphql`はHTTPとWebSocket Executionを合成するprotocol integrationとして公開する。標準の`GraphQLSchema`とGraphQL ecosystemのpeer dependency境界を維持し、GraphQLを使わない利用者へparser/executorやprotocol libraryの依存を強制しない。設計判断の正本は[GraphQLトランスポート設計](./loutre_graphql_transport_architecture.md)とする。
 
+GraphQLサンプルにも、そのソース・開発コマンド・利用手順が直接使う依存だけを宣言する。サーバーのWebSocket transportに必要な`graphql-ws`は`@loutrejs/graphql`が所有するため、クライアントを使わないOrdersサンプルでは重複して宣言しない。クライアントの利用手順を持つCounterサンプルは開発用の宣言を保持する。
+
 ```mermaid
 flowchart TD
   GraphQL["@loutrejs/graphql"] --> Loutre["peer: @loutrejs/loutre"]
