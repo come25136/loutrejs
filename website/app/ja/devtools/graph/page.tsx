@@ -1,17 +1,10 @@
-import type { Metadata } from 'next'
+import { pageMetadata } from '../../../../lib/seo'
 import { DevtoolsPage } from '../../../../components/devtools-page'
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata('/devtools/graph/', 'ja', {
   title: 'Devtools Graph',
   description: 'ローカルのLoutre Application Graphをブラウザで探索します。',
-  alternates: {
-    canonical: '/ja/devtools/graph/',
-    languages: {
-      en: '/devtools/graph/',
-      ja: '/ja/devtools/graph/',
-    },
-  },
-}
+})
 
 export default function Page() {
   return <DevtoolsPage locale="ja" initialWorkspace="graph" />

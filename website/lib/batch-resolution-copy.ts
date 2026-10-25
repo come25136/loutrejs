@@ -2,6 +2,7 @@ import type { Locale } from './i18n'
 
 export const batchResolutionCopy = {
   en: {
+    title: 'GraphQL N+1 queries and Batch Resolution',
     home: 'Home',
     breadcrumb: 'Breadcrumb',
     pageNavigation: 'On this page',
@@ -35,6 +36,7 @@ export const batchResolutionCopy = {
     },
   },
   ja: {
+    title: 'GraphQLのN+1問題とBatch Resolution',
     home: 'トップページ',
     breadcrumb: 'パンくずリスト',
     pageNavigation: 'このページの内容',

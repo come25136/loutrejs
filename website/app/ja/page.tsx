@@ -1,18 +1,11 @@
-import type { Metadata } from 'next'
+import { pageMetadata } from '../../lib/seo'
 import { HomePage } from '../../components/home-page'
 
-export const metadata: Metadata = {
-  title: 'Loutre — TypeScript Framework',
+export const metadata = pageMetadata('/', 'ja', {
+  title: 'HTTP・GraphQLのTypeScriptフレームワーク',
   description:
-    'HTTP、GraphQL、WebSocket Subscriptionに対応したマルチランタイムのTypeScriptフレームワーク。型推論、Codegen、DevToolsで開発をシンプルに。',
-  alternates: {
-    canonical: '/ja/',
-    languages: {
-      en: '/',
-      ja: '/ja/',
-    },
-  },
-}
+    '型安全なHTTP API、GraphQLの型生成とN+1対策を備えたLoutre。Node.js、Bun、Cloudflare Workersなどで動作します。',
+})
 
 export default function JapaneseHome() {
   return <HomePage locale="ja" />

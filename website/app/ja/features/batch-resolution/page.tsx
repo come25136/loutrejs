@@ -1,18 +1,11 @@
-import type { Metadata } from 'next'
+import { pageMetadata } from '../../../../lib/seo'
 import { BatchResolutionPage } from '../../../../components/batch-resolution-page'
 
-export const metadata: Metadata = {
-  title: 'Batch Resolution',
+export const metadata = pageMetadata('/features/batch-resolution/', 'ja', {
+  title: 'GraphQLのN+1問題とBatch Resolution',
   description:
-    'GraphQLの個別取得とBatch取得を図で比較し、loadの実装方法を確認できます。',
-  alternates: {
-    canonical: '/ja/features/batch-resolution/',
-    languages: {
-      en: '/features/batch-resolution/',
-      ja: '/ja/features/batch-resolution/',
-    },
-  },
-}
+    'GraphQLのN+1問題が起きる仕組みと、一括取得で問い合わせを減らす方法を図とTypeScriptのコードで解説します。',
+})
 
 export default function JapaneseBatchResolutionFeaturePage() {
   return <BatchResolutionPage locale="ja" />

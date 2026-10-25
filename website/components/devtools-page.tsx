@@ -297,6 +297,7 @@ export function DevtoolsPage({
 
   return (
     <main className="loutre-devtools h-dvh w-full overflow-auto bg-paper">
+      <h1 className="sr-only">Loutre DevTools</h1>
       <section className="flex h-full min-w-[900px] flex-col overflow-hidden bg-paper">
         <div className="grid min-h-14 grid-cols-[1fr_auto_1fr] items-center border-b border-line bg-surface/95 px-2.5">
           <Link
