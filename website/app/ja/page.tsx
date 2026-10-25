@@ -4,7 +4,7 @@ import { HomePage } from '../../components/home-page'
 export const metadata: Metadata = {
   title: 'Loutre — TypeScript Framework',
   description:
-    '様々なランタイムで動くTypeScriptフレームワーク。型推論とDevToolsで、シンプルな開発体験を提供します。',
+    'HTTP、GraphQL、WebSocket Subscriptionに対応したマルチランタイムのTypeScriptフレームワーク。型推論、Codegen、DevToolsで開発をシンプルに。',
   alternates: {
     canonical: '/ja/',
     languages: {

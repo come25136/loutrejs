@@ -91,7 +91,7 @@ export function DevtoolsShowcase({
               focusRequest={{
                 nodeId: 'UsersController',
                 nonce: 1,
-                scope: 'neighbors',
+                scope: 'node',
               }}
               onSelect={(node) => setSelectedId(node?.id ?? '')}
             />

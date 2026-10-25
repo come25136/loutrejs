@@ -1,7 +1,8 @@
 import type { Locale } from '../../lib/i18n'
 import { localePrefix } from '../../lib/i18n'
 import { homeCopy } from './home-copy'
-import { HomeSection, TextLink } from './shared'
+import { HomeSection } from './shared'
+import { TextLink } from '../text-link'
 
 const architectureNodes = [
   {
@@ -34,10 +35,7 @@ export function ArchitectureSection({ locale }: { readonly locale: Locale }) {
     <HomeSection className="py-18 sm:py-24">
       <div className="shell grid grid-cols-[1.05fr_0.95fr] items-center gap-12 max-lg:grid-cols-1 lg:gap-16">
         <div className="lg:order-2">
-          <p className="text-[10px] font-bold tracking-[0.18em] text-ink-muted">
-            {copy.architecture.eyebrow}
-          </p>
-          <h2 className="mt-5 whitespace-pre-line text-[clamp(2rem,3.2vw,2.9rem)] leading-[1.08] font-bold tracking-[-0.055em] lg:whitespace-pre">
+          <h2 className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
             {copy.architecture.title}
           </h2>
           <p className="mt-6 max-w-xl text-[15px] leading-7 text-ink-soft">
@@ -49,44 +47,49 @@ export function ArchitectureSection({ locale }: { readonly locale: Locale }) {
             </TextLink>
           </div>
         </div>
-        <div className="relative mx-auto h-[390px] w-full max-w-[620px] sm:h-[420px] lg:order-1">
+        <div className="relative mx-auto h-[420px] w-full max-w-[620px] lg:order-1">
           <svg
             className="absolute inset-0 size-full text-line-strong"
             viewBox="0 0 620 420"
+            preserveAspectRatio="none"
             fill="none"
             aria-hidden="true"
           >
             <path
-              d="M96 96V128H194V182H210"
+              d="M124 96V128H310V154"
               stroke="currentColor"
               strokeWidth="1.25"
               strokeDasharray="4 7"
               strokeLinecap="round"
               strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
             />
             <path
-              d="M524 96V128H426V182H410"
+              d="M496 96V128H310V154"
               stroke="currentColor"
               strokeWidth="1.25"
               strokeDasharray="4 7"
               strokeLinecap="round"
               strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
             />
             <path
-              d="M96 324V292H194V238H210"
+              d="M124 324V292H310V266"
               stroke="currentColor"
               strokeWidth="1.25"
               strokeDasharray="4 7"
               strokeLinecap="round"
               strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
             />
             <path
-              d="M524 324V292H426V238H410"
+              d="M496 324V292H310V266"
               stroke="currentColor"
               strokeWidth="1.25"
               strokeDasharray="4 7"
               strokeLinecap="round"
               strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
             />
           </svg>
           <div className="absolute left-1/2 top-1/2 grid h-28 w-44 -translate-x-1/2 -translate-y-1/2 place-items-center border border-sky-400/70 bg-sky-400/6 text-center">
@@ -101,7 +104,7 @@ export function ArchitectureSection({ locale }: { readonly locale: Locale }) {
           </div>
           {architectureNodes.map((node) => (
             <div
-              className={`absolute flex h-24 w-48 flex-col items-center justify-center border border-line-strong bg-paper text-center max-sm:w-36 ${node.className}`}
+              className={`absolute flex h-24 w-2/5 flex-col items-center justify-center border border-line-strong bg-paper px-1 text-center ${node.className}`}
               key={node.title}
             >
               <strong className="text-sm">{node.title}</strong>

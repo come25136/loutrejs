@@ -26,6 +26,7 @@ function initializeMermaid(theme: Theme) {
     startOnLoad: false,
     securityLevel: 'strict',
     theme: 'base',
+    htmlLabels: false,
     themeVariables: {
       background: dark ? '#0a131d' : '#ffffff',
       primaryColor: dark ? '#0d1722' : '#f9fafb',
@@ -36,13 +37,28 @@ function initializeMermaid(theme: Theme) {
       tertiaryColor: dark ? '#081018' : '#ffffff',
       fontFamily: "'Inter Variable', 'Noto Sans JP', sans-serif",
       fontSize: '13px',
+      noteBkgColor: dark ? '#211710' : '#fff7ed',
+      noteBorderColor: '#ff6a30',
+      noteTextColor: dark ? '#f3f6f9' : '#111827',
     },
     flowchart: {
       curve: 'basis',
       nodeSpacing: 18,
       rankSpacing: 24,
       padding: 8,
-      useMaxWidth: true,
+      useMaxWidth: false,
+    },
+    sequence: {
+      theme: 'base',
+      look: 'classic',
+      mirrorActors: false,
+      height: 44,
+      messageMargin: 28,
+      noteMargin: 8,
+      actorFontSize: 13,
+      noteFontSize: 13,
+      messageFontSize: 13,
+      useMaxWidth: false,
     },
   })
 }
@@ -139,7 +155,7 @@ export function MermaidDiagram({
         className={
           embedded
             ? 'grid min-h-48 w-full min-w-0 place-items-center text-sm text-ink-soft [&_svg]:block [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-full'
-            : 'grid min-h-48 min-w-[36rem] place-items-center text-sm text-ink-soft [&_svg]:h-auto [&_svg]:max-w-full'
+            : 'grid min-h-48 w-max min-w-full place-items-center text-sm text-ink-soft [&_svg]:block [&_svg]:h-auto [&_svg]:max-w-none'
         }
         role="img"
         aria-label={copy.label}

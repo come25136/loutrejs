@@ -14,6 +14,14 @@ const documentMetadata = {
       filename: 'getting-started.md',
     },
     {
+      slug: 'graphql-codegen',
+      label: 'GraphQL',
+      title: 'GraphQL, Codegen & Data Resolution',
+      description:
+        'Use SDL-first Codegen, HTTP, WebSocket Subscriptions, and batched Data Resolution.',
+      filename: 'graphql-codegen.md',
+    },
+    {
       slug: 'architecture',
       label: 'Architecture',
       title: 'Loutre Architecture',
@@ -30,6 +38,14 @@ const documentMetadata = {
       description:
         'プロジェクト作成からHTTP、Task、Runtime、CLIまでを順に解説します。',
       filename: 'getting-started.md',
+    },
+    {
+      slug: 'graphql-codegen',
+      label: 'GraphQL',
+      title: 'GraphQLとCodegen',
+      description:
+        'SDLから型付きResolverを生成し、HTTP・Subscription・Batch Data Resolutionを実装します。',
+      filename: 'graphql-codegen.md',
     },
     {
       slug: 'architecture',
