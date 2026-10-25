@@ -35,9 +35,37 @@ describe('Docsのリンク解決', () => {
       expect(resolveDocumentHref('./getting-started.md#setup', locale)).toBe(
         `${prefix}/docs/getting-started/#setup`,
       )
-      expect(resolveDocumentHref('../examples/hello-http', locale)).toBe(
+      const examples = locale === 'ja' ? '../../examples' : '../examples'
+      expect(resolveDocumentHref(`${examples}/hello-http`, locale)).toBe(
         `${prefix}/examples/`,
       )
     },
   )
+
+  it.each([
+    ['en', './adr/loutre_graphql_codegen_architecture.md#decision'],
+    ['ja', '../adr/loutre_graphql_codegen_architecture.md#decision'],
+  ] as const)('%sのADRへのリンクはGitHub上の原稿を参照する', (locale, href) => {
+    expect(resolveDocumentHref(href, locale)).toBe(
+      'https://github.com/come25136/loutrejs/blob/main/docs/adr/loutre_graphql_codegen_architecture.md#decision',
+    )
+  })
+
+  it('言語ディレクトリをまたぐリンクも参照先の言語で表示する', () => {
+    expect(resolveDocumentHref('./ja/architecture.md#logger', 'en')).toBe(
+      '/ja/docs/architecture/#logger',
+    )
+    expect(
+      resolveDocumentHref('../getting-started.md?from=docs#setup', 'ja'),
+    ).toBe('/docs/getting-started/?from=docs#setup')
+  })
+
+  it('未公開の文書は存在しないサイト内URLにせず原稿を参照する', () => {
+    expect(resolveDocumentHref('./unpublished.md', 'ja')).toBe(
+      'https://github.com/come25136/loutrejs/blob/main/docs/ja/unpublished.md',
+    )
+    expect(resolveDocumentHref('../../README.md', 'ja')).toBe(
+      'https://github.com/come25136/loutrejs/blob/main/README.md',
+    )
+  })
 })
