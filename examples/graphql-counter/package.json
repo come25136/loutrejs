@@ -15,15 +15,15 @@
     "generate:check": "loutre graphql generate --config graphql.config.ts --check"
   },
   "dependencies": {
-    "@loutrejs/graphql": "0.9.0",
-    "@loutrejs/loutre": "0.9.0",
-    "@loutrejs/node": "0.9.0",
+    "@loutrejs/graphql": "0.9.1",
+    "@loutrejs/loutre": "0.9.1",
+    "@loutrejs/node": "0.9.1",
     "graphql": "^17.0.2",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@loutrejs/cli": "0.9.0",
-    "graphql-ws": "^6.3.0",
+    "@loutrejs/cli": "0.9.1",
+    "graphql-ws": "^6.4.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
