@@ -1,17 +1,10 @@
-import type { Metadata } from 'next'
+import { pageMetadata } from '../../../lib/seo'
 import { DevtoolsPage } from '../../../components/devtools-page'
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata('/devtools/trace/', 'en', {
   title: 'Devtools Traces',
   description: 'Inspect local Loutre execution traces in the browser.',
-  alternates: {
-    canonical: '/devtools/trace/',
-    languages: {
-      en: '/devtools/trace/',
-      ja: '/ja/devtools/trace/',
-    },
-  },
-}
+})
 
 export default function Page() {
   return <DevtoolsPage locale="en" initialWorkspace="trace" />

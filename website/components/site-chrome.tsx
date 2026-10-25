@@ -21,6 +21,7 @@ const chromeCopy = {
     examples: 'Examples',
     devtools: 'DevTools',
     github: 'GitHub',
+    privacy: 'Website analytics',
     tagline: 'Explicit architecture for TypeScript applications.',
     languageLabel: 'Language',
     darkTheme: 'Switch to dark theme',
@@ -33,6 +34,7 @@ const chromeCopy = {
     examples: 'Examples',
     devtools: 'DevTools',
     github: 'GitHub',
+    privacy: 'アクセス解析について',
     tagline: 'Explicit architecture for TypeScript applications.',
     languageLabel: '言語',
     darkTheme: 'ダークテーマに切り替える',
@@ -232,6 +234,17 @@ export function SiteChrome({ children }: { readonly children: ReactNode }) {
             >
               <GithubMark className="size-3.5" />
               {copy.github}
+            </a>
+            <Link href={`${prefix}/privacy/`} className="hover:text-ink">
+              {copy.privacy}
+            </Link>
+            <a
+              href="https://www.npmjs.com/package/@loutrejs/loutre"
+              className="hover:text-ink"
+              target="_blank"
+              rel="noreferrer"
+            >
+              npm
             </a>
             <span>© 2026 come25136. MIT License</span>
           </nav>

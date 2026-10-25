@@ -1,6 +1,6 @@
-import { Copy } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { ScrollReveal } from '../scroll-reveal'
+import { CopyInstallCommand } from '../copy-install-command'
 
 export function HomeSection({
   children,
@@ -38,11 +38,7 @@ export function CommandBlock({
       <code className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
         {command}
       </code>
-      <Copy
-        className="ml-auto shrink-0 text-slate-500"
-        size={15}
-        aria-hidden="true"
-      />
+      <CopyInstallCommand command={command} />
     </div>
   )
 }

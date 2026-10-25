@@ -48,6 +48,14 @@ const documentMetadata = {
       filename: 'graphql-codegen.md',
     },
     {
+      slug: 'graphql-n-plus-one',
+      label: 'N+1問題を確認する',
+      title: 'GraphQLのN+1問題をTypeScriptで確認する',
+      description:
+        'Ordersサンプルを動かし、先読みとBatch Resolutionの取得回数を比較します。',
+      filename: 'graphql-n-plus-one.md',
+    },
+    {
       slug: 'architecture',
       label: 'Architecture',
       title: 'Loutre Architecture',
@@ -63,7 +71,7 @@ const documentDirectories: Record<Locale, string> = {
   ja: path.join('docs', 'ja'),
 }
 
-export type DocumentSlug = (typeof documentMetadata.en)[number]['slug']
+export type DocumentSlug = (typeof documentMetadata)[Locale][number]['slug']
 
 export function getDocumentNavigation(locale: Locale) {
   return documentMetadata[locale]

@@ -1,3 +1,5 @@
+import { sitePages } from './site-pages'
+
 export const locales = ['en', 'ja'] as const
 
 export type Locale = (typeof locales)[number]
@@ -48,5 +50,10 @@ export function switchLocalePath(
     ? pathname.replace(new RegExp(`^${currentPrefix}(?=/|$)`), '') || '/'
     : pathname
 
+  const normalizedPath = `${unlocalizedPath.replace(/\/$/, '')}/`
+  const page = sitePages.find((entry) => entry.path === normalizedPath)
+  if (page && !(page.locales as readonly Locale[]).includes(targetLocale)) {
+    return localizedPath(targetLocale, '/')
+  }
   return localizedPath(targetLocale, unlocalizedPath)
 }

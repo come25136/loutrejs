@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { GoogleAnalytics } from '@next/third-parties/google'
+import { SiteAnalytics } from '../components/site-analytics'
 import type { ReactNode } from 'react'
 import '@fontsource-variable/inter'
 import '@fontsource-variable/jetbrains-mono'
@@ -7,8 +7,6 @@ import '@xyflow/react/dist/style.css'
 import { SiteChrome } from '../components/site-chrome'
 import { siteUrl } from '../lib/site'
 import './globals.css'
-
-const googleAnalyticsId = 'G-46R1D6Y88K'
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -18,13 +16,6 @@ export const metadata: Metadata = {
   },
   description:
     'A multi-runtime TypeScript framework with typed HTTP and GraphQL APIs, WebSocket Subscriptions, Codegen, and DevTools.',
-  alternates: {
-    canonical: '/',
-    languages: {
-      en: '/',
-      ja: '/ja/',
-    },
-  },
   openGraph: {
     type: 'website',
     locale: 'en_US',
@@ -80,10 +71,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <SiteChrome>{children}</SiteChrome>
+        {process.env.NODE_ENV === 'production' && <SiteAnalytics />}
       </body>
-      {process.env.NODE_ENV === 'production' && (
-        <GoogleAnalytics gaId={googleAnalyticsId} />
-      )}
     </html>
   )
 }

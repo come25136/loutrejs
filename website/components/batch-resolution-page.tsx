@@ -53,11 +53,18 @@ export function BatchResolutionPage({ locale }: { readonly locale: Locale }) {
           </span>
         </nav>
         <h1 className="mt-6 text-4xl leading-tight font-semibold tracking-tight sm:text-[2.65rem]">
-          Batch Resolution
+          {copy.title}
         </h1>
         <p className="mt-5 max-w-3xl text-base leading-8 text-ink-soft">
           {copy.body}
         </p>
+        {locale === 'ja' && (
+          <div className="mt-5">
+            <TextLink href="/ja/docs/graphql-n-plus-one/">
+              OrdersサンプルでN+1対策を確認する
+            </TextLink>
+          </div>
+        )}
       </header>
       <div className="grid items-start gap-9 lg:grid-cols-[minmax(0,1fr)_176px] lg:gap-14">
         <aside className="border-y border-line py-4 lg:sticky lg:top-28 lg:order-2 lg:border-y-0 lg:border-l lg:py-0 lg:pl-5">
