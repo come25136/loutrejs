@@ -159,9 +159,9 @@ Bun
 └ 1.4.0
 
 Electron
-├ 42.10.1
-├ 43.4.1
-└ 44.0.0
+├ 42.11.18
+├ 43.8.3
+└ 44.9.3
 
 Cloudflare Workers
 └ workerd package-lock.json pinned release
