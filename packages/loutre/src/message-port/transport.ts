@@ -1,6 +1,10 @@
+import {
+  decodeMessagePortRequest,
+  type MessagePortProcedureName,
+} from './identity.js'
 export interface MessagePortHost {
   invoke(
-    method: string,
+    method: MessagePortProcedureName,
     input?: unknown,
   ): Promise<{ readonly response: string; readonly value: unknown }>
 }
@@ -8,18 +12,19 @@ export interface MessagePortHost {
 export type MessagePortLike = {
   postMessage(value: unknown): void
   start?(): void
-} & Pick<EventTarget, 'addEventListener'>
+  addEventListener(
+    type: 'message',
+    listener: (event: { readonly data: unknown }) => void,
+  ): void
+}
 
 export function attachMessagePort(
   host: MessagePortHost,
   port: MessagePortLike,
 ): void {
   port.addEventListener('message', async (event) => {
-    const request = (event as MessageEvent<unknown>).data as {
-      readonly id: string
-      readonly procedure: string
-      readonly input?: unknown
-    }
+    const request = decodeMessagePortRequest(event.data)
+    if (!request) return
     try {
       const result = await host.invoke(request.procedure, request.input)
       if (isAsyncIterable(result.value)) {

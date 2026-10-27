@@ -1,3 +1,4 @@
+import * as fixture from './helpers/devtools-fixtures.js'
 import { describe, expect, it } from 'vitest'
 import type { GraphSnapshot } from '../lib/devtools.js'
 import {
@@ -19,12 +20,12 @@ import {
 } from '../components/devtools-graph/graph-routing.js'
 
 function node(id: string): LoutreFlowNode {
-  return {
+  return fixture.flowNode({
     id,
     type: 'provider',
     position: { x: 0, y: 0 },
     data: { graphNode: { id, kind: 'provider', label: id } },
-  }
+  })
 }
 
 function edge(
@@ -33,19 +34,19 @@ function edge(
   target: string,
   label: string,
 ): LoutreFlowEdge {
-  return {
+  return fixture.flowEdge({
     id,
     source,
     target,
     type: 'graph-edge',
     label,
     data: { kind: label },
-  }
+  })
 }
 
 describe('ブラウザ版Devtools Graph', () => {
   it('Moduleをsemantic nodeと視覚groupの両方へ投影する', () => {
-    const graph: GraphSnapshot = {
+    const graph: GraphSnapshot = fixture.graphSnapshot({
       schemaVersion: 1,
       nodes: [
         { id: 'module', kind: 'module', label: 'AppModule' },
@@ -58,10 +59,10 @@ describe('ブラウザ版Devtools Graph', () => {
       ],
       edges: [{ from: 'module', to: 'inside', kind: 'owns' }],
       diagnostics: [],
-    }
+    })
 
     const result = adaptGraph(graph)
-    const groupId = moduleGroupId('module')
+    const groupId = moduleGroupId(fixture.moduleId('module'))
     expect(result.nodes.find((item) => item.id === groupId)).toMatchObject({
       type: 'module-group',
       selectable: false,
@@ -82,7 +83,7 @@ describe('ブラウザ版Devtools Graph', () => {
   })
 
   it('診断の対象Nodeをグラフ上の警告表示へ投影する', () => {
-    const graph: GraphSnapshot = {
+    const graph: GraphSnapshot = fixture.graphSnapshot({
       schemaVersion: 1,
       nodes: [
         { id: 'module', kind: 'module', label: 'AppModule' },
@@ -102,7 +103,7 @@ describe('ブラウザ版Devtools Graph', () => {
           severity: 'error',
         },
       ],
-    }
+    })
 
     const result = adaptGraph(graph)
     expect(
@@ -116,29 +117,35 @@ describe('ブラウザ版Devtools Graph', () => {
   it('Executionのownership labelへHost namespaceを反映する', () => {
     const nodes = new Map([
       [
-        'controller',
-        {
+        fixture.viewId('controller'),
+        fixture.graphNode({
           id: 'controller',
           kind: 'execution' as const,
           label: 'Controller',
           extension: { name: 'loutre:http', hostNamespace: 'http' },
-        },
+        }),
       ],
       [
-        'worker',
-        {
+        fixture.viewId('worker'),
+        fixture.graphNode({
           id: 'worker',
           kind: 'execution' as const,
           label: 'Worker',
-        },
+        }),
       ],
     ])
 
     expect(
-      graphEdgeLabel({ from: 'module', to: 'controller', kind: 'owns' }, nodes),
+      graphEdgeLabel(
+        fixture.graphEdge({ from: 'module', to: 'controller', kind: 'owns' }),
+        nodes,
+      ),
     ).toBe('controller')
     expect(
-      graphEdgeLabel({ from: 'module', to: 'worker', kind: 'owns' }, nodes),
+      graphEdgeLabel(
+        fixture.graphEdge({ from: 'module', to: 'worker', kind: 'owns' }),
+        nodes,
+      ),
     ).toBe('execution')
   })
 
@@ -189,26 +196,26 @@ describe('ブラウザ版Devtools Graph', () => {
   })
 
   it('Module境界内のnodeへedge端点を正確に接続する', async () => {
-    const group: LoutreFlowNode = {
+    const group: LoutreFlowNode = fixture.flowNode({
       id: 'module-group',
       type: 'module-group',
       position: { x: 0, y: 0 },
       data: {
         graphNode: { id: 'module', kind: 'module', label: 'Module' },
       },
-    }
-    const moduleNode: LoutreFlowNode = {
+    })
+    const moduleNode: LoutreFlowNode = fixture.flowNode({
       ...node('module'),
       type: 'module',
       parentId: group.id,
       data: {
         graphNode: { id: 'module', kind: 'module', label: 'Module' },
       },
-    }
-    const provider: LoutreFlowNode = {
+    })
+    const provider: LoutreFlowNode = fixture.flowNode({
       ...node('provider'),
       parentId: group.id,
-    }
+    })
     const result = await layoutGraph(
       [group, moduleNode, provider],
       [edge('module-provider', 'module', 'provider', 'provider')],
@@ -237,7 +244,9 @@ describe('ブラウザ版Devtools Graph', () => {
     const nodes = [node('source'), node('target')]
     const edges = [edge('edge', 'source', 'target', 'injects')]
 
-    expect(followDraggedNode(nodes, edges, 'source')[0]?.data).toMatchObject({
+    expect(
+      followDraggedNode(nodes, edges, fixture.flowId('source'))[0]?.data,
+    ).toMatchObject({
       followHandles: true,
     })
   })

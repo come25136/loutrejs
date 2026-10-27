@@ -1,3 +1,4 @@
+import { normalizeMediaType, type ContentTypeValue } from '../identity.js'
 import {
   SchemaValidationError,
   validateSchema,
@@ -41,7 +42,7 @@ export async function validateRequestHeaders(
   }
 }
 
-export function validatedContentType(headers: unknown): string {
+export function validatedContentType(headers: unknown): ContentTypeValue {
   if (typeof headers !== 'object' || headers === null) {
     throw new TypeError('HTTP body requires validated request headers')
   }
@@ -51,12 +52,12 @@ export function validatedContentType(headers: unknown): string {
       'HTTP body requires request.headers content-type to resolve to a string',
     )
   }
-  return contentType
+  return contentType as ContentTypeValue
 }
 
 export async function decodeBody(
   request: Request,
-  contentType: string,
+  contentType: ContentTypeValue,
 ): Promise<unknown> {
   const mediaType = normalizeMediaType(contentType)!
   if (mediaType === 'application/json' || mediaType.endsWith('+json')) {
@@ -99,13 +100,6 @@ function hasContentTypeIssue(error: SchemaValidationError): boolean {
         : first
     return key === 'content-type'
   })
-}
-
-function normalizeMediaType(
-  value: string | null | undefined,
-): string | undefined {
-  const normalized = value?.split(';', 1)[0]?.trim().toLowerCase()
-  return normalized ? normalized : undefined
 }
 
 export class HttpInputDecodeError extends Error {

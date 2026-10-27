@@ -1,3 +1,12 @@
+type EventLimit = number & { readonly '~loutre.cli-quantity': 'event-limit' }
+import {
+  epochNow,
+  type EpochMs,
+  type DurationMs,
+  type ModelNodeId,
+  type RuntimeExecutionId,
+} from '@loutrejs/loutre'
+import type { RunId, TraceId, CapsuleId } from '@loutrejs/loutre/devtools'
 import type {
   DevtoolsValuePreview,
   RuntimeEvent,
@@ -10,47 +19,47 @@ export interface DevtoolsApplicationInfo {
 }
 
 export interface DevtoolsRun {
-  readonly runId: string
+  readonly runId: RunId
   readonly application: DevtoolsApplicationInfo
-  readonly connectedAt: number
-  readonly stoppedAt?: number
+  readonly connectedAt: EpochMs
+  readonly stoppedAt?: EpochMs
 }
 
 export interface DevtoolsTraceSummary {
-  readonly traceId: string
-  readonly runId: string
-  readonly executionId: string
+  readonly traceId: TraceId
+  readonly runId: RunId
+  readonly executionId: RuntimeExecutionId
   readonly executionKind: string
   readonly name: string
-  readonly graphNodeId?: string
-  readonly startedAt: number
-  readonly durationMs?: number
+  readonly graphNodeId?: ModelNodeId
+  readonly startedAt: EpochMs
+  readonly durationMs?: DurationMs
   readonly status: 'running' | 'ok' | 'error' | 'cancelled'
   readonly attributes?: Readonly<Record<string, unknown>>
   readonly input?: DevtoolsValuePreview
-  readonly capsuleId?: string
+  readonly capsuleId?: CapsuleId
   readonly replayable?: boolean
   readonly replayModes?: readonly ('direct' | 'transport')[]
-  readonly replayedFromTraceId?: string
-  readonly replayedFromCapsuleId?: string
+  readonly replayedFromTraceId?: TraceId
+  readonly replayedFromCapsuleId?: CapsuleId
 }
 
 export interface DevtoolsCapsuleSummary {
-  readonly capsuleId: string
-  readonly runId: string
-  readonly traceId: string
+  readonly capsuleId: CapsuleId
+  readonly runId: RunId
+  readonly traceId: TraceId
   readonly kind: 'execution' | 'provider-method' | 'span'
   readonly name: string
-  readonly graphNodeId?: string
-  readonly executionId?: string
+  readonly graphNodeId?: ModelNodeId
+  readonly executionId?: RuntimeExecutionId
   readonly executionKind?: string
   readonly input?: DevtoolsValuePreview
   readonly replayModes: readonly ('direct' | 'transport')[]
 }
 
 export class DevtoolsEventStore {
-  readonly #maxEvents: number
-  readonly #runs = new Map<string, DevtoolsRun>()
+  readonly #maxEvents: EventLimit
+  readonly #runs = new Map<RunId, DevtoolsRun>()
   readonly #events: RuntimeEvent[] = []
   readonly #listeners = new Set<(events: readonly RuntimeEvent[]) => void>()
 
@@ -58,20 +67,20 @@ export class DevtoolsEventStore {
     if (!Number.isInteger(maxEvents) || maxEvents < 1) {
       throw new TypeError('maxEvents must be a positive integer.')
     }
-    this.#maxEvents = maxEvents
+    this.#maxEvents = maxEvents as EventLimit
   }
 
-  connectRun(runId: string, application: DevtoolsApplicationInfo): void {
-    this.#runs.set(runId, { runId, application, connectedAt: Date.now() })
+  connectRun(runId: RunId, application: DevtoolsApplicationInfo): void {
+    this.#runs.set(runId, { runId, application, connectedAt: epochNow() })
   }
 
-  stopRun(runId: string): void {
+  stopRun(runId: RunId): void {
     const run = this.#runs.get(runId)
     if (!run || run.stoppedAt !== undefined) return
-    this.#runs.set(runId, { ...run, stoppedAt: Date.now() })
+    this.#runs.set(runId, { ...run, stoppedAt: epochNow() })
   }
 
-  append(runId: string, events: readonly RuntimeEvent[]): void {
+  append(runId: RunId, events: readonly RuntimeEvent[]): void {
     const accepted = events.filter((event) => event.runId === runId)
     if (accepted.length === 0) return
     this.#events.push(...accepted)
@@ -106,11 +115,11 @@ export class DevtoolsEventStore {
     return cleared
   }
 
-  traceEvents(traceId: string): readonly RuntimeEvent[] {
+  traceEvents(traceId: TraceId): readonly RuntimeEvent[] {
     return this.#events.filter((event) => event.traceId === traceId)
   }
 
-  findCapsule(capsuleId: string): DevtoolsCapsuleSummary | undefined {
+  findCapsule(capsuleId: CapsuleId): DevtoolsCapsuleSummary | undefined {
     for (let index = this.#events.length - 1; index >= 0; index -= 1) {
       const event = this.#events[index]
       if (!event || !('capsuleId' in event) || event.capsuleId !== capsuleId) {
@@ -151,7 +160,7 @@ export class DevtoolsEventStore {
   }
 
   listTraces(): readonly DevtoolsTraceSummary[] {
-    const traces = new Map<string, DevtoolsTraceSummary>()
+    const traces = new Map<TraceId, DevtoolsTraceSummary>()
     for (const event of this.#events) {
       if (event.type === 'execution.started') {
         traces.set(event.traceId, {

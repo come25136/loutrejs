@@ -1,3 +1,5 @@
+import { dependencyConsumerId } from './identity.js'
+import type { Descriptor } from '../internal/brand.js'
 import type { RuntimeCapability } from './extension.js'
 import { runInInjectionContext, type DependencyResolver } from './injection.js'
 import type { Type } from './type.js'
@@ -15,7 +17,7 @@ export interface GenericLayer<
   TContext extends object = object,
   TContribution extends object = {},
   TOutcome = unknown,
-> {
+> extends Descriptor<'generic-layer'> {
   readonly kind: 'generic-layer'
   readonly state?: Type<TContribution>
   readonly name: string
@@ -42,7 +44,7 @@ export function defineLayer<
     name: declaration.name,
     capabilities: declaration.capabilities ?? [],
     factory: declaration.factory,
-  })
+  }) as GenericLayer<TContext, TContribution, TOutcome>
 }
 
 export function composeLayers<TContext extends object, TOutcome>(options: {
@@ -58,7 +60,7 @@ export function composeLayers<TContext extends object, TOutcome>(options: {
       {
         consumer: {
           kind: 'layer',
-          id: `layer:${index}:${layer.name}`,
+          id: dependencyConsumerId(`layer:${index}:${layer.name}`),
           name: layer.name,
         },
         resolve: (token, consumer) =>

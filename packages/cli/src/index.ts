@@ -1,3 +1,15 @@
+import {
+  sourceFileReference,
+  sourceLine,
+  sourceColumn,
+  type ModelNodeId,
+  type ModuleId,
+  type CapabilityId,
+} from '@loutrejs/loutre'
+import {
+  httpProcedureName,
+  type HttpProcedureName,
+} from '@loutrejs/loutre/http'
 import { randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
@@ -115,11 +127,9 @@ type GraphViewNodeKind =
   | 'handler'
   | 'runtime-capability'
 
-interface GraphViewNode {
-  readonly id: string
-  readonly kind: GraphViewNodeKind
+interface GraphViewNodeBase {
   readonly label: string
-  readonly module?: string
+  readonly module?: ModuleId | 'application'
   readonly executionKind?: string
   readonly capabilities?: readonly string[]
   readonly extension?: GraphNodeIR['extension']
@@ -131,9 +141,35 @@ interface GraphViewNode {
   readonly source?: GraphNodeIR['source']
 }
 
+type EntrypointNodeId = string & { readonly '~loutre.cli-node': 'entrypoint' }
+type MiddlewareStepNodeId = string & {
+  readonly '~loutre.cli-node': 'middleware'
+}
+type HandlerNodeId = string & { readonly '~loutre.cli-node': 'handler' }
+type GraphViewNodeId =
+  | ModelNodeId
+  | EntrypointNodeId
+  | MiddlewareStepNodeId
+  | HandlerNodeId
+type ViewId<Kind extends GraphViewNodeKind> = Kind extends 'entrypoint'
+  ? EntrypointNodeId
+  : Kind extends 'middleware'
+    ? MiddlewareStepNodeId
+    : Kind extends 'handler'
+      ? HandlerNodeId
+      : Kind extends 'runtime-capability'
+        ? ModelNodeId
+        : Extract<GraphNodeIR, { kind: Kind }>['id']
+type GraphViewNode = {
+  [Kind in GraphViewNodeKind]: GraphViewNodeBase & {
+    readonly kind: Kind
+    readonly id: ViewId<Kind>
+  }
+}[GraphViewNodeKind]
+
 interface GraphViewEdge {
-  readonly from: string
-  readonly to: string
+  readonly from: GraphViewNodeId
+  readonly to: GraphViewNodeId
   readonly kind: GraphEdgeIR['kind'] | 'handles' | 'flows-to'
   readonly label?: string
 }
@@ -646,20 +682,26 @@ function renderDiText(
   const relevant = graph.nodes.filter(
     (node) => node.kind === 'provider' || node.kind === 'execution',
   )
-  const ids = new Set(relevant.map((node) => node.id))
+  const ids = new Set<ModelNodeId>(relevant.map((node) => node.id))
   const edges = graph.edges.filter(
     (edge) => edge.kind === 'injects' && ids.has(edge.from) && ids.has(edge.to),
   )
-  const byId = new Map(relevant.map((node) => [node.id, node]))
+  const byId = new Map<ModelNodeId, GraphNodeIR>(
+    relevant.map((node) => [node.id, node]),
+  )
   const outgoing = groupEdges(edges)
   const incoming = new Set(edges.map((edge) => edge.to))
   const roots = relevant.filter(
     (node) =>
       !incoming.has(node.id) && (outgoing.get(node.id)?.length ?? 0) > 0,
   )
-  const rendered = new Set<string>()
+  const rendered = new Set<ModelNodeId>()
 
-  const render = (id: string, prefix: string, lineage: readonly string[]) => {
+  const render = (
+    id: ModelNodeId,
+    prefix: string,
+    lineage: readonly ModelNodeId[],
+  ) => {
     for (const [index, edge] of (outgoing.get(id) ?? []).entries()) {
       const child = byId.get(edge.to)
       if (!child) continue
@@ -718,12 +760,13 @@ function renderMermaidGraph(
   const moduleNames = new Map(
     graph.modules.map((module) => [module.id, module.name ?? module.id]),
   )
-  const moduleGroups = new Map<string, GraphViewNode[]>()
+  const moduleGroups = new Map<ModuleId, GraphViewNode[]>()
 
   for (const candidate of view.nodes) {
     const moduleId =
       candidate.kind === 'module' ? candidate.id : candidate.module
-    if (!moduleId || !moduleNames.has(moduleId)) continue
+    if (!moduleId || moduleId === 'application' || !moduleNames.has(moduleId))
+      continue
     if (
       candidate.kind === 'entrypoint' ||
       candidate.kind === 'middleware' ||
@@ -737,7 +780,7 @@ function renderMermaidGraph(
   }
 
   const endpointGroups = groupHttpEndpointNodes(view.nodes)
-  const declared = new Set<string>()
+  const declared = new Set<GraphViewNodeId>()
   const declareNode = (candidate: GraphViewNode, indent: string) => {
     const id = ids.get(candidate.id)!
     lines.push(`${indent}${id}["${mermaidNodeLabel(candidate)}"]`)
@@ -832,19 +875,20 @@ interface MermaidEndpointGroup {
 
 function groupHttpEndpointNodes(
   candidates: readonly GraphViewNode[],
-): ReadonlyMap<string, MermaidEndpointGroup> {
-  const routes = new Map<string, GraphViewNode>()
+): ReadonlyMap<HttpProcedureName, MermaidEndpointGroup> {
+  const routes = new Map<HttpProcedureName, GraphViewNode>()
   for (const candidate of candidates) {
     if (
       candidate.kind === 'entrypoint' &&
       candidate.entrypointKind === 'http-route'
     ) {
       const routeName = candidate.attributes?.name
-      if (typeof routeName === 'string') routes.set(routeName, candidate)
+      if (typeof routeName === 'string')
+        routes.set(httpProcedureName(routeName), candidate)
     }
   }
 
-  const grouped = new Map<string, MermaidEndpointGroup>()
+  const grouped = new Map<HttpProcedureName, MermaidEndpointGroup>()
   for (const [routeName, route] of routes) {
     const nodes = [route]
     nodes.push(
@@ -901,10 +945,10 @@ function renderExplanation(
 
 function renderDependencyTree(
   graph: ApplicationModelGraphIR,
-  nodeId: string,
+  nodeId: ModelNodeId,
   write: (value: string) => void,
   indent: string,
-  lineage: ReadonlySet<string>,
+  lineage: ReadonlySet<ModelNodeId>,
 ): void {
   const edges = graph.edges.filter(
     (edge) => edge.from === nodeId && edge.kind === 'injects',
@@ -954,7 +998,9 @@ function renderCapabilityReasons(
   write('Capability reasons:')
   for (const capability of capabilities) {
     const requiredBy = graph.executions
-      .filter((execution) => execution.capabilities?.includes(capability))
+      .filter((execution) =>
+        execution.capabilities?.some((id) => id === capability),
+      )
       .map((execution) => execution.name ?? execution.id)
     write(`  ${capability}: ${requiredBy.join(', ') || '(unknown)'}`)
   }
@@ -1150,7 +1196,7 @@ function projectGraphViewNode(node: GraphNodeIR): GraphViewNode {
     ...(node.extension === undefined ? {} : { extension: node.extension }),
     ...(node.attributes === undefined ? {} : { attributes: node.attributes }),
     ...(node.source === undefined ? {} : { source: node.source }),
-  }
+  } as GraphViewNode
 }
 
 function isRuntimeCapabilityNode(node: GraphNodeIR): boolean {
@@ -1200,7 +1246,7 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
         label: name,
       })
 
-      let previousId = routeId
+      let previousId: EntrypointNodeId | MiddlewareStepNodeId = routeId
       const middlewares = Array.isArray(route.middlewares)
         ? route.middlewares
         : []
@@ -1230,11 +1276,14 @@ function projectHttpEntrypoints(graph: ApplicationModelGraphIR): GraphView {
         })
         edges.push({ from: previousId, to: middlewareId, kind: 'flows-to' })
         for (const capability of capabilities) {
-          edges.push({
-            from: middlewareId,
-            to: `capability:${capability}`,
-            kind: 'requires',
-          })
+          const target = graph.nodes.find(
+            (node) =>
+              node.kind === 'framework' &&
+              node.name === capability &&
+              node.attributes?.frameworkKind === 'runtime-capability',
+          )
+          if (target)
+            edges.push({ from: middlewareId, to: target.id, kind: 'requires' })
         }
         previousId = middlewareId
       }
@@ -1323,20 +1372,20 @@ function entrypointId(
   namespace: string,
   executionId: string,
   localId: string,
-): string {
-  return `entrypoint:${namespace}:${encodeURIComponent(executionId)}:${encodeURIComponent(localId)}`
+): EntrypointNodeId {
+  return `entrypoint:${namespace}:${encodeURIComponent(executionId)}:${encodeURIComponent(localId)}` as EntrypointNodeId
 }
 
 function httpMiddlewareStepId(
   executionId: string,
   routeName: string,
   index: number,
-): string {
-  return `middleware:http:${encodeURIComponent(executionId)}:${encodeURIComponent(routeName)}:${index}`
+): MiddlewareStepNodeId {
+  return `middleware:http:${encodeURIComponent(executionId)}:${encodeURIComponent(routeName)}:${index}` as MiddlewareStepNodeId
 }
 
-function httpHandlerId(executionId: string, routeName: string): string {
-  return `handler:http:${encodeURIComponent(executionId)}:${encodeURIComponent(routeName)}`
+function httpHandlerId(executionId: string, routeName: string): HandlerNodeId {
+  return `handler:http:${encodeURIComponent(executionId)}:${encodeURIComponent(routeName)}` as HandlerNodeId
 }
 
 function mermaidNodeLabel(node: GraphViewNode): string {
@@ -1394,7 +1443,7 @@ function mermaidNodeStrokeColor(
 
 function mermaidEdgeLabel(
   edge: GraphViewEdge,
-  byId: ReadonlyMap<string, GraphViewNode>,
+  byId: ReadonlyMap<GraphViewNodeId, GraphViewNode>,
 ): string | undefined {
   if (edge.kind === 'flows-to') return undefined
   if (edge.kind !== 'owns') return edge.label ?? edge.kind
@@ -1410,8 +1459,10 @@ function mermaidEdgeLabel(
     .otherwise(() => edge.kind)
 }
 
-function groupEdges(edges: readonly GraphEdgeIR[]): Map<string, GraphEdgeIR[]> {
-  const grouped = new Map<string, GraphEdgeIR[]>()
+function groupEdges(
+  edges: readonly GraphEdgeIR[],
+): Map<ModelNodeId, GraphEdgeIR[]> {
+  const grouped = new Map<ModelNodeId, GraphEdgeIR[]>()
   for (const edge of edges) {
     const current = grouped.get(edge.from) ?? []
     current.push(edge)
@@ -1442,10 +1493,12 @@ function isRecord(value: unknown): value is Record<string, any> {
 
 function sourceLocation(value: unknown): GraphNodeIR['source'] | undefined {
   if (!isRecord(value) || typeof value.file !== 'string') return undefined
-  const line = typeof value.line === 'number' ? value.line : undefined
-  const column = typeof value.column === 'number' ? value.column : undefined
+  const line =
+    typeof value.line === 'number' ? sourceLine(value.line) : undefined
+  const column =
+    typeof value.column === 'number' ? sourceColumn(value.column) : undefined
   return {
-    file: value.file,
+    file: sourceFileReference(value.file),
     ...(line === undefined ? {} : { line }),
     ...(column === undefined ? {} : { column }),
   }
@@ -1471,7 +1524,7 @@ function formatMermaidSourceLocation(
     : `${compactPath}:${source.line}`
 }
 
-function requiredCapabilities(graph: ApplicationModelGraphIR): string[] {
+function requiredCapabilities(graph: ApplicationModelGraphIR): CapabilityId[] {
   return [
     ...new Set(
       graph.executions.flatMap((execution) => execution.capabilities ?? []),

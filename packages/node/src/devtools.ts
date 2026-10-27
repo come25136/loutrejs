@@ -1,12 +1,14 @@
+import {
+  parseRunId,
+  decodeInspectorCommand,
+  type InspectorCommand,
+} from '@loutrejs/loutre/devtools'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { ApplicationDefinition } from '@loutrejs/loutre'
 import {
   DEVTOOLS_PROTOCOL_VERSION,
   devtoolsOptionsOf,
   serializeDevtoolsError,
-  type ProviderMethodInvocationRequest,
-  type ProviderPlaygroundRequest,
-  type ReplayCapsuleRequest,
   RuntimeDevtoolsInstrumentation,
   type RuntimeDevtoolsContext,
   type RuntimeEvent,
@@ -32,7 +34,7 @@ export function createNodeDevtoolsSession(
   const runIdSeed = process.env.LOUTRE_DEV_RUN_ID
   if (!endpoint || !runIdSeed) return undefined
   // watch wrapperから同じ環境変数を継承する再起動も別sessionとして識別する。
-  const runId = `${runIdSeed}.${crypto.randomUUID()}`
+  const runId = parseRunId(`${runIdSeed}.${crypto.randomUUID()}`)!
 
   const queue: RuntimeEvent[] = []
   let flushScheduled = false
@@ -142,20 +144,6 @@ export function createNodeDevtoolsSession(
   }
 }
 
-type InspectorCommand =
-  | {
-      readonly type: 'command.replay-capsule'
-      readonly request: ReplayCapsuleRequest
-    }
-  | {
-      readonly type: 'command.provider-playground'
-      readonly request: ProviderPlaygroundRequest
-    }
-  | {
-      readonly type: 'command.invoke-provider-method'
-      readonly request: ProviderMethodInvocationRequest
-    }
-
 async function executeInspectorCommand(
   websocket: WebSocket,
   inspector: RuntimeDevtoolsInstrumentation | undefined,
@@ -212,60 +200,5 @@ function parseInspectorCommand(value: string): InspectorCommand | undefined {
   } catch {
     return undefined
   }
-  if (!isRecord(parsed) || !isRecord(parsed.request)) return undefined
-  const request = parsed.request
-  if (typeof request.requestId !== 'string') return undefined
-
-  if (parsed.type === 'command.replay-capsule') {
-    if (typeof request.capsuleId !== 'string') return undefined
-    return {
-      type: parsed.type,
-      request: {
-        requestId: request.requestId,
-        capsuleId: request.capsuleId,
-        ...('inputOverride' in request
-          ? { inputOverride: request.inputOverride }
-          : {}),
-        ...(typeof request.parentTraceId === 'string'
-          ? { parentTraceId: request.parentTraceId }
-          : {}),
-      },
-    }
-  }
-
-  if (parsed.type === 'command.provider-playground') {
-    if (typeof request.graphNodeId !== 'string') return undefined
-    return {
-      type: parsed.type,
-      request: {
-        requestId: request.requestId,
-        graphNodeId: request.graphNodeId,
-      },
-    }
-  }
-
-  if (parsed.type === 'command.invoke-provider-method') {
-    if (
-      typeof request.graphNodeId !== 'string' ||
-      typeof request.method !== 'string' ||
-      !Array.isArray(request.args)
-    ) {
-      return undefined
-    }
-    return {
-      type: parsed.type,
-      request: {
-        requestId: request.requestId,
-        graphNodeId: request.graphNodeId,
-        method: request.method,
-        args: request.args,
-      },
-    }
-  }
-
-  return undefined
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return decodeInspectorCommand(parsed)
 }

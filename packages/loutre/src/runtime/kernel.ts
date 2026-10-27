@@ -1,3 +1,6 @@
+import { milliseconds, type DurationMs } from '../core/units.js'
+import type { ModuleId, ExecutionNodeId } from '../core/model/identity.js'
+import type { ExtensionIdentity, CapabilityId } from '../core/identity.js'
 import { ApplicationShutdownError } from './shutdown.js'
 import {
   assertValidApplicationModel,
@@ -57,22 +60,25 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   readonly model: ApplicationModel
   readonly container: Container
   readonly capabilities: RuntimeCapabilityRegistry
-  readonly #extensionRuntimes = new Map<symbol, ExecutionExtensionRuntime>()
-  readonly #providerInstances = new Map<string, unknown[]>()
+  readonly #extensionRuntimes = new Map<
+    ExtensionIdentity,
+    ExecutionExtensionRuntime
+  >()
+  readonly #providerInstances = new Map<ModuleId, unknown[]>()
   readonly #providerNodes = new Map<ProviderDescriptor, ProviderModelNode>()
   readonly #executionBindings = new Map<
-    symbol,
+    ExtensionIdentity,
     readonly ExecutionRuntimeBinding<any>[]
   >()
-  readonly #initializedModuleIds = new Set<string>()
+  readonly #initializedModuleIds = new Set<ModuleId>()
   readonly #executions = new ExecutionTracker()
   readonly #extensionDrainOperations = new Map<
-    symbol,
+    ExtensionIdentity,
     ExtensionDrainOperation
   >()
   readonly #environmentSource: unknown
   readonly #argumentsSource: unknown
-  readonly #forceShutdownTimeoutMs: number
+  readonly #forceShutdownTimeoutMs: DurationMs
   readonly #instrumentation: RuntimeInstrumentation | undefined
   #state: RuntimeState = 'created'
   #initialization: Promise<void> | undefined
@@ -92,8 +98,9 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     this.#environmentSource = options.environmentSource
     this.#argumentsSource =
       'argumentsSource' in options ? options.argumentsSource : Object.freeze({})
-    this.#forceShutdownTimeoutMs =
-      options.forceShutdownTimeoutMs ?? defaultForceShutdownTimeoutMs
+    this.#forceShutdownTimeoutMs = milliseconds(
+      options.forceShutdownTimeoutMs ?? defaultForceShutdownTimeoutMs,
+    )
     this.#instrumentation = options.instrumentation
     if (
       !Number.isFinite(this.#forceShutdownTimeoutMs) ||
@@ -189,7 +196,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   }
 
   #validateCapabilities(): void {
-    const missing = new Map<string, string[]>()
+    const missing = new Map<CapabilityId, ExecutionNodeId[]>()
     for (const execution of this.model.executions) {
       for (const capability of execution.capabilities) {
         if (this.capabilities.has(capability)) continue
@@ -568,7 +575,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     await hook.run(...dependencies)
   }
 
-  async #runCleanupHook(moduleId: string, phase: string): Promise<void> {
+  async #runCleanupHook(moduleId: ModuleId, phase: string): Promise<void> {
     if (!this.#initializedModuleIds.has(moduleId)) return
     await this.#runHook(lifecycleHookOf(this.model, moduleId, phase))
   }
@@ -582,7 +589,7 @@ function moduleNodes(model: ApplicationModel): readonly ModuleModelNode[] {
 
 function providerNodesOfModule(
   model: ApplicationModel,
-  moduleId: string,
+  moduleId: ModuleId,
 ): readonly ProviderModelNode[] {
   return model.nodes.filter(
     (node): node is ProviderModelNode =>
@@ -592,7 +599,7 @@ function providerNodesOfModule(
 
 function lifecycleHookOf(
   model: ApplicationModel,
-  moduleId: string,
+  moduleId: ModuleId,
   phase: string,
 ): LifecycleHook<any> | undefined {
   return model.nodes.find(

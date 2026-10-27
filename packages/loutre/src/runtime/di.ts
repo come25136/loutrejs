@@ -196,7 +196,7 @@ export class Container {
 
     const provider = this.#providers.get(token)
     if (!provider) {
-      if ((token as TokenLike) === (Logger as unknown as TokenLike)) {
+      if (Object.is(token, Logger)) {
         return this.#logger.child(source === undefined ? {} : { source }) as T
       }
       if (isEnvClass(token)) {

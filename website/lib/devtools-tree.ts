@@ -1,3 +1,4 @@
+import type { GraphViewNodeId } from './devtools-identity'
 import type { GraphEdge, GraphNode, GraphSnapshot } from './devtools'
 
 export interface DevtoolsNodeTreeItem {
@@ -17,12 +18,12 @@ function isStructuralEdge(edge: GraphEdge, child: GraphNode): boolean {
 }
 
 function createsCycle(
-  parentId: string,
-  childId: string,
-  parentByChild: ReadonlyMap<string, string>,
+  parentId: GraphViewNodeId,
+  childId: GraphViewNodeId,
+  parentByChild: ReadonlyMap<GraphViewNodeId, GraphViewNodeId>,
 ): boolean {
-  let current: string | undefined = parentId
-  const visited = new Set<string>()
+  let current: GraphViewNodeId | undefined = parentId
+  const visited = new Set<GraphViewNodeId>()
   while (current !== undefined && !visited.has(current)) {
     if (current === childId) return true
     visited.add(current)
@@ -35,7 +36,7 @@ export function buildDevtoolsNodeTree(
   snapshot: GraphSnapshot,
 ): readonly DevtoolsNodeTreeItem[] {
   const byId = new Map(snapshot.nodes.map((node) => [node.id, node]))
-  const parentByChild = new Map<string, string>()
+  const parentByChild = new Map<GraphViewNodeId, GraphViewNodeId>()
 
   for (const edge of snapshot.edges) {
     if (edge.from === edge.to || parentByChild.has(edge.to)) continue
@@ -46,7 +47,7 @@ export function buildDevtoolsNodeTree(
     parentByChild.set(child.id, parent.id)
   }
 
-  const childrenByParent = new Map<string, GraphNode[]>()
+  const childrenByParent = new Map<GraphViewNodeId, GraphNode[]>()
   const roots: GraphNode[] = []
   for (const node of snapshot.nodes) {
     const parentId = parentByChild.get(node.id)

@@ -1,3 +1,8 @@
+import type {
+  GraphQLTypeName,
+  GraphQLFieldName,
+  GraphQLResponseKey,
+} from './identity.js'
 import type { GraphQLResolveInfo } from 'graphql'
 
 export interface FieldSpec<Parent, Args, Result, Context> {
@@ -8,9 +13,9 @@ export interface FieldSpec<Parent, Args, Result, Context> {
 }
 
 export interface FieldSelection {
-  readonly parentType: string
-  readonly fieldName: string
-  readonly responseKeys: readonly string[]
+  readonly parentType: GraphQLTypeName
+  readonly fieldName: GraphQLFieldName
+  readonly responseKeys: readonly GraphQLResponseKey[]
   readonly args: Readonly<Record<string, unknown>>
   readonly requires: readonly string[]
   readonly prefetchable: boolean

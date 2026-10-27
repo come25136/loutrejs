@@ -1,3 +1,4 @@
+import { normalizeHttpMethod, type HttpDispatchKey } from './identity.js'
 import { createHttpDispatchKey, parseHttpPath } from './path.js'
 
 export interface HttpRouteDescriptor {
@@ -13,12 +14,12 @@ export interface HttpRouteConflict<TRoute extends HttpRouteDescriptor> {
 export function findHttpRouteConflicts<TRoute extends HttpRouteDescriptor>(
   routes: readonly TRoute[],
 ): readonly HttpRouteConflict<TRoute>[] {
-  const dispatches = new Map<string, TRoute>()
+  const dispatches = new Map<HttpDispatchKey, TRoute>()
   const conflicts: HttpRouteConflict<TRoute>[] = []
 
   for (const route of routes) {
     const dispatch = createHttpDispatchKey(
-      route.method,
+      normalizeHttpMethod(route.method),
       parseHttpPath(route.path),
     )
     const existing =

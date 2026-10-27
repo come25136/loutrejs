@@ -1,3 +1,8 @@
+import {
+  absoluteFsPath,
+  type GeneratedPackageName,
+  type GeneratedWorkerName,
+} from './identity.js'
 import { readFileSync } from 'node:fs'
 import { cp, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -36,15 +41,16 @@ const renamedTemplateFiles = new Map([
 ])
 
 export interface StarterOptions {
-  readonly packageName: string
+  readonly packageName: GeneratedPackageName
   readonly packageManager: PackageManager
   readonly target: ProjectTarget
 }
 
 export async function writeStarter(
-  targetDirectory: string,
+  targetDirectoryInput: string,
   options: StarterOptions,
 ): Promise<void> {
+  const targetDirectory = absoluteFsPath(targetDirectoryInput)
   const isTarget = createIsTarget(options.target)
   await cp(baseTemplateDirectory, targetDirectory, { recursive: true })
   await cp(join(targetsTemplateDirectory, options.target), targetDirectory, {
@@ -254,11 +260,9 @@ async function replaceText(
   await writeFile(path, content.replaceAll(search, replacement), 'utf8')
 }
 
-function workerNameFor(packageName: string): string {
-  return (
-    packageName
-      .replace(/[^a-z0-9-]+/gu, '-')
-      .replace(/^-+|-+$/gu, '')
-      .slice(0, 63) || 'loutre-worker'
-  )
+function workerNameFor(packageName: GeneratedPackageName): GeneratedWorkerName {
+  return (packageName
+    .replace(/[^a-z0-9-]+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
+    .slice(0, 63) || 'loutre-worker') as GeneratedWorkerName
 }

@@ -1,27 +1,35 @@
+import type {
+  TraceId,
+  SpanId,
+  CapsuleId,
+  InspectorRequestId,
+} from './identity.js'
+import type { ProviderNodeId } from '../core/model/identity.js'
+
 import type { SerializedDevtoolsError } from './observer.js'
 import type { DevtoolsValuePreview } from './values.js'
 
 export interface ReplayExecutionContext {
-  readonly sourceTraceId: string
-  readonly sourceCapsuleId: string
-  readonly parentTraceId?: string
+  readonly sourceTraceId: TraceId
+  readonly sourceCapsuleId: CapsuleId
+  readonly parentTraceId?: TraceId
 }
 
 export interface ReplayCapsuleRequest {
-  readonly requestId: string
-  readonly capsuleId: string
+  readonly requestId: InspectorRequestId
+  readonly capsuleId: CapsuleId
   readonly inputOverride?: unknown
-  readonly parentTraceId?: string
+  readonly parentTraceId?: TraceId
 }
 
 export interface ProviderPlaygroundRequest {
-  readonly requestId: string
-  readonly graphNodeId: string
+  readonly requestId: InspectorRequestId
+  readonly graphNodeId: ProviderNodeId
 }
 
 export interface ProviderMethodInvocationRequest {
-  readonly requestId: string
-  readonly graphNodeId: string
+  readonly requestId: InspectorRequestId
+  readonly graphNodeId: ProviderNodeId
   readonly method: string
   readonly args: readonly unknown[]
 }
@@ -32,16 +40,16 @@ export interface ProviderPlaygroundMethod {
 }
 
 export interface ProviderPlaygroundDescriptor {
-  readonly requestId: string
-  readonly graphNodeId: string
+  readonly requestId: InspectorRequestId
+  readonly graphNodeId: ProviderNodeId
   readonly providerName: string
   readonly methods: readonly ProviderPlaygroundMethod[]
 }
 
 export interface RuntimeInvocationResult {
-  readonly requestId: string
+  readonly requestId: InspectorRequestId
   readonly status: 'ok' | 'error'
-  readonly traceId?: string
+  readonly traceId?: TraceId
   readonly result?: DevtoolsValuePreview
   readonly error?: SerializedDevtoolsError
 }
@@ -57,8 +65,8 @@ export interface RuntimeInspector {
 }
 
 export interface RuntimeTraceContext {
-  readonly traceId: string
-  readonly spanId: string
+  readonly traceId: TraceId
+  readonly spanId: SpanId
 }
 
 export interface RuntimeDevtoolsContext {

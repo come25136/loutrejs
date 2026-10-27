@@ -1,5 +1,6 @@
 'use client'
 
+import type { TraceId, ProviderNodeId } from '../lib/devtools-identity'
 import { Braces, CircleAlert, Play, SquareArrowOutUpRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
@@ -46,8 +47,8 @@ interface ProviderPlaygroundProps {
   readonly locale: Locale
   readonly baseUrl: string
   readonly connected: boolean
-  readonly graphNodeId: string
-  readonly onOpenTrace: (traceId: string) => void
+  readonly graphNodeId: ProviderNodeId
+  readonly onOpenTrace: (traceId: TraceId) => void
 }
 
 export function DevtoolsProviderPlayground({

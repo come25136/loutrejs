@@ -1,5 +1,11 @@
 'use client'
 
+import type {
+  TraceId,
+  SpanId,
+  ModelNodeId,
+  GraphViewNodeId,
+} from '../lib/devtools-identity'
 import {
   AlertTriangle,
   CircleDot,
@@ -146,11 +152,11 @@ export function DevtoolsPage({
   const [settingsError, setSettingsError] = useState<string>()
   const [workspace, setWorkspace] =
     useState<DevtoolsWorkspace>(initialWorkspace)
-  const [requestedTraceId, setRequestedTraceId] = useState<string>()
-  const [requestedSpanId, setRequestedSpanId] = useState<string>()
-  const [selectedId, setSelectedId] = useState<string>()
+  const [requestedTraceId, setRequestedTraceId] = useState<TraceId>()
+  const [requestedSpanId, setRequestedSpanId] = useState<SpanId>()
+  const [selectedId, setSelectedId] = useState<GraphViewNodeId>()
   const [graphFocusRequest, setGraphFocusRequest] = useState<{
-    readonly nodeId: string
+    readonly nodeId: GraphViewNodeId
     readonly nonce: number
     readonly scope?: 'node' | 'neighbors'
   }>()
@@ -229,7 +235,7 @@ export function DevtoolsPage({
     setSettingsOpen(false)
   }
 
-  const navigateRuntime = (traceId: string, spanId?: string) => {
+  const navigateRuntime = (traceId: TraceId, spanId?: SpanId) => {
     const href = `${traceHref}${devtoolsRuntimeHref(traceId, spanId)}`
     setRequestedTraceId(traceId)
     setRequestedSpanId(spanId)
@@ -239,7 +245,11 @@ export function DevtoolsPage({
     }
   }
 
-  const navigateGraph = (graphNodeId: string) => {
+  const navigateGraph = (modelNodeId: ModelNodeId) => {
+    const graphNodeId = displayedSnapshot?.nodes.find(
+      (node) => node.id === modelNodeId,
+    )?.id
+    if (graphNodeId === undefined) return
     setSelectedId(graphNodeId)
     setGraphFocusRequest((current) => ({
       nodeId: graphNodeId,

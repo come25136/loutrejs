@@ -1,3 +1,11 @@
+import type {
+  ModuleId,
+  ProviderNodeId,
+  ExecutionNodeId,
+  LifecycleNodeId,
+  CapabilityNodeId,
+  ExtensionNodeId,
+} from './identity.js'
 import type { ArgsClass } from '../args.js'
 import type {
   AnyExecutionExtension,
@@ -13,7 +21,7 @@ import type { SourceLocation } from '../source-location.js'
 
 export interface ModuleModelNode {
   readonly kind: 'module'
-  readonly id: string
+  readonly id: ModuleId
   readonly name?: string
   readonly description?: string
   readonly source?: SourceLocation
@@ -21,19 +29,19 @@ export interface ModuleModelNode {
 
 export interface ProviderModelNode {
   readonly kind: 'provider'
-  readonly id: string
+  readonly id: ProviderNodeId
   readonly token: TokenLike
   readonly provider: ProviderDescriptor
-  readonly moduleId: string
+  readonly moduleId: ModuleId | 'application'
   readonly dependencies: readonly TokenLike[]
   readonly source?: SourceLocation
 }
 
 export interface ExecutionModelNode<TCompiled = unknown> {
   readonly kind: 'execution'
-  readonly id: string
+  readonly id: ExecutionNodeId
   readonly executionKind: string
-  readonly moduleId: string
+  readonly moduleId: ModuleId
   readonly dependencies: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
   readonly compiled: TCompiled
@@ -42,20 +50,27 @@ export interface ExecutionModelNode<TCompiled = unknown> {
 
 export interface LifecycleModelNode {
   readonly kind: 'lifecycle'
-  readonly id: string
-  readonly moduleId: string
+  readonly id: LifecycleNodeId
+  readonly moduleId: ModuleId
   readonly phase: string
   readonly hook: LifecycleHook<any>
   readonly source?: SourceLocation
 }
 
-export interface FrameworkModelNode {
+export type FrameworkModelNode = {
   readonly kind: 'framework'
-  readonly id: string
-  readonly frameworkKind: 'runtime-capability' | 'execution-extension'
   readonly name: string
   readonly source?: SourceLocation
-}
+} & (
+  | {
+      readonly frameworkKind: 'runtime-capability'
+      readonly id: CapabilityNodeId
+    }
+  | {
+      readonly frameworkKind: 'execution-extension'
+      readonly id: ExtensionNodeId
+    }
+)
 
 export type ApplicationModelNode =
   | ModuleModelNode
@@ -64,19 +79,24 @@ export type ApplicationModelNode =
   | LifecycleModelNode
   | FrameworkModelNode
 
-export interface ApplicationModelEdge {
-  readonly from: string
-  readonly to: string
-  readonly kind:
-    | 'owns'
-    | 'imports'
-    | 'exports'
-    | 'injects'
-    | 'references'
-    | 'requires'
-    | 'starts'
-    | 'wraps'
+type Edge<Kind, From, To> = {
+  readonly kind: Kind
+  readonly from: From
+  readonly to: To
 }
+export type ApplicationModelEdge =
+  | Edge<'owns', ModuleId, ProviderNodeId | ExecutionNodeId | LifecycleNodeId>
+  | Edge<'imports', ModuleId, ModuleId>
+  | Edge<'exports', ModuleId, ProviderNodeId>
+  | Edge<
+      'injects',
+      ProviderNodeId | ExecutionNodeId | LifecycleNodeId,
+      ProviderNodeId
+    >
+  | Edge<'references', ExecutionNodeId, ExecutionNodeId>
+  | Edge<'requires', ExecutionNodeId, CapabilityNodeId>
+  | Edge<'starts', ExtensionNodeId, ExecutionNodeId>
+  | Edge<'wraps', ApplicationModelNode['id'], ApplicationModelNode['id']>
 
 export type CompiledOf<TExtension extends AnyExecutionExtension> =
   TExtension extends ExecutionExtension<any, infer TCompiled, any, any, any>

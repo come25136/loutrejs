@@ -1,3 +1,4 @@
+import { argumentsKey, type ArgumentsKey } from './identity.js'
 import {
   isNonNullType,
   isListType,
@@ -6,7 +7,7 @@ import {
   type GraphQLArgument,
 } from 'graphql'
 
-export function normalizeArguments(
+function serializeArguments(
   value: unknown,
   seen = new Set<object>(),
 ): string | undefined {
@@ -19,7 +20,7 @@ export function normalizeArguments(
     return undefined
   const next = new Set([...seen, value])
   if (Array.isArray(value)) {
-    const parts = value.map((item) => normalizeArguments(item, next))
+    const parts = value.map((item) => serializeArguments(item, next))
     return parts.every((part) => part !== undefined)
       ? `[${parts.join(',')}]`
       : undefined
@@ -38,7 +39,7 @@ export function normalizeArguments(
       const descriptor = Object.getOwnPropertyDescriptor(value, key)!
       const part =
         'value' in descriptor
-          ? normalizeArguments(descriptor.value, next)
+          ? serializeArguments(descriptor.value, next)
           : undefined
       return part === undefined ? undefined : `${JSON.stringify(key)}:${part}`
     })
@@ -66,7 +67,7 @@ function opaqueInput(value: unknown, type: GraphQLInputType): boolean {
 export function normalizeFieldArguments(
   args: Readonly<Record<string, unknown>>,
   definitions: readonly GraphQLArgument[],
-): string | undefined {
+): ArgumentsKey | undefined {
   if (
     definitions.some((argument) =>
       opaqueInput(args[argument.name], argument.type),
@@ -74,4 +75,12 @@ export function normalizeFieldArguments(
   )
     return undefined
   return normalizeArguments(args)
+}
+
+export function normalizeArguments(
+  value: unknown,
+  seen = new Set<object>(),
+): ArgumentsKey | undefined {
+  const serialized = serializeArguments(value, seen)
+  return serialized === undefined ? undefined : argumentsKey(serialized)
 }

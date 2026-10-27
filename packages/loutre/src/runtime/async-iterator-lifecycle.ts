@@ -1,3 +1,4 @@
+import { epochNow, type EpochMs } from '../core/units.js'
 const cleanupYieldInterval = 32
 
 export class AsyncIteratorCleanupDeadlineError extends Error {
@@ -50,7 +51,7 @@ export class AsyncIteratorLifecycle<T> {
 
   async drain(
     reason: unknown,
-    deadline: () => number | undefined,
+    deadline: () => EpochMs | undefined,
     timeoutMessage: string,
   ): Promise<void> {
     if (this.#returnPending) await this.#waitForIdle()
@@ -63,7 +64,7 @@ export class AsyncIteratorLifecycle<T> {
     let continuationSteps = 0
     while (!this.#done) {
       const currentDeadline = deadline()
-      if (currentDeadline !== undefined && Date.now() >= currentDeadline) {
+      if (currentDeadline !== undefined && epochNow() >= currentDeadline) {
         throw new AsyncIteratorCleanupDeadlineError(timeoutMessage)
       }
       await this.next()

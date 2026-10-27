@@ -1,3 +1,4 @@
+import { byteLimit, captureDepthLimit, utf8ByteLength } from '../core/units.js'
 import { match } from 'ts-pattern'
 
 export type DevtoolsValue =
@@ -39,8 +40,8 @@ export function previewDevtoolsValue(
   value: unknown,
   options: DevtoolsValuePreviewOptions = {},
 ): DevtoolsValuePreview {
-  const maxValueBytes = options.maxValueBytes ?? defaultMaxValueBytes
-  const maxDepth = options.maxDepth ?? defaultMaxDepth
+  const maxValueBytes = byteLimit(options.maxValueBytes ?? defaultMaxValueBytes)
+  const maxDepth = captureDepthLimit(options.maxDepth ?? defaultMaxDepth)
   const redactions = new Set(
     (options.redact ?? []).map((entry) => entry.trim().toLowerCase()),
   )
@@ -225,10 +226,6 @@ function safeValueType(value: unknown): string {
   } catch {
     return typeof value
   }
-}
-
-function utf8ByteLength(value: string): number {
-  return new TextEncoder().encode(value).byteLength
 }
 
 function bytesToBase64(value: Uint8Array): string {

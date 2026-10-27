@@ -1,3 +1,10 @@
+import type { Brand } from '../internal/brand.js'
+import type {
+  HttpNormalizedPath,
+  HttpDispatchKey,
+  HttpMethod,
+  RequestPathname,
+} from './identity.js'
 export type HttpPathSegment =
   | { readonly kind: 'static'; readonly value: string }
   | { readonly kind: 'param'; readonly name: string }
@@ -6,6 +13,11 @@ export type PathParamNames<TPath extends string> =
   TPath extends `${string}{${infer TName}}${infer TRest}`
     ? TName | PathParamNames<TRest>
     : never
+
+export type ParsedHttpPath = Brand<
+  readonly HttpPathSegment[],
+  'http.parsed-path'
+>
 
 const PARAM_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 const HTTP_METHOD_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
@@ -16,8 +28,9 @@ export function assertValidHttpMethod(method: string): void {
   }
 }
 
-export function parseHttpPath(path: string): readonly HttpPathSegment[] {
-  if (path === '/') return Object.freeze([])
+export function parseHttpPath(path: string): ParsedHttpPath {
+  if (path === '/')
+    return Object.freeze<HttpPathSegment[]>([]) as ParsedHttpPath
   if (!path.startsWith('/')) {
     throw new Error(`Invalid HTTP path: ${path}`)
   }
@@ -52,28 +65,28 @@ export function parseHttpPath(path: string): readonly HttpPathSegment[] {
       }
       return Object.freeze({ kind: 'static', value: segment })
     })
-  return Object.freeze(segments)
+  return Object.freeze(segments) as ParsedHttpPath
 }
 
 export function normalizeHttpPath(
-  segments: readonly HttpPathSegment[],
-): string {
-  if (segments.length === 0) return '/'
+  segments: ParsedHttpPath,
+): HttpNormalizedPath {
+  if (segments.length === 0) return '/' as HttpNormalizedPath
   return `/${segments
     .map((segment) => (segment.kind === 'static' ? segment.value : '{}'))
-    .join('/')}`
+    .join('/')}` as HttpNormalizedPath
 }
 
 export function createHttpDispatchKey(
-  method: string,
-  segments: readonly HttpPathSegment[],
-): string {
-  return `http:${method.toUpperCase()}:${normalizeHttpPath(segments)}`
+  method: HttpMethod | '*',
+  segments: ParsedHttpPath,
+): HttpDispatchKey {
+  return `http:${method.toUpperCase()}:${normalizeHttpPath(segments)}` as HttpDispatchKey
 }
 
 export function matchHttpPath(
-  segments: readonly HttpPathSegment[],
-  pathname: string,
+  segments: ParsedHttpPath,
+  pathname: RequestPathname,
 ): Record<string, string> | undefined {
   const requestSegments = pathname === '/' ? [] : pathname.slice(1).split('/')
   if (requestSegments.length !== segments.length) return undefined
@@ -95,8 +108,8 @@ export function matchHttpPath(
 }
 
 export function compareHttpPathSpecificity(
-  left: readonly HttpPathSegment[],
-  right: readonly HttpPathSegment[],
+  left: ParsedHttpPath,
+  right: ParsedHttpPath,
 ): number {
   const length = Math.min(left.length, right.length)
   for (let index = 0; index < length; index += 1) {

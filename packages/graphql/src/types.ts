@@ -1,3 +1,4 @@
+import type { GraphQLOperationId } from './identity.js'
 import type { HttpRawDefinition } from '@loutrejs/loutre/http'
 import type { GraphQLManifest } from './manifest-internal.js'
 import type { GraphQLError, GraphQLFormattedError } from 'graphql'
@@ -13,7 +14,7 @@ export interface GraphQLWebSocketContextInput {
   readonly transport: 'websocket'
   readonly request: Request
   readonly connectionParams: Readonly<Record<string, unknown>> | undefined
-  readonly operationId: string
+  readonly operationId: GraphQLOperationId
   readonly signal: AbortSignal
 }
 

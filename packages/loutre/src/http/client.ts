@@ -1,4 +1,12 @@
 import {
+  normalizeMediaType,
+  normalizeHttpMethod,
+  httpBaseUrl,
+  requestPathname,
+  type RequestPathname,
+  type HttpMethod,
+} from './identity.js'
+import {
   SchemaValidationError,
   validateSchema,
   type SchemaInput,
@@ -17,8 +25,8 @@ import { parseHttpPath, type PathParamNames } from './path.js'
 import { match } from 'ts-pattern'
 
 export interface HttpClientTransportRequest {
-  readonly method: string
-  readonly path: string
+  readonly method: HttpMethod
+  readonly path: RequestPathname
   readonly query?: unknown
   readonly headers?: unknown
   readonly body?: unknown
@@ -162,7 +170,7 @@ export function createHttpClient<const TContract extends HttpContract>(
   for (const [procedureName, definition] of Object.entries(contract.routes)) {
     client[procedureName] = async (request = {}) => {
       const response = await transport({
-        method: definition.method,
+        method: normalizeHttpMethod(definition.method),
         path: interpolatePath(
           definition.path,
           request.params as Readonly<Record<string, unknown>> | undefined,
@@ -181,19 +189,21 @@ export function createHttpClient<const TContract extends HttpContract>(
 function interpolatePath(
   path: string,
   params: Readonly<Record<string, unknown>> | undefined,
-): string {
+): RequestPathname {
   const segments = parseHttpPath(path)
-  if (segments.length === 0) return '/'
-  return `/${segments
-    .map((segment) => {
-      if (segment.kind === 'static') return segment.value
-      const value = params?.[segment.name]
-      if (value === undefined) {
-        throw new Error(`Missing HTTP path parameter: ${segment.name}`)
-      }
-      return encodeURIComponent(String(value))
-    })
-    .join('/')}`
+  if (segments.length === 0) return requestPathname('/')
+  return requestPathname(
+    `/${segments
+      .map((segment) => {
+        if (segment.kind === 'static') return segment.value
+        const value = params?.[segment.name]
+        if (value === undefined) {
+          throw new Error(`Missing HTTP path parameter: ${segment.name}`)
+        }
+        return encodeURIComponent(String(value))
+      })
+      .join('/')}`,
+  )
 }
 
 async function decodeResponse(
@@ -341,7 +351,7 @@ export function fetchHttpTransport(
 ): HttpClientTransport {
   const fetchImplementation = options.fetch ?? globalThis.fetch
   return async (request) => {
-    const url = new URL(request.path, options.baseUrl)
+    const url = new URL(request.path, httpBaseUrl(options.baseUrl))
     appendQuery(url.searchParams, request.query)
 
     const headers = new Headers(options.headers)
@@ -439,13 +449,6 @@ async function decodeFetchBody(response: Response): Promise<unknown> {
     return response.json()
   }
   return response.text()
-}
-
-function normalizeMediaType(
-  value: string | null | undefined,
-): string | undefined {
-  const mediaType = value?.split(';', 1)[0]?.trim().toLowerCase()
-  return mediaType || undefined
 }
 
 async function* decodeServerSentEvents(

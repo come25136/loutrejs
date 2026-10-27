@@ -1,3 +1,4 @@
+import { absoluteFsPath, type AbsoluteFsPath } from './paths.js'
 import { dirname, resolve } from 'node:path'
 import { watch } from 'chokidar'
 import glob from 'fast-glob'
@@ -135,9 +136,12 @@ async function generateOnce(
 
 function patternRoot(pattern: string, cwd: string) {
   const wildcard = pattern.search(/[?*[\]{}()!]/)
-  if (wildcard < 0) return dirname(resolve(cwd, pattern))
+  if (wildcard < 0) return absoluteFsPath(dirname(resolve(cwd, pattern)))
   const prefix = pattern.slice(0, wildcard)
-  return resolve(cwd, prefix.slice(0, prefix.lastIndexOf('/') + 1) || '.')
+  return absoluteFsPath(
+    cwd,
+    prefix.slice(0, prefix.lastIndexOf('/') + 1) || '.',
+  )
 }
 
 async function watchGeneration(
@@ -146,10 +150,10 @@ async function watchGeneration(
   io: CliIO,
 ) {
   const watcher = watch([config], { ignoreInitial: true })
-  const roots = new Set<string>()
-  let outputs = new Set<string>()
+  const roots = new Set<AbsoluteFsPath>()
+  let outputs = new Set<AbsoluteFsPath>()
   let patterns: string[] = []
-  let inputs = new Set<string>()
+  let inputs = new Set<AbsoluteFsPath>()
   let timer: ReturnType<typeof setTimeout> | undefined
   let running = false
   let queued = false
@@ -172,11 +176,13 @@ async function watchGeneration(
         ...(target.kind === 'client' ? target.documents : []),
       ])
       inputs = new Set(
-        await glob(patterns, {
-          cwd: dirname(config),
-          absolute: true,
-          onlyFiles: true,
-        }),
+        (
+          await glob(patterns, {
+            cwd: dirname(config),
+            absolute: true,
+            onlyFiles: true,
+          })
+        ).map((path) => absoluteFsPath(path)),
       )
       const nextRoots = new Set(
         targets
@@ -187,7 +193,7 @@ async function watchGeneration(
           .map((pattern) => patternRoot(pattern, dirname(config))),
       )
       outputs = new Set(
-        targets.map((target) => resolve(dirname(config), target.output)),
+        targets.map((target) => absoluteFsPath(dirname(config), target.output)),
       )
       for (const root of roots)
         if (!nextRoots.has(root)) await watcher.unwatch(root)
@@ -211,22 +217,22 @@ async function watchGeneration(
     watcher.once('error', reject)
   })
   const changed = async (path: string) => {
+    const absolute = absoluteFsPath(path)
     if (
       stopped ||
       [...outputs].some(
-        (output) =>
-          resolve(path) === output || resolve(path).startsWith(output + '/'),
+        (output) => absolute === output || absolute.startsWith(output + '/'),
       ) ||
       /\.[\da-f-]+\.tmp$/.test(path)
     )
       return
-    if (resolve(path) !== config && !inputs.has(resolve(path))) {
+    if (absolute !== config && !inputs.has(absolute)) {
       const current = await glob(patterns, {
         cwd: dirname(config),
         absolute: true,
         onlyFiles: true,
       })
-      if (stopped || !current.includes(resolve(path))) return
+      if (stopped || !current.includes(absolute)) return
     }
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {

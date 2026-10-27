@@ -1,3 +1,5 @@
+import type { ModelNodeId } from './identity.js'
+import { hostNamespace, type HostNamespace } from '../identity.js'
 import { diagnostic, type Diagnostic } from '../diagnostic.js'
 import type { ExecutionExtension } from '../extension.js'
 import type {
@@ -20,7 +22,7 @@ export function validateHostNamespaces(
     'prototype',
     'constructor',
   ])
-  const owners = new Map<string, ExecutionExtension>()
+  const owners = new Map<HostNamespace, ExecutionExtension>()
   for (const { extension } of extensions) {
     const namespace = extension.host?.namespace
     if (!namespace) continue
@@ -34,7 +36,7 @@ export function validateHostNamespaces(
       )
       continue
     }
-    const owner = owners.get(namespace)
+    const owner = owners.get(hostNamespace(namespace))
     if (owner && owner.identity !== extension.identity) {
       diagnostics.push(
         diagnostic(
@@ -45,7 +47,7 @@ export function validateHostNamespaces(
       )
       continue
     }
-    owners.set(namespace, extension)
+    owners.set(hostNamespace(namespace), extension)
   }
 }
 
@@ -53,7 +55,7 @@ export function validateNodeIds(
   nodes: readonly ApplicationModelNode[],
   diagnostics: Diagnostic[],
 ): void {
-  const seen = new Set<string>()
+  const seen = new Set<ModelNodeId>()
   for (const node of nodes) {
     if (!seen.has(node.id)) {
       seen.add(node.id)

@@ -1,3 +1,4 @@
+import { moduleName, type ModuleName } from '../identity.js'
 import { collectInjectedDependencies } from '../injection.js'
 import { diagnostic } from '../diagnostic.js'
 import { normalizeProvider, type ProviderDescriptor } from '../provider.js'
@@ -20,11 +21,11 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
     providers,
     providerNodes,
   } = context
-  const moduleNames = new Set<string>()
+  const moduleNames = new Set<ModuleName>()
   for (const module of modules) {
     const moduleId = moduleIds.get(module)!
     if (module.definition.name) {
-      if (moduleNames.has(module.definition.name)) {
+      if (moduleNames.has(moduleName(module.definition.name))) {
         diagnostics.push(
           diagnostic(
             'LUTRE_MODULE_NAME_COLLISION',
@@ -33,7 +34,7 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
           ),
         )
       }
-      moduleNames.add(module.definition.name)
+      moduleNames.add(moduleName(module.definition.name))
     }
     const moduleSource =
       getSourceLocation(module) ?? getSourceLocation(module.template)

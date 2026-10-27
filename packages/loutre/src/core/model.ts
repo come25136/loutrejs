@@ -1,3 +1,15 @@
+import {
+  executionNodeId,
+  capabilityNodeId,
+  extensionNodeId,
+  type ExecutionNodeId,
+  type CapabilityNodeId,
+} from './model/identity.js'
+import type {
+  ExtensionIdentity,
+  ExtensionName,
+  ExtensionAbiVersion,
+} from './identity.js'
 import { diagnostic, isErrorDiagnostic, type Diagnostic } from './diagnostic.js'
 import {
   isExecutionDefinition,
@@ -48,7 +60,7 @@ export type {
 
 class ApplicationModelExtensionRegistry implements ApplicationModelExtensions {
   readonly #ordered: readonly ApplicationModelExtension[]
-  readonly #groups: ReadonlyMap<symbol, ApplicationModelExtension>
+  readonly #groups: ReadonlyMap<ExtensionIdentity, ApplicationModelExtension>
 
   constructor(groups: readonly ApplicationModelExtension[]) {
     this.#ordered = Object.freeze([...groups])
@@ -117,22 +129,25 @@ export function buildApplicationModel(
   } = context
 
   const extensionExecutions = new Map<
-    symbol,
+    ExtensionIdentity,
     {
       readonly extension: ExecutionExtension
       readonly executions: ExecutionModelNode[]
     }
   >()
   const extensionNames = new Map<
-    string,
-    { readonly identity: symbol; readonly abiVersion: string }
+    ExtensionName,
+    {
+      readonly identity: ExtensionIdentity
+      readonly abiVersion: ExtensionAbiVersion
+    }
   >()
   const extensionIdentities = new Map<
-    symbol,
-    { readonly name: string; readonly extension: ExecutionExtension }
+    ExtensionIdentity,
+    { readonly name: ExtensionName; readonly extension: ExecutionExtension }
   >()
-  const executionIds = new Set<string>()
-  const capabilityNodeIds = new Set<string>()
+  const executionIds = new Set<ExecutionNodeId>()
+  const capabilityNodeIds = new Set<CapabilityNodeId>()
   const visitedDefinitions = new Set<ExecutionDefinition>()
   const compiledDefinitions = new Map<ExecutionDefinition, ExecutionModelNode>()
   const executionReferences: {
@@ -349,7 +364,7 @@ export function buildApplicationModel(
         )
         continue
       }
-      if (executionIds.has(contribution.id)) {
+      if (executionIds.has(executionNodeId(contribution.id))) {
         diagnostics.push(
           diagnostic(
             'LUTRE_EXECUTION_ID_COLLISION',
@@ -359,10 +374,11 @@ export function buildApplicationModel(
         )
         continue
       }
-      executionIds.add(contribution.id)
+      executionIds.add(executionNodeId(contribution.id))
       const executionSource = getSourceLocation(value)
       const execution: ExecutionModelNode = Object.freeze({
         ...contribution,
+        id: executionNodeId(contribution.id),
         dependencies: Object.freeze([...contribution.dependencies]),
         capabilities: Object.freeze([...contribution.capabilities]),
         moduleId,
@@ -410,7 +426,7 @@ export function buildApplicationModel(
         }
       }
       for (const capability of execution.capabilities) {
-        const capabilityId = `capability:${capability.id}`
+        const capabilityId = capabilityNodeId(capability.id)
         if (!capabilityNodeIds.has(capabilityId)) {
           capabilityNodeIds.add(capabilityId)
           nodes.push({
@@ -493,7 +509,7 @@ export function buildApplicationModel(
 
   const extensionGroups = [...extensionExecutions.values()].map(
     ({ extension, executions: ownedExecutions }): ApplicationModelExtension => {
-      const extensionId = `extension:${extension.name}`
+      const extensionId = extensionNodeId(extension.name)
       nodes.push({
         kind: 'framework',
         id: extensionId,

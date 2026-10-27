@@ -1,3 +1,5 @@
+import type { Brand, Descriptor } from '../internal/brand.js'
+export type BearerCredential = Brand<string, 'http.bearer-credential'>
 import { defineLayer } from '../core/index.js'
 import type {
   HttpExecutionResult,
@@ -5,7 +7,7 @@ import type {
   HttpMiddlewareContext,
 } from './extension.js'
 
-export interface BasicAuthCredentials {
+export interface BasicAuthCredentials extends Descriptor<'basic-auth-credentials'> {
   readonly username: string
   readonly password: string
 }
@@ -134,7 +136,7 @@ export interface BearerAuthRuntime<
   TUnauthorizedBody,
 > {
   authenticate(
-    token: string,
+    token: BearerCredential,
   ):
     | TContribution
     | null
@@ -247,14 +249,18 @@ function decodeBasicCredentials(
     return {
       username: decoded.slice(0, separator),
       password: decoded.slice(separator + 1),
-    }
+    } as BasicAuthCredentials
   } catch {
     return undefined
   }
 }
 
-function readBearerToken(authorization: string | null): string | undefined {
-  return /^Bearer +([^\s]+)$/i.exec(authorization ?? '')?.[1]
+function readBearerToken(
+  authorization: string | null,
+): BearerCredential | undefined {
+  return /^Bearer +([^\s]+)$/i.exec(authorization ?? '')?.[1] as
+    | BearerCredential
+    | undefined
 }
 
 function escapeChallengeValue(value: string): string {

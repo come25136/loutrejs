@@ -1,3 +1,4 @@
+import { runtimeSupportFeatures } from '@loutrejs/loutre/runtime'
 import {
   Container,
   Logger,
@@ -12,7 +13,7 @@ describe('CapabilityとLogger', () => {
   it('Application requirementとRuntime capabilityの差分を返す', () => {
     const result = checkRuntimeSupport(['http.server', 'stream.readable'], {
       runtime: 'fixture',
-      capabilities: new Set(['http.server']),
+      capabilities: runtimeSupportFeatures(['http.server']),
     })
     expect(result.ok).toBe(false)
     expect(result.missing).toEqual(['stream.readable'])

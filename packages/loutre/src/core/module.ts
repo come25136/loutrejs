@@ -1,3 +1,4 @@
+import type { Descriptor } from '../internal/brand.js'
 import type { EnvClass } from './env.js'
 import type {
   ExecutionDeclaration,
@@ -53,7 +54,7 @@ export type ModuleHostApis<TModule> = HostApiOfExtension<
 
 export interface ModuleInstance<
   TDefinition extends ModuleDefinition = ModuleDefinition,
-> {
+> extends Descriptor<'module-instance'> {
   readonly kind: 'module-instance'
   readonly template: AnyModuleTemplate
   readonly args: unknown
@@ -61,7 +62,7 @@ export interface ModuleInstance<
   readonly [moduleTypeInfo]?: ModuleTypeInfo<TDefinition>
 }
 
-export interface AnyModuleTemplate {
+export interface AnyModuleTemplate extends Descriptor<'module-template'> {
   (args?: any): ModuleInstance<any>
   readonly kind: 'module-template'
   readonly instantiate: (args: any) => ModuleInstance<any>
@@ -75,6 +76,7 @@ export type ModuleTemplate<
   ? { (): ModuleInstance<TDefinition> }
   : { (args: Args): ModuleInstance<TDefinition> }) & {
   readonly kind: 'module-template'
+  readonly '~loutre.descriptor': 'module-template'
   readonly instantiate: (args: Args) => ModuleInstance<TDefinition>
   readonly [moduleTypeInfo]?: ModuleTypeInfo<TDefinition>
 }
@@ -119,7 +121,7 @@ function createModuleTemplate<Args, TDefinition extends ModuleDefinition>(
         ...(environment.length === 0 ? {} : { environment }),
         ...(providers.length === 0 ? {} : { providers }),
       } as TDefinition,
-    }
+    } as ModuleInstance<TDefinition>
   }
 
   const template = ((args: Args) => instantiate(args)) as ModuleTemplate<

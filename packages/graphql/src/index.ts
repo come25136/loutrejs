@@ -195,3 +195,11 @@ export function defineGraphQLEndpoint<
 }
 
 export const graphql = Object.freeze({ endpoint: defineGraphQLEndpoint })
+
+export type {
+  GraphQLTypeName,
+  GraphQLFieldName,
+  GraphQLFieldCoordinate,
+  GraphQLResponseKey,
+  GraphQLOperationId,
+} from './identity.js'
