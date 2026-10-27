@@ -99,7 +99,7 @@ IDを受け取る内部APIやInspectorの公開APIに`string`を許すoverload�
 
 ## 互換性と寿命
 
-JSONのfield名、IDの生成形式、`DEVTOOLS_PROTOCOL_VERSION`は維持する。TypeScriptで文字列を直接渡すコードには破壊的変更となるため、実装時はChangesetへ記載する。parserの追加は、この移行の正式な入口にもなる。
+JSONのfield名、IDの生成形式、`DEVTOOLS_PROTOCOL_VERSION`は維持する。TypeScriptで文字列を直接渡すコードには破壊的変更となるため、[全体方針の移行案内](loutre_branded_types_adoption.md#互換性と移行)に従う。parserの追加は、この移行の正式な入口にもなる。
 
 brandはIDの種類だけを区別する。同じ種類のIDについて、別Runの値、期限切れのCapsule、未接続のRun、未知のrequestを区別しない。既存のRun照合、lookup、TTL、切断時のpending cleanupを維持する。`RunId`の型パラメータを他のIDへ伝播させる設計は、process間の動的なsession切り替えに対して複雑さが大きいため採用しない。
 

@@ -12,10 +12,7 @@ export interface MessagePortHost {
 export type MessagePortLike = {
   postMessage(value: unknown): void
   start?(): void
-  addEventListener(
-    type: 'message',
-    listener: (event: { readonly data: unknown }) => void,
-  ): void
+  addEventListener(type: 'message', listener: (event: unknown) => void): void
 }
 
 export function attachMessagePort(
@@ -23,6 +20,8 @@ export function attachMessagePort(
   port: MessagePortLike,
 ): void {
   port.addEventListener('message', async (event) => {
+    if (typeof event !== 'object' || event === null || !('data' in event))
+      return
     const request = decodeMessagePortRequest(event.data)
     if (!request) return
     try {

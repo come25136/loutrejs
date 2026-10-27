@@ -126,7 +126,7 @@ describe('DevToolsの受信境界', () => {
 
 describe('MessagePortの受信境界', () => {
   it('不正なenvelopeをhandlerへ渡さず、正規のIDを応答へ引き継ぐ', async () => {
-    let receive!: (event: { readonly data: unknown }) => void
+    let receive!: (event: unknown) => void
     const invoke = vi.fn(async () => ({ response: 'ok', value: 42 }))
     const postMessage = vi.fn()
     attachMessagePort(
@@ -138,6 +138,9 @@ describe('MessagePortの受信境界', () => {
         },
       },
     )
+    await receive(null)
+    await receive('message')
+    await receive(new Event('message'))
     await receive({ data: { id: 1, procedure: 'read' } })
     await receive({ data: { id: 'request', procedure: false } })
     expect(invoke).not.toHaveBeenCalled()

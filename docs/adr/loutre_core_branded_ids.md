@@ -119,7 +119,7 @@ DevToolsがModel IDを受け取る場合もCoreの型を参照する。依存は
 2. Graph、Runtime、ExtensionのModel由来の入力、instrumentation metadataへ同じ型を通す。1と2を一つの整合した変更として完成させる。
 3. DevToolsの設計と接続し、Model IDはCore、sessionとTraceのIDはDevToolsという所有関係を維持する。全体の実装順と完了範囲は[全体方針](loutre_branded_types_adoption.md)に従う。
 
-既存の文字列値とJSON形式は維持する。公開Model、Graph、instrumentation metadataを手書きする利用者にはTypeScriptの破壊的変更となるため、実装時のChangesetで明記する。外部のinstrumentation実装はModel由来のIDを受け取り、そのまま転送できる。syntheticなexecution IDを指定するコードはCoreのfactoryで値を確定する。
+既存の文字列値とJSON形式は維持する。公開Model、Graph、instrumentation metadataを手書きする利用者にはTypeScriptの破壊的変更となるため、[全体方針の移行案内](loutre_branded_types_adoption.md#互換性と移行)に従う。外部のinstrumentation実装はModel由来のIDを受け取り、そのまま転送できる。syntheticなexecution IDを指定するコードはCoreのfactoryで値を確定する。
 
 ## 検証方針
 

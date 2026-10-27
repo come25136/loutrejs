@@ -209,9 +209,17 @@ Websiteは独立したwire decoderと型を所有する現在の構成を維持�
 3. **DevToolsとCLI**: IDと時刻、wire decoder、Graph view、path、source instrumentation、codegenとscaffolderへ適用する。
 4. **Website**: decoder、state、navigation、Timeline、Graph adapterとlibraryから戻る値へ適用する。
 
-これらは実装順であり、後半を任意の追加機能にはしない。依存する公開型とconsumerを同じ変更単位で移行し、型の不整合を一時的な`string` overloadで埋めない。TypeScript APIの破壊的変更をChangesetへ記載する。wireの文字列・数値表現は維持し、不正messageの拒否やconfigの検証条件が変わる場合は別に明示する。
+これらは実装順であり、後半を任意の追加機能にはしない。依存する公開型とconsumerを同じ変更単位で移行し、型の不整合を一時的な`string` overloadで埋めない。TypeScript APIの移行方法は本ADRへ記載し、release時は[release手順](../releasing.md)に従って破壊的変更をChangesetへ集約する。wireの文字列・数値表現は維持し、不正messageの拒否やconfigの検証条件が変わる場合は別に明示する。
 
 完了時は、各表の型について、生成元、変換境界、Map / Set、callback、serialize直前、受信後まで追えることを確認する。残る`Map<string, ...>`や`Map<symbol, ...>`を機械的にゼロにすることは目標にしない。残すものが任意のproperty名・外部API・表示などのどの契約に当たるかを説明できる状態にする。
+
+## 互換性と移行
+
+公開TypeScript APIには破壊的変更がある。Modelやinstrumentation metadataを手書きする場合は、domainのparser・factoryと時刻の変換関数で値を確定する。Model由来ではない合成execution IDには`syntheticExecutionId()`を使用する。通常の宣言用object literal、Schemaの入出力推論、JSON上の文字列・数値表現は維持する。
+
+HTTP handlerのdirect replayでは、入力の`params`がobjectであることを検証し、不正な値はhandlerを呼ぶ前に拒否する。
+
+移行案内は本ADRを正本にする。通常のfeature PRではrelease note用Changesetを追加せず、release時に公開6packageのfixed groupとして変更とSemVer分類をまとめる。
 
 ## 検証
 
