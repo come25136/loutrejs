@@ -1,3 +1,4 @@
+import type { AbsoluteFsPath } from './paths.js'
 import type { ApplicationDefinition } from '@loutrejs/loutre'
 import {
   projectApplicationModel,
@@ -15,19 +16,19 @@ export type EmitApplicationOptions = EmitEntryOptions
 
 export interface LoadedApplicationDefinition {
   readonly definition: ApplicationDefinition
-  readonly files: readonly string[]
+  readonly files: readonly AbsoluteFsPath[]
 }
 
 export interface LoadedApplicationGraph {
   readonly graph: ApplicationModelGraphIR
-  readonly files: readonly string[]
+  readonly files: readonly AbsoluteFsPath[]
 }
 
 export async function emitApplication(
   entry: string,
   output: string,
   options: EmitEntryOptions = {},
-): Promise<readonly string[]> {
+): Promise<readonly AbsoluteFsPath[]> {
   return emitEntry(entry, output, options)
 }
 

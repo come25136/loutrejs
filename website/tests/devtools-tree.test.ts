@@ -1,3 +1,4 @@
+import * as fixture from './helpers/devtools-fixtures.js'
 import { describe, expect, it } from 'vitest'
 import type { GraphSnapshot } from '../lib/devtools.js'
 import { buildDevtoolsNodeTree } from '../lib/devtools-tree.js'
@@ -21,7 +22,7 @@ function flatten(
 
 describe('Devtools node tree', () => {
   it('semantic containmentをModuleからRoute/Handlerまでtree化する', () => {
-    const snapshot: GraphSnapshot = {
+    const snapshot: GraphSnapshot = fixture.graphSnapshot({
       schemaVersion: 1,
       diagnostics: [],
       nodes: [
@@ -54,7 +55,7 @@ describe('Devtools node tree', () => {
         { from: 'middleware', to: 'handler', kind: 'flows-to' },
         { from: 'controller', to: 'http', kind: 'requires' },
       ],
-    }
+    })
 
     expect(flatten(buildDevtoolsNodeTree(snapshot))).toEqual([
       { id: 'app', depth: 0 },
@@ -69,7 +70,7 @@ describe('Devtools node tree', () => {
   })
 
   it('cyclic module importsでもtreeを循環させない', () => {
-    const snapshot: GraphSnapshot = {
+    const snapshot: GraphSnapshot = fixture.graphSnapshot({
       schemaVersion: 1,
       diagnostics: [],
       nodes: [
@@ -80,7 +81,7 @@ describe('Devtools node tree', () => {
         { from: 'a', to: 'b', kind: 'imports' },
         { from: 'b', to: 'a', kind: 'imports' },
       ],
-    }
+    })
 
     expect(flatten(buildDevtoolsNodeTree(snapshot))).toEqual([
       { id: 'a', depth: 0 },

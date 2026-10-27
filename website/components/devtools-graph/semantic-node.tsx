@@ -1,8 +1,11 @@
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
 import { AlertTriangle } from 'lucide-react'
-import type { LoutreFlowNode } from './graph-adapter'
+import type { SemanticNodeData, FlowNodeType } from './graph-adapter'
 
-export function SemanticNode({ data, selected }: NodeProps<LoutreFlowNode>) {
+export function SemanticNode({
+  data,
+  selected,
+}: NodeProps<Node<SemanticNodeData, FlowNodeType>>) {
   const node = data.graphNode
   const diagnostics = data.diagnostics ?? []
   const diagnosticSummary = diagnostics

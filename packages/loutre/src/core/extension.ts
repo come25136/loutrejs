@@ -1,3 +1,13 @@
+import type { Descriptor } from '../internal/brand.js'
+import type { ModuleId, ExecutionNodeId } from './model/identity.js'
+import type {
+  CapabilityId,
+  CapabilityIdentity,
+  ExtensionName,
+  ExtensionAbiVersion,
+  ExtensionIdentity,
+} from './identity.js'
+import type { DurationMs } from './units.js'
 import type { DependencyResolver } from './injection.js'
 import type { Diagnostic } from './diagnostic.js'
 import type {
@@ -12,10 +22,12 @@ declare const executionExtensionTypeInfo: unique symbol
 const executionExtensionIdentityNamespace = 'loutre.execution-extension:'
 const runtimeCapabilityIdentityNamespace = 'loutre.runtime-capability:'
 
-export interface RuntimeCapability<TValue = unknown> {
+export interface RuntimeCapability<
+  TValue = unknown,
+> extends Descriptor<'runtime-capability'> {
   readonly kind: 'runtime-capability'
-  readonly id: string
-  readonly identity: symbol
+  readonly id: CapabilityId
+  readonly identity: CapabilityIdentity
   readonly [runtimeCapabilityValue]?: TValue
 }
 
@@ -30,9 +42,11 @@ export function runtimeCapability<TValue>(
   }
   return Object.freeze({
     kind: 'runtime-capability' as const,
-    id,
-    identity: Symbol.for(`${runtimeCapabilityIdentityNamespace}${id}`),
-  })
+    id: id as CapabilityId,
+    identity: Symbol.for(
+      `${runtimeCapabilityIdentityNamespace}${id}`,
+    ) as CapabilityIdentity,
+  }) as RuntimeCapability<TValue>
 }
 
 export interface RuntimeCapabilityBindings {
@@ -53,8 +67,8 @@ export function bindRuntimeCapability<TValue>(
 }
 
 export class RuntimeCapabilityRegistry implements RuntimeCapabilityBindings {
-  readonly #values = new Map<symbol, unknown>()
-  readonly #capabilities = new Map<symbol, RuntimeCapability<any>>()
+  readonly #values = new Map<CapabilityIdentity, unknown>()
+  readonly #capabilities = new Map<CapabilityIdentity, RuntimeCapability<any>>()
 
   constructor(bindings: Iterable<RuntimeCapabilityBinding> = []) {
     for (const binding of bindings) {
@@ -115,7 +129,7 @@ export interface ExecutionKernelRuntime {
 }
 
 export interface ExecutionExtensionDrainContext {
-  readonly timeoutMs: number
+  readonly timeoutMs: DurationMs
 }
 
 export interface ExecutionExtensionRuntime {
@@ -124,7 +138,7 @@ export interface ExecutionExtensionRuntime {
 }
 
 export interface ExecutionCompileContext {
-  readonly moduleId: string
+  readonly moduleId: ModuleId
   readonly definitionIndex: number
 }
 
@@ -137,17 +151,20 @@ export interface ExecutionContribution<TCompiled = unknown> {
   readonly compiled: TCompiled
 }
 
+export type ModelExecutionContribution<TCompiled = unknown> =
+  ExecutionContribution<TCompiled> & { readonly id: ExecutionNodeId }
+
 export interface ExecutionRuntimeBinding<TCompiled = unknown> {
-  readonly execution: ExecutionContribution<TCompiled>
+  readonly execution: ModelExecutionContribution<TCompiled>
   readonly resolve: DependencyResolver
 }
 
 export interface ExecutionExtensionValidationContext<TCompiled = unknown> {
-  readonly executions: readonly ExecutionContribution<TCompiled>[]
+  readonly executions: readonly ModelExecutionContribution<TCompiled>[]
 }
 
 export interface ExecutionProjectionContext<TCompiled = unknown> {
-  readonly execution: ExecutionContribution<TCompiled>
+  readonly execution: ModelExecutionContribution<TCompiled>
 }
 
 export interface ExecutionExtensionRuntimeContext<TCompiled = unknown> {
@@ -181,11 +198,11 @@ export interface ExecutionExtension<
   TNamespace extends string = string,
   THostApi extends object = object,
   TRuntime extends ExecutionExtensionRuntime = ExecutionExtensionRuntime,
-> {
+> extends Descriptor<'execution-extension'> {
   readonly kind: 'execution-extension'
-  readonly name: string
-  readonly abiVersion: string
-  readonly identity: symbol
+  readonly name: ExtensionName
+  readonly abiVersion: ExtensionAbiVersion
+  readonly identity: ExtensionIdentity
   readonly [executionExtensionTypeInfo]?: readonly [TNamespace, THostApi]
   compile(
     definition: TDefinition,
@@ -202,10 +219,13 @@ export interface ExecutionExtension<
   readonly host?: HostExtension<TNamespace, THostApi, TCompiled, TRuntime>
 }
 
-function executionExtensionIdentity(name: string, abiVersion: string): symbol {
+function executionExtensionIdentity(
+  name: string,
+  abiVersion: string,
+): ExtensionIdentity {
   return Symbol.for(
     `${executionExtensionIdentityNamespace}${JSON.stringify([name, abiVersion])}`,
-  )
+  ) as ExtensionIdentity
 }
 
 export function defineExecutionExtension<
@@ -217,8 +237,8 @@ export function defineExecutionExtension<
 >(
   extension: Omit<
     ExecutionExtension<TDefinition, TCompiled, TNamespace, THostApi, TRuntime>,
-    'identity'
-  >,
+    'identity' | 'name' | 'abiVersion' | '~loutre.descriptor'
+  > & { readonly name: string; readonly abiVersion: string },
 ): ExecutionExtension<TDefinition, TCompiled, TNamespace, THostApi, TRuntime> {
   if (extension.abiVersion.trim().length === 0) {
     throw new Error(
@@ -227,11 +247,19 @@ export function defineExecutionExtension<
   }
   return Object.freeze({
     ...extension,
+    name: extension.name as ExtensionName,
+    abiVersion: extension.abiVersion as ExtensionAbiVersion,
     ...(extension.host === undefined
       ? {}
       : { host: Object.freeze({ ...extension.host }) }),
     identity: executionExtensionIdentity(extension.name, extension.abiVersion),
-  })
+  }) as ExecutionExtension<
+    TDefinition,
+    TCompiled,
+    TNamespace,
+    THostApi,
+    TRuntime
+  >
 }
 
 export const executionDefinitionBrand: unique symbol = Symbol.for(

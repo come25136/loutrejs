@@ -1,3 +1,8 @@
+import {
+  durationMs as durationValue,
+  type SpanId,
+  type DurationMs,
+} from './devtools-identity'
 import type { RuntimeEvent } from './devtools-runtime'
 
 export type TimelineStartEvent = Extract<
@@ -13,14 +18,14 @@ export interface TimelineEntry {
   readonly start: TimelineStartEvent
   readonly end?: TimelineEndEvent
   readonly depth: number
-  readonly offsetMs: number
-  readonly durationMs?: number
-  readonly endOffsetMs: number
+  readonly offsetMs: DurationMs
+  readonly durationMs?: DurationMs
+  readonly endOffsetMs: DurationMs
 }
 
 export interface TimelineLayout {
   readonly entries: readonly TimelineEntry[]
-  readonly durationMs: number
+  readonly durationMs: DurationMs
 }
 
 export function buildTimeline(events: readonly RuntimeEvent[]): TimelineLayout {
@@ -33,7 +38,7 @@ export function buildTimeline(events: readonly RuntimeEvent[]): TimelineLayout {
       .map((event) => [event.spanId, event]),
   )
   const starts = timelineStartEvents(events)
-  if (starts.length === 0) return { entries: [], durationMs: 0 }
+  if (starts.length === 0) return { entries: [], durationMs: durationValue(0) }
 
   const origin = Math.min(...starts.map((event) => event.timestamp))
   const latestTimestamp = Math.max(
@@ -45,22 +50,26 @@ export function buildTimeline(events: readonly RuntimeEvent[]): TimelineLayout {
   )
   const entries = starts.map((start) => {
     const end = ends.get(start.spanId)
-    const offsetMs = Math.max(0, start.timestamp - origin)
+    const offsetMs = durationValue(Math.max(0, start.timestamp - origin))
     const durationMs = end?.durationMs
-    const observedDuration = Math.max(0, latestTimestamp - start.timestamp)
+    const observedDuration = durationValue(
+      Math.max(0, latestTimestamp - start.timestamp),
+    )
     return {
       start,
       end,
       depth: spanDepth(start.spanId, parents),
       offsetMs,
       durationMs,
-      endOffsetMs: offsetMs + (durationMs ?? observedDuration),
+      endOffsetMs: durationValue(offsetMs + (durationMs ?? observedDuration)),
     }
   })
-  const durationMs = Math.max(
-    0.01,
-    ...entries.map((entry) => entry.endOffsetMs),
-    latestTimestamp - origin,
+  const durationMs = durationValue(
+    Math.max(
+      0.01,
+      ...entries.map((entry) => entry.endOffsetMs),
+      latestTimestamp - origin,
+    ),
   )
   return { entries, durationMs }
 }
@@ -78,12 +87,12 @@ export function timelineStartEvents(
 }
 
 function spanDepth(
-  spanId: string,
-  parents: ReadonlyMap<string, string | undefined>,
+  spanId: SpanId,
+  parents: ReadonlyMap<SpanId, SpanId | undefined>,
 ): number {
   let depth = 0
   let current = parents.get(spanId)
-  const seen = new Set<string>()
+  const seen = new Set<SpanId>()
   while (current && !seen.has(current)) {
     seen.add(current)
     depth += 1

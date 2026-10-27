@@ -1,7 +1,8 @@
+import type { DependencyConsumerId } from './identity.js'
 import type { TokenLike, TokenValue } from './token.js'
 
 export interface DependencyConsumerDescriptor {
-  readonly id: string
+  readonly id: DependencyConsumerId
   readonly name: string
   readonly kind?: string
 }

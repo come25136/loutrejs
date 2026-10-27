@@ -1,5 +1,6 @@
 'use client'
 
+import type { GraphViewNodeId } from '../../lib/devtools-identity'
 import { ExternalLink, GitBranch } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -7,7 +8,10 @@ import { useState } from 'react'
 import { GraphCanvas } from '../devtools-graph/graph-canvas'
 import { Inspector, PaneTitle } from '../devtools-graph-sidebars'
 import { localePrefix, type Locale } from '../../lib/i18n'
-import { homeGraphSnapshot } from '../../lib/home-devtools-fixture'
+import {
+  homeGraphSnapshot,
+  homeControllerId,
+} from '../../lib/home-devtools-fixture'
 
 const inspectorLabels = {
   en: {
@@ -33,7 +37,9 @@ export function DevtoolsShowcase({
   readonly className?: string
   readonly locale: Locale
 }) {
-  const [selectedId, setSelectedId] = useState<string>('UsersController')
+  const [selectedId, setSelectedId] = useState<GraphViewNodeId | undefined>(
+    homeControllerId,
+  )
   const selected = homeGraphSnapshot.nodes.find(
     (node) => node.id === selectedId,
   )
@@ -89,11 +95,11 @@ export function DevtoolsShowcase({
               selectedId={selectedId}
               showMiniMap={false}
               focusRequest={{
-                nodeId: 'UsersController',
+                nodeId: homeControllerId,
                 nonce: 1,
                 scope: 'node',
               }}
-              onSelect={(node) => setSelectedId(node?.id ?? '')}
+              onSelect={(node) => setSelectedId(node?.id)}
             />
           </div>
         </div>

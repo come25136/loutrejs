@@ -2,9 +2,10 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   getSmoothStepPath,
+  type Edge,
   type EdgeProps,
 } from '@xyflow/react'
-import type { EdgeRoutePoint, LoutreFlowEdge } from './graph-adapter'
+import type { EdgeRoutePoint, GraphEdgeData } from './graph-adapter'
 
 function distance(from: EdgeRoutePoint, to: EdgeRoutePoint): number {
   return Math.hypot(to.x - from.x, to.y - from.y)
@@ -67,7 +68,7 @@ export function polylineMidpoint(
   return points.at(-1)!
 }
 
-export function GraphEdge(props: EdgeProps<LoutreFlowEdge>) {
+export function GraphEdge(props: EdgeProps<Edge<GraphEdgeData, 'graph-edge'>>) {
   const route = props.data?.route
   const fallback = getSmoothStepPath(props)
   const followsHandles = props.data?.followHandles === true

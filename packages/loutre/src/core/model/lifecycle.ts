@@ -1,3 +1,4 @@
+import { lifecycleNodeId, type ModuleId } from './identity.js'
 import { diagnostic } from '../diagnostic.js'
 import type { ModuleInstance } from '../module.js'
 import { isFrameworkProvidedToken } from '../token-internal.js'
@@ -13,14 +14,14 @@ import { isTokenVisible, moduleDeclaresToken } from './visibility.js'
 
 export function appendLifecycleNodes(
   module: ModuleInstance,
-  moduleId: string,
+  moduleId: ModuleId,
   nodes: ApplicationModelNode[],
   edges: ApplicationModelEdge[],
 ): void {
   const lifecycle = module.definition.lifecycle
   if (!lifecycle) return
   for (const [phase, hook] of Object.entries(lifecycle)) {
-    const id = `lifecycle:${moduleId}:${phase}`
+    const id = lifecycleNodeId(moduleId, phase)
     nodes.push({
       kind: 'lifecycle',
       id,

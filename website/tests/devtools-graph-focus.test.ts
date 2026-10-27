@@ -1,8 +1,9 @@
+import * as fixture from './helpers/devtools-fixtures.js'
 import { describe, expect, it } from 'vitest'
 import { connectedNodeIds } from '../components/devtools-graph/graph-canvas'
 import type { GraphSnapshot } from '../lib/devtools'
 
-const graph: GraphSnapshot = {
+const graph: GraphSnapshot = fixture.graphSnapshot({
   schemaVersion: 1,
   nodes: [
     { id: 'a', kind: 'module', label: 'A' },
@@ -16,18 +17,18 @@ const graph: GraphSnapshot = {
     { from: 'b', to: 'd', kind: 'uses' },
   ],
   diagnostics: [],
-}
+})
 
 describe('connectedNodeIds', () => {
   it('includes the selected node and only its direct incoming/outgoing neighbors', () => {
-    expect([...connectedNodeIds(graph, 'a')].toSorted()).toEqual([
-      'a',
-      'b',
-      'c',
-    ])
+    expect(
+      [...connectedNodeIds(graph, fixture.viewId('a'))].toSorted(),
+    ).toEqual(['a', 'b', 'c'])
   })
 
   it('does not walk transitively through neighboring nodes', () => {
-    expect(connectedNodeIds(graph, 'a').has('d')).toBe(false)
+    expect(
+      connectedNodeIds(graph, fixture.viewId('a')).has(fixture.flowId('d')),
+    ).toBe(false)
   })
 })

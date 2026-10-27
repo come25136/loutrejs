@@ -1,3 +1,9 @@
+import {
+  moduleId,
+  providerNodeId,
+  type ModuleId,
+  type ProviderNodeId,
+} from './identity.js'
 import type { Diagnostic } from '../diagnostic.js'
 import {
   asModuleInstance,
@@ -18,14 +24,14 @@ export interface ModelBuildContext {
   readonly options: ApplicationModelBuildOptions
   readonly modules: readonly ModuleInstance[]
   readonly imports: ReadonlyMap<ModuleInstance, readonly ModuleInstance[]>
-  readonly moduleIds: ReadonlyMap<ModuleInstance, string>
+  readonly moduleIds: ReadonlyMap<ModuleInstance, ModuleId>
   readonly nodes: ApplicationModelNode[]
   readonly edges: ApplicationModelEdge[]
   readonly diagnostics: Diagnostic[]
   readonly providers: ProviderDescriptor[]
   readonly executions: ExecutionModelNode[]
   readonly providerNodes: Map<TokenLike, ProviderModelNode>
-  nextProviderId(): string
+  nextProviderId(): ProviderNodeId
 }
 
 function collectModules(roots: readonly ModuleInput[]) {
@@ -56,7 +62,7 @@ export function createModelBuildContext(
 ): ModelBuildContext {
   const { modules, imports } = collectModules(options.modules)
   const moduleIds = new Map(
-    modules.map((module, index) => [module, `module:${index + 1}`]),
+    modules.map((module, index) => [module, moduleId(index + 1)]),
   )
   let providerOrdinal = 0
   return {
@@ -70,6 +76,6 @@ export function createModelBuildContext(
     providers: [],
     executions: [],
     providerNodes: new Map(),
-    nextProviderId: () => `provider:${++providerOrdinal}`,
+    nextProviderId: () => providerNodeId(++providerOrdinal),
   }
 }

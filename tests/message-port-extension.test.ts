@@ -1,3 +1,4 @@
+import * as fixture from './helpers/identities.js'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
 import {
@@ -237,7 +238,9 @@ describe('MessagePort Execution Extension', () => {
         capabilities: new RuntimeCapabilityRegistry(),
         applicationRuntime,
       })
-      const result = await runtime.invoke('values')
+      const result = await runtime.invoke(
+        fixture.messagePortProcedureName('values'),
+      )
 
       expect(completed).toBe(0)
       await testCase.consume(result.value, () =>

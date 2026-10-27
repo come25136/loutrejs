@@ -1,3 +1,20 @@
+import { syntheticExecutionId } from '../core/identity.js'
+import {
+  createRunId,
+  createTraceId,
+  createSpanId,
+} from './identity-internal.js'
+import { eventSequence } from './identity.js'
+import {
+  monotonicNow,
+  epochFromMonotonic,
+  elapsed,
+  type MonotonicMs,
+} from '../core/units.js'
+import type { RunId, TraceId, SpanId } from './identity.js'
+import type { ModelNodeId, ProviderNodeId } from '../core/model/identity.js'
+
+import type { EpochMs } from '../core/units.js'
 import type {
   RuntimeExecutionMetadata,
   RuntimeInstrumentation,
@@ -52,14 +69,14 @@ export class RuntimeDevtoolsInstrumentation
   readonly #context: RuntimeDevtoolsContextStorage
   readonly #captureProviderMethods: boolean
   readonly #captureResults: boolean
-  readonly #runId: string
+  readonly #runId: RunId
   readonly #capsules: ReplayCapsuleStore | undefined
-  readonly #providers = new Map<string, RegisteredProvider>()
+  readonly #providers = new Map<ProviderNodeId, RegisteredProvider>()
   readonly #providerMethods = new WeakMap<
     object,
     readonly ProviderMethodDefinition[]
   >()
-  readonly #instrumentedProviderIds = new WeakMap<object, string>()
+  readonly #instrumentedProviderIds = new WeakMap<object, ProviderNodeId>()
   readonly #externalProviderValues = new WeakSet<object>()
   readonly #ambiguousProviders = new WeakSet<object>()
   readonly #providerRestorers = new WeakMap<object, () => void>()
@@ -75,7 +92,7 @@ export class RuntimeDevtoolsInstrumentation
     const captureResults = options.options.capture?.results
     this.#captureResults =
       captureResults !== false && captureResults !== 'errors'
-    this.#runId = options.observer.runId ?? `run_${crypto.randomUUID()}`
+    this.#runId = options.observer.runId ?? createRunId()
     const replay = options.options.replay
     this.#capsules =
       replay?.enabled === false
@@ -100,10 +117,10 @@ export class RuntimeDevtoolsInstrumentation
     metadata: RuntimeExecutionMetadata,
     invocation?: RuntimeInvocationRegistration,
   ): RuntimeInstrumentationScope {
-    const traceId = `trace_${crypto.randomUUID()}`
-    const spanId = `span_${crypto.randomUUID()}`
-    const startedAt = performance.now()
-    const startedTimestamp = performance.timeOrigin + startedAt
+    const traceId = createTraceId()
+    const spanId = createSpanId()
+    const startedAt = monotonicNow()
+    const startedTimestamp = epochFromMonotonic(startedAt)
     const name = metadata.name ?? metadata.executionId
     const replaySource = this.#context.current()?.replay
     const capsule =
@@ -187,12 +204,12 @@ export class RuntimeDevtoolsInstrumentation
           resultValues.length === 0
             ? undefined
             : this.#previewResult(resultValues[0])
-        const endedAt = performance.now()
-        const timestamp = performance.timeOrigin + endedAt
+        const endedAt = monotonicNow()
+        const timestamp = epochFromMonotonic(endedAt)
         this.#notify('spanEnded', {
           type: 'span.ended',
           ...this.#identity(timestamp, traceId, spanId, metadata.graphNodeId),
-          durationMs: endedAt - startedAt,
+          durationMs: elapsed(startedAt, endedAt),
           status,
           ...(Object.keys(attributes).length === 0 ? {} : { attributes }),
           ...(result === undefined ? {} : { result }),
@@ -202,7 +219,7 @@ export class RuntimeDevtoolsInstrumentation
           type: 'execution.ended',
           ...this.#identity(timestamp, traceId, spanId, metadata.graphNodeId),
           executionId: metadata.executionId,
-          durationMs: endedAt - startedAt,
+          durationMs: elapsed(startedAt, endedAt),
           status,
           ...(Object.keys(attributes).length === 0 ? {} : { attributes }),
           ...(result === undefined ? {} : { result }),
@@ -219,15 +236,15 @@ export class RuntimeDevtoolsInstrumentation
     const current = this.#context.current()
     if (!current?.trace) return undefined
 
-    const spanId = `span_${crypto.randomUUID()}`
-    const startedAt = performance.now()
+    const spanId = createSpanId()
+    const startedAt = monotonicNow()
     const capsule =
       invocation && this.#capsules
         ? this.#capsules.createExecution(
             current.trace.traceId,
             spanId,
             {
-              executionId: `span:${metadata.name}`,
+              executionId: syntheticExecutionId(`span:${metadata.name}`),
               executionKind: metadata.kind,
               name: metadata.name,
               ...(metadata.graphNodeId === undefined
@@ -249,8 +266,8 @@ export class RuntimeDevtoolsInstrumentation
     this.#notify('spanStarted', {
       type: 'span.started',
       runId: this.#runId,
-      seq: ++this.#seq,
-      timestamp: performance.timeOrigin + startedAt,
+      seq: eventSequence(++this.#seq),
+      timestamp: epochFromMonotonic(startedAt),
       traceId: current.trace.traceId,
       spanId,
       parentSpanId: current.trace.spanId,
@@ -293,19 +310,19 @@ export class RuntimeDevtoolsInstrumentation
             ? undefined
             : this.#previewResult(resultValues[0])
         const error = failed ? serializeDevtoolsError(failureReason) : undefined
-        const endedAt = performance.now()
+        const endedAt = monotonicNow()
         this.#notify('spanEnded', {
           type: 'span.ended',
           runId: this.#runId,
-          seq: ++this.#seq,
-          timestamp: performance.timeOrigin + endedAt,
+          seq: eventSequence(++this.#seq),
+          timestamp: epochFromMonotonic(endedAt),
           traceId: current.trace!.traceId,
           spanId,
           parentSpanId: current.trace!.spanId,
           ...(metadata.graphNodeId === undefined
             ? {}
             : { graphNodeId: metadata.graphNodeId }),
-          durationMs: endedAt - startedAt,
+          durationMs: elapsed(startedAt, endedAt),
           status: failed ? 'error' : 'ok',
           ...(Object.keys(attributes).length === 0 ? {} : { attributes }),
           ...(result === undefined ? {} : { result }),
@@ -415,7 +432,7 @@ export class RuntimeDevtoolsInstrumentation
       }
     }
 
-    let traceId: string | undefined
+    let traceId: TraceId | undefined
     try {
       const result = await this.#runProviderMethodExecution(
         provider.metadata,
@@ -480,8 +497,8 @@ export class RuntimeDevtoolsInstrumentation
       )
     }
 
-    const spanId = `span_${crypto.randomUUID()}`
-    const startedAt = performance.now()
+    const spanId = createSpanId()
+    const startedAt = monotonicNow()
     const name = `${metadata.name}.${invocation.name}`
     const capsule =
       metadata.scope === 'transient'
@@ -490,7 +507,9 @@ export class RuntimeDevtoolsInstrumentation
             current.trace.traceId,
             spanId,
             {
-              executionId: `${metadata.providerId}.${invocation.name}`,
+              executionId: syntheticExecutionId(
+                `${metadata.providerId}.${invocation.name}`,
+              ),
               executionKind: 'provider.method',
               graphNodeId: metadata.graphNodeId,
               name,
@@ -553,9 +572,9 @@ export class RuntimeDevtoolsInstrumentation
   #recordProviderMethodSpan(
     metadata: RuntimeProviderMetadata,
     invocation: ProviderMethodInvocation,
-    parent: { readonly traceId: string; readonly spanId: string },
-    spanId: string,
-    startedAt: number,
+    parent: { readonly traceId: TraceId; readonly spanId: SpanId },
+    spanId: SpanId,
+    startedAt: MonotonicMs,
     capsule: ReturnType<ReplayCapsuleStore['createExecution']> | undefined,
     outcome:
       | { readonly status: 'ok'; readonly result: unknown }
@@ -565,8 +584,8 @@ export class RuntimeDevtoolsInstrumentation
     this.#notify('spanStarted', {
       type: 'span.started',
       runId: this.#runId,
-      seq: ++this.#seq,
-      timestamp: performance.timeOrigin + startedAt,
+      seq: eventSequence(++this.#seq),
+      timestamp: epochFromMonotonic(startedAt),
       traceId: parent.traceId,
       spanId,
       parentSpanId: parent.spanId,
@@ -583,19 +602,19 @@ export class RuntimeDevtoolsInstrumentation
           }),
     })
 
-    const endedAt = performance.now()
+    const endedAt = monotonicNow()
     const result =
       outcome.status === 'ok' ? this.#previewResult(outcome.result) : undefined
     this.#notify('spanEnded', {
       type: 'span.ended',
       runId: this.#runId,
-      seq: ++this.#seq,
-      timestamp: performance.timeOrigin + endedAt,
+      seq: eventSequence(++this.#seq),
+      timestamp: epochFromMonotonic(endedAt),
       traceId: parent.traceId,
       spanId,
       parentSpanId: parent.spanId,
       graphNodeId: metadata.graphNodeId,
-      durationMs: endedAt - startedAt,
+      durationMs: elapsed(startedAt, endedAt),
       status: outcome.status,
       ...(result === undefined ? {} : { result }),
       ...(outcome.status === 'error'
@@ -626,14 +645,14 @@ export class RuntimeDevtoolsInstrumentation
     original: Function,
     method: string,
     input: unknown,
-    onTraceId?: (traceId: string) => void,
+    onTraceId?: (traceId: TraceId) => void,
   ): Promise<unknown> {
     if (!Array.isArray(input)) {
       throw new TypeError('LUTRE_DEVTOOLS_PROVIDER_ARGS_REQUIRED')
     }
     const scope = this.beginExecution(
       {
-        executionId: `${metadata.providerId}.${method}`,
+        executionId: syntheticExecutionId(`${metadata.providerId}.${method}`),
         executionKind: 'provider.method',
         graphNodeId: metadata.graphNodeId,
         name: `${metadata.name}.${method}`,
@@ -700,14 +719,14 @@ export class RuntimeDevtoolsInstrumentation
   }
 
   #identity(
-    timestamp: number,
-    traceId: string,
-    spanId: string,
-    graphNodeId?: string,
+    timestamp: EpochMs,
+    traceId: TraceId,
+    spanId: SpanId,
+    graphNodeId?: ModelNodeId,
   ) {
     return {
       runId: this.#runId,
-      seq: ++this.#seq,
+      seq: eventSequence(++this.#seq),
       timestamp,
       traceId,
       spanId,

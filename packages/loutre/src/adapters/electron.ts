@@ -1,3 +1,4 @@
+import { runtimeSupportFeatures } from '../runtime/capability.js'
 import {
   createKernelApplication,
   type ApplicationDefinition,
@@ -6,7 +7,10 @@ import {
   type RequireApplicationExtension,
 } from '../application/index.js'
 import type { RuntimeCapabilityBinding } from '../core/index.js'
-import { messagePortExtension } from '../message-port/index.js'
+import {
+  messagePortExtension,
+  attachMessagePort,
+} from '../message-port/index.js'
 import { assertRuntimeEngine } from '../runtime/engine.js'
 
 type MessagePortApplication<TDefinition extends ApplicationDefinition> =
@@ -46,7 +50,7 @@ export interface ElectronAttachment<
 
 export const electronRuntime = {
   runtime: 'electron',
-  capabilities: new Set([
+  capabilities: runtimeSupportFeatures([
     'messagePort.send',
     'messagePort.receive',
     'messagePort.transfer',
@@ -86,12 +90,12 @@ function attach<const TDefinition extends ApplicationDefinition>(
   void initialization.catch(() => undefined)
   attachElectronMessagePortInvocation(async (method, input) => {
     await initialization
-    const host = (
-      application as unknown as {
-        readonly messagePort: MessagePortHostApi
-      }
-    ).messagePort
-    return host.invoke(method, input)
+    const hosted: typeof application & {
+      readonly messagePort?: MessagePortHostApi
+    } = application
+    if (!hosted.messagePort)
+      throw new Error('LUTRE_RUNTIME_MESSAGE_PORT_REQUIRED')
+    return hosted.messagePort.invoke(method, input)
   }, options.port)
   return {
     application,
@@ -112,50 +116,7 @@ function attachElectronMessagePortInvocation(
   invoke: (method: string, input?: unknown) => Promise<MessagePortHostResult>,
   port: MessagePortLike | ElectronMessagePortMainLike,
 ): void {
-  const normalized = normalizeMessagePort(port)
-  normalized.addEventListener('message', async (event) => {
-    const request = event.data as {
-      readonly id: string
-      readonly procedure: string
-      readonly input?: unknown
-    }
-    try {
-      const result = await invoke(request.procedure, request.input)
-      if (isAsyncIterable(result.value)) {
-        for await (const value of result.value) {
-          postToMessagePort(normalized, {
-            id: request.id,
-            response: result.response,
-            value,
-            done: false,
-          })
-        }
-        postToMessagePort(normalized, {
-          id: request.id,
-          response: result.response,
-          done: true,
-        })
-      } else {
-        postToMessagePort(normalized, {
-          id: request.id,
-          response: result.response,
-          value: result.value,
-          done: true,
-        })
-      }
-    } catch (error) {
-      postToMessagePort(normalized, {
-        id: request.id,
-        error: error instanceof Error ? error.message : String(error),
-        done: true,
-      })
-    }
-  })
-  normalized.start?.()
-}
-
-function postToMessagePort(port: MessagePortLike, value: unknown): void {
-  port.postMessage(value)
+  attachMessagePort({ invoke }, normalizeMessagePort(port))
 }
 
 function normalizeMessagePort(
@@ -170,13 +131,4 @@ function normalizeMessagePort(
     ) => port.on('message', listener),
     start: () => port.start(),
   }
-}
-
-function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    Symbol.asyncIterator in value &&
-    typeof value[Symbol.asyncIterator] === 'function'
-  )
 }

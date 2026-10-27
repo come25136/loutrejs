@@ -1,3 +1,4 @@
+import type { GraphViewNodeId, FlowNodeId } from '../../lib/devtools-identity'
 import {
   Background,
   BackgroundVariant,
@@ -44,10 +45,10 @@ const edgeTypes = { 'graph-edge': GraphEdge }
 interface GraphCanvasProps {
   readonly graph: GraphSnapshot
   readonly emptyMessage: string
-  readonly selectedId?: string
+  readonly selectedId?: GraphViewNodeId
   readonly showMiniMap?: boolean
   readonly focusRequest?: {
-    readonly nodeId: string
+    readonly nodeId: GraphViewNodeId
     readonly nonce: number
     readonly scope?: 'node' | 'neighbors'
   }
@@ -56,7 +57,7 @@ interface GraphCanvasProps {
 
 function decorateEdges(
   edges: readonly LoutreFlowEdge[],
-  selectedId: string | undefined,
+  selectedId: GraphViewNodeId | undefined,
 ): LoutreFlowEdge[] {
   return edges.map((edge) => {
     const highlighted =
@@ -80,9 +81,9 @@ function decorateEdges(
 
 export function connectedNodeIds(
   graph: GraphSnapshot,
-  nodeId: string,
-): ReadonlySet<string> {
-  const ids = new Set<string>([nodeId])
+  nodeId: GraphViewNodeId,
+): ReadonlySet<FlowNodeId> {
+  const ids = new Set<FlowNodeId>([nodeId])
   for (const edge of graph.edges) {
     if (edge.from === nodeId) ids.add(edge.to)
     if (edge.to === nodeId) ids.add(edge.from)

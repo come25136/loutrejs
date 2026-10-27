@@ -77,7 +77,7 @@ describe('OpenAPI generation', () => {
 
   it('http.contract()を経由していないHttpContract-like objectを拒否する', () => {
     const contractLike = {
-      kind: 'http-contract',
+      kind: 'http-contract' as const,
       routes: {
         get: {
           method: 'GET',
@@ -89,7 +89,8 @@ describe('OpenAPI generation', () => {
 
     expect(() =>
       generateOpenApi(
-        contractLike as unknown as Parameters<typeof generateOpenApi>[0],
+        // @ts-expect-error factoryを迂回した入力のRuntime検証を確認する。
+        contractLike,
         {
           info: { title: 'Users API', version: '1.0.0' },
         },
@@ -336,8 +337,7 @@ describe('OpenAPI generation', () => {
   })
 
   it('Content-Typeを有限集合へ解決できない場合はOpenAPI生成を失敗させる', () => {
-    const schema =
-      z.string() as unknown as typeof z.string extends () => infer T ? T : never
+    const schema = z.string()
     const contract = http.contract({
       create: {
         method: 'POST',

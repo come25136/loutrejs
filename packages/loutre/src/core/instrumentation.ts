@@ -1,3 +1,5 @@
+import type { RuntimeExecutionId } from './identity.js'
+import type { ModelNodeId, ProviderNodeId } from './model/identity.js'
 import type { Scope } from './provider.js'
 
 export interface RuntimeInvocationRegistration {
@@ -6,22 +8,22 @@ export interface RuntimeInvocationRegistration {
 }
 
 export interface RuntimeExecutionMetadata {
-  readonly executionId: string
+  readonly executionId: RuntimeExecutionId
   readonly executionKind: string
   readonly name?: string
-  readonly graphNodeId?: string
+  readonly graphNodeId?: ModelNodeId
 }
 
 export interface RuntimeOperationMetadata {
   readonly kind: string
   readonly name: string
-  readonly graphNodeId?: string
+  readonly graphNodeId?: ModelNodeId
 }
 
 export interface RuntimeProviderMetadata {
-  readonly providerId: string
+  readonly providerId: ProviderNodeId
   readonly name: string
-  readonly graphNodeId: string
+  readonly graphNodeId: ProviderNodeId
   readonly scope: Scope
   readonly providerKind:
     | 'value'

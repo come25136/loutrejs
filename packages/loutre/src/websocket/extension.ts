@@ -1,3 +1,23 @@
+import { dependencyConsumerId } from '../core/identity.js'
+import { milliseconds, type DurationMs } from '../core/units.js'
+import {
+  createWebSocketSessionId,
+  webSocketProcedureName,
+  negotiatedSubprotocol,
+  observedCloseCode,
+  type WebSocketSessionId,
+  type WebSocketProcedureName,
+  type NegotiatedSubprotocol,
+  type ObservedCloseCode,
+} from './identity.js'
+import {
+  requestPathname,
+  type HttpPathTemplate,
+  type HttpNormalizedPath,
+} from '../http/identity.js'
+import type { ParsedHttpPath } from '../http/path.js'
+import type { Descriptor } from '../internal/brand.js'
+import type { ExecutionNodeId } from '../core/model/identity.js'
 import {
   collectInjectedDependencies,
   defineExecution,
@@ -59,8 +79,8 @@ export interface WebSocketUpgradeOptions {
 }
 
 export interface WebSocketSession {
-  readonly id: string
-  readonly protocol: string
+  readonly id: WebSocketSessionId
+  readonly protocol: NegotiatedSubprotocol
 }
 
 export interface WebSocketServerDriver {
@@ -114,7 +134,7 @@ export type WebSocketRouteTree = Readonly<
 
 export interface WebSocketContract<
   TRoutes extends WebSocketRouteTree = WebSocketRouteTree,
-> {
+> extends Descriptor<'websocket-contract'> {
   readonly kind: 'websocket-contract'
   readonly routes: TRoutes
 }
@@ -213,10 +233,10 @@ export interface WebSocketImplementationDefinition<
 }
 
 interface CompiledWebSocketRoute {
-  readonly name: string
-  readonly path: string
-  readonly normalizedPath: string
-  readonly segments: readonly HttpPathSegment[]
+  readonly name: WebSocketProcedureName
+  readonly path: HttpPathTemplate
+  readonly normalizedPath: HttpNormalizedPath
+  readonly segments: ParsedHttpPath
   readonly handshake?: WebSocketHandshakeDefinition
   readonly messages?: WebSocketMessageCodec
 }
@@ -233,7 +253,7 @@ interface ActiveSession {
 }
 
 interface RuntimeWebSocketRoute {
-  readonly executionId: string
+  readonly executionId: ExecutionNodeId
   readonly route: CompiledWebSocketRoute
 }
 
@@ -267,7 +287,9 @@ export const websocketExtension = defineExecutionExtension<
       dependencies: collectInjectedDependencies(
         {
           kind: 'execution',
-          id: `websocket:${definition.name || `${context.moduleId}.websocket.${context.definitionIndex}`}`,
+          id: dependencyConsumerId(
+            `websocket:${definition.name || `${context.moduleId}.websocket.${context.definitionIndex}`}`,
+          ),
           name:
             definition.name ||
             `${context.moduleId}.websocket.${context.definitionIndex}`,
@@ -282,7 +304,7 @@ export const websocketExtension = defineExecutionExtension<
     }
   },
   validate({ executions }) {
-    const paths = new Map<string, string>()
+    const paths = new Map<HttpNormalizedPath, ExecutionNodeId>()
     return executions.flatMap((execution) =>
       execution.compiled.routes.flatMap((route) => {
         const owner = paths.get(route.normalizedPath)
@@ -347,7 +369,10 @@ type WebSocketV2Tree<TTree extends WebSocketRouteTree> = {
 export function defineWebSocketContract<
   const TRoutes extends WebSocketRouteTree,
 >(routes: TRoutes & WebSocketV2Tree<TRoutes>): WebSocketContract<TRoutes> {
-  return Object.freeze({ kind: 'websocket-contract', routes })
+  return Object.freeze({
+    kind: 'websocket-contract',
+    routes,
+  }) as WebSocketContract<TRoutes>
 }
 
 export function defineWebSocketImplementation<
@@ -422,7 +447,7 @@ function compileRouteTree(
   tree: WebSocketRouteTree,
   parentPath = '',
   prefix = '',
-  routeNames = new Set<string>(),
+  routeNames = new Set<WebSocketProcedureName>(),
 ): readonly CompiledWebSocketRoute[] {
   return Object.entries(tree).flatMap(([name, node]) => {
     if ('request' in node || 'responses' in node)
@@ -441,14 +466,16 @@ function compileRouteTree(
     const path = joinPath(parentPath, node.path)
     const segments = parseHttpPath(path)
     assertExactPathParams(path, segments, node.handshake?.params)
-    const routeName = prefix ? `${prefix}.${name}` : name
+    const routeName = webSocketProcedureName(
+      prefix ? `${prefix}.${name}` : name,
+    )
     if (routeNames.has(routeName))
       throw new TypeError(`Duplicate nested WebSocket route name: ${routeName}`)
     routeNames.add(routeName)
     return [
       Object.freeze({
         name: routeName,
-        path,
+        path: path as HttpPathTemplate,
         normalizedPath: normalizeHttpPath(segments),
         segments,
         ...(node.handshake === undefined
@@ -533,7 +560,7 @@ function createWebSocketRuntime(
         {
           consumer: {
             kind: 'execution',
-            id: `websocket:${execution.id}`,
+            id: dependencyConsumerId(`websocket:${execution.id}`),
             name: execution.id,
           },
           resolve: (token, consumer) => resolve(token, { consumer }),
@@ -686,14 +713,17 @@ function findRoute(
   request: Request,
 ):
   | {
-      readonly executionId: string
+      readonly executionId: ExecutionNodeId
       readonly route: CompiledWebSocketRoute
       readonly params: Readonly<Record<string, string>>
     }
   | undefined {
   const url = new URL(request.url)
   for (const candidate of routes) {
-    const params = matchHttpPath(candidate.route.segments, url.pathname)
+    const params = matchHttpPath(
+      candidate.route.segments,
+      requestPathname(url.pathname),
+    )
     if (params) {
       return {
         executionId: candidate.executionId,
@@ -771,8 +801,8 @@ function createSession(
   runInExecution: (<T>(operation: () => T) => T) | undefined,
 ): { readonly active: ActiveSession; readonly completion: Promise<void> } {
   const session = Object.freeze({
-    id: `ws_${crypto.randomUUID()}`,
-    protocol: connection.protocol,
+    id: createWebSocketSessionId(),
+    protocol: negotiatedSubprotocol(connection.protocol),
   })
   lease.annotate?.({
     'websocket.session.id': session.id,
@@ -962,15 +992,17 @@ async function encodeMessage(
   }
 }
 
-function normalizeCloseInfo(info: WebSocketCloseInfo): WebSocketCloseInfo {
+function normalizeCloseInfo(
+  info: WebSocketCloseInfo,
+): WebSocketCloseInfo & { readonly code: ObservedCloseCode } {
   return {
-    code: Number.isInteger(info.code) ? info.code : 1006,
+    code: observedCloseCode(Number.isInteger(info.code) ? info.code : 1006),
     reason: info.reason ?? '',
     wasClean: info.wasClean === true,
   }
 }
 
-function webSocketGracefulShutdownBudget(timeoutMs: number): number {
-  if (timeoutMs <= 0) return 0
-  return Math.min(5_000, Math.max(0, Math.floor(timeoutMs * 0.8)))
+function webSocketGracefulShutdownBudget(timeoutMs: DurationMs): DurationMs {
+  if (timeoutMs <= 0) return milliseconds(0)
+  return milliseconds(Math.min(5_000, Math.max(0, Math.floor(timeoutMs * 0.8))))
 }

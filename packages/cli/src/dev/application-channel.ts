@@ -1,3 +1,10 @@
+import {
+  decodeRuntimeEvent,
+  parseRunId,
+  parseInspectorRequestId,
+  type RunId,
+  type InspectorRequestId,
+} from '@loutrejs/loutre/devtools'
 import type { IncomingMessage, Server } from 'node:http'
 import type { Duplex } from 'node:stream'
 import type {
@@ -36,26 +43,26 @@ export type DevtoolsApplicationCommand =
     }
 
 export interface ApplicationChannel {
-  command(runId: string, command: DevtoolsApplicationCommand): Promise<unknown>
+  command(runId: RunId, command: DevtoolsApplicationCommand): Promise<unknown>
   close(): Promise<void>
 }
 
 interface HelloMessage {
   readonly type: 'hello'
   readonly protocolVersion: number
-  readonly runId: string
+  readonly runId: RunId
   readonly application?: DevtoolsApplicationInfo
 }
 
 interface EventBatchMessage {
   readonly type: 'event.batch'
-  readonly runId: string
+  readonly runId: RunId
   readonly events: readonly RuntimeEvent[]
 }
 
 interface CommandResultMessage {
   readonly type: 'command.result'
-  readonly requestId: string
+  readonly requestId: InspectorRequestId
   readonly ok: boolean
   readonly result?: unknown
   readonly error?: unknown
@@ -69,7 +76,7 @@ interface PendingCommand {
 
 interface ConnectedApplication {
   readonly websocket: WebSocket
-  readonly pending: Map<string, PendingCommand>
+  readonly pending: Map<InspectorRequestId, PendingCommand>
 }
 
 export function attachApplicationChannel(
@@ -77,7 +84,7 @@ export function attachApplicationChannel(
   options: ApplicationChannelOptions,
 ): ApplicationChannel {
   const websocketServer = new WebSocketServer({ noServer: true })
-  const applications = new Map<string, ConnectedApplication>()
+  const applications = new Map<RunId, ConnectedApplication>()
 
   const onUpgrade = (
     request: IncomingMessage,
@@ -157,11 +164,11 @@ export function attachApplicationChannel(
 function attachApplication(
   websocket: WebSocket,
   options: ApplicationChannelOptions,
-  applications: Map<string, ConnectedApplication>,
+  applications: Map<RunId, ConnectedApplication>,
 ): void {
-  let runId: string | undefined
+  let runId: RunId | undefined
   let helloReceived = false
-  const pending = new Map<string, PendingCommand>()
+  const pending = new Map<InspectorRequestId, PendingCommand>()
   const helloTimeout = setTimeout(
     () => websocket.close(1008, 'hello timeout'),
     5_000,
@@ -258,13 +265,22 @@ function parseMessage(value: string): unknown {
   }
 }
 
+function isApplicationInfo(value: unknown): value is DevtoolsApplicationInfo {
+  return (
+    isRecord(value) &&
+    (value.name === undefined || typeof value.name === 'string') &&
+    (value.runtime === undefined || typeof value.runtime === 'string') &&
+    (value.pid === undefined || typeof value.pid === 'number')
+  )
+}
+
 function isHelloMessage(value: unknown): value is HelloMessage {
   return (
     isRecord(value) &&
     value.type === 'hello' &&
     typeof value.protocolVersion === 'number' &&
-    typeof value.runId === 'string' &&
-    (value.application === undefined || isRecord(value.application))
+    parseRunId(value.runId) !== undefined &&
+    (value.application === undefined || isApplicationInfo(value.application))
   )
 }
 
@@ -272,7 +288,7 @@ function isEventBatchMessage(value: unknown): value is EventBatchMessage {
   return (
     isRecord(value) &&
     value.type === 'event.batch' &&
-    typeof value.runId === 'string' &&
+    parseRunId(value.runId) !== undefined &&
     Array.isArray(value.events) &&
     value.events.every(isRuntimeEvent)
   )
@@ -282,27 +298,13 @@ function isCommandResultMessage(value: unknown): value is CommandResultMessage {
   return (
     isRecord(value) &&
     value.type === 'command.result' &&
-    typeof value.requestId === 'string' &&
+    parseInspectorRequestId(value.requestId) !== undefined &&
     typeof value.ok === 'boolean'
   )
 }
 
 function isRuntimeEvent(value: unknown): value is RuntimeEvent {
-  return (
-    isRecord(value) &&
-    typeof value.type === 'string' &&
-    [
-      'execution.started',
-      'execution.ended',
-      'span.started',
-      'span.ended',
-    ].includes(value.type) &&
-    typeof value.runId === 'string' &&
-    typeof value.seq === 'number' &&
-    typeof value.timestamp === 'number' &&
-    typeof value.traceId === 'string' &&
-    typeof value.spanId === 'string'
-  )
+  return decodeRuntimeEvent(value) !== undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

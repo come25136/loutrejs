@@ -1,3 +1,4 @@
+import * as fixture from './helpers/identities.js'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
@@ -107,8 +108,8 @@ describe('HTTP Execution Extension public API surface', () => {
     })
 
     await transport({
-      method: 'POST',
-      path: '/json',
+      method: fixture.normalizeHttpMethod('POST'),
+      path: fixture.requestPathname('/json'),
       headers: { 'content-type': 'application/json' },
       body: { name: 'loutre' },
     })

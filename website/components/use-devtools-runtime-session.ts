@@ -1,5 +1,6 @@
 'use client'
 
+import type { TraceId, SpanId } from '../lib/devtools-identity'
 import { useEffect, useMemo, useState } from 'react'
 import { devtoolsErrorMessage } from '../lib/devtools-error'
 import {
@@ -17,23 +18,23 @@ import { buildTimeline, type TimelineEntry } from '../lib/devtools-timeline'
 interface RuntimeSessionOptions {
   readonly baseUrl: string
   readonly connected: boolean
-  readonly requestedTraceId?: string
-  readonly requestedSpanId?: string
-  readonly onNavigateRuntime: (traceId: string, spanId?: string) => void
+  readonly requestedTraceId?: TraceId
+  readonly requestedSpanId?: SpanId
+  readonly onNavigateRuntime: (traceId: TraceId, spanId?: SpanId) => void
 }
 
 export interface DevtoolsRuntimeSession {
   readonly traces: readonly DevtoolsTraceSummary[]
   readonly selectedTrace?: DevtoolsTraceSummary
   readonly timeline: ReturnType<typeof buildTimeline>
-  readonly selectedSpanId?: string
+  readonly selectedSpanId?: SpanId
   readonly selectedTimeline?: TimelineEntry
   readonly hasConnectedRuntime: boolean
   readonly runtimeError?: string
   readonly paused: boolean
   readonly clearingHistory: boolean
-  readonly selectTrace: (traceId: string) => void
-  readonly selectSpan: (spanId: string) => void
+  readonly selectTrace: (traceId: TraceId) => void
+  readonly selectSpan: (spanId: SpanId) => void
   readonly togglePaused: () => void
   readonly clearHistory: () => Promise<void>
 }
@@ -47,10 +48,10 @@ export function useDevtoolsRuntimeSession({
 }: RuntimeSessionOptions): DevtoolsRuntimeSession {
   const [traces, setTraces] = useState<readonly DevtoolsTraceSummary[]>([])
   const [runs, setRuns] = useState<readonly DevtoolsRun[]>([])
-  const [selectedTraceId, setSelectedTraceId] = useState<string>()
+  const [selectedTraceId, setSelectedTraceId] = useState<TraceId>()
   const [events, setEvents] = useState<readonly RuntimeEvent[]>([])
-  const [eventsTraceId, setEventsTraceId] = useState<string>()
-  const [selectedSpanId, setSelectedSpanId] = useState<string>()
+  const [eventsTraceId, setEventsTraceId] = useState<TraceId>()
+  const [selectedSpanId, setSelectedSpanId] = useState<SpanId>()
   const [runtimeError, setRuntimeError] = useState<string>()
   const [paused, setPaused] = useState(false)
   const [clearingHistory, setClearingHistory] = useState(false)
@@ -153,14 +154,14 @@ export function useDevtoolsRuntimeSession({
     (entry) => entry.start.spanId === selectedSpanId,
   )
 
-  const selectTrace = (traceId: string) => {
+  const selectTrace = (traceId: TraceId) => {
     setSelectedTraceId(traceId)
     setSelectedSpanId(undefined)
     setEventsTraceId(undefined)
     onNavigateRuntime(traceId)
   }
 
-  const selectSpan = (spanId: string) => {
+  const selectSpan = (spanId: SpanId) => {
     setSelectedSpanId(spanId)
     if (selectedTraceId) onNavigateRuntime(selectedTraceId, spanId)
   }

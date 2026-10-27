@@ -1,4 +1,11 @@
 import {
+  fieldCoordinate,
+  typeName,
+  type GraphQLTypeName,
+  batchSize,
+  type GraphQLFieldCoordinate,
+} from './identity.js'
+import {
   buildASTSchema,
   isObjectType,
   isInterfaceType,
@@ -31,7 +38,7 @@ export function bindManifest<Context extends object = object>(input: {
   readonly resolvers: object
 }): GraphQLManifest<Context> {
   const schema = buildASTSchema(input.schemaDocument)
-  const metadata = new Map<string, DataDefinition>()
+  const metadata = new Map<GraphQLFieldCoordinate, DataDefinition>()
   if (!input.resolvers || typeof input.resolvers !== 'object')
     throw new TypeError('Resolver Moduleのresolvers exportが必要です。')
   for (const [name, binding] of Object.entries(input.resolvers)) {
@@ -108,7 +115,12 @@ export function bindManifest<Context extends object = object>(input: {
           throw new TypeError(
             'Subscriptionのroot Fieldは標準subscribe / resolve Resolverを使用してください。',
           )
-        const options = resolver as DataDefinition['options']
+        const options = resolver as import('./data-types.js').FieldOptions<
+          any,
+          any,
+          any,
+          any
+        >
         if (typeof options.load !== 'function')
           throw new TypeError(`${name}.${fieldName}.loadは関数にしてください。`)
         if (
@@ -132,10 +144,14 @@ export function bindManifest<Context extends object = object>(input: {
             throw new TypeError(
               `${name}.${fieldName}.${key}は関数にしてください。`,
             )
+        const { maxBatchSize, ...snapshotOptions } = options
         const definition: DataDefinition = Object.freeze({
-          identity: `${name}.${fieldName}`,
+          identity: fieldCoordinate(name, fieldName),
           options: Object.freeze({
-            ...options,
+            ...snapshotOptions,
+            ...(maxBatchSize === undefined
+              ? {}
+              : { maxBatchSize: batchSize(maxBatchSize) }),
             requires: Object.freeze([...(options.requires ?? [])]),
           }),
         })
@@ -182,17 +198,19 @@ export function bindManifest<Context extends object = object>(input: {
         const target = type.getFields()[name]!
         if (!target.resolve && field.resolve) {
           target.resolve = field.resolve
-          const definition = metadata.get(`${contract.name}.${name}`)
-          if (definition) metadata.set(`${type.name}.${name}`, definition)
+          const definition = metadata.get(fieldCoordinate(contract.name, name))
+          if (definition)
+            metadata.set(fieldCoordinate(type.name, name), definition)
         }
       }
     }
   }
-  const visited = new Set<string>()
+  const visited = new Set<GraphQLTypeName>()
   const defaults = (field: GraphQLArgument | GraphQLInputField) => {
     const type = getNamedType(field.type)
-    if (isInputObjectType(type) && !visited.has(type.name)) {
-      visited.add(type.name)
+    const name = typeName(type.name)
+    if (isInputObjectType(type) && !visited.has(name)) {
+      visited.add(name)
       for (const child of Object.values(type.getFields())) defaults(child)
     }
     if (!field.astNode?.defaultValue) return

@@ -1,5 +1,10 @@
+import {
+  absoluteFsPath,
+  type AbsoluteFsPath,
+  type GeneratedPackageName,
+} from './identity.js'
 import { readdir } from 'node:fs/promises'
-import { basename, resolve } from 'node:path'
+import { basename } from 'node:path'
 import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
 import { task } from '@loutrejs/loutre/tasks'
 import type { PackageManager, ProjectTarget } from './options.js'
@@ -13,13 +18,13 @@ export interface CreateProjectInput {
 }
 
 export interface CreateProjectResult {
-  readonly packageName: string
-  readonly targetDirectory: string
+  readonly packageName: GeneratedPackageName
+  readonly targetDirectory: AbsoluteFsPath
 }
 
 export class ProjectScaffolder {
   async create(input: CreateProjectInput): Promise<CreateProjectResult> {
-    const targetDirectory = resolve(input.cwd, input.directory)
+    const targetDirectory = absoluteFsPath(input.cwd, input.directory)
     const packageName = packageNameFor(targetDirectory)
     await assertTargetIsEmpty(targetDirectory)
 
@@ -49,7 +54,9 @@ const CreateLoutreModule = defineModule(() => ({
 
 export default defineApplication({ modules: [CreateLoutreModule()] })
 
-async function assertTargetIsEmpty(targetDirectory: string): Promise<void> {
+async function assertTargetIsEmpty(
+  targetDirectory: AbsoluteFsPath,
+): Promise<void> {
   try {
     const entries = await readdir(targetDirectory)
     if (entries.length > 0) {
@@ -69,7 +76,7 @@ function isMissingDirectory(error: unknown): boolean {
   )
 }
 
-function packageNameFor(targetDirectory: string): string {
+function packageNameFor(targetDirectory: AbsoluteFsPath): GeneratedPackageName {
   const normalized = basename(targetDirectory)
     .trim()
     .toLowerCase()
@@ -91,5 +98,5 @@ function packageNameFor(targetDirectory: string): string {
       `Could not derive an npm package name from: ${targetDirectory}`,
     )
   }
-  return name
+  return name as GeneratedPackageName
 }

@@ -1,3 +1,4 @@
+import { runtimeSupportFeatures } from '../runtime/capability.js'
 import { createCloudflareWebSocketDriver } from './websocket-native.js'
 import {
   serverTransportBindings,
@@ -31,7 +32,7 @@ export interface CloudflareWorkersBinding {
 export const cloudflareWorkersRuntime = {
   runtime: 'cloudflare-workers',
   compatibilityDateMinimum: '2026-08-04',
-  capabilities: new Set([
+  capabilities: runtimeSupportFeatures([
     'http.server',
     'websocket.server',
     'http.request.streaming',

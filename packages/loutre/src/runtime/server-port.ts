@@ -1,5 +1,13 @@
-export function initialServerPort(requestedPort: number | undefined): number {
-  return requestedPort ?? 3000
+import type { Brand } from '../internal/brand.js'
+
+export type RequestedPort = Brand<number, 'port.requested'>
+export type BoundPort = Brand<number, 'port.bound'>
+export const boundPort = (value: number): BoundPort => value as BoundPort
+
+export function initialServerPort(
+  requestedPort: number | undefined,
+): RequestedPort {
+  return (requestedPort ?? 3000) as RequestedPort
 }
 
 export function canRetryOnNextPort(error: unknown, port: number): boolean {

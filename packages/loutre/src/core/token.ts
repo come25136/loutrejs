@@ -1,12 +1,14 @@
+import type { Descriptor } from '../internal/brand.js'
+import type { TokenKey } from './identity.js'
 export interface TokenOptions {
   readonly description?: string
 }
 
-export interface Token<T> {
+export interface Token<T> extends Descriptor<'token'> {
   readonly kind: 'token'
   readonly id: string
   readonly description?: string
-  readonly key: symbol
+  readonly key: TokenKey
   readonly '~type'?: T
 }
 
@@ -27,8 +29,8 @@ export function token<T>(id: string, options: TokenOptions = {}): Token<T> {
     ...(options.description === undefined
       ? {}
       : { description: options.description }),
-    key: Symbol(id),
-  })
+    key: Symbol(id) as TokenKey,
+  }) as Token<T>
 }
 
 export function tokenName(value: TokenLike): string {

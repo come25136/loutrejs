@@ -1,4 +1,19 @@
 import {
+  openApiOperationId,
+  openApiSchemaName,
+  jsonSchemaReference,
+  schemaComparisonKey,
+  type OpenApiOperationId,
+  type OpenApiSchemaName,
+  type JsonSchemaReference,
+  type SchemaComparisonKey,
+} from './openapi-identity.js'
+export type {
+  OpenApiOperationId,
+  OpenApiSchemaName,
+  JsonSchemaReference,
+} from './openapi-identity.js'
+import {
   supportsJsonSchema,
   assertValidApplicationModel,
   type ApplicationModel,
@@ -58,9 +73,9 @@ type OpenApiPathItem = Record<string, unknown>
 type Direction = 'input' | 'output'
 
 interface SchemaMaterialization {
-  readonly name: string
+  readonly name: OpenApiSchemaName
   readonly schema: JsonSchema
-  readonly reference: { readonly $ref: string }
+  readonly reference: { readonly $ref: JsonSchemaReference }
 }
 
 type OpenApiResponseDefinition = HttpExecutionResponseDefinition
@@ -92,7 +107,7 @@ export function generateOpenApi(
 ): OpenApiDocument {
   const registry = new SchemaRegistry()
   const paths: Record<string, OpenApiPathItem> = {}
-  const operationIds = new Set<string>()
+  const operationIds = new Set<OpenApiOperationId>()
 
   for (const target of httpOperationTargets(source)) {
     attachOperation(
@@ -160,7 +175,7 @@ function httpOperationTargets(source: OpenApiSource): HttpOperationTarget[] {
 function createOperation(
   target: HttpOperationTarget,
   registry: SchemaRegistry,
-  operationIds: Set<string>,
+  operationIds: Set<OpenApiOperationId>,
   resolveOperationId: GenerateOpenApiOptions['operationId'],
 ): OpenApiObject {
   const definition = target.definition
@@ -176,13 +191,13 @@ function createOperation(
         `operationId must not be empty for ${describeTarget(target)}`,
       )
     }
-    if (operationIds.has(operationId)) {
+    if (operationIds.has(openApiOperationId(operationId))) {
       throw openApiError(
         'LUTRE_OPENAPI_OPERATION_ID_001',
         `Duplicate operationId: ${operationId}`,
       )
     }
-    operationIds.add(operationId)
+    operationIds.add(openApiOperationId(operationId))
   }
 
   const parameters: OpenApiObject[] = []
@@ -636,13 +651,13 @@ class SchemaRegistry {
     StandardSchemaV1,
     Partial<Record<Direction, SchemaMaterialization>>
   >()
-  private readonly schemas: Record<string, JsonSchema> = {}
+  private readonly schemas: Record<OpenApiSchemaName, JsonSchema> = {}
 
   reference(
     schema: StandardSchemaV1,
     direction: Direction,
     preferredName: string,
-  ): { readonly $ref: string } {
+  ): { readonly $ref: JsonSchemaReference } {
     return this.materialize(schema, direction, preferredName).reference
   }
 
@@ -676,7 +691,11 @@ class SchemaRegistry {
     const materialized: SchemaMaterialization = {
       name,
       schema: rebased,
-      reference: { $ref: `#/components/schemas/${escapeJsonPointer(name)}` },
+      reference: {
+        $ref: jsonSchemaReference(
+          `#/components/schemas/${escapeJsonPointer(name)}`,
+        ),
+      },
     }
     const directions = this.bySchema.get(schema) ?? {}
     directions[direction] = materialized
@@ -703,11 +722,11 @@ function sanitizeComponentName(value: string): string {
 function uniqueComponentName(
   preferred: string,
   schemas: Readonly<Record<string, JsonSchema>>,
-): string {
-  if (!(preferred in schemas)) return preferred
+): OpenApiSchemaName {
+  if (!(preferred in schemas)) return openApiSchemaName(preferred)
   let index = 2
   while (`${preferred}_${index}` in schemas) index += 1
-  return `${preferred}_${index}`
+  return openApiSchemaName(`${preferred}_${index}`)
 }
 
 function escapeJsonPointer(value: string): string {
@@ -719,10 +738,10 @@ function describeTarget(target: HttpOperationTarget): string {
 }
 
 function dedupeJsonSchemas(schemas: readonly JsonSchema[]): JsonSchema[] {
-  const seen = new Set<string>()
+  const seen = new Set<SchemaComparisonKey>()
   const result: JsonSchema[] = []
   for (const schema of schemas) {
-    const serialized = JSON.stringify(schema)
+    const serialized = schemaComparisonKey(schema)
     if (seen.has(serialized)) continue
     seen.add(serialized)
     result.push(schema)

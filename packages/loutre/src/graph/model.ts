@@ -1,3 +1,5 @@
+import type { CapabilityId, ExtensionName } from '../core/identity.js'
+import type { ModuleId, ExecutionNodeId } from '../core/model/identity.js'
 import {
   diagnostic,
   tokenName,
@@ -18,15 +20,13 @@ export type JsonValue =
   | { readonly [key: string]: JsonValue }
   | readonly JsonValue[]
 
-export interface GraphNodeIR {
-  readonly id: string
-  readonly kind: ApplicationModelNode['kind']
+interface GraphNodeBase {
   readonly name?: string
-  readonly module?: string
+  readonly module?: ModuleId | 'application'
   readonly executionKind?: string
-  readonly capabilities?: readonly string[]
+  readonly capabilities?: readonly CapabilityId[]
   readonly extension?: {
-    readonly name: string
+    readonly name: ExtensionName
     readonly hostNamespace?: string
     readonly metadata?: JsonValue
   }
@@ -34,26 +34,29 @@ export interface GraphNodeIR {
   readonly source?: SourceLocation
 }
 
-export interface GraphEdgeIR {
-  readonly from: string
-  readonly to: string
-  readonly kind: ApplicationModelEdge['kind']
-}
+export type GraphNodeIR = {
+  [Kind in ApplicationModelNode['kind']]: GraphNodeBase & {
+    readonly kind: Kind
+    readonly id: Extract<ApplicationModelNode, { readonly kind: Kind }>['id']
+  }
+}[ApplicationModelNode['kind']]
+
+export type GraphEdgeIR = ApplicationModelEdge
 
 export interface ApplicationModelGraphIR {
   readonly nodes: readonly GraphNodeIR[]
   readonly edges: readonly GraphEdgeIR[]
   readonly diagnostics: readonly Diagnostic[]
-  readonly modules: readonly GraphNodeIR[]
-  readonly providers: readonly GraphNodeIR[]
-  readonly executions: readonly GraphNodeIR[]
+  readonly modules: readonly Extract<GraphNodeIR, { kind: 'module' }>[]
+  readonly providers: readonly Extract<GraphNodeIR, { kind: 'provider' }>[]
+  readonly executions: readonly Extract<GraphNodeIR, { kind: 'execution' }>[]
 }
 
 export function projectApplicationModel(
   model: ApplicationModel,
 ): ApplicationModelGraphIR {
   const diagnostics = [...model.diagnostics]
-  const projectedExecutions = new Map<string, GraphNodeIR>()
+  const projectedExecutions = new Map<ExecutionNodeId, GraphNodeIR>()
   for (const group of model.extensions) {
     for (const execution of projectExtensionGroup(group, diagnostics)) {
       projectedExecutions.set(execution.id, execution)
@@ -121,7 +124,7 @@ function projectCoreNode(
 function projectExtensionGroup<TExtension extends AnyExecutionExtension>(
   group: ApplicationModelExtension<TExtension>,
   diagnostics: Diagnostic[],
-): readonly GraphNodeIR[] {
+): readonly Extract<GraphNodeIR, { kind: 'execution' }>[] {
   return group.executions.map((execution) => {
     let metadata: JsonValue | undefined
     const project = group.extension.projectGraph
@@ -164,7 +167,9 @@ function projectExtensionGroup<TExtension extends AnyExecutionExtension>(
   })
 }
 
-function projectExecutionBase(execution: ExecutionModelNode): GraphNodeIR {
+function projectExecutionBase(
+  execution: ExecutionModelNode,
+): Extract<GraphNodeIR, { kind: 'execution' }> {
   return {
     id: execution.id,
     kind: execution.kind,

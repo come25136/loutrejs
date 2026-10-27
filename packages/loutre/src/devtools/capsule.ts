@@ -1,3 +1,23 @@
+type CapsuleLimit = number & {
+  readonly '~loutre.devtools-quantity': 'capsule-limit'
+}
+function capsuleLimit(value: number): CapsuleLimit {
+  if (!Number.isInteger(value) || value < 1)
+    throw new TypeError('maxCapsules must be a positive integer.')
+  return value as CapsuleLimit
+}
+import { createCapsuleId, createCaptureHandleId } from './identity-internal.js'
+import { milliseconds, epochNow, expiresAt } from '../core/units.js'
+import type {
+  RunId,
+  TraceId,
+  SpanId,
+  CapsuleId,
+  CaptureHandleId,
+} from './identity.js'
+import type { ModelNodeId } from '../core/model/identity.js'
+import type { RuntimeExecutionId } from '../core/identity.js'
+import type { EpochMs, DurationMs } from '../core/units.js'
 import type { RuntimeExecutionMetadata } from '../core/instrumentation.js'
 import type { DevtoolsModuleOptions } from './module.js'
 import { serializeDevtoolsError } from './observer.js'
@@ -19,21 +39,21 @@ export interface ReplayRegistration {
 
 export type CapturedValue =
   | { readonly mode: 'snapshot'; readonly value: unknown }
-  | { readonly mode: 'reference'; readonly handleId: string }
+  | { readonly mode: 'reference'; readonly handleId: CaptureHandleId }
   | { readonly mode: 'unavailable'; readonly reason: string }
 
 export interface ExecutionReplayCapsulePreview {
-  readonly id: string
+  readonly id: CapsuleId
   readonly kind: 'execution'
-  readonly runId: string
-  readonly traceId: string
-  readonly spanId: string
-  readonly createdAt: number
-  readonly expiresAt: number
+  readonly runId: RunId
+  readonly traceId: TraceId
+  readonly spanId: SpanId
+  readonly createdAt: EpochMs
+  readonly expiresAt: EpochMs
   readonly execution: {
-    readonly executionId: string
+    readonly executionId: RuntimeExecutionId
     readonly executionKind: string
-    readonly graphNodeId?: string
+    readonly graphNodeId?: ModelNodeId
     readonly name: string
   }
   readonly input: DevtoolsValuePreview
@@ -58,37 +78,34 @@ const defaultCapsuleTtlMs = 5 * 60_000
 const defaultMaxCapsules = 1_000
 
 export class ReplayCapsuleStore {
-  readonly #runId: string
-  readonly #ttlMs: number
-  readonly #maxCapsules: number
+  readonly #runId: RunId
+  readonly #ttlMs: DurationMs
+  readonly #maxCapsules: CapsuleLimit
   readonly #capture: DevtoolsModuleOptions['capture']
   readonly #redact: readonly string[]
-  readonly #capsules = new Map<string, StoredExecutionReplayCapsule>()
-  readonly #references = new Map<string, unknown>()
+  readonly #capsules = new Map<CapsuleId, StoredExecutionReplayCapsule>()
+  readonly #references = new Map<CaptureHandleId, unknown>()
 
-  constructor(runId: string, options: ReplayCapsuleStoreOptions = {}) {
+  constructor(runId: RunId, options: ReplayCapsuleStoreOptions = {}) {
     this.#runId = runId
-    this.#ttlMs = options.ttlMs ?? defaultCapsuleTtlMs
-    this.#maxCapsules = options.maxCapsules ?? defaultMaxCapsules
+    this.#ttlMs = milliseconds(options.ttlMs ?? defaultCapsuleTtlMs)
+    this.#maxCapsules = capsuleLimit(options.maxCapsules ?? defaultMaxCapsules)
     this.#capture = options.capture
     this.#redact = options.redact ?? []
     if (!Number.isFinite(this.#ttlMs) || this.#ttlMs <= 0) {
       throw new TypeError('capsuleTtlMs must be a positive finite number.')
     }
-    if (!Number.isInteger(this.#maxCapsules) || this.#maxCapsules < 1) {
-      throw new TypeError('maxCapsules must be a positive integer.')
-    }
   }
 
   createExecution(
-    traceId: string,
-    spanId: string,
+    traceId: TraceId,
+    spanId: SpanId,
     observation: RuntimeExecutionMetadata,
     registration: ReplayRegistration,
   ): ExecutionReplayCapsulePreview {
     this.#purgeExpired()
-    const id = `capsule_${crypto.randomUUID()}`
-    const createdAt = Date.now()
+    const id = createCapsuleId()
+    const createdAt = epochNow()
     const captured = this.#captureValue(registration.input)
     const preview: ExecutionReplayCapsulePreview = {
       id,
@@ -97,7 +114,7 @@ export class ReplayCapsuleStore {
       traceId,
       spanId,
       createdAt,
-      expiresAt: createdAt + this.#ttlMs,
+      expiresAt: expiresAt(createdAt, this.#ttlMs),
       execution: {
         executionId: observation.executionId,
         executionKind: observation.executionKind,
@@ -120,14 +137,14 @@ export class ReplayCapsuleStore {
     }
     this.#capsules.set(id, { preview, captured, replay: registration.replay })
     while (this.#capsules.size > this.#maxCapsules) {
-      const oldest = this.#capsules.keys().next().value as string | undefined
+      const oldest = this.#capsules.keys().next().value
       if (!oldest) break
       this.#delete(oldest)
     }
     return preview
   }
 
-  preview(capsuleId: string): ExecutionReplayCapsulePreview | undefined {
+  preview(capsuleId: CapsuleId): ExecutionReplayCapsulePreview | undefined {
     this.#purgeExpired()
     return this.#capsules.get(capsuleId)?.preview
   }
@@ -193,7 +210,7 @@ export class ReplayCapsuleStore {
     }
   }
 
-  discard(capsuleId: string): void {
+  discard(capsuleId: CapsuleId): void {
     this.#delete(capsuleId)
   }
 
@@ -211,7 +228,7 @@ export class ReplayCapsuleStore {
       // cloneできない値を失うより、同一process内だけで有効な参照として保持する。
     }
     if (value !== undefined) {
-      const handleId = `ref_${crypto.randomUUID()}`
+      const handleId = createCaptureHandleId()
       this.#references.set(handleId, value)
       return { mode: 'reference', handleId }
     }
@@ -236,14 +253,14 @@ export class ReplayCapsuleStore {
   }
 
   #purgeExpired(): void {
-    const now = Date.now()
+    const now = epochNow()
     for (const [id, capsule] of this.#capsules) {
       if (capsule.preview.expiresAt > now) continue
       this.#delete(id)
     }
   }
 
-  #delete(id: string): void {
+  #delete(id: CapsuleId): void {
     const capsule = this.#capsules.get(id)
     if (!capsule) return
     if (capsule.captured.mode === 'reference') {

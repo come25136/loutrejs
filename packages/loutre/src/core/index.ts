@@ -23,6 +23,7 @@ export type {
   AnyExecutionExtension,
   ExecutionCompileContext,
   ExecutionContribution,
+  ModelExecutionContribution,
   ExecutionRuntimeBinding,
   ExecutionDefinition,
   ExecutionDeclaration,
@@ -166,3 +167,21 @@ export type {
 } from './token.js'
 export { type } from './type.js'
 export type { Type, TypeOf } from './type.js'
+
+export type * from './model/identity.js'
+export * from './identity.js'
+export * from './units.js'
+
+export { parseModelNodeId, parseProviderNodeId } from './model/identity.js'
+
+export {
+  sourceFileReference,
+  sourceLine,
+  sourceColumn,
+} from './source-location.js'
+export type {
+  SourceLocationInput,
+  SourceFileReference,
+  SourceLine,
+  SourceColumn,
+} from './source-location.js'

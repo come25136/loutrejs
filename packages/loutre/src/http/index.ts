@@ -83,3 +83,8 @@ export {
 export type { HttpPathSegment, PathParamNames } from './path.js'
 
 export type { HttpRequestHeadDefinition } from './request-head.js'
+
+export * from './identity.js'
+export type { ParsedHttpPath } from './path.js'
+
+export type { BearerCredential } from './auth.js'

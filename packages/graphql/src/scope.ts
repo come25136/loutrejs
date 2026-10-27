@@ -1,3 +1,13 @@
+import {
+  fieldCoordinate,
+  batchKey,
+  opaqueBatchKey,
+  dataScopeKey,
+  type ArgumentsKey,
+  type SelectionKey,
+  type BatchKey,
+  type DataScopeKey,
+} from './identity.js'
 import { registerExecutor, type DataDefinition } from './data-internal.js'
 import type { FieldSelection } from './data-types.js'
 import type { BoundManifest } from './manifest-internal.js'
@@ -35,7 +45,7 @@ interface Batch {
 }
 
 class Scope {
-  readonly #batches = new Map<DataDefinition, Map<string, Batch>>()
+  readonly #batches = new Map<DataDefinition, Map<BatchKey, Batch>>()
   readonly #pending = new Set<Request>()
   readonly #signal: AbortSignal
   readonly #context: object
@@ -64,14 +74,14 @@ class Scope {
     parent: unknown,
     args: unknown,
     selection: FieldSelection,
-    argumentsKey: string | undefined,
-    selectionIdentity: string | undefined,
+    argumentsKey: ArgumentsKey | undefined,
+    selectionIdentity: SelectionKey | undefined,
   ) {
     this.#signal.throwIfAborted()
     const key =
       argumentsKey === undefined || selectionIdentity === undefined
-        ? `opaque:${this.#opaque++}`
-        : `${argumentsKey}:${selectionIdentity}`
+        ? opaqueBatchKey(this.#opaque++)
+        : batchKey(argumentsKey, selectionIdentity)
     let groups = this.#batches.get(definition)
     if (!groups) {
       groups = new Map()
@@ -191,13 +201,14 @@ export function executionView(
   )
   const controller = new AbortController()
   const scopedSignal = AbortSignal.any([signal, controller.signal])
-  const scopes = new Map<string, Scope>()
+  const scopes = new Map<DataScopeKey, Scope>()
   registerExecutor(
     view,
     async (definition, parent, args, activeContext, info) => {
       if (
-        bound.metadata.get(`${info.parentType.name}.${info.fieldName}`) !==
-        definition
+        bound.metadata.get(
+          fieldCoordinate(info.parentType.name, info.fieldName),
+        ) !== definition
       )
         throw new TypeError(
           'Batch設定がBinding後に欠落または置換されています。',
@@ -261,8 +272,11 @@ export function executionView(
       }
       let path = info.path
       while (path.prev) path = path.prev
-      const scopeKey =
-        info.operation.operation === 'mutation' ? String(path.key) : 'operation'
+      const scopeKey = dataScopeKey(
+        info.operation.operation === 'mutation'
+          ? String(path.key)
+          : 'operation',
+      )
       let scope = scopes.get(scopeKey)
       if (!scope) {
         scope = new Scope(view, scopedSignal, stats)

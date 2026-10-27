@@ -1,3 +1,10 @@
+import { parseProviderNodeId } from '@loutrejs/loutre'
+import {
+  parseTraceId,
+  parseCapsuleId,
+  parseInspectorRequestId,
+  type RunId,
+} from '@loutrejs/loutre/devtools'
 import type {
   ProviderMethodInvocationRequest,
   ProviderPlaygroundRequest,
@@ -108,7 +115,7 @@ export class DevtoolsControlPlane {
         return { cleared }
       })
       .with({ method: 'runtime.trace.get' }, (candidate) => {
-        const { traceId } = paramsRecord(candidate.params)
+        const traceId = parseTraceId(paramsRecord(candidate.params).traceId)
         if (typeof traceId !== 'string' || traceId.length === 0) {
           throw new Error('Trace id is required.')
         }
@@ -146,7 +153,7 @@ export class DevtoolsControlPlane {
   }
 
   #connectedRun(): {
-    readonly runId: string
+    readonly runId: RunId
     readonly eventStore: DevtoolsEventStore
     readonly command: ApplicationChannel['command']
   } {
@@ -158,20 +165,25 @@ export class DevtoolsControlPlane {
 
   async #replayCapsule(params: unknown): Promise<unknown> {
     const body = paramsRecord(params)
-    const capsuleId = body.capsuleId
+    if (
+      body.parentTraceId !== undefined &&
+      typeof body.parentTraceId !== 'string'
+    )
+      throw new Error('Parent trace id must be a string.')
+    const capsuleId = parseCapsuleId(body.capsuleId)
     if (typeof capsuleId !== 'string' || capsuleId.length === 0) {
       throw new Error('Capsule id is required.')
     }
     const runtime = this.#runtime()
     const capsule = runtime.eventStore.findCapsule(capsuleId)
     if (!capsule) throw new Error('Capsule not found.')
-    const requestId = `request_${crypto.randomUUID()}`
+    const requestId = parseInspectorRequestId(`request_${crypto.randomUUID()}`)!
     const commandRequest: ReplayCapsuleRequest = {
       requestId,
       capsuleId,
       ...('inputOverride' in body ? { inputOverride: body.inputOverride } : {}),
       ...(typeof body.parentTraceId === 'string'
-        ? { parentTraceId: body.parentTraceId }
+        ? { parentTraceId: parseTraceId(body.parentTraceId)! }
         : {}),
     }
     return runtime.command(capsule.runId, {
@@ -181,13 +193,13 @@ export class DevtoolsControlPlane {
   }
 
   async #providerPlayground(params: unknown): Promise<unknown> {
-    const { graphNodeId } = paramsRecord(params)
+    const graphNodeId = parseProviderNodeId(paramsRecord(params).graphNodeId)
     if (typeof graphNodeId !== 'string' || graphNodeId.length === 0) {
       throw new Error('Provider graph node id is required.')
     }
     const runtime = this.#connectedRun()
     const request: ProviderPlaygroundRequest = {
-      requestId: `request_${crypto.randomUUID()}`,
+      requestId: parseInspectorRequestId(`request_${crypto.randomUUID()}`)!,
       graphNodeId,
     }
     return runtime.command(runtime.runId, {
@@ -210,8 +222,8 @@ export class DevtoolsControlPlane {
     }
     const runtime = this.#connectedRun()
     const request: ProviderMethodInvocationRequest = {
-      requestId: `request_${crypto.randomUUID()}`,
-      graphNodeId: body.graphNodeId,
+      requestId: parseInspectorRequestId(`request_${crypto.randomUUID()}`)!,
+      graphNodeId: parseProviderNodeId(body.graphNodeId)!,
       method: body.method,
       args: body.args,
     }

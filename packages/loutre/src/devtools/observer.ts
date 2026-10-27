@@ -1,3 +1,13 @@
+import type {
+  RunId,
+  TraceId,
+  SpanId,
+  CapsuleId,
+  EventSequence,
+} from './identity.js'
+import type { ModelNodeId } from '../core/model/identity.js'
+import type { RuntimeExecutionId } from '../core/identity.js'
+import type { EpochMs, DurationMs } from '../core/units.js'
 import type { RuntimeExecutionMetadata } from '../core/instrumentation.js'
 import type { DevtoolsValuePreview } from './values.js'
 
@@ -23,36 +33,36 @@ export interface SerializedDevtoolsError {
 }
 
 export interface RuntimeEventBase {
-  readonly runId: string
-  readonly seq: number
-  readonly timestamp: number
-  readonly traceId?: string
-  readonly spanId?: string
-  readonly parentSpanId?: string
-  readonly graphNodeId?: string
+  readonly runId: RunId
+  readonly seq: EventSequence
+  readonly timestamp: EpochMs
+  readonly traceId?: TraceId
+  readonly spanId?: SpanId
+  readonly parentSpanId?: SpanId
+  readonly graphNodeId?: ModelNodeId
 }
 
 export interface ExecutionStartedEvent extends RuntimeEventBase {
   readonly type: 'execution.started'
-  readonly traceId: string
-  readonly spanId: string
-  readonly executionId: string
+  readonly traceId: TraceId
+  readonly spanId: SpanId
+  readonly executionId: RuntimeExecutionId
   readonly executionKind: string
   readonly name: string
   readonly input?: DevtoolsValuePreview
-  readonly capsuleId?: string
+  readonly capsuleId?: CapsuleId
   readonly replayable?: boolean
   readonly replayModes?: readonly ('direct' | 'transport')[]
-  readonly replayedFromTraceId?: string
-  readonly replayedFromCapsuleId?: string
+  readonly replayedFromTraceId?: TraceId
+  readonly replayedFromCapsuleId?: CapsuleId
 }
 
 export interface ExecutionEndedEvent extends RuntimeEventBase {
   readonly type: 'execution.ended'
-  readonly traceId: string
-  readonly spanId: string
-  readonly executionId: string
-  readonly durationMs: number
+  readonly traceId: TraceId
+  readonly spanId: SpanId
+  readonly executionId: RuntimeExecutionId
+  readonly durationMs: DurationMs
   readonly status: 'ok' | 'error' | 'cancelled'
   readonly attributes?: Readonly<Record<string, unknown>>
   readonly result?: DevtoolsValuePreview
@@ -61,22 +71,22 @@ export interface ExecutionEndedEvent extends RuntimeEventBase {
 
 export interface SpanStartedEvent extends RuntimeEventBase {
   readonly type: 'span.started'
-  readonly spanId: string
-  readonly traceId: string
+  readonly spanId: SpanId
+  readonly traceId: TraceId
   readonly kind: RuntimeSpanKind
   readonly name: string
   readonly attributes?: Readonly<Record<string, unknown>>
   readonly input?: DevtoolsValuePreview
-  readonly capsuleId?: string
+  readonly capsuleId?: CapsuleId
   readonly replayable?: boolean
   readonly replayModes?: readonly ('direct' | 'transport')[]
 }
 
 export interface SpanEndedEvent extends RuntimeEventBase {
   readonly type: 'span.ended'
-  readonly spanId: string
-  readonly traceId: string
-  readonly durationMs: number
+  readonly spanId: SpanId
+  readonly traceId: TraceId
+  readonly durationMs: DurationMs
   readonly status: 'ok' | 'error' | 'cancelled'
   readonly attributes?: Readonly<Record<string, unknown>>
   readonly result?: DevtoolsValuePreview
@@ -90,7 +100,7 @@ export type RuntimeEvent =
   | SpanEndedEvent
 
 export interface RuntimeObserver {
-  readonly runId?: string
+  readonly runId?: RunId
   executionStarted?(event: ExecutionStartedEvent): void
   executionEnded?(event: ExecutionEndedEvent): void
   spanStarted?(event: SpanStartedEvent): void
@@ -98,8 +108,8 @@ export interface RuntimeObserver {
 }
 
 export interface RuntimeExecutionContext extends RuntimeExecutionMetadata {
-  readonly traceId: string
-  readonly spanId: string
+  readonly traceId: TraceId
+  readonly spanId: SpanId
 }
 
 export function serializeDevtoolsError(

@@ -1,6 +1,6 @@
-import type { GraphSnapshot } from './devtools'
+import { parseGraphSnapshot } from './devtools'
 
-export const homeGraphSnapshot = {
+export const homeGraphSnapshot = parseGraphSnapshot({
   schemaVersion: 1,
   nodes: [
     {
@@ -141,7 +141,7 @@ export const homeGraphSnapshot = {
     },
   ],
   diagnostics: [],
-} as const satisfies GraphSnapshot
+})
 
 export const homeDevtoolsFixture = {
   route: 'POST /users',
@@ -206,3 +206,7 @@ export const homeDiagnosticFixture = {
   message:
     'Provider graph-probe.storage requires graph-probe.missing, but no provider is declared.',
 } as const
+
+export const homeControllerId = homeGraphSnapshot.nodes.find(
+  (node) => node.id === 'UsersController',
+)!.id

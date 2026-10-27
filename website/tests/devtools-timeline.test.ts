@@ -1,9 +1,10 @@
+import * as fixture from './helpers/devtools-fixtures.js'
 import { describe, expect, it } from 'vitest'
 import { buildTimeline } from '../lib/devtools-timeline'
 import type { RuntimeEvent } from '../lib/devtools-runtime'
 
 const events: RuntimeEvent[] = [
-  {
+  fixture.runtimeEvent({
     type: 'execution.started',
     runId: 'run',
     seq: 1,
@@ -13,8 +14,8 @@ const events: RuntimeEvent[] = [
     executionId: 'UsersController',
     executionKind: 'http.request',
     name: 'POST /users',
-  },
-  {
+  }),
+  fixture.runtimeEvent({
     type: 'span.started',
     runId: 'run',
     seq: 2,
@@ -24,8 +25,8 @@ const events: RuntimeEvent[] = [
     parentSpanId: 'root',
     kind: 'provider.method',
     name: 'Repository.create',
-  },
-  {
+  }),
+  fixture.runtimeEvent({
     type: 'span.started',
     runId: 'run',
     seq: 3,
@@ -35,8 +36,8 @@ const events: RuntimeEvent[] = [
     parentSpanId: 'root',
     kind: 'provider.method',
     name: 'Audit.write',
-  },
-  {
+  }),
+  fixture.runtimeEvent({
     type: 'span.ended',
     runId: 'run',
     seq: 4,
@@ -46,8 +47,8 @@ const events: RuntimeEvent[] = [
     parentSpanId: 'root',
     durationMs: 15,
     status: 'ok',
-  },
-  {
+  }),
+  fixture.runtimeEvent({
     type: 'span.ended',
     runId: 'run',
     seq: 5,
@@ -57,8 +58,8 @@ const events: RuntimeEvent[] = [
     parentSpanId: 'root',
     durationMs: 18,
     status: 'ok',
-  },
-  {
+  }),
+  fixture.runtimeEvent({
     type: 'execution.ended',
     runId: 'run',
     seq: 6,
@@ -68,7 +69,7 @@ const events: RuntimeEvent[] = [
     executionId: 'UsersController',
     durationMs: 40,
     status: 'ok',
-  },
+  }),
 ]
 
 describe('Devtools trace timeline', () => {
