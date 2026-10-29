@@ -40,6 +40,27 @@ HTTP前段の認証やrate limitはtransports.http.middlewaresへ指定します
 
 WebSocketはgraphql-transport-ws subprotocolを使用します。Subscription Sourceと外部I/Oはsignalに協調して停止してください。complete / 切断 / drainでAbortとiterator.returnを伝播します。
 
+### WebSocketの接続時認証
+
+`factory`が返すRuntimeの`onConnect`で、`connection_init`のpayloadを`connectionParams`として検証できます。opening requestのヘッダーを使うクライアントにも対応できます。
+
+```ts
+factory: (auth = inject(AuthService)) => ({
+  async onConnect({ connectionParams, request, signal }) {
+    const authorization =
+      connectionParams?.authorization ?? request.headers.get('authorization')
+    return await auth.verify(authorization, { signal })
+  },
+  context: ({ request, signal }) => ({ request, signal }),
+})
+```
+
+`onConnect`は接続ごとに実行され、完了するまで`connection_ack`を返しません。`false`なら4403で拒否し、`true`または戻り値なしなら受け入れます。オブジェクトを返すと`connection_ack.payload`としてクライアントへ送るため、認証情報などの秘密を含めないでください。予期しない例外は理由を公開せず1011で切断します。省略時は接続を受け入れます。
+
+入力の`signal`は接続の切断・drainで中断されます。`connectionInitWaitTimeout`は最初の`connection_init`を待つ時間で、認証処理の実行時間の上限ではありません。外部認証サービスへのタイムアウトは認証処理側で設定してください。
+
+接続の認証とoperationごとの認可は別です。`context()`には従来どおり各operationの`connectionParams`とoperation単位の`signal`を渡します。Runtimeは接続間で共有されるため、認証結果をRuntimeの可変フィールドへ保存しないでください。
+
 transport省略時はHTTPのみです。Node.js / Bun / Cloudflare Workersでは両transport、AWS LambdaではHTTPのみを使用できます。Runtimeは静的ESMとしてbundleでき、Schema fileの読み込みやNode専用APIを要求しません。
 
 [生成・Data Resolutionガイド](../../docs/graphql-codegen.md)、[Counter server](../../examples/graphql-counter/README.md)、[注文server](../../examples/graphql-orders/README.md)、[transport ADR](../../docs/adr/loutre_graphql_transport_architecture.md)を参照してください。

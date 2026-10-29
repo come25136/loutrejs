@@ -9,12 +9,15 @@ export interface GraphQLHttpContextInput {
   readonly state: Readonly<Record<string, unknown>>
 }
 
-export interface GraphQLWebSocketContextInput {
+export interface GraphQLWebSocketConnectionInput {
   readonly transport: 'websocket'
   readonly request: Request
   readonly connectionParams: Readonly<Record<string, unknown>> | undefined
-  readonly operationId: string
   readonly signal: AbortSignal
+}
+
+export interface GraphQLWebSocketContextInput extends GraphQLWebSocketConnectionInput {
+  readonly operationId: string
 }
 
 export type GraphQLContextInput =
@@ -23,6 +26,13 @@ export type GraphQLContextInput =
 
 export interface GraphQLRuntime<TContext extends object = object> {
   context(input: GraphQLContextInput): TContext | Promise<TContext>
+  onConnect?(
+    input: GraphQLWebSocketConnectionInput,
+  ):
+    | boolean
+    | void
+    | Readonly<Record<string, unknown>>
+    | Promise<boolean | void | Readonly<Record<string, unknown>>>
   formatError?(
     error: GraphQLError,
     input: GraphQLContextInput,

@@ -90,6 +90,14 @@ export async function serveGraphQLWebSocket(
     ...(options.connectionInitWaitTimeout === undefined
       ? {}
       : { connectionInitWaitTimeout: options.connectionInitWaitTimeout }),
+    onConnect(connection) {
+      return runtime.onConnect?.({
+        transport: 'websocket',
+        request: context.request,
+        connectionParams: connection.connectionParams,
+        signal: context.signal,
+      })
+    },
     async onSubscribe(connection, id, payload) {
       const controller = new AbortController()
       const lease = context.execution.beginOperation({

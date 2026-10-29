@@ -21,6 +21,7 @@ import type { GraphQLHttpContextInput } from './types.js'
 import type { GraphQLEndpointDefinition } from './types.js'
 export type {
   GraphQLHttpContextInput,
+  GraphQLWebSocketConnectionInput,
   GraphQLWebSocketContextInput,
   GraphQLContextInput,
   GraphQLRuntime,

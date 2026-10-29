@@ -338,6 +338,10 @@ WebSocket側は`graphql-ws`の`makeServer()`を利用する。
 
 Loutre WebSocket contextを`graphql-ws`が要求するsocket interfaceへadapterする。
 
+接続時の認証はRuntimeの任意の`onConnect`へ委譲する。DIしたサービスが必要になるため、静的なtransport設定ではなく`factory`の戻り値に置く。opening request、`connection_init`の`connectionParams`、接続単位の`signal`を渡し、operation用Contextとは寿命を分離する。接続ごとの認証結果を共有Runtimeへ保存しない。
+
+`onConnect`の完了後にackし、`false`による4403拒否、オブジェクトによるack payload、未指定時の受け入れは`graphql-ws`の規約へ委譲する。例外時は既存のsessionエラー処理で1011にし、例外の詳細をクライアントへ送らない。利用方法は[package README](../../packages/graphql/README.md#websocketの接続時認証)を正本とする。
+
 1 connection上で複数operationが同時実行されるため、message receive loopはoperation処理を逐次blockしない。
 
 ```ts

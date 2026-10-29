@@ -1,6 +1,10 @@
 import { parse, type GraphQLError, type GraphQLFormattedError } from 'graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
-import { graphql } from '@loutrejs/graphql'
+import {
+  graphql,
+  type GraphQLWebSocketConnectionInput,
+  type GraphQLRuntime,
+} from '@loutrejs/graphql'
 import {
   defineApplication,
   defineModule,
@@ -33,6 +37,24 @@ const both = graphql.endpoint({
   manifest,
   transports: { http: true, websocket: true },
   factory: () => ({
+    async onConnect(input) {
+      const connection: GraphQLWebSocketConnectionInput = input
+      const request: Request = connection.request
+      const signal: AbortSignal = connection.signal
+      const transport: 'websocket' = connection.transport
+      const params: Readonly<Record<string, unknown>> | undefined =
+        connection.connectionParams
+      // @ts-expect-error 接続入力にはoperation IDを公開しない
+      connection.operationId
+      // @ts-expect-error 接続入力にはHTTP middleware stateを公開しない
+      connection.state
+      if (connection.connectionParams) {
+        // @ts-expect-error 接続payloadのフィールドは読み取り専用
+        connection.connectionParams.authorization = '変更不可'
+      }
+      void [request, signal, transport, params]
+      return { authenticated: true }
+    },
     formatError(error, input) {
       const typedError: GraphQLError = error
       const request: Request = input.request
@@ -66,6 +88,21 @@ const both = graphql.endpoint({
     },
   }),
 })
+
+const acceptConnection: GraphQLRuntime['onConnect'] = () => true
+const rejectConnection: GraphQLRuntime['onConnect'] = async () => false
+const acceptWithoutPayload: GraphQLRuntime['onConnect'] = () => {}
+// @ts-expect-error 接続フックは関数に限定する
+const invalidConnectionHook: GraphQLRuntime['onConnect'] = true
+// @ts-expect-error ack payloadには文字列単体を返せない
+const invalidConnectionPayload: GraphQLRuntime['onConnect'] = () => '文字列'
+void [
+  acceptConnection,
+  rejectConnection,
+  acceptWithoutPayload,
+  invalidConnectionHook,
+  invalidConnectionPayload,
+]
 const HttpModule = defineModule(() => ({ executions: [httpOnly] }))
 const WsModule = defineModule(() => ({ executions: [websocketOnly] }))
 const BothModule = defineModule(() => ({ executions: [both] }))

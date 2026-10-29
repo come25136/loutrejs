@@ -4,12 +4,12 @@ import { once } from 'node:events'
 import { describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { buildSchema } from 'graphql'
-import { graphql } from '@loutrejs/graphql'
+import { graphql, type GraphQLRuntime } from '@loutrejs/graphql'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
 import { serverAudits } from 'graphql-http'
 
-async function create(http: boolean) {
+async function create(http: boolean, onConnect?: GraphQLRuntime['onConnect']) {
   const schema = buildSchema(
     'type Query { hello: String! } type Subscription { hello: String! }',
   )
@@ -24,7 +24,10 @@ async function create(http: boolean) {
     path: '/graphql',
     manifest: manifestFromSchema(schema),
     transports: { http, websocket: true },
-    factory: () => ({ context: () => ({}) }),
+    factory: () => ({
+      context: () => ({}),
+      ...(onConnect ? { onConnect } : {}),
+    }),
   })
   const Module = defineModule(() => ({ executions: [endpoint] }))
   const app = await nodeRuntime.create({
@@ -40,6 +43,76 @@ async function create(http: boolean) {
 }
 
 describe('Node native HTTP/WebSocket', () => {
+  it.each(['payload', 'header', 'invalid'] as const)(
+    '%sの接続認証をnative WebSocketでも適用する',
+    async (credential) => {
+      const { app, url } = await create(
+        true,
+        async ({ connectionParams, request }) => {
+          const authorization =
+            connectionParams?.authorization ??
+            request.headers.get('authorization')
+          return authorization === 'Bearer valid'
+        },
+      )
+      const socket = new WebSocket(
+        url.replace('http:', 'ws:'),
+        ['graphql-transport-ws'],
+        {
+          headers:
+            credential === 'header' ? { authorization: 'Bearer valid' } : {},
+        },
+      )
+      try {
+        await once(socket, 'open')
+        const closed = once(socket, 'close')
+        if (credential === 'invalid') {
+          const messages: unknown[] = []
+          socket.on('message', (message) => messages.push(message))
+          socket.send(
+            JSON.stringify({
+              type: 'connection_init',
+              payload: { authorization: 'Bearer invalid' },
+            }),
+          )
+          expect((await closed)[0]).toBe(4403)
+          expect(messages).toEqual([])
+        } else {
+          let received = once(socket, 'message')
+          socket.send(
+            JSON.stringify({
+              type: 'connection_init',
+              ...(credential === 'payload'
+                ? { payload: { authorization: 'Bearer valid' } }
+                : {}),
+            }),
+          )
+          expect(JSON.parse(String((await received)[0]))).toEqual({
+            type: 'connection_ack',
+          })
+          received = once(socket, 'message')
+          socket.send(
+            JSON.stringify({
+              id: 'q',
+              type: 'subscribe',
+              payload: { query: '{hello}' },
+            }),
+          )
+          expect(JSON.parse(String((await received)[0]))).toEqual({
+            id: 'q',
+            type: 'next',
+            payload: { data: { hello: 'Hello World' } },
+          })
+          socket.close()
+          await closed
+        }
+      } finally {
+        socket.terminate()
+        await app.close()
+      }
+    },
+  )
+
   it.each([true, false])(
     'HTTP=%sで同一serverのupgradeに接続しprotocolとQueryを確認する',
     async (http) => {
