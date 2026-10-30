@@ -37,7 +37,7 @@ const both = graphql.endpoint({
   manifest,
   transports: { http: true, websocket: true },
   factory: () => ({
-    async onConnect(input) {
+    async onConnectionInit(input) {
       const connection: GraphQLWebSocketConnectionInput = input
       const request: Request = connection.request
       const signal: AbortSignal = connection.signal
@@ -89,13 +89,14 @@ const both = graphql.endpoint({
   }),
 })
 
-const acceptConnection: GraphQLRuntime['onConnect'] = () => true
-const rejectConnection: GraphQLRuntime['onConnect'] = async () => false
-const acceptWithoutPayload: GraphQLRuntime['onConnect'] = () => {}
+const acceptConnection: GraphQLRuntime['onConnectionInit'] = () => true
+const rejectConnection: GraphQLRuntime['onConnectionInit'] = async () => false
+const acceptWithoutPayload: GraphQLRuntime['onConnectionInit'] = () => {}
 // @ts-expect-error 接続フックは関数に限定する
-const invalidConnectionHook: GraphQLRuntime['onConnect'] = true
+const invalidConnectionHook: GraphQLRuntime['onConnectionInit'] = true
 // @ts-expect-error ack payloadには文字列単体を返せない
-const invalidConnectionPayload: GraphQLRuntime['onConnect'] = () => '文字列'
+const invalidConnectionPayload: GraphQLRuntime['onConnectionInit'] = () =>
+  '文字列'
 void [
   acceptConnection,
   rejectConnection,

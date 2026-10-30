@@ -42,11 +42,11 @@ WebSocketはgraphql-transport-ws subprotocolを使用します。Subscription So
 
 ### WebSocketの接続時認証
 
-`factory`が返すRuntimeの`onConnect`で、`connection_init`のpayloadを`connectionParams`として検証できます。opening requestのヘッダーを使うクライアントにも対応できます。
+`factory`が返すRuntimeの`onConnectionInit`で、`connection_init`のpayloadを`connectionParams`として検証できます。opening requestのヘッダーを使うクライアントにも対応できます。
 
 ```ts
 factory: (auth = inject(AuthService)) => ({
-  async onConnect({ connectionParams, request, signal }) {
+  async onConnectionInit({ connectionParams, request, signal }) {
     const authorization =
       connectionParams?.authorization ?? request.headers.get('authorization')
     return await auth.verify(authorization, { signal })
@@ -55,7 +55,7 @@ factory: (auth = inject(AuthService)) => ({
 })
 ```
 
-`onConnect`は接続ごとに実行され、完了するまで`connection_ack`を返しません。`false`なら4403で拒否し、`true`または戻り値なしなら受け入れます。オブジェクトを返すと`connection_ack.payload`としてクライアントへ送るため、認証情報などの秘密を含めないでください。予期しない例外は理由を公開せず1011で切断します。省略時は接続を受け入れます。
+`onConnectionInit`は接続ごとに実行され、完了するまで`connection_ack`を返しません。`false`なら4403で拒否し、`true`または戻り値なしなら受け入れます。オブジェクトを返すと`connection_ack.payload`としてクライアントへ送るため、認証情報などの秘密を含めないでください。予期しない例外は理由を公開せず1011で切断します。省略時は接続を受け入れます。
 
 入力の`signal`は接続の切断・drainで中断されます。`connectionInitWaitTimeout`は最初の`connection_init`を待つ時間で、認証処理の実行時間の上限ではありません。外部認証サービスへのタイムアウトは認証処理側で設定してください。
 

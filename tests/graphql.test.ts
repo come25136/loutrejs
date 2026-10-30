@@ -132,7 +132,7 @@ async function fixture(
       input: GraphQLContextInput,
     ) => Record<string, unknown> | Promise<Record<string, unknown>>
     formatError?: GraphQLRuntime['formatError']
-    onConnect?: GraphQLRuntime['onConnect']
+    onConnectionInit?: GraphQLRuntime['onConnectionInit']
     failure?: Error
     afterSend?: (message: Record<string, unknown>) => Promise<void>
   } = {},
@@ -181,7 +181,9 @@ async function fixture(
     },
     factory: (greeting = inject(Service)) => ({
       ...(options.formatError ? { formatError: options.formatError } : {}),
-      ...(options.onConnect ? { onConnect: options.onConnect } : {}),
+      ...(options.onConnectionInit
+        ? { onConnectionInit: options.onConnectionInit }
+        : {}),
       context(input) {
         contexts.push(input)
         return (
@@ -602,23 +604,25 @@ describe('GraphQL HTTP', () => {
 })
 
 describe('GraphQL WebSocket', () => {
-  it('onConnectの認証完了後だけackし、payloadと接続入力を渡す', async () => {
+  it('onConnectionInitの認証完了後だけackし、payloadと接続入力を渡す', async () => {
     let authorize!: (result: Record<string, unknown>) => void
-    const onConnect = vi.fn<NonNullable<GraphQLRuntime['onConnect']>>(
+    const onConnectionInit = vi.fn<
+      NonNullable<GraphQLRuntime['onConnectionInit']>
+    >(
       () =>
         new Promise((resolve) => {
           authorize = resolve
         }),
     )
-    const api = await fixture({ onConnect })
+    const api = await fixture({ onConnectionInit })
     try {
       const connection = await api.open()
       connection.send({
         type: 'connection_init',
         payload: { authorization: 'Bearer valid' },
       })
-      await vi.waitFor(() => expect(onConnect).toHaveBeenCalledTimes(1))
-      const input = onConnect.mock.calls[0]![0]
+      await vi.waitFor(() => expect(onConnectionInit).toHaveBeenCalledTimes(1))
+      const input = onConnectionInit.mock.calls[0]![0]
       expect(input.transport).toBe('websocket')
       expect(input.connectionParams).toEqual({ authorization: 'Bearer valid' })
       expect(input.request.url).toBe('http://test/graphql')
@@ -643,7 +647,7 @@ describe('GraphQL WebSocket', () => {
         connectionParams: input.connectionParams,
       })
       expect(api.contexts[0]!.signal).not.toBe(input.signal)
-      expect(onConnect).toHaveBeenCalledTimes(1)
+      expect(onConnectionInit).toHaveBeenCalledTimes(1)
       await connection.channel.connection.close()
       await vi.waitFor(() => expect(input.signal.aborted).toBe(true))
     } finally {
@@ -652,12 +656,12 @@ describe('GraphQL WebSocket', () => {
   })
 
   it.each([false, true])(
-    'onConnectの非同期=%sの認証拒否はackせず4403で閉じる',
+    'onConnectionInitの非同期=%sの認証拒否はackせず4403で閉じる',
     async (asyncResult) => {
-      const onConnect = vi.fn(() =>
+      const onConnectionInit = vi.fn(() =>
         asyncResult ? Promise.resolve(false) : false,
       )
-      const api = await fixture({ onConnect })
+      const api = await fixture({ onConnectionInit })
       try {
         const connection = await api.open()
         connection.send({
@@ -667,7 +671,7 @@ describe('GraphQL WebSocket', () => {
         expect((await connection.channel.connection.closed).code).toBe(4403)
         expect(connection.sent).toEqual([])
         expect(api.contexts).toEqual([])
-        expect(onConnect).toHaveBeenCalledTimes(1)
+        expect(onConnectionInit).toHaveBeenCalledTimes(1)
       } finally {
         await api.app.close()
       }
@@ -675,21 +679,25 @@ describe('GraphQL WebSocket', () => {
   )
 
   it.each([true, undefined])(
-    'onConnectの戻り値=%sはpayloadなしで受け入れる',
+    'onConnectionInitの戻り値=%sはpayloadなしで受け入れる',
     async (result) => {
-      const onConnect = vi.fn<NonNullable<GraphQLRuntime['onConnect']>>(
-        () => result,
-      )
-      const api = await fixture({ onConnect })
+      const onConnectionInit = vi.fn<
+        NonNullable<GraphQLRuntime['onConnectionInit']>
+      >(() => result)
+      const api = await fixture({ onConnectionInit })
       try {
         const connection = await api.open({ authorization: 'Bearer header' })
         connection.send({ type: 'connection_init' })
         await connection.wait('connection_ack')
         expect(connection.sent).toEqual([{ type: 'connection_ack' }])
-        expect(onConnect).toHaveBeenCalledTimes(1)
-        expect(onConnect.mock.calls[0]![0].connectionParams).toBeUndefined()
+        expect(onConnectionInit).toHaveBeenCalledTimes(1)
         expect(
-          onConnect.mock.calls[0]![0].request.headers.get('authorization'),
+          onConnectionInit.mock.calls[0]![0].connectionParams,
+        ).toBeUndefined()
+        expect(
+          onConnectionInit.mock.calls[0]![0].request.headers.get(
+            'authorization',
+          ),
         ).toBe('Bearer header')
       } finally {
         await api.app.close()
@@ -698,14 +706,14 @@ describe('GraphQL WebSocket', () => {
   )
 
   it.each([false, true])(
-    'onConnectの非同期=%sの例外は詳細を公開せず1011で閉じる',
+    'onConnectionInitの非同期=%sの例外は詳細を公開せず1011で閉じる',
     async (asyncResult) => {
       const failure = new Error('非公開の認証障害')
-      const onConnect = vi.fn(() => {
+      const onConnectionInit = vi.fn(() => {
         if (asyncResult) return Promise.reject(failure)
         throw failure
       })
-      const api = await fixture({ onConnect })
+      const api = await fixture({ onConnectionInit })
       try {
         const connection = await api.open()
         connection.send({ type: 'connection_init' })
@@ -721,7 +729,9 @@ describe('GraphQL WebSocket', () => {
   )
 
   it('認証中にsubscribeされてもoperationを実行せず4401で閉じる', async () => {
-    const onConnect = vi.fn<NonNullable<GraphQLRuntime['onConnect']>>(
+    const onConnectionInit = vi.fn<
+      NonNullable<GraphQLRuntime['onConnectionInit']>
+    >(
       ({ signal }) =>
         new Promise((resolve) =>
           signal.addEventListener('abort', () => resolve(false), {
@@ -729,11 +739,11 @@ describe('GraphQL WebSocket', () => {
           }),
         ),
     )
-    const api = await fixture({ onConnect })
+    const api = await fixture({ onConnectionInit })
     try {
       const connection = await api.open()
       connection.send({ type: 'connection_init' })
-      await vi.waitFor(() => expect(onConnect).toHaveBeenCalledTimes(1))
+      await vi.waitFor(() => expect(onConnectionInit).toHaveBeenCalledTimes(1))
       connection.send({
         id: 'q',
         type: 'subscribe',
@@ -750,7 +760,9 @@ describe('GraphQL WebSocket', () => {
   it.each(['disconnect', 'drain'] as const)(
     '認証待ちの%sで接続signalを中断してackしない',
     async (stop) => {
-      const onConnect = vi.fn<NonNullable<GraphQLRuntime['onConnect']>>(
+      const onConnectionInit = vi.fn<
+        NonNullable<GraphQLRuntime['onConnectionInit']>
+      >(
         ({ signal }) =>
           new Promise((resolve) =>
             signal.addEventListener('abort', () => resolve(true), {
@@ -758,14 +770,16 @@ describe('GraphQL WebSocket', () => {
             }),
           ),
       )
-      const api = await fixture({ onConnect })
+      const api = await fixture({ onConnectionInit })
       try {
         const connection = await api.open()
         connection.send({ type: 'connection_init' })
-        await vi.waitFor(() => expect(onConnect).toHaveBeenCalledTimes(1))
+        await vi.waitFor(() =>
+          expect(onConnectionInit).toHaveBeenCalledTimes(1),
+        )
         if (stop === 'disconnect') await connection.channel.connection.close()
         else await api.app.close()
-        expect(onConnect.mock.calls[0]![0].signal.aborted).toBe(true)
+        expect(onConnectionInit.mock.calls[0]![0].signal.aborted).toBe(true)
         expect(connection.sent).toEqual([])
         expect(api.contexts).toEqual([])
       } finally {
@@ -775,11 +789,13 @@ describe('GraphQL WebSocket', () => {
   )
 
   it('同じRuntimeでも接続ごとの認証入力と拒否を分離する', async () => {
-    const onConnect = vi.fn<NonNullable<GraphQLRuntime['onConnect']>>(
+    const onConnectionInit = vi.fn<
+      NonNullable<GraphQLRuntime['onConnectionInit']>
+    >(
       ({ connectionParams }) =>
         connectionParams?.authorization === 'Bearer valid',
     )
-    const api = await fixture({ onConnect })
+    const api = await fixture({ onConnectionInit })
     try {
       const accepted = await api.open()
       const rejected = await api.open()
@@ -801,9 +817,9 @@ describe('GraphQL WebSocket', () => {
       await accepted.wait('complete', 'q')
       expect(rejected.sent).toEqual([])
       expect(api.contexts).toHaveLength(1)
-      expect(onConnect).toHaveBeenCalledTimes(2)
-      expect(onConnect.mock.calls[0]![0].signal).not.toBe(
-        onConnect.mock.calls[1]![0].signal,
+      expect(onConnectionInit).toHaveBeenCalledTimes(2)
+      expect(onConnectionInit.mock.calls[0]![0].signal).not.toBe(
+        onConnectionInit.mock.calls[1]![0].signal,
       )
     } finally {
       await api.app.close()
@@ -1445,7 +1461,7 @@ describe('GraphQLのresolver契約', () => {
     },
   )
 
-  it.each(['rootValue', 'context', 'onConnect'] as const)(
+  it.each(['rootValue', 'context', 'onConnectionInit'] as const)(
     'JavaScriptからの不正な%s factoryをApplication compileで拒否する',
     (invalid) => {
       const schema = buildSchema('type Query { hello: String }')
@@ -1457,8 +1473,8 @@ describe('GraphQLのresolver契約', () => {
         factory: (() =>
           invalid === 'rootValue'
             ? { context: () => ({}), rootValue: {} }
-            : invalid === 'onConnect'
-              ? { context: () => ({}), onConnect: true }
+            : invalid === 'onConnectionInit'
+              ? { context: () => ({}), onConnectionInit: true }
               : {}) as never,
       })
       const Module = defineModule(() => ({ executions: [endpoint] }))

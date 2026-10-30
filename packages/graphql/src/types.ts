@@ -26,7 +26,7 @@ export type GraphQLContextInput =
 
 export interface GraphQLRuntime<TContext extends object = object> {
   context(input: GraphQLContextInput): TContext | Promise<TContext>
-  onConnect?(
+  onConnectionInit?(
     input: GraphQLWebSocketConnectionInput,
   ):
     | boolean

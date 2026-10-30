@@ -51,10 +51,10 @@ export function validateRuntime(runtime: GraphQLRuntime): GraphQLRuntime {
       'rootValueは廃止しました。schemaへresolve / subscribeを登録してください。',
     )
   if (
-    runtime.onConnect !== undefined &&
-    typeof runtime.onConnect !== 'function'
+    runtime.onConnectionInit !== undefined &&
+    typeof runtime.onConnectionInit !== 'function'
   )
-    throw new TypeError('GraphQL onConnectは関数を指定してください。')
+    throw new TypeError('GraphQL onConnectionInitは関数を指定してください。')
   if (
     runtime.formatError !== undefined &&
     typeof runtime.formatError !== 'function'

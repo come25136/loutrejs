@@ -91,7 +91,7 @@ export async function serveGraphQLWebSocket(
       ? {}
       : { connectionInitWaitTimeout: options.connectionInitWaitTimeout }),
     onConnect(connection) {
-      return runtime.onConnect?.({
+      return runtime.onConnectionInit?.({
         transport: 'websocket',
         request: context.request,
         connectionParams: connection.connectionParams,

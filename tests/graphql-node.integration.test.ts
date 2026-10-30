@@ -9,7 +9,10 @@ import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
 import { serverAudits } from 'graphql-http'
 
-async function create(http: boolean, onConnect?: GraphQLRuntime['onConnect']) {
+async function create(
+  http: boolean,
+  onConnectionInit?: GraphQLRuntime['onConnectionInit'],
+) {
   const schema = buildSchema(
     'type Query { hello: String! } type Subscription { hello: String! }',
   )
@@ -26,7 +29,7 @@ async function create(http: boolean, onConnect?: GraphQLRuntime['onConnect']) {
     transports: { http, websocket: true },
     factory: () => ({
       context: () => ({}),
-      ...(onConnect ? { onConnect } : {}),
+      ...(onConnectionInit ? { onConnectionInit } : {}),
     }),
   })
   const Module = defineModule(() => ({ executions: [endpoint] }))
