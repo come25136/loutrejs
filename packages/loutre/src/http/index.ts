@@ -14,7 +14,7 @@ export type {
 } from './client.js'
 export { cors } from './cors.js'
 export type { CorsLayerDescriptor, CorsOptions, CorsOrigin } from './cors.js'
-export { basicAuth, bearerAuth } from './auth.js'
+export { basicAuth, bearerAuth, authenticateBearer } from './auth.js'
 export type {
   BasicAuthContext,
   BasicAuthCredentials,
@@ -22,6 +22,7 @@ export type {
   BasicAuthUnauthorized,
   BasicAuthRuntime,
   BearerAuthContext,
+  BearerAuthenticator,
   BearerAuthDefinition,
   BearerAuthRuntime,
   BearerAuthUnauthorized,

@@ -34,32 +34,32 @@ factoryとcontextは必須です。manifestが要求するContextを返してく
 
 Resolverはresolve({ parent, args, context, info })を使い、getFieldSelection(info)で先読み用の選択Field情報を取得できます。Batch取得を行うFieldには{ requires, read, load, authorize, maxBatchSize }を直接書きます。生成Resolvers<AppContext>とbindManifest<AppContext>がParent / Args / ResultをSDLとdomain mappingから推論します。
 
-HTTP contextの入力はtransport / request / signal / middleware stateです。WebSocketはtransport / opening request / connectionParams / operationId / operation signalを渡します。DI Serviceと長寿命ContextのlifetimeはBatch QueueのScopeとは別です。BatchはQuery Operation、Mutation root Field、Subscription Delivery Eventごとに分離します。
+HTTP contextの入力はtransport / request / signal / middleware state / identityです。WebSocketはtransport / opening request / connectionParams / operationId / operation signal / identityを渡します。DI Serviceと長寿命ContextのlifetimeはBatch QueueのScopeとは別です。BatchはQuery Operation、Mutation root Field、Subscription Delivery Eventごとに分離します。
 
 HTTP前段の認証やrate limitはtransports.http.middlewaresへ指定します。raw endpointを短絡するmiddlewareはFetch Responseを返します。Batch設定のauthorizeで先読み値のreuseにも認可を適用してください。
 
 WebSocketはgraphql-transport-ws subprotocolを使用します。Subscription Sourceと外部I/Oはsignalに協調して停止してください。complete / 切断 / drainでAbortとiterator.returnを伝播します。
 
-### WebSocketの接続時認証
+### HTTP / WebSocketの共通認証
 
-`factory`が返すRuntimeの`onConnectionInit`で、`connection_init`のpayloadを`connectionParams`として検証できます。opening requestのヘッダーを使うクライアントにも対応できます。
+`factory`が返すRuntimeの`authenticate(token, { signal })`を両transportの認証に使用します。通常のHTTPの`bearerAuth`にも同じ関数を渡せます。戻り値は認証済み利用者のオブジェクトで、`null`または`undefined`は拒否、例外は認証サービスの障害です。Policyや接続イベント用の認証フックは追加しません。
 
 ```ts
-factory: (auth = inject(AuthService)) => ({
-  async onConnectionInit({ connectionParams, request, signal }) {
-    const authorization =
-      connectionParams?.authorization ?? request.headers.get('authorization')
-    return await auth.verify(authorization, { signal })
-  },
-  context: ({ request, signal }) => ({ request, signal }),
+factory: (users = inject(UserRepository)) => ({
+  authenticate: (token, { signal }) => users.authenticate(token, { signal }),
+  context: ({ identity, signal }) => ({ currentUser: identity, signal }),
 })
 ```
 
-`onConnectionInit`は接続ごとに実行され、完了するまで`connection_ack`を返しません。`false`なら4403で拒否し、`true`または戻り値なしなら受け入れます。オブジェクトを返すと`connection_ack.payload`としてクライアントへ送るため、認証情報などの秘密を含めないでください。予期しない例外は理由を公開せず1011で切断します。省略時は接続を受け入れます。
+HTTPはAuthorizationヘッダー、WSは`connection_init.payload.authorization`またはopening requestのAuthorizationヘッダーから`Bearer <token>`を取り出します。WSの両方に指定した場合やpayloadの値が文字列以外の場合は4400で拒否し、不正なpayloadからヘッダーへfallbackしません。payloadのキーは小文字の`authorization`のみです。
 
-入力の`signal`は接続の切断・drainで中断されます。`connectionInitWaitTimeout`は最初の`connection_init`を待つ時間で、認証処理の実行時間の上限ではありません。外部認証サービスへのタイムアウトは認証処理側で設定してください。
+HTTPはリクエストごと、WSはinit時と各operation開始時に認証します。成功した利用者を`context()`の`identity`へ渡し、Policyを挟まずauthenticateの戻り値から型を推論します。未指定のRuntimeでは認証せず、`identity`は`undefined`です。HTTP middlewareへ同じ認証を重複登録しないでください。
 
-接続の認証とoperationごとの認可は別です。`context()`には従来どおり各operationの`connectionParams`とoperation単位の`signal`を渡します。Runtimeは接続間で共有されるため、認証結果をRuntimeの可変フィールドへ保存しないでください。
+認証拒否はHTTPでは401と`WWW-Authenticate: Bearer`、WSではack前の4403、後続operationでも4403で接続を終了します。成功してもidentityをack payloadへ送りません。認証サービスの例外は詳細を公開せずHTTP 500 / WS 1011にします。
+
+`signal`はHTTPリクエスト、WS接続またはoperationの中断を伝えます。adapterは中断後に遅れて成功した結果を採用せず、認証サービスがsignalに協調しなくても待機を終了します。外部認証のtimeoutは認証サービス側で設定してください。`connectionInitWaitTimeout`は最初のinitを待つ時間で、認証の実行時間ではありません。
+
+接続の認証とResolverの認可は別です。開始済みSubscriptionの即時失効や期限での強制再接続はこの認証関数だけでは提供しません。必要な切断・配送時の認可はアプリケーション側で設計します。認証結果を共有Runtimeの可変フィールドへ保存しないでください。
 
 transport省略時はHTTPのみです。Node.js / Bun / Cloudflare Workersでは両transport、AWS LambdaではHTTPのみを使用できます。Runtimeは静的ESMとしてbundleでき、Schema fileの読み込みやNode専用APIを要求しません。
 

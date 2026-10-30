@@ -3,7 +3,11 @@ import type {
   ExecutionGroup,
   StandardSchemaV1,
 } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import {
+  http,
+  authenticateBearer,
+  type BearerAuthenticator,
+} from '@loutrejs/loutre/http'
 import {
   websocket,
   type WebSocketExecutionDefinition,
@@ -21,7 +25,6 @@ import type { GraphQLHttpContextInput } from './types.js'
 import type { GraphQLEndpointDefinition } from './types.js'
 export type {
   GraphQLHttpContextInput,
-  GraphQLWebSocketConnectionInput,
   GraphQLWebSocketContextInput,
   GraphQLContextInput,
   GraphQLRuntime,
@@ -41,7 +44,8 @@ type TransportExecution<
   : never
 
 export type GraphQLEndpoint<
-  TDefinition extends GraphQLEndpointDefinition = GraphQLEndpointDefinition,
+  TDefinition extends Pick<GraphQLEndpointDefinition, 'transports'> =
+    GraphQLEndpointDefinition,
 > = ExecutionGroup<
   readonly (TDefinition extends { readonly transports: infer TTransports }
     ?
@@ -69,15 +73,25 @@ const textSchema: StandardSchemaV1<string, string> = {
   },
 }
 
+type EndpointOptions = Omit<GraphQLEndpointDefinition, 'factory'>
+type ManifestContext<TDefinition extends EndpointOptions> =
+  TDefinition['manifest'] extends GraphQLManifest<infer Context>
+    ? Context
+    : never
+
 export function defineGraphQLEndpoint<
-  const TDefinition extends GraphQLEndpointDefinition,
+  const TDefinition extends EndpointOptions,
+  TIdentity extends object = never,
 >(
   definition: TDefinition & {
-    readonly factory: () => GraphQLRuntime<
-      TDefinition['manifest'] extends GraphQLManifest<infer Context>
-        ? Context
-        : never
-    >
+    readonly factory: () => Omit<
+      GraphQLRuntime<ManifestContext<TDefinition>, NoInfer<TIdentity>>,
+      'authenticate'
+    > & { readonly authenticate?: BearerAuthenticator<TIdentity> } & ([
+        NoInfer<TIdentity>,
+      ] extends [never]
+        ? unknown
+        : { readonly authenticate: BearerAuthenticator<TIdentity> })
   },
 ): GraphQLEndpoint<TDefinition> {
   if (typeof definition.factory !== 'function')
@@ -111,11 +125,33 @@ export function defineGraphQLEndpoint<
         factory: () => {
           const runtime = validateRuntime(definition.factory())
           return async (context) => {
+            let identity: object | undefined
+            if (runtime.authenticate) {
+              try {
+                const result = await authenticateBearer(
+                  context.request.headers.get('authorization'),
+                  (token, input) => runtime.authenticate!(token, input),
+                  { signal: context.execution.signal },
+                )
+                if (result === null)
+                  return Response.json(
+                    { errors: [{ message: '認証が必要です。' }] },
+                    { status: 401, headers: { 'www-authenticate': 'Bearer' } },
+                  )
+                identity = result
+              } catch {
+                return Response.json(
+                  { errors: [{ message: '内部エラーが発生しました。' }] },
+                  { status: 500 },
+                )
+              }
+            }
             const input: GraphQLHttpContextInput = {
               transport: 'http',
               request: context.request,
               signal: context.request.signal,
               state: context.state,
+              identity,
             }
             let requestError = false
             const response = await createHandler<Record<string, unknown>>({

@@ -50,11 +50,15 @@ export function validateRuntime(runtime: GraphQLRuntime): GraphQLRuntime {
     throw new TypeError(
       'rootValueは廃止しました。schemaへresolve / subscribeを登録してください。',
     )
+  if ('onConnectionInit' in runtime)
+    throw new TypeError(
+      'onConnectionInitではなく共通のauthenticateを指定してください。',
+    )
   if (
-    runtime.onConnectionInit !== undefined &&
-    typeof runtime.onConnectionInit !== 'function'
+    runtime.authenticate !== undefined &&
+    typeof runtime.authenticate !== 'function'
   )
-    throw new TypeError('GraphQL onConnectionInitは関数を指定してください。')
+    throw new TypeError('GraphQL authenticateは関数を指定してください。')
   if (
     runtime.formatError !== undefined &&
     typeof runtime.formatError !== 'function'

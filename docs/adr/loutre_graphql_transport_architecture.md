@@ -338,11 +338,9 @@ WebSocket側は`graphql-ws`の`makeServer()`を利用する。
 
 Loutre WebSocket contextを`graphql-ws`が要求するsocket interfaceへadapterする。
 
-接続時の認証はRuntimeの任意の`onConnectionInit`へ委譲する。DIしたサービスが必要になるため、静的なtransport設定ではなく`factory`の戻り値に置く。opening request、`connection_init`の`connectionParams`、接続単位の`signal`を渡し、operation用Contextとは寿命を分離する。接続ごとの認証結果を共有Runtimeへ保存しない。
+認証はRuntimeの`authenticate(token, { signal })`へHTTP / WSの両方から委譲する。既存HTTPの`bearerAuth`と同じ関数の契約に揃え、認証済みidentityをContextへ渡す。Policyオブジェクトや認証専用の`onConnectionInit`は公開しない。protocol上のinit / ackと資格情報の取得はadapterが所有し、認証の業務ロジックはDIしたサービスが所有する。
 
-フック名は呼び出し契機の`connection_init`に合わせる。HTTP upgrade時の接続処理との混同を避け、認証だけでなく初期化やack payloadの生成も表すため、`onConnect`や`onVerify`とはしない。依存先`graphql-ws`の`onConnect`との名前の対応はadapter内に閉じる。
-
-`onConnectionInit`の完了後にackし、`false`による4403拒否、オブジェクトによるack payload、未指定時の受け入れは`graphql-ws`の規約へ委譲する。例外時は既存のsessionエラー処理で1011にし、例外の詳細をクライアントへ送らない。利用方法は[package README](../../packages/graphql/README.md#websocketの接続時認証)を正本とする。
+WSではinit時の認証が成功してからackする。operationごとにも同じ資格情報を再認証し、接続・operationごとの状態を共有Runtimeへ保存しない。既存Subscriptionの即時失効は別の責務とする。共通の契約と境界は[HTTP / GraphQL WSの認証設計](loutre_transport_authentication.md)、利用方法は[package README](../../packages/graphql/README.md#http--websocketの共通認証)を参照する。
 
 1 connection上で複数operationが同時実行されるため、message receive loopはoperation処理を逐次blockしない。
 

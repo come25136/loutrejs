@@ -7,8 +7,7 @@ export const bearerAuthentication = bearerAuth({
   realm: 'Loutre Example',
   factory: (users = inject(UserRepository)) => ({
     authenticate(token) {
-      const currentUser = users.authenticate(token)
-      return currentUser === undefined ? undefined : { currentUser }
+      return users.authenticate(token)
     },
     unauthorized() {
       return {

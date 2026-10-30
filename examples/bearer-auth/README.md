@@ -1,6 +1,6 @@
 # Bearer Auth Example
 
-Protect `GET /profile` with Loutre's built-in `bearerAuth()` Layer. The authentication factory injects a `UserRepository`, validates the bearer token, contributes the authenticated user to `ctx.state`, and short-circuits authentication failures with a `WWW-Authenticate` challenge.
+Loutreの`bearerAuth()` Layerで`GET /profile`を保護します。factoryがDIした`UserRepository`の`authenticate`でBearer tokenを検証し、利用者を`ctx.state.identity`へ渡します。認証拒否は`WWW-Authenticate` challengeを付けて返します。同じ`authenticate(token, { signal })`の契約をGraphQLのHTTP / WSでも使用できます。
 
 From this example directory, start the application with:
 

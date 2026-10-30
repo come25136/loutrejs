@@ -4,6 +4,8 @@ import type {
   WebSocketMessageCodec,
 } from '@loutrejs/loutre/websocket'
 import { makeServer, parseMessage, MessageType } from 'graphql-ws'
+import { authenticateBearer } from '@loutrejs/loutre/http'
+import { AuthenticationError, webSocketAuthorization } from './auth.js'
 import {
   parse,
   validate,
@@ -23,7 +25,7 @@ import {
 } from './execution.js'
 
 interface Operation {
-  readonly input: GraphQLWebSocketContextInput
+  input: GraphQLWebSocketContextInput
   readonly controller: AbortController
   readonly lease: ExecutionOperationLease
   cleanup?: () => Promise<unknown>
@@ -57,6 +59,7 @@ export async function serveGraphQLWebSocket(
   const executionOperations = new WeakMap<ExecutionArgs, Operation>()
   const tasks = new Set<Promise<void>>()
   const operationTasks = new Map<string, Promise<void>>()
+  let authorization: unknown
   let receive!: (data: string) => Promise<void>
   const finish = (id: string) => {
     const operation = operations.get(id)
@@ -90,13 +93,19 @@ export async function serveGraphQLWebSocket(
     ...(options.connectionInitWaitTimeout === undefined
       ? {}
       : { connectionInitWaitTimeout: options.connectionInitWaitTimeout }),
-    onConnect(connection) {
-      return runtime.onConnectionInit?.({
-        transport: 'websocket',
-        request: context.request,
-        connectionParams: connection.connectionParams,
-        signal: context.signal,
-      })
+    async onConnect(connection) {
+      if (!runtime.authenticate) return
+      authorization = webSocketAuthorization(
+        context.request,
+        connection.connectionParams,
+      )
+      const identity = await authenticateBearer(
+        authorization,
+        (token, authenticationInput) =>
+          runtime.authenticate!(token, authenticationInput),
+        { signal: context.signal },
+      )
+      return identity !== null
     },
     async onSubscribe(connection, id, payload) {
       const controller = new AbortController()
@@ -110,6 +119,7 @@ export async function serveGraphQLWebSocket(
         connectionParams: connection.connectionParams,
         operationId: id,
         signal: controller.signal,
+        identity: undefined,
       }
       const operation: Operation = { controller, lease, input, finished: false }
       operations.set(id, operation)
@@ -123,6 +133,24 @@ export async function serveGraphQLWebSocket(
         'websocket.protocol': context.protocol,
       })
       if (context.signal.aborted) controller.abort(context.signal.reason)
+      if (runtime.authenticate) {
+        try {
+          const identity = await run(operation, () =>
+            authenticateBearer(
+              authorization,
+              (token, authenticationInput) =>
+                runtime.authenticate!(token, authenticationInput),
+              { signal: AbortSignal.any([context.signal, controller.signal]) },
+            ),
+          )
+          if (identity === null) throw new AuthenticationError(401)
+          operation.input = { ...input, identity }
+        } catch (error) {
+          if (controller.signal.aborted)
+            return [new GraphQLError('操作は中断されました。')]
+          throw error
+        }
+      }
       let document
       try {
         document = parse(payload.query)
@@ -142,7 +170,9 @@ export async function serveGraphQLWebSocket(
       ]
       if (errors.length > 0) return errors
       if (!ast) return [new GraphQLError('Unable to identify operation')]
-      const contextValue = await run(operation, () => runtime.context(input))
+      const contextValue = await run(operation, () =>
+        runtime.context(operation.input),
+      )
       const args: ExecutionArgs = {
         schema,
         document,
@@ -247,7 +277,16 @@ export async function serveGraphQLWebSocket(
         if (!context.signal.aborted) {
           for (const operation of operations.values())
             if (!operation.formattingFailure) operation.lease.fail?.(error)
-          await context.close(1011, 'Internal server error')
+          const code =
+            error instanceof AuthenticationError
+              ? error.status === 400
+                ? 4400
+                : 4403
+              : 1011
+          await context.close(
+            code,
+            code === 1011 ? 'Internal server error' : '認証に失敗しました。',
+          )
         }
       })
       .finally(() => {

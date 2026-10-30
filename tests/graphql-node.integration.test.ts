@@ -11,7 +11,7 @@ import { serverAudits } from 'graphql-http'
 
 async function create(
   http: boolean,
-  onConnectionInit?: GraphQLRuntime['onConnectionInit'],
+  authenticate?: GraphQLRuntime['authenticate'],
 ) {
   const schema = buildSchema(
     'type Query { hello: String! } type Subscription { hello: String! }',
@@ -22,16 +22,21 @@ async function create(
     yield 'Hello World'
   }
   hello.resolve = (event: string) => event
-  const endpoint = graphql.endpoint({
+  const endpointOptions = {
     name: 'Native',
     path: '/graphql',
     manifest: manifestFromSchema(schema),
     transports: { http, websocket: true },
-    factory: () => ({
-      context: () => ({}),
-      ...(onConnectionInit ? { onConnectionInit } : {}),
-    }),
-  })
+  }
+  const endpoint = authenticate
+    ? graphql.endpoint({
+        ...endpointOptions,
+        factory: () => ({ context: () => ({}), authenticate }),
+      })
+    : graphql.endpoint({
+        ...endpointOptions,
+        factory: () => ({ context: () => ({}) }),
+      })
   const Module = defineModule(() => ({ executions: [endpoint] }))
   const app = await nodeRuntime.create({
     application: defineApplication({ modules: [Module()] }),
@@ -49,14 +54,8 @@ describe('Node native HTTP/WebSocket', () => {
   it.each(['payload', 'header', 'invalid'] as const)(
     '%sの接続認証をnative WebSocketでも適用する',
     async (credential) => {
-      const { app, url } = await create(
-        true,
-        async ({ connectionParams, request }) => {
-          const authorization =
-            connectionParams?.authorization ??
-            request.headers.get('authorization')
-          return authorization === 'Bearer valid'
-        },
+      const { app, url } = await create(true, async (token) =>
+        token === 'valid' ? { id: 'alice' } : null,
       )
       const socket = new WebSocket(
         url.replace('http:', 'ws:'),
