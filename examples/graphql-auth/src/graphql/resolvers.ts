@@ -3,7 +3,7 @@ import type { Resolvers } from '../generated/types.js'
 import type { AppContext } from './context.js'
 
 export const resolvers = {
-  Query: { viewer: ({ context }) => context.currentUser },
+  Query: { viewer: ({ context }) => context.users.get(context.currentUser.id) },
   Mutation: {
     renameViewer: ({ args, context }) =>
       context.users.rename(context.currentUser.id, args.name),

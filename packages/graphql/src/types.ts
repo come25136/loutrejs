@@ -12,7 +12,10 @@ export interface GraphQLHttpContextInput<
   readonly state: Readonly<TState>
 }
 
-export interface GraphQLWebSocketContextInput {
+export interface GraphQLWebSocketContextInput<
+  TState extends object = Record<string, unknown>,
+> {
+  readonly state: Readonly<TState>
   readonly transport: 'websocket'
   readonly request: Request
   readonly connectionParams: Readonly<Record<string, unknown>> | undefined
@@ -21,8 +24,11 @@ export interface GraphQLWebSocketContextInput {
 }
 
 export type GraphQLContextInput<
-  TState extends object = Record<string, unknown>,
-> = GraphQLHttpContextInput<TState> | GraphQLWebSocketContextInput
+  THttpState extends object = Record<string, unknown>,
+  TWebSocketState extends object = Record<string, unknown>,
+> =
+  | GraphQLHttpContextInput<THttpState>
+  | GraphQLWebSocketContextInput<TWebSocketState>
 
 export interface GraphQLWebSocketExtra {
   readonly request: Request
@@ -34,15 +40,27 @@ export type GraphQLWebSocketHooks = Pick<
   'onConnect' | 'onDisconnect' | 'onClose'
 >
 
+export interface GraphQLStateInput {
+  readonly request: Request
+  readonly signal: AbortSignal
+  readonly connectionParams?: Readonly<Record<string, unknown>> | undefined
+}
+
 export interface GraphQLRuntime<
   TContext extends object = object,
-  TState extends object = Record<string, unknown>,
+  THttpState extends object = Record<string, unknown>,
+  TState extends object = {},
 > {
-  context(input: GraphQLContextInput<TState>): TContext | Promise<TContext>
+  state?(
+    input: GraphQLStateInput,
+  ): TState | Response | Promise<TState | Response>
+  context(
+    input: GraphQLContextInput<THttpState & TState, TState>,
+  ): TContext | Promise<TContext>
   readonly websocket?: GraphQLWebSocketHooks
   formatError?(
     error: GraphQLError,
-    input: GraphQLContextInput<TState>,
+    input: GraphQLContextInput<THttpState & TState, TState>,
   ): GraphQLFormattedError
   // 既存のfactoryから構造的型付けで旧指定が紛れ込むことも拒否する。
   readonly rootValue?: never

@@ -212,7 +212,7 @@ graphql.endpoint({
         void [id, tenant]
       } else {
         // @ts-expect-error WSへHTTP middleware stateを持ち込まない
-        input.state
+        input.state.currentUser
       }
       return {}
     },
@@ -222,6 +222,57 @@ graphql.endpoint({
         void id
       }
       return error.toJSON()
+    },
+  }),
+})
+
+graphql.endpoint({
+  name: '共通state',
+  path: '/state',
+  manifest,
+  transports: { http: { middlewares: [tenantState] }, websocket: true },
+  factory: () => ({
+    state: async ({ request, signal, connectionParams }) => {
+      const params: Readonly<Record<string, unknown>> | undefined =
+        connectionParams
+      void [request, signal, params]
+      return { currentUser: { id: 'user-1' } }
+    },
+    context(input) {
+      const id: string = input.state.currentUser.id
+      // @ts-expect-error 共通stateは読み取り専用
+      input.state.currentUser = { id: 'other' }
+      if (input.transport === 'http') {
+        const tenant: string = input.state.tenantId
+        void tenant
+      } else {
+        // @ts-expect-error HTTPだけのmiddleware stateはWSへ混入しない
+        input.state.tenantId
+      }
+      void id
+      return {}
+    },
+    formatError(error, input) {
+      const id: string = input.state.currentUser.id
+      void id
+      return error.toJSON()
+    },
+  }),
+})
+
+graphql.endpoint({
+  name: '前処理の短絡',
+  path: '/reject',
+  manifest,
+  factory: () => ({
+    state: ({ request }) =>
+      request.headers.has('deny')
+        ? new Response(null, { status: 403 })
+        : { value: 'ready' },
+    context: ({ state }) => {
+      const value: string = state.value
+      void value
+      return {}
     },
   }),
 })

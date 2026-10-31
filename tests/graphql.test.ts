@@ -128,6 +128,7 @@ async function fixture(
     subscription?: (context: {
       signal: AbortSignal
     }) => AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>
+    state?: GraphQLRuntime['state']
     makeContext?: (
       input: GraphQLContextInput,
     ) => Record<string, unknown> | Promise<Record<string, unknown>>
@@ -183,6 +184,7 @@ async function fixture(
           : { connectionInitWaitTimeout: options.initTimeout ?? 1000 },
     },
     factory: (greeting = inject(Service)) => ({
+      ...(options.state ? { state: options.state } : {}),
       ...(options.formatError ? { formatError: options.formatError } : {}),
       websocket:
         options.makeWebSocketHooks?.(greeting) ?? options.websocketHooks ?? {},
@@ -1650,5 +1652,171 @@ it.each([false, true])(
       })
     if (registered) expect(create).not.toThrow()
     else expect(create).toThrow('Timestamp')
+  },
+)
+
+describe('共通stateの前処理', () => {
+  it('HTTPごとに前処理し、既存middleware stateと結合してContextへ渡す', async () => {
+    const state = vi.fn<NonNullable<GraphQLRuntime['state']>>(() => ({
+      value: { secret: 'private' },
+    }))
+    const layer = http.middleware<{ tenant: string }>({
+      name: '組織',
+      factory: () => async (_input, next) => next({ tenant: 'example' }),
+    })
+    const api = await fixture({ state, middleware: [layer] })
+    try {
+      for (let i = 0; i < 2; i++)
+        await (await api.fetchGraphQL('{hello}')).text()
+      expect(state).toHaveBeenCalledTimes(2)
+      expect(api.contexts.map((input) => input.state)).toEqual([
+        { tenant: 'example', value: { secret: 'private' } },
+        { tenant: 'example', value: { secret: 'private' } },
+      ])
+      expect(Object.isFrozen(api.contexts[0]!.state)).toBe(true)
+      expect(state.mock.calls[0]![0].connectionParams).toBeUndefined()
+    } finally {
+      await api.app.close()
+    }
+  })
+
+  it('WSごとにstateを分離し、operation間で共有してACK payloadへ送らない', async () => {
+    const state = vi.fn(({ connectionParams }) => ({
+      value: { secret: connectionParams?.secret },
+    }))
+    const api = await fixture({
+      state,
+      websocketHooks: { onConnect: () => ({ ready: true }) },
+    })
+    try {
+      const first = await api.open()
+      first.send({ type: 'connection_init', payload: { secret: 'one' } })
+      await first.wait('connection_ack')
+      const second = await api.open()
+      second.send({ type: 'connection_init', payload: { secret: 'two' } })
+      await second.wait('connection_ack')
+      for (const [connection, id] of [
+        [first, 'a'],
+        [first, 'b'],
+        [second, 'c'],
+      ] as const) {
+        connection.send({
+          type: 'subscribe',
+          id,
+          payload: { query: '{hello}' },
+        })
+        await connection.wait('complete', id)
+      }
+      expect(state).toHaveBeenCalledTimes(2)
+      expect(api.contexts[0]!.state).toBe(api.contexts[1]!.state)
+      expect(api.contexts[2]!.state).toEqual({ value: { secret: 'two' } })
+      expect(api.contexts[0]!.state).not.toBe(api.contexts[2]!.state)
+      expect(Object.isFrozen(api.contexts[0]!.state)).toBe(true)
+      expect(first.sent[0]).toEqual({
+        type: 'connection_ack',
+        payload: { ready: true },
+      })
+      expect(JSON.stringify(first.sent)).not.toContain('secret')
+    } finally {
+      await api.app.close()
+    }
+  })
+
+  it('Responseで前処理を短絡し、HTTPへ応答してWSの接続とContext生成を拒否する', async () => {
+    const hook = vi.fn()
+    const api = await fixture({
+      state: () => Response.json({ secret: 'private' }, { status: 401 }),
+      websocketHooks: { onConnect: hook },
+    })
+    try {
+      const response = await api.fetchGraphQL('{hello}')
+      expect(response.status).toBe(401)
+      expect(await response.json()).toEqual({ secret: 'private' })
+      const connection = await api.open()
+      connection.send({ type: 'connection_init' })
+      expect((await connection.channel.connection.closed).code).toBe(4403)
+      expect(connection.sent).toEqual([])
+      expect(api.contexts).toEqual([])
+      expect(hook).not.toHaveBeenCalled()
+    } finally {
+      await api.app.close()
+    }
+  })
+
+  it.each(['close', 'drain'] as const)(
+    '未完了の前処理中の%sを待機せず、遅い成功を公開しない',
+    async (mode) => {
+      let resolve!: (value: { secret: string }) => void
+      let signal!: AbortSignal
+      const hook = vi.fn()
+      const api = await fixture({
+        state: (input) => {
+          signal = input.signal
+          return new Promise((done) => {
+            resolve = done
+          })
+        },
+        websocketHooks: { onConnect: hook },
+      })
+      try {
+        const connection = await api.open()
+        connection.send({ type: 'connection_init' })
+        await vi.waitFor(() => expect(resolve).toBeTypeOf('function'))
+        if (mode === 'close')
+          connection.channel.finish({ code: 1000, reason: '', wasClean: true })
+        await api.app.close()
+        expect(signal.aborted).toBe(true)
+        resolve({ secret: 'late' })
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(hook).not.toHaveBeenCalled()
+        expect(connection.sent).toEqual([])
+        expect(api.contexts).toEqual([])
+        expect(
+          api.trace.traces.every(
+            (trace) => trace.complete.mock.calls.length === 1,
+          ),
+        ).toBe(true)
+      } finally {
+        resolve?.({ secret: 'cleanup' })
+        await api.app.close()
+      }
+    },
+  )
+
+  it('HTTP middlewareのstateを前処理から上書きしない', async () => {
+    const layer = http.middleware<{ tenant: string }>({
+      name: '組織',
+      factory: () => async (_input, next) => next({ tenant: 'existing' }),
+    })
+    const api = await fixture({
+      state: () => ({ tenant: 'overwrite' }),
+      middleware: [layer],
+    })
+    try {
+      const response = await api.fetchGraphQL('{hello}')
+      expect(response.status).toBe(500)
+      await response.text()
+      expect(api.contexts).toEqual([])
+    } finally {
+      await api.app.close()
+    }
+  })
+})
+
+it.each([null, undefined, [], new Date()])(
+  'stateの不正な戻り値%sをContextへ公開しない',
+  async (value) => {
+    const api = await fixture({
+      state: (() => value) as NonNullable<GraphQLRuntime['state']>,
+    })
+    try {
+      const response = await api.fetchGraphQL('{hello}')
+      expect(response.status).toBe(500)
+      await response.text()
+      expect(api.contexts).toEqual([])
+    } finally {
+      await api.app.close()
+    }
   },
 )

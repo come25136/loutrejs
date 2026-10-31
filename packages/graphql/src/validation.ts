@@ -46,6 +46,8 @@ export function validateEndpointSchema(schema: GraphQLSchema) {
 export function validateRuntime(runtime: GraphQLRuntime): GraphQLRuntime {
   if (!runtime || typeof runtime.context !== 'function')
     throw new TypeError('GraphQL factoryはcontext関数を返してください。')
+  if (runtime.state !== undefined && typeof runtime.state !== 'function')
+    throw new TypeError('GraphQL stateは前処理の関数を指定してください。')
   if ('rootValue' in runtime)
     throw new TypeError(
       'rootValueは廃止しました。schemaへresolve / subscribeを登録してください。',

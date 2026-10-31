@@ -344,9 +344,11 @@ LoutreはDI、接続とoperationの寿命、型、cleanupを所有する。認�
 
 schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#websocketの接続フック)を正本とする。
 
-認証付きの利用例は[HTTP / GraphQL WebSocketの認証例](../../examples/graphql-auth/README.md)を正本とする。HTTPとWSは同じアプリのユーザーサービスを使う。HTTPはmiddleware state、WSはアプリが所有する接続記録からContextを作り、利用者情報をack payloadで渡さない。接続記録の破棄はonCloseへ置くため、ack前の切断も同じ経路で扱う。
+認証付きの利用例は[HTTP / GraphQL WebSocketの認証例](../../examples/graphql-auth/README.md)を正本とする。利用者のAPIは共通のstate前処理と`context({ state })`とし、HTTP / WSの分岐や接続記録の対応表を要求しない。前処理の実行時機と保持期間はintegrationが所有し、HTTPはリクエスト単位、WSは接続単位で分離する。
 
-この利用例ではHTTP middlewareのstateをContextへ渡す型が必要になる。middleware contributionの型を推論して伝播する責務はLoutreに置き、アプリに型アサーションや認証の再実行を要求しない。一方、接続中の認証結果の保存はアプリのサービスに留める。共通の認証APIや予約された利用者型を追加するより、transportごとの小さな接続処理を明示する方を選ぶ。
+stateは任意のアプリの値であり、認証方式や利用者型を定義しない。HTTP middleware contributionと前処理の戻り値から型を推論し、アプリに型アサーションや再認証を要求しない。前処理でのResponseによる短絡はHTTPの応答、WSの接続拒否として扱う。stateとACK payloadは混同しない。
+
+protocolの制御を直接必要とする用途にはgraphql-wsの接続フックを残す。共通の前処理後にonConnectを呼び、その戻り値の規約は変更しない。通常のアプリへACKや終了フックの管理を要求しない。
 
 1 connection上で複数operationが同時実行されるため、message receive loopはoperation処理を逐次blockしない。
 

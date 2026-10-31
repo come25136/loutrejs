@@ -3,7 +3,6 @@ import WebSocket from 'ws'
 import { nodeRuntime } from '@loutrejs/node'
 import application from '../examples/graphql-auth/src/app.js'
 import { Users } from '../examples/graphql-auth/src/auth/users.js'
-import { Connections } from '../examples/graphql-auth/src/auth/connections.js'
 
 async function start() {
   const app = await nodeRuntime.create({ application })
@@ -90,10 +89,9 @@ it.each([{}, { authorization: 'Bearer invalid' }, { 'x-api-key': 'invalid' }])(
   },
 )
 
-it('WSは接続時だけ認証し、同時接続の利用者と通知を分離し、切断時に記録を削除する', async () => {
+it('WSは一度の前処理を使い、同時接続の利用者と通知を分離する', async () => {
   const server = await start()
   const authenticate = vi.spyOn(server.app.get(Users), 'authenticate')
-  const disconnect = vi.spyOn(server.app.get(Connections), 'disconnect')
   const errors: unknown[] = []
   const events: FormattedExecutionResult<Record<string, unknown>, unknown>[][] =
     [[], []]
@@ -140,14 +138,14 @@ it('WSは接続時だけ認証し、同時接続の利用者と通知を分離�
       data: { viewerChanged: { id: 'user-1', name: '変更後' } },
     })
     expect(events[1]).toHaveLength(1)
+    const updated = clients[0]!.iterate({ query: '{ viewer { id name } }' })
+    expect((await updated.next()).value).toEqual({
+      data: { viewer: { id: 'user-1', name: '変更後' } },
+    })
+    await updated.return?.()
+    expect(authenticate).toHaveBeenCalledTimes(3)
     expect(errors).toEqual([])
     await Promise.all(clients.map((connection) => connection.dispose()))
-    await vi.waitFor(() => expect(disconnect).toHaveBeenCalledTimes(2))
-    for (const [request] of disconnect.mock.calls) {
-      expect(() => server.app.get(Connections).requireUser(request)).toThrow(
-        '認証済みの接続がありません。',
-      )
-    }
   } finally {
     await server.close()
   }
@@ -165,23 +163,19 @@ it.each([
   'WSは不正な資格情報やヘッダーをpayloadで迂回する接続を4403で拒否する: %s',
   async (params, headers) => {
     const server = await start()
-    const disconnect = vi.spyOn(server.app.get(Connections), 'disconnect')
     try {
       const stream = server
         .client(params, headers)
         .iterate({ query: '{ viewer { id } }' })
       await expect(stream.next()).rejects.toMatchObject({ code: 4403 })
-      await vi.waitFor(() => expect(disconnect).toHaveBeenCalledOnce())
     } finally {
       await server.close()
     }
   },
 )
 
-it('WSのopening requestでもAPI keyを認証し、drainで接続記録を削除する', async () => {
+it('WSのopening requestでもAPI keyを認証し、drainで購読を終了する', async () => {
   const server = await start()
-  const connections = server.app.get(Connections)
-  const disconnect = vi.spyOn(connections, 'disconnect')
   const stream = server
     .client({}, { 'x-api-key': 'momiji-key' })
     .iterate({ query: 'subscription { viewerChanged { id } }' })
@@ -190,11 +184,7 @@ it('WSのopening requestでもAPI keyを認証し、drainで接続記録を削�
       data: { viewerChanged: { id: 'user-1' } },
     })
     await server.app.close()
-    expect(disconnect).toHaveBeenCalledOnce()
-    const request = disconnect.mock.calls[0]![0]
-    expect(() => connections.requireUser(request)).toThrow(
-      '認証済みの接続がありません。',
-    )
+    await expect(stream.next()).rejects.toMatchObject({ code: 1001 })
   } finally {
     await stream.return?.()
     await server.close()

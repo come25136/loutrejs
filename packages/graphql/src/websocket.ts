@@ -18,6 +18,7 @@ import type {
   GraphQLWebSocketContextInput,
   GraphQLWebSocketExtra,
 } from './types.js'
+import { prepareState } from './state.js'
 import { formatGraphQLError } from './errors.js'
 import type { BoundManifest } from './manifest-internal.js'
 import {
@@ -89,6 +90,7 @@ export async function serveGraphQLWebSocket(
       throw failure
     }
   }
+  let state: Readonly<Record<string, unknown>> = Object.freeze({})
   const hooks = runtime.websocket
   const server = makeServer<
     Record<string, unknown> | undefined,
@@ -98,10 +100,17 @@ export async function serveGraphQLWebSocket(
     ...(options.connectionInitWaitTimeout === undefined
       ? {}
       : { connectionInitWaitTimeout: options.connectionInitWaitTimeout }),
-    onConnect: hooks?.onConnect
-      ? (connection) =>
-          whileConnected(() => hooks.onConnect!(connection), context.signal)
-      : undefined,
+    onConnect: (connection) =>
+      whileConnected(async () => {
+        const prepared = await prepareState(runtime, {
+          request: context.request,
+          signal: context.signal,
+          connectionParams: connection.connectionParams,
+        })
+        if (context.signal.aborted || prepared instanceof Response) return false
+        state = prepared
+        return hooks?.onConnect?.(connection)
+      }, context.signal),
     onDisconnect: (connection, code, reason) =>
       hooks?.onDisconnect?.(connection, code, reason),
     onClose: (connection, code, reason) =>
@@ -114,6 +123,7 @@ export async function serveGraphQLWebSocket(
       })
       const input: GraphQLWebSocketContextInput = {
         transport: 'websocket',
+        state,
         request: context.request,
         connectionParams: connection.connectionParams,
         operationId: id,
@@ -288,6 +298,7 @@ export async function serveGraphQLWebSocket(
           'GraphQL WebSocketの終了処理に失敗しました。',
         )
     } finally {
+      state = Object.freeze({})
       context.signal.removeEventListener('abort', abortAll)
       for (const id of operations.keys()) finish(id)
     }

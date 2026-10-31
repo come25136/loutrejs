@@ -9,6 +9,7 @@ import {
   type WebSocketExecutionDefinition,
 } from '@loutrejs/loutre/websocket'
 import { createHandler } from 'graphql-http/lib/use/fetch'
+import { prepareState } from './state.js'
 import { serveGraphQLWebSocket } from './websocket.js'
 import { validateEndpointSchema, validateRuntime } from './validation.js'
 import { getManifest } from './manifest-internal.js'
@@ -19,6 +20,7 @@ import type { GraphQLHttpContextInput } from './types.js'
 
 import type { GraphQLEndpointDefinition } from './types.js'
 export type {
+  GraphQLStateInput,
   GraphQLHttpContextInput,
   GraphQLWebSocketContextInput,
   GraphQLWebSocketExtra,
@@ -83,6 +85,7 @@ const textSchema: StandardSchemaV1<string, string> = {
 
 export function defineGraphQLEndpoint<
   TContext extends object,
+  TState extends object = {},
   const TTransports extends NonNullable<
     GraphQLEndpointDefinition['transports']
   > = { readonly http: true },
@@ -94,7 +97,8 @@ export function defineGraphQLEndpoint<
     readonly transports?: TTransports
     readonly factory: () => GraphQLRuntime<
       NoInfer<TContext>,
-      EndpointHttpState<TTransports>
+      EndpointHttpState<TTransports>,
+      TState
     >
   },
 ): GraphQLEndpoint<
@@ -134,11 +138,17 @@ export function defineGraphQLEndpoint<
         factory: () => {
           const runtime = validateRuntime(definition.factory())
           return async (context) => {
+            const state = await prepareState(
+              runtime,
+              { request: context.request, signal: context.request.signal },
+              context.state,
+            )
+            if (state instanceof Response) return state
             const input: GraphQLHttpContextInput = {
               transport: 'http',
               request: context.request,
               signal: context.request.signal,
-              state: context.state,
+              state,
             }
             let requestError = false
             const response = await createHandler<Record<string, unknown>>({

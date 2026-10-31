@@ -1,7 +1,7 @@
-import type { Users, User } from '../auth/users.js'
+import type { AuthState } from '../auth/authentication.js'
+import type { Users } from '../auth/users.js'
 
-export interface AppContext {
-  readonly currentUser: User
+export interface AppContext extends AuthState {
   readonly users: Users
   readonly signal: AbortSignal
 }
