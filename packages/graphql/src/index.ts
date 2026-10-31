@@ -3,16 +3,16 @@ import type {
   ExecutionGroup,
   StandardSchemaV1,
 } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import { http, type HttpRawDefinition } from '@loutrejs/loutre/http'
 import {
   websocket,
   type WebSocketExecutionDefinition,
 } from '@loutrejs/loutre/websocket'
 import { createHandler } from 'graphql-http/lib/use/fetch'
+import { prepareState } from './state.js'
 import { serveGraphQLWebSocket } from './websocket.js'
 import { validateEndpointSchema, validateRuntime } from './validation.js'
 import { getManifest } from './manifest-internal.js'
-import type { GraphQLManifest } from './manifest-internal.js'
 import type { GraphQLRuntime } from './types.js'
 import { executeManifest } from './execution.js'
 import { formatHttpError } from './errors.js'
@@ -20,8 +20,11 @@ import type { GraphQLHttpContextInput } from './types.js'
 
 import type { GraphQLEndpointDefinition } from './types.js'
 export type {
+  GraphQLStateInput,
   GraphQLHttpContextInput,
   GraphQLWebSocketContextInput,
+  GraphQLWebSocketExtra,
+  GraphQLWebSocketHooks,
   GraphQLContextInput,
   GraphQLRuntime,
   GraphQLEndpointDefinition,
@@ -38,6 +41,18 @@ type TransportExecution<
     ? never
     : TExecution
   : never
+
+type EndpointHttpState<TTransports> = TTransports extends {
+  readonly http: {
+    readonly middlewares: infer TMiddlewares extends NonNullable<
+      HttpRawDefinition['route']['middlewares']
+    >
+  }
+}
+  ? Parameters<
+      ReturnType<HttpRawDefinition<TMiddlewares>['factory']>
+    >[0]['state']
+  : {}
 
 export type GraphQLEndpoint<
   TDefinition extends GraphQLEndpointDefinition = GraphQLEndpointDefinition,
@@ -69,16 +84,28 @@ const textSchema: StandardSchemaV1<string, string> = {
 }
 
 export function defineGraphQLEndpoint<
-  const TDefinition extends GraphQLEndpointDefinition,
+  TContext extends object,
+  TState extends object = {},
+  const TTransports extends NonNullable<
+    GraphQLEndpointDefinition['transports']
+  > = { readonly http: true },
 >(
-  definition: TDefinition & {
+  definition: Omit<
+    GraphQLEndpointDefinition<TContext>,
+    'factory' | 'transports'
+  > & {
+    readonly transports?: TTransports
     readonly factory: () => GraphQLRuntime<
-      TDefinition['manifest'] extends GraphQLManifest<infer Context>
-        ? Context
-        : never
+      NoInfer<TContext>,
+      EndpointHttpState<TTransports>,
+      TState
     >
   },
-): GraphQLEndpoint<TDefinition> {
+): GraphQLEndpoint<
+  Omit<GraphQLEndpointDefinition<TContext>, 'transports'> & {
+    readonly transports: TTransports
+  }
+> {
   if (typeof definition.factory !== 'function')
     throw new TypeError('GraphQL endpointにfactoryが必要です。')
   if ('schema' in definition)
@@ -87,7 +114,8 @@ export function defineGraphQLEndpoint<
     )
   const bound = getManifest(definition.manifest)
   validateEndpointSchema(bound.schema)
-  const transports = definition.transports ?? { http: true }
+  const transports: NonNullable<GraphQLEndpointDefinition['transports']> =
+    definition.transports ?? { http: true }
   if (!transports.http && !transports.websocket)
     throw new TypeError('GraphQL transportを一つ以上有効にしてください。')
   const executions: (
@@ -110,11 +138,17 @@ export function defineGraphQLEndpoint<
         factory: () => {
           const runtime = validateRuntime(definition.factory())
           return async (context) => {
+            const state = await prepareState(
+              runtime,
+              { request: context.request, signal: context.request.signal },
+              context.state,
+            )
+            if (state instanceof Response) return state
             const input: GraphQLHttpContextInput = {
               transport: 'http',
               request: context.request,
               signal: context.request.signal,
-              state: context.state,
+              state,
             }
             let requestError = false
             const response = await createHandler<Record<string, unknown>>({
@@ -191,7 +225,11 @@ export function defineGraphQLEndpoint<
     kind: 'execution-group',
     name: definition.name,
     executions: Object.freeze(executions),
-  }) as GraphQLEndpoint<TDefinition>
+  }) as GraphQLEndpoint<
+    Omit<GraphQLEndpointDefinition<TContext>, 'transports'> & {
+      readonly transports: TTransports
+    }
+  >
 }
 
 export const graphql = Object.freeze({ endpoint: defineGraphQLEndpoint })

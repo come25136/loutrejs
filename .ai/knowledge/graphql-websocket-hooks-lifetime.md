@@ -1,0 +1,39 @@
+# GraphQL WS接続フックと終了処理
+
+## 発生条件
+
+共通stateの非同期前処理中にWS接続が終了する場合、またはstateへ保存したユーザー情報を更新後の表示データにも使う場合。
+
+`graphql-ws`の接続フックをLoutre Runtimeから設定し、init待ち中に切断・drainする場合、または終了フックが例外を投げる場合。
+
+## 原因
+
+stateは接続中に共有するため、認証時のユーザーオブジェクトを返すだけでは後から更新した表示データを取得できない。認証結果の保持と最新データの取得は分ける。
+
+onConnectの未完了Promiseを受信taskとして無条件に待つと、接続終了後もsessionを解放できない。反対に、終了フックを同じabort待機で包むと、終了時にはsignalが既にabortされているためフック自身を実行できない。
+
+また、disposeがフックの例外でrejectすると、続けて書いたoperation・iterator・taskのcleanupが飛ばされる。接続フックを追加するだけでも、終了処理全体のエラー境界を確認する必要がある。
+
+## 安全な確認方法
+
+前処理を未完了にしたまま切断・drainし、遅いstateがACKやContextへ公開されないことを確認する。HTTPで利用者の名前を変更した後、同じWS接続のQueryでも新しい名前を取得でき、資格情報の検証回数が増えないことを確認する。
+
+接続記録の削除を実際のNode serverで確認する場合は、providerの参照を`app.close()`より前に取得する。停止後の`app.get()`は`LUTRE_APPLICATION_STATE`で拒否されるため、接続記録が残ったという誤った失敗と混同しない。誤った検証で失敗した場合は、起動中に取得したproviderを使って再実行する。
+
+任意のpayload・Request・接続signalがDIしたフックへ届くことを確認する。onConnectを未完了にしたまま切断・drainし、待機の終了と遅いackの抑止を確認する。ack前後でonDisconnect / onCloseの呼び出し条件を分け、終了フックの例外がsessionのtraceへ記録されてもiteratorとleaseが解放されることを確認する。
+
+## 復旧方法
+
+stateにユーザーIDを保存し、Resolverで最新のドメインデータを取得する。stateの前処理も接続signalで待機を中断し、終了時にframeworkの接続状態への参照を破棄する。
+
+onConnectの待機は接続signalで中断し、listenerをfinallyで外す。終了フックはgraphql-wsの順序でawaitする。dispose・受信task・operationのcleanupは失敗を集めて最後に報告し、途中の失敗で残りの解放を省略しない。
+
+## 再発防止策
+
+利用者のAPIは共通の前処理と型付きstateから設計する。protocolの開始・終了手順をアプリの対応表やcleanupとして要求しない。stateをACK payloadへ流用しない。
+
+接続・operation・アプリの認証サービスの寿命を分離する。接続フックのために認証方式、identity、再認証頻度の規約を作らない。websocket設定は型だけでなく実行時にも接続フックへ限定し、schemaやexecutionを上書きさせない。依存ライブラリの接続フックの順序や戻り値は変更せず、そのまま適合テストする。
+
+## テストclientの終了判定
+
+`graphql-ws`の`iterate()`を`retryAttempts: 0`で使うと、serverの正常なdrainでも1001のCloseEventとしてrejectする。`done: true`だけを期待すると、購読の解放に失敗したと誤認する。serverの終了codeとiterator / leaseの解放をそれぞれ確認し、client側は1001の受信を検証する。

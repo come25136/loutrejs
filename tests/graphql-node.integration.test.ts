@@ -4,12 +4,12 @@ import { once } from 'node:events'
 import { describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { buildSchema } from 'graphql'
-import { graphql } from '@loutrejs/graphql'
+import { graphql, type GraphQLWebSocketHooks } from '@loutrejs/graphql'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
 import { serverAudits } from 'graphql-http'
 
-async function create(http: boolean) {
+async function create(http: boolean, hooks: GraphQLWebSocketHooks = {}) {
   const schema = buildSchema(
     'type Query { hello: String! } type Subscription { hello: String! }',
   )
@@ -24,7 +24,7 @@ async function create(http: boolean) {
     path: '/graphql',
     manifest: manifestFromSchema(schema),
     transports: { http, websocket: true },
-    factory: () => ({ context: () => ({}) }),
+    factory: () => ({ context: () => ({}), websocket: hooks }),
   })
   const Module = defineModule(() => ({ executions: [endpoint] }))
   const app = await nodeRuntime.create({
@@ -40,6 +40,67 @@ async function create(http: boolean) {
 }
 
 describe('Node native HTTP/WebSocket', () => {
+  it.each(['payload', 'header', 'reject'] as const)(
+    'native接続の%sをアプリ指定の接続フックで判断する',
+    async (mode) => {
+      const { app, url } = await create(true, {
+        onConnect({ connectionParams, extra }) {
+          return (
+            connectionParams?.secret === 'valid' ||
+            extra.request.headers.get('x-api-key') === 'valid'
+          )
+        },
+      })
+      const socket = new WebSocket(
+        url.replace('http:', 'ws:'),
+        ['graphql-transport-ws'],
+        {
+          headers: mode === 'header' ? { 'x-api-key': 'valid' } : {},
+        },
+      )
+      try {
+        await once(socket, 'open')
+        if (mode === 'reject') {
+          const closed = once(socket, 'close')
+          socket.send(
+            JSON.stringify({
+              type: 'connection_init',
+              payload: { secret: 'invalid' },
+            }),
+          )
+          expect((await closed)[0]).toBe(4403)
+        } else {
+          let received = once(socket, 'message')
+          socket.send(
+            JSON.stringify({
+              type: 'connection_init',
+              ...(mode === 'payload' ? { payload: { secret: 'valid' } } : {}),
+            }),
+          )
+          expect(JSON.parse(String((await received)[0]))).toEqual({
+            type: 'connection_ack',
+          })
+          received = once(socket, 'message')
+          socket.send(
+            JSON.stringify({
+              id: 'q',
+              type: 'subscribe',
+              payload: { query: '{hello}' },
+            }),
+          )
+          expect(JSON.parse(String((await received)[0]))).toEqual({
+            id: 'q',
+            type: 'next',
+            payload: { data: { hello: 'Hello World' } },
+          })
+        }
+      } finally {
+        socket.terminate()
+        await app.close()
+      }
+    },
+  )
+
   it.each([true, false])(
     'HTTP=%sで同一serverのupgradeに接続しprotocolとQueryを確認する',
     async (http) => {

@@ -338,6 +338,18 @@ WebSocket側は`graphql-ws`の`makeServer()`を利用する。
 
 Loutre WebSocket contextを`graphql-ws`が要求するsocket interfaceへadapterする。
 
+接続処理の拡張は、Runtimeの`websocket`から`graphql-ws`の`onConnect` / `onDisconnect` / `onClose`を設定する。DIを使えるようfactoryの戻り値へ置き、opening requestと接続のsignalを`extra`へ渡す。コールバックの意味や戻り値をLoutre独自の認証APIへ翻訳しない。
+
+LoutreはDI、接続とoperationの寿命、型、cleanupを所有する。認証方式、利用者の形、再認証の頻度はアプリ側で決める。HTTP middlewareやContextから同じサービスを呼ぶためだけに、共通authenticate、予約されたidentity、認証Policyを追加しない。通常HTTPの認証middlewareの仕様も変更しない。
+
+schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#websocketの接続フック)を正本とする。
+
+認証付きの利用例は[HTTP / GraphQL WebSocketの認証例](../../examples/graphql-auth/README.md)を正本とする。利用者のAPIは共通のstate前処理と`context({ state })`とし、HTTP / WSの分岐や接続記録の対応表を要求しない。前処理の実行時機と保持期間はintegrationが所有し、HTTPはリクエスト単位、WSは接続単位で分離する。
+
+stateは任意のアプリの値であり、認証方式や利用者型を定義しない。HTTP middleware contributionと前処理の戻り値から型を推論し、アプリに型アサーションや再認証を要求しない。前処理でのResponseによる短絡はHTTPの応答、WSの接続拒否として扱う。stateとACK payloadは混同しない。
+
+protocolの制御を直接必要とする用途にはgraphql-wsの接続フックを残す。共通の前処理後にonConnectを呼び、その戻り値の規約は変更しない。通常のアプリへACKや終了フックの管理を要求しない。
+
 1 connection上で複数operationが同時実行されるため、message receive loopはoperation処理を逐次blockしない。
 
 ```ts

@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "../..",
+    "outDir": "../../dist/examples-graphql-auth",
+    "tsBuildInfoFile": "../../dist/examples-graphql-auth.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

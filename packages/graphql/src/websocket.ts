@@ -13,7 +13,12 @@ import {
   type ExecutionResult,
   type GraphQLFormattedError,
 } from 'graphql'
-import type { GraphQLRuntime, GraphQLWebSocketContextInput } from './types.js'
+import type {
+  GraphQLRuntime,
+  GraphQLWebSocketContextInput,
+  GraphQLWebSocketExtra,
+} from './types.js'
+import { prepareState } from './state.js'
 import { formatGraphQLError } from './errors.js'
 import type { BoundManifest } from './manifest-internal.js'
 import {
@@ -85,11 +90,31 @@ export async function serveGraphQLWebSocket(
       throw failure
     }
   }
-  const server = makeServer({
+  let state: Readonly<Record<string, unknown>> = Object.freeze({})
+  const hooks = runtime.websocket
+  const server = makeServer<
+    Record<string, unknown> | undefined,
+    GraphQLWebSocketExtra
+  >({
     schema,
     ...(options.connectionInitWaitTimeout === undefined
       ? {}
       : { connectionInitWaitTimeout: options.connectionInitWaitTimeout }),
+    onConnect: (connection) =>
+      whileConnected(async () => {
+        const prepared = await prepareState(runtime, {
+          request: context.request,
+          signal: context.signal,
+          connectionParams: connection.connectionParams,
+        })
+        if (context.signal.aborted || prepared instanceof Response) return false
+        state = prepared
+        return hooks?.onConnect?.(connection)
+      }, context.signal),
+    onDisconnect: (connection, code, reason) =>
+      hooks?.onDisconnect?.(connection, code, reason),
+    onClose: (connection, code, reason) =>
+      hooks?.onClose?.(connection, code, reason),
     async onSubscribe(connection, id, payload) {
       const controller = new AbortController()
       const lease = context.execution.beginOperation({
@@ -98,6 +123,7 @@ export async function serveGraphQLWebSocket(
       })
       const input: GraphQLWebSocketContextInput = {
         transport: 'websocket',
+        state,
         request: context.request,
         connectionParams: connection.connectionParams,
         operationId: id,
@@ -214,7 +240,7 @@ export async function serveGraphQLWebSocket(
         receive = callback
       },
     },
-    undefined,
+    { request: context.request, signal: context.signal },
   )
   context.signal.addEventListener('abort', abortAll, { once: true })
   const dispatch = (data: string) => {
@@ -250,6 +276,33 @@ export async function serveGraphQLWebSocket(
     tasks.add(task)
     if (id !== undefined) operationTasks.set(id, task)
   }
+  async function cleanupSession(): Promise<void> {
+    abortAll()
+    const info = await context.closed
+    try {
+      const results: PromiseSettledResult<unknown>[] = await Promise.allSettled(
+        [dispose(info.code, info.reason), ...tasks],
+      )
+      results.push(
+        ...(await Promise.allSettled(
+          [...operations.values()].map((operation) => operation.cleanup?.()),
+        )),
+      )
+      const errors = results
+        .filter((result) => result.status === 'rejected')
+        .map((result) => result.reason)
+      if (errors.length === 1) throw errors[0]
+      if (errors.length > 1)
+        throw new AggregateError(
+          errors,
+          'GraphQL WebSocketの終了処理に失敗しました。',
+        )
+    } finally {
+      state = Object.freeze({})
+      context.signal.removeEventListener('abort', abortAll)
+      for (const id of operations.keys()) finish(id)
+    }
+  }
   try {
     for await (const message of context.input.messages) {
       if (!message.isValid) {
@@ -259,18 +312,32 @@ export async function serveGraphQLWebSocket(
       dispatch(message.value)
     }
   } finally {
-    abortAll()
-    const info = await context.closed
-    try {
-      await dispose(info.code, info.reason)
-      await Promise.all(
-        [...operations.values()].map((operation) => operation.cleanup?.()),
-      )
-      await Promise.all(tasks)
-    } finally {
-      context.signal.removeEventListener('abort', abortAll)
-      for (const id of operations.keys()) finish(id)
-    }
+    await cleanupSession()
+  }
+}
+
+async function whileConnected<T>(
+  invoke: () => T | Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  signal.throwIfAborted()
+  let abort!: () => void
+  const aborted = new Promise<never>((_resolve, reject) => {
+    abort = () => reject(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+  })
+  try {
+    const result = await Promise.race([
+      Promise.resolve().then(() => {
+        signal.throwIfAborted()
+        return invoke()
+      }),
+      aborted,
+    ])
+    signal.throwIfAborted()
+    return result
+  } finally {
+    signal.removeEventListener('abort', abort)
   }
 }
 
