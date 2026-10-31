@@ -109,6 +109,7 @@ Runnable projects are available in [`examples/`](./examples/).
 - [`hello-worker`](./examples/hello-worker/) — A worker that runs a Task periodically with a `fixedDelay` Trigger
 - [`graphql-orders`](./examples/graphql-orders/) — An orders server comparing Eager / Lazy / Hybrid strategies with a generated Manifest and Typed Field Builder
 - [`graphql-counter`](./examples/graphql-counter/) — A GraphQL server providing Query, Mutation, and Subscription operations over state shared through DI
+- [`graphql-auth`](./examples/graphql-auth/) — 通常HTTPとGraphQL HTTP / WebSocketでユーザー認証を共有する例
 - [`basic-auth`](./examples/basic-auth/) / [`bearer-auth`](./examples/bearer-auth/) — HTTP authentication
 - [`database-postgres`](./examples/database-postgres/) / [`database-drizzle-postgres`](./examples/database-drizzle-postgres/) / [`database-prisma-postgres`](./examples/database-prisma-postgres/) — Database integration
 

@@ -12,6 +12,8 @@ onConnectの未完了Promiseを受信taskとして無条件に待つと、接続
 
 ## 安全な確認方法
 
+接続記録の削除を実際のNode serverで確認する場合は、providerの参照を`app.close()`より前に取得する。停止後の`app.get()`は`LUTRE_APPLICATION_STATE`で拒否されるため、接続記録が残ったという誤った失敗と混同しない。誤った検証で失敗した場合は、起動中に取得したproviderを使って再実行する。
+
 任意のpayload・Request・接続signalがDIしたフックへ届くことを確認する。onConnectを未完了にしたまま切断・drainし、待機の終了と遅いackの抑止を確認する。ack前後でonDisconnect / onCloseの呼び出し条件を分け、終了フックの例外がsessionのtraceへ記録されてもiteratorとleaseが解放されることを確認する。
 
 ## 復旧方法

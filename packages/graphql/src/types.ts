@@ -3,11 +3,13 @@ import type { HttpRawDefinition } from '@loutrejs/loutre/http'
 import type { GraphQLManifest } from './manifest-internal.js'
 import type { GraphQLError, GraphQLFormattedError } from 'graphql'
 
-export interface GraphQLHttpContextInput {
+export interface GraphQLHttpContextInput<
+  TState extends object = Record<string, unknown>,
+> {
   readonly transport: 'http'
   readonly request: Request
   readonly signal: AbortSignal
-  readonly state: Readonly<Record<string, unknown>>
+  readonly state: Readonly<TState>
 }
 
 export interface GraphQLWebSocketContextInput {
@@ -18,9 +20,9 @@ export interface GraphQLWebSocketContextInput {
   readonly signal: AbortSignal
 }
 
-export type GraphQLContextInput =
-  | GraphQLHttpContextInput
-  | GraphQLWebSocketContextInput
+export type GraphQLContextInput<
+  TState extends object = Record<string, unknown>,
+> = GraphQLHttpContextInput<TState> | GraphQLWebSocketContextInput
 
 export interface GraphQLWebSocketExtra {
   readonly request: Request
@@ -32,12 +34,15 @@ export type GraphQLWebSocketHooks = Pick<
   'onConnect' | 'onDisconnect' | 'onClose'
 >
 
-export interface GraphQLRuntime<TContext extends object = object> {
-  context(input: GraphQLContextInput): TContext | Promise<TContext>
+export interface GraphQLRuntime<
+  TContext extends object = object,
+  TState extends object = Record<string, unknown>,
+> {
+  context(input: GraphQLContextInput<TState>): TContext | Promise<TContext>
   readonly websocket?: GraphQLWebSocketHooks
   formatError?(
     error: GraphQLError,
-    input: GraphQLContextInput,
+    input: GraphQLContextInput<TState>,
   ): GraphQLFormattedError
   // 既存のfactoryから構造的型付けで旧指定が紛れ込むことも拒否する。
   readonly rootValue?: never

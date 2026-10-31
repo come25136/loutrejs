@@ -77,7 +77,7 @@ jobs:
 
       - name: Check GraphQL generated contracts
         run: |
-          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts conformance/graphql/graphql.config.ts; do
+          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts examples/graphql-auth/graphql.config.ts conformance/graphql/graphql.config.ts; do
             node packages/cli/bin/loutre.js graphql generate --config "$GRAPHQL_CONFIG_FILE" --check
           done
 
@@ -212,7 +212,7 @@ jobs:
       - name: Run Bun CLI conformance
         run: |
           BUN_BIN="$(command -v bun)"
-          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts conformance/graphql/graphql.config.ts; do
+          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts examples/graphql-auth/graphql.config.ts conformance/graphql/graphql.config.ts; do
             "$BUN_BIN" packages/cli/bin/loutre.js graphql generate --config "$GRAPHQL_CONFIG_FILE" --check
           done
           "$BUN_BIN" packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts

@@ -182,3 +182,46 @@ const invalidHooks: GraphQLWebSocketHooks = {
   onConnect: true,
 }
 void [protectedHooks, operationHooks, invalidHooks]
+
+const userState = http.middleware<{ currentUser: { readonly id: string } }>({
+  name: '利用者',
+  factory: () => async (_context, next) =>
+    next({ currentUser: { id: 'user-1' } }),
+})
+const tenantState = http.middleware<{ tenantId: string }>({
+  name: '組織',
+  factory: () => async (_context, next) => next({ tenantId: 'tenant-1' }),
+})
+graphql.endpoint({
+  name: '型付きmiddleware state',
+  path: '/typed',
+  manifest,
+  transports: {
+    http: { middlewares: [userState, tenantState] },
+    websocket: true,
+  },
+  factory: () => ({
+    context(input) {
+      if (input.transport === 'http') {
+        const id: string = input.state.currentUser.id
+        const tenant: string = input.state.tenantId
+        // @ts-expect-error middlewareが提供しないstateは存在しない
+        input.state.missing
+        // @ts-expect-error middleware stateは読み取り専用
+        input.state.tenantId = 'other'
+        void [id, tenant]
+      } else {
+        // @ts-expect-error WSへHTTP middleware stateを持ち込まない
+        input.state
+      }
+      return {}
+    },
+    formatError(error, input) {
+      if (input.transport === 'http') {
+        const id: string = input.state.currentUser.id
+        void id
+      }
+      return error.toJSON()
+    },
+  }),
+})

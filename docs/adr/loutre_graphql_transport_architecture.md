@@ -344,6 +344,10 @@ LoutreはDI、接続とoperationの寿命、型、cleanupを所有する。認�
 
 schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#websocketの接続フック)を正本とする。
 
+認証付きの利用例は[HTTP / GraphQL WebSocketの認証例](../../examples/graphql-auth/README.md)を正本とする。HTTPとWSは同じアプリのユーザーサービスを使う。HTTPはmiddleware state、WSはアプリが所有する接続記録からContextを作り、利用者情報をack payloadで渡さない。接続記録の破棄はonCloseへ置くため、ack前の切断も同じ経路で扱う。
+
+この利用例ではHTTP middlewareのstateをContextへ渡す型が必要になる。middleware contributionの型を推論して伝播する責務はLoutreに置き、アプリに型アサーションや認証の再実行を要求しない。一方、接続中の認証結果の保存はアプリのサービスに留める。共通の認証APIや予約された利用者型を追加するより、transportごとの小さな接続処理を明示する方を選ぶ。
+
 1 connection上で複数operationが同時実行されるため、message receive loopはoperation処理を逐次blockしない。
 
 ```ts
