@@ -6,7 +6,7 @@ export const BearerProfileController = http.implementation({
   contract: BearerProfileContract,
   factory: () => ({
     get(ctx) {
-      return ctx.response.ok({ body: ctx.state.identity })
+      return ctx.response.ok({ body: ctx.state.currentUser })
     },
   }),
 })

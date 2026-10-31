@@ -17,7 +17,7 @@ import {
   defineApplication,
   defineModule,
   inject,
-  token as defineToken,
+  token,
   provide,
   type as stateType,
   type RuntimeInstrumentation,
@@ -132,14 +132,17 @@ async function fixture(
       input: GraphQLContextInput,
     ) => Record<string, unknown> | Promise<Record<string, unknown>>
     formatError?: GraphQLRuntime['formatError']
-    authenticate?: GraphQLRuntime['authenticate']
+    websocketHooks?: GraphQLRuntime['websocket']
+    makeWebSocketHooks?: (
+      greeting: string,
+    ) => NonNullable<GraphQLRuntime['websocket']>
     failure?: Error
     afterSend?: (message: Record<string, unknown>) => Promise<void>
   } = {},
 ) {
   const stream = source()
   const contexts: GraphQLContextInput[] = []
-  const Service = defineToken<string>('greeting')
+  const Service = token<string>('greeting')
   const schema = buildSchema(typeDefs)
   const queryFields = schema.getQueryType()!.getFields()
   queryFields.hello!.resolve = (
@@ -163,7 +166,7 @@ async function fixture(
   trips.subscribe = (_parent, _args, context: { signal: AbortSignal }) =>
     options.subscription?.(context) ?? stream.iterator
   trips.resolve = (event: { trips: unknown }) => event.trips
-  const endpointOptions = {
+  const endpoint = graphql.endpoint({
     name: 'Api',
     path: '/graphql',
     manifest: manifestFromSchema(schema),
@@ -179,21 +182,18 @@ async function fixture(
           ? false
           : { connectionInitWaitTimeout: options.initTimeout ?? 1000 },
     },
-  }
-  const makeRuntime = (greeting = inject(Service)) => ({
-    ...(options.formatError ? { formatError: options.formatError } : {}),
-    context(input: GraphQLContextInput) {
-      contexts.push(input)
-      return options.makeContext?.(input) ?? { greeting, signal: input.signal }
-    },
+    factory: (greeting = inject(Service)) => ({
+      ...(options.formatError ? { formatError: options.formatError } : {}),
+      websocket:
+        options.makeWebSocketHooks?.(greeting) ?? options.websocketHooks ?? {},
+      context(input) {
+        contexts.push(input)
+        return (
+          options.makeContext?.(input) ?? { greeting, signal: input.signal }
+        )
+      },
+    }),
   })
-  const authenticate = options.authenticate
-  const endpoint = authenticate
-    ? graphql.endpoint({
-        ...endpointOptions,
-        factory: () => ({ ...makeRuntime(), authenticate }),
-      })
-    : graphql.endpoint({ ...endpointOptions, factory: makeRuntime })
   const Module = defineModule(() => ({
     providers: [provide(Service).useValue('hello DI')],
     executions: [endpoint],
@@ -543,66 +543,6 @@ describe('GraphQL HTTP', () => {
     }
   })
 
-  it('HTTPの認証結果をContextへ渡し、本文処理前の拒否は401とchallengeにする', async () => {
-    const authenticate = vi.fn((token: string) =>
-      token === 'valid' ? { id: 'alice' } : null,
-    )
-    const api = await fixture({
-      authenticate,
-      makeContext(input) {
-        expect(input.identity).toEqual({ id: 'alice' })
-        return { greeting: 'authenticated' }
-      },
-    })
-    try {
-      const missing = await api.fetchGraphQL('{unknown}')
-      expect(missing.status).toBe(401)
-      expect(missing.headers.get('www-authenticate')).toBe('Bearer')
-      expect(authenticate).not.toHaveBeenCalled()
-      const rejected = await api.fetchGraphQL('{hello}', {
-        headers: { authorization: 'Bearer invalid' },
-      })
-      expect(rejected.status).toBe(401)
-      expect(api.contexts).toEqual([])
-      const response = await api.fetchGraphQL('{hello}', {
-        headers: {
-          authorization: 'Bearer valid',
-          'content-type': 'application/json',
-          accept: 'application/graphql-response+json',
-        },
-      })
-      expect(response.status).toBe(200)
-      expect(await response.json()).toEqual({
-        data: { hello: 'authenticated' },
-      })
-      expect(api.contexts).toHaveLength(1)
-      expect(authenticate.mock.calls.map(([token]) => token)).toEqual([
-        'invalid',
-        'valid',
-      ])
-    } finally {
-      await api.app.close()
-    }
-  })
-
-  it('HTTPの認証サービス障害は詳細を隠した500としContextを生成しない', async () => {
-    const api = await fixture({
-      authenticate: () => {
-        throw new Error('認証DBの秘密')
-      },
-    })
-    try {
-      const response = await api.fetchGraphQL('{hello}', {
-        headers: { authorization: 'Bearer valid' },
-      })
-      expect(response.status).toBe(500)
-      expect(await response.text()).not.toContain('認証DBの秘密')
-      expect(api.contexts).toEqual([])
-    } finally {
-      await api.app.close()
-    }
-  })
-
   it('標準bearerAuth middlewareでGraphQL HTTPを認証しchallengeとstateを保つ', async () => {
     const auth = bearerAuth({
       realm: 'GraphQL',
@@ -619,7 +559,7 @@ describe('GraphQL HTTP', () => {
       middleware: [auth],
       makeContext(input) {
         if (input.transport === 'http')
-          expect(input.state).toEqual({ identity: { auth: { user: 'alice' } } })
+          expect(input.state).toEqual({ auth: { user: 'alice' } })
         return { greeting: 'auth' }
       },
     })
@@ -666,250 +606,176 @@ describe('GraphQL HTTP', () => {
 })
 
 describe('GraphQL WebSocket', () => {
-  it('認証中のcompleteとID再利用で遅いidentityを次のoperationへ混ぜない', async () => {
-    let release!: (identity: { id: string }) => void
-    const authenticate = vi
-      .fn<NonNullable<GraphQLRuntime['authenticate']>>()
-      .mockResolvedValueOnce({ id: 'initial' })
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            release = resolve
-          }),
-      )
-      .mockResolvedValue({ id: 'current' })
-    const api = await fixture({ authenticate })
-    try {
-      const connection = await api.open()
-      connection.send({
-        type: 'connection_init',
-        payload: { authorization: 'Bearer valid' },
-      })
-      await connection.wait('connection_ack')
-      const operation = {
-        id: 'reuse',
-        type: 'subscribe',
-        payload: { query: '{hello}' },
-      }
-      connection.send(operation)
-      await vi.waitFor(() => expect(authenticate).toHaveBeenCalledTimes(2))
-      connection.send({ type: 'complete', id: 'reuse' })
-      connection.send(operation)
-      await connection.wait('complete', 'reuse')
-      release({ id: 'late' })
-      expect(api.contexts).toHaveLength(1)
-      expect(api.contexts[0]!.identity).toEqual({ id: 'current' })
-      expect(connection.sent.some((message) => message.type === 'error')).toBe(
-        false,
-      )
-    } finally {
-      release?.({ id: 'cleanup' })
-      await api.app.close()
-    }
-  })
-
-  it('認証完了までackせずidentityをoperation Contextだけへ渡す', async () => {
-    let authorize!: (identity: { id: string }) => void
-    const authenticate = vi.fn<NonNullable<GraphQLRuntime['authenticate']>>(
+  it('DIした接続フックへpayload・Request・signalを渡し、完了後に標準のackを返す', async () => {
+    let accept!: (payload: Record<string, unknown>) => void
+    const onConnect = vi.fn<
+      NonNullable<NonNullable<GraphQLRuntime['websocket']>['onConnect']>
+    >(
       () =>
         new Promise((resolve) => {
-          authorize = resolve
+          accept = resolve
         }),
     )
-    const api = await fixture({ authenticate })
+    const api = await fixture({
+      makeWebSocketHooks(greeting) {
+        expect(greeting).toBe('hello DI')
+        return { onConnect }
+      },
+    })
     try {
-      const connection = await api.open()
+      const connection = await api.open({ 'x-api-key': 'header-value' })
       connection.send({
         type: 'connection_init',
-        payload: { authorization: 'Bearer valid' },
+        payload: { credential: { custom: 123 } },
       })
-      await vi.waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1))
-      expect(authenticate.mock.calls[0]![0]).toBe('valid')
-      expect(authenticate.mock.calls[0]![1].signal.aborted).toBe(false)
+      await vi.waitFor(() => expect(onConnect).toHaveBeenCalledTimes(1))
+      const input = onConnect.mock.calls[0]![0]
+      expect(input.connectionParams).toEqual({ credential: { custom: 123 } })
+      expect(input.extra.request.url).toBe('http://test/graphql')
+      expect(input.extra.request.headers.get('x-api-key')).toBe('header-value')
+      expect(input.extra.signal.aborted).toBe(false)
       expect(connection.sent).toEqual([])
       expect(api.contexts).toEqual([])
-      authorize({ id: 'alice' })
+      accept({ ready: true })
       await connection.wait('connection_ack')
-      expect(connection.sent).toEqual([{ type: 'connection_ack' }])
-      connection.send({
-        id: 'q',
-        type: 'subscribe',
-        payload: { query: '{hello}' },
-      })
-      await vi.waitFor(() => expect(authenticate).toHaveBeenCalledTimes(2))
-      authorize({ id: 'alice' })
-      await connection.wait('complete', 'q')
-      expect(api.contexts).toHaveLength(1)
-      expect(api.contexts[0]).toMatchObject({
-        identity: { id: 'alice' },
-        operationId: 'q',
-      })
-      expect(authenticate.mock.calls[1]![1].signal).not.toBe(
-        authenticate.mock.calls[0]![1].signal,
-      )
-    } finally {
-      authorize?.({ id: 'cleanup' })
-      await api.app.close()
-    }
-  })
-
-  it.each([null, undefined])(
-    '認証結果=%sならackせず4403で拒否する',
-    async (identity) => {
-      const authenticate = vi.fn(() => identity)
-      const api = await fixture({ authenticate })
-      try {
-        const connection = await api.open()
+      expect(connection.sent).toEqual([
+        { type: 'connection_ack', payload: { ready: true } },
+      ])
+      for (const id of ['one', 'two']) {
         connection.send({
-          type: 'connection_init',
-          payload: { authorization: 'Bearer invalid' },
+          id,
+          type: 'subscribe',
+          payload: { query: '{hello}' },
         })
-        expect((await connection.channel.connection.closed).code).toBe(4403)
-        expect(connection.sent).toEqual([])
-        expect(api.contexts).toEqual([])
-        expect(authenticate).toHaveBeenCalledTimes(1)
-      } finally {
-        await api.app.close()
+        await connection.wait('complete', id)
       }
-    },
-  )
-
-  it.each([
-    [{}, {}, 4403],
-    [{ authorization: 'Basic invalid' }, {}, 4403],
-    [{ authorization: 123 }, {}, 4400],
-    [{ authorization: null }, { authorization: 'Bearer valid' }, 4400],
-    [
-      { authorization: 'Bearer valid' },
-      { authorization: 'Bearer valid' },
-      4400,
-    ],
-  ] as const)(
-    'payload=%jとheader=%jの不正入力を%dで拒否する',
-    async (payload, headers, code) => {
-      const authenticate = vi.fn(() => ({ id: 'alice' }))
-      const api = await fixture({ authenticate })
-      try {
-        const connection = await api.open(headers)
-        connection.send({ type: 'connection_init', payload })
-        expect((await connection.channel.connection.closed).code).toBe(code)
-        expect(authenticate).not.toHaveBeenCalled()
-        expect(connection.sent).toEqual([])
-        expect(api.contexts).toEqual([])
-      } finally {
-        await api.app.close()
-      }
-    },
-  )
-
-  it('payloadに資格情報がない場合は接続時ヘッダーを認証する', async () => {
-    const authenticate = vi.fn<NonNullable<GraphQLRuntime['authenticate']>>(
-      () => ({ id: 'header-user' }),
-    )
-    const api = await fixture({ authenticate })
-    try {
-      const connection = await api.open({ authorization: 'bEaReR valid' })
-      connection.send({ type: 'connection_init' })
-      await connection.wait('connection_ack')
-      connection.send({
-        id: 'q',
-        type: 'subscribe',
-        payload: { query: '{hello}' },
+      expect(onConnect).toHaveBeenCalledTimes(1)
+      expect(api.contexts).toHaveLength(2)
+      expect(api.contexts[0]).toMatchObject({
+        transport: 'websocket',
+        connectionParams: input.connectionParams,
+        request: input.extra.request,
       })
-      await connection.wait('complete', 'q')
-      expect(authenticate).toHaveBeenCalledTimes(2)
-      expect(
-        authenticate.mock.calls.every(([token]) => token === 'valid'),
-      ).toBe(true)
-      expect(api.contexts[0]).toMatchObject({ identity: { id: 'header-user' } })
+      expect(api.contexts[0]).not.toHaveProperty('identity')
     } finally {
+      accept?.({ ready: false })
       await api.app.close()
     }
   })
 
   it.each([false, true])(
-    '非同期=%sの認証障害は詳細を隠して1011で切断する',
+    '接続フックの非同期=%sのfalseを4403拒否へ委譲する',
     async (asyncResult) => {
-      const failure = new Error('認証DBの非公開情報')
-      const authenticate = vi.fn(() => {
-        if (asyncResult) return Promise.reject(failure)
-        throw failure
+      const onConnect = vi.fn(() =>
+        asyncResult ? Promise.resolve(false) : false,
+      )
+      const onDisconnect = vi.fn(),
+        onClose = vi.fn()
+      const api = await fixture({
+        websocketHooks: { onConnect, onDisconnect, onClose },
       })
-      const api = await fixture({ authenticate })
       try {
         const connection = await api.open()
-        connection.send({
-          type: 'connection_init',
-          payload: { authorization: 'Bearer valid' },
-        })
-        const closed = await connection.channel.connection.closed
-        expect(closed.code).toBe(1011)
-        expect(closed.reason).toBe('Internal server error')
+        connection.send({ type: 'connection_init' })
+        expect((await connection.channel.connection.closed).code).toBe(4403)
+        await api.app.close()
         expect(connection.sent).toEqual([])
         expect(api.contexts).toEqual([])
+        expect(onConnect).toHaveBeenCalledTimes(1)
+        expect(onDisconnect).not.toHaveBeenCalled()
+        expect(onClose).toHaveBeenCalledTimes(1)
       } finally {
         await api.app.close()
       }
     },
   )
 
-  it('認証中のsubscribeを4401で拒否してResolverを実行しない', async () => {
-    const authenticate = vi.fn(() => new Promise<object>(() => {}))
-    const api = await fixture({ authenticate })
+  it.each([true, undefined])(
+    '接続フックの戻り値=%sならpayloadなしでackする',
+    async (result) => {
+      const api = await fixture({ websocketHooks: { onConnect: () => result } })
+      try {
+        const connection = await api.open()
+        connection.send({ type: 'connection_init' })
+        await connection.wait('connection_ack')
+        expect(connection.sent).toEqual([{ type: 'connection_ack' }])
+      } finally {
+        await api.app.close()
+      }
+    },
+  )
+
+  it.each([false, true])(
+    '接続フックの非同期=%sの障害で内部情報を送信しない',
+    async (asyncResult) => {
+      const failure = new Error('公開してはいけない接続情報')
+      const api = await fixture({
+        websocketHooks: {
+          onConnect() {
+            if (asyncResult) return Promise.reject(failure)
+            throw failure
+          },
+        },
+      })
+      try {
+        const connection = await api.open()
+        connection.send({ type: 'connection_init' })
+        const closed = await connection.channel.connection.closed
+        expect(closed.code).toBe(1011)
+        expect(closed.reason).toBe('Internal server error')
+        expect(connection.sent).toEqual([])
+      } finally {
+        await api.app.close()
+      }
+    },
+  )
+
+  it('init前の終了はonCloseだけを呼び出す', async () => {
+    const onConnect = vi.fn(),
+      onDisconnect = vi.fn()
+    const onClose =
+      vi.fn<NonNullable<NonNullable<GraphQLRuntime['websocket']>['onClose']>>()
+    const api = await fixture({
+      websocketHooks: { onConnect, onDisconnect, onClose },
+    })
     try {
       const connection = await api.open()
-      connection.send({
-        type: 'connection_init',
-        payload: { authorization: 'Bearer valid' },
-      })
-      await vi.waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1))
-      connection.send({
-        id: 'q',
-        type: 'subscribe',
-        payload: { query: '{hello}' },
-      })
-      expect((await connection.channel.connection.closed).code).toBe(4401)
-      expect(api.contexts).toEqual([])
-      expect(connection.sent).toEqual([])
+      await connection.channel.connection.close(1000, '開始前の終了')
+      await api.app.close()
+      expect(onConnect).not.toHaveBeenCalled()
+      expect(onDisconnect).not.toHaveBeenCalled()
+      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(onClose.mock.calls[0]![0].extra.signal.aborted).toBe(true)
+      expect(onClose.mock.calls[0]!.slice(1)).toEqual([1000, '開始前の終了'])
     } finally {
       await api.app.close()
     }
   })
 
-  it.each(['disconnect', 'drain'] as const)(
-    '認証サービスが中断に協調しなくても%sで終了する',
-    async (stop) => {
-      const authenticate = vi.fn<NonNullable<GraphQLRuntime['authenticate']>>(
-        () => new Promise(() => {}),
-      )
-      const api = await fixture({ authenticate })
-      try {
-        const connection = await api.open()
-        connection.send({
-          type: 'connection_init',
-          payload: { authorization: 'Bearer valid' },
-        })
-        await vi.waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1))
-        if (stop === 'disconnect') await connection.channel.connection.close()
-        await api.app.close()
-        expect(authenticate.mock.calls[0]![1].signal.aborted).toBe(true)
-        expect(connection.sent).toEqual([])
-      } finally {
-        await api.app.close()
-      }
-    },
-  )
-
-  it('後続operationの認証で失効した接続と既存Subscriptionを終了する', async () => {
-    let valid = true
-    const authenticate = vi.fn(() => (valid ? { id: 'alice' } : null))
-    const api = await fixture({ authenticate })
+  it('接続終了時に購読を解放してからonDisconnectとonCloseを同じ接続入力で呼ぶ', async () => {
+    const callbacks: string[] = []
+    const onConnect =
+      vi.fn<
+        NonNullable<NonNullable<GraphQLRuntime['websocket']>['onConnect']>
+      >()
+    const api = await fixture({
+      websocketHooks: {
+        onConnect,
+        onDisconnect(connection, code, reason) {
+          callbacks.push('disconnect')
+          expect(api.stream.cleanup).toHaveBeenCalledTimes(1)
+          expect(connection.extra).toBe(onConnect.mock.calls[0]![0].extra)
+          expect(connection.extra.signal.aborted).toBe(true)
+          expect([code, reason]).toEqual([1000, '終了'])
+        },
+        onClose() {
+          callbacks.push('close')
+        },
+      },
+    })
     try {
       const connection = await api.open()
-      connection.send({
-        type: 'connection_init',
-        payload: { authorization: 'Bearer valid' },
-      })
+      connection.send({ type: 'connection_init' })
       await connection.wait('connection_ack')
       connection.send({
         id: 's',
@@ -917,64 +783,127 @@ describe('GraphQL WebSocket', () => {
         payload: { query: 'subscription {trips{id}}' },
       })
       await vi.waitFor(() => expect(api.contexts).toHaveLength(1))
-      valid = false
-      connection.send({
-        id: 'q',
-        type: 'subscribe',
-        payload: { query: '{hello}' },
-      })
-      expect((await connection.channel.connection.closed).code).toBe(4403)
+      await connection.channel.connection.close(1000, '終了')
       await api.app.close()
+      expect(callbacks).toEqual(['disconnect', 'close'])
       expect(api.stream.cleanup).toHaveBeenCalledTimes(1)
-      expect(api.contexts).toHaveLength(1)
     } finally {
       await api.app.close()
     }
   })
 
-  it('複数接続と並列operationのidentityを混同しない', async () => {
-    const authenticate = vi.fn(async (token: string) => ({ id: token }))
-    const api = await fixture({ authenticate })
-    try {
-      const alice = await api.open(),
-        bob = await api.open()
-      alice.send({
-        type: 'connection_init',
-        payload: { authorization: 'Bearer alice' },
+  it.each(['onDisconnect', 'onClose'] as const)(
+    '終了フック%sが失敗してもiteratorとleaseを解放する',
+    async (hook) => {
+      const failure = new Error('終了フックの失敗')
+      const api = await fixture({
+        websocketHooks: {
+          [hook]: () => {
+            throw failure
+          },
+        },
       })
-      bob.send({
-        type: 'connection_init',
-        payload: { authorization: 'Bearer bob' },
-      })
-      await Promise.all([
-        alice.wait('connection_ack'),
-        bob.wait('connection_ack'),
-      ])
-      alice.send({ id: 'a', type: 'subscribe', payload: { query: '{hello}' } })
-      alice.send({ id: 'a2', type: 'subscribe', payload: { query: '{hello}' } })
-      bob.send({ id: 'b', type: 'subscribe', payload: { query: '{hello}' } })
-      await Promise.all([
-        alice.wait('complete', 'a'),
-        alice.wait('complete', 'a2'),
-        bob.wait('complete', 'b'),
-      ])
-      expect(api.contexts).toHaveLength(3)
-      expect(api.contexts).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            operationId: 'a',
-            identity: { id: 'alice' },
+      try {
+        const connection = await api.open()
+        connection.send({ type: 'connection_init' })
+        await connection.wait('connection_ack')
+        connection.send({
+          id: 's',
+          type: 'subscribe',
+          payload: { query: 'subscription {trips{id}}' },
+        })
+        await vi.waitFor(() => expect(api.contexts).toHaveLength(1))
+        await connection.channel.connection.close()
+        await api.app.close()
+        expect(api.stream.cleanup).toHaveBeenCalledTimes(1)
+        const operation = api.trace.traces.find(
+          (trace) => trace.kind === 'graphql.operation',
+        )!
+        const session = api.trace.traces.find(
+          (trace) => trace.kind === 'websocket.session',
+        )!
+        expect(operation.complete).toHaveBeenCalledTimes(1)
+        expect(session.complete).toHaveBeenCalledTimes(1)
+        expect(session.fail).toHaveBeenCalledWith(failure)
+      } finally {
+        await api.app.close()
+      }
+    },
+  )
+
+  it.each(['disconnect', 'drain'] as const)(
+    '接続フックが中断に協調しなくても%sで終了し、遅いackを送らない',
+    async (stop) => {
+      let accept!: (value: boolean) => void
+      const onConnect = vi.fn<
+        NonNullable<NonNullable<GraphQLRuntime['websocket']>['onConnect']>
+      >(
+        () =>
+          new Promise((resolve) => {
+            accept = resolve
           }),
-          expect.objectContaining({
-            operationId: 'a2',
-            identity: { id: 'alice' },
-          }),
-          expect.objectContaining({
-            operationId: 'b',
-            identity: { id: 'bob' },
-          }),
-        ]),
       )
+      const onDisconnect = vi.fn(),
+        onClose = vi.fn()
+      const api = await fixture({
+        websocketHooks: { onConnect, onDisconnect, onClose },
+      })
+      try {
+        const connection = await api.open()
+        connection.send({ type: 'connection_init' })
+        await vi.waitFor(() => expect(onConnect).toHaveBeenCalledTimes(1))
+        if (stop === 'disconnect') await connection.channel.connection.close()
+        await api.app.close()
+        expect(onConnect.mock.calls[0]![0].extra.signal.aborted).toBe(true)
+        accept(true)
+        expect(connection.sent).toEqual([])
+        expect(onDisconnect).not.toHaveBeenCalled()
+        expect(onClose).toHaveBeenCalledTimes(1)
+      } finally {
+        accept?.(false)
+        await api.app.close()
+      }
+    },
+  )
+
+  it('別接続のextraと任意のContextを混同しない', async () => {
+    const onConnect = vi.fn(() => true)
+    const api = await fixture({
+      websocketHooks: { onConnect },
+      makeContext(input) {
+        return {
+          greeting:
+            input.transport === 'websocket'
+              ? input.connectionParams?.name
+              : 'http',
+        }
+      },
+    })
+    try {
+      const first = await api.open(),
+        second = await api.open()
+      first.send({ type: 'connection_init', payload: { name: 'alice' } })
+      second.send({ type: 'connection_init', payload: { name: 'bob' } })
+      await Promise.all([
+        first.wait('connection_ack'),
+        second.wait('connection_ack'),
+      ])
+      first.send({ id: 'a', type: 'subscribe', payload: { query: '{hello}' } })
+      second.send({ id: 'b', type: 'subscribe', payload: { query: '{hello}' } })
+      await Promise.all([
+        first.wait('complete', 'a'),
+        second.wait('complete', 'b'),
+      ])
+      expect(first.sent).toContainEqual({
+        id: 'a',
+        type: 'next',
+        payload: { data: { hello: 'alice' } },
+      })
+      expect(second.sent).toContainEqual({
+        id: 'b',
+        type: 'next',
+        payload: { data: { hello: 'bob' } },
+      })
     } finally {
       await api.app.close()
     }
@@ -1578,6 +1507,31 @@ describe('GraphQL WebSocket', () => {
 })
 
 describe('GraphQLのresolver契約', () => {
+  it.each([
+    ['websocket', true],
+    ['websocket', null],
+    ['onConnect', { onConnect: true }],
+    ['schema', { schema: {} }],
+    ['onSubscribe', { onSubscribe: () => undefined }],
+  ])(
+    'JavaScriptから指定した不正な接続設定%sをcompileで拒否する',
+    (name, hooks) => {
+      const schema = buildSchema('type Query { hello: String }')
+      schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
+      const endpoint = graphql.endpoint({
+        name: 'InvalidHooks',
+        path: '/graphql',
+        manifest: manifestFromSchema(schema),
+        factory: (() => ({ context: () => ({}), websocket: hooks })) as never,
+      })
+      const Module = defineModule(() => ({ executions: [endpoint] }))
+      const application = defineApplication({ modules: [Module()] })
+      expect(application.model.diagnostics).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining(name) }),
+      )
+    },
+  )
+
   it('root fieldのresolveが欠落したschemaを拒否する', () => {
     expect(() =>
       graphql.endpoint({
@@ -1615,13 +1569,8 @@ describe('GraphQLのresolver契約', () => {
     },
   )
 
-  it.each([
-    'rootValue',
-    'context',
-    'authenticate',
-    'onConnectionInit',
-  ] as const)(
-    'JavaScriptからの不正な%s factoryをApplication compileで拒否する',
+  it.each(['rootValue', 'context'] as const)(
+    'JavaScriptからの旧%s factoryをApplication compileで拒否する',
     (invalid) => {
       const schema = buildSchema('type Query { hello: String }')
       schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
@@ -1632,11 +1581,7 @@ describe('GraphQLのresolver契約', () => {
         factory: (() =>
           invalid === 'rootValue'
             ? { context: () => ({}), rootValue: {} }
-            : invalid === 'authenticate'
-              ? { context: () => ({}), authenticate: true }
-              : invalid === 'onConnectionInit'
-                ? { context: () => ({}), onConnectionInit: () => true }
-                : {}) as never,
+            : {}) as never,
       })
       const Module = defineModule(() => ({ executions: [endpoint] }))
       const application = defineApplication({ modules: [Module()] })

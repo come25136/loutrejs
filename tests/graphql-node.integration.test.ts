@@ -4,15 +4,12 @@ import { once } from 'node:events'
 import { describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { buildSchema } from 'graphql'
-import { graphql, type GraphQLRuntime } from '@loutrejs/graphql'
+import { graphql, type GraphQLWebSocketHooks } from '@loutrejs/graphql'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
 import { serverAudits } from 'graphql-http'
 
-async function create(
-  http: boolean,
-  authenticate?: GraphQLRuntime['authenticate'],
-) {
+async function create(http: boolean, hooks: GraphQLWebSocketHooks = {}) {
   const schema = buildSchema(
     'type Query { hello: String! } type Subscription { hello: String! }',
   )
@@ -22,21 +19,13 @@ async function create(
     yield 'Hello World'
   }
   hello.resolve = (event: string) => event
-  const endpointOptions = {
+  const endpoint = graphql.endpoint({
     name: 'Native',
     path: '/graphql',
     manifest: manifestFromSchema(schema),
     transports: { http, websocket: true },
-  }
-  const endpoint = authenticate
-    ? graphql.endpoint({
-        ...endpointOptions,
-        factory: () => ({ context: () => ({}), authenticate }),
-      })
-    : graphql.endpoint({
-        ...endpointOptions,
-        factory: () => ({ context: () => ({}) }),
-      })
+    factory: () => ({ context: () => ({}), websocket: hooks }),
+  })
   const Module = defineModule(() => ({ executions: [endpoint] }))
   const app = await nodeRuntime.create({
     application: defineApplication({ modules: [Module()] }),
@@ -51,42 +40,41 @@ async function create(
 }
 
 describe('Node native HTTP/WebSocket', () => {
-  it.each(['payload', 'header', 'invalid'] as const)(
-    '%sの接続認証をnative WebSocketでも適用する',
-    async (credential) => {
-      const { app, url } = await create(true, async (token) =>
-        token === 'valid' ? { id: 'alice' } : null,
-      )
+  it.each(['payload', 'header', 'reject'] as const)(
+    'native接続の%sをアプリ指定の接続フックで判断する',
+    async (mode) => {
+      const { app, url } = await create(true, {
+        onConnect({ connectionParams, extra }) {
+          return (
+            connectionParams?.secret === 'valid' ||
+            extra.request.headers.get('x-api-key') === 'valid'
+          )
+        },
+      })
       const socket = new WebSocket(
         url.replace('http:', 'ws:'),
         ['graphql-transport-ws'],
         {
-          headers:
-            credential === 'header' ? { authorization: 'Bearer valid' } : {},
+          headers: mode === 'header' ? { 'x-api-key': 'valid' } : {},
         },
       )
       try {
         await once(socket, 'open')
-        const closed = once(socket, 'close')
-        if (credential === 'invalid') {
-          const messages: unknown[] = []
-          socket.on('message', (message) => messages.push(message))
+        if (mode === 'reject') {
+          const closed = once(socket, 'close')
           socket.send(
             JSON.stringify({
               type: 'connection_init',
-              payload: { authorization: 'Bearer invalid' },
+              payload: { secret: 'invalid' },
             }),
           )
           expect((await closed)[0]).toBe(4403)
-          expect(messages).toEqual([])
         } else {
           let received = once(socket, 'message')
           socket.send(
             JSON.stringify({
               type: 'connection_init',
-              ...(credential === 'payload'
-                ? { payload: { authorization: 'Bearer valid' } }
-                : {}),
+              ...(mode === 'payload' ? { payload: { secret: 'valid' } } : {}),
             }),
           )
           expect(JSON.parse(String((await received)[0]))).toEqual({
@@ -105,8 +93,6 @@ describe('Node native HTTP/WebSocket', () => {
             type: 'next',
             payload: { data: { hello: 'Hello World' } },
           })
-          socket.close()
-          await closed
         }
       } finally {
         socket.terminate()

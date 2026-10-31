@@ -1,12 +1,12 @@
 import { parse, type GraphQLError, type GraphQLFormattedError } from 'graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
-import { graphql, type GraphQLRuntime } from '@loutrejs/graphql'
+import { graphql, type GraphQLWebSocketHooks } from '@loutrejs/graphql'
 import {
   defineApplication,
   defineModule,
   createKernelApplication,
 } from '@loutrejs/loutre'
-import { http, type BearerAuthenticator } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 import { websocket } from '@loutrejs/loutre/websocket'
 
 const manifest = bindManifest({
@@ -19,18 +19,6 @@ const httpOnly = graphql.endpoint({
   path: '/graphql',
   manifest,
   factory,
-})
-graphql.endpoint({
-  name: 'Public',
-  path: '/public',
-  manifest,
-  factory: () => ({
-    context(input) {
-      const identity: undefined = input.identity
-      void identity
-      return {}
-    },
-  }),
 })
 const websocketOnly = graphql.endpoint({
   name: 'WebSocket',
@@ -45,11 +33,27 @@ const both = graphql.endpoint({
   manifest,
   transports: { http: true, websocket: true },
   factory: () => ({
-    async authenticate(token, { signal }) {
-      const value: string = token
-      const abort: AbortSignal = signal
-      void [value, abort]
-      return token === 'valid' ? { id: 'alice' } : null
+    websocket: {
+      onConnect(connection) {
+        const request: Request = connection.extra.request
+        const signal: AbortSignal = connection.extra.signal
+        const params: Readonly<Record<string, unknown>> | undefined =
+          connection.connectionParams
+        // @ts-expect-error opening requestの参照は読み取り専用
+        connection.extra.request = request
+        void [signal, params]
+        return { ready: true }
+      },
+      onDisconnect(connection, code, reason) {
+        const request: Request = connection.extra.request
+        const status: number | undefined = code
+        const message: string | undefined = reason
+        void [request, status, message]
+      },
+      async onClose(connection) {
+        const signal: AbortSignal = connection.extra.signal
+        void signal
+      },
     },
     formatError(error, input) {
       const typedError: GraphQLError = error
@@ -69,11 +73,6 @@ const both = graphql.endpoint({
       return formatted
     },
     context(input) {
-      const identity: { id: string } = input.identity
-      const identityId: string = input.identity.id
-      // @ts-expect-error 利用者の未定義フィールドを許可しない
-      input.identity.missing
-      void [identity, identityId]
       const request: Request = input.request
       const signal: AbortSignal = input.signal
       if (input.transport === 'websocket') {
@@ -89,12 +88,6 @@ const both = graphql.endpoint({
     },
   }),
 })
-
-type Authenticate = NonNullable<GraphQLRuntime['authenticate']>
-// @ts-expect-error 認証関数はbooleanを利用者として返せない
-const invalidAuthenticator: Authenticate = () => true
-void invalidAuthenticator
-
 const HttpModule = defineModule(() => ({ executions: [httpOnly] }))
 const WsModule = defineModule(() => ({ executions: [websocketOnly] }))
 const BothModule = defineModule(() => ({ executions: [both] }))
@@ -159,9 +152,9 @@ graphql.endpoint({
   name: 'AsyncFormatter',
   path: '/graphql',
   manifest,
-  // @ts-expect-error formatErrorは同期的なGraphQLFormattedErrorを返す
   factory: () => ({
     context: () => ({}),
+    // @ts-expect-error formatErrorは同期的なGraphQLFormattedErrorを返す
     formatError: async () => ({ message: 'error' }),
   }),
 })
@@ -169,34 +162,23 @@ graphql.endpoint({
   name: 'MissingMessage',
   path: '/graphql',
   manifest,
-  // @ts-expect-error 整形済みエラーにはmessageが必要
   factory: () => ({
     context: () => ({}),
+    // @ts-expect-error 整形済みエラーにはmessageが必要
     formatError: () => ({ extensions: {} }),
   }),
 })
 
-const sharedAuthenticate: BearerAuthenticator<{ id: string }> = (token) =>
-  token === 'valid' ? { id: 'alice' } : null
-graphql.endpoint({
-  name: 'ContextFirst',
-  path: '/ordered',
-  manifest,
-  factory: () => ({
-    context({ identity }) {
-      const id: string = identity.id
-      return { id }
-    },
-    authenticate: sharedAuthenticate,
-  }),
-})
-const maybeAuthenticate = {} as {
-  authenticate?: NonNullable<GraphQLRuntime['authenticate']>
+const protectedHooks: GraphQLWebSocketHooks = {
+  // @ts-expect-error manifestのexecuteは公開フックから上書きできない
+  execute: () => ({ data: {} }),
 }
-graphql.endpoint({
-  name: 'DynamicAuth',
-  path: '/dynamic',
-  manifest,
-  // @ts-expect-error 認証関数の有無を不確定にしたままidentityを非optionalにできない
-  factory: () => ({ ...maybeAuthenticate, context: () => ({}) }),
-})
+const operationHooks: GraphQLWebSocketHooks = {
+  // @ts-expect-error operationのleaseを所有するonSubscribeは公開しない
+  onSubscribe: () => undefined,
+}
+const invalidHooks: GraphQLWebSocketHooks = {
+  // @ts-expect-error 接続フックは関数を要求する
+  onConnect: true,
+}
+void [protectedHooks, operationHooks, invalidHooks]

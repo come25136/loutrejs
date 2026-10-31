@@ -4,8 +4,6 @@ import type {
   WebSocketMessageCodec,
 } from '@loutrejs/loutre/websocket'
 import { makeServer, parseMessage, MessageType } from 'graphql-ws'
-import { authenticateBearer } from '@loutrejs/loutre/http'
-import { AuthenticationError, webSocketAuthorization } from './auth.js'
 import {
   parse,
   validate,
@@ -15,7 +13,11 @@ import {
   type ExecutionResult,
   type GraphQLFormattedError,
 } from 'graphql'
-import type { GraphQLRuntime, GraphQLWebSocketContextInput } from './types.js'
+import type {
+  GraphQLRuntime,
+  GraphQLWebSocketContextInput,
+  GraphQLWebSocketExtra,
+} from './types.js'
 import { formatGraphQLError } from './errors.js'
 import type { BoundManifest } from './manifest-internal.js'
 import {
@@ -25,7 +27,7 @@ import {
 } from './execution.js'
 
 interface Operation {
-  input: GraphQLWebSocketContextInput
+  readonly input: GraphQLWebSocketContextInput
   readonly controller: AbortController
   readonly lease: ExecutionOperationLease
   cleanup?: () => Promise<unknown>
@@ -59,7 +61,6 @@ export async function serveGraphQLWebSocket(
   const executionOperations = new WeakMap<ExecutionArgs, Operation>()
   const tasks = new Set<Promise<void>>()
   const operationTasks = new Map<string, Promise<void>>()
-  let authorization: unknown
   let receive!: (data: string) => Promise<void>
   const finish = (id: string) => {
     const operation = operations.get(id)
@@ -88,25 +89,23 @@ export async function serveGraphQLWebSocket(
       throw failure
     }
   }
-  const server = makeServer({
+  const hooks = runtime.websocket
+  const server = makeServer<
+    Record<string, unknown> | undefined,
+    GraphQLWebSocketExtra
+  >({
     schema,
     ...(options.connectionInitWaitTimeout === undefined
       ? {}
       : { connectionInitWaitTimeout: options.connectionInitWaitTimeout }),
-    async onConnect(connection) {
-      if (!runtime.authenticate) return
-      authorization = webSocketAuthorization(
-        context.request,
-        connection.connectionParams,
-      )
-      const identity = await authenticateBearer(
-        authorization,
-        (token, authenticationInput) =>
-          runtime.authenticate!(token, authenticationInput),
-        { signal: context.signal },
-      )
-      return identity !== null
-    },
+    onConnect: hooks?.onConnect
+      ? (connection) =>
+          whileConnected(() => hooks.onConnect!(connection), context.signal)
+      : undefined,
+    onDisconnect: (connection, code, reason) =>
+      hooks?.onDisconnect?.(connection, code, reason),
+    onClose: (connection, code, reason) =>
+      hooks?.onClose?.(connection, code, reason),
     async onSubscribe(connection, id, payload) {
       const controller = new AbortController()
       const lease = context.execution.beginOperation({
@@ -119,7 +118,6 @@ export async function serveGraphQLWebSocket(
         connectionParams: connection.connectionParams,
         operationId: id,
         signal: controller.signal,
-        identity: undefined,
       }
       const operation: Operation = { controller, lease, input, finished: false }
       operations.set(id, operation)
@@ -133,24 +131,6 @@ export async function serveGraphQLWebSocket(
         'websocket.protocol': context.protocol,
       })
       if (context.signal.aborted) controller.abort(context.signal.reason)
-      if (runtime.authenticate) {
-        try {
-          const identity = await run(operation, () =>
-            authenticateBearer(
-              authorization,
-              (token, authenticationInput) =>
-                runtime.authenticate!(token, authenticationInput),
-              { signal: AbortSignal.any([context.signal, controller.signal]) },
-            ),
-          )
-          if (identity === null) throw new AuthenticationError(401)
-          operation.input = { ...input, identity }
-        } catch (error) {
-          if (controller.signal.aborted)
-            return [new GraphQLError('操作は中断されました。')]
-          throw error
-        }
-      }
       let document
       try {
         document = parse(payload.query)
@@ -170,9 +150,7 @@ export async function serveGraphQLWebSocket(
       ]
       if (errors.length > 0) return errors
       if (!ast) return [new GraphQLError('Unable to identify operation')]
-      const contextValue = await run(operation, () =>
-        runtime.context(operation.input),
-      )
+      const contextValue = await run(operation, () => runtime.context(input))
       const args: ExecutionArgs = {
         schema,
         document,
@@ -252,7 +230,7 @@ export async function serveGraphQLWebSocket(
         receive = callback
       },
     },
-    undefined,
+    { request: context.request, signal: context.signal },
   )
   context.signal.addEventListener('abort', abortAll, { once: true })
   const dispatch = (data: string) => {
@@ -277,16 +255,7 @@ export async function serveGraphQLWebSocket(
         if (!context.signal.aborted) {
           for (const operation of operations.values())
             if (!operation.formattingFailure) operation.lease.fail?.(error)
-          const code =
-            error instanceof AuthenticationError
-              ? error.status === 400
-                ? 4400
-                : 4403
-              : 1011
-          await context.close(
-            code,
-            code === 1011 ? 'Internal server error' : '認証に失敗しました。',
-          )
+          await context.close(1011, 'Internal server error')
         }
       })
       .finally(() => {
@@ -297,6 +266,32 @@ export async function serveGraphQLWebSocket(
     tasks.add(task)
     if (id !== undefined) operationTasks.set(id, task)
   }
+  async function cleanupSession(): Promise<void> {
+    abortAll()
+    const info = await context.closed
+    try {
+      const results: PromiseSettledResult<unknown>[] = await Promise.allSettled(
+        [dispose(info.code, info.reason), ...tasks],
+      )
+      results.push(
+        ...(await Promise.allSettled(
+          [...operations.values()].map((operation) => operation.cleanup?.()),
+        )),
+      )
+      const errors = results
+        .filter((result) => result.status === 'rejected')
+        .map((result) => result.reason)
+      if (errors.length === 1) throw errors[0]
+      if (errors.length > 1)
+        throw new AggregateError(
+          errors,
+          'GraphQL WebSocketの終了処理に失敗しました。',
+        )
+    } finally {
+      context.signal.removeEventListener('abort', abortAll)
+      for (const id of operations.keys()) finish(id)
+    }
+  }
   try {
     for await (const message of context.input.messages) {
       if (!message.isValid) {
@@ -306,18 +301,32 @@ export async function serveGraphQLWebSocket(
       dispatch(message.value)
     }
   } finally {
-    abortAll()
-    const info = await context.closed
-    try {
-      await dispose(info.code, info.reason)
-      await Promise.all(
-        [...operations.values()].map((operation) => operation.cleanup?.()),
-      )
-      await Promise.all(tasks)
-    } finally {
-      context.signal.removeEventListener('abort', abortAll)
-      for (const id of operations.keys()) finish(id)
-    }
+    await cleanupSession()
+  }
+}
+
+async function whileConnected<T>(
+  invoke: () => T | Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  signal.throwIfAborted()
+  let abort!: () => void
+  const aborted = new Promise<never>((_resolve, reject) => {
+    abort = () => reject(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+  })
+  try {
+    const result = await Promise.race([
+      Promise.resolve().then(() => {
+        signal.throwIfAborted()
+        return invoke()
+      }),
+      aborted,
+    ])
+    signal.throwIfAborted()
+    return result
+  } finally {
+    signal.removeEventListener('abort', abort)
   }
 }
 

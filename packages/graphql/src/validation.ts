@@ -50,15 +50,22 @@ export function validateRuntime(runtime: GraphQLRuntime): GraphQLRuntime {
     throw new TypeError(
       'rootValueは廃止しました。schemaへresolve / subscribeを登録してください。',
     )
-  if ('onConnectionInit' in runtime)
-    throw new TypeError(
-      'onConnectionInitではなく共通のauthenticateを指定してください。',
-    )
-  if (
-    runtime.authenticate !== undefined &&
-    typeof runtime.authenticate !== 'function'
-  )
-    throw new TypeError('GraphQL authenticateは関数を指定してください。')
+  if (runtime.websocket !== undefined) {
+    if (runtime.websocket === null || typeof runtime.websocket !== 'object')
+      throw new TypeError(
+        'GraphQL websocketは接続フックのオブジェクトを指定してください。',
+      )
+    for (const [name, hook] of Object.entries(runtime.websocket)) {
+      if (!['onConnect', 'onDisconnect', 'onClose'].includes(name))
+        throw new TypeError(
+          `GraphQL websocket.${name}は公開する接続フックではありません。`,
+        )
+      if (hook !== undefined && typeof hook !== 'function')
+        throw new TypeError(
+          `GraphQL websocket.${name}は関数を指定してください。`,
+        )
+    }
+  }
   if (
     runtime.formatError !== undefined &&
     typeof runtime.formatError !== 'function'

@@ -37,47 +37,6 @@ export interface BearerAuthContext {
   }
 }
 
-export type BearerAuthenticator<TIdentity extends object = object> = (
-  token: string,
-  input: { readonly signal: AbortSignal },
-) => TIdentity | null | undefined | Promise<TIdentity | null | undefined>
-
-export async function authenticateBearer<TIdentity extends object>(
-  authorization: unknown,
-  authenticate: BearerAuthenticator<TIdentity>,
-  input: { readonly signal: AbortSignal },
-): Promise<TIdentity | null> {
-  const { signal } = input
-  signal.throwIfAborted()
-  const token =
-    typeof authorization === 'string'
-      ? readBearerToken(authorization)
-      : undefined
-  if (!token) return null
-  let abort!: () => void
-  const aborted = new Promise<never>((_resolve, reject) => {
-    abort = () => reject(signal.reason)
-    signal.addEventListener('abort', abort, { once: true })
-  })
-  try {
-    const identity = await Promise.race([
-      Promise.resolve().then(() => {
-        signal.throwIfAborted()
-        return authenticate(token, input)
-      }),
-      aborted,
-    ])
-    signal.throwIfAborted()
-    if (identity != null && typeof identity !== 'object')
-      throw new TypeError(
-        'Bearer authenticateは利用者のオブジェクトかnullを返してください。',
-      )
-    return identity ?? null
-  } finally {
-    signal.removeEventListener('abort', abort)
-  }
-}
-
 type AuthenticationChallengeHeaders = {
   readonly 'www-authenticate': string
 }
@@ -156,44 +115,50 @@ export function basicAuth<
 }
 
 export interface BearerAuthDefinition<
-  TIdentity extends object,
+  TContribution extends object,
   TResponse extends string,
   TUnauthorizedBody,
 > {
   readonly name?: string
   readonly realm: string
   readonly factory: () => BearerAuthRuntime<
-    TIdentity,
+    TContribution,
     TResponse,
     TUnauthorizedBody
   >
 }
 
 export interface BearerAuthRuntime<
-  TIdentity extends object,
+  TContribution extends object,
   TResponse extends string,
   TUnauthorizedBody,
 > {
-  authenticate: BearerAuthenticator<TIdentity>
+  authenticate(
+    token: string,
+  ):
+    | TContribution
+    | null
+    | undefined
+    | Promise<TContribution | null | undefined>
   unauthorized():
     | HttpAuthenticationFailure<TResponse, TUnauthorizedBody>
     | Response
 }
 
 export function bearerAuth<
-  const TIdentity extends object,
+  const TContribution extends object,
   const TResponse extends string,
   TUnauthorizedBody,
 >(
-  definition: BearerAuthDefinition<TIdentity, TResponse, TUnauthorizedBody>,
+  definition: BearerAuthDefinition<TContribution, TResponse, TUnauthorizedBody>,
 ): HttpMiddleware<
-  { readonly identity: TIdentity },
+  TContribution,
   HttpMiddlewareContext,
   AuthenticationShortCircuit<TResponse, TUnauthorizedBody>
 > {
   const challenge = formatBearerChallenge(definition.realm)
   return defineLayer<
-    { readonly identity: TIdentity },
+    TContribution,
     HttpMiddlewareContext,
     HttpExecutionResult | Response
   >({
@@ -201,15 +166,17 @@ export function bearerAuth<
     factory: () => {
       const runtime = definition.factory()
       return async (context, next) => {
-        const identity = await authenticateBearer(
+        const token = readBearerToken(
           context.request.headers.get('authorization'),
-          (token, input) => runtime.authenticate(token, input),
-          { signal: context.signal },
         )
-        if (identity === null) {
+        if (!token) {
           return authenticationFailure(runtime.unauthorized(), challenge)
         }
-        await next({ identity })
+        const contribution = await runtime.authenticate(token)
+        if (contribution == null) {
+          return authenticationFailure(runtime.unauthorized(), challenge)
+        }
+        await next(contribution)
       }
     },
   })

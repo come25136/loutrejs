@@ -338,9 +338,11 @@ WebSocket側は`graphql-ws`の`makeServer()`を利用する。
 
 Loutre WebSocket contextを`graphql-ws`が要求するsocket interfaceへadapterする。
 
-認証はRuntimeの`authenticate(token, { signal })`へHTTP / WSの両方から委譲する。既存HTTPの`bearerAuth`と同じ関数の契約に揃え、認証済みidentityをContextへ渡す。Policyオブジェクトや認証専用の`onConnectionInit`は公開しない。protocol上のinit / ackと資格情報の取得はadapterが所有し、認証の業務ロジックはDIしたサービスが所有する。
+接続処理の拡張は、Runtimeの`websocket`から`graphql-ws`の`onConnect` / `onDisconnect` / `onClose`を設定する。DIを使えるようfactoryの戻り値へ置き、opening requestと接続のsignalを`extra`へ渡す。コールバックの意味や戻り値をLoutre独自の認証APIへ翻訳しない。
 
-WSではinit時の認証が成功してからackする。operationごとにも同じ資格情報を再認証し、接続・operationごとの状態を共有Runtimeへ保存しない。既存Subscriptionの即時失効は別の責務とする。共通の契約と境界は[HTTP / GraphQL WSの認証設計](loutre_transport_authentication.md)、利用方法は[package README](../../packages/graphql/README.md#http--websocketの共通認証)を参照する。
+LoutreはDI、接続とoperationの寿命、型、cleanupを所有する。認証方式、利用者の形、再認証の頻度はアプリ側で決める。HTTP middlewareやContextから同じサービスを呼ぶためだけに、共通authenticate、予約されたidentity、認証Policyを追加しない。通常HTTPの認証middlewareの仕様も変更しない。
+
+schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#websocketの接続フック)を正本とする。
 
 1 connection上で複数operationが同時実行されるため、message receive loopはoperation処理を逐次blockしない。
 
