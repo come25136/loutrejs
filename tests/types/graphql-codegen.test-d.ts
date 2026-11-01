@@ -1,3 +1,4 @@
+import { http as contractHttp } from '@loutrejs/loutre/http'
 import type { VariablesOf, ResultOf } from '@graphql-typed-document-node/core'
 import type {
   Resolvers,
@@ -162,9 +163,11 @@ void invalidRoot
 void invalidResult
 // @ts-expect-error loaded(undefined)を拒否する
 data.loaded(undefined)
-graphql.endpoint({
+graphql.implementation({
   name: 'InvalidContext',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest,
   // @ts-expect-error Manifestが要求するContextを返す必要がある
   factory: () => ({ context: () => ({}) }),

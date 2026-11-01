@@ -1,0 +1,23 @@
+# HTTP Contractのrawルートと型宣言
+
+## 発生条件
+
+HTTP Contractのrawルートを別ファイルからexportし、型付きルート参照をGraphQLや通常HTTPの実装へ渡す場合。型テストだけが成功しても、rootのcheckやbuildがTS4023 / TS4082で失敗することがある。
+
+## 原因
+
+privateなunique symbolのbrandを、ルートを解決する条件型へ直接展開すると、別moduleのexportされた値の推論型がそのsymbol名を必要とする。型テストはdeclarationを無効化しており、この問題を検出できない。
+
+## 安全な確認方法
+
+同じファイル内の型テストに加え、Contractをexportするファイルと、それをimportするimplementationのファイルを分けてrootのcheckとbuildを実行する。pathのliteral型とmiddleware stateの推論が残ることも確認する。
+
+## 復旧方法
+
+brandは公開されたHttpContractRawRoute interfaceへ閉じ込め、解決済みルートの条件型からその名前付きinterfaceのbrand部分だけをOmitで参照する。middlewareの広い配列型まで交差させると、個別のtupleからstateを推論する際にanyへ広がるため、metadataの型を重複させない。private symbolそのものを公開したり、Contractの型をanyへ広げたりしない。
+
+## 再発防止策
+
+宣言出力を伴うcheck / buildと、別ファイルのexampleを検証に含める。HTTPとWSは同じ正規化済みpathを使う一方、HTTP middlewareをUpgradeへ暗黙適用しない。HTTP認証を通した回数、ConnectionInitだけでの認証、継承前のURLの404を実serverで確認する。
+
+HTTP/1.1のWebSocket Upgradeのmethod確認をnative driverだけに任せると、テストdriverや別runtimeではPOSTでもsessionを開始できてしまう。共通WebSocket hostでGET以外を405とAllow: GETで拒否し、driverの呼び出しとExecution leaseの取得が起きないことを確認する。

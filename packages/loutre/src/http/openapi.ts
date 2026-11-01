@@ -120,8 +120,9 @@ function httpOperationTargets(source: OpenApiSource): HttpOperationTarget[] {
         'HttpContract source must be created by http.contract().',
       )
     }
-    const routes = Object.entries(source.routes).map(
-      ([procedure, definition]) => ({ procedure, definition }),
+    const routes = Object.entries(source.routes).flatMap(
+      ([procedure, definition]) =>
+        definition.raw === true ? [] : [{ procedure, definition }],
     )
     const [conflict] = findHttpRouteConflicts(
       routes.map(({ definition }) => definition),

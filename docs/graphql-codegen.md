@@ -107,6 +107,7 @@ Plain resolver functions and `{ resolve }` receive `{ parent, args, context, inf
 
 ```ts
 import { graphql } from '@loutrejs/graphql'
+import { http } from '@loutrejs/loutre/http'
 import { inject } from '@loutrejs/loutre'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
@@ -115,9 +116,13 @@ import { resolvers } from './resolvers.js'
 
 const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 
-export const endpoint = graphql.endpoint({
+const Api = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})
+
+export const endpoint = graphql.implementation({
   name: 'Commerce',
-  path: '/graphql',
+  route: Api.routes.graphql,
   manifest,
   http: true,
   ws: true,

@@ -1,3 +1,4 @@
+import { http } from '@loutrejs/loutre/http'
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
 import { CounterStore, CounterRangeError } from './domain/counter.js'
@@ -5,9 +6,13 @@ import { StepService } from './domain/step.js'
 import { manifest } from './graphql/manifest.js'
 import type { AppContext } from './graphql/context.js'
 
-export const CounterEndpoint = graphql.endpoint({
+const ApiContract = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})
+
+export const CounterEndpoint = graphql.implementation({
   name: 'Counter',
-  path: '/graphql',
+  route: ApiContract.routes.graphql,
   manifest,
   http: true,
   ws: true,

@@ -126,6 +126,7 @@ export interface HttpValidationMiddleware<
 }
 
 export interface HttpExecutionRouteDefinition {
+  readonly raw?: false
   readonly method: string
   readonly path: string
   readonly summary?: string
@@ -151,7 +152,39 @@ export interface HttpContractBranchDefinition {
 
 export type HttpContractNodeDefinition =
   | HttpExecutionRouteDefinition
+  | HttpContractRawRouteDefinition
   | HttpContractBranchDefinition
+
+export type HttpContractRouteDefinition =
+  | HttpExecutionRouteDefinition
+  | HttpContractRawRouteDefinition
+
+export interface HttpContractRawRouteDefinition {
+  readonly raw: true
+  readonly method: string
+  readonly path: string
+  readonly middlewares?: readonly AnyHttpMiddleware[]
+  readonly request?: never
+  readonly responses?: never
+}
+
+const httpContractRawRouteBrand: unique symbol = Symbol.for(
+  'loutre.http-contract-raw-route',
+) as typeof httpContractRawRouteBrand
+
+export interface HttpContractRawRoute extends HttpContractRawRouteDefinition {
+  readonly [httpContractRawRouteBrand]: true
+}
+
+export function isHttpRawContractRoute(
+  value: unknown,
+): value is HttpContractRawRoute {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Partial<HttpContractRawRoute>)[httpContractRawRouteBrand] === true
+  )
+}
 
 export type HttpContractRouteTree = Readonly<
   Record<string, HttpContractNodeDefinition>
@@ -221,14 +254,16 @@ type BranchMiddlewares<TBranch extends HttpContractBranchDefinition> =
     : readonly []
 
 type ResolveHttpRoute<
-  TRoute extends HttpExecutionRouteDefinition,
+  TRoute extends HttpContractRouteDefinition,
   TPathPrefix extends string,
   TResponses extends Readonly<Record<string, HttpExecutionResponseDefinition>>,
   TMiddlewares extends readonly HttpRouteMiddleware[],
 > = Omit<TRoute, 'path' | 'responses' | 'middlewares'> & {
   readonly path: JoinHttpPath<TPathPrefix, TRoute['path']>
-  readonly responses: TResponses & TRoute['responses']
-} & (readonly [
+} & (TRoute extends HttpContractRawRouteDefinition
+    ? Omit<HttpContractRawRoute, keyof HttpContractRawRouteDefinition>
+    : { readonly responses: TResponses & TRoute['responses'] }) &
+  (readonly [
     ...TMiddlewares,
     ...(TRoute extends {
       readonly middlewares: infer TRouteMiddlewares extends
@@ -256,7 +291,7 @@ type ResolveHttpNode<
   TPathPrefix extends string,
   TResponses extends Readonly<Record<string, HttpExecutionResponseDefinition>>,
   TMiddlewares extends readonly HttpRouteMiddleware[],
-> = TNode extends HttpExecutionRouteDefinition
+> = TNode extends HttpContractRouteDefinition
   ? Readonly<
       Record<
         TName,
@@ -295,7 +330,7 @@ export type ResolvedHttpContractRoutes<TTree extends HttpContractRouteTree> =
     ? {
         readonly [TName in keyof TRoutes]: Extract<
           TRoutes[TName],
-          HttpExecutionRouteDefinition
+          HttpContractRouteDefinition
         >
       }
     : never
@@ -308,18 +343,25 @@ type HasResponseNameCollision<
 type IsHttpContractNodeInheritanceValid<
   TNode extends HttpContractNodeDefinition,
   TResponses extends Readonly<Record<string, HttpExecutionResponseDefinition>>,
-> = TNode extends HttpExecutionRouteDefinition
-  ? HasResponseNameCollision<TResponses, TNode['responses']> extends true
-    ? false
-    : true
-  : TNode extends HttpContractBranchDefinition
-    ? HasResponseNameCollision<TResponses, BranchResponses<TNode>> extends true
-      ? false
-      : IsHttpContractTreeInheritanceValid<
-          TNode['routes'],
-          TResponses & BranchResponses<TNode>
-        >
+> = TNode extends HttpContractRawRouteDefinition
+  ? keyof TResponses extends never
+    ? true
     : false
+  : TNode extends HttpExecutionRouteDefinition
+    ? HasResponseNameCollision<TResponses, TNode['responses']> extends true
+      ? false
+      : true
+    : TNode extends HttpContractBranchDefinition
+      ? HasResponseNameCollision<
+          TResponses,
+          BranchResponses<TNode>
+        > extends true
+        ? false
+        : IsHttpContractTreeInheritanceValid<
+            TNode['routes'],
+            TResponses & BranchResponses<TNode>
+          >
+      : false
 
 type IsHttpContractTreeInheritanceValid<
   TTree extends HttpContractRouteTree,
@@ -349,8 +391,8 @@ const httpContractBrand: unique symbol = Symbol.for(
 ) as typeof httpContractBrand
 
 export interface HttpContract<
-  TRoutes extends Readonly<Record<string, HttpExecutionRouteDefinition>> =
-    Readonly<Record<string, HttpExecutionRouteDefinition>>,
+  TRoutes extends Readonly<Record<string, HttpContractRouteDefinition>> =
+    Readonly<Record<string, HttpContractRouteDefinition>>,
 > {
   readonly kind: 'http-contract'
   readonly routes: TRoutes
@@ -514,11 +556,23 @@ export type HttpExecutionContext<
 }
 
 export type HttpHandlers<TContract extends HttpContract> = {
-  readonly [TName in keyof TContract['routes']]: (
-    context: HttpExecutionContext<TContract['routes'][TName]>,
+  readonly [
+    TName in keyof TContract['routes'] as TContract['routes'][TName] extends HttpContractRawRouteDefinition
+      ? never
+      : TName
+  ]: (
+    context: HttpExecutionContext<
+      Extract<TContract['routes'][TName], HttpExecutionRouteDefinition>
+    >,
   ) =>
-    | DeclaredHttpResults<TContract['routes'][TName]>
-    | Promise<DeclaredHttpResults<TContract['routes'][TName]>>
+    | DeclaredHttpResults<
+        Extract<TContract['routes'][TName], HttpExecutionRouteDefinition>
+      >
+    | Promise<
+        DeclaredHttpResults<
+          Extract<TContract['routes'][TName], HttpExecutionRouteDefinition>
+        >
+      >
 }
 
 export interface HttpImplementationDefinition<
@@ -627,8 +681,16 @@ export const httpExecutionExtension = defineExecutionExtension<
     const raw = 'route' in definition
     const routes: CompiledHttpRoute[] = raw
       ? [compileRawRoute(definition.route)]
-      : Object.entries(definition.contract.routes).map(([name, route]) =>
-          compileHttpRoute(name, route, getSourceLocation(definition.contract)),
+      : Object.entries(definition.contract.routes).flatMap(([name, route]) =>
+          route.raw === true
+            ? []
+            : [
+                compileHttpRoute(
+                  name,
+                  route,
+                  getSourceLocation(definition.contract),
+                ),
+              ],
         )
     const id =
       definition.name || `${context.moduleId}.http.${context.definitionIndex}`
@@ -931,9 +993,13 @@ type HttpRouteConstraint<TRoute extends HttpExecutionRouteDefinition> =
       : { readonly middlewares: never })
 
 type HttpContractConstraint<
-  TRoutes extends Readonly<Record<string, HttpExecutionRouteDefinition>>,
+  TRoutes extends Readonly<Record<string, HttpContractRouteDefinition>>,
 > = {
-  readonly [TName in keyof TRoutes]: HttpRouteConstraint<TRoutes[TName]>
+  readonly [
+    TName in keyof TRoutes
+  ]: TRoutes[TName] extends HttpContractRawRouteDefinition
+    ? unknown
+    : HttpRouteConstraint<Extract<TRoutes[TName], HttpExecutionRouteDefinition>>
 }
 
 type ErrorOf<TDefinition> =
@@ -981,7 +1047,9 @@ export function defineHttpContract(
   const canonicalRoutes = Object.fromEntries(
     Object.entries(resolvedRoutes).map(([name, route]) => [
       name,
-      compileHttpRoute(name, route).definition,
+      route.raw === true
+        ? snapshotHttpContractRawRoute(route)
+        : compileHttpRoute(name, route).definition,
     ]),
   )
   return Object.freeze({
@@ -993,8 +1061,8 @@ export function defineHttpContract(
 
 function resolveHttpContractRoutes(
   tree: HttpContractRouteTree,
-): Record<string, HttpExecutionRouteDefinition> {
-  const resolved: Record<string, HttpExecutionRouteDefinition> = {}
+): Record<string, HttpContractRouteDefinition> {
+  const resolved: Record<string, HttpContractRouteDefinition> = {}
 
   const visit = (
     current: HttpContractRouteTree,
@@ -1002,7 +1070,7 @@ function resolveHttpContractRoutes(
     inheritedResponses: Readonly<
       Record<string, HttpExecutionResponseDefinition>
     >,
-    inheritedMiddlewares: readonly HttpRouteMiddleware[],
+    inheritedMiddlewares: readonly AnyHttpMiddleware[],
   ) => {
     for (const [name, node] of Object.entries(current)) {
       if ('method' in node) {
@@ -1014,11 +1082,38 @@ function resolveHttpContractRoutes(
         if (resolved[name]) {
           throw new TypeError(`Duplicate nested HTTP route name: ${name}`)
         }
-        assertNoInheritedResponseCollision(
-          name,
-          inheritedResponses,
-          node.responses,
-        )
+        if (node.raw === true) {
+          if (
+            node.responses !== undefined ||
+            node.request !== undefined ||
+            Object.keys(inheritedResponses).length > 0
+          )
+            throw new TypeError(
+              'rawルートにはHTTPのrequestとresponsesを定義・継承できません。',
+            )
+          resolved[name] = inheritSourceLocation(
+            {
+              ...node,
+              path: joinHttpPath(pathPrefix, node.path),
+              ...(inheritedMiddlewares.length === 0 && !node.middlewares
+                ? {}
+                : {
+                    middlewares: [
+                      ...inheritedMiddlewares,
+                      ...(node.middlewares ?? []),
+                    ],
+                  }),
+            },
+            node,
+          )
+          continue
+        } else {
+          assertNoInheritedResponseCollision(
+            name,
+            inheritedResponses,
+            node.responses,
+          )
+        }
         resolved[name] = inheritSourceLocation(
           {
             ...node,
@@ -1157,9 +1252,28 @@ export function withHttpFrameworkHeaders(
   } as HttpExecutionResultWithFrameworkHeaders
 }
 
+function snapshotHttpContractRawRoute(
+  route: HttpContractRawRouteDefinition,
+): HttpContractRawRoute {
+  if (route.method !== '*') assertValidHttpMethod(route.method)
+  parseHttpPath(route.path)
+  return inheritSourceLocation(
+    Object.freeze({
+      ...route,
+      method: route.method.toUpperCase(),
+      [httpContractRawRouteBrand]: true as const,
+      ...(route.middlewares === undefined
+        ? {}
+        : { middlewares: Object.freeze([...route.middlewares]) }),
+    }),
+    route,
+  )
+}
+
 function compileRawRoute(route: HttpRawRouteDefinition): CompiledHttpRoute {
   if (route.method !== '*') assertValidHttpMethod(route.method)
   const segments = parseHttpPath(route.path)
+  const source = getSourceLocation(route)
   return Object.freeze({
     name: 'raw',
     method: route.method.toUpperCase(),
@@ -1172,6 +1286,7 @@ function compileRawRoute(route: HttpRawRouteDefinition): CompiledHttpRoute {
       responses: Object.freeze({}),
     }),
     middlewares: Object.freeze([...(route.middlewares ?? [])]),
+    ...(source === undefined ? {} : { source }),
     raw: true,
     ...(route.protocol === undefined ? {} : { protocol: route.protocol }),
   })

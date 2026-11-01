@@ -1,6 +1,6 @@
 import type { ConnectionRejected } from './connection-rejected.js'
 import type { ServerOptions } from 'graphql-ws'
-import type { HttpRawDefinition } from '@loutrejs/loutre/http'
+import type { HttpContractRawRoute } from '@loutrejs/loutre/http'
 import type { GraphQLManifest } from './manifest-internal.js'
 import type { GraphQLError, GraphQLFormattedError } from 'graphql'
 
@@ -87,14 +87,15 @@ export interface GraphQLRuntime<
   readonly rootValue?: never
 }
 
-export interface GraphQLEndpointDefinition<TContext extends object = object> {
+export interface GraphQLImplementationDefinition<
+  TContext extends object = object,
+> {
   readonly name: string
-  readonly path: string
+  readonly route: HttpContractRawRoute
+  readonly path?: never
   readonly manifest: GraphQLManifest<TContext>
   readonly schema?: never
-  readonly http?:
-    | boolean
-    | { readonly middlewares?: HttpRawDefinition['route']['middlewares'] }
+  readonly http?: boolean
   readonly ws?:
     | boolean
     | {

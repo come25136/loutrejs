@@ -1,3 +1,4 @@
+import { http as contractHttp } from '@loutrejs/loutre/http'
 import { nodeRuntime } from '@loutrejs/node'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { graphql } from '@loutrejs/graphql'
@@ -11,9 +12,11 @@ import WebSocket from 'ws'
 it('手書きBindingの100注文 / 200明細がEager・Lazy・Hybridで一致し、HTTPとWSのOperation間を分離する', async () => {
   const commerce = new CommerceService()
   const calls = vi.spyOn(commerce, 'findProducts')
-  const endpoint = graphql.endpoint({
+  const endpoint = graphql.implementation({
     name: 'Orders',
-    path: '/graphql',
+    route: contractHttp.contract({
+      graphql: { raw: true, method: '*', path: '/graphql' },
+    }).routes.graphql,
     manifest,
     http: true,
     ws: true,

@@ -50,7 +50,7 @@ schema-ast.ts ─────┘       │
                            ▼
                   GraphQL Runtime
                       │
-             graphql.endpoint({ manifest })
+             graphql.implementation({ manifest })
                       │
                GraphQL Operation
                       │
@@ -71,11 +71,16 @@ schema-ast.ts ─────┘       │
 
 ```ts
 import { graphql } from '@loutrejs/graphql'
+import { http } from '@loutrejs/loutre/http'
 import { manifest } from './graphql/manifest.js'
 
-graphql.endpoint({
+const Api = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})
+
+graphql.implementation({
   name: 'CommerceApi',
-  path: '/graphql',
+  route: Api.routes.graphql,
   manifest,
   http: true,
   ws: true,
@@ -88,8 +93,8 @@ graphql.endpoint({
 })
 ```
 
-- `graphql.endpoint({ manifest })`をPublic APIのコントラクトとし、アプリ側から`schema`や`typeDefs`を渡す方式は廃止してよい。
-- `manifest`のPublic Typeは **`Opaque Type`** とする。GraphQL SchemaとData ResolutionのCompiled Metadataを保持するが、アプリケーションは内部構造に依存せず`graphql.endpoint({ manifest })`を使用する。これはTypeScriptのAPI境界に関する方針であり、Runtime Objectの内部情報を一切参照できないという意味ではなく、Security Boundaryでもない。
+- `graphql.implementation({ manifest })`をPublic APIのコントラクトとし、アプリ側から`schema`や`typeDefs`を渡す方式は廃止してよい。
+- `manifest`のPublic Typeは **`Opaque Type`** とする。GraphQL SchemaとData ResolutionのCompiled Metadataを保持するが、アプリケーションは内部構造に依存せず`graphql.implementation({ manifest })`を使用する。これはTypeScriptのAPI境界に関する方針であり、Runtime Objectの内部情報を一切参照できないという意味ではなく、Security Boundaryでもない。
 - `@loutrejs/graphql`は`getFieldSelection(info)`と明示read用の`loaded` / `missing`を提供する。利用者がtransportとResolver helperのimport先を区別する学習コストを避けるため、公開APIをpackage rootへ集約する。内部moduleの責務分離は維持する。
 - 通常のResolverは`resolve({ parent, args, context, info })`を使う。Batch取得を行うFieldには`{ requires, read, load, authorize, maxBatchSize }`を直接書く。
 - 型付き`bindManifest<AppContext>`と`Resolvers<AppContext>`がSDLとDomain MapperからParent / Args / Resultを推論する。FieldごとのGeneric Type指定は要求しない。
@@ -589,7 +594,7 @@ loutre graphql generate --config graphql.config.ts --watch
 
 1. **CLI / Manifest形式:** `types.ts`・`schema-ast.ts`・`bindings.ts`の同一世代生成、config/API、生成の原子性・`--check`・watch。
 2. **Resolver型:** `SchemaFields`、標準resolve / loadのType Inference、Domain Mapper/Context/Custom Scalar/nullableのType Test。
-3. **Runtime Binding:** ManifestからGraphQLSchemaを1回構築し、Standard Resolver / Data Resolverを結合・検証。`graphql.endpoint({ manifest })`を正式入口にする。value import循環を防ぐ。
+3. **Runtime Binding:** ManifestからGraphQLSchemaを1回構築し、Standard Resolver / Data Resolverを結合・検証。`graphql.implementation({ manifest })`を正式入口にする。value import循環を防ぐ。
 4. **Read-through / Batch:** `read`、`requires`、`load`、引数の自動正規化、Execution ScopeによるBatchの分離・中断・Authorization。
 5. **選択Field情報:** AST・fragment・alias・abstract type・引数の正規化。Manifest Metadataと結合。
 6. **Operation Scope:** HTTP Query、Mutation Root、WS Query/MutationとSubscription Event境界。GraphQL.js 16/17互換性検証。
@@ -602,7 +607,7 @@ loutre graphql generate --config graphql.config.ts --watch
 | ID  | 条件                                | 合格基準                                                                                                               |
 | --- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | M01 | 生成CLI                             | `generate`が`types.ts`・`bindings.ts`・Static Schemaの整合した世代を生成                                               |
-| M02 | 正規Runtime入口                     | `graphql.endpoint({ manifest })`でHTTP/WSを提供し、`graphql.schema()`を要求しない                                      |
+| M02 | 正規Runtime入口                     | `graphql.implementation({ manifest })`でHTTP/WSを提供し、`graphql.schema()`を要求しない                                |
 | M03 | Circular Import                     | `manifest → resolvers`のvalue importと`generated/types`へのtype-only importでESM初期化時の循環障害がない               |
 | M07 | Type Inference                      | `OrderItem.product.load`と`Query.orders.resolve`で`Parent` / `Args` / `Result` / `Context`をGeneric Type指定なしで推論 |
 | M08 | Invalid Field / Requires            | 存在しないType/Fieldや`requires`の誤字をTypeScriptが拒否                                                               |

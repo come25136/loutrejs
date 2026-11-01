@@ -131,8 +131,14 @@ type HttpClientMethod<TDefinition extends HttpExecutionRouteDefinition> =
       ) => Promise<HttpClientResponse<TDefinition>>
 
 export type HttpClient<TContract extends HttpContract> = {
-  readonly [TName in keyof TContract['routes']]: HttpClientMethod<
-    TContract['routes'][TName]
+  readonly [
+    TName in keyof TContract['routes'] as TContract['routes'][TName] extends {
+      readonly raw: true
+    }
+      ? never
+      : TName
+  ]: HttpClientMethod<
+    Extract<TContract['routes'][TName], HttpExecutionRouteDefinition>
   >
 }
 
@@ -160,6 +166,7 @@ export function createHttpClient<const TContract extends HttpContract>(
   > = {}
 
   for (const [procedureName, definition] of Object.entries(contract.routes)) {
+    if (definition.raw === true) continue
     client[procedureName] = async (request = {}) => {
       const response = await transport({
         method: definition.method,

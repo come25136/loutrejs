@@ -1,8 +1,7 @@
+import { ApiContract } from './contract.js'
 import { graphql, ConnectionRejected } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
 import { Users } from './auth/users.js'
-import { httpBearerAuthentication } from './auth/bearer.js'
-import { httpApiKeyAuthentication } from './auth/api-key.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
 import { resolvers } from './graphql/resolvers.js'
@@ -10,11 +9,11 @@ import type { AppContext } from './graphql/context.js'
 
 const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 
-export const ProfileBearerGraphQL = graphql.endpoint({
+export const ProfileBearerGraphQL = graphql.implementation({
   name: 'ProfileBearerGraphQL',
-  path: '/graphql/bearer',
+  route: ApiContract.routes.bearer,
   manifest,
-  http: { middlewares: [httpBearerAuthentication] },
+
   ws: true,
   factory: (users = inject(Users)) => ({
     ws: {
@@ -34,11 +33,11 @@ export const ProfileBearerGraphQL = graphql.endpoint({
   }),
 })
 
-export const ProfileApiKeyGraphQL = graphql.endpoint({
+export const ProfileApiKeyGraphQL = graphql.implementation({
   name: 'ProfileApiKeyGraphQL',
-  path: '/graphql/api-key',
+  route: ApiContract.routes.apiKey,
   manifest,
-  http: { middlewares: [httpApiKeyAuthentication] },
+
   ws: true,
   factory: (users = inject(Users)) => ({
     ws: {

@@ -557,6 +557,12 @@ function createWebSocketRuntime(
       if (state !== 'running') {
         return Response.json({ error: 'Service Unavailable' }, { status: 503 })
       }
+      if (request.method !== 'GET') {
+        return new Response('WebSocket handshakeにはGETを使用してください。', {
+          status: 405,
+          headers: { allow: 'GET' },
+        })
+      }
       let match: ReturnType<typeof findRoute>
       try {
         match = findRoute(routes, request)

@@ -56,16 +56,20 @@ Package Distribution ADRのpublic package制限は、このpackage追加に合�
 
 ## Public API
 
-基本APIは`graphql.endpoint()`とする。
+基本APIは`graphql.implementation()`とし、HTTP Contractのrawルートを参照する。[HTTP Contractからの委任](./loutre_http_protocol_delegation.md)をルート所有権の正本とする。
 
 Schemaとresolverの結合は[GraphQL Codegen ADR](loutre_graphql_codegen_architecture.md)のApplicationのbindManifestへ委譲する。
 
 ```ts
 import { manifest } from './graphql/manifest.js'
 
-const GraphQLApi = graphql.endpoint({
+const Api = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})
+
+const GraphQLApi = graphql.implementation({
   name: 'GraphQLApi',
-  path: '/graphql',
+  route: Api.routes.graphql,
   manifest,
   http: true,
   ws: {
@@ -83,7 +87,7 @@ const GraphQLApi = graphql.endpoint({
 })
 ```
 
-`graphql.endpoint()`は内部でHTTP / WebSocket Executionを生成する。
+`graphql.implementation()`は内部でHTTP / WebSocket Executionを生成する。
 
 ## 複合Execution
 
@@ -110,11 +114,7 @@ GraphQL over HTTPは既存のresponse variant contractへ押し込まず、HTTP 
 ```ts
 http.raw({
   name: 'GraphQLApi.http',
-  route: {
-    method: '*',
-    path: '/graphql',
-    middlewares: [auth(), rateLimit()],
-  },
+  route: { ...Api.routes.graphql, protocol: 'graphql' },
   factory: () => async (ctx) => {
     return graphqlHandler(ctx.request)
   },
@@ -344,7 +344,7 @@ schema / execute / subscribeとoperation用フックはmanifest executionとleas
 
 方式別の認証例は[GraphQL認証example](../../examples/graphql-auth/README.md)を正本とする。HTTPは既存middlewareへ認証を置き、GraphQL WSはendpointのfactory内のwsへライフサイクルを直接定義する。HTTPとWSを同じ抽象度のlayerへ揃えることを目的にしない。
 
-外側のhttp / wsは有効化や静的設定、factoryはDIしたサービスを使う実行時handlerとContext生成を所有する。connectionInitの戻り値からstateの型を推論し、HTTPの認証結果と同じ形ならContext・Resolverを共通化する。stateはACK payloadとは分離する。
+path・method・HTTP middlewareはHTTP Contract、http / wsは有効化や静的設定、factoryはDIしたサービスを使う実行時handlerとContext生成を所有する。connectionInitの戻り値からstateの型を推論し、HTTPの認証結果と同じ形ならContext・Resolverを共通化する。stateはACK payloadとは分離する。
 
 WS専用layerの宣言や継続処理、遅延DI resolverを追加しない。ConnectionInitはstateまたはConnectionRejectedを返すprotocol handlerとし、HTTP Responseやmiddlewareのnextを要求しない。接続開始の入口をconnectionInitに一本化し、同じタイミングのonConnectを重ねて公開しない。ConnectionRejectedはGraphQL adapterが提供する接続拒否の結果であり、認証方式を定義しない。指定した公開理由を4403のclose reasonへ渡し、通常の例外は1011として区別する。認証の依存はendpoint factoryのinjectからcanonical Modelへ登録する。
 

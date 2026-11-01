@@ -24,28 +24,63 @@ npm run start --workspace @loutrejs/example-graphql-auth
 
 ## 宣言とDI
 
-```ts
-import { ConnectionRejected } from '@loutrejs/graphql'
+HTTPの公開URLとmiddlewareは[contract.ts](./src/contract.ts)へまとめます。通常HTTPの`/health`と、GraphQLの`/graphql/bearer`・`/graphql/api-key`を同じContractで定義します。
 
-http: { middlewares: [httpBearerAuthentication] },
-ws: true,
-factory: (users = inject(Users)) => ({
-  ws: {
-    connectionInit: async ({ payload }) => {
-      const user = users.authenticate({ authorization: payload?.authorization })
-      if (!user) return new ConnectionRejected('認証が必要です。')
-      return { currentUser: { id: user.id } }
+```ts
+const ApiContract = http.contract({
+  health: {
+    method: 'GET',
+    path: '/health',
+    responses: { ok: { status: 204 } },
+  },
+  graphql: {
+    path: '/graphql',
+    routes: {
+      bearer: {
+        raw: true,
+        method: '*',
+        path: '/bearer',
+        middlewares: [httpBearerAuthentication],
+      },
+      apiKey: {
+        raw: true,
+        method: '*',
+        path: '/api-key',
+        middlewares: [httpApiKeyAuthentication],
+      },
     },
   },
-  context: ({ state, signal }) => ({
-    currentUser: state.currentUser,
-    users,
-    signal,
+})
+```
+
+[health.ts](./src/health.ts)のhttp.implementationは通常HTTPを担当します。[endpoint.ts](./src/endpoint.ts)のgraphql.implementationはrawルートの参照を受け取り、manifestへ処理を委任します。実装側でpathやHTTP middlewareを再指定しません。
+
+```ts
+graphql.implementation({
+  name: 'ProfileBearerGraphQL',
+  route: ApiContract.routes.bearer,
+  manifest,
+  ws: true,
+  factory: (users = inject(Users)) => ({
+    ws: {
+      connectionInit: ({ payload }) => {
+        const user = users.authenticate({
+          authorization: payload?.authorization,
+        })
+        if (!user) return new ConnectionRejected('認証が必要です。')
+        return { currentUser: { id: user.id } }
+      },
+    },
+    context: ({ state, signal }) => ({
+      currentUser: state.currentUser,
+      users,
+      signal,
+    }),
   }),
 })
 ```
 
-[endpoint.ts](./src/endpoint.ts)は、認証方式ごとにGraphQL endpointを定義します。HTTPは[bearer.ts](./src/auth/bearer.ts)と[api-key.ts](./src/auth/api-key.ts)のmiddlewareを使います。WSのライフサイクルはendpointのfactory内にまとめ、そこでDIしたUsersを使います。HTTP middlewareは`next({ currentUser })`、ConnectionInit handlerは`return { currentUser }`で同じ形のstateを渡します。
+HTTP middlewareは通常のHTTP要求で実行します。WSのUpgradeでは実行せず、ConnectionInitでpayloadを認証します。HTTP middlewareの`next({ currentUser })`とConnectionInitの`return { currentUser }`は同じ形のstateをContextへ渡します。
 
 Context・Resolverは認証方式とtransportに依存しません。stateにはユーザーIDを保持し、表示データはUsersから最新値を取得します。stateや資格情報をACK payloadへ送りません。
 

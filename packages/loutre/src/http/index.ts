@@ -37,6 +37,7 @@ export {
   executionHttp as http,
   httpExecutionExtension,
   isHttpContract,
+  isHttpRawContractRoute,
   HTTP_SERVER,
   validate,
 } from './extension.js'
@@ -49,6 +50,9 @@ export type {
   HttpContractBranchDefinition,
   HttpContractNodeDefinition,
   HttpContractRouteTree,
+  HttpContractRouteDefinition,
+  HttpContractRawRouteDefinition,
+  HttpContractRawRoute,
   HttpExecutionContext,
   HttpExecutionDefinition,
   HttpExecutionRequestDefinition,

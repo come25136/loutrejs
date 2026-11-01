@@ -1,3 +1,4 @@
+import { http as contractHttp } from '@loutrejs/loutre/http'
 import { manifestFromSchema } from './helpers/graphql-manifest.js'
 import { request as httpRequest } from 'node:http'
 import { once } from 'node:events'
@@ -26,9 +27,11 @@ async function create(
     yield 'Hello World'
   }
   hello.resolve = (event: string) => event
-  const endpoint = graphql.endpoint({
+  const endpoint = graphql.implementation({
     name: 'Native',
-    path: '/graphql',
+    route: contractHttp.contract({
+      graphql: { raw: true, method: '*', path: '/graphql' },
+    }).routes.graphql,
     manifest: manifestFromSchema(schema),
     http,
     ws: true,

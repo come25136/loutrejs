@@ -1,3 +1,4 @@
+import { http as contractHttp } from '@loutrejs/loutre/http'
 import { parse, type GraphQLError, type GraphQLFormattedError } from 'graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
 import {
@@ -19,23 +20,29 @@ const manifest = bindManifest({
   resolvers: { Query: { hello: () => 'Hello' } },
 })
 const factory = () => ({ context: () => ({}) })
-const httpOnly = graphql.endpoint({
+const httpOnly = graphql.implementation({
   name: 'Http',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest,
   factory,
 })
-const websocketOnly = graphql.endpoint({
+const websocketOnly = graphql.implementation({
   name: 'WebSocket',
   http: false,
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest,
   ws: true,
   factory,
 })
-const both = graphql.endpoint({
+const both = graphql.implementation({
   name: 'Both',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest,
   http: true,
   ws: true,
@@ -137,24 +144,36 @@ const invalidWebSocketRoute = {
 websocket.contract({ route: invalidWebSocketRoute })
 
 // @ts-expect-error factoryは必須
-graphql.endpoint({ name: 'MissingFactory', path: '/graphql', manifest })
-graphql.endpoint({
+graphql.implementation({
+  name: 'MissingFactory',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
+  manifest,
+})
+graphql.implementation({
   name: 'MissingContext',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest,
   // @ts-expect-error contextは必須
   factory: () => ({}),
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'Legacy',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest,
   // @ts-expect-error rootValueを返すfactoryは拒否する
   factory: () => ({ context: () => ({}), rootValue: {} }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'AsyncFormatter',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest,
   factory: () => ({
     context: () => ({}),
@@ -162,9 +181,11 @@ graphql.endpoint({
     formatError: async () => ({ message: 'error' }),
   }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'MissingMessage',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest,
   factory: () => ({
     context: () => ({}),
@@ -196,11 +217,18 @@ const tenantState = http.middleware<{ tenantId: string }>({
   name: '組織',
   factory: () => async (_context, next) => next({ tenantId: 'tenant-1' }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: '型付きmiddleware state',
-  path: '/typed',
+  route: contractHttp.contract({
+    graphql: {
+      raw: true,
+      method: '*',
+      path: '/typed',
+      middlewares: [userState, tenantState],
+    },
+  }).routes.graphql,
   manifest,
-  http: { middlewares: [userState, tenantState] },
+
   ws: true,
   factory: () => ({
     context(input) {
@@ -228,11 +256,18 @@ graphql.endpoint({
   }),
 })
 
-graphql.endpoint({
+graphql.implementation({
   name: '入口ごとのstate',
-  path: '/profile',
+  route: contractHttp.contract({
+    graphql: {
+      raw: true,
+      method: '*',
+      path: '/profile',
+      middlewares: [userState, tenantState],
+    },
+  }).routes.graphql,
   manifest,
-  http: { middlewares: [userState, tenantState] },
+
   ws: true,
   factory: () => ({
     ws: {
@@ -267,10 +302,12 @@ graphql.endpoint({
     },
   }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'WSのみのstate',
   http: false,
-  path: '/ws',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/ws' },
+  }).routes.graphql,
   manifest,
   ws: true,
   factory: () => ({
@@ -295,11 +332,18 @@ graphql.endpoint({
     },
   }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'HTTPのみのstate',
-  path: '/http',
+  route: contractHttp.contract({
+    graphql: {
+      raw: true,
+      method: '*',
+      path: '/http',
+      middlewares: [userState],
+    },
+  }).routes.graphql,
   manifest,
-  http: { middlewares: [userState] },
+
   factory: () => ({
     context(input) {
       const id: string = input.state.currentUser.id
@@ -311,9 +355,11 @@ graphql.endpoint({
   }),
 })
 
-graphql.endpoint({
+graphql.implementation({
   name: '非同期ConnectionInitのstate',
-  path: '/async',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/async' },
+  }).routes.graphql,
   manifest,
   http: false,
   ws: true,
@@ -340,9 +386,11 @@ graphql.endpoint({
   }),
 })
 
-graphql.endpoint({
+graphql.implementation({
   name: 'WS設定でHTTPを無効にしない',
-  path: '/both',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/both' },
+  }).routes.graphql,
   manifest,
   ws: true,
   factory: () => ({
@@ -352,9 +400,11 @@ graphql.endpoint({
     },
   }),
 })
-const defaultHttpWithWs = graphql.endpoint({
+const defaultHttpWithWs = graphql.implementation({
   name: '既定HTTPとWS',
-  path: '/both',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/both' },
+  }).routes.graphql,
   manifest,
   ws: true,
   factory,
@@ -366,9 +416,11 @@ const defaultApp = createKernelApplication({
 defaultApp.http.fetch(new Request('http://test'))
 defaultApp.websocket.upgrade(new Request('http://test'))
 
-graphql.endpoint({
+graphql.implementation({
   name: 'WS有効化の指定忘れ',
-  path: '/missing',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/missing' },
+  }).routes.graphql,
   manifest,
   factory: () => ({
     context: () => ({}),
@@ -376,9 +428,11 @@ graphql.endpoint({
     ws: { connectionInit: () => ({ currentUser: { id: '1' } }) },
   }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'WSを明示的に無効化',
-  path: '/disabled',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/disabled' },
+  }).routes.graphql,
   manifest,
   ws: false,
   factory: () => ({
@@ -387,9 +441,11 @@ graphql.endpoint({
     ws: { onClose() {} },
   }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'HTTP ResponseをWSで返さない',
-  path: '/response',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/response' },
+  }).routes.graphql,
   manifest,
   ws: true,
   factory: () => ({
@@ -400,9 +456,11 @@ graphql.endpoint({
     },
   }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: '戻り値を忘れない',
-  path: '/void',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/void' },
+  }).routes.graphql,
   manifest,
   ws: true,
   factory: () => ({
@@ -447,9 +505,11 @@ const publicReason: string = rejection.reason
 // @ts-expect-error 公開する理由は読み取り専用
 rejection.reason = '変更'
 void publicReason
-graphql.endpoint({
+graphql.implementation({
   name: 'booleanで拒否しない',
-  path: '/boolean',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/boolean' },
+  }).routes.graphql,
   manifest,
   ws: true,
   factory: () => ({
@@ -460,3 +520,47 @@ graphql.endpoint({
     },
   }),
 })
+
+graphql.implementation({
+  name: '正規化していないルート',
+  manifest,
+  // @ts-expect-error HTTP Contractで正規化したrawルートを使う
+  route: { raw: true, method: '*', path: '/graphql' },
+  factory,
+})
+const normalRoute = http.contract({
+  regular: {
+    method: 'GET',
+    path: '/regular',
+    responses: { ok: { status: 204 } },
+  },
+})
+graphql.implementation({
+  name: '通常HTTPをGraphQLへ委任しない',
+  manifest,
+  // @ts-expect-error GraphQLの実装にはrawルートを指定する
+  route: normalRoute.routes.regular,
+  factory,
+})
+graphql.implementation({
+  name: '実装側でpathを上書きしない',
+  manifest,
+  route: contractHttp.contract({
+    raw: { raw: true, method: '*', path: '/graphql' },
+  }).routes.raw,
+  // @ts-expect-error pathはHTTP Contractが所有する
+  path: '/override',
+  factory,
+})
+graphql.implementation({
+  name: '実装側でmiddlewareを上書きしない',
+  manifest,
+  route: contractHttp.contract({
+    raw: { raw: true, method: '*', path: '/graphql' },
+  }).routes.raw,
+  // @ts-expect-error middlewareはHTTP Contractが所有する
+  http: { middlewares: [userState] },
+  factory,
+})
+// @ts-expect-error 独立したGraphQL endpoint宣言を残さない
+graphql.endpoint

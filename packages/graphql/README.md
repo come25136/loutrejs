@@ -10,6 +10,7 @@ npm install --save-dev @loutrejs/cli
 ```ts
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
 import type { AppContext } from './context.js'
@@ -19,9 +20,13 @@ import { CounterStore } from './domain/counter.js'
 
 const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 
-export const endpoint = graphql.endpoint({
+const Api = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})
+
+export const endpoint = graphql.implementation({
   name: 'Counter',
-  path: '/graphql',
+  route: Api.routes.graphql,
   manifest,
   http: true,
   ws: { connectionInitWaitTimeout: 3_000 },
@@ -37,18 +42,20 @@ Resolverはresolve({ parent, args, context, info })を使い、getFieldSelection
 
 HTTP contextの入力はtransport / request / signal / middleware stateです。WebSocketはtransport / opening request / connectionParams / operationId / operation signal / connection stateを渡します。DI Serviceと長寿命ContextのlifetimeはBatch QueueのScopeとは別です。BatchはQuery Operation、Mutation root Field、Subscription Delivery Eventごとに分離します。
 
-HTTP前段の認証やrate limitはhttp.middlewaresへ指定します。middlewareが渡すstateの型は、`context()`と`formatError()`のHTTP入力へ推論します。raw endpointを短絡するmiddlewareはFetch Responseを返します。Batch設定のauthorizeで先読み値のreuseにも認可を適用してください。
+HTTP前段の認証やrate limitはHTTP Contractのルートへ指定します。middlewareが渡すstateの型は、`context()`と`formatError()`のHTTP入力へ推論します。raw endpointを短絡するmiddlewareはFetch Responseを返します。Batch設定のauthorizeで先読み値のreuseにも認可を適用してください。
 
 WebSocketはgraphql-transport-ws subprotocolを使用します。Subscription Sourceと外部I/Oはsignalに協調して停止してください。complete / 切断 / drainでAbortとiterator.returnを伝播します。
 
 ### HTTPとGraphQL WSの認証
 
-HTTPは`http.middlewares`へ既存のHTTP middlewareを指定します。GraphQL WSのライフサイクルは、DIしたサービスを使えるendpointの`factory().ws`へ直接書きます。外側の`ws`は有効化と待機時間などの静的設定です。
+HTTPはHTTP Contractのrawルートへ既存middlewareを指定します。GraphQL WSのライフサイクルは、DIしたサービスを使えるendpointの`factory().ws`へ直接書きます。外側の`ws`は有効化と待機時間などの静的設定です。`route`はhttp.contractで作成したrawルートを指定し、path・method・middlewareを実装側へ再指定しません。
 
 ```ts
 import { ConnectionRejected } from '@loutrejs/graphql'
 
-http: { middlewares: [httpBearerAuthentication] },
+const Api = http.contract({ profile: { raw: true, method: '*', path: '/graphql', middlewares: [httpBearerAuthentication] } })
+
+route: Api.routes.profile,
 ws: true,
 factory: (users = inject(Users)) => ({
   ws: {
@@ -81,3 +88,5 @@ HTTPは既定で有効です。`ws: true`や待機時間の設定を追加して
 `ws`の既定は無効です。Node.js / Bun / Cloudflare Workersでは両transport、AWS LambdaではHTTPのみを使用できます。Runtimeは静的ESMとしてbundleでき、Schema fileの読み込みやNode専用APIを要求しません。
 
 [生成・Data Resolutionガイド](../../docs/graphql-codegen.md)、[Counter server](../../examples/graphql-counter/README.md)、[HTTP / WSの認証例](../../examples/graphql-auth/README.md)、[注文server](../../examples/graphql-orders/README.md)、[transport ADR](../../docs/adr/loutre_graphql_transport_architecture.md)を参照してください。
+
+HTTP Contractのbranch pathとmiddlewareはGraphQLルートにも継承します。HTTP middlewareは通常のHTTP要求で実行し、WSのUpgradeでは実行しません。WSの認証はConnectionInitで行います。WSを有効にするルートのmethodはGETまたは*にしてください。通常HTTPとrawルートは同じContractへ並べられ、http.implementationは通常HTTPのルートを担当します。

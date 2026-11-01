@@ -1,3 +1,4 @@
+import { http as contractHttp } from '@loutrejs/loutre/http'
 import { graphql } from '@loutrejs/graphql'
 import type { GraphQLResolveInfo } from 'graphql'
 import { bindManifest } from '../../examples/graphql-counter/src/generated/bindings.js'
@@ -137,22 +138,28 @@ const custom = bindManifest<{ readonly label: string }>({
     },
   },
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'Custom',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest: custom,
   factory: () => ({ context: () => ({ label: 'custom' }) }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'MissingCustomContext',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest: custom,
   // @ts-expect-error bindManifestのContextをendpointへ引き継ぐ
   factory: () => ({ context: () => ({}) }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'MissingContext',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest: explicit,
   // @ts-expect-error 明示したAppContextをendpointへ引き継ぐ
   factory: () => ({ context: () => ({}) }),
