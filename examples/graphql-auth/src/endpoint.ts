@@ -9,9 +9,9 @@ import type { AppContext } from './graphql/context.js'
 
 const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 
-export const ProfileBearerGraphQL = graphql.implementation({
-  name: 'ProfileBearerGraphQL',
-  route: ApiContract.routes.bearer,
+export const ProfileGraphQL = graphql.implementation({
+  name: 'ProfileGraphQL',
+  route: ApiContract.routes.graphql,
   manifest,
 
   ws: true,
@@ -20,29 +20,8 @@ export const ProfileBearerGraphQL = graphql.implementation({
       connectionInit: ({ payload }) => {
         const user = users.authenticate({
           authorization: payload?.authorization,
+          apiKey: payload?.apiKey,
         })
-        if (!user) return new ConnectionRejected('認証が必要です。')
-        return { currentUser: { id: user.id } }
-      },
-    },
-    context: ({ state, signal }) => ({
-      currentUser: state.currentUser,
-      users,
-      signal,
-    }),
-  }),
-})
-
-export const ProfileApiKeyGraphQL = graphql.implementation({
-  name: 'ProfileApiKeyGraphQL',
-  route: ApiContract.routes.apiKey,
-  manifest,
-
-  ws: true,
-  factory: (users = inject(Users)) => ({
-    ws: {
-      connectionInit: ({ payload }) => {
-        const user = users.authenticate({ apiKey: payload?.apiKey })
         if (!user) return new ConnectionRejected('認証が必要です。')
         return { currentUser: { id: user.id } }
       },

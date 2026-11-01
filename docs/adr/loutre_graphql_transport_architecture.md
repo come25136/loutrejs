@@ -342,7 +342,7 @@ LoutreはDI、接続とoperationの寿命、型、cleanupを所有する。認�
 
 schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#接続終了のライフサイクル)を正本とする。
 
-方式別の認証例は[GraphQL認証example](../../examples/graphql-auth/README.md)を正本とする。HTTPは既存middlewareへ認証を置き、GraphQL WSはendpointのfactory内のwsへライフサイクルを直接定義する。HTTPとWSを同じ抽象度のlayerへ揃えることを目的にしない。
+同じURLを使う認証例は[GraphQL認証example](../../examples/graphql-auth/README.md)を正本とする。HTTPは既存middlewareへ認証を置き、GraphQL WSはendpointのfactory内のwsへライフサイクルを直接定義する。HTTPとWSを同じ抽象度のlayerへ揃えることを目的にしない。
 
 path・method・HTTP middlewareはHTTP Contract、http / wsは有効化や静的設定、factoryはDIしたサービスを使う実行時handlerとContext生成を所有する。connectionInitの戻り値からstateの型を推論し、HTTPの認証結果と同じ形ならContext・Resolverを共通化する。stateはACK payloadとは分離する。
 

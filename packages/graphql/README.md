@@ -81,7 +81,7 @@ ConnectionInit handlerは`request`・`payload`・接続の`signal`を受け取�
 
 onDisconnectはACK済み接続、onCloseはACK前を含む終了時に呼びます。購読の終了処理後に呼び出すため、接続中に保持するresourceはonCloseで解放できます。終了フックはabort済みsignalでも終了を待ちます。購読の終了処理やonDisconnectが失敗してもonCloseを呼び出し、失敗を集めて報告した後にsessionを解放します。
 
-接続開始の処理はconnectionInitへまとめます。認証方式・payloadのキー・再認証の方針はアプリ側で決めます。[方式別の認証example](../../examples/graphql-auth/README.md)を参照してください。
+接続開始の処理はconnectionInitへまとめます。認証方式・payloadのキー・再認証の方針はアプリ側で決めます。[同じURLを使う認証example](../../examples/graphql-auth/README.md)を参照してください。
 
 HTTPは既定で有効です。`ws: true`や待機時間の設定を追加してもHTTPは無効になりません。WS専用にする場合は`http: false`を明示します。factory内にws handlerを置く場合は、外側でもWSを有効にしてください。有効化を忘れた設定は型チェックとApplication Modelの構築時に拒否します。
 

@@ -9,23 +9,26 @@ interface AuthCase {
   pattern: Pattern
   headers: Record<string, string>
   payload: Record<string, unknown>
-  otherHeaders: Record<string, string>
-  otherPayload: Record<string, unknown>
+  invalidHeaders: Record<string, string>
+  invalidPayload: Record<string, unknown>
+  openingHeaders: Record<string, string>
 }
 const cases: readonly AuthCase[] = [
   {
     pattern: 'bearer',
     headers: { authorization: 'Bearer momiji-token' },
     payload: { authorization: 'Bearer momiji-token' },
-    otherHeaders: { 'x-api-key': 'momiji-key' },
-    otherPayload: { apiKey: 'momiji-key' },
+    invalidHeaders: { authorization: 'Bearer invalid' },
+    invalidPayload: { authorization: 'Bearer invalid' },
+    openingHeaders: { 'x-api-key': 'kaede-key' },
   },
   {
     pattern: 'api-key',
     headers: { 'x-api-key': 'momiji-key' },
     payload: { apiKey: 'momiji-key' },
-    otherHeaders: { authorization: 'Bearer momiji-token' },
-    otherPayload: { authorization: 'Bearer momiji-token' },
+    invalidHeaders: { 'x-api-key': 'invalid' },
+    invalidPayload: { apiKey: 'invalid' },
+    openingHeaders: { authorization: 'Bearer kaede-token' },
   },
 ]
 
@@ -40,17 +43,15 @@ async function start() {
   const url = `http://127.0.0.1:${port}`
   const clients: ReturnType<typeof createClient>[] = []
   const request = (
-    pattern: Pattern,
     headers: Record<string, string>,
     query = '{ viewer { id name } }',
   ) =>
-    fetch(`${url}/graphql/${pattern}`, {
+    fetch(`${url}/graphql`, {
       method: 'POST',
       headers: { ...headers, 'content-type': 'application/json' },
       body: JSON.stringify({ query }),
     })
   function client(
-    pattern: Pattern,
     payload: Record<string, unknown>,
     headers: Record<string, string> = {},
   ) {
@@ -60,7 +61,7 @@ async function start() {
       }
     }
     const result = createClient({
-      url: `${url.replace('http:', 'ws:')}/graphql/${pattern}`,
+      url: `${url.replace('http:', 'ws:')}/graphql`,
       connectionParams: payload,
       webSocketImpl: OpeningSocket,
       retryAttempts: 0,
@@ -80,19 +81,19 @@ async function start() {
 }
 
 it.each(cases)(
-  'HTTPの$pattern で指定した認証方式でstateを作り、他の方式へfallbackしない',
+  '同じURLのHTTPで$pattern を認証し、不正な資格情報は拒否する',
   async (auth) => {
     const server = await start()
     const authenticate = vi.spyOn(server.app.get(Users), 'authenticate')
     try {
-      const response = await server.request(auth.pattern, auth.headers)
+      const response = await server.request(auth.headers)
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({
         data: { viewer: { id: 'user-1', name: 'もみじ' } },
       })
       expect(authenticate).toHaveBeenCalledOnce()
-      for (const headers of [{}, auth.otherHeaders]) {
-        const rejected = await server.request(auth.pattern, headers)
+      for (const headers of [{}, auth.invalidHeaders]) {
+        const rejected = await server.request(headers)
         expect(rejected.status).toBe(401)
         expect(await rejected.json()).toEqual({ error: '認証が必要です。' })
       }
@@ -108,7 +109,7 @@ it.each(cases)(
     const server = await start()
     try {
       const stream = server
-        .client(auth.pattern, auth.payload, auth.otherHeaders)
+        .client(auth.payload, auth.openingHeaders)
         .iterate({ query: '{ viewer { id name } }' })
       expect((await stream.next()).value).toEqual({
         data: { viewer: { id: 'user-1', name: 'もみじ' } },
@@ -116,11 +117,11 @@ it.each(cases)(
       await stream.return?.()
       for (const payload of [
         {},
-        auth.otherPayload,
+        auth.invalidPayload,
         { authorization: 123, apiKey: 123 },
       ]) {
         const rejected = server
-          .client(auth.pattern, payload, auth.headers)
+          .client(payload, auth.headers)
           .iterate({ query: '{viewer{id}}' })
         await expect(rejected.next()).rejects.toMatchObject({
           code: 4403,
@@ -133,7 +134,7 @@ it.each(cases)(
   },
 )
 
-it('異なる認証方式でも同じContextとResolverを使い、ユーザーと通知を接続間で分離する', async () => {
+it('同じURLでHTTP MutationからWS Subscriptionへ通知し、認証方式とユーザーを分離する', async () => {
   const server = await start()
   const authenticate = vi.spyOn(server.app.get(Users), 'authenticate')
   const events: FormattedExecutionResult<Record<string, unknown>, unknown>[][] =
@@ -141,8 +142,8 @@ it('異なる認証方式でも同じContextとResolverを使い、ユーザー�
   const errors: unknown[] = []
   const acks: unknown[] = []
   const clients = [
-    server.client('bearer', { authorization: 'Bearer momiji-token' }),
-    server.client('api-key', { apiKey: 'kaede-key' }),
+    server.client({ authorization: 'Bearer momiji-token' }),
+    server.client({ apiKey: 'kaede-key' }),
   ]
   clients.forEach((client, index) => {
     client.on('connected', (_socket, payload) => acks.push(payload))
@@ -171,7 +172,6 @@ it('異なる認証方式でも同じContextとResolverを使い、ユーザー�
     await query.return?.()
     expect(authenticate).toHaveBeenCalledTimes(2)
     const response = await server.request(
-      'api-key',
       { 'x-api-key': 'momiji-key' },
       'mutation { renameViewer(name: "変更後") { id name } }',
     )
@@ -198,7 +198,7 @@ it('異なる認証方式でも同じContextとResolverを使い、ユーザー�
 it.each(cases)('WSの$pattern でdrain時に購読と接続を終了する', async (auth) => {
   const server = await start()
   const stream = server
-    .client(auth.pattern, auth.payload)
+    .client(auth.payload)
     .iterate({ query: 'subscription { viewerChanged { id } }' })
   try {
     expect((await stream.next()).value).toEqual({
