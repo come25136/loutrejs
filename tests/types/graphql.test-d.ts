@@ -1,8 +1,13 @@
 import { parse, type GraphQLError, type GraphQLFormattedError } from 'graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
-import { graphql, type GraphQLWebSocketHooks } from '@loutrejs/graphql'
+import {
+  graphql,
+  type GraphQLWebSocketHooks,
+  type GraphQLMiddlewareContext,
+} from '@loutrejs/graphql'
 import {
   defineApplication,
+  defineLayer,
   defineModule,
   createKernelApplication,
 } from '@loutrejs/loutre'
@@ -226,27 +231,35 @@ graphql.endpoint({
   }),
 })
 
+const authentication = defineLayer<
+  { currentUser: { readonly id: string } },
+  GraphQLMiddlewareContext,
+  Response
+>({
+  name: '共通認証',
+  factory:
+    () =>
+    async ({ request, signal, connectionParams }, next) => {
+      void [request, signal, connectionParams]
+      return next({ currentUser: { id: 'user-1' } })
+    },
+})
 graphql.endpoint({
-  name: '共通state',
-  path: '/state',
+  name: '共通middleware',
+  path: '/shared',
   manifest,
+  middlewares: [authentication],
   transports: { http: { middlewares: [tenantState] }, websocket: true },
   factory: () => ({
-    state: async ({ request, signal, connectionParams }) => {
-      const params: Readonly<Record<string, unknown>> | undefined =
-        connectionParams
-      void [request, signal, params]
-      return { currentUser: { id: 'user-1' } }
-    },
     context(input) {
       const id: string = input.state.currentUser.id
-      // @ts-expect-error 共通stateは読み取り専用
+      // @ts-expect-error stateは読み取り専用
       input.state.currentUser = { id: 'other' }
       if (input.transport === 'http') {
         const tenant: string = input.state.tenantId
         void tenant
       } else {
-        // @ts-expect-error HTTPだけのmiddleware stateはWSへ混入しない
+        // @ts-expect-error HTTP専用layerのstateをWSへ渡さない
         input.state.tenantId
       }
       void id
@@ -256,23 +269,6 @@ graphql.endpoint({
       const id: string = input.state.currentUser.id
       void id
       return error.toJSON()
-    },
-  }),
-})
-
-graphql.endpoint({
-  name: '前処理の短絡',
-  path: '/reject',
-  manifest,
-  factory: () => ({
-    state: ({ request }) =>
-      request.headers.has('deny')
-        ? new Response(null, { status: 403 })
-        : { value: 'ready' },
-    context: ({ state }) => {
-      const value: string = state.value
-      void value
-      return {}
     },
   }),
 })

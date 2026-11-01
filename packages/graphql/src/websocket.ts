@@ -1,4 +1,8 @@
-import type { ExecutionOperationLease } from '@loutrejs/loutre'
+import {
+  composeLayers,
+  type ExecutionOperationLease,
+  type DependencyResolver,
+} from '@loutrejs/loutre'
 import type {
   WebSocketHandlerContext,
   WebSocketMessageCodec,
@@ -17,8 +21,9 @@ import type {
   GraphQLRuntime,
   GraphQLWebSocketContextInput,
   GraphQLWebSocketExtra,
+  GraphQLMiddleware,
+  GraphQLMiddlewareContext,
 } from './types.js'
-import { prepareState } from './state.js'
 import { formatGraphQLError } from './errors.js'
 import type { BoundManifest } from './manifest-internal.js'
 import {
@@ -56,6 +61,8 @@ export async function serveGraphQLWebSocket(
   bound: BoundManifest,
   runtime: GraphQLRuntime,
   options: { readonly connectionInitWaitTimeout?: number },
+  middlewares: readonly GraphQLMiddleware[],
+  resolve: DependencyResolver,
 ): Promise<void> {
   const operations = new Map<string, Operation>()
   const schema = bound.schema
@@ -91,6 +98,14 @@ export async function serveGraphQLWebSocket(
     }
   }
   let state: Readonly<Record<string, unknown>> = Object.freeze({})
+  let releaseMiddlewares!: () => void
+  const middlewaresReleased = new Promise<void>((complete) => {
+    releaseMiddlewares = complete
+  })
+  let middlewaresStarted = false
+  let middlewareTask:
+    | Promise<Readonly<Record<string, unknown>> | Response>
+    | undefined
   const hooks = runtime.websocket
   const server = makeServer<
     Record<string, unknown> | undefined,
@@ -102,12 +117,35 @@ export async function serveGraphQLWebSocket(
       : { connectionInitWaitTimeout: options.connectionInitWaitTimeout }),
     onConnect: (connection) =>
       whileConnected(async () => {
-        const prepared = await prepareState(runtime, {
-          request: context.request,
-          signal: context.signal,
-          connectionParams: connection.connectionParams,
+        const prepared = await new Promise<
+          Readonly<Record<string, unknown>> | Response
+        >((ready, reject) => {
+          middlewareTask = composeLayers<
+            GraphQLMiddlewareContext,
+            Readonly<Record<string, unknown>> | Response
+          >({
+            context: {
+              request: context.request,
+              signal: context.signal,
+              connectionParams: connection.connectionParams,
+            },
+            layers: middlewares,
+            resolve,
+            terminal: async ({ state: result }) => {
+              context.signal.throwIfAborted()
+              middlewaresStarted = true
+              ready(result)
+              await middlewaresReleased
+              return result
+            },
+          })
+          void middlewareTask.then(ready, reject)
         })
         if (context.signal.aborted || prepared instanceof Response) return false
+        if (!prepared)
+          throw new TypeError(
+            'GraphQL middlewareはnext()かResponseで処理を完了してください。',
+          )
         state = prepared
         return hooks?.onConnect?.(connection)
       }, context.signal),
@@ -288,6 +326,9 @@ export async function serveGraphQLWebSocket(
           [...operations.values()].map((operation) => operation.cleanup?.()),
         )),
       )
+      releaseMiddlewares()
+      if (middlewaresStarted && middlewareTask)
+        results.push(...(await Promise.allSettled([middlewareTask])))
       const errors = results
         .filter((result) => result.status === 'rejected')
         .map((result) => result.reason)
@@ -298,6 +339,7 @@ export async function serveGraphQLWebSocket(
           'GraphQL WebSocketの終了処理に失敗しました。',
         )
     } finally {
+      releaseMiddlewares()
       state = Object.freeze({})
       context.signal.removeEventListener('abort', abortAll)
       for (const id of operations.keys()) finish(id)

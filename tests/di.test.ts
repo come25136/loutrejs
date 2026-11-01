@@ -2,6 +2,7 @@ import {
   defineModule,
   defineApplication,
   composeLayers,
+  captureDependencyResolver,
   defineLayer,
   bootstrapApplication,
   inject,
@@ -435,4 +436,43 @@ describe('consumer metadataとModelの依存宣言', () => {
       }
     },
   )
+})
+
+it('factoryで取得したresolverを後から使ってもlayerのconsumerと元のDI scopeを保つ', async () => {
+  class LayerLogger {
+    readonly consumer = injectInquirer()
+  }
+  const container = containerFor([
+    provide(LayerLogger).useClass(LayerLogger, { scope: 'transient' }),
+  ])
+  const resolve = runInInjectionContext(
+    {
+      consumer: { kind: 'execution', id: 'ws:profile', name: 'Profile' },
+      resolve: (dependency, consumer) =>
+        container.resolve(dependency, { consumer }),
+    },
+    captureDependencyResolver,
+  )
+  let consumer: DependencyConsumer | undefined
+  const layer = defineLayer({
+    name: '認証',
+    factory:
+      (logger = inject(LayerLogger)) =>
+      async (_input, next) => {
+        consumer = logger.consumer
+        return next()
+      },
+  })
+  await composeLayers({
+    context: {},
+    layers: [layer],
+    resolve,
+    terminal: async () => undefined,
+  })
+  expect(consumer).toEqual({ kind: 'layer', id: 'layer:0:認証', name: '認証' })
+  expect(() => inject(LayerLogger)).toThrow(InjectionContextError)
+})
+
+it('注入コンテキストの外からDI resolverを取得しない', () => {
+  expect(() => captureDependencyResolver()).toThrow('注入コンテキスト')
 })

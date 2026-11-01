@@ -3,6 +3,7 @@ import {
   getSourceLocation,
   inheritSourceLocation,
   composeLayers,
+  type LayerState,
   defineExecution,
   defineExecutionExtension,
   defineLayer,
@@ -545,7 +546,7 @@ export interface HttpRawExecutionContext<
 }
 
 type RawMiddlewareState<TMiddlewares extends readonly AnyHttpMiddleware[]> =
-  UnionToIntersection<MiddlewareContribution<TMiddlewares[number]>> & object
+  LayerState<TMiddlewares>
 
 export interface HttpRawDefinition<
   TMiddlewares extends readonly AnyHttpMiddleware[] =

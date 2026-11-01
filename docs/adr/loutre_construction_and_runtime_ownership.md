@@ -16,6 +16,8 @@ Loutreの設計では、canonical Application Modelが構造の正本、Containe
 
 factoryは構築metadataを参照できるが、依存は既存の`inject`配列で宣言する。metadata参照を可能にするためだけに、必ず例外を投げる偽のresolverは設けない。依存解決可能なcontextと構築metadataだけのcontextは、resolverの有無で表現する。Modelに現れない実行時だけの依存追加は認めない。
 
+protocol integrationでlayerの実行を後へ遅らせる場合は、既存のInjection Contextのresolverを保持する。接続ごとにlayer factoryを構築し、Modelに宣言した依存の検証とModule visibilityを維持する。別Containerやprocess全体のサービスcacheは追加しない。利用方法は[architecture guide](../ja/architecture.md#protocol-integrationからlayerを実行する)に記載する。
+
 ## Moduleの正規化結果はModel構築が所有する
 
 静的Moduleの参照と動的Moduleの明示instanceをGraphのidentityとして扱う。引数なしの旧templateは、Model構築ごとに一つのinstanceへ正規化する。Module収集、import edge、visibilityは同じ正規化済みimport graphを利用する。

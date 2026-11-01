@@ -26,6 +26,20 @@ export interface GenericLayer<
   ) => Promise<void | TOutcome>
 }
 
+type LayerContribution<TLayer> =
+  TLayer extends GenericLayer<any, infer TState, any> ? TState : never
+
+type UnionToIntersection<T> = (
+  T extends unknown ? (value: T) => void : never
+) extends (value: infer TState) => void
+  ? TState
+  : never
+
+export type LayerState<TLayers extends readonly GenericLayer<any, any, any>[]> =
+  [TLayers[number]] extends [never]
+    ? {}
+    : UnionToIntersection<LayerContribution<TLayers[number]>> & object
+
 export function defineLayer<
   TContribution extends object = {},
   TContext extends object = object,

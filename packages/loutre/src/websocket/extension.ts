@@ -1,5 +1,6 @@
 import {
   collectInjectedDependencies,
+  getSourceLocation,
   defineExecution,
   defineExecutionExtension,
   runtimeCapability,
@@ -13,6 +14,7 @@ import {
   type RuntimeCapabilityBinding,
   type SchemaOutput,
   type StandardSchemaV1,
+  type GenericLayer,
 } from '../core/index.js'
 import type { HttpRequestHeadDefinition } from '../http/request-head.js'
 import { IngressGate } from '../runtime/ingress-gate.js'
@@ -209,6 +211,7 @@ export interface WebSocketImplementationDefinition<
 > {
   readonly name: string
   readonly contract: TContract
+  readonly layers?: readonly GenericLayer<any, any, any>[]
   readonly factory: () => WebSocketHandlers<TContract>
 }
 
@@ -223,6 +226,7 @@ interface CompiledWebSocketRoute {
 
 interface CompiledWebSocketExecution {
   readonly routes: readonly CompiledWebSocketRoute[]
+  readonly layers: readonly GenericLayer<any, any, any>[]
   readonly factory: WebSocketImplementationDefinition['factory']
 }
 
@@ -258,25 +262,37 @@ export const websocketExtension = defineExecutionExtension<
   abiVersion: '2',
   name: 'loutre:websocket',
   compile(definition, context) {
-    return {
-      kind: 'execution',
-      id:
-        definition.name ||
-        `${context.moduleId}.websocket.${context.definitionIndex}`,
-      executionKind: 'websocket.session',
-      dependencies: collectInjectedDependencies(
-        {
-          kind: 'execution',
-          id: `websocket:${definition.name || `${context.moduleId}.websocket.${context.definitionIndex}`}`,
-          name:
-            definition.name ||
-            `${context.moduleId}.websocket.${context.definitionIndex}`,
-        },
+    const id =
+      definition.name ||
+      `${context.moduleId}.websocket.${context.definitionIndex}`
+    const layers = [...(definition.layers ?? [])]
+    const dependencies = new Set(
+      collectInjectedDependencies(
+        { kind: 'execution', id: `websocket:${id}`, name: id },
         () => definition.factory(),
       ),
-      capabilities: [WEBSOCKET_SERVER],
+    )
+    layers.forEach((layer, index) => {
+      for (const dependency of collectInjectedDependencies(
+        { kind: 'layer', id: `websocket:${id}:${index}`, name: layer.name },
+        () => layer.factory(),
+      ))
+        dependencies.add(dependency)
+    })
+    return {
+      kind: 'execution',
+      id,
+      executionKind: 'websocket.session',
+      dependencies: [...dependencies],
+      capabilities: [
+        ...new Set([
+          WEBSOCKET_SERVER,
+          ...layers.flatMap((layer) => layer.capabilities),
+        ]),
+      ],
       compiled: Object.freeze({
         routes: Object.freeze(compileRouteTree(definition.contract.routes)),
+        layers: Object.freeze(layers),
         factory: definition.factory,
       }),
     }
@@ -308,6 +324,17 @@ export const websocketExtension = defineExecutionExtension<
     )
   },
   projectGraph: ({ execution }) => ({
+    ...(execution.compiled.layers.length === 0
+      ? {}
+      : {
+          layers: execution.compiled.layers.map((layer) => ({
+            name: layer.name,
+            ...(getSourceLocation(layer) === undefined
+              ? {}
+              : { source: getSourceLocation(layer) }),
+            capabilities: layer.capabilities.map((capability) => capability.id),
+          })),
+        }),
     routes: execution.compiled.routes.map((route) => ({
       name: route.name,
       path: route.path,
@@ -355,11 +382,13 @@ export function defineWebSocketImplementation<
 >(definition: {
   readonly name?: string
   readonly contract: TContract
+  readonly layers?: readonly GenericLayer<any, any, any>[]
   readonly factory: WebSocketImplementationDefinition<TContract>['factory']
 }): WebSocketExecutionDefinition<TContract> {
   return defineExecution(websocketExtension, {
     name: definition.name ?? '',
     contract: definition.contract,
+    ...(definition.layers === undefined ? {} : { layers: definition.layers }),
     factory: definition.factory,
   }) as WebSocketExecutionDefinition<TContract>
 }

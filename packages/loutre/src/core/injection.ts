@@ -59,6 +59,21 @@ export function runInInjectionContext<T>(
   }
 }
 
+export function captureDependencyResolver(): DependencyResolver {
+  const context = currentInjectionContext()
+  if (!context?.resolve)
+    throw new Error('DI resolverは注入コンテキスト内で取得してください。')
+  const resolve = context.resolve
+  return (dependency, resolution) => {
+    const consumer =
+      typeof resolution === 'object' && resolution.consumer
+        ? resolution.consumer
+        : context.consumer
+    context.record?.(consumer, dependency)
+    return resolve(dependency, consumer)
+  }
+}
+
 export class InjectionContextError extends Error {
   readonly code = 'LUTRE_DI_CONTEXT'
 

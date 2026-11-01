@@ -40,7 +40,7 @@ curl http://127.0.0.1:3000/graphql \
   --data '{"query":"{ viewer { id name } }"}'
 ```
 
-資格情報がない場合や不正な場合は、どちらも401です。GraphQLは共通の`state`前処理から認証結果を受け取り、`context({ state })`で型付きのまま使います。通常HTTPのmiddlewareも同じ前処理を呼びます。Context生成で資格情報を再検証する必要はありません。
+資格情報がない場合や不正な場合は、どちらも401です。GraphQLは共有middlewareから認証結果を受け取り、`context({ state })`で型付きのまま使います。通常HTTPにも同じ認証layerを指定します。Context生成で資格情報を再検証する必要はありません。
 
 ## WebSocket
 
@@ -73,8 +73,8 @@ curl http://127.0.0.1:3000/graphql \
 ## 利用するAPI
 
 ```ts
+middlewares: [authentication],
 factory: (users = inject(Users)) => ({
-  state: (input) => authenticate(users, input),
   context: ({ state, signal }) => ({
     currentUser: state.currentUser,
     users,
@@ -83,13 +83,13 @@ factory: (users = inject(Users)) => ({
 })
 ```
 
-利用者は前処理で作った値をHTTPでもWSでも`state`から参照します。`onConnect`、ACK、接続記録の対応表、切断時の削除処理は不要です。認証以外の前処理にも同じAPIを使えます。
+利用者は既存のlayerで前処理し、HTTPでもWSでもその結果を`state`から参照します。`onConnect`、ACK、接続記録の対応表、切断時の削除処理は不要です。認証以外の前処理にも同じAPIを使えます。
 
 ## アプリとフレームワークの境界
 
 - `Users`は資格情報の検証とユーザーデータを所有します。
-- `authenticate`はヘッダーと任意の`connectionParams`から資格情報を取り出し、`{ currentUser }`か拒否する`Response`を返すアプリの関数です。通常HTTPのmiddlewareとGraphQLの`state`が共有します。
-- Loutreは前処理の結果を型付きの`input.state`へ渡します。既存のHTTP middlewareのstateとも結合します。同じキーの上書きは許可しません。
+- `authentication`は既存の`defineLayer`で定義する共有middlewareです。ヘッダーと任意の`connectionParams`から資格情報を取り出し、`next({ currentUser })`で認証結果を渡すか、`Response`で短絡します。通常HTTPとGraphQLへ同じlayerを指定します。
+- Loutreは前処理の結果を型付きの`input.state`へ渡します。HTTP専用middlewareのstateとも、既存layerの結合規約に従って結合します。
 - HTTPではリクエストごと、WSでは接続開始時に前処理を実行します。WSで複数operationを実行しても資格情報の検証を繰り返しません。接続ごとのstateは分離し、切断時にはLoutreが保持を終了します。認証結果にはユーザーIDを保持し、表示するユーザー情報はResolverで最新値を取得します。
 - 前処理が`Response`を返した場合、HTTPではその応答を返し、WSでは接続を拒否します。前処理の結果や拒否応答のbodyをACK payloadへ送りません。
 - 認証方式、利用者の形、失効・再検証の方針はアプリ側で決めます。接続フックは追加のprotocol制御が必要な場合だけ使います。
