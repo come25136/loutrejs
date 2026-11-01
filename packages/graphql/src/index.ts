@@ -88,7 +88,7 @@ export function defineGraphQLImplementation<
   const TRoute extends HttpContractRawRoute,
   const THttp extends HttpOptions = undefined,
   const TWs extends WebSocketOptions = undefined,
-  TState extends object = {},
+  TState extends object = HttpState<TRoute>,
 >(
   definition: Omit<
     GraphQLImplementationDefinition<TContext>,
@@ -100,7 +100,8 @@ export function defineGraphQLImplementation<
     readonly factory: () => GraphQLRuntime<
       NoInfer<TContext>,
       ImplementationInput<TRoute, THttp, TWs, NoInfer<TState>>,
-      TState
+      TState,
+      HttpState<TRoute>
     > &
       (Enabled<TWs> extends true ? {} : { readonly ws?: never })
   },
@@ -204,7 +205,10 @@ export function defineGraphQLImplementation<
         contract: websocket.contract({
           endpoint: {
             path: definition.route.path,
-            handshake: { protocols: ['graphql-transport-ws'] },
+            handshake: {
+              protocols: ['graphql-transport-ws'],
+              middlewares: definition.route.middlewares ?? [],
+            },
             messages: websocket.text({ input: textSchema, output: textSchema }),
           },
         }),

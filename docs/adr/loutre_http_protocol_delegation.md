@@ -58,11 +58,10 @@ const Profile = graphql.implementation({
           : new ConnectionRejected('認証が必要です。')
       },
     },
-    context: ({ state, signal }) => ({
-      currentUser: state.currentUser,
-      users,
-      signal,
-    }),
+    context: ({ state, signal }) => {
+      if (!state.currentUser) throw new Error('認証済みの利用者がありません。')
+      return { currentUser: state.currentUser, users, signal }
+    },
   }),
 })
 ```
@@ -71,6 +70,14 @@ raw: trueはHTTP request/responseの処理を委任する明示的な印であ�
 
 branchのpathとmiddlewareはrawルートにも継承する。branchで宣言したresponse variantは通常HTTP用であり、rawルートへ継承する組合せは型と実行時の両方で拒否する。GraphQLのHTTP入出力はmanifestとprotocolが所有するためである。
 
-HTTP middlewareは通常のGraphQL HTTP要求へ適用し、Upgrade時には自動適用しない。ブラウザがConnectionInitで渡す資格情報を、Upgradeより前にHTTP Bearer認証で拒否しないためである。WS handshakeは同じContractのpathを照合し、共通WebSocket hostでGET以外を405とAllow: GETで拒否してからgraphql-transport-wsを交渉する。WSを有効にするルートはGETまたは*を受け付ける必要がある。接続確立後の認証とstate生成はGraphQL implementationのconnectionInitが所有する。
+HTTP Contractのmiddlewareは通常HTTPとWS Upgradeの両方で、同じ順序で実行する。認証をConnectionInitまで延期するかはmiddleware自身がUpgradeヘッダーを見て決める。適用条件用のwrapperや、認証方式をframeworkが分類する仕組みは追加しない。
+
+Upgrade前のmiddlewareはHTTPの要求処理として扱い、nextの完了はhandshakeまでとする。接続中の処理はGraphQLのWS lifecycleが担当する。middleware間のstateは通常と同様に伝播し、接続のstateとしても読み取れる。ConnectionInitはそのstateを読み、自身が返す接続stateを作る。ConnectionInitを指定しない場合はmiddlewareのstateをそのまま使う。
+
+認証を省略する分岐があるmiddlewareは、その寄与を部分的なstateとして宣言する。認証後のGraphQL contextは必須の利用者があることを確認して組み立てる。既存のnextのstate必須規約を弱めたり、Upgradeに架空の利用者を渡したりしない。
+
+通常HTTPのfetch入口はUpgradeを示すヘッダー付き要求を400で拒否し、通常のhandlerへ到達させない。WS入口はGET、path、subprotocolとnative handshakeを検証する。Node adapterは元のmethodでGET以外を拒否し、handshake前の拒否応答のstatus・headers・bodyを送る。Fetch Requestが禁止するTRACE等もRequest作成前に拒否する。WSを有効にするルートはGETまたは*を受け付ける必要がある。
+
+WSのmiddlewareの依存とcapabilityはWebSocket executionのModelへ登録し、実行時にはそのexecutionの既存resolverで解決する。別Containerや遅延DI取得APIを追加しない。middlewareが短絡した場合はdriverとsessionを開始せず、開始後のmiddleware失敗では接続を終了してleaseを解放する。
 
 httpとwsの有効化は引き続き独立した静的設定とし、HTTPは既定で有効、WSは既定で無効にする。GraphQL実装側のhttp設定はbooleanだけとし、path・method・middlewareの上書きを廃止する。既存graphql.endpointは残さない。

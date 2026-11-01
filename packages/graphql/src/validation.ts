@@ -44,9 +44,9 @@ export function validateEndpointSchema(schema: GraphQLSchema) {
 }
 
 export function validateRuntime(
-  runtime: GraphQLRuntime<any, any, any>,
+  runtime: GraphQLRuntime<any, any, any, any>,
   wsEnabled: boolean,
-): GraphQLRuntime<any, any, any> {
+): GraphQLRuntime<any, any, any, any> {
   if (!runtime || typeof runtime.context !== 'function')
     throw new TypeError('GraphQL factoryはcontext関数を返してください。')
   if ('rootValue' in runtime)

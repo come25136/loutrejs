@@ -241,8 +241,11 @@ graphql.implementation({
         input.state.tenantId = 'other'
         void [id, tenant]
       } else {
-        // @ts-expect-error WSへHTTP middleware stateを持ち込まない
-        input.state.currentUser
+        const id: string = input.state.currentUser.id
+        const tenant: string = input.state.tenantId
+        // @ts-expect-error handshakeのstateも読み取り専用
+        input.state.tenantId = 'other'
+        void [id, tenant]
       }
       return {}
     },
@@ -271,11 +274,17 @@ graphql.implementation({
   ws: true,
   factory: () => ({
     ws: {
-      connectionInit: async ({ request, signal, payload }) => {
+      connectionInit: async ({ request, signal, payload, state }) => {
         const openingRequest: Request = request
         const connectionSignal: AbortSignal = signal
         const params: Readonly<Record<string, unknown>> | undefined = payload
-        void [openingRequest, connectionSignal, params]
+        const tenant: string = state.tenantId
+        const id: string = state.currentUser.id
+        // @ts-expect-error handshakeにないstateは存在しない
+        state.missing
+        // @ts-expect-error handshakeのstateは読み取り専用
+        state.tenantId = 'other'
+        void [openingRequest, connectionSignal, params, tenant, id]
         if (payload?.authorization === undefined)
           return new ConnectionRejected('認証が必要です。')
         return { currentUser: { id: 'user-1' } }

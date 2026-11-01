@@ -26,10 +26,9 @@ export const ProfileGraphQL = graphql.implementation({
         return { currentUser: { id: user.id } }
       },
     },
-    context: ({ state, signal }) => ({
-      currentUser: state.currentUser,
-      users,
-      signal,
-    }),
+    context: ({ state, signal }) => {
+      if (!state.currentUser) throw new Error('認証済みの利用者がありません。')
+      return { currentUser: state.currentUser, users, signal }
+    },
   }),
 })

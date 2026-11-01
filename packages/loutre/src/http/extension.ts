@@ -1593,6 +1593,18 @@ function createHttpExtensionRuntime(
       if (!ingress.isAccepting) {
         return Response.json({ error: 'Service Unavailable' }, { status: 503 })
       }
+      if (
+        request.headers.has('upgrade') ||
+        request.headers
+          .get('connection')
+          ?.split(',')
+          .some((value) => value.trim().toLowerCase() === 'upgrade')
+      ) {
+        return new Response(
+          'Upgrade要求はWebSocketの入口を使用してください。',
+          { status: 400 },
+        )
+      }
       const url = new URL(request.url)
       const method = request.method.toUpperCase()
 

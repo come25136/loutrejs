@@ -54,7 +54,7 @@ type SessionContext = WebSocketHandlerContext<{
 export async function serveGraphQLWebSocket(
   context: SessionContext,
   bound: BoundManifest,
-  runtime: GraphQLRuntime<any, any, any>,
+  runtime: GraphQLRuntime<any, any, any, any>,
   options: { readonly connectionInitWaitTimeout?: number },
 ): Promise<void> {
   const operations = new Map<string, Operation>()
@@ -111,8 +111,9 @@ export async function serveGraphQLWebSocket(
               request: context.request,
               signal: context.signal,
               payload: connection.connectionParams,
+              state: context.state,
             })
-          : {}
+          : context.state
         context.signal.throwIfAborted()
         if (result instanceof ConnectionRejected) {
           await context.close(4403, result.reason)
@@ -148,7 +149,12 @@ export async function serveGraphQLWebSocket(
         operationId: id,
         signal: controller.signal,
       }
-      const operation: Operation = { controller, lease, input, finished: false }
+      const operation: Operation = {
+        controller,
+        lease,
+        input,
+        finished: false,
+      }
       operations.set(id, operation)
       lease.annotate?.({
         'graphql.session.id': context.session.id,

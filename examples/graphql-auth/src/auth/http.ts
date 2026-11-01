@@ -3,12 +3,14 @@ import { http } from '@loutrejs/loutre/http'
 import { Users } from './users.js'
 import type { AuthState } from './state.js'
 
-export const httpAuthentication = http.middleware<AuthState>({
+export const httpAuthentication = http.middleware<Partial<AuthState>>({
   name: 'HTTP認証',
   factory:
     (users = inject(Users)) =>
     async ({ request, signal }, next) => {
       signal.throwIfAborted()
+      if (request.headers.get('upgrade')?.toLowerCase() === 'websocket')
+        return next({})
       const user = users.authenticate({
         authorization: request.headers.get('authorization'),
         apiKey: request.headers.get('x-api-key'),

@@ -53,7 +53,17 @@ HTTPはHTTP Contractのrawルートへ既存middlewareを指定します。Graph
 ```ts
 import { ConnectionRejected } from '@loutrejs/graphql'
 
-const Api = http.contract({ profile: { raw: true, method: '*', path: '/graphql', middlewares: [httpBearerAuthentication] } })
+const httpAuthentication = http.middleware<{ currentUser?: { id: string } }>({
+  name: 'HTTP認証',
+  factory: (users = inject(Users)) => async ({ request }, next) => {
+    if (request.headers.get('upgrade')?.toLowerCase() === 'websocket') return next({})
+    const user = users.authenticate({ authorization: request.headers.get('authorization') })
+    if (!user) return new Response('認証が必要です。', { status: 401 })
+    return next({ currentUser: { id: user.id } })
+  },
+})
+
+const Api = http.contract({ profile: { raw: true, method: '*', path: '/graphql', middlewares: [httpAuthentication] } })
 
 route: Api.routes.profile,
 ws: true,
@@ -65,11 +75,14 @@ factory: (users = inject(Users)) => ({
       return { currentUser: { id: user.id } }
     },
   },
-  context: ({ state, signal }) => ({ currentUser: state.currentUser, users, signal }),
+  context: ({ state, signal }) => {
+    if (!state.currentUser) throw new Error('認証済みの利用者がありません。')
+    return { currentUser: state.currentUser, users, signal }
+  },
 })
 ```
 
-ConnectionInit handlerは`request`・`payload`・接続の`signal`を受け取り、stateのオブジェクトを返します。同期・非同期のどちらも使え、戻り値から`context()`と`formatError()`のWS stateを推論します。HTTP middlewareの認証結果と同じ形なら、Context・Resolverを共通化できます。
+ConnectionInit handlerは`request`・`payload`・接続の`signal`・handshake middlewareの`state`を受け取り、stateのオブジェクトを返します。同期・非同期のどちらも使え、戻り値から`context()`と`formatError()`のWS stateを推論します。HTTP middlewareの認証結果と同じ形なら、Context・Resolverを共通化できます。
 
 拒否する場合は`@loutrejs/graphql`の`ConnectionRejected`を返します。`new ConnectionRejected('認証が必要です。')`なら、クライアントへ4403とその理由を通知します。理由は公開情報として扱い、UTF-8で123バイト以内にします。省略時は「接続が拒否されました。」です。HTTP Response、boolean、戻り値の省略は受け付けません。stateはACK payloadへ送らず、最上位を読み取り専用にして接続ごとに保持します。
 
@@ -89,4 +102,6 @@ HTTPは既定で有効です。`ws: true`や待機時間の設定を追加して
 
 [生成・Data Resolutionガイド](../../docs/graphql-codegen.md)、[Counter server](../../examples/graphql-counter/README.md)、[HTTP / WSの認証例](../../examples/graphql-auth/README.md)、[注文server](../../examples/graphql-orders/README.md)、[transport ADR](../../docs/adr/loutre_graphql_transport_architecture.md)を参照してください。
 
-HTTP Contractのbranch pathとmiddlewareはGraphQLルートにも継承します。HTTP middlewareは通常のHTTP要求で実行し、WSのUpgradeでは実行しません。WSの認証はConnectionInitで行います。WSを有効にするルートのmethodはGETまたは*にしてください。通常HTTPとrawルートは同じContractへ並べられ、http.implementationは通常HTTPのルートを担当します。
+HTTP Contractのbranch pathとmiddlewareはGraphQLルートにも継承します。HTTP middlewareは通常HTTPとWS Upgradeの両方で実行します。WS認証をConnectionInitへ任せる場合はmiddleware自身でUpgradeを判定します。WSを有効にするルートのmethodはGETまたは*にしてください。通常HTTPとrawルートは同じContractへ並べられ、http.implementationは通常HTTPのルートを担当します。
+
+Upgradeのmiddlewareが渡したstateはconnectionInitのinput.stateから読めます。ConnectionInitを省略した場合は、そのstateをoperationでも使います。ConnectionInitを定義する場合は、operationへ渡すstateを戻り値で決めます。middlewareのnextはhandshakeの完了までを担当し、接続全体の終了処理はonCloseへ置きます。認証を後回しにしたUpgrade要求が通常HTTP handlerへ流れる経路は拒否します。

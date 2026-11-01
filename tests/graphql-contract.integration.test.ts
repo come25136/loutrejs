@@ -1,5 +1,6 @@
 import { once } from 'node:events'
 import { buildSchema } from 'graphql'
+import { request as httpRequest } from 'node:http'
 import WebSocket from 'ws'
 import { nodeRuntime } from '@loutrejs/node'
 import { graphql, ConnectionRejected } from '@loutrejs/graphql'
@@ -18,12 +19,14 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
     readonly text = 'こんにちは'
   }
   const authenticated = vi.fn()
-  const auth = http.middleware<{ user: string }>({
+  const auth = http.middleware<{ user?: string }>({
     name: 'HTTP認証',
     factory:
       () =>
       async ({ request }, next) => {
         authenticated()
+        if (request.headers.get('upgrade')?.toLowerCase() === 'websocket')
+          return next({})
         if (request.headers.get('authorization') !== 'Bearer valid')
           return new Response(null, { status: 401 })
         return next({ user: '利用者' })
@@ -115,7 +118,6 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
     expect(await response.json()).toEqual({
       data: { greeting: 'こんにちは利用者' },
     })
-    expect(authenticated).toHaveBeenCalledTimes(2)
     if (socket.readyState !== WebSocket.OPEN) await once(socket, 'open')
     let received = once(socket, 'message')
     socket.send(
@@ -137,7 +139,7 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
       id: '1',
       payload: { data: { greeting: 'こんにちは利用者' } },
     })
-    expect(authenticated).toHaveBeenCalledTimes(2)
+    expect(authenticated).toHaveBeenCalledTimes(3)
     const wrong = new WebSocket(origin.replace('http:', 'ws:') + '/graphql', [
       'graphql-transport-ws',
     ])
@@ -160,6 +162,140 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
     })
   } finally {
     socket.terminate()
+    await app.close()
+  }
+})
+
+it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒否のstatus・headers・bodyを返す', async () => {
+  class Gate {
+    readonly events: string[] = []
+  }
+  const layer = http.middleware({
+    name: '共通アクセス制限',
+    factory:
+      (gate = inject(Gate)) =>
+      async ({ request }, next) => {
+        gate.events.push('開始')
+        if (request.headers.has('x-blocked'))
+          return Response.json(
+            { error: '接続を拒否しました。' },
+            { status: 403, headers: { 'retry-after': '30' } },
+          )
+        await next()
+        gate.events.push('終了')
+      },
+  })
+  const Api = http.contract({
+    api: {
+      path: '/api',
+      middlewares: [layer],
+      routes: { graphql: { raw: true, method: '*', path: '/graphql' } },
+    },
+  })
+  const schema = buildSchema('type Query { hello: String }')
+  schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
+  const execution = graphql.implementation({
+    name: 'Middleware',
+    route: Api.routes.graphql,
+    manifest: manifestFromSchema(schema),
+    http: false,
+    ws: true,
+    factory: () => ({ context: () => ({}) }),
+  })
+  const Module = defineModule(() => ({
+    providers: [Gate],
+    executions: [execution],
+  }))
+  const application = defineApplication({ modules: [Module()] })
+  const graph = projectApplicationModel(application.model)
+  const ws = graph.executions.find(
+    (node) => node.executionKind === 'websocket.session',
+  )!
+  const provider = graph.providers.find((node) => node.name === 'Gate')!
+  expect(
+    graph.edges.some((edge) => edge.from === ws.id && edge.to === provider.id),
+  ).toBe(true)
+  const app = await nodeRuntime.create({ application })
+  const gate = app.get(Gate)
+  const { server } = await app.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    shutdownHooks: false,
+  })
+  const url = `ws://127.0.0.1:${(server.address() as { port: number }).port}/api/graphql`
+  try {
+    const denied = new WebSocket(url, ['graphql-transport-ws'], {
+      headers: { 'x-blocked': 'true' },
+    })
+    await new Promise<void>((resolve, reject) => {
+      denied.on('error', () => {})
+      denied.on('unexpected-response', (_request, response) => {
+        const body: Buffer[] = []
+        response.on('data', (chunk) => body.push(chunk))
+        response.on('end', () => {
+          try {
+            expect(response.statusCode).toBe(403)
+            expect(response.headers['retry-after']).toBe('30')
+            expect(JSON.parse(Buffer.concat(body).toString())).toEqual({
+              error: '接続を拒否しました。',
+            })
+            denied.terminate()
+            resolve()
+          } catch (error) {
+            denied.terminate()
+            reject(error)
+          }
+        })
+      })
+      denied.on('open', () => {
+        denied.terminate()
+        reject(new Error('拒否すべきUpgradeが成功しました。'))
+      })
+    })
+    expect(gate.events).toEqual(['開始'])
+    for (const method of ['POST', 'TRACE']) {
+      await new Promise<void>((resolve, reject) => {
+        const request = httpRequest(
+          url.replace('ws:', 'http:'),
+          {
+            method,
+            headers: {
+              connection: 'Upgrade',
+              upgrade: 'websocket',
+              'sec-websocket-protocol': 'graphql-transport-ws',
+              'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+              'sec-websocket-version': '13',
+            },
+          },
+          (response) => {
+            response.resume()
+            try {
+              expect(response.statusCode).toBe(405)
+              expect(response.headers.allow).toBe('GET')
+              resolve()
+            } catch (error) {
+              reject(error)
+            }
+          },
+        )
+        request.on('error', reject)
+        request.on('upgrade', (_response, socket) => {
+          socket.destroy()
+          reject(new Error(`${method}のUpgradeを受け入れました。`))
+        })
+        request.end()
+      })
+    }
+    expect(gate.events).toEqual(['開始'])
+    const allowed = new WebSocket(url, ['graphql-transport-ws'])
+    await once(allowed, 'open')
+    await vi.waitFor(() =>
+      expect(gate.events).toEqual(['開始', '開始', '終了']),
+    )
+    const closed = once(allowed, 'close')
+    allowed.close()
+    await closed
+  } finally {
     await app.close()
   }
 })

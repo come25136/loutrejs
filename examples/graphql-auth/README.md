@@ -49,6 +49,27 @@ const ApiContract = http.contract({
 })
 ```
 
+認証middleware内で次のように分岐します。Upgradeではユーザーをまだ確定しないため、stateの寄与は`Partial<AuthState>`にします。
+
+```ts
+export const httpAuthentication = http.middleware<Partial<AuthState>>({
+  name: 'HTTP認証',
+  factory:
+    (users = inject(Users)) =>
+    async ({ request, signal }, next) => {
+      signal.throwIfAborted()
+      if (request.headers.get('upgrade')?.toLowerCase() === 'websocket')
+        return next({})
+      const user = users.authenticate({
+        authorization: request.headers.get('authorization'),
+        apiKey: request.headers.get('x-api-key'),
+      })
+      if (!user) return new Response('認証が必要です。', { status: 401 })
+      return next({ currentUser: { id: user.id } })
+    },
+})
+```
+
 [health.ts](./src/health.ts)は通常HTTP、[endpoint.ts](./src/endpoint.ts)はGraphQL HTTPとWSを担当します。GraphQL実装は同じルート参照から両方の入口を作ります。
 
 ```ts
@@ -68,16 +89,15 @@ const ProfileGraphQL = graphql.implementation({
         return { currentUser: { id: user.id } }
       },
     },
-    context: ({ state, signal }) => ({
-      currentUser: state.currentUser,
-      users,
-      signal,
-    }),
+    context: ({ state, signal }) => {
+      if (!state.currentUser) throw new Error('認証済みの利用者がありません。')
+      return { currentUser: state.currentUser, users, signal }
+    },
   }),
 })
 ```
 
-HTTP middlewareは通常のHTTP要求で実行します。WSのUpgradeでは実行せず、ConnectionInitで認証します。どちらもstateへユーザーIDを保持し、表示データはUsersから最新値を取得します。stateや資格情報をACK payloadへ送りません。
+HTTP middlewareは通常HTTPとWS Upgradeの両方で実行します。認証middleware自身がUpgradeヘッダーを判定し、WSの認証はConnectionInitへ任せます。どちらもstateへユーザーIDを保持し、表示データはUsersから最新値を取得します。stateや資格情報をACK payloadへ送りません。
 
 ## Query / Mutation
 

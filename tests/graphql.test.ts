@@ -941,7 +941,11 @@ describe('GraphQL WebSocket', () => {
         second.wait('connection_ack'),
       ])
       first.send({ id: 'a', type: 'subscribe', payload: { query: '{hello}' } })
-      second.send({ id: 'b', type: 'subscribe', payload: { query: '{hello}' } })
+      second.send({
+        id: 'b',
+        type: 'subscribe',
+        payload: { query: '{hello}' },
+      })
       await Promise.all([
         first.wait('complete', 'a'),
         second.wait('complete', 'b'),
@@ -1720,7 +1724,36 @@ it.each([false, true])(
 )
 
 describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
-  it('HTTP middlewareとConnectionInitを別々に実行し、それぞれのstateを渡す', async () => {
+  it('ConnectionInitを省略するとmiddlewareのstateを接続内のoperationで共有する', async () => {
+    const api = await fixture({
+      middleware: [
+        http.middleware<{ tenant: string }>({
+          name: '組織',
+          factory: () => async (_input, next) => next({ tenant: '組織1' }),
+        }),
+      ],
+    })
+    try {
+      const connection = await api.open()
+      connection.send({ type: 'connection_init' })
+      await connection.wait('connection_ack')
+      for (const id of ['1', '2']) {
+        connection.send({
+          id,
+          type: 'subscribe',
+          payload: { query: '{hello}' },
+        })
+        await connection.wait('complete', id)
+      }
+      expect(api.contexts[0]!.state).toEqual({ tenant: '組織1' })
+      expect(api.contexts[0]!.state).toBe(api.contexts[1]!.state)
+      expect(Object.isFrozen(api.contexts[0]!.state)).toBe(true)
+      expect(connection.sent[0]).toEqual({ type: 'connection_ack' })
+    } finally {
+      await api.app.close()
+    }
+  })
+  it('共通middlewareのstateをConnectionInitへ渡し、戻り値を接続stateとして使う', async () => {
     const calls: string[] = []
     const httpLayer = http.middleware<{ user: string }>({
       name: 'HTTP',
@@ -1731,7 +1764,8 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
     })
     const api = await fixture({
       middleware: [httpLayer],
-      connectionInit: () => {
+      connectionInit: ({ state }) => {
+        expect(state).toEqual({ user: 'http-user' })
         calls.push('ws')
         return { user: 'ws-user' }
       },
@@ -1749,7 +1783,7 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
         payload: { query: '{hello}' },
       })
       await connection.wait('complete', '1')
-      expect(calls).toEqual(['http', 'ws'])
+      expect(calls).toEqual(['http', 'http', 'ws'])
       expect(api.contexts[1]!.state).toEqual({ user: 'ws-user' })
     } finally {
       await api.app.close()
@@ -1830,8 +1864,16 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
       middleware: [
         http.middleware({
           name: 'HTTP拒否',
-          factory: () => async () =>
-            Response.json({ error: '認証が必要です。' }, { status: 401 }),
+          factory:
+            () =>
+            async ({ request }, next) => {
+              if (request.headers.get('upgrade') === 'websocket')
+                return next({})
+              return Response.json(
+                { error: '認証が必要です。' },
+                { status: 401 },
+              )
+            },
         }),
       ],
       connectionInit: () => new ConnectionRejected('認証が必要です。'),
@@ -1995,7 +2037,9 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
 
 describe('GraphQLの設定と型に沿った実行', () => {
   it('ConnectionInitが返したstateをoperationへ渡し、ACKには含めない', async () => {
-    const api = await fixture({ connectionInit: () => ({ secret: 'private' }) })
+    const api = await fixture({
+      connectionInit: () => ({ secret: 'private' }),
+    })
     try {
       const connection = await api.open()
       connection.send({ type: 'connection_init' })
@@ -2183,6 +2227,32 @@ it('HTTP ContractのWS入口はGET以外をdriverとsessionの開始前に拒否
     expect(response.headers.get('allow')).toBe('GET')
     expect(api.connections).toEqual([])
     expect(api.trace.traces).toEqual([])
+  } finally {
+    await api.app.close()
+  }
+})
+
+it.each([
+  { upgrade: 'websocket' },
+  { connection: 'Upgrade' },
+  { upgrade: 'websocket', connection: 'keep-alive, Upgrade' },
+])('Upgradeを示すHTTP要求=%jを通常handlerへ流さない', async (headers) => {
+  const called = vi.fn()
+  const middleware = http.middleware({
+    name: '到達確認',
+    factory: () => async (_input, next) => {
+      called()
+      return next()
+    },
+  })
+  const api = await fixture({ middleware: [middleware] })
+  try {
+    const response = await api.fetchGraphQL('{hello}', {
+      headers: { 'content-type': 'application/json', ...headers },
+    })
+    expect(response.status).toBe(400)
+    expect(called).not.toHaveBeenCalled()
+    expect(api.contexts).toEqual([])
   } finally {
     await api.app.close()
   }
