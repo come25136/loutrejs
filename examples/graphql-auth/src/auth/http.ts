@@ -25,8 +25,8 @@ const profile = http.contract({
   },
 })
 
-export const Profile = http.implementation({
-  name: 'Profile',
+export const ProfileHttp = http.implementation({
+  name: 'ProfileHttp',
   contract: profile,
   factory: (users = inject(Users)) => ({
     me: ({ state, response }) =>

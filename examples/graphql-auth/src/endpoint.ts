@@ -9,8 +9,8 @@ import type { AppContext } from './graphql/context.js'
 
 const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 
-export const AuthenticatedGraphQL = graphql.endpoint({
-  name: 'AuthenticatedGraphQL',
+export const ProfileGraphQL = graphql.endpoint({
+  name: 'ProfileGraphQL',
   path: '/graphql',
   manifest,
   transports: { http: true, websocket: true },

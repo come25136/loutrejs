@@ -20,6 +20,15 @@ npm run start --workspace @loutrejs/example-graphql-auth
 | user-1 / もみじ | momiji-token | momiji-key |
 | user-2 / かえで | kaede-token  | kaede-key  |
 
+## 構成
+
+同じプロフィール機能の入口を通信方式ごとに定義します。
+
+- [ProfileHttp](./src/auth/http.ts): 通常HTTPの`/me`。
+- [ProfileGraphQL](./src/endpoint.ts): GraphQLのQuery / Mutation / Subscription。
+
+認証は両者が共有する前処理であり、入口の機能名とは分けます。
+
 ## HTTP
 
 通常のHTTPとGraphQL HTTPは同じ認証の前処理を使います。
