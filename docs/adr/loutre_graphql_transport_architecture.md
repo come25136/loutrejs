@@ -67,11 +67,9 @@ const GraphQLApi = graphql.endpoint({
   name: 'GraphQLApi',
   path: '/graphql',
   manifest,
-  transports: {
-    http: true,
-    websocket: {
-      connectionInitWaitTimeout: 3_000,
-    },
+  http: true,
+  ws: {
+    connectionInitWaitTimeout: 3_000,
   },
   factory: (trips = inject(TripService)) => ({
     context({ request, signal }) {
@@ -344,13 +342,15 @@ LoutreはDI、接続とoperationの寿命、型、cleanupを所有する。認�
 
 schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#websocketの接続フック)を正本とする。
 
-認証付きの利用例は[HTTP / GraphQL WebSocketの認証例](../../examples/graphql-auth/README.md)を正本とする。既存のgeneric layerをendpointのmiddlewaresへ指定し、`next(state)`の結果を`context({ state })`で使う。stateは前処理の結果とし、独自のstate生成コールバックや認証APIを追加しない。
+方式別の認証例は[GraphQL認証example](../../examples/graphql-auth/README.md)を正本とする。通常HTTPのexampleとGraphQLのexampleを分離し、GraphQLもBearer / API keyなどの方式ごとにendpointとlayerを定義する。
 
-HTTPは既存のmiddleware pipelineへ共有layerとHTTP専用layerを渡す。WSは接続開始時にCoreのcomposeLayersで共有layerを合成し、operation間でstateを共有する。layerのstate結合、上書き拒否、nextの規約をGraphQL側で再実装しない。WSのterminalはstateを公開してから接続の処理終了を待ち、layerのaround処理がstateを使うoperationより先にresourceを解放しないようにする。接続開始前の中断では未完了の前処理を無期限に待たず、開始後の後処理はoperationの解放後に待つ。ResponseはHTTPの応答またはWSの拒否として扱い、stateをACK payloadへ流用しない。
+宣言はendpointのfactory外に`http.middlewares`と`ws.connectionInit`を置く。DIは各layer自身のfactoryで行い、Context生成はendpointのfactoryに置く。stateは前処理の結果とし、入口ごとに型を推論する。認証結果の形が一致すれば、ContextとResolverでtransportの分岐は不要になる。
 
-WSのlayer宣言はexecutionの依存・capability・graph projectionにも反映する。RuntimeのDI resolverを注入コンテキストから取得し、各接続でlayer factoryを構築する。factoryをserver全体で使い回したり、GraphQL固有のDI containerを作ったりしない。CoreがDIとlayer合成、WebSocket extensionが宣言のModelへの反映、GraphQL adapterがprotocol内の実行タイミングを所有する。
+HTTPはHTTP middlewareのpipeline、WSはConnectionInitのgeneric layerとして独立に実行する。payloadをHTTPヘッダーへ変換する経路や、両方へ自動適用する共通middleware設定を追加しない。WSの入力はprotocolのpayloadをそのまま渡す。
 
-追加のprotocol制御にはgraphql-wsの接続フックを公開し、middleware後にonConnectを呼ぶ。通常のアプリにHTTP / WSの分岐、接続記録、ACKや終了フックの管理を要求しない。
+state結合・nextの規約・DI・capability・graph projectionは既存のCore / WebSocket extensionの実装を使う。WSのlayer terminalはstateを公開して接続終了を待ち、operationのcleanup後に後処理を待つ。前処理中に中断した場合は非協調的な処理を無期限に待たず、遅い成功を公開しない。
+
+追加のprotocol制御にはgraphql-wsの接続フックを公開する。通常の認証ではlayerとstateを使い、ACKや接続記録の管理をアプリへ要求しない。
 
 1 connection上で複数operationが同時実行されるため、message receive loopはoperation処理を逐次blockしない。
 

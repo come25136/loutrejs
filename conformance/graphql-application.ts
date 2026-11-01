@@ -9,7 +9,8 @@ export function graphQLConformanceApplication(http = true, path = '/graphql') {
     name: 'Conformance',
     path,
     manifest,
-    transports: { http, websocket: true },
+    http,
+    ws: true,
     factory: (state = inject(ConformanceState)) => ({
       context: (input) => ({ signal: input.signal, state }),
     }),

@@ -21,8 +21,8 @@ import type {
   GraphQLRuntime,
   GraphQLWebSocketContextInput,
   GraphQLWebSocketExtra,
-  GraphQLMiddleware,
-  GraphQLMiddlewareContext,
+  GraphQLConnectionInitMiddleware,
+  GraphQLConnectionInitContext,
 } from './types.js'
 import { formatGraphQLError } from './errors.js'
 import type { BoundManifest } from './manifest-internal.js'
@@ -61,7 +61,7 @@ export async function serveGraphQLWebSocket(
   bound: BoundManifest,
   runtime: GraphQLRuntime,
   options: { readonly connectionInitWaitTimeout?: number },
-  middlewares: readonly GraphQLMiddleware[],
+  middlewares: readonly GraphQLConnectionInitMiddleware[],
   resolve: DependencyResolver,
 ): Promise<void> {
   const operations = new Map<string, Operation>()
@@ -121,13 +121,13 @@ export async function serveGraphQLWebSocket(
           Readonly<Record<string, unknown>> | Response
         >((ready, reject) => {
           middlewareTask = composeLayers<
-            GraphQLMiddlewareContext,
+            GraphQLConnectionInitContext,
             Readonly<Record<string, unknown>> | Response
           >({
             context: {
               request: context.request,
               signal: context.signal,
-              connectionParams: connection.connectionParams,
+              payload: connection.connectionParams,
             },
             layers: middlewares,
             resolve,

@@ -41,31 +41,22 @@ export type GraphQLWebSocketHooks = Pick<
   'onConnect' | 'onDisconnect' | 'onClose'
 >
 
-export interface GraphQLMiddlewareContext {
+export interface GraphQLConnectionInitContext {
   readonly request: Request
   readonly signal: AbortSignal
-  readonly connectionParams?: Readonly<Record<string, unknown>> | undefined
+  readonly payload: Readonly<Record<string, unknown>> | undefined
 }
 
-export type GraphQLMiddleware<TState extends object = any> = GenericLayer<
-  GraphQLMiddlewareContext,
-  TState,
-  Response
->
+export type GraphQLConnectionInitMiddleware<TState extends object = any> =
+  GenericLayer<GraphQLConnectionInitContext, TState, Response>
 
 export interface GraphQLRuntime<
   TContext extends object = object,
-  THttpState extends object = Record<string, unknown>,
-  TWebSocketState extends object = THttpState,
+  TInput extends GraphQLContextInput<object, object> = GraphQLContextInput,
 > {
-  context(
-    input: GraphQLContextInput<THttpState, TWebSocketState>,
-  ): TContext | Promise<TContext>
+  context(input: TInput): TContext | Promise<TContext>
   readonly websocket?: GraphQLWebSocketHooks
-  formatError?(
-    error: GraphQLError,
-    input: GraphQLContextInput<THttpState, TWebSocketState>,
-  ): GraphQLFormattedError
+  formatError?(error: GraphQLError, input: TInput): GraphQLFormattedError
   // 既存のfactoryから構造的型付けで旧指定が紛れ込むことも拒否する。
   readonly rootValue?: never
 }
@@ -75,14 +66,14 @@ export interface GraphQLEndpointDefinition<TContext extends object = object> {
   readonly path: string
   readonly manifest: GraphQLManifest<TContext>
   readonly schema?: never
-  readonly middlewares?: readonly GraphQLMiddleware[]
-  readonly transports?: {
-    readonly http?:
-      | boolean
-      | { readonly middlewares?: HttpRawDefinition['route']['middlewares'] }
-    readonly websocket?:
-      | boolean
-      | { readonly connectionInitWaitTimeout?: number }
-  }
+  readonly http?:
+    | boolean
+    | { readonly middlewares?: HttpRawDefinition['route']['middlewares'] }
+  readonly ws?:
+    | boolean
+    | {
+        readonly connectionInit?: readonly GraphQLConnectionInitMiddleware[]
+        readonly connectionInitWaitTimeout?: number
+      }
   readonly factory: () => GraphQLRuntime<TContext>
 }

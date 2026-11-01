@@ -3,7 +3,7 @@ import { bindManifest } from '@loutrejs/graphql/runtime'
 import {
   graphql,
   type GraphQLWebSocketHooks,
-  type GraphQLMiddlewareContext,
+  type GraphQLConnectionInitContext,
 } from '@loutrejs/graphql'
 import {
   defineApplication,
@@ -29,14 +29,15 @@ const websocketOnly = graphql.endpoint({
   name: 'WebSocket',
   path: '/graphql',
   manifest,
-  transports: { websocket: true },
+  ws: true,
   factory,
 })
 const both = graphql.endpoint({
   name: 'Both',
   path: '/graphql',
   manifest,
-  transports: { http: true, websocket: true },
+  http: true,
+  ws: true,
   factory: () => ({
     websocket: {
       onConnect(connection) {
@@ -201,10 +202,8 @@ graphql.endpoint({
   name: '型付きmiddleware state',
   path: '/typed',
   manifest,
-  transports: {
-    http: { middlewares: [userState, tenantState] },
-    websocket: true,
-  },
+  http: { middlewares: [userState, tenantState] },
+  ws: true,
   factory: () => ({
     context(input) {
       if (input.transport === 'http') {
@@ -233,23 +232,24 @@ graphql.endpoint({
 
 const authentication = defineLayer<
   { currentUser: { readonly id: string } },
-  GraphQLMiddlewareContext,
+  GraphQLConnectionInitContext,
   Response
 >({
   name: '共通認証',
   factory:
     () =>
-    async ({ request, signal, connectionParams }, next) => {
-      void [request, signal, connectionParams]
+    async ({ request, signal, payload }, next) => {
+      void [request, signal, payload]
       return next({ currentUser: { id: 'user-1' } })
     },
 })
+
 graphql.endpoint({
-  name: '共通middleware',
-  path: '/shared',
+  name: '入口ごとのstate',
+  path: '/profile',
   manifest,
-  middlewares: [authentication],
-  transports: { http: { middlewares: [tenantState] }, websocket: true },
+  http: { middlewares: [userState, tenantState] },
+  ws: { connectionInit: [authentication] },
   factory: () => ({
     context(input) {
       const id: string = input.state.currentUser.id
@@ -259,7 +259,7 @@ graphql.endpoint({
         const tenant: string = input.state.tenantId
         void tenant
       } else {
-        // @ts-expect-error HTTP専用layerのstateをWSへ渡さない
+        // @ts-expect-error HTTPのstateをWSへ渡さない
         input.state.tenantId
       }
       void id
@@ -269,6 +269,37 @@ graphql.endpoint({
       const id: string = input.state.currentUser.id
       void id
       return error.toJSON()
+    },
+  }),
+})
+graphql.endpoint({
+  name: 'WSのみのstate',
+  path: '/ws',
+  manifest,
+  ws: { connectionInit: [authentication] },
+  factory: () => ({
+    context(input) {
+      const id: string = input.state.currentUser.id
+      const operationId: string = input.operationId
+      // @ts-expect-error WSのみの入力をHTTPとして扱わない
+      const transport: 'http' = input.transport
+      void [id, operationId, transport]
+      return {}
+    },
+  }),
+})
+graphql.endpoint({
+  name: 'HTTPのみのstate',
+  path: '/http',
+  manifest,
+  http: { middlewares: [userState] },
+  factory: () => ({
+    context(input) {
+      const id: string = input.state.currentUser.id
+      // @ts-expect-error HTTPのみの入力にWSのoperation IDは存在しない
+      input.operationId
+      void id
+      return {}
     },
   }),
 })

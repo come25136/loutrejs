@@ -119,7 +119,8 @@ export const endpoint = graphql.endpoint({
   name: 'Commerce',
   path: '/graphql',
   manifest,
-  transports: { http: true, websocket: true },
+  http: true,
+  ws: true,
   factory: (
     orders = inject(OrderService),
     catalog = inject(CatalogService),

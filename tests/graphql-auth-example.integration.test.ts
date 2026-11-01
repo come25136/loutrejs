@@ -4,6 +4,31 @@ import { nodeRuntime } from '@loutrejs/node'
 import application from '../examples/graphql-auth/src/app.js'
 import { Users } from '../examples/graphql-auth/src/auth/users.js'
 
+type Pattern = 'bearer' | 'api-key'
+interface AuthCase {
+  pattern: Pattern
+  headers: Record<string, string>
+  payload: Record<string, unknown>
+  otherHeaders: Record<string, string>
+  otherPayload: Record<string, unknown>
+}
+const cases: readonly AuthCase[] = [
+  {
+    pattern: 'bearer',
+    headers: { authorization: 'Bearer momiji-token' },
+    payload: { authorization: 'Bearer momiji-token' },
+    otherHeaders: { 'x-api-key': 'momiji-key' },
+    otherPayload: { apiKey: 'momiji-key' },
+  },
+  {
+    pattern: 'api-key',
+    headers: { 'x-api-key': 'momiji-key' },
+    payload: { apiKey: 'momiji-key' },
+    otherHeaders: { authorization: 'Bearer momiji-token' },
+    otherPayload: { authorization: 'Bearer momiji-token' },
+  },
+]
+
 async function start() {
   const app = await nodeRuntime.create({ application })
   const { server } = await app.serve({
@@ -15,23 +40,28 @@ async function start() {
   const url = `http://127.0.0.1:${port}`
   const clients: ReturnType<typeof createClient>[] = []
   const request = (
+    pattern: Pattern,
     headers: Record<string, string>,
     query = '{ viewer { id name } }',
   ) =>
-    fetch(`${url}/graphql`, {
+    fetch(`${url}/graphql/${pattern}`, {
       method: 'POST',
       headers: { ...headers, 'content-type': 'application/json' },
       body: JSON.stringify({ query }),
     })
-  function client(connectionParams: Record<string, unknown>, headers = {}) {
+  function client(
+    pattern: Pattern,
+    payload: Record<string, unknown>,
+    headers: Record<string, string> = {},
+  ) {
     class OpeningSocket extends WebSocket {
       constructor(address: string, protocols: string[]) {
         super(address, protocols, { headers })
       }
     }
     const result = createClient({
-      url: `${url.replace('http:', 'ws:')}/graphql`,
-      connectionParams,
+      url: `${url.replace('http:', 'ws:')}/graphql/${pattern}`,
+      connectionParams: payload,
       webSocketImpl: OpeningSocket,
       retryAttempts: 0,
     })
@@ -40,7 +70,6 @@ async function start() {
   }
   return {
     app,
-    url,
     request,
     client,
     async close() {
@@ -50,38 +79,22 @@ async function start() {
   }
 }
 
-it.each([
-  { authorization: 'Bearer momiji-token' },
-  { 'x-api-key': 'momiji-key' },
-])('通常HTTPとGraphQL HTTPが同じ資格情報%sで認証する', async (headers) => {
-  const server = await start()
-  const authenticate = vi.spyOn(server.app.get(Users), 'authenticate')
-  try {
-    const response = await fetch(`${server.url}/me`, { headers })
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ id: 'user-1', name: 'もみじ' })
-    const graphql = await server.request(headers)
-    expect(graphql.status).toBe(200)
-    expect(await graphql.json()).toEqual({
-      data: { viewer: { id: 'user-1', name: 'もみじ' } },
-    })
-    expect(authenticate).toHaveBeenCalledTimes(2)
-  } finally {
-    await server.close()
-  }
-})
-
-it.each([{}, { authorization: 'Bearer invalid' }, { 'x-api-key': 'invalid' }])(
-  '通常HTTPとGraphQL HTTPが未認証の%sを401で拒否する',
-  async (headers) => {
+it.each(cases)(
+  'HTTPの$pattern で指定した認証方式でstateを作り、他の方式へfallbackしない',
+  async (auth) => {
     const server = await start()
+    const authenticate = vi.spyOn(server.app.get(Users), 'authenticate')
     try {
-      for (const response of [
-        await fetch(`${server.url}/me`, { headers }),
-        await server.request(headers),
-      ]) {
-        expect(response.status).toBe(401)
-        expect(await response.json()).toEqual({ error: '認証が必要です。' })
+      const response = await server.request(auth.pattern, auth.headers)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        data: { viewer: { id: 'user-1', name: 'もみじ' } },
+      })
+      expect(authenticate).toHaveBeenCalledOnce()
+      for (const headers of [{}, auth.otherHeaders]) {
+        const rejected = await server.request(auth.pattern, headers)
+        expect(rejected.status).toBe(401)
+        expect(await rejected.json()).toEqual({ error: '認証が必要です。' })
       }
     } finally {
       await server.close()
@@ -89,23 +102,51 @@ it.each([{}, { authorization: 'Bearer invalid' }, { 'x-api-key': 'invalid' }])(
   },
 )
 
-it('WSは一度の前処理を使い、同時接続の利用者と通知を分離する', async () => {
+it.each(cases)(
+  'WSの$pattern でConnectionInitだけを認証し、HTTPヘッダーへfallbackしない',
+  async (auth) => {
+    const server = await start()
+    try {
+      const stream = server
+        .client(auth.pattern, auth.payload, auth.otherHeaders)
+        .iterate({ query: '{ viewer { id name } }' })
+      expect((await stream.next()).value).toEqual({
+        data: { viewer: { id: 'user-1', name: 'もみじ' } },
+      })
+      await stream.return?.()
+      for (const payload of [
+        {},
+        auth.otherPayload,
+        { authorization: 123, apiKey: 123 },
+      ]) {
+        const rejected = server
+          .client(auth.pattern, payload, auth.headers)
+          .iterate({ query: '{viewer{id}}' })
+        await expect(rejected.next()).rejects.toMatchObject({ code: 4403 })
+      }
+    } finally {
+      await server.close()
+    }
+  },
+)
+
+it('異なる認証方式でも同じContextとResolverを使い、ユーザーと通知を接続間で分離する', async () => {
   const server = await start()
   const authenticate = vi.spyOn(server.app.get(Users), 'authenticate')
-  const errors: unknown[] = []
   const events: FormattedExecutionResult<Record<string, unknown>, unknown>[][] =
     [[], []]
+  const errors: unknown[] = []
   const acks: unknown[] = []
   const clients = [
-    server.client({ authorization: 'Bearer momiji-token' }),
-    server.client({ apiKey: 'kaede-key' }),
+    server.client('bearer', { authorization: 'Bearer momiji-token' }),
+    server.client('api-key', { apiKey: 'kaede-key' }),
   ]
   clients.forEach((client, index) => {
     client.on('connected', (_socket, payload) => acks.push(payload))
     client.subscribe(
       { query: 'subscription { viewerChanged { id name } }' },
       {
-        next: (data) => events[index]!.push(data),
+        next: (value) => events[index]!.push(value),
         error: (error) => errors.push(error),
         complete() {},
       },
@@ -120,14 +161,15 @@ it('WSは一度の前処理を使い、同時接続の利用者と通知を分�
     )
     expect(acks).toEqual([undefined, undefined])
     expect(authenticate).toHaveBeenCalledTimes(2)
-    const query = clients[0]!.iterate({ query: '{ viewer { id name } }' })
+    const query = clients[0]!.iterate({ query: '{viewer{id name}}' })
     expect((await query.next()).value).toEqual({
       data: { viewer: { id: 'user-1', name: 'もみじ' } },
     })
     await query.return?.()
     expect(authenticate).toHaveBeenCalledTimes(2)
     const response = await server.request(
-      { authorization: 'Bearer momiji-token' },
+      'api-key',
+      { 'x-api-key': 'momiji-key' },
       'mutation { renameViewer(name: "変更後") { id name } }',
     )
     expect(await response.json()).toEqual({
@@ -138,46 +180,22 @@ it('WSは一度の前処理を使い、同時接続の利用者と通知を分�
       data: { viewerChanged: { id: 'user-1', name: '変更後' } },
     })
     expect(events[1]).toHaveLength(1)
-    const updated = clients[0]!.iterate({ query: '{ viewer { id name } }' })
+    const updated = clients[0]!.iterate({ query: '{viewer{id name}}' })
     expect((await updated.next()).value).toEqual({
       data: { viewer: { id: 'user-1', name: '変更後' } },
     })
     await updated.return?.()
     expect(authenticate).toHaveBeenCalledTimes(3)
     expect(errors).toEqual([])
-    await Promise.all(clients.map((connection) => connection.dispose()))
   } finally {
     await server.close()
   }
 })
 
-it.each([
-  [{}, {}],
-  [{ authorization: 123 }, {}],
-  [{ apiKey: 'invalid' }, {}],
-  [
-    { authorization: 'Bearer momiji-token' },
-    { authorization: 'Bearer invalid' },
-  ],
-])(
-  'WSは不正な資格情報やヘッダーをpayloadで迂回する接続を4403で拒否する: %s',
-  async (params, headers) => {
-    const server = await start()
-    try {
-      const stream = server
-        .client(params, headers)
-        .iterate({ query: '{ viewer { id } }' })
-      await expect(stream.next()).rejects.toMatchObject({ code: 4403 })
-    } finally {
-      await server.close()
-    }
-  },
-)
-
-it('WSのopening requestでもAPI keyを認証し、drainで購読を終了する', async () => {
+it.each(cases)('WSの$pattern でdrain時に購読と接続を終了する', async (auth) => {
   const server = await start()
   const stream = server
-    .client({}, { 'x-api-key': 'momiji-key' })
+    .client(auth.pattern, auth.payload)
     .iterate({ query: 'subscription { viewerChanged { id } }' })
   try {
     expect((await stream.next()).value).toEqual({

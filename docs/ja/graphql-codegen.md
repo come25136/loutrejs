@@ -133,7 +133,8 @@ export const endpoint = graphql.endpoint({
   name: 'Counter',
   path: '/graphql',
   manifest,
-  transports: { http: true, websocket: true },
+  http: true,
+  ws: true,
   factory: (counter = inject(CounterStore)) => ({
     context: ({ signal }) => ({ counter, signal }),
   }),

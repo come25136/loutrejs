@@ -11,8 +11,8 @@ import {
   graphql,
   type GraphQLContextInput,
   type GraphQLRuntime,
-  type GraphQLMiddleware,
-  type GraphQLMiddlewareContext,
+  type GraphQLConnectionInitMiddleware,
+  type GraphQLConnectionInitContext,
 } from '@loutrejs/graphql'
 import {
   bootstrapApplication,
@@ -134,7 +134,7 @@ async function fixture(
     subscription?: (context: {
       signal: AbortSignal
     }) => AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>
-    middlewares?: readonly GraphQLMiddleware[]
+    connectionInit?: readonly GraphQLConnectionInitMiddleware[]
     providers?: readonly ProviderDeclaration[]
     makeContext?: (
       input: GraphQLContextInput,
@@ -178,19 +178,19 @@ async function fixture(
     name: 'Api',
     path: '/graphql',
     manifest: manifestFromSchema(schema),
-    transports: {
-      http:
-        options.http === false
-          ? false
-          : options.middleware === undefined
-            ? {}
-            : { middlewares: options.middleware },
-      websocket:
-        options.websocket === false
-          ? false
-          : { connectionInitWaitTimeout: options.initTimeout ?? 1000 },
-    },
-    middlewares: options.middlewares ?? [],
+    http:
+      options.http === false
+        ? false
+        : options.middleware === undefined
+          ? {}
+          : { middlewares: options.middleware },
+    ws:
+      options.websocket === false
+        ? false
+        : {
+            connectionInitWaitTimeout: options.initTimeout ?? 1000,
+            connectionInit: options.connectionInit ?? [],
+          },
     factory: (greeting = inject(Service)) => ({
       ...(options.formatError ? { formatError: options.formatError } : {}),
       websocket:
@@ -1665,9 +1665,9 @@ it.each([false, true])(
   },
 )
 
-function sharedLayer(
+function connectionInitLayer(
   run: (
-    input: GraphQLMiddlewareContext,
+    input: GraphQLConnectionInitContext,
   ) =>
     | Record<string, unknown>
     | Response
@@ -1675,10 +1675,10 @@ function sharedLayer(
 ) {
   return defineLayer<
     Record<string, unknown>,
-    GraphQLMiddlewareContext,
+    GraphQLConnectionInitContext,
     Response
   >({
-    name: '共有',
+    name: 'ConnectionInit',
     factory: () => async (input, next) => {
       const state = await run(input)
       return state instanceof Response ? state : next(state)
@@ -1686,30 +1686,40 @@ function sharedLayer(
   })
 }
 
-describe('共有middlewareとstate', () => {
-  it('HTTPの既存pipelineで共有layerとHTTP専用layerを順に実行する', async () => {
+describe('入口ごとのmiddlewareとstate', () => {
+  it('HTTP middlewareとConnectionInitを別々に実行し、それぞれのstateを渡す', async () => {
     const calls: string[] = []
-    const shared = sharedLayer(() => {
-      calls.push('shared')
-      return { auth: { user: 'alice' } }
+    const httpLayer = http.middleware<{ user: string }>({
+      name: 'HTTP',
+      factory: () => async (_input, next) => {
+        calls.push('http')
+        return next({ user: 'http-user' })
+      },
     })
-    const httpOnly = http.middleware({
-      name: 'HTTP専用',
-      factory:
-        () =>
-        async ({ state }, next) => {
-          expect(state).toEqual({ auth: { user: 'alice' } })
-          calls.push('http')
-          return next()
-        },
+    const api = await fixture({
+      middleware: [httpLayer],
+      connectionInit: [
+        connectionInitLayer(() => {
+          calls.push('ws')
+          return { user: 'ws-user' }
+        }),
+      ],
     })
-    const api = await fixture({ middlewares: [shared], middleware: [httpOnly] })
     try {
-      for (let i = 0; i < 2; i++)
-        await (await api.fetchGraphQL('{hello}')).text()
-      expect(calls).toEqual(['shared', 'http', 'shared', 'http'])
-      expect(api.contexts[0]!.state).toEqual({ auth: { user: 'alice' } })
-      expect(Object.isFrozen(api.contexts[0]!.state)).toBe(true)
+      await (await api.fetchGraphQL('{hello}')).text()
+      expect(calls).toEqual(['http'])
+      expect(api.contexts[0]!.state).toEqual({ user: 'http-user' })
+      const connection = await api.open()
+      connection.send({ type: 'connection_init' })
+      await connection.wait('connection_ack')
+      connection.send({
+        id: '1',
+        type: 'subscribe',
+        payload: { query: '{hello}' },
+      })
+      await connection.wait('complete', '1')
+      expect(calls).toEqual(['http', 'ws'])
+      expect(api.contexts[1]!.state).toEqual({ user: 'ws-user' })
     } finally {
       await api.app.close()
     }
@@ -1722,22 +1732,22 @@ describe('共有middlewareとstate', () => {
     let factories = 0
     const shared = defineLayer<
       { secret: string; count: number },
-      GraphQLMiddlewareContext,
+      GraphQLConnectionInitContext,
       Response
     >({
       name: 'WS認証',
       factory: (service = inject(LayerOnly)) => {
         const instance = ++factories
-        return async ({ connectionParams }, next) =>
+        return async ({ payload }, next) =>
           next({
-            secret: service.value + connectionParams?.id,
+            secret: service.value + payload?.id,
             count: instance,
           })
       },
     })
     const api = await fixture({
       http: false,
-      middlewares: [shared],
+      connectionInit: [shared],
       providers: [LayerOnly],
       websocketHooks: { onConnect: () => ({ ready: true }) },
     })
@@ -1791,7 +1801,7 @@ describe('共有middlewareとstate', () => {
       await api.app.close()
     }
     await expect(
-      fixture({ http: false, middlewares: [shared] }),
+      fixture({ http: false, connectionInit: [shared] }),
     ).rejects.toThrow('LayerOnly')
   })
 
@@ -1799,7 +1809,7 @@ describe('共有middlewareとstate', () => {
     class RuntimeOnly {}
     let enabled = false
     let failure: unknown
-    const layer = defineLayer<{}, GraphQLMiddlewareContext, Response>({
+    const layer = defineLayer<{}, GraphQLConnectionInitContext, Response>({
       name: '動的依存の拒否',
       factory: () => {
         if (enabled) {
@@ -1815,7 +1825,7 @@ describe('共有middlewareとstate', () => {
     })
     const api = await fixture({
       http: false,
-      middlewares: [layer],
+      connectionInit: [layer],
       providers: [RuntimeOnly],
     })
     try {
@@ -1831,22 +1841,29 @@ describe('共有middlewareとstate', () => {
   })
 
   it('WSだけの場合もlayerのcapabilityをModelで要求する', async () => {
-    const capability = runtimeCapability('共有layerの外部接続')
-    const layer = defineLayer<{}, GraphQLMiddlewareContext, Response>({
+    const capability = runtimeCapability('ConnectionInitの外部接続')
+    const layer = defineLayer<{}, GraphQLConnectionInitContext, Response>({
       name: '外部接続',
       capabilities: [capability],
       factory: () => async (_input, next) => next(),
     })
     await expect(
-      fixture({ http: false, middlewares: [layer] }),
-    ).rejects.toThrow('共有layerの外部接続')
+      fixture({ http: false, connectionInit: [layer] }),
+    ).rejects.toThrow('ConnectionInitの外部接続')
   })
 
   it('Responseによる短絡をHTTPの応答とWSの拒否へ接続する', async () => {
     const hook = vi.fn()
     const api = await fixture({
-      middlewares: [
-        sharedLayer(() =>
+      middleware: [
+        http.middleware({
+          name: 'HTTP拒否',
+          factory: () => async () =>
+            Response.json({ secret: 'private' }, { status: 401 }),
+        }),
+      ],
+      connectionInit: [
+        connectionInitLayer(() =>
           Response.json({ secret: 'private' }, { status: 401 }),
         ),
       ],
@@ -1874,8 +1891,8 @@ describe('共有middlewareとstate', () => {
       let signal!: AbortSignal
       const hook = vi.fn()
       const api = await fixture({
-        middlewares: [
-          sharedLayer((input) => {
+        connectionInit: [
+          connectionInitLayer((input) => {
             signal = input.signal
             return new Promise((done) => {
               resolve = done
@@ -1914,7 +1931,7 @@ describe('共有middlewareとstate', () => {
     const events: string[] = []
     const layer = defineLayer<
       { resource: { open: boolean } },
-      GraphQLMiddlewareContext,
+      GraphQLConnectionInitContext,
       Response
     >({
       name: 'resource',
@@ -1931,7 +1948,7 @@ describe('共有middlewareとstate', () => {
     })
     const api = await fixture({
       http: false,
-      middlewares: [layer],
+      connectionInit: [layer],
       makeContext(input) {
         expect((input.state.resource as { open: boolean }).open).toBe(true)
         return { greeting: 'ready', signal: input.signal }
@@ -1962,7 +1979,7 @@ describe('共有middlewareとstate', () => {
   it.each([false, true])(
     'WSのlayerのnext規約違反=%sも終了時に回収する',
     async (twice) => {
-      const invalid = defineLayer<{}, GraphQLMiddlewareContext, Response>({
+      const invalid = defineLayer<{}, GraphQLConnectionInitContext, Response>({
         name: '不正',
         factory: () => async (_input, next) => {
           if (twice) {
@@ -1973,7 +1990,7 @@ describe('共有middlewareとstate', () => {
           }
         },
       })
-      const api = await fixture({ http: false, middlewares: [invalid] })
+      const api = await fixture({ http: false, connectionInit: [invalid] })
       try {
         const connection = await api.open()
         connection.send({ type: 'connection_init' })
@@ -1994,14 +2011,14 @@ describe('共有middlewareとstate', () => {
   )
 
   it('WSのlayerの終了処理が失敗してもsessionを解放する', async () => {
-    const layer = defineLayer<{}, GraphQLMiddlewareContext, Response>({
+    const layer = defineLayer<{}, GraphQLConnectionInitContext, Response>({
       name: '終了失敗',
       factory: () => async (_input, next) => {
         await next()
         throw new Error('後処理に失敗')
       },
     })
-    const api = await fixture({ http: false, middlewares: [layer] })
+    const api = await fixture({ http: false, connectionInit: [layer] })
     try {
       const connection = await api.open()
       connection.send({ type: 'connection_init' })
@@ -2020,16 +2037,16 @@ describe('共有middlewareとstate', () => {
     }
   })
 
-  it('共有layerとHTTP専用layerのstate上書きを既存の規約で拒否する', async () => {
-    const shared = sharedLayer(() => ({ tenant: 'existing' }))
+  it('HTTPのstate上書きを既存のlayer規約で拒否する', async () => {
+    const first = http.middleware<{ tenant: string }>({
+      name: '最初',
+      factory: () => async (_input, next) => next({ tenant: 'existing' }),
+    })
     const overwrite = http.middleware<{ tenant: string }>({
       name: '上書き',
       factory: () => async (_input, next) => next({ tenant: 'overwrite' }),
     })
-    const api = await fixture({
-      middlewares: [shared],
-      middleware: [overwrite],
-    })
+    const api = await fixture({ middleware: [first, overwrite] })
     try {
       const response = await api.fetchGraphQL('{hello}')
       expect(response.status).toBe(500)

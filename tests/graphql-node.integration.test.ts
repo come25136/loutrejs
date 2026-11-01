@@ -9,7 +9,10 @@ import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
 import { serverAudits } from 'graphql-http'
 
-async function create(http: boolean, hooks: GraphQLWebSocketHooks = {}) {
+async function create(
+  http: boolean | undefined,
+  hooks: GraphQLWebSocketHooks = {},
+) {
   const schema = buildSchema(
     'type Query { hello: String! } type Subscription { hello: String! }',
   )
@@ -23,7 +26,8 @@ async function create(http: boolean, hooks: GraphQLWebSocketHooks = {}) {
     name: 'Native',
     path: '/graphql',
     manifest: manifestFromSchema(schema),
-    transports: { http, websocket: true },
+    http,
+    ws: true,
     factory: () => ({ context: () => ({}), websocket: hooks }),
   })
   const Module = defineModule(() => ({ executions: [endpoint] }))
@@ -101,7 +105,7 @@ describe('Node native HTTP/WebSocket', () => {
     },
   )
 
-  it.each([true, false])(
+  it.each([true, false, undefined])(
     'HTTP=%sで同一serverのupgradeに接続しprotocolとQueryを確認する',
     async (http) => {
       const { app, url } = await create(http)

@@ -9,7 +9,8 @@ export const CounterEndpoint = graphql.endpoint({
   name: 'Counter',
   path: '/graphql',
   manifest,
-  transports: { http: true, websocket: true },
+  http: true,
+  ws: true,
   factory: (counter = inject(CounterStore), steps = inject(StepService)) => ({
     formatError(error, input) {
       if (error.originalError instanceof CounterRangeError)

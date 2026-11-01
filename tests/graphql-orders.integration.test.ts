@@ -15,7 +15,8 @@ it('手書きBindingの100注文 / 200明細がEager・Lazy・Hybridで一致し
     name: 'Orders',
     path: '/graphql',
     manifest,
-    transports: { http: true, websocket: true },
+    http: true,
+    ws: true,
     factory: () => ({ context: ({ signal }) => ({ commerce, signal }) }),
   })
   const Module = defineModule(() => ({ executions: [endpoint] }))

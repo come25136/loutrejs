@@ -4,7 +4,7 @@ import type {
   StandardSchemaV1,
   LayerState,
 } from '@loutrejs/loutre'
-import { http, type HttpRawDefinition } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 import {
   websocket,
   type WebSocketExecutionDefinition,
@@ -17,12 +17,18 @@ import { getManifest } from './manifest-internal.js'
 import type { GraphQLRuntime } from './types.js'
 import { executeManifest } from './execution.js'
 import { formatHttpError } from './errors.js'
-import type { GraphQLHttpContextInput } from './types.js'
+import type {
+  GraphQLHttpContextInput,
+  GraphQLWebSocketContextInput,
+} from './types.js'
 
-import type { GraphQLMiddleware, GraphQLEndpointDefinition } from './types.js'
+import type {
+  GraphQLConnectionInitMiddleware,
+  GraphQLEndpointDefinition,
+} from './types.js'
 export type {
-  GraphQLMiddlewareContext,
-  GraphQLMiddleware,
+  GraphQLConnectionInitContext,
+  GraphQLConnectionInitMiddleware,
   GraphQLHttpContextInput,
   GraphQLWebSocketContextInput,
   GraphQLWebSocketExtra,
@@ -34,44 +40,46 @@ export type {
 export type { GraphQLManifest } from './manifest-internal.js'
 export * from './data.js'
 
-type TransportExecution<
-  TTransports,
-  TKey extends PropertyKey,
-  TExecution,
-> = TKey extends keyof TTransports
-  ? [Exclude<TTransports[TKey], false | undefined>] extends [never]
-    ? never
-    : TExecution
-  : never
+type HttpOptions = GraphQLEndpointDefinition['http']
+type WebSocketOptions = GraphQLEndpointDefinition['ws']
+type Enabled<T> = [Exclude<T, false | undefined>] extends [never] ? false : true
+type HttpEnabled<THttp, TWs> = [THttp] extends [undefined]
+  ? [TWs] extends [undefined]
+    ? true
+    : false
+  : Enabled<THttp>
 
-type EndpointHttpState<TTransports> = TTransports extends {
-  readonly http: {
-    readonly middlewares: infer TMiddlewares extends NonNullable<
-      HttpRawDefinition['route']['middlewares']
-    >
-  }
+type HttpState<THttp> = THttp extends {
+  readonly middlewares: infer TLayers extends NonNullable<
+    Exclude<HttpOptions, boolean | undefined>['middlewares']
+  >
 }
-  ? Parameters<
-      ReturnType<HttpRawDefinition<TMiddlewares>['factory']>
-    >[0]['state']
+  ? LayerState<TLayers>
   : {}
+type ConnectionInitState<TWs> = TWs extends {
+  readonly connectionInit: infer TLayers extends
+    readonly GraphQLConnectionInitMiddleware[]
+}
+  ? LayerState<TLayers>
+  : {}
+type EndpointInput<THttp, TWs> =
+  | (HttpEnabled<THttp, TWs> extends true
+      ? GraphQLHttpContextInput<HttpState<THttp>>
+      : never)
+  | (Enabled<TWs> extends true
+      ? GraphQLWebSocketContextInput<ConnectionInitState<TWs>>
+      : never)
 
 export type GraphQLEndpoint<
-  TDefinition extends GraphQLEndpointDefinition = GraphQLEndpointDefinition,
+  THttp extends HttpOptions = undefined,
+  TWs extends WebSocketOptions = undefined,
 > = ExecutionGroup<
-  readonly (TDefinition extends { readonly transports: infer TTransports }
-    ?
-        | TransportExecution<
-            TTransports,
-            'http',
-            ExecutionDefinition<typeof http.extension>
-          >
-        | TransportExecution<
-            TTransports,
-            'websocket',
-            WebSocketExecutionDefinition
-          >
-    : ExecutionDefinition<typeof http.extension>)[]
+  readonly (
+    | (HttpEnabled<THttp, TWs> extends true
+        ? ExecutionDefinition<typeof http.extension>
+        : never)
+    | (Enabled<TWs> extends true ? WebSocketExecutionDefinition : never)
+  )[]
 >
 
 const textSchema: StandardSchemaV1<string, string> = {
@@ -87,28 +95,21 @@ const textSchema: StandardSchemaV1<string, string> = {
 
 export function defineGraphQLEndpoint<
   TContext extends object,
-  const TMiddlewares extends readonly GraphQLMiddleware[] = readonly [],
-  const TTransports extends NonNullable<
-    GraphQLEndpointDefinition['transports']
-  > = { readonly http: true },
+  const THttp extends HttpOptions = undefined,
+  const TWs extends WebSocketOptions = undefined,
 >(
   definition: Omit<
     GraphQLEndpointDefinition<TContext>,
-    'factory' | 'transports' | 'middlewares'
+    'factory' | 'http' | 'ws'
   > & {
-    readonly middlewares?: TMiddlewares
-    readonly transports?: TTransports
+    readonly http?: THttp
+    readonly ws?: TWs
     readonly factory: () => GraphQLRuntime<
       NoInfer<TContext>,
-      LayerState<TMiddlewares> & EndpointHttpState<TTransports>,
-      LayerState<TMiddlewares>
+      EndpointInput<THttp, TWs>
     >
   },
-): GraphQLEndpoint<
-  Omit<GraphQLEndpointDefinition<TContext>, 'transports'> & {
-    readonly transports: TTransports
-  }
-> {
+): GraphQLEndpoint<THttp, TWs> {
   if (typeof definition.factory !== 'function')
     throw new TypeError('GraphQL endpointにfactoryが必要です。')
   if ('schema' in definition)
@@ -117,15 +118,16 @@ export function defineGraphQLEndpoint<
     )
   const bound = getManifest(definition.manifest)
   validateEndpointSchema(bound.schema)
-  const transports: NonNullable<GraphQLEndpointDefinition['transports']> =
-    definition.transports ?? { http: true }
-  if (!transports.http && !transports.websocket)
-    throw new TypeError('GraphQL transportを一つ以上有効にしてください。')
+  const httpOptions: HttpOptions =
+    definition.http ?? definition.ws === undefined
+  const wsOptions: WebSocketOptions = definition.ws ?? false
+  if (!httpOptions && !wsOptions)
+    throw new TypeError('GraphQLのHTTPかWSを一つ以上有効にしてください。')
   const executions: (
     | ExecutionDefinition<typeof http.extension>
     | WebSocketExecutionDefinition
   )[] = []
-  if (transports.http) {
+  if (httpOptions) {
     executions.push(
       http.raw({
         name: `${definition.name}.http`,
@@ -133,12 +135,10 @@ export function defineGraphQLEndpoint<
           method: '*',
           path: definition.path,
           protocol: 'graphql',
-          middlewares: [
-            ...(definition.middlewares ?? []),
-            ...(typeof transports.http === 'object'
-              ? (transports.http.middlewares ?? [])
-              : []),
-          ],
+          middlewares:
+            typeof httpOptions === 'object'
+              ? (httpOptions.middlewares ?? [])
+              : [],
         },
         factory: () => {
           const runtime = validateRuntime(definition.factory())
@@ -197,13 +197,13 @@ export function defineGraphQLEndpoint<
       }),
     )
   }
-  if (transports.websocket) {
-    const options =
-      typeof transports.websocket === 'object' ? transports.websocket : {}
+  if (wsOptions) {
+    const options = typeof wsOptions === 'object' ? wsOptions : {}
+    const connectionInit = options.connectionInit ?? []
     executions.push(
       websocket.implementation({
         name: `${definition.name}.websocket`,
-        layers: definition.middlewares ?? [],
+        layers: connectionInit,
         contract: websocket.contract({
           endpoint: {
             path: definition.path,
@@ -221,7 +221,7 @@ export function defineGraphQLEndpoint<
                 bound,
                 runtime,
                 options,
-                definition.middlewares ?? [],
+                connectionInit,
                 resolve,
               ),
           }
@@ -233,11 +233,7 @@ export function defineGraphQLEndpoint<
     kind: 'execution-group',
     name: definition.name,
     executions: Object.freeze(executions),
-  }) as GraphQLEndpoint<
-    Omit<GraphQLEndpointDefinition<TContext>, 'transports'> & {
-      readonly transports: TTransports
-    }
-  >
+  }) as GraphQLEndpoint<THttp, TWs>
 }
 
 export const graphql = Object.freeze({ endpoint: defineGraphQLEndpoint })

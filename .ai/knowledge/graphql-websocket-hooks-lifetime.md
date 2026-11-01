@@ -2,7 +2,7 @@
 
 ## 発生条件
 
-共有middlewareの非同期処理中にWS接続が終了する場合、またはstateへ保存したユーザー情報を更新後の表示データにも使う場合。
+ConnectionInitのlayerの非同期処理中にWS接続が終了する場合、またはstateへ保存したユーザー情報を更新後の表示データにも使う場合。
 
 `graphql-ws`の接続フックをLoutre Runtimeから設定し、init待ち中に切断・drainする場合、または終了フックが例外を投げる場合。
 
@@ -35,6 +35,8 @@ stateにユーザーIDを保存し、Resolverで最新のドメインデータ�
 onConnectの待機は接続signalで中断し、listenerをfinallyで外す。終了フックはgraphql-wsの順序でawaitする。dispose・受信task・operationのcleanupは失敗を集めて最後に報告し、途中の失敗で残りの解放を省略しない。
 
 ## 再発防止策
+
+認証の入口はhttp.middlewaresとws.connectionInitで分け、各layerのfactoryでDIする。HTTPヘッダーとConnectionInit payloadを暗黙にfallbackさせず、認証方式ごとに受け付ける入力をテストする。stateは結果の受け渡しに使い、Context・Resolverは共通化できる。
 
 WSだけを有効にした構成でも、layerのDI依存・capability・graph projectionを確認する。resolverを遅延使用してもModelにない依存を取得できないこと、layer factoryのローカル変数が接続間で共有されないことを確認する。
 

@@ -10,7 +10,8 @@ export const OrdersModule = defineModule(
         name: 'Orders',
         path,
         manifest,
-        transports: { http: true, websocket: true },
+        http: true,
+        ws: true,
         factory: (commerce = inject(CommerceService)) => ({
           context: ({ signal }) => ({ commerce, signal }),
         }),

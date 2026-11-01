@@ -138,7 +138,7 @@ try {
       import { resolvers } from './resolvers.js'
       const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
       export const state={parent:{id:'same'},revision:0,calls:0,cleanups:0}
-      const Module=defineModule(()=>({executions:[graphql.endpoint({name:'Compatibility',path:'/graphql',manifest,transports:{http:true,websocket:true},factory:()=>({context:({signal})=>({signal,state}),formatError:(error,input)=>({message:error.originalError?'Internal server error':error.message,extensions:{transport:input.transport}})})})]}))
+      const Module=defineModule(()=>({executions:[graphql.endpoint({name:'Compatibility',path:'/graphql',manifest,http:true,ws:true,factory:()=>({context:({signal})=>({signal,state}),formatError:(error,input)=>({message:error.originalError?'Internal server error':error.message,extensions:{transport:input.transport}})})})]}))
       export default defineApplication({modules:[Module()]})`,
     )
     await writeFile(
