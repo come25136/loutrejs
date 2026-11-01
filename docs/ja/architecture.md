@@ -188,13 +188,7 @@ LoutreはApplicationを起動する前に、`inject()`などから「どのサ�
 
 記録したサービスを毎回すべて使う必要はありません。必要なサービスは常に同じように取得し、使うかどうかはメソッドやhandler内の処理で判断してください。
 
-### protocol integrationからlayerを実行する
-
-同期的なfactoryの中で`captureDependencyResolver()`を呼ぶと、その実行のDI resolverを保持できます。protocolの初期messageを受け取ってから`composeLayers()`を呼ぶintegrationで使います。通常のアプリでは既存のmiddleware設定を使い、handlerからサービスを取得するために使わないでください。
-
-resolverを保持してもModule visibilityやModelに宣言した依存の検証は変わりません。integrationは使用するlayerの宣言をexecutionへ登録し、その依存とcapabilityをModelへ反映します。layer factoryは実行ごとに構築し、構築結果を異なる接続で共有しません。
-
-`LayerState<typeof layers>`は、generic layerの配列からstate contributionを結合した型を取得する型utilityです。HTTPとprotocol integrationで同じ型推論を使います。
+`LayerState<typeof layers>`は、generic layerの配列からstate contributionを結合した型を取得する型utilityです。HTTP endpointとGraphQL HTTPのstate推論で利用します。
 
 ### 独自loggerなどで依存元を取得する
 

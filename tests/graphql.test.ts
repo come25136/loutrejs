@@ -11,14 +11,13 @@ import {
   graphql,
   type GraphQLContextInput,
   type GraphQLRuntime,
-  type GraphQLConnectionInitMiddleware,
+  type GraphQLWebSocketHooks,
+  type GraphQLConnectionInitHandler,
   type GraphQLConnectionInitContext,
 } from '@loutrejs/graphql'
 import {
   bootstrapApplication,
   defineApplication,
-  defineLayer,
-  runtimeCapability,
   projectApplicationModel,
   type ProviderDeclaration,
   defineModule,
@@ -134,16 +133,15 @@ async function fixture(
     subscription?: (context: {
       signal: AbortSignal
     }) => AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>
-    connectionInit?: readonly GraphQLConnectionInitMiddleware[]
+    connectionInit?: GraphQLConnectionInitHandler
+    makeConnectionInit?: () => GraphQLConnectionInitHandler
     providers?: readonly ProviderDeclaration[]
     makeContext?: (
       input: GraphQLContextInput,
     ) => Record<string, unknown> | Promise<Record<string, unknown>>
     formatError?: GraphQLRuntime['formatError']
-    websocketHooks?: GraphQLRuntime['websocket']
-    makeWebSocketHooks?: (
-      greeting: string,
-    ) => NonNullable<GraphQLRuntime['websocket']>
+    websocketHooks?: GraphQLWebSocketHooks
+    makeWebSocketHooks?: (greeting: string) => GraphQLWebSocketHooks
     failure?: Error
     afterSend?: (message: Record<string, unknown>) => Promise<void>
   } = {},
@@ -189,12 +187,17 @@ async function fixture(
         ? false
         : {
             connectionInitWaitTimeout: options.initTimeout ?? 1000,
-            connectionInit: options.connectionInit ?? [],
           },
     factory: (greeting = inject(Service)) => ({
       ...(options.formatError ? { formatError: options.formatError } : {}),
-      websocket:
-        options.makeWebSocketHooks?.(greeting) ?? options.websocketHooks ?? {},
+      ws: {
+        ...(options.makeWebSocketHooks?.(greeting) ?? options.websocketHooks),
+        ...(options.makeConnectionInit
+          ? { connectionInit: options.makeConnectionInit() }
+          : options.connectionInit
+            ? { connectionInit: options.connectionInit }
+            : {}),
+      },
       context(input) {
         contexts.push(input)
         return (
@@ -620,9 +623,7 @@ describe('GraphQL HTTP', () => {
 describe('GraphQL WebSocket', () => {
   it('DIした接続フックへpayload・Request・signalを渡し、完了後に標準のackを返す', async () => {
     let accept!: (payload: Record<string, unknown>) => void
-    const onConnect = vi.fn<
-      NonNullable<NonNullable<GraphQLRuntime['websocket']>['onConnect']>
-    >(
+    const onConnect = vi.fn<NonNullable<GraphQLWebSocketHooks['onConnect']>>(
       () =>
         new Promise((resolve) => {
           accept = resolve
@@ -745,8 +746,7 @@ describe('GraphQL WebSocket', () => {
   it('init前の終了はonCloseだけを呼び出す', async () => {
     const onConnect = vi.fn(),
       onDisconnect = vi.fn()
-    const onClose =
-      vi.fn<NonNullable<NonNullable<GraphQLRuntime['websocket']>['onClose']>>()
+    const onClose = vi.fn<NonNullable<GraphQLWebSocketHooks['onClose']>>()
     const api = await fixture({
       websocketHooks: { onConnect, onDisconnect, onClose },
     })
@@ -766,10 +766,7 @@ describe('GraphQL WebSocket', () => {
 
   it('接続終了時に購読を解放してからonDisconnectとonCloseを同じ接続入力で呼ぶ', async () => {
     const callbacks: string[] = []
-    const onConnect =
-      vi.fn<
-        NonNullable<NonNullable<GraphQLRuntime['websocket']>['onConnect']>
-      >()
+    const onConnect = vi.fn<NonNullable<GraphQLWebSocketHooks['onConnect']>>()
     const api = await fixture({
       websocketHooks: {
         onConnect,
@@ -847,9 +844,7 @@ describe('GraphQL WebSocket', () => {
     '接続フックが中断に協調しなくても%sで終了し、遅いackを送らない',
     async (stop) => {
       let accept!: (value: boolean) => void
-      const onConnect = vi.fn<
-        NonNullable<NonNullable<GraphQLRuntime['websocket']>['onConnect']>
-      >(
+      const onConnect = vi.fn<NonNullable<GraphQLWebSocketHooks['onConnect']>>(
         () =>
           new Promise((resolve) => {
             accept = resolve
@@ -1520,9 +1515,10 @@ describe('GraphQL WebSocket', () => {
 
 describe('GraphQLのresolver契約', () => {
   it.each([
-    ['websocket', true],
-    ['websocket', null],
+    ['ws', true],
+    ['ws', null],
     ['onConnect', { onConnect: true }],
+    ['connectionInit', { connectionInit: true }],
     ['schema', { schema: {} }],
     ['onSubscribe', { onSubscribe: () => undefined }],
   ])(
@@ -1534,7 +1530,7 @@ describe('GraphQLのresolver契約', () => {
         name: 'InvalidHooks',
         path: '/graphql',
         manifest: manifestFromSchema(schema),
-        factory: (() => ({ context: () => ({}), websocket: hooks })) as never,
+        factory: (() => ({ context: () => ({}), ws: hooks })) as never,
       })
       const Module = defineModule(() => ({ executions: [endpoint] }))
       const application = defineApplication({ modules: [Module()] })
@@ -1665,28 +1661,21 @@ it.each([false, true])(
   },
 )
 
-function connectionInitLayer(
+function connectionInitHandler(
   run: (
     input: GraphQLConnectionInitContext,
   ) =>
     | Record<string, unknown>
     | Response
     | Promise<Record<string, unknown> | Response>,
-) {
-  return defineLayer<
-    Record<string, unknown>,
-    GraphQLConnectionInitContext,
-    Response
-  >({
-    name: 'ConnectionInit',
-    factory: () => async (input, next) => {
-      const state = await run(input)
-      return state instanceof Response ? state : next(state)
-    },
-  })
+): GraphQLConnectionInitHandler {
+  return async (input, next) => {
+    const state = await run(input)
+    return state instanceof Response ? state : next(state)
+  }
 }
 
-describe('入口ごとのmiddlewareとstate', () => {
+describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
   it('HTTP middlewareとConnectionInitを別々に実行し、それぞれのstateを渡す', async () => {
     const calls: string[] = []
     const httpLayer = http.middleware<{ user: string }>({
@@ -1698,12 +1687,10 @@ describe('入口ごとのmiddlewareとstate', () => {
     })
     const api = await fixture({
       middleware: [httpLayer],
-      connectionInit: [
-        connectionInitLayer(() => {
-          calls.push('ws')
-          return { user: 'ws-user' }
-        }),
-      ],
+      connectionInit: connectionInitHandler(() => {
+        calls.push('ws')
+        return { user: 'ws-user' }
+      }),
     })
     try {
       await (await api.fetchGraphQL('{hello}')).text()
@@ -1725,30 +1712,21 @@ describe('入口ごとのmiddlewareとstate', () => {
     }
   })
 
-  it('WSのDI依存をModelへ登録し、layer factoryとstateを接続間で分離する', async () => {
-    class LayerOnly {
+  it('endpoint factoryのDI依存をModelへ登録し、stateを接続間で分離する', async () => {
+    class Authentication {
       readonly value = 'private'
     }
-    let factories = 0
-    const shared = defineLayer<
-      { secret: string; count: number },
-      GraphQLConnectionInitContext,
-      Response
-    >({
-      name: 'WS認証',
-      factory: (service = inject(LayerOnly)) => {
-        const instance = ++factories
-        return async ({ payload }, next) =>
-          next({
-            secret: service.value + payload?.id,
-            count: instance,
-          })
-      },
-    })
+    const makeConnectionInit = (
+      service = inject(Authentication),
+    ): GraphQLConnectionInitHandler => {
+      let count = 0
+      return async ({ payload }, next) =>
+        next({ secret: service.value + payload?.id, count: ++count })
+    }
     const api = await fixture({
       http: false,
-      connectionInit: [shared],
-      providers: [LayerOnly],
+      makeConnectionInit,
+      providers: [Authentication],
       websocketHooks: { onConnect: () => ({ ready: true }) },
     })
     try {
@@ -1772,15 +1750,13 @@ describe('入口ごとのmiddlewareとstate', () => {
       }
       expect(api.contexts[0]!.state).toBe(api.contexts[1]!.state)
       expect(api.contexts[0]!.state).not.toBe(api.contexts[2]!.state)
+      expect(Object.isFrozen(api.contexts[0]!.state)).toBe(true)
       const graph = projectApplicationModel(api.definition.model)
       const execution = graph.executions.find(
         (node) => node.executionKind === 'websocket.session',
       )!
-      expect(execution.extension?.metadata).toMatchObject({
-        layers: [{ name: 'WS認証' }],
-      })
       const provider = graph.providers.find(
-        (node) => node.name === 'LayerOnly',
+        (node) => node.name === 'Authentication',
       )!
       expect(
         graph.edges.some(
@@ -1800,56 +1776,9 @@ describe('入口ごとのmiddlewareとstate', () => {
     } finally {
       await api.app.close()
     }
-    await expect(
-      fixture({ http: false, connectionInit: [shared] }),
-    ).rejects.toThrow('LayerOnly')
-  })
-
-  it('遅延構築したlayerでもModelにない依存を実行時だけ取得できない', async () => {
-    class RuntimeOnly {}
-    let enabled = false
-    let failure: unknown
-    const layer = defineLayer<{}, GraphQLConnectionInitContext, Response>({
-      name: '動的依存の拒否',
-      factory: () => {
-        if (enabled) {
-          try {
-            inject(RuntimeOnly)
-          } catch (error) {
-            failure = error
-            throw error
-          }
-        }
-        return async (_input, next) => next()
-      },
-    })
-    const api = await fixture({
-      http: false,
-      connectionInit: [layer],
-      providers: [RuntimeOnly],
-    })
-    try {
-      enabled = true
-      const connection = await api.open()
-      connection.send({ type: 'connection_init' })
-      expect((await connection.channel.connection.closed).code).toBe(1011)
-      expect(String(failure)).toContain('LUTRE_DI_UNDECLARED_DEPENDENCY')
-      expect(api.contexts).toEqual([])
-    } finally {
-      await api.app.close()
-    }
-  })
-
-  it('WSだけの場合もlayerのcapabilityをModelで要求する', async () => {
-    const capability = runtimeCapability('ConnectionInitの外部接続')
-    const layer = defineLayer<{}, GraphQLConnectionInitContext, Response>({
-      name: '外部接続',
-      capabilities: [capability],
-      factory: () => async (_input, next) => next(),
-    })
-    await expect(
-      fixture({ http: false, connectionInit: [layer] }),
-    ).rejects.toThrow('ConnectionInitの外部接続')
+    await expect(fixture({ http: false, makeConnectionInit })).rejects.toThrow(
+      'Authentication',
+    )
   })
 
   it('Responseによる短絡をHTTPの応答とWSの拒否へ接続する', async () => {
@@ -1862,11 +1791,9 @@ describe('入口ごとのmiddlewareとstate', () => {
             Response.json({ secret: 'private' }, { status: 401 }),
         }),
       ],
-      connectionInit: [
-        connectionInitLayer(() =>
-          Response.json({ secret: 'private' }, { status: 401 }),
-        ),
-      ],
+      connectionInit: connectionInitHandler(() =>
+        Response.json({ secret: 'private' }, { status: 401 }),
+      ),
       websocketHooks: { onConnect: hook },
     })
     try {
@@ -1885,20 +1812,18 @@ describe('入口ごとのmiddlewareとstate', () => {
   })
 
   it.each(['close', 'drain'] as const)(
-    '未完了layer中の%sで待機を終え、遅い成功を公開しない',
+    '未完了ConnectionInit中の%sで待機を終え、遅い成功を公開しない',
     async (mode) => {
       let resolve!: (value: Record<string, unknown>) => void
       let signal!: AbortSignal
       const hook = vi.fn()
       const api = await fixture({
-        connectionInit: [
-          connectionInitLayer((input) => {
-            signal = input.signal
-            return new Promise((done) => {
-              resolve = done
-            })
-          }),
-        ],
+        connectionInit: connectionInitHandler((input) => {
+          signal = input.signal
+          return new Promise((done) => {
+            resolve = done
+          })
+        }),
         websocketHooks: { onConnect: hook },
       })
       try {
@@ -1927,28 +1852,31 @@ describe('入口ごとのmiddlewareとstate', () => {
     },
   )
 
-  it('WSのlayerのaround処理はoperationの終了処理までresourceを保持する', async () => {
+  it('ConnectionInitの後処理はoperationの終了処理までresourceを保持する', async () => {
     const events: string[] = []
-    const layer = defineLayer<
-      { resource: { open: boolean } },
-      GraphQLConnectionInitContext,
-      Response
-    >({
-      name: 'resource',
-      factory: () => async (_input, next) => {
-        const resource = { open: true }
-        events.push('before')
-        try {
-          await next({ resource })
-        } finally {
-          resource.open = false
-          events.push('after')
-        }
-      },
-    })
+    const stream = source()
+    let resource!: { open: boolean }
+    const handler: GraphQLConnectionInitHandler = async (_input, next) => {
+      resource = { open: true }
+      events.push('接続開始')
+      try {
+        return await next({ resource })
+      } finally {
+        resource.open = false
+        events.push('接続解放')
+      }
+    }
     const api = await fixture({
       http: false,
-      connectionInit: [layer],
+      connectionInit: handler,
+      subscription: () => ({
+        ...stream.iterator,
+        return: async () => {
+          expect(resource.open).toBe(true)
+          events.push('購読解放')
+          return stream.iterator.return()
+        },
+      }),
       makeContext(input) {
         expect((input.state.resource as { open: boolean }).open).toBe(true)
         return { greeting: 'ready', signal: input.signal }
@@ -1958,39 +1886,68 @@ describe('入口ごとのmiddlewareとstate', () => {
       const connection = await api.open()
       connection.send({ type: 'connection_init' })
       await connection.wait('connection_ack')
-      expect(events).toEqual(['before'])
+      expect(events).toEqual(['接続開始'])
       connection.send({
         id: '1',
         type: 'subscribe',
-        payload: { query: '{hello}' },
+        payload: { query: 'subscription {trips {id}}' },
       })
-      await connection.wait('complete', '1')
-      expect(events).toEqual(['before'])
+      stream.push({ trips: { id: '1' } })
+      await connection.wait('next', '1')
+      expect(events).toEqual(['接続開始'])
       await api.app.close()
-      expect(events).toEqual(['before', 'after'])
-      expect((api.contexts[0]!.state.resource as { open: boolean }).open).toBe(
-        false,
-      )
+      expect(events).toEqual(['接続開始', '購読解放', '接続解放'])
+      expect(resource.open).toBe(false)
     } finally {
       await api.app.close()
     }
   })
 
+  it.each([
+    ['nextなし', async () => ({ secret: 'private' })],
+    ['不正なstate', async (_input, next) => next([])],
+    [
+      '同期例外',
+      () => {
+        throw new Error('private')
+      },
+    ],
+    [
+      '非同期例外',
+      async () => {
+        throw new Error('private')
+      },
+    ],
+  ] satisfies readonly (readonly [string, GraphQLConnectionInitHandler])[])(
+    'ConnectionInitの%sを内部情報なしで終了する',
+    async (_name, handler) => {
+      const api = await fixture({ http: false, connectionInit: handler })
+      try {
+        const connection = await api.open()
+        connection.send({ type: 'connection_init' })
+        const closed = await connection.channel.connection.closed
+        expect(closed.code).toBe(1011)
+        expect(closed.reason).not.toContain('private')
+        expect(connection.sent).toEqual([])
+        expect(api.contexts).toEqual([])
+      } finally {
+        await api.app.close()
+      }
+    },
+  )
+
   it.each([false, true])(
-    'WSのlayerのnext規約違反=%sも終了時に回収する',
+    'ConnectionInitのnext規約違反=%sも終了時に回収する',
     async (twice) => {
-      const invalid = defineLayer<{}, GraphQLConnectionInitContext, Response>({
-        name: '不正',
-        factory: () => async (_input, next) => {
-          if (twice) {
-            await next()
-            await next()
-          } else {
-            next()
-          }
-        },
-      })
-      const api = await fixture({ http: false, connectionInit: [invalid] })
+      const invalid: GraphQLConnectionInitHandler = async (_input, next) => {
+        if (twice) {
+          await next()
+          await next()
+        } else {
+          next()
+        }
+      }
+      const api = await fixture({ http: false, connectionInit: invalid })
       try {
         const connection = await api.open()
         connection.send({ type: 'connection_init' })
@@ -2010,15 +1967,12 @@ describe('入口ごとのmiddlewareとstate', () => {
     },
   )
 
-  it('WSのlayerの終了処理が失敗してもsessionを解放する', async () => {
-    const layer = defineLayer<{}, GraphQLConnectionInitContext, Response>({
-      name: '終了失敗',
-      factory: () => async (_input, next) => {
-        await next()
-        throw new Error('後処理に失敗')
-      },
-    })
-    const api = await fixture({ http: false, connectionInit: [layer] })
+  it('ConnectionInitの終了処理が失敗してもsessionを解放する', async () => {
+    const handler: GraphQLConnectionInitHandler = async (_input, next) => {
+      await next()
+      throw new Error('後処理に失敗')
+    }
+    const api = await fixture({ http: false, connectionInit: handler })
     try {
       const connection = await api.open()
       connection.send({ type: 'connection_init' })

@@ -63,7 +63,6 @@ export type {
 } from './generic-layer.js'
 export {
   collectInjectedDependencies,
-  captureDependencyResolver,
   inject,
   injectInquirer,
   InjectionContextError,

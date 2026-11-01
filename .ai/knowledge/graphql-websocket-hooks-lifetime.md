@@ -2,13 +2,13 @@
 
 ## 発生条件
 
-ConnectionInitのlayerの非同期処理中にWS接続が終了する場合、またはstateへ保存したユーザー情報を更新後の表示データにも使う場合。
+ConnectionInit handlerの非同期処理中にWS接続が終了する場合、またはstateへ保存したユーザー情報を更新後の表示データにも使う場合。
 
 `graphql-ws`の接続フックをLoutre Runtimeから設定し、init待ち中に切断・drainする場合、または終了フックが例外を投げる場合。
 
 ## 原因
 
-layerをstate生成だけで完了させると、`await next()`後の後処理がoperationより先にresourceを解放する。WSではstateの公開とpipeline全体の終了を分ける。
+handlerをstate生成だけで完了させると、`await next()`後の後処理がoperationより先にresourceを解放する。WSではstateの公開とhandler全体の終了を分ける。
 
 stateは接続中に共有するため、認証時のユーザーオブジェクトを返すだけでは後から更新した表示データを取得できない。認証結果の保持と最新データの取得は分ける。
 
@@ -18,7 +18,7 @@ onConnectの未完了Promiseを受信taskとして無条件に待つと、接続
 
 ## 安全な確認方法
 
-layerがresourceをstateへ渡し、`finally`で解放するケースを確認する。接続中のQueryとSubscriptionはresourceを使え、operationのcleanup後に後処理を実行できること、後処理の失敗をsessionのtraceへ報告してleaseを解放できることを検証する。
+ConnectionInit handlerがresourceをstateへ渡し、`finally`で解放するケースを確認する。接続中のQueryとSubscriptionはresourceを使え、operationのcleanup後に後処理を実行できること、後処理の失敗をsessionのtraceへ報告してleaseを解放できることを検証する。
 
 前処理を未完了にしたまま切断・drainし、遅いstateがACKやContextへ公開されないことを確認する。HTTPで利用者の名前を変更した後、同じWS接続のQueryでも新しい名前を取得でき、資格情報の検証回数が増えないことを確認する。
 
@@ -28,21 +28,19 @@ layerがresourceをstateへ渡し、`finally`で解放するケースを確認�
 
 ## 復旧方法
 
-WSのlayer terminalはstateを公開して接続の終了を待ち、operationをcleanupした後でpipelineを終了する。terminalへ到達していない非協調的な前処理は無期限に待たず、遅い到達をabort済みsignalで拒否する。
+ConnectionInitのnextはstateを公開して接続の終了を待ち、operationをcleanupした後で継続を完了する。nextへ到達していない非協調的な前処理は無期限に待たず、遅い到達をabort済みsignalで拒否する。
 
-stateにユーザーIDを保存し、Resolverで最新のドメインデータを取得する。middlewareの待機も接続signalで中断し、終了時にframeworkの接続状態への参照を破棄する。
+stateにユーザーIDを保存し、Resolverで最新のドメインデータを取得する。handlerの待機も接続signalで中断し、終了時にframeworkの接続状態への参照を破棄する。
 
 onConnectの待機は接続signalで中断し、listenerをfinallyで外す。終了フックはgraphql-wsの順序でawaitする。dispose・受信task・operationのcleanupは失敗を集めて最後に報告し、途中の失敗で残りの解放を省略しない。
 
 ## 再発防止策
 
-認証の入口はhttp.middlewaresとws.connectionInitで分け、各layerのfactoryでDIする。HTTPヘッダーとConnectionInit payloadを暗黙にfallbackさせず、認証方式ごとに受け付ける入力をテストする。stateは結果の受け渡しに使い、Context・Resolverは共通化できる。
+HTTPは既存のhttp.middlewares、GraphQL WSはendpointのfactory().wsにライフサイクルを置く。WSのためにHTTPと同層のlayerや遅延DI resolverを追加しない。依存はendpoint factoryで取得し、canonical Modelへ登録する。HTTPヘッダーとConnectionInit payloadを暗黙にfallbackさせず、認証方式ごとに受け付ける入力をテストする。
 
-WSだけを有効にした構成でも、layerのDI依存・capability・graph projectionを確認する。resolverを遅延使用してもModelにない依存を取得できないこと、layer factoryのローカル変数が接続間で共有されないことを確認する。
+ConnectionInit handlerのローカル変数とstateは接続ごとに作り、factoryで取得したサービスと寿命を混同しない。stateの型はhandlerの戻り値から推論するため、後処理は`try { return await next(state) } finally { ... }`と書く。stateをACK payloadへ流用しない。
 
-利用者のAPIは既存のlayerと型付きstateから設計する。独自のstate生成コールバックやstate結合処理を追加しない。protocolの開始・終了手順をアプリの対応表やcleanupとして要求しない。stateをACK payloadへ流用しない。
-
-接続・operation・アプリの認証サービスの寿命を分離する。接続フックのために認証方式、identity、再認証頻度の規約を作らない。websocket設定は型だけでなく実行時にも接続フックへ限定し、schemaやexecutionを上書きさせない。依存ライブラリの接続フックの順序や戻り値は変更せず、そのまま適合テストする。
+接続・operation・アプリの認証サービスの寿命を分離する。接続フックのために認証方式、identity、再認証頻度の規約を作らない。factory().wsは型だけでなく実行時にも接続フックへ限定し、schemaやexecutionを上書きさせない。依存ライブラリの接続フックの順序や戻り値は変更せず、そのまま適合テストする。
 
 ## テストclientの終了判定
 

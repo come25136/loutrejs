@@ -1,13 +1,8 @@
 import { parse, type GraphQLError, type GraphQLFormattedError } from 'graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
-import {
-  graphql,
-  type GraphQLWebSocketHooks,
-  type GraphQLConnectionInitContext,
-} from '@loutrejs/graphql'
+import { graphql, type GraphQLWebSocketHooks } from '@loutrejs/graphql'
 import {
   defineApplication,
-  defineLayer,
   defineModule,
   createKernelApplication,
 } from '@loutrejs/loutre'
@@ -39,7 +34,7 @@ const both = graphql.endpoint({
   http: true,
   ws: true,
   factory: () => ({
-    websocket: {
+    ws: {
       onConnect(connection) {
         const request: Request = connection.extra.request
         const signal: AbortSignal = connection.extra.signal
@@ -230,27 +225,24 @@ graphql.endpoint({
   }),
 })
 
-const authentication = defineLayer<
-  { currentUser: { readonly id: string } },
-  GraphQLConnectionInitContext,
-  Response
->({
-  name: '共通認証',
-  factory:
-    () =>
-    async ({ request, signal, payload }, next) => {
-      void [request, signal, payload]
-      return next({ currentUser: { id: 'user-1' } })
-    },
-})
-
 graphql.endpoint({
   name: '入口ごとのstate',
   path: '/profile',
   manifest,
   http: { middlewares: [userState, tenantState] },
-  ws: { connectionInit: [authentication] },
+  ws: true,
   factory: () => ({
+    ws: {
+      connectionInit: async ({ request, signal, payload }, next) => {
+        const openingRequest: Request = request
+        const connectionSignal: AbortSignal = signal
+        const params: Readonly<Record<string, unknown>> | undefined = payload
+        void [openingRequest, connectionSignal, params]
+        if (payload?.authorization === undefined)
+          return new Response(null, { status: 401 })
+        return next({ currentUser: { id: 'user-1' } })
+      },
+    },
     context(input) {
       const id: string = input.state.currentUser.id
       // @ts-expect-error stateは読み取り専用
@@ -276,8 +268,19 @@ graphql.endpoint({
   name: 'WSのみのstate',
   path: '/ws',
   manifest,
-  ws: { connectionInit: [authentication] },
+  ws: true,
   factory: () => ({
+    ws: {
+      connectionInit: async ({ request, signal, payload }, next) => {
+        const openingRequest: Request = request
+        const connectionSignal: AbortSignal = signal
+        const params: Readonly<Record<string, unknown>> | undefined = payload
+        void [openingRequest, connectionSignal, params]
+        if (payload?.authorization === undefined)
+          return new Response(null, { status: 401 })
+        return next({ currentUser: { id: 'user-1' } })
+      },
+    },
     context(input) {
       const id: string = input.state.currentUser.id
       const operationId: string = input.operationId
@@ -300,6 +303,32 @@ graphql.endpoint({
       input.operationId
       void id
       return {}
+    },
+  }),
+})
+
+graphql.endpoint({
+  name: '終了処理を持つConnectionInitのstate',
+  path: '/cleanup',
+  manifest,
+  ws: true,
+  factory: () => ({
+    ws: {
+      connectionInit: async (_input, next) => {
+        try {
+          return await next({ tenantId: 'tenant-1' })
+        } finally {
+          void '終了処理'
+        }
+      },
+    },
+    context: ({ state }) => {
+      const id: string = state.tenantId
+      // @ts-expect-error ConnectionInitが提供しないstateは存在しない
+      state.currentUser
+      // @ts-expect-error ConnectionInitのstateは読み取り専用
+      state.tenantId = 'other'
+      return { id }
     },
   }),
 })

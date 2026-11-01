@@ -28,7 +28,7 @@ async function create(
     manifest: manifestFromSchema(schema),
     http,
     ws: true,
-    factory: () => ({ context: () => ({}), websocket: hooks }),
+    factory: () => ({ context: () => ({}), ws: hooks }),
   })
   const Module = defineModule(() => ({ executions: [endpoint] }))
   const app = await nodeRuntime.create({

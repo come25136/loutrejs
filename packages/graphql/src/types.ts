@@ -1,4 +1,3 @@
-import type { GenericLayer } from '@loutrejs/loutre'
 import type { ServerOptions } from 'graphql-ws'
 import type { HttpRawDefinition } from '@loutrejs/loutre/http'
 import type { GraphQLManifest } from './manifest-internal.js'
@@ -47,15 +46,25 @@ export interface GraphQLConnectionInitContext {
   readonly payload: Readonly<Record<string, unknown>> | undefined
 }
 
-export type GraphQLConnectionInitMiddleware<TState extends object = any> =
-  GenericLayer<GraphQLConnectionInitContext, TState, Response>
+export interface GraphQLConnectionInitNext {
+  (): Promise<Readonly<{}>>
+  <TState extends object>(state: TState): Promise<Readonly<TState>>
+}
+
+export type GraphQLConnectionInitHandler<TState extends object = object> = (
+  input: GraphQLConnectionInitContext,
+  next: GraphQLConnectionInitNext,
+) => void | Response | TState | Promise<void | Response | TState>
 
 export interface GraphQLRuntime<
   TContext extends object = object,
   TInput extends GraphQLContextInput<object, object> = GraphQLContextInput,
+  TState extends object = object,
 > {
   context(input: TInput): TContext | Promise<TContext>
-  readonly websocket?: GraphQLWebSocketHooks
+  readonly ws?: GraphQLWebSocketHooks & {
+    readonly connectionInit?: GraphQLConnectionInitHandler<TState>
+  }
   formatError?(error: GraphQLError, input: TInput): GraphQLFormattedError
   // 既存のfactoryから構造的型付けで旧指定が紛れ込むことも拒否する。
   readonly rootValue?: never
@@ -72,7 +81,6 @@ export interface GraphQLEndpointDefinition<TContext extends object = object> {
   readonly ws?:
     | boolean
     | {
-        readonly connectionInit?: readonly GraphQLConnectionInitMiddleware[]
         readonly connectionInitWaitTimeout?: number
       }
   readonly factory: () => GraphQLRuntime<TContext>

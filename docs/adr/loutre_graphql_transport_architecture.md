@@ -336,21 +336,17 @@ WebSocket側は`graphql-ws`の`makeServer()`を利用する。
 
 Loutre WebSocket contextを`graphql-ws`が要求するsocket interfaceへadapterする。
 
-接続処理の拡張は、Runtimeの`websocket`から`graphql-ws`の`onConnect` / `onDisconnect` / `onClose`を設定する。DIを使えるようfactoryの戻り値へ置き、opening requestと接続のsignalを`extra`へ渡す。コールバックの意味や戻り値をLoutre独自の認証APIへ翻訳しない。
+接続処理の拡張はRuntimeの`ws`へまとめる。ConnectionInit handlerで型付きstateを渡し、追加のprotocol制御には`graphql-ws`の`onConnect` / `onDisconnect` / `onClose`を利用する。native hookにはopening requestと接続のsignalを`extra`へ渡し、引数・戻り値の意味を維持する。
 
 LoutreはDI、接続とoperationの寿命、型、cleanupを所有する。認証方式、利用者の形、再認証の頻度はアプリ側で決める。HTTP middlewareやContextから同じサービスを呼ぶためだけに、共通authenticate、予約されたidentity、認証Policyを追加しない。通常HTTPの認証middlewareの仕様も変更しない。
 
-schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#websocketの接続フック)を正本とする。
+schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#その他のwsライフサイクル)を正本とする。
 
-方式別の認証例は[GraphQL認証example](../../examples/graphql-auth/README.md)を正本とする。通常HTTPのexampleとGraphQLのexampleを分離し、GraphQLもBearer / API keyなどの方式ごとにendpointとlayerを定義する。
+方式別の認証例は[GraphQL認証example](../../examples/graphql-auth/README.md)を正本とする。HTTPは既存middlewareへ認証を置き、GraphQL WSはendpointのfactory内のwsへライフサイクルを直接定義する。HTTPとWSを同じ抽象度のlayerへ揃えることを目的にしない。
 
-宣言はendpointのfactory外に`http.middlewares`と`ws.connectionInit`を置く。DIは各layer自身のfactoryで行い、Context生成はendpointのfactoryに置く。stateは前処理の結果とし、入口ごとに型を推論する。認証結果の形が一致すれば、ContextとResolverでtransportの分岐は不要になる。
+外側のhttp / wsは有効化や静的設定、factoryはDIしたサービスを使う実行時handlerとContext生成を所有する。connectionInitの`return next(state)`からstateの型を推論し、HTTPの認証結果と同じ形ならContext・Resolverを共通化する。stateはACK payloadとは分離する。
 
-HTTPはHTTP middlewareのpipeline、WSはConnectionInitのgeneric layerとして独立に実行する。payloadをHTTPヘッダーへ変換する経路や、両方へ自動適用する共通middleware設定を追加しない。WSの入力はprotocolのpayloadをそのまま渡す。
-
-state結合・nextの規約・DI・capability・graph projectionは既存のCore / WebSocket extensionの実装を使う。WSのlayer terminalはstateを公開して接続終了を待ち、operationのcleanup後に後処理を待つ。前処理中に中断した場合は非協調的な処理を無期限に待たず、遅い成功を公開しない。
-
-追加のprotocol制御にはgraphql-wsの接続フックを公開する。通常の認証ではlayerとstateを使い、ACKや接続記録の管理をアプリへ要求しない。
+WS専用layerの宣言、遅延DI resolver、layer依存のためのWebSocket metadataは設けない。認証の依存はendpoint factoryのinjectからcanonical Modelへ登録する。protocolの開始・終了処理はGraphQL adapterが所有し、ConnectionInit handlerの継続と後処理を接続の寿命へ結び付ける。operationのcleanup後に継続を完了し、前処理中の中断では非協調的な処理を無期限に待たない。
 
 1 connection上で複数operationが同時実行されるため、message receive loopはoperation処理を逐次blockしない。
 

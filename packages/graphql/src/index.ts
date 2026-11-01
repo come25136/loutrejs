@@ -10,7 +10,6 @@ import {
   type WebSocketExecutionDefinition,
 } from '@loutrejs/loutre/websocket'
 import { createHandler } from 'graphql-http/lib/use/fetch'
-import { captureDependencyResolver } from '@loutrejs/loutre'
 import { serveGraphQLWebSocket } from './websocket.js'
 import { validateEndpointSchema, validateRuntime } from './validation.js'
 import { getManifest } from './manifest-internal.js'
@@ -22,13 +21,11 @@ import type {
   GraphQLWebSocketContextInput,
 } from './types.js'
 
-import type {
-  GraphQLConnectionInitMiddleware,
-  GraphQLEndpointDefinition,
-} from './types.js'
+import type { GraphQLEndpointDefinition } from './types.js'
 export type {
   GraphQLConnectionInitContext,
-  GraphQLConnectionInitMiddleware,
+  GraphQLConnectionInitNext,
+  GraphQLConnectionInitHandler,
   GraphQLHttpContextInput,
   GraphQLWebSocketContextInput,
   GraphQLWebSocketExtra,
@@ -56,19 +53,11 @@ type HttpState<THttp> = THttp extends {
 }
   ? LayerState<TLayers>
   : {}
-type ConnectionInitState<TWs> = TWs extends {
-  readonly connectionInit: infer TLayers extends
-    readonly GraphQLConnectionInitMiddleware[]
-}
-  ? LayerState<TLayers>
-  : {}
-type EndpointInput<THttp, TWs> =
+type EndpointInput<THttp, TWs, TState extends object> =
   | (HttpEnabled<THttp, TWs> extends true
       ? GraphQLHttpContextInput<HttpState<THttp>>
       : never)
-  | (Enabled<TWs> extends true
-      ? GraphQLWebSocketContextInput<ConnectionInitState<TWs>>
-      : never)
+  | (Enabled<TWs> extends true ? GraphQLWebSocketContextInput<TState> : never)
 
 export type GraphQLEndpoint<
   THttp extends HttpOptions = undefined,
@@ -97,6 +86,7 @@ export function defineGraphQLEndpoint<
   TContext extends object,
   const THttp extends HttpOptions = undefined,
   const TWs extends WebSocketOptions = undefined,
+  TState extends object = {},
 >(
   definition: Omit<
     GraphQLEndpointDefinition<TContext>,
@@ -106,7 +96,8 @@ export function defineGraphQLEndpoint<
     readonly ws?: TWs
     readonly factory: () => GraphQLRuntime<
       NoInfer<TContext>,
-      EndpointInput<THttp, TWs>
+      EndpointInput<THttp, TWs, NoInfer<TState>>,
+      TState
     >
   },
 ): GraphQLEndpoint<THttp, TWs> {
@@ -199,11 +190,9 @@ export function defineGraphQLEndpoint<
   }
   if (wsOptions) {
     const options = typeof wsOptions === 'object' ? wsOptions : {}
-    const connectionInit = options.connectionInit ?? []
     executions.push(
       websocket.implementation({
         name: `${definition.name}.websocket`,
-        layers: connectionInit,
         contract: websocket.contract({
           endpoint: {
             path: definition.path,
@@ -213,17 +202,9 @@ export function defineGraphQLEndpoint<
         }),
         factory: () => {
           const runtime = validateRuntime(definition.factory())
-          const resolve = captureDependencyResolver()
           return {
             endpoint: (context) =>
-              serveGraphQLWebSocket(
-                context,
-                bound,
-                runtime,
-                options,
-                connectionInit,
-                resolve,
-              ),
+              serveGraphQLWebSocket(context, bound, runtime, options),
           }
         },
       }) as WebSocketExecutionDefinition,

@@ -1,8 +1,4 @@
-import {
-  composeLayers,
-  type ExecutionOperationLease,
-  type DependencyResolver,
-} from '@loutrejs/loutre'
+import type { ExecutionOperationLease } from '@loutrejs/loutre'
 import type {
   WebSocketHandlerContext,
   WebSocketMessageCodec,
@@ -21,8 +17,6 @@ import type {
   GraphQLRuntime,
   GraphQLWebSocketContextInput,
   GraphQLWebSocketExtra,
-  GraphQLConnectionInitMiddleware,
-  GraphQLConnectionInitContext,
 } from './types.js'
 import { formatGraphQLError } from './errors.js'
 import type { BoundManifest } from './manifest-internal.js'
@@ -61,8 +55,6 @@ export async function serveGraphQLWebSocket(
   bound: BoundManifest,
   runtime: GraphQLRuntime,
   options: { readonly connectionInitWaitTimeout?: number },
-  middlewares: readonly GraphQLConnectionInitMiddleware[],
-  resolve: DependencyResolver,
 ): Promise<void> {
   const operations = new Map<string, Operation>()
   const schema = bound.schema
@@ -98,15 +90,16 @@ export async function serveGraphQLWebSocket(
     }
   }
   let state: Readonly<Record<string, unknown>> = Object.freeze({})
-  let releaseMiddlewares!: () => void
-  const middlewaresReleased = new Promise<void>((complete) => {
-    releaseMiddlewares = complete
+  let releaseConnectionInit!: () => void
+  const connectionInitReleased = new Promise<void>((complete) => {
+    releaseConnectionInit = complete
   })
-  let middlewaresStarted = false
-  let middlewareTask:
+  let connectionInitAccepted = false
+  let operationsCleaned = false
+  let connectionInitTask:
     | Promise<Readonly<Record<string, unknown>> | Response>
     | undefined
-  const hooks = runtime.websocket
+  const hooks = runtime.ws
   const server = makeServer<
     Record<string, unknown> | undefined,
     GraphQLWebSocketExtra
@@ -117,35 +110,56 @@ export async function serveGraphQLWebSocket(
       : { connectionInitWaitTimeout: options.connectionInitWaitTimeout }),
     onConnect: (connection) =>
       whileConnected(async () => {
+        if (!hooks?.connectionInit) return hooks?.onConnect?.(connection)
         const prepared = await new Promise<
           Readonly<Record<string, unknown>> | Response
         >((ready, reject) => {
-          middlewareTask = composeLayers<
-            GraphQLConnectionInitContext,
-            Readonly<Record<string, unknown>> | Response
-          >({
-            context: {
-              request: context.request,
-              signal: context.signal,
-              payload: connection.connectionParams,
-            },
-            layers: middlewares,
-            resolve,
-            terminal: async ({ state: result }) => {
-              context.signal.throwIfAborted()
-              middlewaresStarted = true
-              ready(result)
-              await middlewaresReleased
-              return result
-            },
+          connectionInitTask = Promise.resolve().then(async () => {
+            context.signal.throwIfAborted()
+            const result = await hooks.connectionInit!(
+              {
+                request: context.request,
+                signal: context.signal,
+                payload: connection.connectionParams,
+              },
+              (contribution: object = {}) => {
+                context.signal.throwIfAborted()
+                if (connectionInitAccepted)
+                  throw new TypeError(
+                    'ConnectionInitのnext()は一度だけ呼び出せます。',
+                  )
+                const prototype = Object.getPrototypeOf(contribution)
+                if (
+                  (prototype !== Object.prototype && prototype !== null) ||
+                  Array.isArray(contribution)
+                )
+                  throw new TypeError(
+                    'ConnectionInitのnext()にはstateのオブジェクトを指定してください。',
+                  )
+                const snapshot = Object.freeze({ ...contribution })
+                connectionInitAccepted = true
+                ready(snapshot)
+                return connectionInitReleased.then(() => snapshot)
+              },
+            )
+            if (connectionInitAccepted) {
+              if (!operationsCleaned) {
+                await connectionInitReleased
+                throw new TypeError(
+                  'ConnectionInitはnext()をawaitするかreturnしてください。',
+                )
+              }
+              return state
+            }
+            if (!(result instanceof Response))
+              throw new TypeError(
+                'ConnectionInitはnext()かResponseで処理を完了してください。',
+              )
+            return result
           })
-          void middlewareTask.then(ready, reject)
+          void connectionInitTask.then(ready, reject)
         })
         if (context.signal.aborted || prepared instanceof Response) return false
-        if (!prepared)
-          throw new TypeError(
-            'GraphQL middlewareはnext()かResponseで処理を完了してください。',
-          )
         state = prepared
         return hooks?.onConnect?.(connection)
       }, context.signal),
@@ -326,9 +340,10 @@ export async function serveGraphQLWebSocket(
           [...operations.values()].map((operation) => operation.cleanup?.()),
         )),
       )
-      releaseMiddlewares()
-      if (middlewaresStarted && middlewareTask)
-        results.push(...(await Promise.allSettled([middlewareTask])))
+      operationsCleaned = true
+      releaseConnectionInit()
+      if (connectionInitAccepted && connectionInitTask)
+        results.push(...(await Promise.allSettled([connectionInitTask])))
       const errors = results
         .filter((result) => result.status === 'rejected')
         .map((result) => result.reason)
@@ -339,7 +354,8 @@ export async function serveGraphQLWebSocket(
           'GraphQL WebSocketの終了処理に失敗しました。',
         )
     } finally {
-      releaseMiddlewares()
+      operationsCleaned = true
+      releaseConnectionInit()
       state = Object.freeze({})
       context.signal.removeEventListener('abort', abortAll)
       for (const id of operations.keys()) finish(id)

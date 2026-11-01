@@ -1,14 +1,8 @@
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
 import { Users } from './auth/users.js'
-import {
-  httpBearerAuthentication,
-  wsBearerAuthentication,
-} from './auth/bearer.js'
-import {
-  httpApiKeyAuthentication,
-  wsApiKeyAuthentication,
-} from './auth/api-key.js'
+import { httpBearerAuthentication } from './auth/bearer.js'
+import { httpApiKeyAuthentication } from './auth/api-key.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
 import { resolvers } from './graphql/resolvers.js'
@@ -21,8 +15,19 @@ export const ProfileBearerGraphQL = graphql.endpoint({
   path: '/graphql/bearer',
   manifest,
   http: { middlewares: [httpBearerAuthentication] },
-  ws: { connectionInit: [wsBearerAuthentication] },
+  ws: true,
   factory: (users = inject(Users)) => ({
+    ws: {
+      connectionInit: async ({ payload, signal }, next) => {
+        signal.throwIfAborted()
+        const user = users.authenticate({
+          authorization: payload?.authorization,
+        })
+        if (!user)
+          return Response.json({ error: '認証が必要です。' }, { status: 401 })
+        return next({ currentUser: { id: user.id } })
+      },
+    },
     context: ({ state, signal }) => ({
       currentUser: state.currentUser,
       users,
@@ -36,8 +41,17 @@ export const ProfileApiKeyGraphQL = graphql.endpoint({
   path: '/graphql/api-key',
   manifest,
   http: { middlewares: [httpApiKeyAuthentication] },
-  ws: { connectionInit: [wsApiKeyAuthentication] },
+  ws: true,
   factory: (users = inject(Users)) => ({
+    ws: {
+      connectionInit: async ({ payload, signal }, next) => {
+        signal.throwIfAborted()
+        const user = users.authenticate({ apiKey: payload?.apiKey })
+        if (!user)
+          return Response.json({ error: '認証が必要です。' }, { status: 401 })
+        return next({ currentUser: { id: user.id } })
+      },
+    },
     context: ({ state, signal }) => ({
       currentUser: state.currentUser,
       users,
