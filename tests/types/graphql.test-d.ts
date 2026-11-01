@@ -1,6 +1,11 @@
 import { parse, type GraphQLError, type GraphQLFormattedError } from 'graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
-import { graphql, type GraphQLWebSocketHooks } from '@loutrejs/graphql'
+import {
+  graphql,
+  ConnectionRejected,
+  type GraphQLWebSocketHooks,
+  type GraphQLConnectionInitHandler,
+} from '@loutrejs/graphql'
 import {
   defineApplication,
   defineModule,
@@ -22,6 +27,7 @@ const httpOnly = graphql.endpoint({
 })
 const websocketOnly = graphql.endpoint({
   name: 'WebSocket',
+  http: false,
   path: '/graphql',
   manifest,
   ws: true,
@@ -35,14 +41,11 @@ const both = graphql.endpoint({
   ws: true,
   factory: () => ({
     ws: {
-      onConnect(connection) {
-        const request: Request = connection.extra.request
-        const signal: AbortSignal = connection.extra.signal
-        const params: Readonly<Record<string, unknown>> | undefined =
-          connection.connectionParams
-        // @ts-expect-error opening requestの参照は読み取り専用
-        connection.extra.request = request
-        void [signal, params]
+      connectionInit({ request, signal, payload }) {
+        const openingRequest: Request = request
+        const connectionSignal: AbortSignal = signal
+        const params: Readonly<Record<string, unknown>> | undefined = payload
+        void [openingRequest, connectionSignal, params]
         return { ready: true }
       },
       onDisconnect(connection, code, reason) {
@@ -179,8 +182,8 @@ const operationHooks: GraphQLWebSocketHooks = {
   onSubscribe: () => undefined,
 }
 const invalidHooks: GraphQLWebSocketHooks = {
-  // @ts-expect-error 接続フックは関数を要求する
-  onConnect: true,
+  // @ts-expect-error 接続開始の入口はconnectionInitへ一本化する
+  onConnect: () => true,
 }
 void [protectedHooks, operationHooks, invalidHooks]
 
@@ -233,14 +236,14 @@ graphql.endpoint({
   ws: true,
   factory: () => ({
     ws: {
-      connectionInit: async ({ request, signal, payload }, next) => {
+      connectionInit: async ({ request, signal, payload }) => {
         const openingRequest: Request = request
         const connectionSignal: AbortSignal = signal
         const params: Readonly<Record<string, unknown>> | undefined = payload
         void [openingRequest, connectionSignal, params]
         if (payload?.authorization === undefined)
-          return new Response(null, { status: 401 })
-        return next({ currentUser: { id: 'user-1' } })
+          return new ConnectionRejected('認証が必要です。')
+        return { currentUser: { id: 'user-1' } }
       },
     },
     context(input) {
@@ -266,19 +269,20 @@ graphql.endpoint({
 })
 graphql.endpoint({
   name: 'WSのみのstate',
+  http: false,
   path: '/ws',
   manifest,
   ws: true,
   factory: () => ({
     ws: {
-      connectionInit: async ({ request, signal, payload }, next) => {
+      connectionInit: async ({ request, signal, payload }) => {
         const openingRequest: Request = request
         const connectionSignal: AbortSignal = signal
         const params: Readonly<Record<string, unknown>> | undefined = payload
         void [openingRequest, connectionSignal, params]
         if (payload?.authorization === undefined)
-          return new Response(null, { status: 401 })
-        return next({ currentUser: { id: 'user-1' } })
+          return new ConnectionRejected('認証が必要です。')
+        return { currentUser: { id: 'user-1' } }
       },
     },
     context(input) {
@@ -308,18 +312,21 @@ graphql.endpoint({
 })
 
 graphql.endpoint({
-  name: '終了処理を持つConnectionInitのstate',
-  path: '/cleanup',
+  name: '非同期ConnectionInitのstate',
+  path: '/async',
   manifest,
+  http: false,
   ws: true,
   factory: () => ({
     ws: {
-      connectionInit: async (_input, next) => {
-        try {
-          return await next({ tenantId: 'tenant-1' })
-        } finally {
-          void '終了処理'
-        }
+      connectionInit: async () => {
+        const tenantId = await Promise.resolve('tenant-1')
+        return { tenantId }
+      },
+      onClose({ extra }) {
+        const state: Readonly<{ tenantId: string }> | undefined = extra.state
+        // @ts-expect-error 接続stateは読み取り専用
+        if (state) state.tenantId = 'other'
       },
     },
     context: ({ state }) => {
@@ -329,6 +336,127 @@ graphql.endpoint({
       // @ts-expect-error ConnectionInitのstateは読み取り専用
       state.tenantId = 'other'
       return { id }
+    },
+  }),
+})
+
+graphql.endpoint({
+  name: 'WS設定でHTTPを無効にしない',
+  path: '/both',
+  manifest,
+  ws: true,
+  factory: () => ({
+    context(input) {
+      const transport: 'http' | 'websocket' = input.transport
+      return { transport }
+    },
+  }),
+})
+const defaultHttpWithWs = graphql.endpoint({
+  name: '既定HTTPとWS',
+  path: '/both',
+  manifest,
+  ws: true,
+  factory,
+})
+const DefaultModule = defineModule(() => ({ executions: [defaultHttpWithWs] }))
+const defaultApp = createKernelApplication({
+  application: defineApplication({ modules: [DefaultModule()] }),
+})
+defaultApp.http.fetch(new Request('http://test'))
+defaultApp.websocket.upgrade(new Request('http://test'))
+
+graphql.endpoint({
+  name: 'WS有効化の指定忘れ',
+  path: '/missing',
+  manifest,
+  factory: () => ({
+    context: () => ({}),
+    // @ts-expect-error WSの有効化なしにhandlerを指定しない
+    ws: { connectionInit: () => ({ currentUser: { id: '1' } }) },
+  }),
+})
+graphql.endpoint({
+  name: 'WSを明示的に無効化',
+  path: '/disabled',
+  manifest,
+  ws: false,
+  factory: () => ({
+    context: () => ({}),
+    // @ts-expect-error 無効なWSへhandlerを指定しない
+    ws: { onClose() {} },
+  }),
+})
+graphql.endpoint({
+  name: 'HTTP ResponseをWSで返さない',
+  path: '/response',
+  manifest,
+  ws: true,
+  factory: () => ({
+    context: () => ({}),
+    ws: {
+      // @ts-expect-error WSの拒否はConnectionRejectedで表す
+      connectionInit: () => new Response(null, { status: 401 }),
+    },
+  }),
+})
+graphql.endpoint({
+  name: '戻り値を忘れない',
+  path: '/void',
+  manifest,
+  ws: true,
+  factory: () => ({
+    context: () => ({}),
+    ws: {
+      // @ts-expect-error stateかConnectionRejectedを返す
+      connectionInit: async () => {},
+    },
+  }),
+})
+
+const responseHandler: GraphQLConnectionInitHandler = () =>
+  // @ts-expect-error 公開handler型もHTTP Responseを受け付けない
+  new Response(null, { status: 401 })
+// @ts-expect-error 公開handler型も戻り値の省略を受け付けない
+const emptyHandler: GraphQLConnectionInitHandler = async () => {}
+// @ts-expect-error 公開handler型も配列を受け付けない
+const arrayHandler: GraphQLConnectionInitHandler = () => []
+const responseHooks: GraphQLWebSocketHooks = {
+  // @ts-expect-error 公開hook型もHTTP Responseを受け付けない
+  connectionInit: () => new Response(),
+}
+interface AuthenticationState {
+  readonly currentUser: { readonly id: string }
+}
+const annotatedHandler: GraphQLConnectionInitHandler<
+  AuthenticationState
+> = async () => {
+  const state: AuthenticationState = { currentUser: { id: '1' } }
+  return state
+}
+void [
+  responseHandler,
+  emptyHandler,
+  arrayHandler,
+  responseHooks,
+  annotatedHandler,
+]
+
+const rejection = new ConnectionRejected('認証が必要です。')
+const publicReason: string = rejection.reason
+// @ts-expect-error 公開する理由は読み取り専用
+rejection.reason = '変更'
+void publicReason
+graphql.endpoint({
+  name: 'booleanで拒否しない',
+  path: '/boolean',
+  manifest,
+  ws: true,
+  factory: () => ({
+    context: () => ({}),
+    ws: {
+      // @ts-expect-error booleanの代わりにConnectionRejectedを返す
+      connectionInit: () => false,
     },
   }),
 })

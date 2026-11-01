@@ -336,17 +336,21 @@ WebSocket側は`graphql-ws`の`makeServer()`を利用する。
 
 Loutre WebSocket contextを`graphql-ws`が要求するsocket interfaceへadapterする。
 
-接続処理の拡張はRuntimeの`ws`へまとめる。ConnectionInit handlerで型付きstateを渡し、追加のprotocol制御には`graphql-ws`の`onConnect` / `onDisconnect` / `onClose`を利用する。native hookにはopening requestと接続のsignalを`extra`へ渡し、引数・戻り値の意味を維持する。
+接続処理の拡張はRuntimeの`ws`へまとめる。ConnectionInit handlerの戻り値から型付きstateを受け取り、終了処理には`graphql-ws`の`onDisconnect` / `onClose`を利用する。native hookにはopening requestと接続のsignalを`extra`へ渡し、引数・戻り値の意味を維持する。
 
 LoutreはDI、接続とoperationの寿命、型、cleanupを所有する。認証方式、利用者の形、再認証の頻度はアプリ側で決める。HTTP middlewareやContextから同じサービスを呼ぶためだけに、共通authenticate、予約されたidentity、認証Policyを追加しない。通常HTTPの認証middlewareの仕様も変更しない。
 
-schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#その他のwsライフサイクル)を正本とする。
+schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#接続終了のライフサイクル)を正本とする。
 
 方式別の認証例は[GraphQL認証example](../../examples/graphql-auth/README.md)を正本とする。HTTPは既存middlewareへ認証を置き、GraphQL WSはendpointのfactory内のwsへライフサイクルを直接定義する。HTTPとWSを同じ抽象度のlayerへ揃えることを目的にしない。
 
-外側のhttp / wsは有効化や静的設定、factoryはDIしたサービスを使う実行時handlerとContext生成を所有する。connectionInitの`return next(state)`からstateの型を推論し、HTTPの認証結果と同じ形ならContext・Resolverを共通化する。stateはACK payloadとは分離する。
+外側のhttp / wsは有効化や静的設定、factoryはDIしたサービスを使う実行時handlerとContext生成を所有する。connectionInitの戻り値からstateの型を推論し、HTTPの認証結果と同じ形ならContext・Resolverを共通化する。stateはACK payloadとは分離する。
 
-WS専用layerの宣言、遅延DI resolver、layer依存のためのWebSocket metadataは設けない。認証の依存はendpoint factoryのinjectからcanonical Modelへ登録する。protocolの開始・終了処理はGraphQL adapterが所有し、ConnectionInit handlerの継続と後処理を接続の寿命へ結び付ける。operationのcleanup後に継続を完了し、前処理中の中断では非協調的な処理を無期限に待たない。
+WS専用layerの宣言や継続処理、遅延DI resolverを追加しない。ConnectionInitはstateまたはConnectionRejectedを返すprotocol handlerとし、HTTP Responseやmiddlewareのnextを要求しない。接続開始の入口をconnectionInitに一本化し、同じタイミングのonConnectを重ねて公開しない。ConnectionRejectedはGraphQL adapterが提供する接続拒否の結果であり、認証方式を定義しない。指定した公開理由を4403のclose reasonへ渡し、通常の例外は1011として区別する。認証の依存はendpoint factoryのinjectからcanonical Modelへ登録する。
+
+HTTPは既定で有効、WSは既定で無効とし、一方の設定から他方の有効性を変えない。factory().wsの指定には静的なWS有効化を要求し、型とModel構築の両方で矛盾を拒否する。静的な有効化はhost capabilityとcanonical Modelの構築に必要なため、factoryの実行結果からtransportを追加しない。
+
+接続終了時にはoperationと購読の終了処理を待ち、nativeの終了フックへstateを渡す。init前・拒否時はstateがない。前処理中の中断では非協調的なhandlerを無期限に待たず、遅いstateを公開しない。
 
 1 connection上で複数operationが同時実行されるため、message receive loopはoperation処理を逐次blockしない。
 

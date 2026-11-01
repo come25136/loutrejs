@@ -43,7 +43,10 @@ export function validateEndpointSchema(schema: GraphQLSchema) {
   }
 }
 
-export function validateRuntime(runtime: GraphQLRuntime): GraphQLRuntime {
+export function validateRuntime(
+  runtime: GraphQLRuntime<any, any, any>,
+  wsEnabled: boolean,
+): GraphQLRuntime<any, any, any> {
   if (!runtime || typeof runtime.context !== 'function')
     throw new TypeError('GraphQL factoryはcontext関数を返してください。')
   if ('rootValue' in runtime)
@@ -51,16 +54,16 @@ export function validateRuntime(runtime: GraphQLRuntime): GraphQLRuntime {
       'rootValueは廃止しました。schemaへresolve / subscribeを登録してください。',
     )
   if (runtime.ws !== undefined) {
+    if (!wsEnabled)
+      throw new TypeError(
+        'factory内のwsを使うには、endpointのwsを有効にしてください。',
+      )
     if (runtime.ws === null || typeof runtime.ws !== 'object')
       throw new TypeError(
         'GraphQL wsは接続フックのオブジェクトを指定してください。',
       )
     for (const [name, hook] of Object.entries(runtime.ws)) {
-      if (
-        !['connectionInit', 'onConnect', 'onDisconnect', 'onClose'].includes(
-          name,
-        )
-      )
+      if (!['connectionInit', 'onDisconnect', 'onClose'].includes(name))
         throw new TypeError(
           `GraphQL ws.${name}は公開する接続フックではありません。`,
         )

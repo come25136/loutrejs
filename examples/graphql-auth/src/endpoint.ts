@@ -1,4 +1,4 @@
-import { graphql } from '@loutrejs/graphql'
+import { graphql, ConnectionRejected } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
 import { Users } from './auth/users.js'
 import { httpBearerAuthentication } from './auth/bearer.js'
@@ -18,14 +18,12 @@ export const ProfileBearerGraphQL = graphql.endpoint({
   ws: true,
   factory: (users = inject(Users)) => ({
     ws: {
-      connectionInit: async ({ payload, signal }, next) => {
-        signal.throwIfAborted()
+      connectionInit: ({ payload }) => {
         const user = users.authenticate({
           authorization: payload?.authorization,
         })
-        if (!user)
-          return Response.json({ error: '認証が必要です。' }, { status: 401 })
-        return next({ currentUser: { id: user.id } })
+        if (!user) return new ConnectionRejected('認証が必要です。')
+        return { currentUser: { id: user.id } }
       },
     },
     context: ({ state, signal }) => ({
@@ -44,12 +42,10 @@ export const ProfileApiKeyGraphQL = graphql.endpoint({
   ws: true,
   factory: (users = inject(Users)) => ({
     ws: {
-      connectionInit: async ({ payload, signal }, next) => {
-        signal.throwIfAborted()
+      connectionInit: ({ payload }) => {
         const user = users.authenticate({ apiKey: payload?.apiKey })
-        if (!user)
-          return Response.json({ error: '認証が必要です。' }, { status: 401 })
-        return next({ currentUser: { id: user.id } })
+        if (!user) return new ConnectionRejected('認証が必要です。')
+        return { currentUser: { id: user.id } }
       },
     },
     context: ({ state, signal }) => ({

@@ -24,7 +24,6 @@ import type {
 import type { GraphQLEndpointDefinition } from './types.js'
 export type {
   GraphQLConnectionInitContext,
-  GraphQLConnectionInitNext,
   GraphQLConnectionInitHandler,
   GraphQLHttpContextInput,
   GraphQLWebSocketContextInput,
@@ -36,15 +35,12 @@ export type {
 } from './types.js'
 export type { GraphQLManifest } from './manifest-internal.js'
 export * from './data.js'
+export { ConnectionRejected } from './connection-rejected.js'
 
 type HttpOptions = GraphQLEndpointDefinition['http']
 type WebSocketOptions = GraphQLEndpointDefinition['ws']
 type Enabled<T> = [Exclude<T, false | undefined>] extends [never] ? false : true
-type HttpEnabled<THttp, TWs> = [THttp] extends [undefined]
-  ? [TWs] extends [undefined]
-    ? true
-    : false
-  : Enabled<THttp>
+type HttpEnabled<THttp> = [THttp] extends [undefined] ? true : Enabled<THttp>
 
 type HttpState<THttp> = THttp extends {
   readonly middlewares: infer TLayers extends NonNullable<
@@ -54,7 +50,7 @@ type HttpState<THttp> = THttp extends {
   ? LayerState<TLayers>
   : {}
 type EndpointInput<THttp, TWs, TState extends object> =
-  | (HttpEnabled<THttp, TWs> extends true
+  | (HttpEnabled<THttp> extends true
       ? GraphQLHttpContextInput<HttpState<THttp>>
       : never)
   | (Enabled<TWs> extends true ? GraphQLWebSocketContextInput<TState> : never)
@@ -64,7 +60,7 @@ export type GraphQLEndpoint<
   TWs extends WebSocketOptions = undefined,
 > = ExecutionGroup<
   readonly (
-    | (HttpEnabled<THttp, TWs> extends true
+    | (HttpEnabled<THttp> extends true
         ? ExecutionDefinition<typeof http.extension>
         : never)
     | (Enabled<TWs> extends true ? WebSocketExecutionDefinition : never)
@@ -98,7 +94,8 @@ export function defineGraphQLEndpoint<
       NoInfer<TContext>,
       EndpointInput<THttp, TWs, NoInfer<TState>>,
       TState
-    >
+    > &
+      (Enabled<TWs> extends true ? {} : { readonly ws?: never })
   },
 ): GraphQLEndpoint<THttp, TWs> {
   if (typeof definition.factory !== 'function')
@@ -109,8 +106,7 @@ export function defineGraphQLEndpoint<
     )
   const bound = getManifest(definition.manifest)
   validateEndpointSchema(bound.schema)
-  const httpOptions: HttpOptions =
-    definition.http ?? definition.ws === undefined
+  const httpOptions: HttpOptions = definition.http ?? true
   const wsOptions: WebSocketOptions = definition.ws ?? false
   if (!httpOptions && !wsOptions)
     throw new TypeError('GraphQLのHTTPかWSを一つ以上有効にしてください。')
@@ -132,7 +128,7 @@ export function defineGraphQLEndpoint<
               : [],
         },
         factory: () => {
-          const runtime = validateRuntime(definition.factory())
+          const runtime = validateRuntime(definition.factory(), !!wsOptions)
           return async (context) => {
             const input: GraphQLHttpContextInput = {
               transport: 'http',
@@ -201,7 +197,7 @@ export function defineGraphQLEndpoint<
           },
         }),
         factory: () => {
-          const runtime = validateRuntime(definition.factory())
+          const runtime = validateRuntime(definition.factory(), !!wsOptions)
           return {
             endpoint: (context) =>
               serveGraphQLWebSocket(context, bound, runtime, options),

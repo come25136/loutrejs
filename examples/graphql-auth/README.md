@@ -25,15 +25,16 @@ npm run start --workspace @loutrejs/example-graphql-auth
 ## 宣言とDI
 
 ```ts
+import { ConnectionRejected } from '@loutrejs/graphql'
+
 http: { middlewares: [httpBearerAuthentication] },
 ws: true,
 factory: (users = inject(Users)) => ({
   ws: {
-    connectionInit: async ({ payload, signal }, next) => {
-      signal.throwIfAborted()
+    connectionInit: async ({ payload }) => {
       const user = users.authenticate({ authorization: payload?.authorization })
-      if (!user) return Response.json({ error: '認証が必要です。' }, { status: 401 })
-      return next({ currentUser: { id: user.id } })
+      if (!user) return new ConnectionRejected('認証が必要です。')
+      return { currentUser: { id: user.id } }
     },
   },
   context: ({ state, signal }) => ({
@@ -44,7 +45,7 @@ factory: (users = inject(Users)) => ({
 })
 ```
 
-[endpoint.ts](./src/endpoint.ts)は、認証方式ごとにGraphQL endpointを定義します。HTTPは[bearer.ts](./src/auth/bearer.ts)と[api-key.ts](./src/auth/api-key.ts)のmiddlewareを使います。WSのライフサイクルはendpointのfactory内にまとめ、そこでDIしたUsersを使います。HTTP middlewareとConnectionInit handlerは`next({ currentUser })`で同じ形のstateを渡します。
+[endpoint.ts](./src/endpoint.ts)は、認証方式ごとにGraphQL endpointを定義します。HTTPは[bearer.ts](./src/auth/bearer.ts)と[api-key.ts](./src/auth/api-key.ts)のmiddlewareを使います。WSのライフサイクルはendpointのfactory内にまとめ、そこでDIしたUsersを使います。HTTP middlewareは`next({ currentUser })`、ConnectionInit handlerは`return { currentUser }`で同じ形のstateを渡します。
 
 Context・Resolverは認証方式とtransportに依存しません。stateにはユーザーIDを保持し、表示データはUsersから最新値を取得します。stateや資格情報をACK payloadへ送りません。
 

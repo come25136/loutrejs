@@ -122,7 +122,10 @@ it.each(cases)(
         const rejected = server
           .client(auth.pattern, payload, auth.headers)
           .iterate({ query: '{viewer{id}}' })
-        await expect(rejected.next()).rejects.toMatchObject({ code: 4403 })
+        await expect(rejected.next()).rejects.toMatchObject({
+          code: 4403,
+          reason: '認証が必要です。',
+        })
       }
     } finally {
       await server.close()

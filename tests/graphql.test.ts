@@ -9,11 +9,11 @@ import {
 } from 'graphql'
 import {
   graphql,
+  ConnectionRejected,
   type GraphQLContextInput,
   type GraphQLRuntime,
   type GraphQLWebSocketHooks,
   type GraphQLConnectionInitHandler,
-  type GraphQLConnectionInitContext,
 } from '@loutrejs/graphql'
 import {
   bootstrapApplication,
@@ -621,9 +621,9 @@ describe('GraphQL HTTP', () => {
 })
 
 describe('GraphQL WebSocket', () => {
-  it('DIした接続フックへpayload・Request・signalを渡し、完了後に標準のackを返す', async () => {
-    let accept!: (payload: Record<string, unknown>) => void
-    const onConnect = vi.fn<NonNullable<GraphQLWebSocketHooks['onConnect']>>(
+  it('factoryでDIしたhandlerへpayload・Request・signalを渡し、戻り値をprivateなstateにする', async () => {
+    let accept!: (state: Record<string, unknown>) => void
+    const connectionInit = vi.fn<GraphQLConnectionInitHandler>(
       () =>
         new Promise((resolve) => {
           accept = resolve
@@ -632,7 +632,7 @@ describe('GraphQL WebSocket', () => {
     const api = await fixture({
       makeWebSocketHooks(greeting) {
         expect(greeting).toBe('hello DI')
-        return { onConnect }
+        return { connectionInit }
       },
     })
     try {
@@ -641,19 +641,15 @@ describe('GraphQL WebSocket', () => {
         type: 'connection_init',
         payload: { credential: { custom: 123 } },
       })
-      await vi.waitFor(() => expect(onConnect).toHaveBeenCalledTimes(1))
-      const input = onConnect.mock.calls[0]![0]
-      expect(input.connectionParams).toEqual({ credential: { custom: 123 } })
-      expect(input.extra.request.url).toBe('http://test/graphql')
-      expect(input.extra.request.headers.get('x-api-key')).toBe('header-value')
-      expect(input.extra.signal.aborted).toBe(false)
+      await vi.waitFor(() => expect(connectionInit).toHaveBeenCalledTimes(1))
+      const input = connectionInit.mock.calls[0]![0]
+      expect(input.payload).toEqual({ credential: { custom: 123 } })
+      expect(input.request.headers.get('x-api-key')).toBe('header-value')
+      expect(input.signal.aborted).toBe(false)
       expect(connection.sent).toEqual([])
-      expect(api.contexts).toEqual([])
-      accept({ ready: true })
+      accept({ secret: 'private' })
       await connection.wait('connection_ack')
-      expect(connection.sent).toEqual([
-        { type: 'connection_ack', payload: { ready: true } },
-      ])
+      expect(connection.sent).toEqual([{ type: 'connection_ack' }])
       for (const id of ['one', 'two']) {
         connection.send({
           id,
@@ -662,56 +658,49 @@ describe('GraphQL WebSocket', () => {
         })
         await connection.wait('complete', id)
       }
-      expect(onConnect).toHaveBeenCalledTimes(1)
+      expect(connectionInit).toHaveBeenCalledTimes(1)
       expect(api.contexts).toHaveLength(2)
       expect(api.contexts[0]).toMatchObject({
         transport: 'websocket',
-        connectionParams: input.connectionParams,
-        request: input.extra.request,
+        connectionParams: input.payload,
+        request: input.request,
+        state: { secret: 'private' },
       })
-      expect(api.contexts[0]).not.toHaveProperty('identity')
+      expect(api.contexts[0]!.state).toBe(api.contexts[1]!.state)
+      expect(Object.isFrozen(api.contexts[0]!.state)).toBe(true)
     } finally {
-      accept?.({ ready: false })
+      accept?.({})
       await api.app.close()
     }
   })
 
   it.each([false, true])(
-    '接続フックの非同期=%sのfalseを4403拒否へ委譲する',
+    'ConnectionInitの非同期=%sのConnectionRejectedを理由付きで通知する',
     async (asyncResult) => {
-      const onConnect = vi.fn(() =>
-        asyncResult ? Promise.resolve(false) : false,
+      const connectionInit = vi.fn<GraphQLConnectionInitHandler>(() =>
+        asyncResult
+          ? Promise.resolve(new ConnectionRejected('認証が必要です。'))
+          : new ConnectionRejected('認証が必要です。'),
       )
       const onDisconnect = vi.fn(),
-        onClose = vi.fn()
+        onClose = vi.fn<NonNullable<GraphQLWebSocketHooks['onClose']>>()
       const api = await fixture({
-        websocketHooks: { onConnect, onDisconnect, onClose },
+        websocketHooks: { connectionInit, onDisconnect, onClose },
       })
       try {
         const connection = await api.open()
         connection.send({ type: 'connection_init' })
-        expect((await connection.channel.connection.closed).code).toBe(4403)
+        expect(await connection.channel.connection.closed).toMatchObject({
+          code: 4403,
+          reason: '認証が必要です。',
+        })
         await api.app.close()
         expect(connection.sent).toEqual([])
         expect(api.contexts).toEqual([])
-        expect(onConnect).toHaveBeenCalledTimes(1)
+        expect(connectionInit).toHaveBeenCalledOnce()
         expect(onDisconnect).not.toHaveBeenCalled()
-        expect(onClose).toHaveBeenCalledTimes(1)
-      } finally {
-        await api.app.close()
-      }
-    },
-  )
-
-  it.each([true, undefined])(
-    '接続フックの戻り値=%sならpayloadなしでackする',
-    async (result) => {
-      const api = await fixture({ websocketHooks: { onConnect: () => result } })
-      try {
-        const connection = await api.open()
-        connection.send({ type: 'connection_init' })
-        await connection.wait('connection_ack')
-        expect(connection.sent).toEqual([{ type: 'connection_ack' }])
+        expect(onClose).toHaveBeenCalledOnce()
+        expect(onClose.mock.calls[0]![0].extra.state).toBeUndefined()
       } finally {
         await api.app.close()
       }
@@ -719,23 +708,22 @@ describe('GraphQL WebSocket', () => {
   )
 
   it.each([false, true])(
-    '接続フックの非同期=%sの障害で内部情報を送信しない',
+    'ConnectionInitの非同期=%sの障害で内部情報を送信しない',
     async (asyncResult) => {
       const failure = new Error('公開してはいけない接続情報')
       const api = await fixture({
-        websocketHooks: {
-          onConnect() {
-            if (asyncResult) return Promise.reject(failure)
-            throw failure
-          },
+        connectionInit() {
+          if (asyncResult) return Promise.reject(failure)
+          throw failure
         },
       })
       try {
         const connection = await api.open()
         connection.send({ type: 'connection_init' })
-        const closed = await connection.channel.connection.closed
-        expect(closed.code).toBe(1011)
-        expect(closed.reason).toBe('Internal server error')
+        expect(await connection.channel.connection.closed).toMatchObject({
+          code: 1011,
+          reason: 'Internal server error',
+        })
         expect(connection.sent).toEqual([])
       } finally {
         await api.app.close()
@@ -743,42 +731,44 @@ describe('GraphQL WebSocket', () => {
     },
   )
 
-  it('init前の終了はonCloseだけを呼び出す', async () => {
-    const onConnect = vi.fn(),
+  it('init前の終了はstateなしでonCloseだけを呼び出す', async () => {
+    const connectionInit = vi.fn(() => ({})),
       onDisconnect = vi.fn()
     const onClose = vi.fn<NonNullable<GraphQLWebSocketHooks['onClose']>>()
     const api = await fixture({
-      websocketHooks: { onConnect, onDisconnect, onClose },
+      websocketHooks: { connectionInit, onDisconnect, onClose },
     })
     try {
       const connection = await api.open()
       await connection.channel.connection.close(1000, '開始前の終了')
       await api.app.close()
-      expect(onConnect).not.toHaveBeenCalled()
+      expect(connectionInit).not.toHaveBeenCalled()
       expect(onDisconnect).not.toHaveBeenCalled()
-      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(onClose).toHaveBeenCalledOnce()
       expect(onClose.mock.calls[0]![0].extra.signal.aborted).toBe(true)
+      expect(onClose.mock.calls[0]![0].extra.state).toBeUndefined()
       expect(onClose.mock.calls[0]!.slice(1)).toEqual([1000, '開始前の終了'])
     } finally {
       await api.app.close()
     }
   })
 
-  it('接続終了時に購読を解放してからonDisconnectとonCloseを同じ接続入力で呼ぶ', async () => {
+  it('購読を解放してからonDisconnectとonCloseへ同じ接続のstateを渡す', async () => {
     const callbacks: string[] = []
-    const onConnect = vi.fn<NonNullable<GraphQLWebSocketHooks['onConnect']>>()
     const api = await fixture({
       websocketHooks: {
-        onConnect,
+        connectionInit: () => ({ user: 'alice' }),
         onDisconnect(connection, code, reason) {
           callbacks.push('disconnect')
-          expect(api.stream.cleanup).toHaveBeenCalledTimes(1)
-          expect(connection.extra).toBe(onConnect.mock.calls[0]![0].extra)
+          expect(api.stream.cleanup).toHaveBeenCalledOnce()
+          expect(connection.extra.state).toBe(api.contexts[0]!.state)
+          expect(connection.extra.request).toBe(api.contexts[0]!.request)
           expect(connection.extra.signal.aborted).toBe(true)
           expect([code, reason]).toEqual([1000, '終了'])
         },
-        onClose() {
+        onClose(connection) {
           callbacks.push('close')
+          expect(connection.extra.state).toBe(api.contexts[0]!.state)
         },
       },
     })
@@ -795,7 +785,94 @@ describe('GraphQL WebSocket', () => {
       await connection.channel.connection.close(1000, '終了')
       await api.app.close()
       expect(callbacks).toEqual(['disconnect', 'close'])
-      expect(api.stream.cleanup).toHaveBeenCalledTimes(1)
+      expect(api.stream.cleanup).toHaveBeenCalledOnce()
+    } finally {
+      await api.app.close()
+    }
+  })
+
+  it.each([false, true])(
+    'onDisconnectの失敗後もonCloseを呼び、onClose失敗=%sも回収する',
+    async (closeFails) => {
+      const disconnectFailure = new Error('切断処理の失敗')
+      const closeFailure = new Error('解放処理の失敗')
+      const resource = { open: true }
+      const api = await fixture({
+        websocketHooks: {
+          connectionInit: () => ({ resource }),
+          onDisconnect() {
+            throw disconnectFailure
+          },
+          onClose({ extra }) {
+            expect(extra.state).toEqual({ resource })
+            resource.open = false
+            if (closeFails) throw closeFailure
+          },
+        },
+      })
+      try {
+        const connection = await api.open()
+        connection.send({ type: 'connection_init' })
+        await connection.wait('connection_ack')
+        await api.app.close()
+        expect(resource.open).toBe(false)
+        const session = api.trace.traces.find(
+          (trace) => trace.kind === 'websocket.session',
+        )!
+        if (closeFails) {
+          expect(session.fail.mock.calls[0]![0]).toBeInstanceOf(AggregateError)
+          expect(session.fail.mock.calls[0]![0].errors).toEqual([
+            disconnectFailure,
+            closeFailure,
+          ])
+        } else expect(session.fail).toHaveBeenCalledWith(disconnectFailure)
+        expect(session.complete).toHaveBeenCalledOnce()
+      } finally {
+        await api.app.close()
+      }
+    },
+  )
+
+  it('購読の解放が失敗してもonCloseで接続resourceを解放する', async () => {
+    const failure = new Error('購読の解放失敗')
+    const resource = { open: true }
+    const stream = source()
+    const release = vi.fn(async () => {
+      await stream.iterator.return()
+      throw failure
+    })
+    const onClose = vi.fn<NonNullable<GraphQLWebSocketHooks['onClose']>>(
+      ({ extra }) => {
+        expect(extra.state).toEqual({ resource })
+        resource.open = false
+      },
+    )
+    const api = await fixture({
+      websocketHooks: { connectionInit: () => ({ resource }), onClose },
+      subscription: () => ({ ...stream.iterator, return: release }),
+    })
+    try {
+      const connection = await api.open()
+      connection.send({ type: 'connection_init' })
+      await connection.wait('connection_ack')
+      connection.send({
+        id: 's',
+        type: 'subscribe',
+        payload: { query: 'subscription {trips{id}}' },
+      })
+      await vi.waitFor(() => expect(api.contexts).toHaveLength(1))
+      await api.app.close()
+      expect(onClose).toHaveBeenCalledOnce()
+      expect(release).toHaveBeenCalledOnce()
+      expect(resource.open).toBe(false)
+      expect(
+        api.trace.traces.every(
+          (trace) => trace.complete.mock.calls.length === 1,
+        ),
+      ).toBe(true)
+      expect(
+        api.trace.traces.some((trace) => trace.fail.mock.calls.length > 0),
+      ).toBe(true)
     } finally {
       await api.app.close()
     }
@@ -840,43 +917,8 @@ describe('GraphQL WebSocket', () => {
     },
   )
 
-  it.each(['disconnect', 'drain'] as const)(
-    '接続フックが中断に協調しなくても%sで終了し、遅いackを送らない',
-    async (stop) => {
-      let accept!: (value: boolean) => void
-      const onConnect = vi.fn<NonNullable<GraphQLWebSocketHooks['onConnect']>>(
-        () =>
-          new Promise((resolve) => {
-            accept = resolve
-          }),
-      )
-      const onDisconnect = vi.fn(),
-        onClose = vi.fn()
-      const api = await fixture({
-        websocketHooks: { onConnect, onDisconnect, onClose },
-      })
-      try {
-        const connection = await api.open()
-        connection.send({ type: 'connection_init' })
-        await vi.waitFor(() => expect(onConnect).toHaveBeenCalledTimes(1))
-        if (stop === 'disconnect') await connection.channel.connection.close()
-        await api.app.close()
-        expect(onConnect.mock.calls[0]![0].extra.signal.aborted).toBe(true)
-        accept(true)
-        expect(connection.sent).toEqual([])
-        expect(onDisconnect).not.toHaveBeenCalled()
-        expect(onClose).toHaveBeenCalledTimes(1)
-      } finally {
-        accept?.(false)
-        await api.app.close()
-      }
-    },
-  )
-
   it('別接続のextraと任意のContextを混同しない', async () => {
-    const onConnect = vi.fn(() => true)
     const api = await fixture({
-      websocketHooks: { onConnect },
       makeContext(input) {
         return {
           greeting:
@@ -1517,7 +1559,7 @@ describe('GraphQLのresolver契約', () => {
   it.each([
     ['ws', true],
     ['ws', null],
-    ['onConnect', { onConnect: true }],
+    ['onConnect', { onConnect() {} }],
     ['connectionInit', { connectionInit: true }],
     ['schema', { schema: {} }],
     ['onSubscribe', { onSubscribe: () => undefined }],
@@ -1528,6 +1570,7 @@ describe('GraphQLのresolver契約', () => {
       schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
       const endpoint = graphql.endpoint({
         name: 'InvalidHooks',
+        ws: true,
         path: '/graphql',
         manifest: manifestFromSchema(schema),
         factory: (() => ({ context: () => ({}), ws: hooks })) as never,
@@ -1661,20 +1704,6 @@ it.each([false, true])(
   },
 )
 
-function connectionInitHandler(
-  run: (
-    input: GraphQLConnectionInitContext,
-  ) =>
-    | Record<string, unknown>
-    | Response
-    | Promise<Record<string, unknown> | Response>,
-): GraphQLConnectionInitHandler {
-  return async (input, next) => {
-    const state = await run(input)
-    return state instanceof Response ? state : next(state)
-  }
-}
-
 describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
   it('HTTP middlewareとConnectionInitを別々に実行し、それぞれのstateを渡す', async () => {
     const calls: string[] = []
@@ -1687,10 +1716,10 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
     })
     const api = await fixture({
       middleware: [httpLayer],
-      connectionInit: connectionInitHandler(() => {
+      connectionInit: () => {
         calls.push('ws')
         return { user: 'ws-user' }
-      }),
+      },
     })
     try {
       await (await api.fetchGraphQL('{hello}')).text()
@@ -1720,14 +1749,15 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
       service = inject(Authentication),
     ): GraphQLConnectionInitHandler => {
       let count = 0
-      return async ({ payload }, next) =>
-        next({ secret: service.value + payload?.id, count: ++count })
+      return async ({ payload }) => ({
+        secret: service.value + payload?.id,
+        count: ++count,
+      })
     }
     const api = await fixture({
       http: false,
       makeConnectionInit,
       providers: [Authentication],
-      websocketHooks: { onConnect: () => ({ ready: true }) },
     })
     try {
       const first = await api.open(),
@@ -1770,7 +1800,6 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
       )
       expect(first.sent[0]).toEqual({
         type: 'connection_ack',
-        payload: { ready: true },
       })
       expect(JSON.stringify(first.sent)).not.toContain('private')
     } finally {
@@ -1781,31 +1810,29 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
     )
   })
 
-  it('Responseによる短絡をHTTPの応答とWSの拒否へ接続する', async () => {
-    const hook = vi.fn()
+  it('HTTPはResponseを返し、WSはConnectionRejectedで拒否する', async () => {
     const api = await fixture({
       middleware: [
         http.middleware({
           name: 'HTTP拒否',
           factory: () => async () =>
-            Response.json({ secret: 'private' }, { status: 401 }),
+            Response.json({ error: '認証が必要です。' }, { status: 401 }),
         }),
       ],
-      connectionInit: connectionInitHandler(() =>
-        Response.json({ secret: 'private' }, { status: 401 }),
-      ),
-      websocketHooks: { onConnect: hook },
+      connectionInit: () => new ConnectionRejected('認証が必要です。'),
     })
     try {
       const response = await api.fetchGraphQL('{hello}')
       expect(response.status).toBe(401)
-      expect(await response.json()).toEqual({ secret: 'private' })
+      expect(await response.json()).toEqual({ error: '認証が必要です。' })
       const connection = await api.open()
       connection.send({ type: 'connection_init' })
-      expect((await connection.channel.connection.closed).code).toBe(4403)
+      expect(await connection.channel.connection.closed).toMatchObject({
+        code: 4403,
+        reason: '認証が必要です。',
+      })
       expect(connection.sent).toEqual([])
       expect(api.contexts).toEqual([])
-      expect(hook).not.toHaveBeenCalled()
     } finally {
       await api.app.close()
     }
@@ -1816,15 +1843,13 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
     async (mode) => {
       let resolve!: (value: Record<string, unknown>) => void
       let signal!: AbortSignal
-      const hook = vi.fn()
       const api = await fixture({
-        connectionInit: connectionInitHandler((input) => {
+        connectionInit: (input) => {
           signal = input.signal
           return new Promise((done) => {
             resolve = done
           })
-        }),
-        websocketHooks: { onConnect: hook },
+        },
       })
       try {
         const connection = await api.open()
@@ -1839,7 +1864,6 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
         await Promise.resolve()
         expect(connection.sent).toEqual([])
         expect(api.contexts).toEqual([])
-        expect(hook).not.toHaveBeenCalled()
         expect(
           api.trace.traces.every(
             (trace) => trace.complete.mock.calls.length === 1,
@@ -1852,23 +1876,24 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
     },
   )
 
-  it('ConnectionInitの後処理はoperationの終了処理までresourceを保持する', async () => {
+  it('stateのresourceを購読の終了処理まで保持し、onCloseで解放する', async () => {
     const events: string[] = []
     const stream = source()
     let resource!: { open: boolean }
-    const handler: GraphQLConnectionInitHandler = async (_input, next) => {
-      resource = { open: true }
-      events.push('接続開始')
-      try {
-        return await next({ resource })
-      } finally {
-        resource.open = false
-        events.push('接続解放')
-      }
-    }
     const api = await fixture({
       http: false,
-      connectionInit: handler,
+      websocketHooks: {
+        connectionInit: () => {
+          resource = { open: true }
+          events.push('接続開始')
+          return { resource }
+        },
+        onClose({ extra }) {
+          if (!extra.state) return
+          resource.open = false
+          events.push('接続解放')
+        },
+      },
       subscription: () => ({
         ...stream.iterator,
         return: async () => {
@@ -1886,11 +1911,10 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
       const connection = await api.open()
       connection.send({ type: 'connection_init' })
       await connection.wait('connection_ack')
-      expect(events).toEqual(['接続開始'])
       connection.send({
         id: '1',
         type: 'subscribe',
-        payload: { query: 'subscription {trips {id}}' },
+        payload: { query: 'subscription {trips{id}}' },
       })
       stream.push({ trips: { id: '1' } })
       await connection.wait('next', '1')
@@ -1904,24 +1928,21 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
   })
 
   it.each([
-    ['nextなし', async () => ({ secret: 'private' })],
-    ['不正なstate', async (_input, next) => next([])],
+    ['戻り値なし', () => undefined],
+    ['true', () => true],
+    ['false', () => false],
+    ['配列', () => []],
     [
-      '同期例外',
-      () => {
-        throw new Error('private')
-      },
+      'HTTP Response',
+      () => Response.json({ secret: 'private' }, { status: 401 }),
     ],
-    [
-      '非同期例外',
-      async () => {
-        throw new Error('private')
-      },
-    ],
-  ] satisfies readonly (readonly [string, GraphQLConnectionInitHandler])[])(
-    'ConnectionInitの%sを内部情報なしで終了する',
+  ])(
+    'JavaScriptからの不正なConnectionInit戻り値=%sを内部情報なしで拒否する',
     async (_name, handler) => {
-      const api = await fixture({ http: false, connectionInit: handler })
+      const api = await fixture({
+        http: false,
+        connectionInit: handler as never,
+      })
       try {
         const connection = await api.open()
         connection.send({ type: 'connection_init' })
@@ -1935,61 +1956,6 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
       }
     },
   )
-
-  it.each([false, true])(
-    'ConnectionInitのnext規約違反=%sも終了時に回収する',
-    async (twice) => {
-      const invalid: GraphQLConnectionInitHandler = async (_input, next) => {
-        if (twice) {
-          await next()
-          await next()
-        } else {
-          next()
-        }
-      }
-      const api = await fixture({ http: false, connectionInit: invalid })
-      try {
-        const connection = await api.open()
-        connection.send({ type: 'connection_init' })
-        await connection.wait('connection_ack')
-        await api.app.close()
-        expect(
-          api.trace.traces.some((trace) => trace.fail.mock.calls.length > 0),
-        ).toBe(true)
-        expect(
-          api.trace.traces.every(
-            (trace) => trace.complete.mock.calls.length === 1,
-          ),
-        ).toBe(true)
-      } finally {
-        await api.app.close()
-      }
-    },
-  )
-
-  it('ConnectionInitの終了処理が失敗してもsessionを解放する', async () => {
-    const handler: GraphQLConnectionInitHandler = async (_input, next) => {
-      await next()
-      throw new Error('後処理に失敗')
-    }
-    const api = await fixture({ http: false, connectionInit: handler })
-    try {
-      const connection = await api.open()
-      connection.send({ type: 'connection_init' })
-      await connection.wait('connection_ack')
-      await api.app.close()
-      expect(
-        api.trace.traces.some((trace) => trace.fail.mock.calls.length > 0),
-      ).toBe(true)
-      expect(
-        api.trace.traces.every(
-          (trace) => trace.complete.mock.calls.length === 1,
-        ),
-      ).toBe(true)
-    } finally {
-      await api.app.close()
-    }
-  })
 
   it('HTTPのstate上書きを既存のlayer規約で拒否する', async () => {
     const first = http.middleware<{ tenant: string }>({
@@ -2009,5 +1975,98 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
     } finally {
       await api.app.close()
     }
+  })
+})
+
+describe('GraphQLの設定と型に沿った実行', () => {
+  it('ConnectionInitが返したstateをoperationへ渡し、ACKには含めない', async () => {
+    const api = await fixture({ connectionInit: () => ({ secret: 'private' }) })
+    try {
+      const connection = await api.open()
+      connection.send({ type: 'connection_init' })
+      await connection.wait('connection_ack')
+      expect(connection.sent).toEqual([{ type: 'connection_ack' }])
+      connection.send({
+        id: '1',
+        type: 'subscribe',
+        payload: { query: '{hello}' },
+      })
+      await connection.wait('complete', '1')
+      expect(api.contexts[0]!.state).toEqual({ secret: 'private' })
+    } finally {
+      await api.app.close()
+    }
+  })
+
+  it.each([undefined, false])(
+    'WS有効化=%sでfactory内にhandlerを指定したらModel構築で拒否する',
+    (ws) => {
+      const schema = buildSchema('type Query { hello: String }')
+      schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
+      const endpoint = graphql.endpoint({
+        name: 'Invalid',
+        path: '/graphql',
+        manifest: manifestFromSchema(schema),
+        http: true,
+        ws,
+        factory: (() => ({
+          context: () => ({}),
+          ws: { connectionInit: () => ({}) },
+        })) as never,
+      })
+      const Module = defineModule(() => ({ executions: [endpoint] }))
+      const app = defineApplication({ modules: [Module()] })
+      expect(app.model.diagnostics).toContainEqual(
+        expect.objectContaining({
+          message: expect.stringContaining('wsを有効'),
+        }),
+      )
+    },
+  )
+
+  it.each([undefined, false, true, { connectionInitWaitTimeout: 3000 }])(
+    'WS設定=%sでも既定のHTTPを有効にする',
+    async (ws) => {
+      const schema = buildSchema('type Query { hello: String }')
+      schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
+      const endpoint = graphql.endpoint({
+        name: 'Defaults',
+        path: '/graphql',
+        manifest: manifestFromSchema(schema),
+        ws,
+        factory: () => ({ context: () => ({}) }),
+      })
+      const Module = defineModule(() => ({ executions: [endpoint] }))
+      const app = await bootstrapApplication({
+        application: defineApplication({ modules: [Module()] }),
+        capabilities: [
+          bindHttpServer({ runtime: 'test' }),
+          bindWebSocketServer({
+            runtime: 'test',
+            upgrade: async () => {
+              throw new Error('未使用')
+            },
+          }),
+        ],
+      })
+      try {
+        const response = await app.http.fetch(
+          new Request('http://test/graphql?query=%7Bhello%7D'),
+        )
+        expect(await response.json()).toEqual({ data: { hello: 'hello' } })
+      } finally {
+        await app.close()
+      }
+    },
+  )
+})
+
+describe('接続拒否の公開理由', () => {
+  it('理由を省略すると既定の日本語メッセージを使う', () => {
+    expect(new ConnectionRejected().reason).toBe('接続が拒否されました。')
+  })
+  it('理由の長さをUTF-8のバイト数で制限する', () => {
+    expect(() => new ConnectionRejected('あ'.repeat(41))).not.toThrow()
+    expect(() => new ConnectionRejected('あ'.repeat(42))).toThrow('123バイト')
   })
 })

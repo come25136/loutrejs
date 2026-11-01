@@ -1,3 +1,4 @@
+import type { ConnectionRejected } from './connection-rejected.js'
 import type { ServerOptions } from 'graphql-ws'
 import type { HttpRawDefinition } from '@loutrejs/loutre/http'
 import type { GraphQLManifest } from './manifest-internal.js'
@@ -30,15 +31,23 @@ export type GraphQLContextInput<
   | GraphQLHttpContextInput<THttpState>
   | GraphQLWebSocketContextInput<TWebSocketState>
 
-export interface GraphQLWebSocketExtra {
+export interface GraphQLWebSocketExtra<
+  TState extends object = Record<string, unknown>,
+> {
+  readonly state: Readonly<TState> | undefined
   readonly request: Request
   readonly signal: AbortSignal
 }
 
-export type GraphQLWebSocketHooks = Pick<
-  ServerOptions<Record<string, unknown> | undefined, GraphQLWebSocketExtra>,
-  'onConnect' | 'onDisconnect' | 'onClose'
->
+export type GraphQLWebSocketHooks<
+  TState extends object = Record<string, unknown>,
+> = Pick<
+  ServerOptions<
+    Record<string, unknown> | undefined,
+    GraphQLWebSocketExtra<NoInfer<TState>>
+  >,
+  'onDisconnect' | 'onClose'
+> & { readonly connectionInit?: GraphQLConnectionInitHandler<TState> }
 
 export interface GraphQLConnectionInitContext {
   readonly request: Request
@@ -46,25 +55,33 @@ export interface GraphQLConnectionInitContext {
   readonly payload: Readonly<Record<string, unknown>> | undefined
 }
 
-export interface GraphQLConnectionInitNext {
-  (): Promise<Readonly<{}>>
-  <TState extends object>(state: TState): Promise<Readonly<TState>>
-}
+type ConnectionState<TState extends object> = TState & {
+  readonly then?: never
+} & (TState extends
+    | Response
+    | ConnectionRejected
+    | PromiseLike<unknown>
+    | readonly unknown[]
+    | ((...args: never[]) => unknown)
+    ? never
+    : unknown)
 
-export type GraphQLConnectionInitHandler<TState extends object = object> = (
+export type GraphQLConnectionInitHandler<
+  TState extends object = Record<string, unknown>,
+> = (
   input: GraphQLConnectionInitContext,
-  next: GraphQLConnectionInitNext,
-) => void | Response | TState | Promise<void | Response | TState>
+) =>
+  | ConnectionRejected
+  | ConnectionState<TState>
+  | Promise<ConnectionRejected | ConnectionState<TState>>
 
 export interface GraphQLRuntime<
   TContext extends object = object,
   TInput extends GraphQLContextInput<object, object> = GraphQLContextInput,
-  TState extends object = object,
+  TState extends object = Record<string, unknown>,
 > {
   context(input: TInput): TContext | Promise<TContext>
-  readonly ws?: GraphQLWebSocketHooks & {
-    readonly connectionInit?: GraphQLConnectionInitHandler<TState>
-  }
+  readonly ws?: GraphQLWebSocketHooks<TState>
   formatError?(error: GraphQLError, input: TInput): GraphQLFormattedError
   // 既存のfactoryから構造的型付けで旧指定が紛れ込むことも拒否する。
   readonly rootValue?: never

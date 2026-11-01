@@ -4,7 +4,11 @@ import { once } from 'node:events'
 import { describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { buildSchema } from 'graphql'
-import { graphql, type GraphQLWebSocketHooks } from '@loutrejs/graphql'
+import {
+  graphql,
+  ConnectionRejected,
+  type GraphQLWebSocketHooks,
+} from '@loutrejs/graphql'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
 import { serverAudits } from 'graphql-http'
@@ -48,11 +52,11 @@ describe('Node native HTTP/WebSocket', () => {
     'native接続の%sをアプリ指定の接続フックで判断する',
     async (mode) => {
       const { app, url } = await create(true, {
-        onConnect({ connectionParams, extra }) {
-          return (
-            connectionParams?.secret === 'valid' ||
-            extra.request.headers.get('x-api-key') === 'valid'
-          )
+        connectionInit({ payload, request }) {
+          return payload?.secret === 'valid' ||
+            request.headers.get('x-api-key') === 'valid'
+            ? {}
+            : new ConnectionRejected('認証が必要です。')
         },
       })
       const socket = new WebSocket(
@@ -72,7 +76,9 @@ describe('Node native HTTP/WebSocket', () => {
               payload: { secret: 'invalid' },
             }),
           )
-          expect((await closed)[0]).toBe(4403)
+          const [code, reason] = await closed
+          expect(code).toBe(4403)
+          expect(String(reason)).toBe('認証が必要です。')
         } else {
           let received = once(socket, 'message')
           socket.send(
@@ -135,7 +141,7 @@ describe('Node native HTTP/WebSocket', () => {
           payload: { data: { hello: 'Hello World' } },
         })
         const response = await fetch(`${url}?query=%7Bhello%7D`)
-        expect(response.status).toBe(http ? 200 : 404)
+        expect(response.status).toBe(http !== false ? 200 : 404)
         await response.text()
         const closing = once(socket, 'close')
         await app.close()

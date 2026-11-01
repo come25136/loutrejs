@@ -46,35 +46,38 @@ WebSocketはgraphql-transport-ws subprotocolを使用します。Subscription So
 HTTPは`http.middlewares`へ既存のHTTP middlewareを指定します。GraphQL WSのライフサイクルは、DIしたサービスを使えるendpointの`factory().ws`へ直接書きます。外側の`ws`は有効化と待機時間などの静的設定です。
 
 ```ts
+import { ConnectionRejected } from '@loutrejs/graphql'
+
 http: { middlewares: [httpBearerAuthentication] },
 ws: true,
 factory: (users = inject(Users)) => ({
   ws: {
-    connectionInit: async ({ payload, signal }, next) => {
-      signal.throwIfAborted()
+    connectionInit: async ({ payload }) => {
       const user = users.authenticate({ authorization: payload?.authorization })
-      if (!user) return Response.json({ error: '認証が必要です。' }, { status: 401 })
-      return next({ currentUser: { id: user.id } })
+      if (!user) return new ConnectionRejected('認証が必要です。')
+      return { currentUser: { id: user.id } }
     },
   },
   context: ({ state, signal }) => ({ currentUser: state.currentUser, users, signal }),
 })
 ```
 
-ConnectionInit handlerは`request`・`payload`・接続の`signal`を受け取ります。`return next(state)`で認証結果を渡し、HTTP middlewareの結果と同じ`input.state`からContext・Resolverへ渡します。戻り値からstateの型を推論するため、後処理を囲む場合も`try { return await next(state) } finally { ... }`と書きます。
+ConnectionInit handlerは`request`・`payload`・接続の`signal`を受け取り、stateのオブジェクトを返します。同期・非同期のどちらも使え、戻り値から`context()`と`formatError()`のWS stateを推論します。HTTP middlewareの認証結果と同じ形なら、Context・Resolverを共通化できます。
 
-`next()`の完了は接続全体の処理終了を待ちます。handler内の後処理はoperationのcleanup後に実行されます。`next`を複数回呼んだり、呼び出した結果をawait / returnせずにhandlerを終了したりすることは拒否します。stateは最上位を読み取り専用にし、接続間で分離します。
+拒否する場合は`@loutrejs/graphql`の`ConnectionRejected`を返します。`new ConnectionRejected('認証が必要です。')`なら、クライアントへ4403とその理由を通知します。理由は公開情報として扱い、UTF-8で123バイト以内にします。省略時は「接続が拒否されました。」です。HTTP Response、boolean、戻り値の省略は受け付けません。stateはACK payloadへ送らず、最上位を読み取り専用にして接続ごとに保持します。
 
-`next`を呼ぶ前にResponseを返すと接続を拒否します。stateや拒否応答のbodyをACK payloadへ送りません。前処理中に切断・drainした場合は待機を終了し、遅い成功を公開しません。外部I/Oはsignalに協調させてください。
+前処理中に切断・drainした場合は待機を終了し、遅い成功を公開しません。非同期I/Oには接続のsignalを渡してください。前処理中に確保したresourceは、signalによる中断も含めてアプリ側で解放してください。
 
-### その他のWSライフサイクル
+### 接続終了のライフサイクル
 
-`factory().ws`は、`graphql-ws`の`onConnect`・`onDisconnect`・`onClose`も受け取ります。追加のprotocol制御が必要な場合に使い、引数・戻り値は依存ライブラリの規約に従います。`extra.request`はopening request、`extra.signal`は接続のsignalです。
+`factory().ws`の`onDisconnect`・`onClose`は`graphql-ws`の引数・戻り値に従います。`extra.request`はopening request、`extra.signal`は接続のsignal、`extra.state`はConnectionInitで受け取ったstateです。init前や拒否された接続ではstateは`undefined`です。
 
-ConnectionInit handlerの前処理後にonConnectを呼び、その完了後にACKします。onConnectの`false`は4403拒否、オブジェクトはクライアントへ送るACK payloadです。認証済み利用者をACK payloadへ保存しないでください。onDisconnectはACK済み接続、onCloseはACKされなかった接続も含む終了時に呼びます。終了フックはabort済みsignalでも終了を待ち、失敗してもoperation・iterator・sessionを解放します。
+onDisconnectはACK済み接続、onCloseはACK前を含む終了時に呼びます。購読の終了処理後に呼び出すため、接続中に保持するresourceはonCloseで解放できます。終了フックはabort済みsignalでも終了を待ちます。購読の終了処理やonDisconnectが失敗してもonCloseを呼び出し、失敗を集めて報告した後にsessionを解放します。
 
-HTTP middlewareとWSのライフサイクルを同じlayerへ揃える設定は設けません。認証方式・payloadのキー・再認証の方針はアプリ側で決めます。[方式別の認証example](../../examples/graphql-auth/README.md)を参照してください。
+接続開始の処理はconnectionInitへまとめます。認証方式・payloadのキー・再認証の方針はアプリ側で決めます。[方式別の認証example](../../examples/graphql-auth/README.md)を参照してください。
 
-`http`と`ws`を両方省略した場合はHTTPのみです。Node.js / Bun / Cloudflare Workersでは両transport、AWS LambdaではHTTPのみを使用できます。Runtimeは静的ESMとしてbundleでき、Schema fileの読み込みやNode専用APIを要求しません。
+HTTPは既定で有効です。`ws: true`や待機時間の設定を追加してもHTTPは無効になりません。WS専用にする場合は`http: false`を明示します。factory内にws handlerを置く場合は、外側でもWSを有効にしてください。有効化を忘れた設定は型チェックとApplication Modelの構築時に拒否します。
+
+`ws`の既定は無効です。Node.js / Bun / Cloudflare Workersでは両transport、AWS LambdaではHTTPのみを使用できます。Runtimeは静的ESMとしてbundleでき、Schema fileの読み込みやNode専用APIを要求しません。
 
 [生成・Data Resolutionガイド](../../docs/graphql-codegen.md)、[Counter server](../../examples/graphql-counter/README.md)、[HTTP / WSの認証例](../../examples/graphql-auth/README.md)、[注文server](../../examples/graphql-orders/README.md)、[transport ADR](../../docs/adr/loutre_graphql_transport_architecture.md)を参照してください。
