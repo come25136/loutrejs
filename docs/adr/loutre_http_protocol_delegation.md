@@ -26,6 +26,8 @@ Contractへprotocol routeを置いても、GraphQLの入出力をHTTP response v
 
 HTTP implementationからhandlerへ委任するAPIをexampleで示し、型付きHTTP state、WSの有効化に必要なhost capability、canonical Model、DI、branch継承、route conflict、CLIの解析結果を揃える。factoryの実行結果によってModelに現れないWS endpointが増える構造にはしない。
 
+配布パッケージのconsumer検証もgraphql.implementationを公開APIとして確認する。CIのJavaScript式やWebサイトのコード文字列は型チェックだけでは旧APIの残存を検出できないため、workflowの検証式を実行するテストと、tarballだけをインストールしたconsumerでの検証を行う。
+
 ```ts
 const Api = http.contract({
   health: {

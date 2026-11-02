@@ -34,6 +34,7 @@ export const resolvers = {
 
 const endpointSource = `import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
+import { http } from '@loutrejs/loutre/http'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
 import { resolvers } from './resolvers.js'
@@ -45,9 +46,13 @@ const manifest = bindManifest<AppContext>({
   resolvers,
 })
 
-export const endpoint = graphql.endpoint({
+const Api = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})
+
+export const endpoint = graphql.implementation({
   name: 'Counter',
-  path: '/graphql',
+  route: Api.routes.graphql,
   manifest,
   factory: (counter = inject(CounterStore)) => ({
     context: ({ signal }) => ({ counter, signal }),

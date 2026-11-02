@@ -61,3 +61,17 @@ watch対象・ファイルイベント・再構築回数を確認し、buildや�
 Vitestのit.eachで`$headersの場合は$expectedを返す`のようにproperty名へ日本語を直結すると、表示名がundefinedになった。置換するproperty名の境界を意図どおりに認識できないためで、テストの入力自体は渡っていた。
 
 失敗時は表示名と入力のオブジェクトを別々に確認する。`%j`による入力表示、またはproperty名の前後に空白を置く形式へ変更し、実行結果で各ケースを識別できることを確認する。日本語を含むテスト名ではplaceholderの境界を明示する。
+
+## 公開API変更後のpackage consumer CI
+
+### 発生条件・原因
+
+型チェック・単体・統合・runtime適合検証が成功する一方、tarballを入れるNode.js consumer jobだけがimport検証で失敗する場合。graphql.endpointを廃止してgraphql.implementationへ置き換えた際、ci.yml内のJavaScript式に旧API参照が残った。workflow内の式とWebサイト内のコード文字列はTypeScriptの型チェック対象にならない。
+
+### 安全な確認方法
+
+PRのhead SHAに対応する失敗jobとstepを調べ、インストールやimport自体の失敗と、import後のAPI検証の失敗を分ける。配布tarballだけを別の一時ディレクトリへインストールし、workflowと同じ式を実行する。リポジトリのnode_modulesへのsymlinkやsource aliasで配布検証を代用しない。
+
+### 復旧方法・再発防止策
+
+CIの検証対象を現行APIへ更新し、廃止APIの互換aliasを復活させて回避しない。workflowに書いたGraphQLの検証式も公開APIに対して実行するテストで確認する。公開APIを削除するときはCI・conformance・Webサイトのコード例も検索し、意図的な型エラーのテストと過去のCHANGELOGを除いて旧参照が残っていないことを調べる。

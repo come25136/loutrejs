@@ -1,4 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises'
+import { runInNewContext } from 'node:vm'
+import { graphql } from '@loutrejs/graphql'
 import { describe, expect, it } from 'vitest'
 
 const nativeSetupFiles = [
@@ -24,7 +26,7 @@ async function readCiJob(jobId: string): Promise<string> {
   const start = lines.findIndex((line) => line === `  ${jobId}:`)
 
   if (start < 0) {
-    throw new Error(`CI jobが見つかりません: ${jobId}`)
+    throw new Error(`CI job not found: ${jobId}`)
   }
 
   const end = lines.findIndex(
@@ -35,6 +37,16 @@ async function readCiJob(jobId: string): Promise<string> {
 }
 
 describe('native runtime CI isolation', () => {
+  it('Node.js consumerのGraphQL import検証を現行の公開APIで実行できる', async () => {
+    const source = await readCiJob('node-package-consumer')
+    const command = source.match(
+      /node --input-type=module -e "import \{ graphql \} from '@loutrejs\/graphql';\s*([^"]+)"/u,
+    )?.[1]
+    if (!command) throw new Error('GraphQL package smoke check was not found.')
+
+    expect(() => runInNewContext(command, { graphql })).not.toThrow()
+  })
+
   it.each(nativeSetupFiles)(
     '%sはNode.js setupやNode/npm commandへ依存しない',
     async (file) => {
