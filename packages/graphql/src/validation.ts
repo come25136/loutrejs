@@ -58,7 +58,10 @@ export function validateRuntime(
     )
 
   if (runtime.ws !== undefined) {
-    if (!wsEnabled) throw new TypeError('Enable ws before defining factory.ws.')
+    if (!wsEnabled)
+      throw new TypeError(
+        'Enable transports.websocket before defining factory.ws.',
+      )
     if (runtime.ws === null || typeof runtime.ws !== 'object')
       throw new TypeError(
         'GraphQL ws must be an object containing connection hooks.',

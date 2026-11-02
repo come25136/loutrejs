@@ -15,8 +15,7 @@ export const OrdersModule = defineModule(
           name: 'Orders',
           route: ApiContract.routes.graphql,
           manifest,
-          http: true,
-          ws: true,
+          transports: { http: true, websocket: true },
           factory: (commerce = inject(CommerceService)) => ({
             context: ({ signal }) => ({ commerce, signal }),
           }),

@@ -13,7 +13,7 @@ export const ProfileGraphQL = graphql.implementation({
   name: 'ProfileGraphQL',
   route: ApiContract.routes.graphql,
   manifest,
-  ws: true,
+  transports: { http: true, websocket: true },
   factory: (users = inject(Users)) => ({
     ws: {
       connectionInit: ({ payload }) => {

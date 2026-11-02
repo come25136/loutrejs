@@ -138,8 +138,7 @@ export const endpoint = graphql.implementation({
   name: 'Counter',
   route: Api.routes.graphql,
   manifest,
-  http: true,
-  ws: true,
+  transports: { http: true, websocket: true },
   factory: (counter = inject(CounterStore)) => ({
     context: ({ signal }) => ({ counter, signal }),
   }),
@@ -176,13 +175,15 @@ Endpointの`factory`から任意の`formatError(error, input)`を返すと、HTT
 
 ```ts
 import { ZodError } from 'zod'
+import { inject } from '@loutrejs/loutre'
+import { Logger } from '@loutrejs/loutre/runtime'
 
-factory: () => ({
+factory: (logger = inject(Logger)) => ({
   context: ({ signal }) => ({ signal }),
   formatError(error, input) {
     if (error.originalError instanceof ZodError) {
       return {
-        message: '入力が不正です。',
+        message: 'Invalid input.',
         extensions: {
           code: 'BAD_USER_INPUT',
           details: error.originalError.issues,
@@ -190,8 +191,11 @@ factory: () => ({
       }
     }
     if (!error.originalError) return error.toJSON()
-    console.error(`[GraphQL ${input.transport}]`, error.originalError)
-    return { message: '内部エラーが発生しました。' }
+    logger.error('GraphQL operation failed', {
+      transport: input.transport,
+      error: error.originalError,
+    })
+    return { message: 'Internal server error' }
   },
 })
 ```

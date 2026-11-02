@@ -12,8 +12,7 @@ export function graphQLConformanceApplication(http = true, path = '/graphql') {
       graphql: { raw: true, method: '*', path: path },
     }).routes.graphql,
     manifest,
-    http,
-    ws: true,
+    transports: { http, websocket: true },
     factory: (state = inject(ConformanceState)) => ({
       context: (input) => ({ signal: input.signal, state }),
     }),

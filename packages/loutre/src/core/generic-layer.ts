@@ -9,7 +9,9 @@ export interface GenericLayerContext<TState extends object = {}> {
 export type GenericLayerNext<TContribution extends object> =
   keyof TContribution extends never
     ? () => Promise<void>
-    : (contribution: TContribution) => Promise<void>
+    : {} extends TContribution
+      ? (contribution?: TContribution) => Promise<void>
+      : (contribution: TContribution) => Promise<void>
 
 export interface GenericLayer<
   TContext extends object = object,

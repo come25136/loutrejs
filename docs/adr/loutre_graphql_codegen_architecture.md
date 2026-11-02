@@ -83,7 +83,7 @@ graphql.implementation({
   route: Api.routes.graphql,
   manifest,
   http: true,
-  ws: true,
+  transports: { http: true, websocket: true },
   factory: (
     orders = inject(OrderService),
     catalog = inject(CatalogService),

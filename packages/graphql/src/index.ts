@@ -42,8 +42,9 @@ export type { GraphQLManifest } from './manifest-internal.js'
 export * from './data.js'
 export { ConnectionRejected } from './connection-rejected.js'
 
-type HttpOptions = GraphQLImplementationDefinition['http']
-type WebSocketOptions = GraphQLImplementationDefinition['ws']
+type Transports = NonNullable<GraphQLImplementationDefinition['transports']>
+type HttpOptions = Transports['http']
+type WebSocketOptions = Transports['websocket']
 type Enabled<T> = [Exclude<T, false | undefined>] extends [never] ? false : true
 type HttpEnabled<THttp> = [THttp] extends [undefined] ? true : Enabled<THttp>
 
@@ -93,11 +94,13 @@ export function defineGraphQLImplementation<
 >(
   definition: Omit<
     GraphQLImplementationDefinition<TContext>,
-    'factory' | 'route' | 'http' | 'ws'
+    'factory' | 'route' | 'transports'
   > & {
     readonly route: TRoute
-    readonly http?: THttp
-    readonly ws?: TWs
+    readonly transports?: {
+      readonly http?: THttp
+      readonly websocket?: TWs
+    }
     readonly factory: () => GraphQLRuntime<
       NoInfer<TContext>,
       ImplementationInput<TRoute, THttp, TWs, NoInfer<TState>>,
@@ -119,12 +122,16 @@ export function defineGraphQLImplementation<
     )
   if ('path' in definition)
     throw new TypeError('Define the GraphQL path in the HTTP contract.')
+  if ('http' in definition || 'ws' in definition)
+    throw new TypeError(
+      'Configure GraphQL transports with transports.http and transports.websocket.',
+    )
 
   const bound = getManifest(definition.manifest)
   validateEndpointSchema(bound.schema)
 
-  const httpOptions: HttpOptions = definition.http ?? true
-  const wsOptions: WebSocketOptions = definition.ws ?? false
+  const httpOptions: HttpOptions = definition.transports?.http ?? true
+  const wsOptions: WebSocketOptions = definition.transports?.websocket ?? false
   if (wsOptions && !['GET', '*'].includes(definition.route.method))
     throw new TypeError(
       'GraphQL WebSocket routes must use GET or * in the HTTP contract.',

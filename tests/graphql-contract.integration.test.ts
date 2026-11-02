@@ -25,7 +25,7 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
       () =>
       async ({ request }, next) => {
         authenticated()
-        if (http.isWebSocketUpgrade(request)) return next({})
+        if (http.isWebSocketUpgrade(request)) return next()
         if (request.headers.get('authorization') !== 'Bearer valid')
           return new Response(null, { status: 401 })
         return next({ user: '利用者' })
@@ -62,7 +62,7 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
     name: 'Profile',
     route: Api.routes.profile,
     manifest: manifestFromSchema(schema),
-    ws: true,
+    transports: { websocket: true },
     factory: (greeting = inject(Greeting)) => ({
       ws: {
         connectionInit: ({ payload }) =>
@@ -197,8 +197,7 @@ it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒�
     name: 'Middleware',
     route: Api.routes.graphql,
     manifest: manifestFromSchema(schema),
-    http: false,
-    ws: true,
+    transports: { http: false, websocket: true },
     factory: () => ({ context: () => ({}) }),
   })
   const Module = defineModule(() => ({

@@ -28,8 +28,7 @@ export const endpoint = graphql.implementation({
   name: 'Counter',
   route: Api.routes.graphql,
   manifest,
-  http: true,
-  ws: { connectionInitWaitTimeout: 3_000 },
+  transports: { http: true, websocket: { connectionInitWaitTimeout: 3_000 } },
   factory: (counter = inject(CounterStore)) => ({
     context: ({ signal }) => ({ counter, signal }),
   }),
@@ -48,7 +47,7 @@ WebSocketはgraphql-transport-ws subprotocolを使用します。Subscription So
 
 ### HTTPとGraphQL WSの認証
 
-HTTPはHTTP Contractのrawルートへ既存middlewareを指定します。GraphQL WSのライフサイクルは、DIしたサービスを使えるendpointの`factory().ws`へ直接書きます。外側の`ws`は有効化と待機時間などの静的設定です。`route`はhttp.contractで作成したrawルートを指定し、path・method・middlewareを実装側へ再指定しません。
+HTTPはHTTP Contractのrawルートへ既存middlewareを指定します。GraphQL WSのライフサイクルは、DIしたサービスを使えるendpointの`factory().ws`へ直接書きます。外側の`transports.websocket`は有効化と待機時間などの静的設定です。`route`はhttp.contractで作成したrawルートを指定し、path・method・middlewareを実装側へ再指定しません。
 
 ```ts
 import { ConnectionRejected } from '@loutrejs/graphql'
@@ -56,7 +55,7 @@ import { ConnectionRejected } from '@loutrejs/graphql'
 const httpAuthentication = http.middleware<{ currentUser?: { id: string } }>({
   name: 'HttpAuthentication',
   factory: (users = inject(Users)) => async ({ request }, next) => {
-    if (http.isWebSocketUpgrade(request)) return next({})
+    if (http.isWebSocketUpgrade(request)) return next()
 
     const user = users.authenticate({ authorization: request.headers.get('authorization') })
     if (!user) return new Response('Authentication required.', { status: 401 })
@@ -68,7 +67,7 @@ const httpAuthentication = http.middleware<{ currentUser?: { id: string } }>({
 const Api = http.contract({ profile: { raw: true, method: '*', path: '/graphql', middlewares: [httpAuthentication] } })
 
 route: Api.routes.profile,
-ws: true,
+transports: { http: true, websocket: true },
 factory: (users = inject(Users)) => ({
   ws: {
     connectionInit: async ({ payload }) => {
@@ -101,9 +100,9 @@ onDisconnectはACK済み接続、onCloseはACK前を含む終了時に呼びま�
 
 接続開始の処理はconnectionInitへまとめます。認証方式・payloadのキー・再認証の方針はアプリ側で決めます。[同じURLを使う認証example](../../examples/graphql-auth/README.md)を参照してください。
 
-HTTPは既定で有効です。`ws: true`や待機時間の設定を追加してもHTTPは無効になりません。WS専用にする場合は`http: false`を明示します。factory内にws handlerを置く場合は、外側でもWSを有効にしてください。有効化を忘れた設定は型チェックとApplication Modelの構築時に拒否します。
+HTTPは既定で有効です。`transports.websocket: true`や待機時間の設定を追加してもHTTPは無効になりません。WS専用にする場合は`transports.http: false`を明示します。factory内にws handlerを置く場合は、transports.websocketでもWSを有効にしてください。有効化を忘れた設定は型チェックとApplication Modelの構築時に拒否します。
 
-`ws`の既定は無効です。Node.js / Bun / Cloudflare Workersでは両transport、AWS LambdaではHTTPのみを使用できます。Runtimeは静的ESMとしてbundleでき、Schema fileの読み込みやNode専用APIを要求しません。
+`transports.websocket`の既定は無効です。Node.js / Bun / Cloudflare Workersでは両transport、AWS LambdaではHTTPのみを使用できます。Runtimeは静的ESMとしてbundleでき、Schema fileの読み込みやNode専用APIを要求しません。
 
 [生成・Data Resolutionガイド](../../docs/graphql-codegen.md)、[Counter server](../../examples/graphql-counter/README.md)、[HTTP / WSの認証例](../../examples/graphql-auth/README.md)、[注文server](../../examples/graphql-orders/README.md)、[transport ADR](../../docs/adr/loutre_graphql_transport_architecture.md)を参照してください。
 

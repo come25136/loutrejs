@@ -124,8 +124,7 @@ export const endpoint = graphql.implementation({
   name: 'Commerce',
   route: Api.routes.graphql,
   manifest,
-  http: true,
-  ws: true,
+  transports: { http: true, websocket: true },
   factory: (
     orders = inject(OrderService),
     catalog = inject(CatalogService),
@@ -167,8 +166,10 @@ The endpoint factory can optionally return `formatError(error, input)` to config
 
 ```ts
 import { ZodError } from 'zod'
+import { inject } from '@loutrejs/loutre'
+import { Logger } from '@loutrejs/loutre/runtime'
 
-factory: () => ({
+factory: (logger = inject(Logger)) => ({
   context: ({ signal }) => ({ signal }),
   formatError(error, input) {
     if (error.originalError instanceof ZodError) {
@@ -181,7 +182,10 @@ factory: () => ({
       }
     }
     if (!error.originalError) return error.toJSON()
-    console.error(`[GraphQL ${input.transport}]`, error.originalError)
+    logger.error('GraphQL operation failed', {
+      transport: input.transport,
+      error: error.originalError,
+    })
     return { message: 'Internal server error' }
   },
 })

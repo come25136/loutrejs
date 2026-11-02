@@ -184,13 +184,15 @@ async function fixture(
       },
     }).routes.graphql,
     manifest: manifestFromSchema(schema),
-    http: options.http !== false,
-    ws:
-      options.websocket === false
-        ? false
-        : {
-            connectionInitWaitTimeout: options.initTimeout ?? 1000,
-          },
+    transports: {
+      http: options.http !== false,
+      websocket:
+        options.websocket === false
+          ? false
+          : {
+              connectionInitWaitTimeout: options.initTimeout ?? 1000,
+            },
+    },
     factory: (greeting = inject(Service)) => ({
       ...(options.formatError ? { formatError: options.formatError } : {}),
       ws: {
@@ -1582,7 +1584,7 @@ describe('GraphQLのresolver契約', () => {
       schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
       const endpoint = graphql.implementation({
         name: 'InvalidHooks',
-        ws: true,
+        transports: { websocket: true },
         route: contractHttp.contract({
           graphql: { raw: true, method: '*', path: '/graphql' },
         }).routes.graphql,
@@ -1872,7 +1874,7 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
           factory:
             () =>
             async ({ request }, next) => {
-              if (http.isWebSocketUpgrade(request)) return next({})
+              if (http.isWebSocketUpgrade(request)) return next()
               return Response.json(
                 { error: 'Authentication required.' },
                 { status: 401 },
@@ -2042,6 +2044,41 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
 })
 
 describe('GraphQLの設定と型に沿った実行', () => {
+  it.each(['http', 'ws'] as const)(
+    'transport設定をトップレベルの%sへ分散させない',
+    (property) => {
+      const schema = buildSchema('type Query { hello: String }')
+      schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
+      expect(() =>
+        graphql.implementation({
+          name: 'InvalidTransportConfiguration',
+          route: contractHttp.contract({
+            graphql: { raw: true, method: '*', path: '/graphql' },
+          }).routes.graphql,
+          manifest: manifestFromSchema(schema),
+          [property]: true,
+          factory: () => ({ context: () => ({}) }),
+        } as never),
+      ).toThrow('Configure GraphQL transports')
+    },
+  )
+
+  it('両transportを明示的に無効にした設定を拒否する', () => {
+    const schema = buildSchema('type Query { hello: String }')
+    schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
+    expect(() =>
+      graphql.implementation({
+        name: 'DisabledTransports',
+        route: contractHttp.contract({
+          graphql: { raw: true, method: '*', path: '/graphql' },
+        }).routes.graphql,
+        manifest: manifestFromSchema(schema),
+        transports: { http: false, websocket: false },
+        factory: () => ({ context: () => ({}) }),
+      }),
+    ).toThrow('Enable at least one GraphQL transport')
+  })
+
   it('ConnectionInitが返したstateをoperationへ渡し、ACKには含めない', async () => {
     const api = await fixture({
       connectionInit: () => ({ secret: 'private' }),
@@ -2074,8 +2111,7 @@ describe('GraphQLの設定と型に沿った実行', () => {
           graphql: { raw: true, method: '*', path: '/graphql' },
         }).routes.graphql,
         manifest: manifestFromSchema(schema),
-        http: true,
-        ws,
+        transports: { http: true, websocket: ws },
         factory: (() => ({
           context: () => ({}),
           ws: { connectionInit: () => ({}) },
@@ -2085,7 +2121,7 @@ describe('GraphQLの設定と型に沿った実行', () => {
       const app = defineApplication({ modules: [Module()] })
       expect(app.model.diagnostics).toContainEqual(
         expect.objectContaining({
-          message: expect.stringContaining('Enable ws'),
+          message: expect.stringContaining('Enable transports.websocket'),
         }),
       )
     },
@@ -2102,7 +2138,7 @@ describe('GraphQLの設定と型に沿った実行', () => {
           graphql: { raw: true, method: '*', path: '/graphql' },
         }).routes.graphql,
         manifest: manifestFromSchema(schema),
-        ws,
+        transports: { websocket: ws },
         factory: () => ({ context: () => ({}) }),
       })
       const Module = defineModule(() => ({ executions: [endpoint] }))
@@ -2178,7 +2214,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
         name: 'Post',
         route: Api.routes.post,
         manifest,
-        ws: true,
+        transports: { websocket: true },
         factory: () => ({ context: () => ({}) }),
       }),
     ).toThrow('GET or *')

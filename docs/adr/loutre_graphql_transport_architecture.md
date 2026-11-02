@@ -71,9 +71,9 @@ const GraphQLApi = graphql.implementation({
   name: 'GraphQLApi',
   route: Api.routes.graphql,
   manifest,
-  http: true,
-  ws: {
-    connectionInitWaitTimeout: 3_000,
+  transports: {
+    http: true,
+    websocket: { connectionInitWaitTimeout: 3_000 },
   },
   factory: (trips = inject(TripService)) => ({
     context({ request, signal }) {
@@ -347,7 +347,7 @@ HTTP ContractのmiddlewareはUpgradeにも適用し、認証をConnectionInitへ
 
 同じURLを使う認証例は[GraphQL認証example](../../examples/graphql-auth/README.md)を正本とする。HTTPは既存middlewareへ認証を置き、GraphQL WSはendpointのfactory内のwsへライフサイクルを直接定義する。HTTPとWSを同じ抽象度のlayerへ揃えることを目的にしない。
 
-path・method・HTTP middlewareはHTTP Contract、http / wsは有効化や静的設定、factoryはDIしたサービスを使う実行時handlerとContext生成を所有する。connectionInitの戻り値からstateの型を推論し、HTTPの認証結果と同じ形ならContext・Resolverを共通化する。stateはACK payloadとは分離する。
+path・method・HTTP middlewareはHTTP Contract、transports.http / transports.websocketは有効化や静的設定、factoryはDIしたサービスを使う実行時handlerとContext生成を所有する。connectionInitの戻り値からstateの型を推論し、HTTPの認証結果と同じ形ならContext・Resolverを共通化する。stateはACK payloadとは分離する。
 
 WS専用layerの宣言や継続処理、遅延DI resolverを追加しない。ConnectionInitはstateまたはConnectionRejectedを返すprotocol handlerとし、HTTP Responseやmiddlewareのnextを要求しない。接続開始の入口をconnectionInitに一本化し、同じタイミングのonConnectを重ねて公開しない。ConnectionRejectedはGraphQL adapterが提供する接続拒否の結果であり、認証方式を定義しない。指定した公開理由を4403のclose reasonへ渡し、通常の例外は1011として区別する。認証の依存はendpoint factoryのinjectからcanonical Modelへ登録する。
 

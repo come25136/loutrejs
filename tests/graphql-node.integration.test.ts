@@ -33,8 +33,7 @@ async function create(
       graphql: { raw: true, method: '*', path: '/graphql' },
     }).routes.graphql,
     manifest: manifestFromSchema(schema),
-    http,
-    ws: true,
+    transports: { http: http, websocket: true },
     factory: () => ({ context: () => ({}), ws: hooks }),
   })
   const Module = defineModule(() => ({ executions: [endpoint] }))

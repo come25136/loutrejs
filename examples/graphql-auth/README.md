@@ -13,6 +13,8 @@ npm run generate --workspace @loutrejs/example-graphql-auth
 npm run start --workspace @loutrejs/example-graphql-auth
 ```
 
+app.tsで作成したLoggerをApplicationとmain.tsで共有し、起動後のHTTP／WS接続先を構造化ログとして出力します。
+
 既定のポートは3000です。`PORT=3001`で変更できます。
 
 | transport | 接続先                          |
@@ -49,7 +51,7 @@ const ApiContract = http.contract({
 })
 ```
 
-認証middleware内で次のように分岐します。Upgradeではユーザーをまだ確定しないため、stateの寄与は`Partial<AuthState>`にします。
+認証middleware内で次のように分岐します。Upgradeではユーザーをまだ確定しないため、stateの寄与は`Partial<AuthState>`にします。全propertyがoptionalなので、追加しない分岐は`next()`と書けます。
 
 ```ts
 export const httpAuthentication = http.middleware<Partial<AuthState>>({
@@ -58,7 +60,7 @@ export const httpAuthentication = http.middleware<Partial<AuthState>>({
     (users = inject(Users)) =>
     async ({ request, signal }, next) => {
       signal.throwIfAborted()
-      if (http.isWebSocketUpgrade(request)) return next({})
+      if (http.isWebSocketUpgrade(request)) return next()
 
       const user = users.authenticate({
         authorization: request.headers.get('authorization'),
@@ -79,7 +81,7 @@ const ProfileGraphQL = graphql.implementation({
   name: 'ProfileGraphQL',
   route: ApiContract.routes.graphql,
   manifest,
-  ws: true,
+  transports: { http: true, websocket: true },
   factory: (users = inject(Users)) => ({
     ws: {
       connectionInit: ({ payload }) => {
@@ -122,6 +124,9 @@ curl http://127.0.0.1:3000/graphql \
 
 ```js
 import { createClient } from 'graphql-ws'
+import { Logger } from '@loutrejs/loutre/runtime'
+
+const logger = new Logger()
 
 const client = createClient({
   url: 'ws://127.0.0.1:3000/graphql',
@@ -130,7 +135,11 @@ const client = createClient({
 })
 client.subscribe(
   { query: 'subscription { viewerChanged { id name } }' },
-  { next: console.log, error: console.error, complete: () => {} },
+  {
+    next: (result) => logger.info('Profile updated', { result }),
+    error: (error) => logger.error('Subscription failed', { error }),
+    complete: () => {},
+  },
 )
 ```
 

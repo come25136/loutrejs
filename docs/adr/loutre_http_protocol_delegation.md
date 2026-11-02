@@ -50,7 +50,7 @@ const Profile = graphql.implementation({
   name: 'Profile',
   route: Api.routes.profile,
   manifest,
-  ws: true,
+  transports: { http: true, websocket: true },
   factory: (users = inject(Users)) => ({
     ws: {
       connectionInit: ({ payload }) => {
@@ -80,16 +80,18 @@ http.isWebSocketUpgrade(request)はUpgradeヘッダーがwebsocketであるか�
 
 Upgrade前のmiddlewareはHTTPの要求処理として扱い、nextの完了はhandshakeまでとする。接続中の処理はGraphQLのWS lifecycleが担当する。middleware間のstateは通常と同様に伝播し、接続のstateとしても読み取れる。ConnectionInitはそのstateを読み、自身が返す接続stateを作る。ConnectionInitを指定しない場合はmiddlewareのstateをそのまま使う。
 
-認証を省略する分岐があるmiddlewareは、その寄与を部分的なstateとして宣言する。認証後のGraphQL contextは必須の利用者があることを確認して組み立てる。既存のnextのstate必須規約を弱めたり、Upgradeに架空の利用者を渡したりしない。
+認証を省略する分岐があるmiddlewareは、その寄与を部分的なstateとして宣言する。認証後のGraphQL contextは必須の利用者があることを確認して組み立てる。必須propertyのあるstateは引き続きnext(state)を要求する。stateが未指定または全propertyがoptionalの場合はnext()を許可し、stateを追加せず後続へ進む。Upgradeに架空の利用者を渡さない。
 
 通常HTTPのfetch入口はUpgradeを示すヘッダー付き要求を400で拒否し、通常のhandlerへ到達させない。WS入口はGET、path、subprotocolとnative handshakeを検証する。Node adapterは元のmethodでGET以外を拒否し、handshake前の拒否応答のstatus・headers・bodyを送る。Fetch Requestが禁止するTRACE等もRequest作成前に拒否する。WSを有効にするルートはGETまたは*を受け付ける必要がある。
 
 WSのmiddlewareの依存とcapabilityはWebSocket executionのModelへ登録し、実行時にはそのexecutionの既存resolverで解決する。別Containerや遅延DI取得APIを追加しない。middlewareが短絡した場合はdriverとsessionを開始せず、開始後のmiddleware失敗では接続を終了してleaseを解放する。
 
-httpとwsの有効化は引き続き独立した静的設定とし、HTTPは既定で有効、WSは既定で無効にする。GraphQL実装側のhttp設定はbooleanだけとし、path・method・middlewareの上書きを廃止する。既存graphql.endpointは残さない。
+transports.httpとtransports.websocketの有効化は独立した静的設定とし、HTTPは既定で有効、WSは既定で無効にする。GraphQL実装側のtransports.httpはbooleanだけとし、path・method・middlewareの上書きを廃止する。既存graphql.endpointは残さない。
 
 ## 識別名とメッセージの表記
 
 このAPIのmodule・execution・middlewareの識別名、例外、HTTPのエラー本文、WSの既定close reasonとexampleの起動ログは英語に揃える。資料本文・コメント・テスト名は日本語とし、コード例・エラーの期待値は実装と一致させる。ユーザー表示名などのサンプルデータやUTF-8検証用の文字列とは区別する。
+
+GraphQL exampleではApplicationに渡すLoggerを起動コードと共有し、接続先を構造化ログで出力する。resolverの障害ログはDIしたLoggerへ渡す。
 
 コードの空行は、入力確認、認証・検証、stateの作成、後処理などのまとまりを区切るために入れる。オブジェクトの設定項目の間へ意味のない空行を置かず、factory内の各handlerや関数定義の間は読み分けられるようにする。

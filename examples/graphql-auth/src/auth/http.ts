@@ -9,7 +9,7 @@ export const httpAuthentication = http.middleware<Partial<AuthState>>({
     (users = inject(Users)) =>
     async ({ request, signal }, next) => {
       signal.throwIfAborted()
-      if (http.isWebSocketUpgrade(request)) return next({})
+      if (http.isWebSocketUpgrade(request)) return next()
 
       const user = users.authenticate({
         authorization: request.headers.get('authorization'),

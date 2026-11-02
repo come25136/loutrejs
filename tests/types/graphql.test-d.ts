@@ -30,12 +30,12 @@ const httpOnly = graphql.implementation({
 })
 const websocketOnly = graphql.implementation({
   name: 'WebSocket',
-  http: false,
+  transports: { http: false, websocket: true },
   route: contractHttp.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
-  ws: true,
+
   factory,
 })
 const both = graphql.implementation({
@@ -44,8 +44,7 @@ const both = graphql.implementation({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
-  http: true,
-  ws: true,
+  transports: { http: true, websocket: true },
   factory: () => ({
     ws: {
       connectionInit({ request, signal, payload }) {
@@ -229,7 +228,7 @@ graphql.implementation({
   }).routes.graphql,
   manifest,
 
-  ws: true,
+  transports: { websocket: true },
   factory: () => ({
     context(input) {
       if (input.transport === 'http') {
@@ -271,7 +270,7 @@ graphql.implementation({
   }).routes.graphql,
   manifest,
 
-  ws: true,
+  transports: { websocket: true },
   factory: () => ({
     ws: {
       connectionInit: async ({ request, signal, payload, state }) => {
@@ -313,12 +312,11 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'WebSocketState',
-  http: false,
+  transports: { http: false, websocket: true },
   route: contractHttp.contract({
     graphql: { raw: true, method: '*', path: '/ws' },
   }).routes.graphql,
   manifest,
-  ws: true,
   factory: () => ({
     ws: {
       connectionInit: async ({ request, signal, payload }) => {
@@ -352,7 +350,6 @@ graphql.implementation({
     },
   }).routes.graphql,
   manifest,
-
   factory: () => ({
     context(input) {
       const id: string = input.state.currentUser.id
@@ -370,8 +367,7 @@ graphql.implementation({
     graphql: { raw: true, method: '*', path: '/async' },
   }).routes.graphql,
   manifest,
-  http: false,
-  ws: true,
+  transports: { http: false, websocket: true },
   factory: () => ({
     ws: {
       connectionInit: async () => {
@@ -401,7 +397,7 @@ graphql.implementation({
     graphql: { raw: true, method: '*', path: '/both' },
   }).routes.graphql,
   manifest,
-  ws: true,
+  transports: { websocket: true },
   factory: () => ({
     context(input) {
       const transport: 'http' | 'websocket' = input.transport
@@ -415,7 +411,7 @@ const defaultHttpWithWs = graphql.implementation({
     graphql: { raw: true, method: '*', path: '/both' },
   }).routes.graphql,
   manifest,
-  ws: true,
+  transports: { websocket: true },
   factory,
 })
 const DefaultModule = defineModule(() => ({ executions: [defaultHttpWithWs] }))
@@ -443,7 +439,7 @@ graphql.implementation({
     graphql: { raw: true, method: '*', path: '/disabled' },
   }).routes.graphql,
   manifest,
-  ws: false,
+  transports: { websocket: false },
   factory: () => ({
     context: () => ({}),
     // @ts-expect-error 無効なWSへhandlerを指定しない
@@ -456,7 +452,7 @@ graphql.implementation({
     graphql: { raw: true, method: '*', path: '/response' },
   }).routes.graphql,
   manifest,
-  ws: true,
+  transports: { websocket: true },
   factory: () => ({
     context: () => ({}),
     ws: {
@@ -471,7 +467,7 @@ graphql.implementation({
     graphql: { raw: true, method: '*', path: '/void' },
   }).routes.graphql,
   manifest,
-  ws: true,
+  transports: { websocket: true },
   factory: () => ({
     context: () => ({}),
     ws: {
@@ -520,7 +516,7 @@ graphql.implementation({
     graphql: { raw: true, method: '*', path: '/boolean' },
   }).routes.graphql,
   manifest,
-  ws: true,
+  transports: { websocket: true },
   factory: () => ({
     context: () => ({}),
     ws: {
@@ -568,7 +564,7 @@ graphql.implementation({
     raw: { raw: true, method: '*', path: '/graphql' },
   }).routes.raw,
   // @ts-expect-error middlewareはHTTP Contractが所有する
-  http: { middlewares: [userState] },
+  transports: { http: { middlewares: [userState] } },
   factory,
 })
 // @ts-expect-error 独立したGraphQL endpoint宣言を残さない

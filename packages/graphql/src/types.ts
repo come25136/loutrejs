@@ -106,11 +106,13 @@ export interface GraphQLImplementationDefinition<
   readonly path?: never
   readonly manifest: GraphQLManifest<TContext>
   readonly schema?: never
-  readonly http?: boolean
-  readonly ws?:
-    | boolean
-    | {
-        readonly connectionInitWaitTimeout?: number
-      }
+  readonly transports?: {
+    readonly http?: boolean
+    readonly websocket?:
+      | boolean
+      | {
+          readonly connectionInitWaitTimeout?: number
+        }
+  }
   readonly factory: () => GraphQLRuntime<TContext>
 }
