@@ -13,6 +13,7 @@ export type {
   HttpClientTransportResponse,
 } from './client.js'
 export { cors } from './cors.js'
+export { isWebSocketUpgrade } from './websocket-upgrade.js'
 export type { CorsLayerDescriptor, CorsOptions, CorsOrigin } from './cors.js'
 export { basicAuth, bearerAuth } from './auth.js'
 export type {

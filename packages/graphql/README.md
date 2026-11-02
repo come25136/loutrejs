@@ -56,7 +56,7 @@ import { ConnectionRejected } from '@loutrejs/graphql'
 const httpAuthentication = http.middleware<{ currentUser?: { id: string } }>({
   name: 'HTTP認証',
   factory: (users = inject(Users)) => async ({ request }, next) => {
-    if (request.headers.get('upgrade')?.toLowerCase() === 'websocket') return next({})
+    if (http.isWebSocketUpgrade(request)) return next({})
     const user = users.authenticate({ authorization: request.headers.get('authorization') })
     if (!user) return new Response('認証が必要です。', { status: 401 })
     return next({ currentUser: { id: user.id } })
@@ -102,6 +102,6 @@ HTTPは既定で有効です。`ws: true`や待機時間の設定を追加して
 
 [生成・Data Resolutionガイド](../../docs/graphql-codegen.md)、[Counter server](../../examples/graphql-counter/README.md)、[HTTP / WSの認証例](../../examples/graphql-auth/README.md)、[注文server](../../examples/graphql-orders/README.md)、[transport ADR](../../docs/adr/loutre_graphql_transport_architecture.md)を参照してください。
 
-HTTP Contractのbranch pathとmiddlewareはGraphQLルートにも継承します。HTTP middlewareは通常HTTPとWS Upgradeの両方で実行します。WS認証をConnectionInitへ任せる場合はmiddleware自身でUpgradeを判定します。WSを有効にするルートのmethodはGETまたは*にしてください。通常HTTPとrawルートは同じContractへ並べられ、http.implementationは通常HTTPのルートを担当します。
+HTTP Contractのbranch pathとmiddlewareはGraphQLルートにも継承します。HTTP middlewareは通常HTTPとWS Upgradeの両方で実行します。WS認証をConnectionInitへ任せる場合はmiddleware自身でhttp.isWebSocketUpgrade(request)を使って判定します。WSを有効にするルートのmethodはGETまたは*にしてください。通常HTTPとrawルートは同じContractへ並べられ、http.implementationは通常HTTPのルートを担当します。
 
 Upgradeのmiddlewareが渡したstateはconnectionInitのinput.stateから読めます。ConnectionInitを省略した場合は、そのstateをoperationでも使います。ConnectionInitを定義する場合は、operationへ渡すstateを戻り値で決めます。middlewareのnextはhandshakeの完了までを担当し、接続全体の終了処理はonCloseへ置きます。認証を後回しにしたUpgrade要求が通常HTTP handlerへ流れる経路は拒否します。

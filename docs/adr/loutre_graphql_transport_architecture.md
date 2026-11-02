@@ -343,7 +343,7 @@ LoutreはDI、接続とoperationの寿命、型、cleanupを所有する。認�
 
 schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#接続終了のライフサイクル)を正本とする。
 
-HTTP ContractのmiddlewareはUpgradeにも適用し、認証をConnectionInitへ延期するかはmiddleware自身がUpgradeヘッダーを見て決める。handshakeのstateはConnectionInitで参照でき、handlerを省略した場合は接続stateへそのまま引き継ぐ。handlerを指定した場合は、その戻り値を接続stateとして使う。middlewareのnextはhandshakeまでを担当し、接続の終了処理はWS lifecycleへ置く。詳細は[HTTP Contractの委任ADR](./loutre_http_protocol_delegation.md)を正本とする。
+HTTP ContractのmiddlewareはUpgradeにも適用し、認証をConnectionInitへ延期するかはmiddleware自身がhttp.isWebSocketUpgrade(request)で決める。handshakeのstateはConnectionInitで参照でき、handlerを省略した場合は接続stateへそのまま引き継ぐ。handlerを指定した場合は、その戻り値を接続stateとして使う。middlewareのnextはhandshakeまでを担当し、接続の終了処理はWS lifecycleへ置く。詳細は[HTTP Contractの委任ADR](./loutre_http_protocol_delegation.md)を正本とする。
 
 同じURLを使う認証例は[GraphQL認証example](../../examples/graphql-auth/README.md)を正本とする。HTTPは既存middlewareへ認証を置き、GraphQL WSはendpointのfactory内のwsへライフサイクルを直接定義する。HTTPとWSを同じ抽象度のlayerへ揃えることを目的にしない。
 

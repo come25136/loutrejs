@@ -9,8 +9,7 @@ export const httpAuthentication = http.middleware<Partial<AuthState>>({
     (users = inject(Users)) =>
     async ({ request, signal }, next) => {
       signal.throwIfAborted()
-      if (request.headers.get('upgrade')?.toLowerCase() === 'websocket')
-        return next({})
+      if (http.isWebSocketUpgrade(request)) return next({})
       const user = users.authenticate({
         authorization: request.headers.get('authorization'),
         apiKey: request.headers.get('x-api-key'),

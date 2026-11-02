@@ -67,6 +67,7 @@ import {
   validateResponseHeaders,
 } from './runtime/response.js'
 import type { HttpRequestHeadDefinition } from './request-head.js'
+import { isWebSocketUpgrade } from './websocket-upgrade.js'
 import { match as patternMatch } from 'ts-pattern'
 
 export interface HttpServerDriver {
@@ -1222,6 +1223,7 @@ export const validate = Object.freeze({
 })
 
 export const executionHttp = Object.freeze({
+  isWebSocketUpgrade,
   raw: defineHttpRaw,
   contract: defineHttpContract,
   implementation: defineHttpImplementation,

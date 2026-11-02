@@ -25,8 +25,7 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
       () =>
       async ({ request }, next) => {
         authenticated()
-        if (request.headers.get('upgrade')?.toLowerCase() === 'websocket')
-          return next({})
+        if (http.isWebSocketUpgrade(request)) return next({})
         if (request.headers.get('authorization') !== 'Bearer valid')
           return new Response(null, { status: 401 })
         return next({ user: '利用者' })

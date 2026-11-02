@@ -55,3 +55,9 @@ watch対象・ファイルイベント・再構築回数を確認し、buildや�
 このリポジトリはoxfmtを使用する。設定を確認せずnpx prettierを実行すると、未導入のformatterを取得し、引用符・semicolonなどの差分が変更対象全体へ広がる。
 
 実行前にpackage.jsonのformat scriptを確認し、既存のユーザー編集を除いて対象ファイルだけをoxfmtへ渡す。誤って整形した場合は同じ範囲をoxfmtで再整形し、git diffで無関係な変更と依存ファイルの混入がないことを確認する。ユーザー編集を含むファイルを一括復元しない。
+
+## 日本語のparameterized test名
+
+Vitestのit.eachで`$headersの場合は$expectedを返す`のようにproperty名へ日本語を直結すると、表示名がundefinedになった。置換するproperty名の境界を意図どおりに認識できないためで、テストの入力自体は渡っていた。
+
+失敗時は表示名と入力のオブジェクトを別々に確認する。`%j`による入力表示、またはproperty名の前後に空白を置く形式へ変更し、実行結果で各ケースを識別できることを確認する。日本語を含むテスト名ではplaceholderの境界を明示する。

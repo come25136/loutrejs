@@ -58,8 +58,7 @@ export const httpAuthentication = http.middleware<Partial<AuthState>>({
     (users = inject(Users)) =>
     async ({ request, signal }, next) => {
       signal.throwIfAborted()
-      if (request.headers.get('upgrade')?.toLowerCase() === 'websocket')
-        return next({})
+      if (http.isWebSocketUpgrade(request)) return next({})
       const user = users.authenticate({
         authorization: request.headers.get('authorization'),
         apiKey: request.headers.get('x-api-key'),
@@ -97,7 +96,7 @@ const ProfileGraphQL = graphql.implementation({
 })
 ```
 
-HTTP middlewareは通常HTTPとWS Upgradeの両方で実行します。認証middleware自身がUpgradeヘッダーを判定し、WSの認証はConnectionInitへ任せます。どちらもstateへユーザーIDを保持し、表示データはUsersから最新値を取得します。stateや資格情報をACK payloadへ送りません。
+HTTP middlewareは通常HTTPとWS Upgradeの両方で実行します。認証middleware自身がhttp.isWebSocketUpgrade(request)で判定し、WSの認証はConnectionInitへ任せます。どちらもstateへユーザーIDを保持し、表示データはUsersから最新値を取得します。stateや資格情報をACK payloadへ送りません。
 
 ## Query / Mutation
 

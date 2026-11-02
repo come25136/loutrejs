@@ -1867,8 +1867,7 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
           factory:
             () =>
             async ({ request }, next) => {
-              if (request.headers.get('upgrade') === 'websocket')
-                return next({})
+              if (http.isWebSocketUpgrade(request)) return next({})
               return Response.json(
                 { error: '認証が必要です。' },
                 { status: 401 },
