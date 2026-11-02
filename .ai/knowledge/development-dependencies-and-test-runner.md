@@ -74,4 +74,18 @@ PRのhead SHAに対応する失敗jobとstepを調べ、インストールやimp
 
 ### 復旧方法・再発防止策
 
-CIの検証対象を現行APIへ更新し、廃止APIの互換aliasを復活させて回避しない。workflowに書いたGraphQLの検証式も公開APIに対して実行するテストで確認する。公開APIを削除するときはCI・conformance・Webサイトのコード例も検索し、意図的な型エラーのテストと過去のCHANGELOGを除いて旧参照が残っていないことを調べる。
+CIの検証対象を現行APIへ更新し、廃止APIの互換aliasを復活させて回避しない。GraphQLの公開APIはtarballだけを使うconsumer CIで確認する。公開APIを削除するときはCI・conformance・Webサイトのコード例も検索し、意図的な型エラーのテストと過去のCHANGELOGを除いて旧参照が残っていないことを調べる。
+
+## workflowの検証式をvmで実行しない
+
+### 発生条件・原因
+
+ci.ymlから読み出したJavaScriptを単体テストのrunInNewContextへ渡すと、CodeQLのjs/code-injectionに検出された。テスト用であっても、ファイル内容が動的コード実行の入力になる。公開APIの確認には不要な実行経路だった。
+
+### 安全な確認方法
+
+code scanning alertの対象commit・path・データフローを確認し、通常のCI jobの成功だけでcode scanningも成功したと判断しない。check-runsからCodeQLのconclusionも確認する。
+
+### 復旧方法・再発防止策
+
+vm実行のテストとimportを削除し、tarballを隔離環境へインストールするconsumer CIを公開APIの検証に使う。文字列をevalやFunctionへ渡す別方式へ置き換えたり、警告を抑制したりしない。push後は最新headのCodeQL成功とalertの修正状態を確認する。
