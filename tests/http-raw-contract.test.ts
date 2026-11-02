@@ -14,7 +14,7 @@ import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 
 function contract() {
   const state = http.middleware<{ tenant: string }>({
-    name: '組織',
+    name: 'Tenant',
     factory: () => async (_input, next) => next({ tenant: 'もみじ' }),
   })
   return http.contract({
@@ -106,6 +106,6 @@ describe('HTTP Contractのrawルート', () => {
           routes: { delegated: { raw: true, method: '*', path: '/protocol' } },
         },
       } as never),
-    ).toThrow('raw')
+    ).toThrow('Raw routes cannot declare or inherit')
   })
 })

@@ -53,17 +53,20 @@ const ApiContract = http.contract({
 
 ```ts
 export const httpAuthentication = http.middleware<Partial<AuthState>>({
-  name: 'HTTP認証',
+  name: 'HttpAuthentication',
   factory:
     (users = inject(Users)) =>
     async ({ request, signal }, next) => {
       signal.throwIfAborted()
       if (http.isWebSocketUpgrade(request)) return next({})
+
       const user = users.authenticate({
         authorization: request.headers.get('authorization'),
         apiKey: request.headers.get('x-api-key'),
       })
-      if (!user) return new Response('認証が必要です。', { status: 401 })
+      if (!user)
+        return new Response('Authentication required.', { status: 401 })
+
       return next({ currentUser: { id: user.id } })
     },
 })
@@ -84,12 +87,15 @@ const ProfileGraphQL = graphql.implementation({
           authorization: payload?.authorization,
           apiKey: payload?.apiKey,
         })
-        if (!user) return new ConnectionRejected('認証が必要です。')
+        if (!user) return new ConnectionRejected('Authentication required.')
+
         return { currentUser: { id: user.id } }
       },
     },
+
     context: ({ state, signal }) => {
-      if (!state.currentUser) throw new Error('認証済みの利用者がありません。')
+      if (!state.currentUser) throw new Error('Authenticated user is missing.')
+
       return { currentUser: state.currentUser, users, signal }
     },
   }),

@@ -89,11 +89,11 @@ describe('WebSocket Execution Extension', () => {
     const upgrade = vi.fn(fixtureDriver(connection).upgrade)
     const handler = vi.fn()
     const controller = new AbortController()
-    const failure = new Error('handshakeに失敗しました。')
+    const failure = new Error('WebSocket handshake failed.')
     const terminated = vi.spyOn(connection, 'terminate')
     const completed = vi.fn()
     const layer = http.middleware({
-      name: 'handshake検証',
+      name: 'HandshakeValidation',
       factory:
         () =>
         async ({ signal }, next) => {

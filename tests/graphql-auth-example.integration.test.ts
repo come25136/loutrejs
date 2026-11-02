@@ -95,7 +95,9 @@ it.each(cases)(
       for (const headers of [{}, auth.invalidHeaders]) {
         const rejected = await server.request(headers)
         expect(rejected.status).toBe(401)
-        expect(await rejected.json()).toEqual({ error: '認証が必要です。' })
+        expect(await rejected.json()).toEqual({
+          error: 'Authentication required.',
+        })
       }
     } finally {
       await server.close()
@@ -125,7 +127,7 @@ it.each(cases)(
           .iterate({ query: '{viewer{id}}' })
         await expect(rejected.next()).rejects.toMatchObject({
           code: 4403,
-          reason: '認証が必要です。',
+          reason: 'Authentication required.',
         })
       }
     } finally {

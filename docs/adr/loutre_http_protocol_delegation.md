@@ -55,11 +55,13 @@ const Profile = graphql.implementation({
         const user = users.authenticate(payload)
         return user
           ? { currentUser: { id: user.id } }
-          : new ConnectionRejected('認証が必要です。')
+          : new ConnectionRejected('Authentication required.')
       },
     },
+
     context: ({ state, signal }) => {
-      if (!state.currentUser) throw new Error('認証済みの利用者がありません。')
+      if (!state.currentUser) throw new Error('Authenticated user is missing.')
+
       return { currentUser: state.currentUser, users, signal }
     },
   }),
@@ -83,3 +85,9 @@ Upgrade前のmiddlewareはHTTPの要求処理として扱い、nextの完了はh
 WSのmiddlewareの依存とcapabilityはWebSocket executionのModelへ登録し、実行時にはそのexecutionの既存resolverで解決する。別Containerや遅延DI取得APIを追加しない。middlewareが短絡した場合はdriverとsessionを開始せず、開始後のmiddleware失敗では接続を終了してleaseを解放する。
 
 httpとwsの有効化は引き続き独立した静的設定とし、HTTPは既定で有効、WSは既定で無効にする。GraphQL実装側のhttp設定はbooleanだけとし、path・method・middlewareの上書きを廃止する。既存graphql.endpointは残さない。
+
+## 識別名とメッセージの表記
+
+このAPIのmodule・execution・middlewareの識別名、例外、HTTPのエラー本文、WSの既定close reasonとexampleの起動ログは英語に揃える。資料本文・コメント・テスト名は日本語とし、コード例・エラーの期待値は実装と一致させる。ユーザー表示名などのサンプルデータやUTF-8検証用の文字列とは区別する。
+
+コードの空行は、入力確認、認証・検証、stateの作成、後処理などのまとまりを区切るために入れる。オブジェクトの設定項目の間へ意味のない空行を置かず、factory内の各handlerや関数定義の間は読み分けられるようにする。

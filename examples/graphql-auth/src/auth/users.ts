@@ -44,7 +44,8 @@ export class Users {
 
   get(id: string): User {
     const user = this.#users.get(id)
-    if (!user) throw new Error('利用者が見つかりません。')
+    if (!user) throw new Error('User not found.')
+
     return user
   }
 
@@ -57,6 +58,7 @@ export class Users {
 
   async *watch(id: string, signal: AbortSignal): AsyncGenerator<User> {
     const events = on(this.#events, id, { signal })
+
     try {
       yield this.get(id)
       for await (const [user] of events) yield user as User

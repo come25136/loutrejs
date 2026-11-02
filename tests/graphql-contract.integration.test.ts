@@ -20,7 +20,7 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
   }
   const authenticated = vi.fn()
   const auth = http.middleware<{ user?: string }>({
-    name: 'HTTP認証',
+    name: 'HttpAuthentication',
     factory:
       () =>
       async ({ request }, next) => {
@@ -68,7 +68,7 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
         connectionInit: ({ payload }) =>
           payload?.token === 'valid'
             ? { user: '利用者' }
-            : new ConnectionRejected('認証が必要です。'),
+            : new ConnectionRejected('Authentication required.'),
       },
       context: ({ state }) => ({ greeting: greeting.text, user: state.user }),
     }),
@@ -156,7 +156,7 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
       wrong.on('error', () => {})
       wrong.on('open', () => {
         wrong.terminate()
-        reject(new Error('未定義のURLへ接続できました。'))
+        reject(new Error('Connected to an undefined URL.'))
       })
     })
   } finally {
@@ -170,14 +170,14 @@ it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒�
     readonly events: string[] = []
   }
   const layer = http.middleware({
-    name: '共通アクセス制限',
+    name: 'AccessControl',
     factory:
       (gate = inject(Gate)) =>
       async ({ request }, next) => {
         gate.events.push('開始')
         if (request.headers.has('x-blocked'))
           return Response.json(
-            { error: '接続を拒否しました。' },
+            { error: 'Connection denied.' },
             { status: 403, headers: { 'retry-after': '30' } },
           )
         await next()
@@ -236,7 +236,7 @@ it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒�
             expect(response.statusCode).toBe(403)
             expect(response.headers['retry-after']).toBe('30')
             expect(JSON.parse(Buffer.concat(body).toString())).toEqual({
-              error: '接続を拒否しました。',
+              error: 'Connection denied.',
             })
             denied.terminate()
             resolve()
@@ -248,7 +248,9 @@ it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒�
       })
       denied.on('open', () => {
         denied.terminate()
-        reject(new Error('拒否すべきUpgradeが成功しました。'))
+        reject(
+          new Error('An upgrade that should have been rejected succeeded.'),
+        )
       })
     })
     expect(gate.events).toEqual(['開始'])
@@ -280,7 +282,7 @@ it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒�
         request.on('error', reject)
         request.on('upgrade', (_response, socket) => {
           socket.destroy()
-          reject(new Error(`${method}のUpgradeを受け入れました。`))
+          reject(new Error(`Accepted an upgrade using ${method}.`))
         })
         request.end()
       })

@@ -209,16 +209,16 @@ const invalidHooks: GraphQLWebSocketHooks = {
 void [protectedHooks, operationHooks, invalidHooks]
 
 const userState = http.middleware<{ currentUser: { readonly id: string } }>({
-  name: '利用者',
+  name: 'CurrentUser',
   factory: () => async (_context, next) =>
     next({ currentUser: { id: 'user-1' } }),
 })
 const tenantState = http.middleware<{ tenantId: string }>({
-  name: '組織',
+  name: 'Tenant',
   factory: () => async (_context, next) => next({ tenantId: 'tenant-1' }),
 })
 graphql.implementation({
-  name: '型付きmiddleware state',
+  name: 'TypedMiddlewareState',
   route: contractHttp.contract({
     graphql: {
       raw: true,
@@ -260,7 +260,7 @@ graphql.implementation({
 })
 
 graphql.implementation({
-  name: '入口ごとのstate',
+  name: 'TransportState',
   route: contractHttp.contract({
     graphql: {
       raw: true,
@@ -286,7 +286,7 @@ graphql.implementation({
         state.tenantId = 'other'
         void [openingRequest, connectionSignal, params, tenant, id]
         if (payload?.authorization === undefined)
-          return new ConnectionRejected('認証が必要です。')
+          return new ConnectionRejected('Authentication required.')
         return { currentUser: { id: 'user-1' } }
       },
     },
@@ -312,7 +312,7 @@ graphql.implementation({
   }),
 })
 graphql.implementation({
-  name: 'WSのみのstate',
+  name: 'WebSocketState',
   http: false,
   route: contractHttp.contract({
     graphql: { raw: true, method: '*', path: '/ws' },
@@ -327,7 +327,7 @@ graphql.implementation({
         const params: Readonly<Record<string, unknown>> | undefined = payload
         void [openingRequest, connectionSignal, params]
         if (payload?.authorization === undefined)
-          return new ConnectionRejected('認証が必要です。')
+          return new ConnectionRejected('Authentication required.')
         return { currentUser: { id: 'user-1' } }
       },
     },
@@ -342,7 +342,7 @@ graphql.implementation({
   }),
 })
 graphql.implementation({
-  name: 'HTTPのみのstate',
+  name: 'HttpState',
   route: contractHttp.contract({
     graphql: {
       raw: true,
@@ -365,7 +365,7 @@ graphql.implementation({
 })
 
 graphql.implementation({
-  name: '非同期ConnectionInitのstate',
+  name: 'AsyncConnectionInitState',
   route: contractHttp.contract({
     graphql: { raw: true, method: '*', path: '/async' },
   }).routes.graphql,
@@ -396,7 +396,7 @@ graphql.implementation({
 })
 
 graphql.implementation({
-  name: 'WS設定でHTTPを無効にしない',
+  name: 'WebSocketKeepsHttpEnabled',
   route: contractHttp.contract({
     graphql: { raw: true, method: '*', path: '/both' },
   }).routes.graphql,
@@ -410,7 +410,7 @@ graphql.implementation({
   }),
 })
 const defaultHttpWithWs = graphql.implementation({
-  name: '既定HTTPとWS',
+  name: 'DefaultHttpWithWebSocket',
   route: contractHttp.contract({
     graphql: { raw: true, method: '*', path: '/both' },
   }).routes.graphql,
@@ -426,7 +426,7 @@ defaultApp.http.fetch(new Request('http://test'))
 defaultApp.websocket.upgrade(new Request('http://test'))
 
 graphql.implementation({
-  name: 'WS有効化の指定忘れ',
+  name: 'MissingWebSocketEnablement',
   route: contractHttp.contract({
     graphql: { raw: true, method: '*', path: '/missing' },
   }).routes.graphql,
@@ -438,7 +438,7 @@ graphql.implementation({
   }),
 })
 graphql.implementation({
-  name: 'WSを明示的に無効化',
+  name: 'DisabledWebSocket',
   route: contractHttp.contract({
     graphql: { raw: true, method: '*', path: '/disabled' },
   }).routes.graphql,
@@ -451,7 +451,7 @@ graphql.implementation({
   }),
 })
 graphql.implementation({
-  name: 'HTTP ResponseをWSで返さない',
+  name: 'RejectHttpResponseFromWebSocket',
   route: contractHttp.contract({
     graphql: { raw: true, method: '*', path: '/response' },
   }).routes.graphql,
@@ -466,7 +466,7 @@ graphql.implementation({
   }),
 })
 graphql.implementation({
-  name: '戻り値を忘れない',
+  name: 'RequiredConnectionState',
   route: contractHttp.contract({
     graphql: { raw: true, method: '*', path: '/void' },
   }).routes.graphql,
@@ -509,13 +509,13 @@ void [
   annotatedHandler,
 ]
 
-const rejection = new ConnectionRejected('認証が必要です。')
+const rejection = new ConnectionRejected('Authentication required.')
 const publicReason: string = rejection.reason
 // @ts-expect-error 公開する理由は読み取り専用
 rejection.reason = '変更'
 void publicReason
 graphql.implementation({
-  name: 'booleanで拒否しない',
+  name: 'RejectBooleanConnectionResult',
   route: contractHttp.contract({
     graphql: { raw: true, method: '*', path: '/boolean' },
   }).routes.graphql,
@@ -531,7 +531,7 @@ graphql.implementation({
 })
 
 graphql.implementation({
-  name: '正規化していないルート',
+  name: 'UnnormalizedRoute',
   manifest,
   // @ts-expect-error HTTP Contractで正規化したrawルートを使う
   route: { raw: true, method: '*', path: '/graphql' },
@@ -545,14 +545,14 @@ const normalRoute = http.contract({
   },
 })
 graphql.implementation({
-  name: '通常HTTPをGraphQLへ委任しない',
+  name: 'RejectRegularHttpRoute',
   manifest,
   // @ts-expect-error GraphQLの実装にはrawルートを指定する
   route: normalRoute.routes.regular,
   factory,
 })
 graphql.implementation({
-  name: '実装側でpathを上書きしない',
+  name: 'ContractOwnsPath',
   manifest,
   route: contractHttp.contract({
     raw: { raw: true, method: '*', path: '/graphql' },
@@ -562,7 +562,7 @@ graphql.implementation({
   factory,
 })
 graphql.implementation({
-  name: '実装側でmiddlewareを上書きしない',
+  name: 'ContractOwnsMiddleware',
   manifest,
   route: contractHttp.contract({
     raw: { raw: true, method: '*', path: '/graphql' },

@@ -25,11 +25,10 @@ export function createNodeWebSocketDriver(): {
       runtime: 'node',
       async upgrade(request, options) {
         const native = requests.get(request)
-        if (!native)
-          throw new Error('Node.jsのupgrade requestが見つかりません。')
+        if (!native) throw new Error('Node.js upgrade request not found.')
         requests.delete(request)
         if (native.socket.destroyed)
-          throw new Error('WebSocket handshakeが終了しました。')
+          throw new Error('WebSocket handshake has ended.')
         protocols.set(native.incoming, options.protocol ?? '')
         const connection = await new Promise<
           ReturnType<typeof createEventWebSocketConnection>
@@ -39,7 +38,7 @@ export function createNodeWebSocketDriver(): {
             reject(error)
           }
           const onClose = () =>
-            fail(new Error('WebSocket handshakeが終了しました。'))
+            fail(new Error('WebSocket handshake has ended.'))
           const cleanup = () => {
             native.socket.off('close', onClose)
             native.socket.off('error', fail)
@@ -75,17 +74,20 @@ export function createNodeWebSocketDriver(): {
           )
           return
         }
+
         const controller = new AbortController()
         const abort = () =>
-          controller.abort(new Error('WebSocket handshakeが終了しました。'))
+          controller.abort(new Error('WebSocket handshake has ended.'))
         socket.once('close', abort)
         socket.once('error', abort)
+
         const headers = new Headers()
         for (const [name, value] of Object.entries(incoming.headers)) {
           if (Array.isArray(value))
             value.forEach((item) => headers.append(name, item))
           else if (value !== undefined) headers.set(name, value)
         }
+
         const request = new Request(
           new URL(
             incoming.url ?? '/',
@@ -98,11 +100,13 @@ export function createNodeWebSocketDriver(): {
           },
         )
         requests.set(request, { incoming, socket, head })
+
         void application
           .upgrade(request)
           .then(async (response) => {
             if (!requests.has(request)) return
             requests.delete(request)
+
             const body = Buffer.from(await response.arrayBuffer())
             const responseHeaders = new Headers(response.headers)
             responseHeaders.set('connection', 'close')

@@ -14,6 +14,7 @@ const outputCoercion = (type: {
 
 export function validateEndpointSchema(schema: GraphQLSchema) {
   assertValidSchema(schema)
+
   const defaults = new GraphQLScalarType({ name: 'LoutreScalarDefaults' })
   for (const type of Object.values(schema.getTypeMap())) {
     if (
@@ -21,16 +22,18 @@ export function validateEndpointSchema(schema: GraphQLSchema) {
       !isSpecifiedScalarType(type) &&
       outputCoercion(type) === outputCoercion(defaults)
     )
-      throw new TypeError(
-        `${type.name}にscalarの出力coercionを登録してください。`,
-      )
+      throw new TypeError(`${type.name} must define scalar output coercion.`)
   }
+
   for (const root of [schema.getQueryType(), schema.getMutationType()]) {
     for (const field of Object.values(root?.getFields() ?? {})) {
       if (typeof field.resolve !== 'function')
-        throw new TypeError(`${root!.name}.${field.name}にresolveが必要です。`)
+        throw new TypeError(
+          `${root!.name}.${field.name} requires a resolve function.`,
+        )
     }
   }
+
   const subscription = schema.getSubscriptionType()
   for (const field of Object.values(subscription?.getFields() ?? {})) {
     if (
@@ -38,7 +41,7 @@ export function validateEndpointSchema(schema: GraphQLSchema) {
       typeof field.resolve !== 'function'
     )
       throw new TypeError(
-        `${subscription!.name}.${field.name}にsubscribeとresolveが必要です。`,
+        `${subscription!.name}.${field.name} requires subscribe and resolve functions.`,
       )
   }
 }
@@ -48,33 +51,34 @@ export function validateRuntime(
   wsEnabled: boolean,
 ): GraphQLRuntime<any, any, any, any> {
   if (!runtime || typeof runtime.context !== 'function')
-    throw new TypeError('GraphQL factoryはcontext関数を返してください。')
+    throw new TypeError('GraphQL factory must return a context function.')
   if ('rootValue' in runtime)
     throw new TypeError(
-      'rootValueは廃止しました。schemaへresolve / subscribeを登録してください。',
+      'The rootValue option is not supported. Register resolve / subscribe functions on the schema.',
     )
+
   if (runtime.ws !== undefined) {
-    if (!wsEnabled)
-      throw new TypeError(
-        'factory内のwsを使うには、endpointのwsを有効にしてください。',
-      )
+    if (!wsEnabled) throw new TypeError('Enable ws before defining factory.ws.')
     if (runtime.ws === null || typeof runtime.ws !== 'object')
       throw new TypeError(
-        'GraphQL wsは接続フックのオブジェクトを指定してください。',
+        'GraphQL ws must be an object containing connection hooks.',
       )
+
     for (const [name, hook] of Object.entries(runtime.ws)) {
       if (!['connectionInit', 'onDisconnect', 'onClose'].includes(name))
         throw new TypeError(
-          `GraphQL ws.${name}は公開する接続フックではありません。`,
+          `GraphQL ws.${name} is not a supported connection hook.`,
         )
       if (hook !== undefined && typeof hook !== 'function')
-        throw new TypeError(`GraphQL ws.${name}は関数を指定してください。`)
+        throw new TypeError(`GraphQL ws.${name} must be a function.`)
     }
   }
+
   if (
     runtime.formatError !== undefined &&
     typeof runtime.formatError !== 'function'
   )
-    throw new TypeError('GraphQL formatErrorは関数を指定してください。')
+    throw new TypeError('GraphQL formatError must be a function.')
+
   return runtime
 }

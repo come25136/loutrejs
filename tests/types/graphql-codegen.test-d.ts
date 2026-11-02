@@ -183,7 +183,7 @@ const fromRead = {
 } satisfies ProductResolver
 void fromRead
 const perParentError = {
-  load: () => [product, new Error('対象のProductを取得できません。')],
+  load: () => [product, new Error('Cannot load the requested Product.')],
 } satisfies ProductResolver
 void perParentError
 

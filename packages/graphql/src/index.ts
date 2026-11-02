@@ -54,6 +54,7 @@ type HttpState<TRoute> = TRoute extends {
 }
   ? LayerState<TLayers>
   : {}
+
 type ImplementationInput<TRoute, THttp, TWs, TState extends object> =
   | (HttpEnabled<THttp> extends true
       ? GraphQLHttpContextInput<HttpState<TRoute>>
@@ -79,7 +80,7 @@ const textSchema: StandardSchemaV1<string, string> = {
     validate: (value: unknown) =>
       typeof value === 'string'
         ? { value }
-        : { issues: [{ message: 'text messageが必要です。' }] },
+        : { issues: [{ message: 'A text message is required.' }] },
   },
 }
 
@@ -107,31 +108,37 @@ export function defineGraphQLImplementation<
   },
 ): GraphQLImplementation<THttp, TWs> {
   if (typeof definition.factory !== 'function')
-    throw new TypeError('GraphQL implementationにfactoryが必要です。')
+    throw new TypeError('GraphQL implementation requires a factory.')
   if ('schema' in definition)
     throw new TypeError(
-      'schemaは廃止しました。CLIが生成したmanifestを指定してください。',
+      'The schema option is not supported. Use a CLI-generated manifest.',
     )
   if (!isHttpRawContractRoute(definition.route))
     throw new TypeError(
-      'GraphQL implementationのrouteにはHTTP Contractのrawルートを指定してください。',
+      'GraphQL implementation requires a raw route from an HTTP contract.',
     )
   if ('path' in definition)
-    throw new TypeError('GraphQLのpathはHTTP Contractへ指定してください。')
+    throw new TypeError('Define the GraphQL path in the HTTP contract.')
+
   const bound = getManifest(definition.manifest)
   validateEndpointSchema(bound.schema)
+
   const httpOptions: HttpOptions = definition.http ?? true
   const wsOptions: WebSocketOptions = definition.ws ?? false
   if (wsOptions && !['GET', '*'].includes(definition.route.method))
     throw new TypeError(
-      'GraphQL WSのルートはHTTP ContractでGETか*を指定してください。',
+      'GraphQL WebSocket routes must use GET or * in the HTTP contract.',
     )
   if (!httpOptions && !wsOptions)
-    throw new TypeError('GraphQLのHTTPかWSを一つ以上有効にしてください。')
+    throw new TypeError(
+      'Enable at least one GraphQL transport: HTTP or WebSocket.',
+    )
+
   const executions: (
     | ExecutionDefinition<typeof http.extension>
     | WebSocketExecutionDefinition
   )[] = []
+
   if (httpOptions) {
     executions.push(
       http.raw({
@@ -142,6 +149,7 @@ export function defineGraphQLImplementation<
         ),
         factory: () => {
           const runtime = validateRuntime(definition.factory(), !!wsOptions)
+
           return async (context) => {
             const input: GraphQLHttpContextInput = {
               transport: 'http',
@@ -197,6 +205,7 @@ export function defineGraphQLImplementation<
       }),
     )
   }
+
   if (wsOptions) {
     const options = typeof wsOptions === 'object' ? wsOptions : {}
     executions.push(
@@ -214,6 +223,7 @@ export function defineGraphQLImplementation<
         }),
         factory: () => {
           const runtime = validateRuntime(definition.factory(), !!wsOptions)
+
           return {
             endpoint: (context) =>
               serveGraphQLWebSocket(context, bound, runtime, options),
@@ -222,6 +232,7 @@ export function defineGraphQLImplementation<
       }) as WebSocketExecutionDefinition,
     )
   }
+
   return Object.freeze({
     kind: 'execution-group',
     name: definition.name,

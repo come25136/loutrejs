@@ -4,7 +4,7 @@ import {
   type HttpContractRawRoute,
 } from '@loutrejs/loutre/http'
 const layer = http.middleware<{ tenant: string }>({
-  name: '組織',
+  name: 'Tenant',
   factory: () => async (_input, next) => next({ tenant: 'もみじ' }),
 })
 const api = http.contract({

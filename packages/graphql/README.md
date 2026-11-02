@@ -54,11 +54,13 @@ HTTPはHTTP Contractのrawルートへ既存middlewareを指定します。Graph
 import { ConnectionRejected } from '@loutrejs/graphql'
 
 const httpAuthentication = http.middleware<{ currentUser?: { id: string } }>({
-  name: 'HTTP認証',
+  name: 'HttpAuthentication',
   factory: (users = inject(Users)) => async ({ request }, next) => {
     if (http.isWebSocketUpgrade(request)) return next({})
+
     const user = users.authenticate({ authorization: request.headers.get('authorization') })
-    if (!user) return new Response('認証が必要です。', { status: 401 })
+    if (!user) return new Response('Authentication required.', { status: 401 })
+
     return next({ currentUser: { id: user.id } })
   },
 })
@@ -71,12 +73,15 @@ factory: (users = inject(Users)) => ({
   ws: {
     connectionInit: async ({ payload }) => {
       const user = users.authenticate({ authorization: payload?.authorization })
-      if (!user) return new ConnectionRejected('認証が必要です。')
+      if (!user) return new ConnectionRejected('Authentication required.')
+
       return { currentUser: { id: user.id } }
     },
   },
+
   context: ({ state, signal }) => {
-    if (!state.currentUser) throw new Error('認証済みの利用者がありません。')
+    if (!state.currentUser) throw new Error('Authenticated user is missing.')
+
     return { currentUser: state.currentUser, users, signal }
   },
 })
@@ -84,7 +89,7 @@ factory: (users = inject(Users)) => ({
 
 ConnectionInit handlerは`request`・`payload`・接続の`signal`・handshake middlewareの`state`を受け取り、stateのオブジェクトを返します。同期・非同期のどちらも使え、戻り値から`context()`と`formatError()`のWS stateを推論します。HTTP middlewareの認証結果と同じ形なら、Context・Resolverを共通化できます。
 
-拒否する場合は`@loutrejs/graphql`の`ConnectionRejected`を返します。`new ConnectionRejected('認証が必要です。')`なら、クライアントへ4403とその理由を通知します。理由は公開情報として扱い、UTF-8で123バイト以内にします。省略時は「接続が拒否されました。」です。HTTP Response、boolean、戻り値の省略は受け付けません。stateはACK payloadへ送らず、最上位を読み取り専用にして接続ごとに保持します。
+拒否する場合は`@loutrejs/graphql`の`ConnectionRejected`を返します。`new ConnectionRejected('Authentication required.')`なら、クライアントへ4403とその理由を通知します。理由は公開情報として扱い、UTF-8で123バイト以内にします。省略時は「Connection rejected.」です。HTTP Response、boolean、戻り値の省略は受け付けません。stateはACK payloadへ送らず、最上位を読み取り専用にして接続ごとに保持します。
 
 前処理中に切断・drainした場合は待機を終了し、遅い成功を公開しません。非同期I/Oには接続のsignalを渡してください。前処理中に確保したresourceは、signalによる中断も含めてアプリ側で解放してください。
 

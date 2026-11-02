@@ -126,8 +126,9 @@ export async function serveGraphQLWebSocket(
           result instanceof Response
         )
           throw new TypeError(
-            'ConnectionInitはstateのオブジェクトかConnectionRejectedを返してください。',
+            'connectionInit must return a state object or ConnectionRejected.',
           )
+
         state = Object.freeze(result) as Readonly<Record<string, unknown>>
         return true
       }, context.signal)
@@ -337,10 +338,7 @@ export async function serveGraphQLWebSocket(
         .map((result) => result.reason)
       if (errors.length === 1) throw errors[0]
       if (errors.length > 1)
-        throw new AggregateError(
-          errors,
-          'GraphQL WebSocketの終了処理に失敗しました。',
-        )
+        throw new AggregateError(errors, 'GraphQL WebSocket cleanup failed.')
     } finally {
       state = undefined
       context.signal.removeEventListener('abort', abortAll)

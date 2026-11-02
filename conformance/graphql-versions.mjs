@@ -19,9 +19,7 @@ const packageVersion = JSON.parse(
 const versions = (process.argv[3] ?? '16.14.2,17.0.2').split(',')
 for (const version of versions) {
   if (!/^\d+\.\d+\.\d+$/u.test(version)) {
-    throw new Error(
-      `GraphQLの検証versionには固定versionを指定してください: ${version}`,
-    )
+    throw new Error(`GraphQL conformance requires an exact version: ${version}`)
   }
 }
 const directory = await mkdtemp(join(tmpdir(), 'loutre-graphql-versions-'))

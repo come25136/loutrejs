@@ -1090,7 +1090,7 @@ function resolveHttpContractRoutes(
             Object.keys(inheritedResponses).length > 0
           )
             throw new TypeError(
-              'rawルートにはHTTPのrequestとresponsesを定義・継承できません。',
+              'Raw routes cannot declare or inherit HTTP request schemas or responses.',
             )
           resolved[name] = inheritSourceLocation(
             {
@@ -1300,7 +1300,9 @@ function compileHttpRoute(
   routeSourceFallback?: SourceLocation,
 ): CompiledHttpRoute {
   if (route.method === '*')
-    throw new TypeError('method: *はhttp.raw()でのみ利用できます。')
+    throw new TypeError(
+      'The wildcard method (*) is only supported by http.raw().',
+    )
   assertValidHttpMethod(route.method)
   const segments = parseHttpPath(route.path)
   assertValidHttpRouteDefinition(route, segments)
@@ -1603,7 +1605,7 @@ function createHttpExtensionRuntime(
           .some((value) => value.trim().toLowerCase() === 'upgrade')
       ) {
         return new Response(
-          'Upgrade要求はWebSocketの入口を使用してください。',
+          'Upgrade requests must use the WebSocket entry point.',
           { status: 400 },
         )
       }
@@ -1901,7 +1903,7 @@ function createHttpExtensionRuntime(
         }
         if (match.route.raw)
           throw new TypeError(
-            'Raw handlerとmiddlewareはResponseを返す必要があります。',
+            'Raw handlers and middleware must return a Response.',
           )
         const finalized = await finalizeHttpResult(
           match.route.definition,

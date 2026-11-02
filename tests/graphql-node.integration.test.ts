@@ -59,7 +59,7 @@ describe('Node native HTTP/WebSocket', () => {
           return payload?.secret === 'valid' ||
             request.headers.get('x-api-key') === 'valid'
             ? {}
-            : new ConnectionRejected('認証が必要です。')
+            : new ConnectionRejected('Authentication required.')
         },
       })
       const socket = new WebSocket(
@@ -81,7 +81,7 @@ describe('Node native HTTP/WebSocket', () => {
           )
           const [code, reason] = await closed
           expect(code).toBe(4403)
-          expect(String(reason)).toBe('認証が必要です。')
+          expect(String(reason)).toBe('Authentication required.')
         } else {
           let received = once(socket, 'message')
           socket.send(

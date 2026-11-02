@@ -483,7 +483,7 @@ function compileRouteTree(
 ): readonly CompiledWebSocketRoute[] {
   return Object.entries(tree).flatMap(([name, node]) => {
     if ('request' in node || 'responses' in node)
-      throw new TypeError('WebSocket v2ではhandshakeを使用してください。')
+      throw new TypeError('Use handshake for WebSocket v2 routes.')
     if (isBranch(node)) {
       const branchPath = node.path ?? ''
       if (branchPath !== '') parseHttpPath(branchPath)
@@ -619,7 +619,7 @@ function createWebSocketRuntime(
         return Response.json({ error: 'Service Unavailable' }, { status: 503 })
       }
       if (request.method !== 'GET') {
-        return new Response('WebSocket handshakeにはGETを使用してください。', {
+        return new Response('WebSocket handshake requires GET.', {
           status: 405,
           headers: { allow: 'GET' },
         })
@@ -653,7 +653,7 @@ function createWebSocketRuntime(
         offered.includes(value),
       )
       if (match.route.handshake?.protocols?.length && protocol === undefined) {
-        return new Response('WebSocket subprotocolが一致しません。', {
+        return new Response('WebSocket subprotocol mismatch.', {
           status: 400,
         })
       }
@@ -695,7 +695,7 @@ function createWebSocketRuntime(
         const response = await (lease.run ? lease.run(dispatch) : dispatch())
         if (!(response instanceof Response))
           throw new TypeError(
-            'WebSocket handshakeのmiddlewareはResponseを返してください。',
+            'WebSocket handshake middleware must return a Response.',
           )
         signal.throwIfAborted()
         if (!upgraded) {

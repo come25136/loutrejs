@@ -1,11 +1,12 @@
 export class ConnectionRejected {
   readonly #reason: string
 
-  constructor(reason = '接続が拒否されました。') {
+  constructor(reason = 'Connection rejected.') {
     if (new TextEncoder().encode(reason).byteLength > 123)
       throw new RangeError(
-        '接続拒否の理由はUTF-8で123バイト以内にしてください。',
+        'Connection rejection reason must not exceed 123 UTF-8 bytes.',
       )
+
     this.#reason = reason
   }
 

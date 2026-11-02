@@ -682,8 +682,8 @@ describe('GraphQL WebSocket', () => {
     async (asyncResult) => {
       const connectionInit = vi.fn<GraphQLConnectionInitHandler>(() =>
         asyncResult
-          ? Promise.resolve(new ConnectionRejected('認証が必要です。'))
-          : new ConnectionRejected('認証が必要です。'),
+          ? Promise.resolve(new ConnectionRejected('Authentication required.'))
+          : new ConnectionRejected('Authentication required.'),
       )
       const onDisconnect = vi.fn(),
         onClose = vi.fn<NonNullable<GraphQLWebSocketHooks['onClose']>>()
@@ -695,7 +695,7 @@ describe('GraphQL WebSocket', () => {
         connection.send({ type: 'connection_init' })
         expect(await connection.channel.connection.closed).toMatchObject({
           code: 4403,
-          reason: '認証が必要です。',
+          reason: 'Authentication required.',
         })
         await api.app.close()
         expect(connection.sent).toEqual([])
@@ -713,7 +713,7 @@ describe('GraphQL WebSocket', () => {
   it.each([false, true])(
     'ConnectionInitの非同期=%sの障害で内部情報を送信しない',
     async (asyncResult) => {
-      const failure = new Error('公開してはいけない接続情報')
+      const failure = new Error('Private connection details')
       const api = await fixture({
         connectionInit() {
           if (asyncResult) return Promise.reject(failure)
@@ -797,8 +797,8 @@ describe('GraphQL WebSocket', () => {
   it.each([false, true])(
     'onDisconnectの失敗後もonCloseを呼び、onClose失敗=%sも回収する',
     async (closeFails) => {
-      const disconnectFailure = new Error('切断処理の失敗')
-      const closeFailure = new Error('解放処理の失敗')
+      const disconnectFailure = new Error('Disconnect cleanup failed.')
+      const closeFailure = new Error('Resource cleanup failed.')
       const resource = { open: true }
       const api = await fixture({
         websocketHooks: {
@@ -837,7 +837,7 @@ describe('GraphQL WebSocket', () => {
   )
 
   it('購読の解放が失敗してもonCloseで接続resourceを解放する', async () => {
-    const failure = new Error('購読の解放失敗')
+    const failure = new Error('Subscription cleanup failed.')
     const resource = { open: true }
     const stream = source()
     const release = vi.fn(async () => {
@@ -884,7 +884,7 @@ describe('GraphQL WebSocket', () => {
   it.each(['onDisconnect', 'onClose'] as const)(
     '終了フック%sが失敗してもiteratorとleaseを解放する',
     async (hook) => {
-      const failure = new Error('終了フックの失敗')
+      const failure = new Error('Close hook failed.')
       const api = await fixture({
         websocketHooks: {
           [hook]: () => {
@@ -1024,7 +1024,7 @@ describe('GraphQL WebSocket', () => {
       const formatError = vi.fn<NonNullable<GraphQLRuntime['formatError']>>(
         (error) => {
           if (fallback && error.originalError === failure)
-            return { message: 'formatter failureを公開しない' }
+            return { message: 'Formatting failed.' }
           throw failure
         },
       )
@@ -1065,7 +1065,10 @@ describe('GraphQL WebSocket', () => {
       (error, input) => {
         expect(input.transport).toBe('websocket')
         expect(input.signal.aborted).toBe(false)
-        return { message: '公開メッセージ', extensions: { code: 'APP_ERROR' } }
+        return {
+          message: 'Public error message',
+          extensions: { code: 'APP_ERROR' },
+        }
       },
     )
     const api = await fixture({ formatError })
@@ -1097,7 +1100,7 @@ describe('GraphQL WebSocket', () => {
         data: null,
         errors: [
           {
-            message: '公開メッセージ',
+            message: 'Public error message',
             extensions: { code: 'APP_ERROR' },
             path: ['trips', 'name'],
           },
@@ -1152,7 +1155,7 @@ describe('GraphQL WebSocket', () => {
     const formatError = vi.fn<NonNullable<GraphQLRuntime['formatError']>>(
       (error) => {
         expect(error.originalError).toBe(failure)
-        return { message: '購読を開始できません。' }
+        return { message: 'Cannot start the subscription.' }
       },
     )
     const api = await fixture({
@@ -1175,7 +1178,9 @@ describe('GraphQL WebSocket', () => {
         connection.sent.find((message) => message.id === 'subscription')!
           .payload,
       ).toMatchObject({
-        errors: [{ message: '購読を開始できません。', path: ['trips'] }],
+        errors: [
+          { message: 'Cannot start the subscription.', path: ['trips'] },
+        ],
       })
       expect(formatError).toHaveBeenCalledTimes(1)
       connection.send({
@@ -1200,7 +1205,7 @@ describe('GraphQL WebSocket', () => {
     const formatError = vi.fn<NonNullable<GraphQLRuntime['formatError']>>(
       (error) => {
         expect(error.originalError).toBe(failure)
-        return { message: '購読を継続できません。' }
+        return { message: 'Cannot continue the subscription.' }
       },
     )
     const iterator: AsyncIterableIterator<unknown> = {
@@ -1225,7 +1230,7 @@ describe('GraphQL WebSocket', () => {
       await connection.wait('error', 'broken')
       expect(
         connection.sent.find((message) => message.id === 'broken')!.payload,
-      ).toEqual([{ message: '購読を継続できません。' }])
+      ).toEqual([{ message: 'Cannot continue the subscription.' }])
       expect(formatError).toHaveBeenCalledTimes(1)
       expect(cleanup).toHaveBeenCalledTimes(1)
       const operation = api.trace.traces.find(
@@ -1728,7 +1733,7 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
     const api = await fixture({
       middleware: [
         http.middleware<{ tenant: string }>({
-          name: '組織',
+          name: 'Tenant',
           factory: () => async (_input, next) => next({ tenant: '組織1' }),
         }),
       ],
@@ -1863,29 +1868,31 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
     const api = await fixture({
       middleware: [
         http.middleware({
-          name: 'HTTP拒否',
+          name: 'DenyHttp',
           factory:
             () =>
             async ({ request }, next) => {
               if (http.isWebSocketUpgrade(request)) return next({})
               return Response.json(
-                { error: '認証が必要です。' },
+                { error: 'Authentication required.' },
                 { status: 401 },
               )
             },
         }),
       ],
-      connectionInit: () => new ConnectionRejected('認証が必要です。'),
+      connectionInit: () => new ConnectionRejected('Authentication required.'),
     })
     try {
       const response = await api.fetchGraphQL('{hello}')
       expect(response.status).toBe(401)
-      expect(await response.json()).toEqual({ error: '認証が必要です。' })
+      expect(await response.json()).toEqual({
+        error: 'Authentication required.',
+      })
       const connection = await api.open()
       connection.send({ type: 'connection_init' })
       expect(await connection.channel.connection.closed).toMatchObject({
         code: 4403,
-        reason: '認証が必要です。',
+        reason: 'Authentication required.',
       })
       expect(connection.sent).toEqual([])
       expect(api.contexts).toEqual([])
@@ -2015,11 +2022,11 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
 
   it('HTTPのstate上書きを既存のlayer規約で拒否する', async () => {
     const first = http.middleware<{ tenant: string }>({
-      name: '最初',
+      name: 'InitialTenant',
       factory: () => async (_input, next) => next({ tenant: 'existing' }),
     })
     const overwrite = http.middleware<{ tenant: string }>({
-      name: '上書き',
+      name: 'OverwriteTenant',
       factory: () => async (_input, next) => next({ tenant: 'overwrite' }),
     })
     const api = await fixture({ middleware: [first, overwrite] })
@@ -2078,7 +2085,7 @@ describe('GraphQLの設定と型に沿った実行', () => {
       const app = defineApplication({ modules: [Module()] })
       expect(app.model.diagnostics).toContainEqual(
         expect.objectContaining({
-          message: expect.stringContaining('wsを有効'),
+          message: expect.stringContaining('Enable ws'),
         }),
       )
     },
@@ -2106,7 +2113,7 @@ describe('GraphQLの設定と型に沿った実行', () => {
           bindWebSocketServer({
             runtime: 'test',
             upgrade: async () => {
-              throw new Error('未使用')
+              throw new Error('Unused driver.')
             },
           }),
         ],
@@ -2124,12 +2131,14 @@ describe('GraphQLの設定と型に沿った実行', () => {
 })
 
 describe('接続拒否の公開理由', () => {
-  it('理由を省略すると既定の日本語メッセージを使う', () => {
-    expect(new ConnectionRejected().reason).toBe('接続が拒否されました。')
+  it('理由を省略すると既定の英語メッセージを使う', () => {
+    expect(new ConnectionRejected().reason).toBe('Connection rejected.')
   })
   it('理由の長さをUTF-8のバイト数で制限する', () => {
     expect(() => new ConnectionRejected('あ'.repeat(41))).not.toThrow()
-    expect(() => new ConnectionRejected('あ'.repeat(42))).toThrow('123バイト')
+    expect(() => new ConnectionRejected('あ'.repeat(42))).toThrow(
+      '123 UTF-8 bytes',
+    )
   })
 })
 
@@ -2157,7 +2166,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
           route: route as never,
           factory: () => ({ context: () => ({}) }),
         }),
-      ).toThrow('HTTP Contractのrawルート')
+      ).toThrow('raw route from an HTTP contract')
   })
 
   it('WSのGET要求と矛盾するmethodを拒否し、HTTPのみならそのmethodで公開できる', () => {
@@ -2172,7 +2181,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
         ws: true,
         factory: () => ({ context: () => ({}) }),
       }),
-    ).toThrow('GETか*')
+    ).toThrow('GET or *')
     expect(() =>
       graphql.implementation({
         name: 'Post',
@@ -2238,7 +2247,7 @@ it.each([
 ])('Upgradeを示すHTTP要求=%jを通常handlerへ流さない', async (headers) => {
   const called = vi.fn()
   const middleware = http.middleware({
-    name: '到達確認',
+    name: 'ReachabilityCheck',
     factory: () => async (_input, next) => {
       called()
       return next()
