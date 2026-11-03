@@ -47,7 +47,7 @@ class SilentLoggerBackend implements LoggerBackend {
 }
 
 export class LoggerService {
-  #state = { disposed: false }
+  #disposed = false
   static readonly [frameworkProvidedTokenBrand] = true
   static readonly [loggerTokenBrand] = true
   readonly [loggerInstanceBrand] = true
@@ -59,15 +59,6 @@ export class LoggerService {
     context: Readonly<Record<string, unknown>> = {},
   ) {
     this.context = { source: 'Application', ...context }
-  }
-
-  child(context: Readonly<Record<string, unknown>>): LoggerService {
-    const child = new LoggerService(this.backend, {
-      ...this.context,
-      ...context,
-    })
-    child.#state = this.#state
-    return child
   }
 
   debug(
@@ -93,7 +84,7 @@ export class LoggerService {
   }
 
   onApplicationDispose(): void {
-    this.#state.disposed = true
+    this.#disposed = true
   }
 
   #write(
@@ -108,7 +99,7 @@ export class LoggerService {
       level,
       message,
     }
-    if (this.#state.disposed) {
+    if (this.#disposed) {
       writeToConsole(level, serializeLogRecord(record))
       return
     }

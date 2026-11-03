@@ -31,6 +31,9 @@ class Consumer {
 }
 void Consumer
 
+// @ts-expect-error Loggerはchild APIを提供しない。
+logger.child({ source: 'Consumer' })
+
 // @ts-expect-error rootの選択はModule.providersで宣言する。
 defineApplication({ modules: [], logger: LoggerService })
 class Invalid {

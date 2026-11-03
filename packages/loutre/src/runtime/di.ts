@@ -17,6 +17,7 @@ import {
   isLogger,
   isLoggerToken,
 } from '../core/logger-internal.js'
+import { bindLoggerSource } from './logger-source.js'
 import { match } from 'ts-pattern'
 
 export class DependencyResolutionError extends Error {
@@ -250,7 +251,7 @@ export class Container {
     }
     if (isLoggerToken(requested)) {
       const root = requireLogger(value)
-      return (source === undefined ? root : root.child({ source })) as T
+      return (source === undefined ? root : bindLoggerSource(root, source)) as T
     }
     return value as T
   }

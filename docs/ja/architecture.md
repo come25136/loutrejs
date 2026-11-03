@@ -263,7 +263,7 @@ const application = defineApplication({ modules: [AppModule] })
 
 標準構成を明示するための`LoggerModule`も提供します。`modules: [LoggerModule, AppModule]`と指定しても、省略時と同じ標準Providerを使います。`LoggerToken`は利用側の注入先と、カスタム実装の登録先に使います。
 
-Provider、Execution、middlewareでは`inject(LoggerToken)`を使います。要求元の`source`を持つchild Loggerが渡され、同じApplicationのbackendを共有します。起動コードでは`app.get(LoggerToken)`でrootを取得します。sourceは`Application`となり、利用側で名前を付ける必要はありません。
+Provider、Execution、middlewareでは`inject(LoggerToken)`を使います。DIが要求元の`source`を各ログのcontextへ付与し、登録されたLogger実装へ渡します。同じApplicationのLoggerとbackendを使うため、カスタム実装のoverrideも維持されます。起動コードでは`app.get(LoggerToken)`でrootを取得します。sourceは`Application`となり、利用側で名前を付ける必要はありません。
 
 ```ts
 import { LoggerToken } from '@loutrejs/loutre'

@@ -20,6 +20,85 @@ import {
 } from '@loutrejs/loutre/runtime'
 
 describe('ApplicationのLogger DI', () => {
+  it('child APIを提供せず、元のカスタム実装を並行呼び出ししても注入先のsourceを混ぜない', async () => {
+    const pending = Promise.withResolvers<void>()
+    class Backend implements LoggerBackend {
+      readonly records: LogRecord[] = []
+      write(record: LogRecord) {
+        this.records.push(record)
+      }
+    }
+    class CustomLoggerService extends LoggerService {
+      #calls = 0
+      constructor(backend = inject(Backend)) {
+        super(backend)
+      }
+      get calls() {
+        return this.#calls
+      }
+      override async info(
+        message: string,
+        context: Readonly<Record<string, unknown>> = {},
+      ) {
+        if (message === 'first') await pending.promise
+        this.#calls++
+        super.info(`custom:${message}`, context)
+      }
+    }
+    class First {
+      readonly logger = inject(LoggerToken)
+    }
+    class Second {
+      readonly logger = inject(LoggerToken)
+    }
+    const application = defineApplication({
+      modules: [
+        defineModule({
+          providers: [
+            Backend,
+            provide(LoggerToken).useClass(CustomLoggerService),
+          ],
+          exports: [LoggerToken],
+        }),
+        defineModule({ providers: [First, Second] }),
+      ],
+    })
+    const app = await bootstrapApplication({ application })
+    try {
+      const root = app.get(LoggerToken)
+      if (!(root instanceof CustomLoggerService))
+        throw new Error('登録したLogger実装が解決されませんでした')
+      const first = app.get(First).logger
+      const second = app.get(Second).logger
+      expect(first).toBeInstanceOf(CustomLoggerService)
+      expect(first.backend).toBe(root.backend)
+      expect(first).not.toHaveProperty('child')
+      expect(root).not.toHaveProperty('child')
+      const running = first.info('first')
+      await second.info('second')
+      await root.info('root')
+      pending.resolve()
+      await running
+      const backend = root.backend
+      if (!(backend instanceof Backend))
+        throw new Error('登録したbackendが解決されませんでした')
+      expect(
+        backend.records.map(({ message, source }) => [message, source]),
+      ).toEqual([
+        ['custom:second', 'Second'],
+        ['custom:root', 'Application'],
+        ['custom:first', 'First'],
+      ])
+      expect(root.calls).toBe(3)
+      expect(Reflect.get(first, 'calls')).toBe(3)
+      expect(root.context.source).toBe('Application')
+      expect(first.context.source).toBe('First')
+    } finally {
+      pending.resolve()
+      await app.close()
+    }
+  })
+
   it('LoggerModuleが標準Loggerを公開し、backendをApplication内で共有してApplication間では分離する', async () => {
     class Consumer {
       readonly logger = inject(LoggerToken)
@@ -331,7 +410,7 @@ describe('ApplicationのLogger DI', () => {
     }
   })
 
-  it('backend終了後に保持したchildへ出した診断をconsoleへ送り、backendを再利用しない', async () => {
+  it('backend終了後に保持した注入先のLoggerへ出した診断をconsoleへ送り、backendを再利用しない', async () => {
     const write = vi.fn()
     const dispose = vi.fn()
     const ROOT = LoggerToken
@@ -349,10 +428,15 @@ describe('ApplicationのLogger DI', () => {
       ],
       exports: [ROOT],
     })
+    class Consumer {
+      readonly logger = inject(LoggerToken)
+    }
     const app = await bootstrapApplication({
-      application: defineApplication({ modules: [Logging] }),
+      application: defineApplication({
+        modules: [Logging, defineModule({ providers: [Consumer] })],
+      }),
     })
-    const logger = app.get(Logger).child({ source: 'Runtime' })
+    const logger = app.get(Consumer).logger
     const output = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
       await app.close()
@@ -365,7 +449,7 @@ describe('ApplicationのLogger DI', () => {
       expect(dispose).toHaveBeenCalledOnce()
       expect(JSON.parse(output.mock.calls[0]![0])).toMatchObject({
         level: 'error',
-        source: 'Runtime',
+        source: 'Consumer',
         message: 'shutdown failed',
         error: {
           message: 'cleanup failed',

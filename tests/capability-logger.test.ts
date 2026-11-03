@@ -32,15 +32,16 @@ describe('CapabilityとLogger', () => {
     expect(result.missing).toEqual(['stream.readable'])
   })
 
-  it('structured contextをchild Loggerへ引き継ぐ', () => {
+  it('Loggerの設定とログ出力時のstructured contextを結合する', () => {
     const records: LogRecord[] = []
     const backend: LoggerBackend = {
       write: (record) => records.push(record),
     }
-    const logger = new Logger(backend, { module: 'UsersModule' }).child({
+    const logger = new Logger(backend, { module: 'UsersModule' })
+    logger.info('ユーザーを取得しました', {
       procedure: 'users.get',
+      requestId: 'req-1',
     })
-    logger.info('ユーザーを取得しました', { requestId: 'req-1' })
 
     expect(records).toEqual([
       {
@@ -55,14 +56,12 @@ describe('CapabilityとLogger', () => {
     ])
   })
 
-  it('SilentLoggerはchildを含めてconsoleへ出力しない', () => {
+  it('SilentLoggerはconsoleへ出力しない', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    const logger = new SilentLogger({ application: 'test' }).child({
-      source: 'fixture',
-    })
+    const logger = new SilentLogger({ application: 'test', source: 'fixture' })
     logger.debug('debug')
     logger.info('info')
     logger.warn('warn')
