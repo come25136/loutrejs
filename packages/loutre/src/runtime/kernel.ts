@@ -16,7 +16,6 @@ import {
   type DependencyResolver,
   type ExecutionLease,
   type ExecutionOperationLease,
-  type LifecycleHook,
   type LifecycleModelNode,
   type ModuleModelNode,
   type ProviderDescriptor,
@@ -35,7 +34,6 @@ import { Logger } from './logger.js'
 
 export interface ApplicationKernelRuntimeOptions {
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
-  readonly logger?: Logger
   readonly environmentSource?: unknown
   readonly argumentsSource?: unknown
   readonly forceShutdownTimeoutMs?: number
@@ -64,7 +62,10 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     ExtensionIdentity,
     ExecutionExtensionRuntime
   >()
-  readonly #providerInstances = new Map<ModuleId, unknown[]>()
+  readonly #providerInstances = new Map<ModuleId | 'application', unknown[]>()
+  readonly #createdInstances: unknown[] = []
+  readonly #trackedInstances = new Set<unknown>()
+  #initializedInstanceCount = 0
   readonly #providerNodes = new Map<ProviderDescriptor, ProviderModelNode>()
   readonly #executionBindings = new Map<
     ExtensionIdentity,
@@ -88,6 +89,11 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     model: ApplicationModel,
     options: ApplicationKernelRuntimeOptions = {},
   ) {
+    if ('logger' in options) {
+      throw new TypeError(
+        'LUTRE_LOGGER_CONFIGURATION: Select a Provider token with defineApplication({ logger }); runtime Logger overrides are not supported.',
+      )
+    }
     this.model = assertValidApplicationModel(model)
     for (const node of this.model.nodes) {
       if (node.kind === 'provider') this.#providerNodes.set(node.provider, node)
@@ -111,7 +117,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       )
     }
     this.container = new Container(model.providers, {
-      logger: options.logger ?? new Logger(),
+      logger: model.logger,
       dependencies: new Map(
         [...this.#providerNodes.values()].map((node) => [
           node.token,
@@ -119,8 +125,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         ]),
       ),
       hooks: {
-        created: (provider, value) =>
-          this.#notifyProviderCreated(provider, value),
+        created: (provider, value) => this.#onProviderCreated(provider, value),
       },
     })
     for (const { extension, executions } of this.model.extensions) {
@@ -171,6 +176,8 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     try {
       this.#validateCapabilities()
       await this.#bindRuntimeInputs()
+      this.container.resolve(Logger)
+      await this.#initializeConstructedProviders()
       await this.#initializeProviders()
       for (const modelExtension of this.model.extensions) {
         const runtime = await modelExtension.extension.createRuntime({
@@ -235,8 +242,6 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
 
   async #initializeProviders(): Promise<void> {
     for (const module of moduleNodes(this.model)) {
-      const instances: unknown[] = []
-      this.#providerInstances.set(module.id, instances)
       for (const providerNode of providerNodesOfModule(this.model, module.id)) {
         const provider = providerNode.provider
         if (
@@ -246,14 +251,16 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         ) {
           continue
         }
-        const instance = this.container.resolve(provider.provide)
-        instances.push(instance)
-        await callLifecycle(instance, 'onModuleInit')
+        this.container.resolve(provider.provide)
+        await this.#initializeConstructedProviders()
       }
       this.#initializedModuleIds.add(module.id)
       await this.#runHook(
         lifecycleHookOf(this.model, module.id, 'onModuleInit'),
       )
+    }
+    for (const instance of this.#providerInstances.get('application') ?? []) {
+      await callLifecycle(instance, 'onApplicationBootstrap')
     }
     for (const module of moduleNodes(this.model)) {
       for (const instance of this.#providerInstances.get(module.id) ?? []) {
@@ -262,6 +269,13 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       await this.#runHook(
         lifecycleHookOf(this.model, module.id, 'onApplicationBootstrap'),
       )
+    }
+  }
+
+  async #initializeConstructedProviders(): Promise<void> {
+    while (this.#initializedInstanceCount < this.#createdInstances.length) {
+      const instance = this.#createdInstances[this.#initializedInstanceCount++]
+      await callLifecycle(instance, 'onModuleInit')
     }
   }
 
@@ -335,7 +349,19 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     )
   }
 
-  #notifyProviderCreated(provider: ProviderDescriptor, value: unknown): void {
+  #onProviderCreated(provider: ProviderDescriptor, value: unknown): void {
+    const node = this.#providerNodes.get(provider)
+    if (
+      node &&
+      provider.scope === 'application' &&
+      !this.#trackedInstances.has(value)
+    ) {
+      this.#trackedInstances.add(value)
+      this.#createdInstances.push(value)
+      const instances = this.#providerInstances.get(node.moduleId) ?? []
+      instances.push(value)
+      this.#providerInstances.set(node.moduleId, instances)
+    }
     const instrumentation = this.#instrumentation
     if (!instrumentation?.providerCreated) return
     const providerNode = this.#providerNodes.get(provider)
@@ -449,6 +475,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     }
     this.#extensionDrainOperations.clear()
     await this.#cleanupProviders(signal, errors)
+    await this.#disposeProviders(errors)
     this.#state = 'stopped'
     await closeInstrumentation(this.#instrumentation)
     if (errors.length > 0) {
@@ -500,45 +527,53 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
 
   async #cleanupProviders(signal: string | undefined, errors: unknown[]) {
     const modules = moduleNodes(this.model).toReversed()
-    for (const module of modules) {
+    for (const phase of [
+      'onModuleDestroy',
+      'beforeApplicationShutdown',
+      'onApplicationShutdown',
+    ] as const) {
+      for (const module of modules) {
+        for (const instance of (
+          this.#providerInstances.get(module.id) ?? []
+        ).toReversed()) {
+          await collectError(
+            () =>
+              callLifecycle(
+                instance,
+                phase,
+                phase === 'onModuleDestroy' ? undefined : signal,
+              ),
+            errors,
+          )
+        }
+        await collectError(() => this.#runCleanupHook(module.id, phase), errors)
+      }
       for (const instance of (
-        this.#providerInstances.get(module.id) ?? []
+        this.#providerInstances.get('application') ?? []
       ).toReversed()) {
         await collectError(
-          () => callLifecycle(instance, 'onModuleDestroy'),
+          () =>
+            callLifecycle(
+              instance,
+              phase,
+              phase === 'onModuleDestroy' ? undefined : signal,
+            ),
           errors,
         )
       }
+    }
+  }
+
+  async #disposeProviders(errors: unknown[]): Promise<void> {
+    for (const module of moduleNodes(this.model).toReversed()) {
       await collectError(
-        () => this.#runCleanupHook(module.id, 'onModuleDestroy'),
+        () => this.#runCleanupHook(module.id, 'onApplicationDispose'),
         errors,
       )
     }
-    for (const module of modules) {
-      for (const instance of (
-        this.#providerInstances.get(module.id) ?? []
-      ).toReversed()) {
-        await collectError(
-          () => callLifecycle(instance, 'beforeApplicationShutdown', signal),
-          errors,
-        )
-      }
+    for (const instance of this.#createdInstances.toReversed()) {
       await collectError(
-        () => this.#runCleanupHook(module.id, 'beforeApplicationShutdown'),
-        errors,
-      )
-    }
-    for (const module of modules) {
-      for (const instance of (
-        this.#providerInstances.get(module.id) ?? []
-      ).toReversed()) {
-        await collectError(
-          () => callLifecycle(instance, 'onApplicationShutdown', signal),
-          errors,
-        )
-      }
-      await collectError(
-        () => this.#runCleanupHook(module.id, 'onApplicationShutdown'),
+        () => callLifecycle(instance, 'onApplicationDispose'),
         errors,
       )
     }
@@ -563,16 +598,28 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         )
       }
     }
+    for (const instance of (
+      this.#providerInstances.get('application') ?? []
+    ).toReversed()) {
+      await collectError(
+        () => callLifecycle(instance, 'onModuleDestroy'),
+        errors,
+      )
+    }
+    await this.#disposeProviders(errors)
     await closeInstrumentation(this.#instrumentation)
     return errors
   }
 
-  async #runHook(hook: LifecycleHook<any> | undefined): Promise<void> {
-    if (!hook) return
-    const dependencies = hook.inject.map((token: TokenLike) =>
-      this.container.resolve(token),
+  async #runHook(node: LifecycleModelNode | undefined): Promise<void> {
+    if (!node) return
+    const dependencies = node.hook.inject.map((token: TokenLike) =>
+      this.container.resolve(token, {
+        source: node.id,
+        consumer: { id: node.id, name: node.phase, kind: 'lifecycle' },
+      }),
     )
-    await hook.run(...dependencies)
+    await node.hook.run(...dependencies)
   }
 
   async #runCleanupHook(moduleId: ModuleId, phase: string): Promise<void> {
@@ -601,13 +648,13 @@ function lifecycleHookOf(
   model: ApplicationModel,
   moduleId: ModuleId,
   phase: string,
-): LifecycleHook<any> | undefined {
+): LifecycleModelNode | undefined {
   return model.nodes.find(
     (node): node is LifecycleModelNode =>
       node.kind === 'lifecycle' &&
       node.moduleId === moduleId &&
       node.phase === phase,
-  )?.hook
+  )
 }
 
 interface InstrumentationLease extends ExecutionOperationLease {
@@ -708,7 +755,8 @@ async function callLifecycle(
     | 'onApplicationBootstrap'
     | 'onModuleDestroy'
     | 'beforeApplicationShutdown'
-    | 'onApplicationShutdown',
+    | 'onApplicationShutdown'
+    | 'onApplicationDispose',
   signal?: string,
 ): Promise<void> {
   if (

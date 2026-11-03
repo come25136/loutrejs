@@ -22,6 +22,7 @@ import type {
 
 export interface ModelBuildContext {
   readonly options: ApplicationModelBuildOptions
+  readonly roots: readonly ModuleInstance[]
   readonly modules: readonly ModuleInstance[]
   readonly imports: ReadonlyMap<ModuleInstance, readonly ModuleInstance[]>
   readonly moduleIds: ReadonlyMap<ModuleInstance, ModuleId>
@@ -54,19 +55,20 @@ function collectModules(roots: readonly ModuleInput[]) {
     modules.push(module)
   }
   for (const root of roots) visit(root)
-  return { modules, imports }
+  return { modules, imports, rootModules: roots.map(normalize) }
 }
 
 export function createModelBuildContext(
   options: ApplicationModelBuildOptions,
 ): ModelBuildContext {
-  const { modules, imports } = collectModules(options.modules)
+  const { modules, imports, rootModules } = collectModules(options.modules)
   const moduleIds = new Map(
     modules.map((module, index) => [module, moduleId(index + 1)]),
   )
   let providerOrdinal = 0
   return {
     options,
+    roots: rootModules,
     modules,
     imports,
     moduleIds,

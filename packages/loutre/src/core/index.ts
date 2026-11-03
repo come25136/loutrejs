@@ -83,6 +83,7 @@ export type {
   ModuleLifecycle,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  OnApplicationDispose,
   OnModuleDestroy,
   OnModuleInit,
 } from './lifecycle.js'

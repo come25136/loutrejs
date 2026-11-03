@@ -5,7 +5,9 @@ import type {
   LifecycleNodeId,
   CapabilityNodeId,
   ExtensionNodeId,
+  ApplicationLoggerNodeId,
 } from './identity.js'
+import type { Logger } from '../logger.js'
 import type { ArgsClass } from '../args.js'
 import type {
   AnyExecutionExtension,
@@ -70,6 +72,10 @@ export type FrameworkModelNode = {
       readonly frameworkKind: 'execution-extension'
       readonly id: ExtensionNodeId
     }
+  | {
+      readonly frameworkKind: 'application-logger'
+      readonly id: ApplicationLoggerNodeId
+    }
 )
 
 export type ApplicationModelNode =
@@ -90,8 +96,11 @@ export type ApplicationModelEdge =
   | Edge<'exports', ModuleId, ProviderNodeId>
   | Edge<
       'injects',
-      ProviderNodeId | ExecutionNodeId | LifecycleNodeId,
-      ProviderNodeId
+      | ProviderNodeId
+      | ExecutionNodeId
+      | LifecycleNodeId
+      | ApplicationLoggerNodeId,
+      ProviderNodeId | ApplicationLoggerNodeId
     >
   | Edge<'references', ExecutionNodeId, ExecutionNodeId>
   | Edge<'requires', ExecutionNodeId, CapabilityNodeId>
@@ -118,6 +127,7 @@ export interface ApplicationModelExtensions extends Iterable<ApplicationModelExt
 }
 
 export interface ApplicationModel {
+  readonly logger: TokenLike<Logger>
   readonly kind: 'application-model'
   readonly arguments?: ArgsClass
   readonly providers: readonly ProviderDescriptor[]
@@ -129,6 +139,7 @@ export interface ApplicationModel {
 }
 
 export interface ApplicationModelBuildOptions {
+  readonly logger?: TokenLike<Logger>
   readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
   readonly arguments?: ArgsClass
 }

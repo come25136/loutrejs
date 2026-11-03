@@ -20,6 +20,10 @@ export interface OnApplicationShutdown {
   onApplicationShutdown(signal?: string): void | Promise<void>
 }
 
+export interface OnApplicationDispose {
+  onApplicationDispose(): void | Promise<void>
+}
+
 export interface LifecycleHook<
   TInject extends readonly TokenLike[] = readonly TokenLike[],
 > {
@@ -43,4 +47,5 @@ export interface ModuleLifecycle {
   readonly onModuleDestroy?: LifecycleHook<any>
   readonly beforeApplicationShutdown?: LifecycleHook<any>
   readonly onApplicationShutdown?: LifecycleHook<any>
+  readonly onApplicationDispose?: LifecycleHook<any>
 }

@@ -8,6 +8,7 @@ import type {
   ModuleExtensions,
   ModuleInput,
   SchemaInput,
+  TokenLike,
 } from '../core/index.js'
 import { buildApplicationModel } from '../core/index.js'
 import type { Logger } from '../runtime/index.js'
@@ -18,7 +19,7 @@ export interface ApplicationDefinitionOptions<
 > {
   readonly modules: TModules
   readonly arguments?: TArguments
-  readonly logger?: Logger
+  readonly logger?: TokenLike<Logger>
 }
 
 export interface ApplicationDefinition<
@@ -29,7 +30,6 @@ export interface ApplicationDefinition<
   readonly model: ApplicationModel
   readonly modules: TModules
   readonly arguments: TArguments
-  readonly logger?: Logger
 }
 
 export function defineApplication<
@@ -42,13 +42,13 @@ export function defineApplication<
     kind: 'application-definition',
     model: buildApplicationModel({
       modules: options.modules,
+      ...(options.logger === undefined ? {} : { logger: options.logger }),
       ...(options.arguments === undefined
         ? {}
         : { arguments: options.arguments }),
     }),
     modules: options.modules,
     arguments: options.arguments as TArguments,
-    ...(options.logger === undefined ? {} : { logger: options.logger }),
   })
 }
 

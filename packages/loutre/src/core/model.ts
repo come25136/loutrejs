@@ -32,6 +32,11 @@ import {
 } from './model/providers.js'
 import { snapshotExecutionExtension } from './model/snapshot.js'
 import { validateHostNamespaces, validateNodeIds } from './model/validation.js'
+import {
+  compileApplicationLogger,
+  connectApplicationLogger,
+} from './model/logger.js'
+import { defaultLoggerToken } from './logger-internal.js'
 import { getSourceLocation } from './source-location.js'
 import { isTokenVisible, moduleDeclaresToken } from './model/visibility.js'
 
@@ -114,6 +119,7 @@ export function buildApplicationModel(
   collectModuleDeclarations(context)
   resolveModuleExports(context)
   compileArgumentsProvider(context)
+  compileApplicationLogger(context)
   resolveProviderDependencies(context)
   resolveLifecycleDependencies(context)
 
@@ -543,11 +549,13 @@ export function buildApplicationModel(
 
   const extensions = new ApplicationModelExtensionRegistry(extensionGroups)
 
+  connectApplicationLogger(context)
   validateHostNamespaces(extensionGroups, diagnostics)
   validateNodeIds(nodes, diagnostics)
 
   return Object.freeze({
     kind: 'application-model' as const,
+    logger: options.logger ?? defaultLoggerToken,
     ...(options.arguments === undefined
       ? {}
       : { arguments: options.arguments }),

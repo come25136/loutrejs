@@ -7,7 +7,7 @@ import {
 import { bindHttpServer, http, validate } from '@loutrejs/loutre/http'
 import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
-import { silentLogger } from './helpers/silent-logger.js'
+import { silentLogger, silentLoggingModule } from './helpers/silent-logger.js'
 import { reserveHttpPort } from './helpers/http-server.js'
 
 const BodyStreamSchema: StandardSchemaV1<
@@ -65,7 +65,7 @@ describe('streaming validate.body', () => {
       executions: [Implementation],
     }))
     const definition = defineApplication({
-      modules: [Module()],
+      modules: [silentLoggingModule, Module()],
       logger: silentLogger,
     })
 

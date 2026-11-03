@@ -6,7 +6,7 @@ import {
   token,
   type RuntimeInstrumentation,
 } from '@loutrejs/loutre'
-import { ApplicationKernelRuntime } from '@loutrejs/loutre/runtime'
+import { ApplicationKernelRuntime, Logger } from '@loutrejs/loutre/runtime'
 
 describe('Runtime instrumentation boundary', () => {
   it('coreはexecution/operation/providerの意味情報だけをgeneric instrumentationへ渡す', async () => {
@@ -27,7 +27,8 @@ describe('Runtime instrumentation boundary', () => {
         calls.push(
           `provider:${metadata.name}:${metadata.scope}:${metadata.providerKind}`,
         )
-        expect(value).toBeInstanceOf(Repository)
+        if (metadata.name === 'Repository')
+          expect(value).toBeInstanceOf(Repository)
       },
       beginExecution(metadata, invocation) {
         calls.push(`execution:${metadata.executionKind}:${metadata.name}`)
@@ -98,6 +99,8 @@ describe('Runtime instrumentation boundary', () => {
     expect(executionInvocation).toMatchObject({ input: { value: 21 } })
     expect(operationInvocation).toMatchObject({ input: { value: 21 } })
     expect(calls).toEqual([
+      'provider:loutre.logger.backend:application:factory',
+      'provider:loutre.logger.root:application:factory',
       'provider:Repository:application:class',
       'execution:task.invocation:demo',
       'execution:run',
@@ -130,7 +133,11 @@ describe('Runtime instrumentation boundary', () => {
 
     await runtime.initialize()
     expect(runtime.get(Service)).toBe(service)
-    expect(created).toEqual([service])
+    expect(created).toEqual([
+      runtime.get(Logger).backend,
+      runtime.get(Logger),
+      service,
+    ])
     await runtime.shutdown()
   })
 

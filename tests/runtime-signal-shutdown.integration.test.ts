@@ -1,3 +1,4 @@
+import { recordingLogger } from './helpers/recording-logger.js'
 import {
   defineApplication,
   defineExecution,
@@ -5,7 +6,7 @@ import {
   defineModule,
   type ExecutionLease,
 } from '@loutrejs/loutre'
-import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
+import { type LogRecord } from '@loutrejs/loutre/runtime'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { nodeRuntime } from '@loutrejs/node'
 
@@ -19,6 +20,7 @@ describe.each([
 ] as const)('%sのsignal shutdown継続', (name, runtime) => {
   beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     if (name === 'Bun') vi.stubGlobal('Bun', { env: {}, version: '1.4.0' })
   })
 
@@ -117,8 +119,11 @@ describe.each([
         ])
         expect(listenerCounts()).toEqual(baseline)
         if (order === 'drain-reject') {
-          await vi.waitFor(() => expect(fixture.records).toHaveLength(2))
-          expect(fixture.records[1]).toMatchObject({
+          await vi.waitFor(() => expect(console.error).toHaveBeenCalledOnce())
+          expect(fixture.records).toHaveLength(1)
+          expect(
+            JSON.parse(vi.mocked(console.error).mock.calls[0]![0]),
+          ).toMatchObject({
             signal: 'SIGTERM',
             error: expect.objectContaining({
               safeCleanupBoundaryReached: true,
@@ -188,15 +193,17 @@ function workerFixture(pendingDrain: boolean) {
       }),
     },
   })
+  const logging = recordingLogger(records)
   return {
     definition: defineApplication({
       modules: [
+        logging.module,
         defineModule({
           providers: [Resource],
           executions: [defineExecution(extension, {})],
         }),
       ],
-      logger: new Logger({ write: (record) => records.push(record) }),
+      logger: logging.root,
     }),
     events,
     records,

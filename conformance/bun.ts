@@ -81,12 +81,13 @@ const shutdownController = http.implementation({
 const failing = await bunRuntime.create({
   application: defineApplication({
     modules: [
+      defineModule({ providers: [SilentLogger], exports: [SilentLogger] }),
       defineModule({
         providers: [BrokenShutdown],
         executions: [shutdownController],
       }),
     ],
-    logger: new SilentLogger(),
+    logger: SilentLogger,
   }),
 })
 const failingListener = await failing.serve({

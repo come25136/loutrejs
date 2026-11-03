@@ -68,11 +68,9 @@ export function compileArgumentsProvider(context: ModelBuildContext): void {
 export function resolveProviderDependencies(context: ModelBuildContext): void {
   const { providerNodes, modules, moduleIds, edges, diagnostics } = context
   for (const provider of providerNodes.values()) {
-    if (provider.moduleId === 'application') continue
     const sourceModule = modules.find(
       (candidate) => moduleIds.get(candidate) === provider.moduleId,
     )
-    if (!sourceModule) continue
     for (const dependency of provider.dependencies) {
       const target = providerNodes.get(dependency)
       if (target) {
@@ -81,6 +79,7 @@ export function resolveProviderDependencies(context: ModelBuildContext): void {
           (candidate) => moduleIds.get(candidate) === target.moduleId,
         )
         if (
+          sourceModule &&
           targetModule &&
           target.moduleId !== provider.moduleId &&
           !moduleDeclaresToken(sourceModule, dependency) &&

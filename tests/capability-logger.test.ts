@@ -7,9 +7,22 @@ import {
   type LogRecord,
   type LoggerBackend,
 } from '@loutrejs/loutre/runtime'
-import { inject, normalizeProvider } from '@loutrejs/loutre'
+import {
+  buildApplicationModel,
+  inject,
+  normalizeProvider,
+  provide,
+  token,
+} from '@loutrejs/loutre'
 
 describe('CapabilityとLogger', () => {
+  it('Modelの既定Logger ProviderをContainerで二重登録しない', () => {
+    const model = buildApplicationModel({ modules: [] })
+    const container = new Container(model.providers)
+    expect(container.resolve(Logger).backend).toBe(
+      container.get(Logger).backend,
+    )
+  })
   it('Application requirementとRuntime capabilityの差分を返す', () => {
     const result = checkRuntimeSupport(['http.server', 'stream.readable'], {
       runtime: 'fixture',
@@ -93,7 +106,14 @@ describe('CapabilityとLogger', () => {
       { write: (record) => records.push(record) },
       { application: 'fixture' },
     )
-    const container = new Container([normalizeProvider(Consumer)], rootLogger)
+    const ROOT = token<Logger>('test.logger')
+    const container = new Container(
+      [
+        normalizeProvider(Consumer),
+        provide(ROOT).useFactory({ use: () => rootLogger }),
+      ],
+      { logger: ROOT },
+    )
 
     const consumer = container.resolve(Consumer)
     consumer.logger.info('DIから出力しました')

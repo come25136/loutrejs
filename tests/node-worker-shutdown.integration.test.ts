@@ -1,9 +1,9 @@
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { Server } from 'node:http'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
-import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
+
 import { nodeRuntime } from '@loutrejs/node'
-import { silentLogger } from './helpers/silent-logger.js'
+import { silentLogger, silentLoggingModule } from './helpers/silent-logger.js'
 
 const signals = ['SIGINT', 'SIGTERM'] as const
 const listeners = (): readonly (readonly unknown[])[] =>
@@ -17,7 +17,10 @@ function worker(onShutdown: (signal?: string) => void | Promise<void>) {
     }
   }
   return defineApplication({
-    modules: [defineModule(() => ({ providers: [Resource] }))()],
+    modules: [
+      silentLoggingModule,
+      defineModule(() => ({ providers: [Resource] }))(),
+    ],
     logger: silentLogger,
   })
 }
@@ -131,19 +134,16 @@ describe('Node workerの終了フック', () => {
     }
   })
 
-  it('signalによる終了失敗をLoggerで観測し、handlerを解除する', async () => {
+  it('signalによる終了失敗を終了後のconsoleで観測し、handlerを解除する', async () => {
     const baseline = listeners()
     const baselineCounts = counts()
-    const records: LogRecord[] = []
+    const output = vi.spyOn(console, 'error').mockImplementation(() => {})
     const error = new Error('shutdown failed')
     const definition = worker(() => {
       throw error
     })
     const app = await nodeRuntime.create({
-      application: {
-        ...definition,
-        logger: new Logger({ write: (record) => records.push(record) }),
-      },
+      application: definition,
     })
     try {
       const handler = process
@@ -151,16 +151,13 @@ describe('Node workerの終了フック', () => {
         .find((candidate) => !baseline[0]!.includes(candidate))!
       Reflect.apply(handler, process, ['SIGINT'])
       await expect(app.close()).rejects.toThrow('Node runtime shutdown failed')
-      await vi.waitFor(() =>
-        expect(records).toContainEqual(
-          expect.objectContaining({
-            level: 'error',
-            message: 'Node runtime shutdown failed',
-            signal: 'SIGINT',
-            error: expect.any(AggregateError),
-          }),
-        ),
-      )
+      await vi.waitFor(() => expect(output).toHaveBeenCalledOnce())
+      expect(JSON.parse(output.mock.calls[0]![0])).toMatchObject({
+        level: 'error',
+        message: 'Node runtime shutdown failed',
+        signal: 'SIGINT',
+        error: { name: 'ApplicationShutdownError' },
+      })
       expect(counts()).toEqual(baselineCounts)
     } finally {
       await app.close()

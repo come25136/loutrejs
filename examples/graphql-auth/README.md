@@ -13,7 +13,7 @@ npm run generate --workspace @loutrejs/example-graphql-auth
 npm run start --workspace @loutrejs/example-graphql-auth
 ```
 
-app.tsで作成したLoggerをApplicationとmain.tsで共有し、起動後のHTTP／WS接続先を構造化ログとして出力します。
+ApplicationがDIで生成したLoggerを`main.ts`で`app.get(Logger)`から取得し、起動後のHTTP／WS接続先を構造化ログとして出力します。Providerやmiddlewareも同じbackendを共有します。
 
 既定のポートは3000です。`PORT=3001`で変更できます。
 

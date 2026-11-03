@@ -8,6 +8,7 @@ export type ExecutionNodeId = ModelId<'execution'>
 export type LifecycleNodeId = ModelId<'lifecycle'>
 export type CapabilityNodeId = ModelId<'capability'>
 export type ExtensionNodeId = ModelId<'extension'>
+export type ApplicationLoggerNodeId = ModelId<'application-logger'>
 export type ModelNodeId =
   | ModuleId
   | ProviderNodeId
@@ -15,6 +16,7 @@ export type ModelNodeId =
   | LifecycleNodeId
   | CapabilityNodeId
   | ExtensionNodeId
+  | ApplicationLoggerNodeId
 
 export const moduleId = (ordinal: number): ModuleId =>
   `module:${ordinal}` as ModuleId
@@ -30,6 +32,9 @@ export const capabilityNodeId = (value: string): CapabilityNodeId =>
   `capability:${value}` as CapabilityNodeId
 export const extensionNodeId = (value: string): ExtensionNodeId =>
   `extension:${value}` as ExtensionNodeId
+
+export const applicationLoggerNodeId = (): ApplicationLoggerNodeId =>
+  'framework:logger' as ApplicationLoggerNodeId
 
 export const parseModelNodeId = (value: unknown): ModelNodeId | undefined =>
   typeof value === 'string' ? (value as ModelNodeId) : undefined

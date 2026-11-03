@@ -7,13 +7,16 @@ import { nodeRuntime } from '@loutrejs/node'
 import { UsersModule } from '../integrations/http-crud/src/index.js'
 import { EventsMessagePortModule } from '../integrations/streaming/src/index.js'
 import { assertSupportedBunVersion } from '@loutrejs/loutre/runtime'
-import { silentLogger } from './helpers/silent-logger.js'
+import { silentLogger, silentLoggingModule } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>
-  defineApplication({ modules: [UsersModule()], logger: silentLogger })
+  defineApplication({
+    modules: [silentLoggingModule, UsersModule()],
+    logger: silentLogger,
+  })
 const eventsDefinition = () =>
   defineApplication({
-    modules: [EventsMessagePortModule()],
+    modules: [silentLoggingModule, EventsMessagePortModule()],
     logger: silentLogger,
   })
 

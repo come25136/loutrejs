@@ -250,6 +250,57 @@ const loggerProvider = provide(AppLogger).useClass(AppLogger, {
 
 `ServiceA`が`inject(AppLogger)`すると、`AppLogger.consumer`は`ServiceA`です。組み込みLoggerの`context.source`は、そのLoggerを要求した`AppLogger`になります。factoryでも`use`内から`injectInquirer()`を使えますが、必要なサービスは登録時の`inject`配列で指定します。
 
+### ApplicationのLogger
+
+設定を省略すると、LoutreがApplicationごとにroot Loggerとconsole backendを生成します。Provider、Execution、middlewareでは`inject(Logger)`を使うと、要求元の`source`を持つchild Loggerが渡されます。childは同じApplicationのbackendを共有します。
+
+起動コードでは、初期化済みApplicationからrootを取得します。Loggerの実体を`app.ts`からexportする必要はありません。
+
+```ts
+import { Logger } from '@loutrejs/loutre/runtime'
+
+const app = await nodeRuntime.create({ application })
+const logger = app.get(Logger).child({ source: 'Main' })
+logger.info('Application ready')
+```
+
+独自backendを使う場合は、通常のProviderとしてrootとbackendを登録し、rootのtokenを`defineApplication({ logger })`で選択します。
+
+```ts
+import {
+  defineApplication,
+  defineModule,
+  provide,
+  token,
+} from '@loutrejs/loutre'
+import { JsonConsoleLoggerBackend, Logger } from '@loutrejs/loutre/runtime'
+
+const AppLogger = token<Logger>('application.logger')
+const LoggingModule = defineModule({
+  providers: [
+    JsonConsoleLoggerBackend,
+    provide(AppLogger).useFactory({
+      inject: [JsonConsoleLoggerBackend],
+      use: (backend: JsonConsoleLoggerBackend) => new Logger(backend),
+    }),
+  ],
+  exports: [AppLogger],
+})
+
+const application = defineApplication({
+  modules: [LoggingModule],
+  logger: AppLogger,
+})
+```
+
+rootはapplication scopeとし、Application直下Moduleの`exports`から公開します。backendは通常のProviderなので、EnvironmentやほかのProviderを`inject()`できます。非同期の準備は`onModuleInit`へ、終了時のflushやcloseは`onApplicationDispose`へ置きます。rootとその依存は、Environment・Argumentsの検証後、ほかのProviderより先に初期化します。backendが保持する資源のlifecycleをApplicationで管理する場合は、backendもapplication scopeにしてください。
+
+`Logger`は注入時のsourceを付ける予約tokenです。`provide(Logger)`ではなく別のroot tokenを宣言してください。rootの依存から`Logger`を要求すると循環になるため、Modelが経路付きで拒否します。factoryの依存指定は通常どおり`inject: [...]`を使います。
+
+同じDefinitionから複数Applicationを作っても、factoryで作ったrootとbackendは共有されません。`useValue`で実体を指定した場合は、通常のvalue providerと同様に、その指定した実体が共有されます。
+
+Logger準備前の失敗は例外として呼び出し元へ返します。終了後に保持していたLoggerへ出したログはconsoleへ送られ、終了済みbackendを再利用しません。従来のLoggerインスタンス指定と`bootstrapApplication({ logger: ... })`による差し替えは使用できません。
+
 ### Providerの登録方法ごとのルール
 
 | 登録方法                                         | 依存の指定方法と確認内容                                                                                                                                     |
@@ -361,7 +412,7 @@ const app = await nodeRuntime.create({ application })
 await app.serve({ port: 3000 })
 ```
 
-shutdownはExtension-owned workとactive executionをdrainし、active executionが0になってからExtension runtimeをcloseします。その後のProvider lifecycle cleanupは`onModuleDestroy`、`beforeApplicationShutdown`、`onApplicationShutdown`の順で実行します。drainの成否にかかわらずactive executionの待機が`forceShutdownTimeoutMs`を超えた場合は、利用中のProviderをcleanupせずApplicationを`draining`に保ちます。
+shutdownはExtension-owned workとactive executionをdrainし、active executionが0になってからExtension runtimeをcloseします。その後のProvider lifecycle cleanupは`onModuleDestroy`、`beforeApplicationShutdown`、`onApplicationShutdown`の順で実行します。最後にModuleの`onApplicationDispose` hookを実行し、Providerの`onApplicationDispose`を実体の生成と逆の順で実行します。終了hookからも利用する接続やbackendは、この最終フェーズで解放してください。初期化失敗時も生成済みの依存を回収し、`onModuleDestroy`の後に`onApplicationDispose`を実行します。同じ実体を複数tokenで公開した場合も、Providerのlifecycleは一度だけ実行します。drainの成否にかかわらずactive executionの待機が`forceShutdownTimeoutMs`を超えた場合は、利用中のProviderをcleanupせずApplicationを`draining`に保ちます。
 
 ## GraphとTooling
 

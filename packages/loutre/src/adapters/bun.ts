@@ -114,7 +114,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
 
   const closeApplication = application.close.bind(application)
   let server: BunServer | undefined
-  const logger = options.application.logger ?? new Logger()
+  const logger = application.get(Logger).child({ source: 'BunRuntime' })
   let serving = false
   let serverClosingPromise: Promise<void> | undefined
 

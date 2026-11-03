@@ -4,7 +4,7 @@ import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
 import { reserveHttpPort } from './helpers/http-server.js'
-import { silentLogger } from './helpers/silent-logger.js'
+import { silentLogger, silentLoggingModule } from './helpers/silent-logger.js'
 
 describe('複数値HTTP response header', () => {
   afterEach(() => {
@@ -71,7 +71,7 @@ function cookieApplication() {
     executions: [Controller],
   }))
   return defineApplication({
-    modules: [Module()],
+    modules: [silentLoggingModule, Module()],
     logger: silentLogger,
   })
 }

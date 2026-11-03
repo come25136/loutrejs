@@ -285,7 +285,9 @@ describe('Application Model identity regressions', () => {
     const Second = class Duplicate {}
     const Module = defineModule(() => ({ providers: [First, Second] }))
     const model = buildApplicationModel({ modules: [Module()] })
-    const providers = model.nodes.filter((node) => node.kind === 'provider')
+    const providers = model.nodes.filter(
+      (node) => node.kind === 'provider' && node.moduleId !== 'application',
+    )
 
     expect(providers.map((provider) => provider.id)).toEqual([
       'provider:1',
