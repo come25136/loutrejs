@@ -1,6 +1,6 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
 import type { GraphQLResolveInfo } from 'graphql'
-import type { User as UserDomain } from '../auth/users.js'
+import type { User as UserDomain } from '../../auth/users.js'
 export type Maybe<T> = T | null
 export type InputMaybe<T> = Maybe<T>
 export type RequireFields<T, K extends keyof T> = Omit<T, K> & {

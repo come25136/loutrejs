@@ -26,7 +26,7 @@ npm install --include=dev --ignore-scripts --no-save --package-lock=false --no-a
 
 ## TypeScriptのAST APIを使う補助script
 
-このworktreeのTypeScript 7パッケージはversion情報のみをexportし、createSourceFileやScriptTargetを提供しない。tscが動いても、従来のJavaScript compiler APIを使えるとは判断しない。
+このworktreeのTypeScript 7パッケージはversion情報のみをexportし、createSourceFileやScriptTargetを提供しない。tscが動いても、従来のJavaScript compiler APIを使えるとは判断しない。dependency-cruiserもTypeScript 7未対応の警告を出すため、コマンドの成功だけで全TypeScript依存を解析できたと判断しない。型チェックと実装の依存方向のレビューを併用する。
 
 変換scriptを作る前にexportを確認する。ASTが必要なら既存依存の@swc/coreを使う。SWCのspanは1始まりのUTF-8 byte offsetなので、日本語を含むsourceをJavaScript文字列のindexで切らず、Bufferで編集する。変換後にformat・型チェック・関連テストを行い、依存バージョンを変更して対処しない。
 
@@ -89,3 +89,17 @@ code scanning alertの対象commit・path・データフローを確認し、通
 ### 復旧方法・再発防止策
 
 vm実行のテストとimportを削除し、tarballを隔離環境へインストールするconsumer CIを公開APIの検証に使う。文字列をevalやFunctionへ渡す別方式へ置き換えたり、警告を抑制したりしない。push後は最新headのCodeQL成功とalertの修正状態を確認する。
+
+## 一時ディレクトリのworktreeが欠落した場合
+
+### 発生条件・原因
+
+`/tmp`配下のworktreeで作業を再開した際、`.git`ファイルと追跡対象の一部が失われ、元リポジトリのworktree一覧ではprunableと表示された。削除原因は確認できていない。未コミットのユーザー編集と依存ファイルは残っていた。
+
+### 安全な確認方法
+
+残存ファイルを確認し、元リポジトリで`git worktree list --porcelain`と対象PRのheadを照合する。`.git`がないディレクトリでGit操作が失敗しても、残った編集を不要と判断しない。
+
+### 復旧方法・再発防止策
+
+残存ファイルは保存したまま、確認済みのPR headから永続ディレクトリへ新しいworktreeを作る。依存を再インストールし、新しい作業だけを反映する。旧ディレクトリのユーザー編集は無断で取り込まず、削除・reset・worktree pruneもしない。複数日にわたる作業のworktreeは`/tmp`へ置かない。

@@ -1,7 +1,7 @@
 import { inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
-import { Users } from './users.js'
-import type { AuthState } from './state.js'
+import { Users } from '../auth/users.js'
+import type { AuthState } from '../auth/state.js'
 
 export const httpAuthentication = http.middleware<Partial<AuthState>>({
   name: 'HttpAuthentication',

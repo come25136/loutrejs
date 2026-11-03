@@ -29,11 +29,15 @@ Change `strategy` to EAGER, LAZY, or HYBRID to compare them. In a separate Query
 
 ## Suggested Reading Order
 
+GraphQL実装と生成物は`src/graphql/`、公開URLは`src/http/contract.ts`、業務サービスは`src/domain/`へ置きます。Moduleへ渡すpathを変えても、HTTP Contractがルートの正本です。
+
 - [contracts/orders.graphql](./contracts/orders.graphql): Public contract and default arguments.
 - [graphql.config.ts](./graphql.config.ts): SDL, domain mapping, and generated output paths.
 - [src/domain/commerce.ts](./src/domain/commerce.ts): Pagination, prefetching, and lookups keyed by a composite including Tenant and Revision.
 - [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): Object-style `resolve` arguments, field selections from `info`, and inline `load`, `requires`, and `authorize`.
-- [src/app.ts](./src/app.ts): Connects the manifest and DI.
+- [src/http/contract.ts](./src/http/contract.ts): 公開pathを持つHTTP Contractを作成します。
+- [src/graphql/endpoint.ts](./src/graphql/endpoint.ts): Contractのルート参照とmanifest・DIを接続します。
+- [src/app.ts](./src/app.ts): Module・Provider・Executionを組み立てます。
 - [src/graphql/manifest.ts](./src/graphql/manifest.ts): Binds the generated schema to handwritten resolvers.
 
 The OrderItem domain model contains `productId`, `tenant`, and `revision`, which are not exposed through GraphQL. `load` aligns values with the Parent order and never mixes different Tenant or Revision values, even for the same product ID. `authorize` also applies when reusing prefetched data.

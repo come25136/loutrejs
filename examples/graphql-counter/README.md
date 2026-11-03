@@ -17,13 +17,15 @@ HTTP is available at http://127.0.0.1:3000/graphql and WebSocket at ws://127.0.0
 
 ## Server Structure
 
+`src/app.ts`は構成、`src/main.ts`は起動を担当します。公開URLは[src/http/contract.ts](./src/http/contract.ts)、GraphQL実装と生成物は`src/graphql/`、業務サービスは`src/domain/`にまとめます。
+
 - [contracts/counter.graphql](./contracts/counter.graphql): Shared API contract.
 - [graphql.config.ts](./graphql.config.ts): Server type generation and domain mapping.
 - [src/domain/counter.ts](./src/domain/counter.ts): Domain state containing `value` and `stepId`, plus change notifications.
 - [src/domain/step.ts](./src/domain/step.ts): Batch retrieval of related Steps.
 - [src/graphql/resolvers.ts](./src/graphql/resolvers.ts): Uses the generated `Resolvers<AppContext>` type and inline `load` configuration to resolve `Counter.step` by `stepId` in batches.
 - [src/graphql/context.ts](./src/graphql/context.ts): Domain services and operation signals. The framework creates a Batch Scope for each Operation or Delivery Event.
-- [src/endpoint.ts](./src/endpoint.ts): Connects the bound manifest and DI to Context and configures shared HTTP/WebSocket error formatting.
+- [src/graphql/endpoint.ts](./src/graphql/endpoint.ts): Connects the bound manifest and DI to Context and configures shared HTTP/WebSocket error formatting.
 - [src/graphql/manifest.ts](./src/graphql/manifest.ts): Binds the generated schema to handwritten resolvers.
 
 The domain Counter does not contain a GraphQL `step` object. Mappers type the resolver's Parent as the domain type, while the related domain object is retrieved by `stepId`. The GraphQL contract does not prescribe how data is loaded or stored. This example keeps state in memory and resets it to 0 on restart.

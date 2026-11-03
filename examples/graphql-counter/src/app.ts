@@ -3,7 +3,7 @@ import { Logger } from '@loutrejs/loutre/runtime'
 import { AppEnv } from './config/env.js'
 import { CounterStore } from './domain/counter.js'
 import { StepService } from './domain/step.js'
-import { CounterEndpoint } from './endpoint.js'
+import { CounterEndpoint } from './graphql/endpoint.js'
 
 export const logger = new Logger()
 

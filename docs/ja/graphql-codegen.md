@@ -118,25 +118,31 @@ export const resolvers = {
 
 生成された`bindManifest`でSDLとResolverを関連付ける。Endpointの`factory`では、ApplicationのDIで受け取ったServiceをContextへ接続する。
 
+公開URLは`src/http/contract.ts`で定義し、`src/graphql/endpoint.ts`から参照します。
+
+```ts
+import { http } from '@loutrejs/loutre/http'
+
+export const ApiContract = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})
+```
+
 ```ts
 import { graphql } from '@loutrejs/graphql'
-import { http } from '@loutrejs/loutre/http'
 import { inject } from '@loutrejs/loutre'
-import { bindManifest } from './graphql/generated/bindings.js'
-import { schemaDocument } from './graphql/generated/schema-ast.js'
-import { resolvers } from './graphql/resolvers.js'
-import { CounterStore } from './domain/counter.js'
-import type { AppContext } from './graphql/context.js'
+import { ApiContract } from '../http/contract.js'
+import { bindManifest } from './generated/bindings.js'
+import { schemaDocument } from './generated/schema-ast.js'
+import { resolvers } from './resolvers.js'
+import { CounterStore } from '../domain/counter.js'
+import type { AppContext } from './context.js'
 
 const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 
-const Api = http.contract({
-  graphql: { raw: true, method: '*', path: '/graphql' },
-})
-
 export const endpoint = graphql.implementation({
   name: 'Counter',
-  route: Api.routes.graphql,
+  route: ApiContract.routes.graphql,
   manifest,
   transports: { http: true, websocket: true },
   factory: (counter = inject(CounterStore)) => ({

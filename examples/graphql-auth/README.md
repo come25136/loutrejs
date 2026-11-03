@@ -31,9 +31,30 @@ app.tsで作成したLoggerをApplicationとmain.tsで共有し、起動後のHT
 
 WSはConnectionInitのpayloadを読み、接続時のHTTPヘッダーへfallbackしません。
 
+## ディレクトリ構成
+
+```text
+src/
+├── app.ts / main.ts           # 構成と起動
+├── config/env.ts              # 環境設定
+├── auth/                     # 認証サービスと共有state
+├── http/                     # 公開ルートとHTTP処理
+│   ├── contract.ts
+│   ├── authentication.ts
+│   └── health.ts
+└── graphql/                  # GraphQLの実装
+    ├── endpoint.ts
+    ├── manifest.ts
+    ├── context.ts
+    ├── resolvers.ts
+    └── generated/
+```
+
+`http/contract.ts`を公開URLの正本にし、GraphQLはそのルート参照を使います。SDLは`contracts/auth.graphql`、codegenの設定は`graphql.config.ts`に置きます。
+
 ## 宣言とDI
 
-[contract.ts](./src/contract.ts)で、通常HTTPの`/health`とGraphQLの`/graphql`を定義します。[auth/http.ts](./src/auth/http.ts)のmiddlewareが、HTTPヘッダーからBearerまたはAPI keyを読み取ります。
+[http/contract.ts](./src/http/contract.ts)で、通常HTTPの`/health`とGraphQLの`/graphql`を定義します。[http/authentication.ts](./src/http/authentication.ts)のmiddlewareが、HTTPヘッダーからBearerまたはAPI keyを読み取ります。
 
 ```ts
 const ApiContract = http.contract({
@@ -74,7 +95,7 @@ export const httpAuthentication = http.middleware<Partial<AuthState>>({
 })
 ```
 
-[health.ts](./src/health.ts)は通常HTTP、[endpoint.ts](./src/endpoint.ts)はGraphQL HTTPとWSを担当します。GraphQL実装は同じルート参照から両方の入口を作ります。
+[http/health.ts](./src/http/health.ts)は通常HTTP、[graphql/endpoint.ts](./src/graphql/endpoint.ts)はGraphQL HTTPとWSを担当します。GraphQL実装は同じルート参照から両方の入口を作ります。
 
 ```ts
 const ProfileGraphQL = graphql.implementation({

@@ -1,5 +1,5 @@
 import { http } from '@loutrejs/loutre/http'
-import { httpAuthentication } from './auth/http.js'
+import { httpAuthentication } from './authentication.js'
 
 export const ApiContract = http.contract({
   health: {

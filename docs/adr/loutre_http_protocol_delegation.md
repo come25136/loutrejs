@@ -24,7 +24,7 @@ Contractへprotocol routeを置いても、GraphQLの入出力をHTTP response v
 
 ## 公開APIと検証
 
-HTTP implementationからhandlerへ委任するAPIをexampleで示し、型付きHTTP state、WSの有効化に必要なhost capability、canonical Model、DI、branch継承、route conflict、CLIの解析結果を揃える。factoryの実行結果によってModelに現れないWS endpointが増える構造にはしない。
+HTTP ContractのrawルートへGraphQL実装を接続するAPIをexampleで示し、型付きHTTP state、WSの有効化に必要なhost capability、canonical Model、DI、branch継承、route conflict、CLIの解析結果を揃える。factoryの実行結果によってModelに現れないWS endpointが増える構造にはしない。
 
 配布パッケージのconsumer検証もgraphql.implementationを公開APIとして確認する。CIのJavaScript式やWebサイトのコード文字列は型チェックだけでは旧APIの残存を検出できないため、tarballだけをインストールしたconsumerで公開APIを検証する。workflowから抜き出した文字列をvm・eval・Function等で実行する単体テストは追加しない。
 
@@ -95,3 +95,11 @@ transports.httpとtransports.websocketの有効化は独立した静的設定と
 GraphQL exampleではApplicationに渡すLoggerを起動コードと共有し、接続先を構造化ログで出力する。resolverの障害ログはDIしたLoggerへ渡す。
 
 コードの空行は、入力確認、認証・検証、stateの作成、後処理などのまとまりを区切るために入れる。オブジェクトの設定項目の間へ意味のない空行を置かず、factory内の各handlerや関数定義の間は読み分けられるようにする。
+
+## GraphQL exampleの配置
+
+exampleは、公開URLの定義から実装、DIの組み立てまでを責務ごとに追える配置にする。`app.ts`はModule・Provider・Executionの組み立て、`main.ts`はruntimeの起動を担当する。
+
+HTTP Contract・HTTP middleware・通常HTTPの実装は`src/http/`、GraphQLのendpoint・manifest・Context・Resolver・生成物は`src/graphql/`へ置く。認証の共有stateとサービスは`src/auth/`、業務サービスは各exampleの既存featureディレクトリへ置く。GraphQL SDLは`contracts/*.graphql`を正本とし、HTTP Contractとは分ける。
+
+GraphQL endpointは`http/contract.ts`のルート参照を受け取り、pathを重複定義しない。可変pathを扱うOrdersでも、Moduleが作ったContractの参照をendpointへ渡す。生成物を移動するときはcodegenのoutputとmapperの相対importを揃え、生成物の再作成で検証する。

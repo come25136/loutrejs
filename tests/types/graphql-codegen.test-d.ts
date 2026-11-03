@@ -3,7 +3,7 @@ import type { VariablesOf, ResultOf } from '@graphql-typed-document-node/core'
 import type {
   Resolvers,
   ResolversParentTypes,
-} from '../../examples/graphql-counter/src/generated/types.js'
+} from '../../examples/graphql-counter/src/graphql/generated/types.js'
 import {
   AddDocument,
   SnapshotDocument,
@@ -55,7 +55,7 @@ result.counter.stepId
 void variables
 void wrongVariables
 
-import type { Resolvers as OrderResolvers } from '../../examples/graphql-orders/src/generated/types.js'
+import type { Resolvers as OrderResolvers } from '../../examples/graphql-orders/src/graphql/generated/types.js'
 import type {
   OrderItem,
   Product,

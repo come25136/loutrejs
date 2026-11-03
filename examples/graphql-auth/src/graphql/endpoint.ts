@@ -1,13 +1,8 @@
-import { ApiContract } from './contract.js'
 import { graphql, ConnectionRejected } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { Users } from './auth/users.js'
-import { bindManifest } from './generated/bindings.js'
-import { schemaDocument } from './generated/schema-ast.js'
-import { resolvers } from './graphql/resolvers.js'
-import type { AppContext } from './graphql/context.js'
-
-const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
+import { Users } from '../auth/users.js'
+import { ApiContract } from '../http/contract.js'
+import { manifest } from './manifest.js'
 
 export const ProfileGraphQL = graphql.implementation({
   name: 'ProfileGraphQL',

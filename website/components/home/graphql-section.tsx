@@ -32,9 +32,15 @@ export const resolvers = {
   },
 } satisfies Resolvers<AppContext>`
 
+const contractSource = `import { http } from '@loutrejs/loutre/http'
+
+export const ApiContract = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})`
+
 const endpointSource = `import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { http } from '@loutrejs/loutre/http'
+import { ApiContract } from '../http/contract.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
 import { resolvers } from './resolvers.js'
@@ -46,14 +52,11 @@ const manifest = bindManifest<AppContext>({
   resolvers,
 })
 
-const Api = http.contract({
-  graphql: { raw: true, method: '*', path: '/graphql' },
-})
-
 export const endpoint = graphql.implementation({
   name: 'Counter',
-  route: Api.routes.graphql,
+  route: ApiContract.routes.graphql,
   manifest,
+  transports: { http: true, websocket: true },
   factory: (counter = inject(CounterStore)) => ({
     context: ({ signal }) => ({ counter, signal }),
   }),
@@ -109,6 +112,17 @@ export function GraphQLSection({ locale }: { readonly locale: Locale }) {
                   content: (
                     <HighlightedCode
                       source={resolverSource}
+                      lineNumbers
+                      className="pb-6 pt-2"
+                    />
+                  ),
+                },
+                {
+                  path: 'src/http/contract.ts',
+                  language: 'typescript',
+                  content: (
+                    <HighlightedCode
+                      source={contractSource}
                       lineNumbers
                       className="pb-6 pt-2"
                     />

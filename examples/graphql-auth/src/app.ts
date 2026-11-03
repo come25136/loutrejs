@@ -1,9 +1,9 @@
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { Logger } from '@loutrejs/loutre/runtime'
 import { Users } from './auth/users.js'
-import { HealthHttp } from './health.js'
+import { HealthHttp } from './http/health.js'
 import { AppEnv } from './config/env.js'
-import { ProfileGraphQL } from './endpoint.js'
+import { ProfileGraphQL } from './graphql/endpoint.js'
 
 export const logger = new Logger()
 

@@ -1,5 +1,5 @@
 import type { User } from '../auth/users.js'
-import type { Resolvers } from '../generated/types.js'
+import type { Resolvers } from './generated/types.js'
 import type { AppContext } from './context.js'
 
 export const resolvers = {

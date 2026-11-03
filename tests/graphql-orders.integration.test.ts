@@ -4,10 +4,50 @@ import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { graphql } from '@loutrejs/graphql'
 import { manifest } from '../examples/graphql-orders/src/graphql/manifest.js'
 import { CommerceService } from '../examples/graphql-orders/src/domain/commerce.js'
+import { OrdersModule } from '../examples/graphql-orders/src/app.js'
 import { print } from 'graphql'
 import { OrdersWithDetailsDocument } from '../conformance/graphql/client/orders.js'
 import { createClient } from 'graphql-ws'
 import WebSocket from 'ws'
+
+it('OrdersModuleの指定pathをHTTPとWSで共有し、既定pathへ公開しない', async () => {
+  const app = await nodeRuntime.create({
+    application: defineApplication({
+      modules: [OrdersModule({ path: '/custom/orders' })],
+    }),
+  })
+  const { server } = await app.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    shutdownHooks: false,
+  })
+  const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+  const client = createClient({
+    url: `${origin.replace('http:', 'ws:')}/custom/orders`,
+    webSocketImpl: WebSocket,
+    retryAttempts: 0,
+  })
+  const query = '{ productBatchCount }'
+  const stream = client.iterate({ query })
+
+  try {
+    const response = await fetch(`${origin}/custom/orders`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query }),
+    })
+    expect(response.status).toBe(200)
+    const result = { data: { productBatchCount: 0 } }
+    expect(await response.json()).toEqual(result)
+    expect((await stream.next()).value).toEqual(result)
+    expect((await stream.next()).done).toBe(true)
+    expect((await fetch(`${origin}/graphql`)).status).toBe(404)
+  } finally {
+    await stream.return?.()
+    await client.dispose()
+    await app.close()
+  }
+})
 
 it('手書きBindingの100注文 / 200明細がEager・Lazy・Hybridで一致し、HTTPとWSのOperation間を分離する', async () => {
   const commerce = new CommerceService()

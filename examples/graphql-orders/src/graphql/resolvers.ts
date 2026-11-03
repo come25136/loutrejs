@@ -1,6 +1,6 @@
 import { getFieldSelection } from '@loutrejs/graphql'
 import type { AppContext } from './context.js'
-import type { Resolvers } from '../generated/types.js'
+import type { Resolvers } from './generated/types.js'
 export const resolvers = {
   Query: {
     orders: {

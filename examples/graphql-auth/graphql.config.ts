@@ -5,8 +5,8 @@ export default {
     server: {
       kind: 'server',
       schema: ['contracts/*.graphql'],
-      output: 'src/generated',
-      mappers: { User: '../auth/users.js#User' },
+      output: 'src/graphql/generated',
+      mappers: { User: '../../auth/users.js#User' },
     },
   },
 } satisfies GraphQLCodegenConfig
