@@ -100,7 +100,6 @@ Enumの内部値がSDLの名前と異なる場合は、Server targetの`enumValu
 
 ```ts
 import type { Resolvers } from './generated/types.js'
-import type { AppContext } from './context.js'
 
 export const resolvers = {
   Query: {
@@ -118,20 +117,34 @@ export const resolvers = {
 
 生成された`bindManifest`でSDLとResolverを関連付ける。Endpointの`factory`では、ApplicationのDIで受け取ったServiceをContextへ接続する。
 
+公開URLは`src/http/endpoint.ts`で定義し、`src/graphql/endpoint.ts`から参照します。上記のResolver、Context、manifest、接続設定は同じendpointファイルへまとめられます。
+
+```ts
+import { http } from '@loutrejs/loutre/http'
+
+export const ApiContract = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})
+```
+
 ```ts
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { bindManifest } from './graphql/generated/bindings.js'
-import { schemaDocument } from './graphql/generated/schema-ast.js'
-import { resolvers } from './graphql/resolvers.js'
-import { CounterStore } from './domain/counter.js'
-import type { AppContext } from './graphql/context.js'
+import { ApiContract } from '../http/endpoint.js'
+import { bindManifest } from './generated/bindings.js'
+import { schemaDocument } from './generated/schema-ast.js'
+import { CounterStore } from '../domain/counter.js'
+
+interface AppContext {
+  readonly counter: CounterStore
+  readonly signal: AbortSignal
+}
 
 const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 
-export const endpoint = graphql.endpoint({
+export const endpoint = graphql.implementation({
   name: 'Counter',
-  path: '/graphql',
+  route: ApiContract.routes.graphql,
   manifest,
   transports: { http: true, websocket: true },
   factory: (counter = inject(CounterStore)) => ({
@@ -170,13 +183,15 @@ Endpointの`factory`から任意の`formatError(error, input)`を返すと、HTT
 
 ```ts
 import { ZodError } from 'zod'
+import { inject } from '@loutrejs/loutre'
+import { Logger } from '@loutrejs/loutre/runtime'
 
-factory: () => ({
+factory: (logger = inject(Logger)) => ({
   context: ({ signal }) => ({ signal }),
   formatError(error, input) {
     if (error.originalError instanceof ZodError) {
       return {
-        message: '入力が不正です。',
+        message: 'Invalid input.',
         extensions: {
           code: 'BAD_USER_INPUT',
           details: error.originalError.issues,
@@ -184,8 +199,11 @@ factory: () => ({
       }
     }
     if (!error.originalError) return error.toJSON()
-    console.error(`[GraphQL ${input.transport}]`, error.originalError)
-    return { message: '内部エラーが発生しました。' }
+    logger.error('GraphQL operation failed', {
+      transport: input.transport,
+      error: error.originalError,
+    })
+    return { message: 'Internal server error' }
   },
 })
 ```

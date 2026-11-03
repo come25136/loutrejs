@@ -60,6 +60,7 @@ export type {
   GenericLayer,
   GenericLayerContext,
   GenericLayerNext,
+  LayerState,
 } from './generic-layer.js'
 export {
   collectInjectedDependencies,

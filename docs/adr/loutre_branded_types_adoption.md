@@ -87,6 +87,14 @@ GraphQL.jsやgraphql-wsから来るtype名、field名、operation IDは各callba
 
 `FieldOptions.requires`はParentのproperty keyを表し、必ずしもGraphQL Schema上のfield名ではない。ここは既存の`keyof Parent`を維持し、`GraphQLFieldName`へ変換しない。
 
+### HTTP ContractからGraphQLへ委任する境界
+
+公開URLとmiddlewareはHTTP Contractを正本とし、GraphQL実装は正規化済みrawルートを参照する。`graphql.implementation`と、HTTP／GraphQLそれぞれの`endpoint.ts`にまとめたexample構成を維持する。型の導入を理由に廃止した`graphql.endpoint`を復活させない。
+
+WS UpgradeのmiddlewareからConnectionInitへ渡すstateと、ConnectionInitが返す接続stateはアプリの型をそのまま保持する。認証済みstateへFramework独自のbrandを付けない。Model由来のexecution IDとmiddlewareの依存収集用IDはCoreの型を引き継ぐ。graphql-wsのoperation IDはcallback入口で一度確定し、Context、Map、終了処理まで`GraphQLOperationId`を維持する。
+
+ConnectionInit、認証拒否、切断時の購読終了とlease解放はprotocolの既存契約を維持する。手動マージだけでなく、自動マージされたHTTP・WSのcompileと依存収集も型チェックし、brandの再変換や単なるstringへの拡張で統合しない。
+
 ### DevTools・CLI・Website・Scaffolder
 
 | 対象・所有者                     | 採用する型と境界                                                                                | 防げる取り違え・根拠                                                                                                                                                                                                            |

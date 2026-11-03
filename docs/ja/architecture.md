@@ -188,6 +188,8 @@ LoutreはApplicationを起動する前に、`inject()`などから「どのサ�
 
 記録したサービスを毎回すべて使う必要はありません。必要なサービスは常に同じように取得し、使うかどうかはメソッドやhandler内の処理で判断してください。
 
+`LayerState<typeof layers>`は、generic layerの配列からstate contributionを結合した型を取得する型utilityです。HTTP endpointとGraphQL HTTPのstate推論で利用します。
+
 ### 独自loggerなどで依存元を取得する
 
 `injectInquirer()`は、今作っているサービスを直接要求した相手を返します。返された相手をconsumerと呼びます。ログに要求元の名前を付けるなどの補足情報（metadata）に使い、取得するサービスの切り替えには使わないでください。

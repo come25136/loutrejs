@@ -2,7 +2,11 @@ import type {
   ApplicationModel,
   RuntimeCapabilityBinding,
 } from '../core/index.js'
-import { bindHttpServer, type HttpHostApi } from '../http/index.js'
+import {
+  bindHttpServer,
+  isWebSocketUpgrade,
+  type HttpHostApi,
+} from '../http/index.js'
 import {
   bindWebSocketServer,
   type WebSocketHostApi,
@@ -32,7 +36,7 @@ export function dispatchServerRequest(
     readonly http?: HttpHostApi
     readonly websocket?: WebSocketHostApi
   }
-  if (request.headers.get('upgrade')?.toLowerCase() === 'websocket') {
+  if (isWebSocketUpgrade(request)) {
     return (
       transports.websocket?.upgrade(request) ??
       Promise.resolve(new Response('Not Found', { status: 404 }))

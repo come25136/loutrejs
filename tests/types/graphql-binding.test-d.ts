@@ -1,12 +1,13 @@
+import { http as contractHttp } from '@loutrejs/loutre/http'
 import { graphql, getFieldSelection } from '@loutrejs/graphql'
 import type { GraphQLResolveInfo } from 'graphql'
-import { bindManifest } from '../../examples/graphql-counter/src/generated/bindings.js'
-import { schemaDocument } from '../../examples/graphql-counter/src/generated/schema-ast.js'
-import type { AppContext } from '../../examples/graphql-counter/src/graphql/context.js'
+import { bindManifest } from '../../examples/graphql-counter/src/graphql/generated/bindings.js'
+import { schemaDocument } from '../../examples/graphql-counter/src/graphql/generated/schema-ast.js'
+import type { AppContext } from '../../examples/graphql-counter/src/graphql/endpoint.js'
 import type { Counter } from '../../examples/graphql-counter/src/domain/counter.js'
-import { bindManifest as bindOrders } from '../../examples/graphql-orders/src/generated/bindings.js'
-import { schemaDocument as ordersDocument } from '../../examples/graphql-orders/src/generated/schema-ast.js'
-import type { AppContext as OrderContext } from '../../examples/graphql-orders/src/graphql/context.js'
+import { bindManifest as bindOrders } from '../../examples/graphql-orders/src/graphql/generated/bindings.js'
+import { schemaDocument as ordersDocument } from '../../examples/graphql-orders/src/graphql/generated/schema-ast.js'
+import type { AppContext as OrderContext } from '../../examples/graphql-orders/src/graphql/endpoint.js'
 import { bindManifest as bindConformance } from '../../conformance/graphql/generated/bindings.js'
 import { schemaDocument as conformanceDocument } from '../../conformance/graphql/generated/schema-ast.js'
 
@@ -137,22 +138,28 @@ const custom = bindManifest<{ readonly label: string }>({
     },
   },
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'Custom',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest: custom,
   factory: () => ({ context: () => ({ label: 'custom' }) }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'MissingCustomContext',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest: custom,
   // @ts-expect-error bindManifestのContextをendpointへ引き継ぐ
   factory: () => ({ context: () => ({}) }),
 })
-graphql.endpoint({
+graphql.implementation({
   name: 'MissingContext',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest: explicit,
   // @ts-expect-error 明示したAppContextをendpointへ引き継ぐ
   factory: () => ({ context: () => ({}) }),

@@ -1,0 +1,21 @@
+# Branded Typesとprotocol委任の変更を統合する
+
+## 発生条件・原因
+
+Branded Types導入と、HTTP ContractからGraphQLへ委任する変更を並行して進めた場合。GraphQLの公開API、WSの接続・終了処理、middlewareの依存収集が重なる。
+
+競合していない自動マージ箇所にも、後から追加したmiddlewareの依存収集IDが通常のstringで残った。競合マーカーの解消だけではCoreのDependencyConsumerIdと整合しない。
+
+## 安全な確認方法
+
+競合ファイルだけでなく、HTTP・WSのcompileとModelへの依存登録を比較し、checkとtest:typesを実行する。GraphQLのoperation IDとWebSocket session IDを交換できないこと、HTTP／WSでstateの推論が維持されることも型テストで確認する。
+
+## 復旧方法
+
+廃止したgraphql.endpointを戻さずgraphql.implementationへ統合する。Modelのexecution IDはExecutionNodeIdを維持し、依存収集IDはCoreのdependencyConsumerIdで生成する。graphql-ws由来のoperation IDだけをcallback入口で確定し、型付きMapから取り出した値を再変換しない。
+
+接続認証とcleanupは新しいprotocol実装を維持し、従来の終了処理へ戻さない。認証拒否、完了、切断、drain時のiterator終了とlease解放を既存の統合テストで確認する。
+
+## 再発防止策
+
+自動マージできたことと型・動作の整合を区別する。stringへの拡張やunknownへの二重assertionで回避せず、型の所有者と生成境界を揃える。exampleの移動先、生成物、Runtimeと配布packageのconsumerを含めて検証する。

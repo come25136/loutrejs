@@ -73,7 +73,7 @@ curl http://127.0.0.1:3000/graphql \
 
 まず[Batch Resolutionの図とコード比較](https://loutrejs.come25136.id/ja/features/batch-resolution/)で、個別resolverを`load`へ置き換える箇所を確認します。APIの契約、実行スコープ、認可、先読みデータの再利用は[GraphQLとCodegen](./graphql-codegen.md)を参照してください。
 
-[Ordersサンプルのresolver](https://github.com/come25136/loutrejs/blob/main/examples/graphql-orders/src/graphql/resolvers.ts)には、TenantやRevisionを含めて商品を取得し、親の順序に対応させる実装があります。自分のデータソースへ適用するときも、異なる利用者や版のデータを同じ取得キーとして扱わないことが必要です。
+[Ordersサンプルのresolver](https://github.com/come25136/loutrejs/blob/main/examples/graphql-orders/src/graphql/endpoint.ts)には、TenantやRevisionを含めて商品を取得し、親の順序に対応させる実装があります。自分のデータソースへ適用するときも、異なる利用者や版のデータを同じ取得キーとして扱わないことが必要です。
 
 ## 参考資料
 
