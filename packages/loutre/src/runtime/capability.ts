@@ -1,4 +1,12 @@
-export type RuntimeCapabilityId = string
+import type { Brand } from '../internal/brand.js'
+export type RuntimeSupportFeature = Brand<string, 'runtime.support-feature'>
+export const runtimeSupportFeature = (value: string): RuntimeSupportFeature =>
+  value as RuntimeSupportFeature
+export const runtimeSupportFeatures = (
+  values: Iterable<string>,
+): ReadonlySet<RuntimeSupportFeature> =>
+  new Set([...values].map(runtimeSupportFeature))
+export type RuntimeCapabilityId = RuntimeSupportFeature
 
 export interface RuntimeSupportProfile {
   readonly runtime: string
@@ -13,10 +21,10 @@ export interface RuntimeSupportCheck {
 }
 
 export function checkRuntimeSupport(
-  required: Iterable<RuntimeCapabilityId>,
+  required: Iterable<string>,
   runtime: RuntimeSupportProfile,
 ): RuntimeSupportCheck {
-  const requirements = [...new Set(required)]
+  const requirements = [...runtimeSupportFeatures(required)]
   const missing = requirements.filter(
     (capability) => !runtime.capabilities.has(capability),
   )

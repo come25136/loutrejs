@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   bootstrapApplication,
+  createKernelApplication,
   defineApplication,
   defineExecution,
   defineExecutionExtension,
@@ -14,6 +15,16 @@ interface BrokenHostDefinition extends ExecutionDefinition {
 }
 
 describe('Application Kernel regression', () => {
+  it('asyncDisposeはadapterが差し替えたcloseを呼ぶ', async () => {
+    const application = createKernelApplication({
+      application: defineApplication({ modules: [] }),
+    })
+    const close = vi.fn(application.close.bind(application))
+    application.close = close
+    await application[Symbol.asyncDispose]()
+    expect(close).toHaveBeenCalledOnce()
+  })
+
   it('Host API生成失敗時にExtensionとProviderをrollbackする', async () => {
     const events: string[] = []
     const extension = defineExecutionExtension<

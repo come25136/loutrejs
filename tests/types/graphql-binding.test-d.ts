@@ -1,5 +1,5 @@
 import { http as contractHttp } from '@loutrejs/loutre/http'
-import { graphql } from '@loutrejs/graphql'
+import { graphql, getFieldSelection } from '@loutrejs/graphql'
 import type { GraphQLResolveInfo } from 'graphql'
 import { bindManifest } from '../../examples/graphql-counter/src/graphql/generated/bindings.js'
 import { schemaDocument } from '../../examples/graphql-counter/src/graphql/generated/schema-ast.js'
@@ -188,7 +188,7 @@ bindOrders<OrderContext>({
       },
     },
     Query: {
-      orders({ args, context }) {
+      orders({ args, context, info }) {
         const offset: number = args.pagination.offset
         const strategy: 'EAGER' | 'LAZY' | 'HYBRID' = args.strategy
         // @ts-expect-error nested defaultはundefinedを含まないnumber
@@ -199,15 +199,7 @@ bindOrders<OrderContext>({
         return context.commerce.search({
           ...args,
           signal: context.signal,
-          selection: {
-            parentType: 'Query',
-            fieldName: 'orders',
-            responseKeys: ['orders'],
-            args,
-            requires: [],
-            prefetchable: false,
-            children: [],
-          },
+          selection: getFieldSelection(info),
         })
       },
     },

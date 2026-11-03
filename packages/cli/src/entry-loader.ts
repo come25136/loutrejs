@@ -1,3 +1,4 @@
+import { absoluteFsPath, fileUrl, type AbsoluteFsPath } from './paths.js'
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { builtinModules } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -20,14 +21,16 @@ export interface LoadEntryOptions {
 
 export interface LoadedEntry {
   readonly value: unknown
-  readonly files: readonly string[]
+  readonly files: readonly AbsoluteFsPath[]
 }
 
 export async function emitEntry(
-  entry: string,
-  output: string,
+  entryInput: string,
+  outputInput: string,
   options: EmitEntryOptions = {},
-): Promise<readonly string[]> {
+): Promise<readonly AbsoluteFsPath[]> {
+  const entry = absoluteFsPath(entryInput)
+  const output = absoluteFsPath(outputInput)
   await mkdir(dirname(output), { recursive: true })
   const workingDirectory = dirname(entry)
   const projectRoot = resolve(options.projectRoot ?? process.cwd())
@@ -61,14 +64,12 @@ export async function emitEntry(
     ],
   })
   return Object.keys(result.metafile.inputs).map((path) =>
-    resolve(workingDirectory, path),
+    absoluteFsPath(workingDirectory, path),
   )
 }
 
-async function importEntry(output: string): Promise<unknown> {
-  const module = await import(
-    `${pathToFileURL(output).href}?loutre=${Date.now()}`
-  )
+async function importEntry(output: AbsoluteFsPath): Promise<unknown> {
+  const module = await import(`${fileUrl(output)}?loutre=${Date.now()}`)
   if (!('default' in module) || module.default === undefined) {
     throw new Error('Loutre entry must have a default export.')
   }
@@ -80,7 +81,7 @@ export async function loadEntryWithFiles(
   options: LoadEntryOptions = {},
 ): Promise<LoadedEntry> {
   const directory = await mkdtemp(join(tmpdir(), 'loutre-entry-'))
-  const output = join(directory, 'entry.mjs')
+  const output = absoluteFsPath(directory, 'entry.mjs')
   try {
     const files = await emitEntry(entry, output, {
       nodeCompatibility: true,

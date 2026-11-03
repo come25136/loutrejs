@@ -54,5 +54,9 @@
       }
     }
   ],
-  "ignorePatterns": ["dist/**", "node_modules/**"]
+  "ignorePatterns": ["dist/**", "node_modules/**"],
+  "jsPlugins": ["./scripts/oxlint-loutre.mjs"],
+  "rules": {
+    "loutre/no-unknown-assertion": "error"
+  }
 }

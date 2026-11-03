@@ -10,7 +10,7 @@ export type {
 export { Container, DependencyResolutionError } from './di.js'
 export type { ContainerOptions } from './di.js'
 export { normalizeUnknownError } from './error.js'
-export type { NormalizedApplicationError } from './error.js'
+export type { NormalizedApplicationError, ApplicationErrorId } from './error.js'
 export {
   assertRuntimeEngine,
   assertSupportedBunVersion,
@@ -42,3 +42,9 @@ export type {
 } from './shutdown-hooks.js'
 export { ApplicationShutdownError, RuntimeShutdown } from './shutdown.js'
 export type { RuntimeShutdownOptions } from './shutdown.js'
+
+export { runtimeSupportFeature, runtimeSupportFeatures } from './capability.js'
+export type { RuntimeSupportFeature } from './capability.js'
+
+export { boundPort } from './server-port.js'
+export type { RequestedPort, BoundPort } from './server-port.js'

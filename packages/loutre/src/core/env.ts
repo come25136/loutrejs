@@ -16,6 +16,7 @@ export type EnvKey<TValue = unknown> = RuntimeInputKey<TValue> & {
 export interface EnvClass<TSchema extends EnvSchema = EnvSchema> extends Class<
   SchemaOutput<TSchema>
 > {
+  readonly '~loutre.descriptor': 'env'
   readonly kind: 'environment'
   readonly schema: TSchema
   key<TKey extends keyof SchemaOutput<TSchema> & string>(
@@ -27,6 +28,7 @@ export function defineEnv<TSchema extends EnvSchema>(
   schema: TSchema,
 ): EnvClass<TSchema> {
   class DefinedEnv {
+    declare static readonly '~loutre.descriptor': 'env'
     static readonly kind = 'environment' as const
     static readonly schema = schema
 
@@ -34,12 +36,16 @@ export function defineEnv<TSchema extends EnvSchema>(
       this: EnvClass<TSchema>,
       key: TKey,
     ): EnvKey<SchemaOutput<TSchema>[TKey]> {
-      return {
+      const descriptor: Omit<
+        EnvKey<SchemaOutput<TSchema>[TKey]>,
+        '~loutre.descriptor'
+      > = {
         kind: 'runtime-input-key',
         source: 'environment',
         contract: this,
         key,
       }
+      return descriptor as EnvKey<SchemaOutput<TSchema>[TKey]>
     }
 
     constructor(values: SchemaOutput<TSchema>) {
@@ -47,7 +53,7 @@ export function defineEnv<TSchema extends EnvSchema>(
     }
   }
 
-  return DefinedEnv as unknown as EnvClass<TSchema>
+  return DefinedEnv as EnvClass<TSchema>
 }
 
 export function isEnvClass(value: unknown): value is EnvClass {

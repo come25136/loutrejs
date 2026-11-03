@@ -1,3 +1,9 @@
+import {
+  boundPort,
+  type RequestedPort,
+  type BoundPort,
+} from '../runtime/server-port.js'
+import { runtimeSupportFeatures } from '../runtime/capability.js'
 import { RuntimeShutdown } from '../runtime/shutdown.js'
 import { ProcessShutdownHooks } from '../runtime/shutdown-hooks.js'
 import { Logger } from '../runtime/logger.js'
@@ -48,7 +54,7 @@ export interface BunServeOptions {
 }
 
 export interface BunListenerHandle {
-  readonly port: number
+  readonly port: BoundPort
 }
 
 export type BunRuntimeApplication<
@@ -59,7 +65,7 @@ export type BunRuntimeApplication<
 
 export const bunRuntime = {
   runtime: 'bun',
-  capabilities: new Set([
+  capabilities: runtimeSupportFeatures([
     'http.server',
     'websocket.server',
     'http.request.streaming',
@@ -161,7 +167,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
     }
     try {
       const requestedPort = serveOptions.port
-      let port = initialServerPort(requestedPort)
+      let port: RequestedPort | BoundPort = initialServerPort(requestedPort)
       while (true) {
         try {
           server = bun.serve({
@@ -178,13 +184,13 @@ async function create<const TDefinition extends ApplicationDefinition>(
               ),
             websocket: websocketDriver.websocket,
           })
-          port = server.port
+          port = boundPort(server.port)
           break
         } catch (error) {
           if (requestedPort !== undefined || !canRetryOnNextPort(error, port)) {
             throw error
           }
-          port += 1
+          port = initialServerPort(port + 1)
         }
       }
 

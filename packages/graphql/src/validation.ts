@@ -5,7 +5,6 @@ import {
   isSpecifiedScalarType,
   type GraphQLSchema,
 } from 'graphql'
-import type { GraphQLRuntime } from './types.js'
 
 const outputCoercion = (type: {
   readonly serialize: unknown
@@ -46,10 +45,9 @@ export function validateEndpointSchema(schema: GraphQLSchema) {
   }
 }
 
-export function validateRuntime(
-  runtime: GraphQLRuntime<any, any, any, any>,
-  wsEnabled: boolean,
-): GraphQLRuntime<any, any, any, any> {
+export function validateRuntime<
+  T extends { context: unknown; ws?: unknown; formatError?: unknown },
+>(runtime: T, wsEnabled: boolean): T {
   if (!runtime || typeof runtime.context !== 'function')
     throw new TypeError('GraphQL factory must return a context function.')
   if ('rootValue' in runtime)

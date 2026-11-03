@@ -1,3 +1,4 @@
+import type { FlowNodeId } from '../../lib/devtools-identity'
 import ELK, {
   type ElkExtendedEdge,
   type ElkNode,
@@ -60,7 +61,7 @@ export async function layoutGraph(
   readonly nodes: LoutreFlowNode[]
   readonly edges: LoutreFlowEdge[]
 }> {
-  const childrenByParent = new Map<string, LoutreFlowNode[]>()
+  const childrenByParent = new Map<FlowNodeId, LoutreFlowNode[]>()
   for (const node of nodes) {
     if (!node.parentId) continue
     const children = childrenByParent.get(node.parentId) ?? []

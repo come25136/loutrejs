@@ -1,6 +1,10 @@
+import type { Brand } from '../../internal/brand.js'
+export type CronExpression = Brand<string, 'tasks.cron-expression'>
+export type IanaTimeZone = Brand<string, 'tasks.iana-timezone'>
+
 export interface CronSchedule {
-  readonly expression: string
-  readonly timezone: string
+  readonly expression: CronExpression
+  readonly timezone: IanaTimeZone
 }
 
 export function matchesCronTrigger(
@@ -119,5 +123,18 @@ function isValidCronField(
     const start = Number(bounds[0])
     const end = bounds[1] === undefined ? start : Number(bounds[1])
     return start >= minimum && end <= maximum && start <= end
+  })
+}
+
+export function parseCronSchedule(
+  expression: string,
+  timezone: string,
+): CronSchedule {
+  if (!isValidCronExpression(expression))
+    throw new TypeError('portableな5-field cron expressionが必要です。')
+  new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format()
+  return Object.freeze({
+    expression: expression as CronExpression,
+    timezone: timezone as IanaTimeZone,
   })
 }

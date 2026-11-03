@@ -1,3 +1,16 @@
+import { dependencyConsumerId } from '../core/identity.js'
+import {
+  epochNow,
+  expiresAt,
+  epochMilliseconds,
+  type EpochMs,
+} from '../core/units.js'
+import {
+  messagePortProcedureName,
+  type MessagePortProcedureName,
+} from './identity.js'
+import type { Descriptor } from '../internal/brand.js'
+import type { ExecutionNodeId } from '../core/model/identity.js'
 import {
   collectInjectedDependencies,
   defineExecution,
@@ -35,7 +48,7 @@ export interface MessagePortRouteDefinition {
 export interface MessagePortContract<
   TRoutes extends Readonly<Record<string, MessagePortRouteDefinition>> =
     Readonly<Record<string, MessagePortRouteDefinition>>,
-> {
+> extends Descriptor<'message-port-contract'> {
   readonly kind: 'message-port-contract'
   readonly routes: TRoutes
 }
@@ -102,7 +115,10 @@ interface CompiledMessagePortExecution {
 }
 
 export interface MessagePortExtensionRuntime {
-  invoke(method: string, input?: unknown): Promise<MessagePortResult>
+  invoke(
+    method: MessagePortProcedureName,
+    input?: unknown,
+  ): Promise<MessagePortResult>
   drain(context: ExecutionExtensionDrainContext): Promise<void>
 }
 
@@ -132,7 +148,9 @@ export const messagePortExtension = defineExecutionExtension<
       dependencies: collectInjectedDependencies(
         {
           kind: 'execution',
-          id: `message-port:${definition.name || `${context.moduleId}.message-port.${context.definitionIndex}`}`,
+          id: dependencyConsumerId(
+            `message-port:${definition.name || `${context.moduleId}.message-port.${context.definitionIndex}`}`,
+          ),
           name:
             definition.name ||
             `${context.moduleId}.message-port.${context.definitionIndex}`,
@@ -147,9 +165,10 @@ export const messagePortExtension = defineExecutionExtension<
     }
   },
   validate({ executions }) {
-    const methods = new Set<string>()
+    const methods = new Set<MessagePortProcedureName>()
     return executions.flatMap((execution) =>
-      Object.keys(execution.compiled.routes).flatMap((method) => {
+      Object.keys(execution.compiled.routes).flatMap((name) => {
+        const method = messagePortProcedureName(name)
         if (!methods.has(method)) {
           methods.add(method)
           return []
@@ -173,7 +192,8 @@ export const messagePortExtension = defineExecutionExtension<
   host: {
     namespace: 'messagePort',
     create: ({ runtime }) => ({
-      invoke: (method, input) => runtime.invoke(method, input),
+      invoke: (method, input) =>
+        runtime.invoke(messagePortProcedureName(method), input),
     }),
   },
 }) as ExecutionExtension<
@@ -192,7 +212,10 @@ export type MessagePortExecutionDefinition<
 export function defineMessagePortContract<
   const TRoutes extends Readonly<Record<string, MessagePortRouteDefinition>>,
 >(routes: TRoutes): MessagePortContract<TRoutes> {
-  return Object.freeze({ kind: 'message-port-contract', routes })
+  return Object.freeze({
+    kind: 'message-port-contract',
+    routes,
+  }) as MessagePortContract<TRoutes>
 }
 
 export function defineMessagePortImplementation<
@@ -245,9 +268,9 @@ function createMessagePortRuntime(
   applicationRuntime: ExecutionKernelRuntime,
 ): MessagePortExtensionRuntime {
   const routes = new Map<
-    string,
+    MessagePortProcedureName,
     {
-      readonly executionId: string
+      readonly executionId: ExecutionNodeId
       readonly route: MessagePortRouteDefinition
       readonly handler: (
         context: MessagePortContext,
@@ -256,14 +279,14 @@ function createMessagePortRuntime(
   >()
   const ingress = new IngressGate()
   const activeStreams = new Set<{
-    abort(reason: unknown, deadline: number): Promise<void>
+    abort(reason: unknown, deadline: EpochMs): Promise<void>
   }>()
   for (const { execution, resolve } of bindings) {
     const handlers = runInInjectionContext(
       {
         consumer: {
           kind: 'execution',
-          id: `message-port:${execution.id}`,
+          id: dependencyConsumerId(`message-port:${execution.id}`),
           name: execution.id,
         },
         resolve: (token, consumer) => resolve(token, { consumer }),
@@ -275,7 +298,7 @@ function createMessagePortRuntime(
     )) {
       const handler = handlers[method]
       if (handler) {
-        routes.set(method, {
+        routes.set(messagePortProcedureName(method), {
           executionId: execution.id,
           route: definition,
           handler,
@@ -361,7 +384,7 @@ function createMessagePortRuntime(
     },
     async drain({ timeoutMs }) {
       ingress.stopAccepting()
-      const deadline = Date.now() + timeoutMs
+      const deadline = expiresAt(epochNow(), timeoutMs)
       await ingress.waitForIdle()
       const reason = new Error('LUTRE_MESSAGE_PORT_DRAINING')
       const results = await Promise.allSettled(
@@ -382,7 +405,7 @@ function createLeasedMessagePortStream(
   source: AsyncIterable<unknown>,
   lease: ReturnType<ExecutionKernelRuntime['beginExecution']>,
   activeStreams: Set<{
-    abort(reason: unknown, deadline: number): Promise<void>
+    abort(reason: unknown, deadline: EpochMs): Promise<void>
   }>,
 ): AsyncIterable<unknown> & { cancel(reason?: unknown): Promise<void> } {
   const iterator = new AsyncIteratorLifecycle(source[Symbol.asyncIterator]())
@@ -392,14 +415,14 @@ function createLeasedMessagePortStream(
   let cancellationSettled = true
   let cancellation: Promise<void> | undefined
   let iteratorCleanup: Promise<void> | undefined
-  let iteratorCleanupDeadline: number | undefined
+  let iteratorCleanupDeadline: EpochMs | undefined
   let iteratorCleanupComplete = false
   let resolveCompleted!: () => void
   const completedPromise = new Promise<void>((resolve) => {
     resolveCompleted = resolve
   })
   let control: {
-    abort(reason: unknown, deadline: number): Promise<void>
+    abort(reason: unknown, deadline: EpochMs): Promise<void>
   }
 
   const markFinished = () => {
@@ -427,13 +450,12 @@ function createLeasedMessagePortStream(
   }
   const startIteratorCleanup = (
     reason?: unknown,
-    deadline?: number,
+    deadline?: EpochMs,
   ): Promise<void> => {
     if (iteratorCleanup) {
       if (deadline !== undefined) {
-        iteratorCleanupDeadline = Math.min(
-          iteratorCleanupDeadline ?? deadline,
-          deadline,
+        iteratorCleanupDeadline = epochMilliseconds(
+          Math.min(iteratorCleanupDeadline ?? deadline, deadline),
         )
       }
       return iteratorCleanup

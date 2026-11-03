@@ -1,3 +1,4 @@
+import type { GraphQLOperationId } from './identity.js'
 import type { ConnectionRejected } from './connection-rejected.js'
 import type { ServerOptions } from 'graphql-ws'
 import type { HttpContractRawRoute } from '@loutrejs/loutre/http'
@@ -20,7 +21,7 @@ export interface GraphQLWebSocketContextInput<
   readonly transport: 'websocket'
   readonly request: Request
   readonly connectionParams: Readonly<Record<string, unknown>> | undefined
-  readonly operationId: string
+  readonly operationId: GraphQLOperationId
   readonly signal: AbortSignal
 }
 

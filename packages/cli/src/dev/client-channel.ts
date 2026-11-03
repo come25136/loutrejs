@@ -1,3 +1,7 @@
+import {
+  parseControlRequestId,
+  type ControlRequestId,
+} from '@loutrejs/loutre/devtools'
 import type { IncomingMessage, Server } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer, type WebSocket } from 'ws'
@@ -13,7 +17,7 @@ export const DEVTOOLS_CLIENT_CHANNEL_PATH = '/__loutre/client'
 
 interface ClientRequestMessage {
   readonly type: 'request'
-  readonly id: string
+  readonly id: ControlRequestId
   readonly method: DevtoolsControlMethod
   readonly params?: unknown
 }
@@ -26,13 +30,13 @@ interface ClientHelloMessage {
 type ClientResponseMessage =
   | {
       readonly type: 'response'
-      readonly id: string
+      readonly id: ControlRequestId
       readonly ok: true
       readonly result: unknown
     }
   | {
       readonly type: 'response'
-      readonly id: string
+      readonly id: ControlRequestId
       readonly ok: false
       readonly error: {
         readonly name: string
@@ -161,7 +165,7 @@ function isClientRequest(value: unknown): value is ClientRequestMessage {
   return (
     isRecord(value) &&
     value.type === 'request' &&
-    typeof value.id === 'string' &&
+    parseControlRequestId(value.id) !== undefined &&
     typeof value.method === 'string' &&
     isControlMethod(value.method)
   )

@@ -1,3 +1,4 @@
+import * as fixture from './helpers/devtools-fixtures.js'
 import { describe, expect, it } from 'vitest'
 import type { GraphSnapshot } from '../lib/devtools.js'
 import {
@@ -6,7 +7,7 @@ import {
   diagnosticsByNodeId,
 } from '../lib/devtools-diagnostics.js'
 
-const snapshot: GraphSnapshot = {
+const snapshot: GraphSnapshot = fixture.graphSnapshot({
   schemaVersion: 1,
   nodes: [
     { id: 'module:1', kind: 'module', label: 'AppModule' },
@@ -36,14 +37,18 @@ const snapshot: GraphSnapshot = {
       severity: 'warning',
     },
   ],
-}
+})
 
 describe('DevTools diagnostics', () => {
   it('グラフ上に存在する対象Nodeへ診断を関連付ける', () => {
     const diagnostics = diagnosticsByNodeId(snapshot)
 
-    expect(diagnostics.get('provider:2')).toEqual([snapshot.diagnostics[0]])
-    expect(diagnostics.has('module:missing.exports.token')).toBe(false)
+    expect(diagnostics.get(fixture.viewId('provider:2'))).toEqual([
+      snapshot.diagnostics[0],
+    ])
+    expect(
+      diagnostics.has(fixture.viewId('module:missing.exports.token')),
+    ).toBe(false)
   })
 
   it('診断対象Nodeのsource locationを表示用文字列へ変換する', () => {
@@ -80,10 +85,10 @@ describe('DevTools diagnostics', () => {
 
   it('severityがない診断はerrorとしてプロンプトへ出力する', () => {
     const prompt = buildDiagnosticAgentPrompt(
-      {
+      fixture.graphSnapshot({
         ...snapshot,
         diagnostics: [{ ...snapshot.diagnostics[0]!, severity: undefined }],
-      },
+      }),
       'en',
     )
 

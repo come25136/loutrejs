@@ -1,3 +1,4 @@
+import { operationId, type GraphQLOperationId } from './identity.js'
 import { ConnectionRejected } from './connection-rejected.js'
 import type { ExecutionOperationLease } from '@loutrejs/loutre'
 import type {
@@ -16,7 +17,7 @@ import {
 } from 'graphql'
 import type {
   GraphQLRuntime,
-  GraphQLWebSocketContextInput,
+  GraphQLContextInput,
   GraphQLWebSocketExtra,
 } from './types.js'
 import { formatGraphQLError } from './errors.js'
@@ -27,8 +28,8 @@ import {
   incrementalErrors,
 } from './execution.js'
 
-interface Operation {
-  readonly input: GraphQLWebSocketContextInput
+interface Operation<TInput> {
+  readonly input: TInput
   readonly controller: AbortController
   readonly lease: ExecutionOperationLease
   cleanup?: () => Promise<unknown>
@@ -51,19 +52,23 @@ type SessionContext = WebSocketHandlerContext<{
   messages: WebSocketMessageCodec<TextSchema, TextSchema>
 }>
 
-export async function serveGraphQLWebSocket(
+export async function serveGraphQLWebSocket<
+  TInput extends GraphQLContextInput<object, object>,
+  TState extends object,
+  THandshakeState extends object,
+>(
   context: SessionContext,
   bound: BoundManifest,
-  runtime: GraphQLRuntime<any, any, any, any>,
+  runtime: GraphQLRuntime<object, TInput, TState, THandshakeState>,
   options: { readonly connectionInitWaitTimeout?: number },
 ): Promise<void> {
-  const operations = new Map<string, Operation>()
+  const operations = new Map<GraphQLOperationId, Operation<TInput>>()
   const schema = bound.schema
-  const executionOperations = new WeakMap<ExecutionArgs, Operation>()
+  const executionOperations = new WeakMap<ExecutionArgs, Operation<TInput>>()
   const tasks = new Set<Promise<void>>()
-  const operationTasks = new Map<string, Promise<void>>()
+  const operationTasks = new Map<GraphQLOperationId, Promise<void>>()
   let receive!: (data: string) => Promise<void>
-  const finish = (id: string) => {
+  const finish = (id: GraphQLOperationId) => {
     const operation = operations.get(id)
     if (!operation || operation.finished) return
     operation.finished = true
@@ -75,10 +80,12 @@ export async function serveGraphQLWebSocket(
     for (const operation of operations.values())
       operation.controller.abort(context.signal.reason)
   }
-  const run = <T>(operation: Operation | undefined, invoke: () => T): T =>
-    operation?.lease.run ? operation.lease.run(invoke) : invoke()
+  const run = <T>(
+    operation: Operation<TInput> | undefined,
+    invoke: () => T,
+  ): T => (operation?.lease.run ? operation.lease.run(invoke) : invoke())
   const format = (
-    operation: Operation,
+    operation: Operation<TInput>,
     error: GraphQLError,
   ): GraphQLFormattedError => {
     if (operation.formattingFailure) throw operation.formattingFailure.error
@@ -90,14 +97,17 @@ export async function serveGraphQLWebSocket(
       throw failure
     }
   }
-  let state: Readonly<Record<string, unknown>> | undefined
+  let state: Readonly<TState> | undefined
   let connectionContext:
-    | Context<Record<string, unknown> | undefined, GraphQLWebSocketExtra>
+    | Context<
+        Record<string, unknown> | undefined,
+        GraphQLWebSocketExtra<TState>
+      >
     | undefined
   const hooks = runtime.ws
   const server = makeServer<
     Record<string, unknown> | undefined,
-    GraphQLWebSocketExtra
+    GraphQLWebSocketExtra<TState>
   >({
     schema,
     ...(options.connectionInitWaitTimeout === undefined
@@ -111,7 +121,7 @@ export async function serveGraphQLWebSocket(
               request: context.request,
               signal: context.signal,
               payload: connection.connectionParams,
-              state: context.state,
+              state: context.state as Readonly<THandshakeState>,
             })
           : context.state
         context.signal.throwIfAborted()
@@ -129,7 +139,7 @@ export async function serveGraphQLWebSocket(
             'connectionInit must return a state object or ConnectionRejected.',
           )
 
-        state = Object.freeze(result) as Readonly<Record<string, unknown>>
+        state = Object.freeze(result) as Readonly<TState>
         return true
       }, context.signal)
     },
@@ -137,26 +147,28 @@ export async function serveGraphQLWebSocket(
       connectionContext = connection
     },
     async onSubscribe(connection, id, payload) {
+      const operationKey = operationId(id)
       const controller = new AbortController()
       const lease = context.execution.beginOperation({
         kind: 'graphql.operation',
         name: payload.operationName || id,
       })
-      const input: GraphQLWebSocketContextInput = {
-        transport: 'websocket',
+      // factoryの条件型は呼び出し側でWSが有効な場合にこの入力を含む。
+      const input = {
+        transport: 'websocket' as const,
         state: state!,
         request: context.request,
         connectionParams: connection.connectionParams,
-        operationId: id,
+        operationId: operationKey,
         signal: controller.signal,
-      }
-      const operation: Operation = {
+      } as TInput
+      const operation: Operation<TInput> = {
         controller,
         lease,
         input,
         finished: false,
       }
-      operations.set(id, operation)
+      operations.set(operationKey, operation)
       lease.annotate?.({
         'graphql.session.id': context.session.id,
         'graphql.operation.id': id,
@@ -230,7 +242,7 @@ export async function serveGraphQLWebSocket(
       return iterator
     },
     onNext(_connection, id, _payload, _args, result) {
-      const operation = operations.get(id)!
+      const operation = operations.get(operationId(id))!
       if (!runtime.formatError || !result.errors) return
       return {
         ...(result.data === undefined ? {} : { data: result.data }),
@@ -241,18 +253,18 @@ export async function serveGraphQLWebSocket(
       }
     },
     async onError(_connection, id, _payload, errors) {
-      const operation = operations.get(id)!
+      const operation = operations.get(operationId(id))!
       try {
         if (runtime.formatError)
           return errors.map((error) => format(operation, error))
       } finally {
         await operation.cleanup?.()
-        finish(id)
+        finish(operationId(id))
       }
     },
     async onComplete(_connection, id) {
-      await operations.get(id)?.cleanup?.()
-      finish(id)
+      await operations.get(operationId(id))?.cleanup?.()
+      finish(operationId(id))
     },
   })
   const dispose = server.opened(
@@ -276,14 +288,14 @@ export async function serveGraphQLWebSocket(
   )
   context.signal.addEventListener('abort', abortAll, { once: true })
   const dispatch = (data: string) => {
-    let id: string | undefined
+    let id: GraphQLOperationId | undefined
     let predecessor: Promise<void> | undefined
     try {
       const message = parseMessage(data)
       if (message.type === MessageType.Complete)
-        operations.get(message.id)?.controller.abort()
+        operations.get(operationId(message.id))?.controller.abort()
       if (message.type === MessageType.Subscribe) {
-        id = message.id
+        id = operationId(message.id)
         const operation = operations.get(id)
         if (!operation || operation.controller.signal.aborted)
           predecessor = operationTasks.get(id)
@@ -391,7 +403,7 @@ function isAsyncIterable(
 
 function cancellableIterator(
   source: AsyncIterator<ExecutionResult>,
-  operation: Operation,
+  operation: Pick<Operation<unknown>, 'controller' | 'lease'>,
 ): AsyncIterableIterator<ExecutionResult> {
   let ended = false
   let returning: Promise<IteratorResult<ExecutionResult>> | undefined

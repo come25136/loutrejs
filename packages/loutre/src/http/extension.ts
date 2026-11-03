@@ -1,3 +1,24 @@
+import { dependencyConsumerId } from '../core/identity.js'
+import {
+  epochNow,
+  expiresAt,
+  epochMilliseconds,
+  type EpochMs,
+} from '../core/units.js'
+import type { Descriptor } from '../internal/brand.js'
+import {
+  normalizeHttpMethod,
+  requestPathname,
+  httpProcedureName,
+  type HttpMethod,
+  type HttpPathTemplate,
+  type HttpDispatchKey,
+  type HttpProcedureName,
+  type HttpResponseStatus,
+} from './identity.js'
+import type { ParsedHttpPath } from './path.js'
+import type { ExecutionNodeId } from '../core/model/identity.js'
+import { syntheticExecutionId } from '../core/identity.js'
 import {
   collectInjectedDependencies,
   getSourceLocation,
@@ -628,32 +649,54 @@ export function defineHttpRaw<
   return defineExecution(httpExecutionExtension, { ...definition, raw: true })
 }
 
+export type CompiledHttpResponseDefinition = HttpExecutionResponseDefinition &
+  Descriptor<'http-response'> & { readonly status: HttpResponseStatus }
+
+type CompiledHttpRouteDefinition = Omit<
+  HttpExecutionRouteDefinition,
+  'responses'
+> & {
+  readonly responses: Readonly<Record<string, CompiledHttpResponseDefinition>>
+}
+
 interface CompiledHttpRoute {
-  readonly name: string
-  readonly method: string
-  readonly path: string
-  readonly segments: readonly HttpPathSegment[]
-  readonly dispatch: string
-  readonly definition: HttpExecutionRouteDefinition
+  readonly name: HttpProcedureName
+  readonly method: HttpMethod | '*'
+  readonly path: HttpPathTemplate
+  readonly segments: ParsedHttpPath
+  readonly dispatch: HttpDispatchKey
+  readonly definition: CompiledHttpRouteDefinition
   readonly middlewares: readonly AnyHttpMiddleware[]
   readonly source?: SourceLocation
   readonly raw?: boolean
   readonly protocol?: string
 }
 
+interface RuntimeHttpContext {
+  readonly input: HttpMiddlewareContext['input']
+  readonly response: ReturnType<typeof createHttpResponseHelpers>
+  readonly signal: AbortSignal
+  readonly state: Readonly<Record<string, unknown>>
+  readonly request?: Request
+  readonly execution?: ExecutionContextView
+}
+
+type InitialHttpContext = HttpMiddlewareContext &
+  Pick<RuntimeHttpContext, 'response'>
+
 interface CompiledHttpExecution {
   readonly routes: readonly CompiledHttpRoute[]
   readonly factory: () => Record<
     string,
     (
-      context: HttpExecutionContext,
+      context: RuntimeHttpContext,
     ) => HttpMiddlewareOutcome | Promise<HttpMiddlewareOutcome>
   >
 }
 
 interface RuntimeHttpRoute {
   readonly resolve: DependencyResolver
-  readonly executionId: string
+  readonly executionId: ExecutionNodeId
   readonly route: CompiledHttpRoute
 }
 
@@ -699,7 +742,7 @@ export const httpExecutionExtension = defineExecutionExtension<
       collectInjectedDependencies(
         {
           kind: 'execution',
-          id: `http:${id}`,
+          id: dependencyConsumerId(`http:${id}`),
           name: id,
         },
         () => definition.factory(),
@@ -710,7 +753,7 @@ export const httpExecutionExtension = defineExecutionExtension<
         for (const dependency of collectInjectedDependencies(
           {
             kind: 'layer',
-            id: `http:${id}:${route.name}:${index}`,
+            id: dependencyConsumerId(`http:${id}:${route.name}:${index}`),
             name: middleware.name,
           },
           () => middleware.factory(),
@@ -1277,14 +1320,18 @@ function compileRawRoute(route: HttpRawRouteDefinition): CompiledHttpRoute {
   const segments = parseHttpPath(route.path)
   const source = getSourceLocation(route)
   return Object.freeze({
-    name: 'raw',
-    method: route.method.toUpperCase(),
-    path: route.path,
+    name: httpProcedureName('raw'),
+    method:
+      route.method === '*' ? ('*' as const) : normalizeHttpMethod(route.method),
+    path: route.path as HttpPathTemplate,
     segments,
-    dispatch: createHttpDispatchKey(route.method, segments),
+    dispatch: createHttpDispatchKey(
+      normalizeHttpMethod(route.method),
+      segments,
+    ),
     definition: Object.freeze({
       method: route.method,
-      path: route.path,
+      path: route.path as HttpPathTemplate,
       responses: Object.freeze({}),
     }),
     middlewares: Object.freeze([...(route.middlewares ?? [])]),
@@ -1309,11 +1356,15 @@ function compileHttpRoute(
   const definition = snapshotHttpRouteDefinition(route)
   const routeSource = getSourceLocation(route) ?? routeSourceFallback
   return Object.freeze({
-    name,
-    method: route.method.toUpperCase(),
-    path: route.path,
+    name: httpProcedureName(name),
+    method:
+      route.method === '*' ? ('*' as const) : normalizeHttpMethod(route.method),
+    path: route.path as HttpPathTemplate,
     segments,
-    dispatch: createHttpDispatchKey(route.method, segments),
+    dispatch: createHttpDispatchKey(
+      normalizeHttpMethod(route.method),
+      segments,
+    ),
     definition,
     middlewares: compileHttpMiddlewares(definition),
     ...(routeSource === undefined ? {} : { source: routeSource }),
@@ -1322,7 +1373,7 @@ function compileHttpRoute(
 
 function snapshotHttpRouteDefinition(
   route: HttpExecutionRouteDefinition,
-): HttpExecutionRouteDefinition {
+): CompiledHttpRouteDefinition {
   const request = route.request
     ? Object.freeze({
         ...route.request,
@@ -1337,13 +1388,14 @@ function snapshotHttpRouteDefinition(
         name,
         Object.freeze({
           ...response,
+          status: response.status as HttpResponseStatus,
           ...(response.headers === undefined
             ? {}
             : { headers: snapshotHttpResponseHeaders(response.headers) }),
           ...(response.error === undefined
             ? {}
             : { error: Object.freeze({ ...response.error }) }),
-        }),
+        }) as CompiledHttpResponseDefinition,
       ]),
     ),
   )
@@ -1552,7 +1604,7 @@ function createHttpExtensionRuntime(
         {
           consumer: {
             kind: 'execution',
-            id: `http:${execution.id}`,
+            id: dependencyConsumerId(`http:${execution.id}`),
             name: execution.id,
           },
           resolve: (token, consumer) => resolve(token, { consumer }),
@@ -1576,7 +1628,7 @@ function createHttpExtensionRuntime(
   return {
     async drain({ timeoutMs }) {
       ingress.stopAccepting()
-      const deadline = Date.now() + timeoutMs
+      const deadline = expiresAt(epochNow(), timeoutMs)
       await ingress.waitForIdle()
       const reason = new Error(
         'LUTRE_HTTP_SERVER_STREAM_DRAIN: Application is shutting down.',
@@ -1691,7 +1743,7 @@ function createHttpExtensionRuntime(
         let lease: ReturnType<ExecutionKernelRuntime['beginExecution']>
         try {
           lease = applicationRuntime.beginExecution({
-            executionId: 'http.not-found',
+            executionId: syntheticExecutionId('http.not-found'),
             executionKind: 'http.request',
             name: `${method} ${url.pathname}`,
           })
@@ -1768,7 +1820,7 @@ function createHttpExtensionRuntime(
             applyFrameworkHeadersToResponse(response, corsHeaders),
           )
 
-        let context: HttpExecutionContext
+        let context: InitialHttpContext
         try {
           context = await createHttpContext(
             request,
@@ -1862,7 +1914,7 @@ function createHttpExtensionRuntime(
                     ? request.signal
                     : middlewareContext.signal,
                   state: middlewareContext.state,
-                } as HttpExecutionContext)
+                })
               let result: HttpMiddlewareOutcome | undefined
               let hasResult = false
               try {
@@ -1978,7 +2030,10 @@ function findRuntimeHttpRoute(
   for (const candidate of routes) {
     if (candidate.route.method !== method && candidate.route.method !== '*')
       continue
-    const params = matchHttpPath(candidate.route.segments, pathname)
+    const params = matchHttpPath(
+      candidate.route.segments,
+      requestPathname(pathname),
+    )
     if (!params) continue
     return { ...candidate, params }
   }
@@ -2010,7 +2065,7 @@ async function createHttpContext(
   rawParams: Readonly<Record<string, string>>,
   route: CompiledHttpRoute,
   signal: AbortSignal,
-): Promise<HttpExecutionContext> {
+): Promise<InitialHttpContext> {
   const definition = route.definition.request
   const params = definition?.params
     ? Object.fromEntries(
@@ -2040,7 +2095,7 @@ async function createHttpContext(
     input: { params, query, headers, body },
     response,
     signal,
-  } as unknown as HttpExecutionContext
+  }
 }
 
 function createHttpResponseHelpers(
@@ -2069,18 +2124,23 @@ function createHttpResponseHelpers(
   )
 }
 
+function isHttpInputRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 async function replayHttpHandler(
   applicationRuntime: ExecutionKernelRuntime,
   handler: (
-    context: HttpExecutionContext,
+    context: RuntimeHttpContext,
   ) => HttpExecutionResult | Promise<HttpExecutionResult>,
   match: RuntimeHttpRoute & { readonly params: Record<string, string> },
   input: unknown,
-  state: unknown,
+  state: Readonly<Record<string, unknown>>,
 ): Promise<HttpExecutionResult> {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+  if (!isHttpInputRecord(input) || !isHttpInputRecord(input.params)) {
     throw new TypeError('LUTRE_DEVTOOLS_HTTP_HANDLER_INPUT_REQUIRED')
   }
+  const params = input.params
   const lease = applicationRuntime.beginExecution({
     executionId: match.executionId,
     executionKind: 'http.handler',
@@ -2089,11 +2149,16 @@ async function replayHttpHandler(
   })
   const invoke = () =>
     handler({
-      input,
+      input: {
+        params,
+        query: input.query,
+        headers: input.headers,
+        body: input.body,
+      },
       response: createHttpResponseHelpers(match.route.definition.responses),
       signal: lease.signal,
       state,
-    } as unknown as HttpExecutionContext)
+    })
   let result: HttpExecutionResult | undefined
   let hasResult = false
   try {
@@ -2115,14 +2180,14 @@ interface FinalizedHttpResult {
 }
 
 interface ActiveHttpResponseStream {
-  abort(reason: unknown, deadline: number): Promise<void>
+  abort(reason: unknown, deadline: EpochMs): Promise<void>
 }
 
 interface HttpResponseStreamControl {
   readonly stream: ReadableStream<Uint8Array>
   readonly finished: Promise<void>
-  setDrainDeadline?(deadline: number): void
-  abort(reason: unknown, deadline?: number): Promise<void>
+  setDrainDeadline?(deadline: EpochMs): void
+  abort(reason: unknown, deadline?: EpochMs): Promise<void>
 }
 
 type ServerSentEventStreamControl = HttpResponseStreamControl
@@ -2338,7 +2403,7 @@ function createServerSentEventStream(
   let cleanupSettled = true
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined
   let cleanupAttempt: Promise<void> | undefined
-  let cleanupDeadline: number | undefined
+  let cleanupDeadline: EpochMs | undefined
   let resolveFinished!: () => void
   const finishedPromise = new Promise<void>((resolve) => {
     resolveFinished = resolve
@@ -2364,11 +2429,13 @@ function createServerSentEventStream(
   const stop = (
     reason: unknown,
     errorStream: boolean,
-    deadline?: number,
+    deadline?: EpochMs,
   ): Promise<void> => {
     if (cleanupAttempt) {
       if (deadline !== undefined) {
-        cleanupDeadline = Math.min(cleanupDeadline ?? deadline, deadline)
+        cleanupDeadline = epochMilliseconds(
+          Math.min(cleanupDeadline ?? deadline, deadline),
+        )
       }
       return cleanupAttempt
     }

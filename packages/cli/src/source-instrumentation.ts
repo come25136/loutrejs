@@ -1,4 +1,23 @@
-import { isAbsolute, relative, sep, win32 } from 'node:path'
+import {
+  sourceLine,
+  sourceColumn,
+  type SourceLine,
+  type SourceColumn,
+} from '@loutrejs/loutre'
+import {
+  utf16Index,
+  swcBytePosition,
+  utf8ByteOffset,
+  type Utf16Index,
+  type Utf8ByteOffset,
+  type SwcBytePosition,
+} from './source-position.js'
+import {
+  absoluteFsPath,
+  projectRelativePath,
+  type ProjectRelativePath,
+} from './paths.js'
+
 import { parseSync } from '@swc/core'
 
 type AstNode = {
@@ -24,9 +43,9 @@ interface ImportedApis {
 }
 
 interface SourcePoint {
-  readonly file: string
-  readonly line: number
-  readonly column: number
+  readonly file: ProjectRelativePath
+  readonly line: SourceLine
+  readonly column: SourceColumn
 }
 
 export function instrumentSourceLocations(
@@ -39,25 +58,26 @@ export function instrumentSourceLocations(
 
   let program: AstNode
   try {
-    program = parseSync(code, parserOptions(file)) as unknown as AstNode
+    program = parseSync(code, parserOptions(file))
   } catch {
     return code
   }
 
-  const toIndex = createSwcPositionMapper(code)
+  const mapPosition = createSwcPositionMapper(code)
+  const toIndex = (position: number) => mapPosition(swcBytePosition(position))
   const apis = collectImportedApis(program)
   const usedIdentifiers = collectIdentifierNames(program)
   const sourceHelper = uniqueHelperName('__loutreSource', usedIdentifiers)
   const helperImportPriority = 0
   const sourceInsertionPriority = 1
   const insertions = new Map<
-    number,
+    Utf16Index,
     Array<{ text: string; priority: number }>
   >()
   const wrapped = new Set<string>()
 
   const add = (
-    position: number,
+    position: Utf16Index,
     text: string,
     priority = sourceInsertionPriority,
   ) => {
@@ -65,7 +85,7 @@ export function instrumentSourceLocations(
     current.push({ text, priority })
     insertions.set(position, current)
   }
-  const sourceLiteral = (offset: number) =>
+  const sourceLiteral = (offset: Utf16Index) =>
     JSON.stringify({
       file: sourceFile,
       ...positionAt(code, offset),
@@ -197,8 +217,8 @@ function uniqueHelperName(base: string, used: ReadonlySet<string>): string {
 function sourceImportPosition(
   program: AstNode,
   code: string,
-  toIndex: (position: number) => number,
-): { position: number; needsSemicolon: boolean } {
+  toIndex: (position: SwcBytePosition) => Utf16Index,
+): { position: Utf16Index; needsSemicolon: boolean } {
   let position = code.charCodeAt(0) === 0xfeff ? 1 : 0
   if (program.interpreter != null) {
     const lineEnd = code.indexOf('\n', position)
@@ -217,7 +237,7 @@ function sourceImportPosition(
     position = toIndex(statement.span.end)
     needsSemicolon = true
   }
-  return { position, needsSemicolon }
+  return { position: utf16Index(position), needsSemicolon }
 }
 
 function collectImportedApis(program: AstNode): ImportedApis {
@@ -430,18 +450,23 @@ function walkAst(root: AstNode, visit: (node: AstNode) => void): void {
   walk(root)
 }
 
-function createSwcPositionMapper(code: string): (position: number) => number {
+function createSwcPositionMapper(
+  code: string,
+): (position: SwcBytePosition) => Utf16Index {
   const sourceStart = code.charCodeAt(0) === 0xfeff ? 1 : 0
-  const indexByByteOffset = new Map<number, number>([[0, sourceStart]])
+  const indexByByteOffset = new Map<Utf8ByteOffset, Utf16Index>([
+    [utf8ByteOffset(0), utf16Index(sourceStart)],
+  ])
   let byteOffset = 0
   for (let index = sourceStart; index < code.length;) {
     const codePoint = code.codePointAt(index)!
     byteOffset += utf8Length(codePoint)
     index += codePoint > 0xffff ? 2 : 1
-    indexByByteOffset.set(byteOffset, index)
+    indexByByteOffset.set(utf8ByteOffset(byteOffset), utf16Index(index))
   }
-  return (position: number) =>
-    indexByByteOffset.get(Math.max(0, position - 1)) ?? sourceStart
+  return (position: SwcBytePosition) =>
+    indexByByteOffset.get(utf8ByteOffset(Math.max(0, position - 1))) ??
+    utf16Index(sourceStart)
 }
 
 function utf8Length(codePoint: number): number {
@@ -453,8 +478,8 @@ function utf8Length(codePoint: number): number {
 
 function positionAt(
   code: string,
-  offset: number,
-): { line: number; column: number } {
+  offset: Utf16Index,
+): { line: SourceLine; column: SourceColumn } {
   let line = 1
   let lineStart = code.charCodeAt(0) === 0xfeff ? 1 : 0
   for (let index = 0; index < offset; index++) {
@@ -469,23 +494,21 @@ function positionAt(
     line += 1
     lineStart = index + 1
   }
-  return { line, column: offset - lineStart + 1 }
+  return {
+    line: sourceLine(line),
+    column: sourceColumn(offset - lineStart + 1),
+  }
 }
 
 function projectRelativeFile(
   file: string,
   projectRoot: string,
-): string | undefined {
-  const path = relative(projectRoot, file)
-  if (
-    path === '' ||
-    path === '..' ||
-    path.startsWith(`..${sep}`) ||
-    isAbsolute(path) ||
-    win32.isAbsolute(path)
-  ) {
+): ProjectRelativePath | undefined {
+  const path = projectRelativePath(
+    absoluteFsPath(file),
+    absoluteFsPath(projectRoot),
+  )
+  if (path === undefined || path.split('/').includes('node_modules'))
     return undefined
-  }
-  if (path.split(sep).includes('node_modules')) return undefined
-  return path.split(sep).join('/')
+  return path
 }

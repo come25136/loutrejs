@@ -1,3 +1,4 @@
+import * as fixture from './helpers/identities.js'
 import {
   defineApplication,
   defineModule,
@@ -65,9 +66,9 @@ describe('Runtime instrumentation boundary', () => {
 
     const execution = runtime.beginExecution(
       {
-        executionId: 'task:demo',
+        executionId: fixture.executionNodeId('task:demo'),
         executionKind: 'task.invocation',
-        graphNodeId: 'task:demo',
+        graphNodeId: fixture.modelNodeId('task:demo'),
         name: 'demo',
       },
       {
@@ -80,7 +81,7 @@ describe('Runtime instrumentation boundary', () => {
         {
           kind: 'http.handler',
           name: 'demo.handler',
-          graphNodeId: 'task:demo',
+          graphNodeId: fixture.modelNodeId('task:demo'),
         },
         {
           input: { value: 21 },
@@ -163,7 +164,7 @@ describe('Runtime instrumentation boundary', () => {
     expect(runtime.get(Repository).read()).toBe(42)
 
     const execution = runtime.beginExecution({
-      executionId: 'safe',
+      executionId: fixture.executionNodeId('safe'),
       executionKind: 'custom',
     })
     expect(execution.run).toBeUndefined()

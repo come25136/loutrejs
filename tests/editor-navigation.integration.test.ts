@@ -148,7 +148,11 @@ class TypeScriptLspClient {
     }
     if (typeof message.id !== 'number') return
 
-    const response = message as unknown as JsonRpcResponse
+    const response: JsonRpcResponse = {
+      id: message.id,
+      result: message.result,
+      error: message.error,
+    }
     const pending = this.#pending.get(response.id)
     if (!pending) return
     this.#pending.delete(response.id)

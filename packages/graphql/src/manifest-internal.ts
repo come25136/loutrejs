@@ -1,3 +1,4 @@
+import { type GraphQLFieldCoordinate } from './identity.js'
 import type { GraphQLSchema } from 'graphql'
 import type { DataDefinition } from './data-internal.js'
 
@@ -7,7 +8,7 @@ export interface GraphQLManifest<Context extends object = object> {
 }
 export interface BoundManifest {
   readonly schema: GraphQLSchema
-  readonly metadata: ReadonlyMap<string, DataDefinition>
+  readonly metadata: ReadonlyMap<GraphQLFieldCoordinate, DataDefinition>
 }
 const manifests = new WeakMap<object, BoundManifest>()
 export function storeManifest<C extends object>(

@@ -97,9 +97,7 @@ export function createKernelApplication<
         return runtime.shutdown(signal)
       },
       [Symbol.asyncDispose]() {
-        return (
-          application as unknown as Pick<KernelApplicationBase, 'close'>
-        ).close()
+        return this.close()
       },
     },
   )

@@ -1,3 +1,8 @@
+import {
+  boundPort,
+  type RequestedPort,
+  type BoundPort,
+} from '@loutrejs/loutre/runtime'
 import { createNodeWebSocketDriver } from './websocket.js'
 import {
   bindWebSocketServer,
@@ -47,7 +52,7 @@ export interface NodeServeOptions {
 
 export interface NodeListenerHandle {
   readonly server: Server
-  readonly port: number
+  readonly port: BoundPort
 }
 
 export type NodeRuntimeApplication<
@@ -110,12 +115,14 @@ async function create<const TDefinition extends ApplicationDefinition>(
     throw error
   }
   const application = hosted as NodeRuntimeApplication<TDefinition>
-  const http = (hosted as unknown as { readonly http?: HttpHostApi }).http ?? {
+  const transports: typeof hosted & {
+    readonly http?: HttpHostApi
+    readonly websocket?: WebSocketHostApi
+  } = hosted
+  const http = transports.http ?? {
     fetch: async () => new Response('Not Found', { status: 404 }),
   }
-  const websocket = (
-    hosted as unknown as { readonly websocket?: WebSocketHostApi }
-  ).websocket
+  const websocket = transports.websocket
 
   const closeApplication = application.close.bind(application)
   let server: Server | undefined
@@ -188,7 +195,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
       server = createNodeHttpServerDriver(http)
       if (websocket) websocketDriver.attach(server, websocket)
       const requestedPort = serveOptions.port
-      let port = initialServerPort(requestedPort)
+      let port: RequestedPort | BoundPort = initialServerPort(requestedPort)
       while (true) {
         try {
           serverListeningPromise = listenServer(
@@ -201,7 +208,8 @@ async function create<const TDefinition extends ApplicationDefinition>(
             throw new Error('LUTRE_APP_STOPPED: Application is stopped.')
           }
           const address = server.address()
-          if (address && typeof address !== 'string') port = address.port
+          if (address && typeof address !== 'string')
+            port = boundPort(address.port)
           break
         } catch (error) {
           if (
@@ -211,7 +219,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
           ) {
             throw error
           }
-          port += 1
+          port = initialServerPort(port + 1)
         }
       }
 
@@ -222,7 +230,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
         startupDurationMs: performance.now() - startedAt,
       })
 
-      return { server, port }
+      return { server, port: boundPort(port) }
     } catch (error) {
       await close().catch(() => undefined)
       throw error

@@ -1496,11 +1496,13 @@ describe('Loutre CLI', () => {
       })
       await application.init()
       try {
-        const response = await (
-          application as unknown as {
-            readonly http: { fetch(request: Request): Promise<Response> }
-          }
-        ).http.fetch(new Request('https://fixture.test/Loutre'))
+        const hosted: typeof application & {
+          readonly http?: { fetch(request: Request): Promise<Response> }
+        } = application
+        if (!hosted.http) throw new Error('HTTP Host APIがありません。')
+        const response = await hosted.http.fetch(
+          new Request('https://fixture.test/Loutre'),
+        )
         expect(response.status).toBe(200)
         await expect(response.json()).resolves.toEqual({
           message: 'Hello, Loutre!',

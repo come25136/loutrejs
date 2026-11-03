@@ -1,9 +1,10 @@
+import { runtimeSupportFeatures } from './capability.js'
 import type { RuntimeSupportProfile } from './capability.js'
 
 /** CLIが`@loutrejs/node`へ依存するとBunでもNode.js専用moduleを評価するため、Capability metadataだけをruntime-neutral側へ分離する。 */
 export const nodeRuntimeSupport = {
   runtime: 'node',
-  capabilities: new Set([
+  capabilities: runtimeSupportFeatures([
     'http.server',
     'websocket.server',
     'http.request.streaming',

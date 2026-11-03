@@ -10,14 +10,14 @@ export function createCloudflareWebSocketDriver(): WebSocketServerDriver {
   return {
     runtime: 'cloudflare-workers',
     async upgrade(_request, { protocol }) {
-      const Pair = (
-        globalThis as unknown as {
-          WebSocketPair: new () => {
-            0: EventWebSocket
-            1: EventWebSocket & { accept(): void }
-          }
+      const platform: typeof globalThis & {
+        WebSocketPair?: new () => {
+          0: EventWebSocket
+          1: EventWebSocket & { accept(): void }
         }
-      ).WebSocketPair
+      } = globalThis
+      const Pair = platform.WebSocketPair
+      if (!Pair) throw new Error('WebSocketPairを利用できません。')
       const pair = new Pair()
       pair[1].accept()
       // WorkersのI/Oはopening requestへ所属するため、別requestからのdrainをそのcontextへ戻す。

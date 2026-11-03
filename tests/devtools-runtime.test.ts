@@ -1,3 +1,4 @@
+import * as fixture from './helpers/identities.js'
 import {
   defineApplication,
   defineModule,
@@ -19,7 +20,7 @@ import { ApplicationKernelRuntime } from '@loutrejs/loutre/runtime'
 function createTestInstrumentation(
   events: RuntimeEvent[],
   options: Readonly<DevtoolsModuleOptions> = {},
-  runId = 'run_test',
+  runId = fixture.runId('run_test'),
 ): RuntimeDevtoolsInstrumentation {
   let current: RuntimeDevtoolsContext | undefined
   const observer: RuntimeObserver = {
@@ -78,7 +79,7 @@ describe('DevTools runtime observation', () => {
     await runtime.initialize()
 
     const lease = runtime.beginExecution({
-      executionId: 'task:hello',
+      executionId: fixture.executionNodeId('task:hello'),
       executionKind: 'task.invocation',
       name: 'hello',
     })
@@ -116,7 +117,7 @@ describe('DevTools runtime observation', () => {
 
     try {
       const execution = instrumentation.beginExecution({
-        executionId: 'http:get-ping',
+        executionId: fixture.executionNodeId('http:get-ping'),
         executionKind: 'http.request',
         name: 'GET /ping',
       })
@@ -180,7 +181,7 @@ describe('DevTools runtime observation', () => {
 
     expect(() => {
       const lease = runtime.beginExecution({
-        executionId: 'test',
+        executionId: fixture.executionNodeId('test'),
         executionKind: 'custom',
       })
       lease.complete()
@@ -210,21 +211,21 @@ describe('DevTools runtime observation', () => {
     const instrumentation = createTestInstrumentation(events)
 
     const cancelled = instrumentation.beginExecution({
-      executionId: 'cancelled',
+      executionId: fixture.executionNodeId('cancelled'),
       executionKind: 'custom',
     })
     cancelled.abort?.()
     cancelled.complete()
 
     const failed = instrumentation.beginExecution({
-      executionId: 'failed',
+      executionId: fixture.executionNodeId('failed'),
       executionKind: 'custom',
     })
     failed.fail?.(undefined)
     failed.complete()
 
     const operationRoot = instrumentation.beginExecution({
-      executionId: 'operation-root',
+      executionId: fixture.executionNodeId('operation-root'),
       executionKind: 'custom',
     })
     operationRoot.run!(() => {
@@ -305,7 +306,7 @@ describe('DevTools runtime observation', () => {
     const instrumentation = createTestInstrumentation(
       events,
       {},
-      'run_provider',
+      fixture.runId('run_provider'),
     )
     const runtime = new ApplicationKernelRuntime(application.model, {
       instrumentation,
@@ -322,7 +323,7 @@ describe('DevTools runtime observation', () => {
     expect(repository).toBeInstanceOf(Repository)
     await expect(
       instrumentation.providerPlayground({
-        requestId: 'provider-playground',
+        requestId: fixture.requestId('provider-playground'),
         graphNodeId: providerNode.id,
       }),
     ).resolves.toMatchObject({
@@ -336,7 +337,7 @@ describe('DevTools runtime observation', () => {
       ]),
     })
     const playgroundRun = await instrumentation.invokeProviderMethod({
-      requestId: 'provider-playground-run',
+      requestId: fixture.requestId('provider-playground-run'),
       graphNodeId: providerNode.id,
       method: 'add',
       args: [7],
@@ -367,7 +368,7 @@ describe('DevTools runtime observation', () => {
       throw new Error('Playground trace capsule was not created.')
     }
     const playgroundReplay = await instrumentation.replayCapsule({
-      requestId: 'provider-playground-replay',
+      requestId: fixture.requestId('provider-playground-replay'),
       capsuleId: playgroundTrace.capsuleId,
       inputOverride: [8],
     })
@@ -387,7 +388,7 @@ describe('DevTools runtime observation', () => {
 
     expect(getterReads).toBe(0)
     const lease = runtime.beginExecution({
-      executionId: 'test.execution',
+      executionId: fixture.executionNodeId('test.execution'),
       executionKind: 'custom',
     })
     const result = lease.run!(() => ({
@@ -427,7 +428,7 @@ describe('DevTools runtime observation', () => {
       methodSpans.some((event) => event.name === 'Repository.asyncDouble'),
     ).toBe(false)
     const replay = await instrumentation.replayCapsule({
-      requestId: 'provider-replay',
+      requestId: fixture.requestId('provider-replay'),
       capsuleId: addSpan!.capsuleId!,
       inputOverride: [5],
     })
@@ -452,7 +453,7 @@ describe('DevTools runtime observation', () => {
     await runtime.initialize()
     const repository = runtime.get(Repository)
     const lease = runtime.beginExecution({
-      executionId: 'promise.test',
+      executionId: fixture.executionNodeId('promise.test'),
       executionKind: 'custom',
     })
     const then = vi.spyOn(Promise.prototype, 'then')
@@ -519,7 +520,7 @@ describe('DevTools runtime observation', () => {
     expect(service.ping).toBe(original)
 
     const lease = runtime.beginExecution({
-      executionId: 'factory-external.test',
+      executionId: fixture.executionNodeId('factory-external.test'),
       executionKind: 'custom',
     })
     expect(lease.run!(() => service.ping())).toBe('pong')
@@ -562,7 +563,7 @@ describe('DevTools runtime observation', () => {
     expect(shared.ping).toBe(original)
 
     const lease = runtime.beginExecution({
-      executionId: 'external-shared.test',
+      executionId: fixture.executionNodeId('external-shared.test'),
       executionKind: 'custom',
     })
     expect(lease.run!(() => shared.ping())).toBe('pong')
@@ -599,7 +600,7 @@ describe('DevTools runtime observation', () => {
     })
     await runtime.initialize()
     const lease = runtime.beginExecution({
-      executionId: 'shared-provider.test',
+      executionId: fixture.executionNodeId('shared-provider.test'),
       executionKind: 'custom',
     })
 
@@ -642,7 +643,7 @@ describe('DevTools runtime observation', () => {
     await runtime.initialize()
     const repository = runtime.get(Repository)
     const lease = runtime.beginExecution({
-      executionId: 'lazy-thenable.test',
+      executionId: fixture.executionNodeId('lazy-thenable.test'),
       executionKind: 'custom',
     })
 
@@ -690,7 +691,7 @@ describe('DevTools runtime observation', () => {
     await runtime.initialize()
     const repository = runtime.get(Repository)
     const lease = runtime.beginExecution({
-      executionId: 'unsafe-input.test',
+      executionId: fixture.executionNodeId('unsafe-input.test'),
       executionKind: 'custom',
     })
 
@@ -732,7 +733,7 @@ describe('DevTools runtime observation', () => {
     await runtime.initialize()
     const service = runtime.get(Service)
     const lease = runtime.beginExecution({
-      executionId: 'transient.test',
+      executionId: fixture.executionNodeId('transient.test'),
       executionKind: 'custom',
     })
 
@@ -774,7 +775,7 @@ describe('DevTools runtime observation', () => {
     await runtime.initialize()
     const repository = runtime.get(FrozenRepository)
     const lease = runtime.beginExecution({
-      executionId: 'x',
+      executionId: fixture.executionNodeId('x'),
       executionKind: 'custom',
     })
     expect(lease.run!(() => repository.read())).toBe(42)

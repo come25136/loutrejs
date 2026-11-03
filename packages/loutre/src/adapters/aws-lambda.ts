@@ -1,3 +1,4 @@
+import { runtimeSupportFeatures } from '../runtime/capability.js'
 import {
   createKernelApplication,
   type ApplicationDefinition,
@@ -73,7 +74,7 @@ export type AwsLambdaStreamingHttpHandler = (
 
 export const awsLambdaRuntime = {
   runtime: 'aws-lambda',
-  capabilities: new Set([
+  capabilities: runtimeSupportFeatures([
     'http.server',
     'http.response.streaming',
     'stream.readable',
@@ -120,12 +121,13 @@ function bind<const TDefinition extends ApplicationDefinition>(
     initialize: async () => {
       await application.init()
     },
-    fetch: (request) =>
-      (
-        application as unknown as {
-          readonly http: AwsLambdaHttpRequestHandler
-        }
-      ).http.fetch(request),
+    fetch: (request) => {
+      const hosted: typeof application & {
+        readonly http?: AwsLambdaHttpRequestHandler
+      } = application
+      if (!hosted.http) throw new Error('LUTRE_RUNTIME_HTTP_REQUIRED')
+      return hosted.http.fetch(request)
+    },
   }
 
   if (options.response === 'streaming') {

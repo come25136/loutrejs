@@ -1,8 +1,9 @@
+import * as fixture from './helpers/devtools-fixtures.js'
 import { describe, expect, it } from 'vitest'
 import type { GraphSnapshot } from '../lib/devtools.js'
 import { filterDevtoolsGraph } from '../lib/devtools-graph-filter.js'
 
-const snapshot: GraphSnapshot = {
+const snapshot: GraphSnapshot = fixture.graphSnapshot({
   schemaVersion: 1,
   nodes: [
     { id: 'module:app', kind: 'module', label: 'AppModule' },
@@ -14,7 +15,7 @@ const snapshot: GraphSnapshot = {
     { from: 'provider:user', to: 'handler:list', kind: 'uses' },
   ],
   diagnostics: [],
-}
+})
 
 describe('DevTools Graph filter', () => {
   it('種別と検索語に一致するNode、および両端が残るEdgeだけを返す', () => {
@@ -41,11 +42,13 @@ describe('DevTools Graph filter', () => {
   })
 
   it('Snapshotがない間は空のGraphを返す', () => {
-    expect(filterDevtoolsGraph(undefined, '', new Set(), true)).toEqual({
-      schemaVersion: 1,
-      nodes: [],
-      edges: [],
-      diagnostics: [],
-    })
+    expect(filterDevtoolsGraph(undefined, '', new Set(), true)).toEqual(
+      fixture.graphSnapshot({
+        schemaVersion: 1,
+        nodes: [],
+        edges: [],
+        diagnostics: [],
+      }),
+    )
   })
 })

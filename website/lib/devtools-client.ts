@@ -1,3 +1,11 @@
+import {
+  normalizeDevtoolsBaseUrl,
+  devtoolsClientEndpoint,
+  controlRequestId,
+  type ControlRequestId,
+  type DevtoolsBaseUrl,
+} from './devtools-identity'
+export { normalizeDevtoolsBaseUrl } from './devtools-identity'
 import { DEVTOOLS_PROTOCOL_VERSION } from './devtools-protocol'
 
 export type DevtoolsClientEvent =
@@ -23,7 +31,7 @@ interface PendingRequest {
   readonly reject: (reason: unknown) => void
 }
 
-const clients = new Map<string, DevtoolsClient>()
+const clients = new Map<DevtoolsBaseUrl, DevtoolsClient>()
 
 export async function connectDevtools(baseUrl: string): Promise<void> {
   await clientFor(baseUrl).connect()
@@ -51,12 +59,12 @@ export function subscribeDevtoolsEvents(
   return clientFor(baseUrl).subscribe(listener)
 }
 
-export async function devtoolsRequest<T = unknown>(
+export async function devtoolsRequest(
   baseUrl: string,
   method: string,
   params?: unknown,
-): Promise<T> {
-  return clientFor(baseUrl).request<T>(method, params)
+): Promise<unknown> {
+  return clientFor(baseUrl).request(method, params)
 }
 
 class DevtoolsClient {
@@ -64,7 +72,7 @@ class DevtoolsClient {
   readonly #connectionListeners = new Set<
     (status: DevtoolsConnectionStatus) => void
   >()
-  readonly #pending = new Map<string, PendingRequest>()
+  readonly #pending = new Map<ControlRequestId, PendingRequest>()
   #socket: WebSocket | undefined
   #connectPromise: Promise<void> | undefined
   #reconnectTimer: ReturnType<typeof setTimeout> | undefined
@@ -72,7 +80,7 @@ class DevtoolsClient {
   #shouldReconnect = false
   #status: DevtoolsConnectionStatus = 'disconnected'
 
-  constructor(readonly baseUrl: string) {}
+  constructor(readonly baseUrl: DevtoolsBaseUrl) {}
 
   connect(): Promise<void> {
     this.#shouldReconnect = true
@@ -101,16 +109,16 @@ class DevtoolsClient {
     return () => this.#connectionListeners.delete(listener)
   }
 
-  async request<T>(method: string, params?: unknown): Promise<T> {
+  async request(method: string, params?: unknown): Promise<unknown> {
     await this.connect()
     const socket = this.#socket
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       throw new Error('Loutre DevTools is not connected.')
     }
-    const id = crypto.randomUUID()
-    return new Promise<T>((resolve, reject) => {
+    const id = controlRequestId(crypto.randomUUID())
+    return new Promise<unknown>((resolve, reject) => {
       this.#pending.set(id, {
-        resolve: (value) => resolve(value as T),
+        resolve,
         reject,
       })
       try {
@@ -152,7 +160,7 @@ class DevtoolsClient {
     if (this.#connectPromise) return this.#connectPromise
     this.#setStatus(reconnecting ? 'reconnecting' : 'connecting')
 
-    const socket = new WebSocket(controlEndpoint(this.baseUrl))
+    const socket = new WebSocket(devtoolsClientEndpoint(this.baseUrl))
     this.#socket = socket
     let settled = false
     let protocolAccepted = false
@@ -283,7 +291,11 @@ class DevtoolsClient {
           message.event === 'runtime.snapshot') &&
         'payload' in message
       ) {
-        const event = message as unknown as DevtoolsClientEvent
+        const event: DevtoolsClientEvent = {
+          type: message.type,
+          event: message.event,
+          payload: message.payload,
+        }
         for (const listener of this.#listeners) listener(event)
       }
       return
@@ -295,9 +307,9 @@ class DevtoolsClient {
     ) {
       return
     }
-    const pending = this.#pending.get(message.id)
+    const pending = this.#pending.get(controlRequestId(message.id))
     if (!pending) return
-    this.#pending.delete(message.id)
+    this.#pending.delete(controlRequestId(message.id))
     if (message.ok) {
       pending.resolve(message.result)
       return
@@ -337,23 +349,6 @@ function clientFor(baseUrl: string): DevtoolsClient {
   const client = new DevtoolsClient(normalized)
   clients.set(normalized, client)
   return client
-}
-
-function controlEndpoint(baseUrl: string): string {
-  const url = new URL(normalizeDevtoolsBaseUrl(baseUrl))
-  url.protocol = 'ws:'
-  url.pathname = '/__loutre/client'
-  url.search = ''
-  url.hash = ''
-  return url.toString()
-}
-
-export function normalizeDevtoolsBaseUrl(value: string): string {
-  const url = new URL(value)
-  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1') {
-    throw new Error('Invalid local DevTools URL.')
-  }
-  return url.origin
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

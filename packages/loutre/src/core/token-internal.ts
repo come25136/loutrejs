@@ -6,8 +6,7 @@ export const frameworkProvidedTokenBrand = Symbol.for(
 
 export function isFrameworkProvidedToken(token: TokenLike): boolean {
   return (
-    (token as unknown as Record<PropertyKey, unknown>)[
-      frameworkProvidedTokenBrand
-    ] === true
+    frameworkProvidedTokenBrand in token &&
+    token[frameworkProvidedTokenBrand] === true
   )
 }

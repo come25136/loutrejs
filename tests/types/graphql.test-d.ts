@@ -6,6 +6,7 @@ import {
   ConnectionRejected,
   type GraphQLWebSocketHooks,
   type GraphQLConnectionInitHandler,
+  type GraphQLOperationId,
 } from '@loutrejs/graphql'
 import {
   defineApplication,
@@ -13,7 +14,7 @@ import {
   createKernelApplication,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
-import { websocket } from '@loutrejs/loutre/websocket'
+import { websocket, type WebSocketSessionId } from '@loutrejs/loutre/websocket'
 
 const manifest = bindManifest({
   schemaDocument: parse('type Query { hello: String }'),
@@ -69,8 +70,12 @@ const both = graphql.implementation({
       const typedError: GraphQLError = error
       const request: Request = input.request
       if (input.transport === 'websocket') {
-        const id: string = input.operationId
-        void id
+        const id: GraphQLOperationId = input.operationId
+        // @ts-expect-error GraphQL operation IDをWebSocket session IDと取り違えない
+        const session: WebSocketSessionId = id
+        // @ts-expect-error 任意の文字列をadapterで確定したoperation IDと見なさない
+        const unverified: GraphQLOperationId = 'operation'
+        void [id, session, unverified]
       } else {
         const state: Readonly<Record<string, unknown>> = input.state
         void state
@@ -86,7 +91,7 @@ const both = graphql.implementation({
       const request: Request = input.request
       const signal: AbortSignal = input.signal
       if (input.transport === 'websocket') {
-        const id: string = input.operationId
+        const id: GraphQLOperationId = input.operationId
         void id
       } else {
         const state: Readonly<Record<string, unknown>> = input.state

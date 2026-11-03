@@ -574,6 +574,31 @@ it('fragment / directive / abstract typeを選択Field情報へ反映し、__typ
   ).toEqual(['id'])
 })
 
+it('継承したmaxBatchSizeをバッチ分割に適用しない', async () => {
+  class ChildBatch {
+    readonly load = vi.fn(({ parents }: { parents: readonly object[] }) =>
+      parents.map(() => ({ name: 'child' })),
+    )
+
+    get maxBatchSize() {
+      return 1
+    }
+  }
+
+  const batch = new ChildBatch()
+  const parents = [{ id: '1' }, { id: '2' }]
+  const f = fixture(basic, () => ({
+    Query: { parents: () => parents },
+    Parent: { child: batch },
+  }))
+
+  expect(
+    (await f.query('{ parents { child { name } } }')).errors,
+  ).toBeUndefined()
+  expect(batch.load).toHaveBeenCalledTimes(1)
+  expect(batch.load).toHaveBeenCalledWith(expect.objectContaining({ parents }))
+})
+
 it('存在しないFieldと不正なBatch設定をBinding時に拒否する', () => {
   expect(() =>
     fixture(basic, () => ({

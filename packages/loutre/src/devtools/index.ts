@@ -40,3 +40,7 @@ export type {
   DevtoolsValuePreviewOptions,
 } from './values.js'
 export { previewDevtoolsValue } from './values.js'
+
+export * from './identity.js'
+export { decodeRuntimeEvent, decodeInspectorCommand } from './decoder.js'
+export type { InspectorCommand } from './decoder.js'

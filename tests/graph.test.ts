@@ -107,7 +107,7 @@ describe('Application Model graph', () => {
 
     const AsyncModule = defineModule(() => ({
       providers: [
-        provide(ASYNC).useFactory({ use: async () => ({}) as unknown }),
+        provide(ASYNC).useFactory({ use: async (): Promise<unknown> => ({}) }),
       ],
     }))
     await expect(

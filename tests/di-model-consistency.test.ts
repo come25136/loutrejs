@@ -1,3 +1,4 @@
+import * as fixture from './helpers/identities.js'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import {
@@ -529,7 +530,10 @@ describe('canonical Modelと実行時DIの依存照合', () => {
       expect(() =>
         first.resolve(Hidden, {
           source: 'task.other',
-          consumer: { id: 'task.other', name: 'other' },
+          consumer: {
+            id: fixture.dependencyConsumerId('task.other'),
+            name: 'other',
+          },
         }),
       ).toThrow('task.declared requested Hidden')
     } finally {

@@ -1,3 +1,8 @@
+import type {
+  FlowNodeId,
+  FlowEdgeId,
+  FlowHandleId,
+} from '../../lib/devtools-identity'
 import {
   createRoutingSession,
   init,
@@ -34,7 +39,7 @@ function nodeSize(node: LoutreFlowNode): {
 
 function handleOffset(
   node: LoutreFlowNode | undefined,
-  handleId: string | null | undefined,
+  handleId: FlowHandleId | null | undefined,
   side: 'source' | 'target',
 ): number {
   const handles: readonly FlowHandle[] =
@@ -46,9 +51,9 @@ function handleOffset(
 
 function absolutePositions(
   nodes: readonly LoutreFlowNode[],
-): ReadonlyMap<string, EdgeRoutePoint> {
+): ReadonlyMap<FlowNodeId, EdgeRoutePoint> {
   const byId = new Map(nodes.map((node) => [node.id, node]))
-  const positions = new Map<string, EdgeRoutePoint>()
+  const positions = new Map<FlowNodeId, EdgeRoutePoint>()
   const getPosition = (node: LoutreFlowNode): EdgeRoutePoint => {
     const cached = positions.get(node.id)
     if (cached) return cached
@@ -70,7 +75,7 @@ function routingGraph(
   edges: readonly LoutreFlowEdge[],
 ): {
   readonly graph: ElkGraph
-  readonly positions: ReadonlyMap<string, EdgeRoutePoint>
+  readonly positions: ReadonlyMap<FlowNodeId, EdgeRoutePoint>
 } {
   const positions = absolutePositions(nodes)
   const routableNodes = nodes.filter((node) => node.type !== 'module-group')
@@ -211,7 +216,7 @@ export function edgeRoutePoints(route: RouteResult): readonly EdgeRoutePoint[] {
 
 export function applyEdgeRoutes(
   edges: readonly LoutreFlowEdge[],
-  routes: ReadonlyMap<string, RouteResult>,
+  routes: ReadonlyMap<FlowEdgeId, RouteResult>,
   nodes: readonly LoutreFlowNode[],
 ): LoutreFlowEdge[] {
   const positions = absolutePositions(nodes)
@@ -322,10 +327,10 @@ function orthogonalizeEndpoints(
 }
 
 export interface GraphEdgeRouter {
-  readonly initialRoutes: ReadonlyMap<string, RouteResult>
+  readonly initialRoutes: ReadonlyMap<FlowEdgeId, RouteResult>
   readonly route: (
     nodes: readonly LoutreFlowNode[],
-  ) => ReadonlyMap<string, RouteResult>
+  ) => ReadonlyMap<FlowEdgeId, RouteResult>
   readonly destroy: () => void
 }
 
@@ -347,7 +352,16 @@ export async function createGraphEdgeRouter(
     nudgeSharedPathsWithCommonEndPoint: true,
   })
   const positions = new Map(initial.positions)
-  const initialRoutes = session.processTransaction()
+  const typedRoutes = (
+    raw: ReadonlyMap<string, RouteResult>,
+  ): ReadonlyMap<FlowEdgeId, RouteResult> =>
+    new Map(
+      edges.flatMap((edge) => {
+        const route = raw.get(edge.id)
+        return route ? [[edge.id, route] as const] : []
+      }),
+    )
+  const initialRoutes = typedRoutes(session.processTransaction())
 
   return {
     initialRoutes,
@@ -366,7 +380,7 @@ export async function createGraphEdgeRouter(
         session.moveNode(node.id, next)
         positions.set(node.id, next)
       }
-      return session.processTransaction()
+      return typedRoutes(session.processTransaction())
     },
     destroy() {
       session.destroy()

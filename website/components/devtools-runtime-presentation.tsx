@@ -1,5 +1,6 @@
 'use client'
 
+import type { SpanId } from '../lib/devtools-identity'
 import {
   Activity,
   Braces,
@@ -84,8 +85,8 @@ export function HorizontalWaterfall({
 }: {
   entries: readonly TimelineEntry[]
   durationMs: number
-  selectedSpanId?: string
-  onSelect: (spanId: string) => void
+  selectedSpanId?: SpanId
+  onSelect: (spanId: SpanId) => void
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-surface">
