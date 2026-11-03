@@ -19,6 +19,11 @@
 
 利用例は[ApplicationのLogger](https://github.com/come25136/loutrejs/blob/main/docs/ja/architecture.md#applicationのlogger)を参照してください。
 
+### Moduleの登録
+
+- `modules`と`imports`にはモジュールのインスタンスを登録する形に統一しました。設定が不要なら`defineModule({ ... })`の戻り値を、設定が必要ならファクトリーに引数を渡して呼び出した戻り値を登録します。静的なモジュールは定義時にインスタンス化されるため、そのまま渡せます。
+- 引数なしファクトリーをそのまま登録すると自動で呼び出す省略記法と、`ModuleInput`型・`asModuleInstance()`を削除しました。
+
 ### HTTP ContractとGraphQL
 
 - HTTP Contractに`raw: true`のルートを定義し、`graphql.implementation({ route, manifest, transports, factory })`へ渡してGraphQLを公開できるようにしました。公開パス・HTTPメソッド・ミドルウェアはHTTP Contractに記述します。同じミドルウェアを通常のHTTP要求とWebSocket Upgradeの両方に適用します。
