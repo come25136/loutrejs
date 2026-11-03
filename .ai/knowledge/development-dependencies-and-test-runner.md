@@ -74,7 +74,7 @@ PRのhead SHAに対応する失敗jobとstepを調べ、インストールやimp
 
 ### 復旧方法・再発防止策
 
-CIの検証対象を現行APIへ更新し、廃止APIの互換aliasを復活させて回避しない。GraphQLの公開APIはtarballだけを使うconsumer CIで確認する。公開APIを削除するときはCI・conformance・Webサイトのコード例も検索し、意図的な型エラーのテストと過去のCHANGELOGを除いて旧参照が残っていないことを調べる。
+CIの検証対象を現行APIへ更新し、廃止APIの互換aliasを復活させて回避しない。GraphQLの公開APIはtarballだけを使うconsumer CIで確認する。公開APIを削除するときはCI・conformance・Webサイトのコード例も検索し、意図的な型エラーのテストと過去のCHANGELOGを除いて旧参照が残っていないことを調べる。 WebサイトのGraphQL例でファイルを統合した際は、専用のgraphql-section描画テストに旧タブ名と型表記の期待が残った。code-editor共通部品のテストだけではこの差分を確認できない。コード例の構成を変える場合は、専用の表示テストで最初の選択タブと表示内容を確認し、新しい使い方へ揃えてから単体全体を実行する。
 
 ## workflowの検証式をvmで実行しない
 

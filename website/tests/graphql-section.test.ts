@@ -7,7 +7,7 @@ import { homeCopy } from '../components/home/home-copy'
 
 describe('トップページのGraphQL紹介', () => {
   it.each(['en', 'ja'] as const)(
-    '%sでSDLと生成型を使うResolverをハイライトして表示する',
+    '%sでSDLと生成Bindingを使う統合endpointを最初にハイライト表示する',
     (locale) => {
       const html = renderToStaticMarkup(
         createElement(GraphQLSection, { locale }),
@@ -31,9 +31,10 @@ describe('トップページのGraphQL紹介', () => {
         ),
       ]
       expect(
-        selectedTabs.some(([, content]) => content.includes('resolvers.ts')),
+        selectedTabs.some(([, content]) => content.includes('endpoint.ts')),
       ).toBe(true)
-      expect(html).toContain('endpoint.ts')
+      expect(html).toContain('contract.ts')
+      expect(html).not.toContain('resolvers.ts')
       expect(
         codeBlocks.some(
           ([block]) =>
@@ -43,14 +44,14 @@ describe('トップページのGraphQL紹介', () => {
       expect(
         codeBlocks.some(
           ([block]) =>
-            block.includes('hljs-keyword') && block.includes('satisfies'),
+            block.includes('hljs-keyword') && block.includes('bindManifest'),
         ),
       ).toBe(true)
 
       const text = load(html).text()
       expect(text).toContain('increment(amount: Int!): Counter!')
       expect(text).toContain('args.amount')
-      expect(text).toContain('Resolvers<AppContext>')
+      expect(text).toContain('bindManifest<AppContext>')
       expect(text).not.toContain('TERMINAL')
       expect(text).not.toContain('UTF-8')
       expect(text).not.toContain(' — Loutre')

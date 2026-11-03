@@ -105,22 +105,22 @@ export function GraphQLSection({ locale }: { readonly locale: Locale }) {
               ],
               [
                 {
-                  path: 'src/http/contract.ts',
+                  path: 'src/graphql/endpoint.ts',
                   language: 'typescript',
                   content: (
                     <HighlightedCode
-                      source={contractSource}
+                      source={endpointSource}
                       lineNumbers
                       className="pb-6 pt-2"
                     />
                   ),
                 },
                 {
-                  path: 'src/graphql/endpoint.ts',
+                  path: 'src/http/contract.ts',
                   language: 'typescript',
                   content: (
                     <HighlightedCode
-                      source={endpointSource}
+                      source={contractSource}
                       lineNumbers
                       className="pb-6 pt-2"
                     />
