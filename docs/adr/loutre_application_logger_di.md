@@ -44,4 +44,6 @@ rootの準備前に失敗した場合は元の例外を呼び出し元へ返す�
 
 rootはdispose時に出力状態を終了済みにする。注入先もrootへ委譲するため、以後の出力はconsoleへ送り、終了済みbackendへ再度書き込まない。Runtimeが全資源の解放後に受け取る終了失敗もこの経路で診断する。drain待ちで資源を保持している間は同じbackendを使用する。console出力はApplicationのbackend共有の対象外となる障害境界であり、通常のログ設定として別のbackendを並走させるものではない。
 
+signalによる終了失敗の報告では、同期例外と非同期のrejectをともに捕捉し、報告自体の失敗をconsoleへ出す。ログ送信の完了を待って終了処理の再試行を止めると資源の回収を妨げるため、報告処理とshutdownの進行は分離する。
+
 公開APIと利用例は[アーキテクチャガイド](../ja/architecture.md#applicationのlogger)を正本とする。
