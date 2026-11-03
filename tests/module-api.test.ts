@@ -5,6 +5,7 @@ import {
   defineApplication,
   defineEnv,
   defineModule,
+  asModuleInstance,
   inject,
   hook,
   registerSourceLocation,
@@ -23,6 +24,7 @@ describe('静的・動的Module API', () => {
       environment: [Environment, Environment],
     })
     expect(module.kind).toBe('module-instance')
+    expect(asModuleInstance(module)).toBe(module)
     expect(module.template.kind).toBe('module-template')
     expect(module.args).toBeUndefined()
     expect(module.definition.environment).toEqual([Environment])
@@ -90,7 +92,7 @@ describe('静的・動的Module API', () => {
     )
   })
 
-  it('引数なしfactoryも明示的に生成したinstanceだけを共有し、Model構築で再生成しない', () => {
+  it('明示的に生成したinstanceはModel構築で再生成しない', () => {
     class SharedService {}
     class Consumer {
       readonly service = inject(SharedService)
@@ -122,21 +124,42 @@ describe('静的・動的Module API', () => {
     expect(calls).toBe(2)
   })
 
-  it.each(['root', 'import'] as const)(
-    '未生成templateを%sへ登録してもfactoryを呼ばず拒否する',
-    (registration) => {
-      const factory = vi.fn(() => ({}))
-      const Template = defineModule(factory)
-      const modules =
-        registration === 'root'
-          ? [Template]
-          : [{ kind: 'module-instance', definition: { imports: [Template] } }]
-      expect(() =>
-        Reflect.apply(buildApplicationModel, undefined, [{ modules }]),
-      ).toThrow('Application modules and imports require Module instances.')
-      expect(factory).not.toHaveBeenCalled()
-    },
-  )
+  it('引数なしfactoryはrootとdiamond importで一度だけ生成し、Application内でProviderを共有する', async () => {
+    class Repository {}
+    const factory = vi.fn(() => ({
+      providers: [Repository],
+      exports: [Repository],
+    }))
+    class Consumer {
+      readonly repository = inject(Repository)
+    }
+    const Shared = defineModule(factory)
+    const Left = defineModule({ imports: [Shared], exports: [Repository] })
+    const Right = defineModule({ imports: [Shared], exports: [Repository] })
+    const Root = defineModule({ imports: [Left, Right], providers: [Consumer] })
+    const definition = defineApplication({ modules: [Root, Shared, Shared] })
+    expect(definition.model.diagnostics).toEqual([])
+    expect(factory).toHaveBeenCalledOnce()
+    expect(
+      definition.model.nodes.filter((node) => node.kind === 'module'),
+    ).toHaveLength(4)
+    expect(
+      definition.model.edges.filter((edge) => edge.kind === 'imports'),
+    ).toHaveLength(4)
+    const first = await bootstrapApplication({ application: definition })
+    const second = await bootstrapApplication({ application: definition })
+    try {
+      expect(first.get(Consumer).repository).toBe(first.get(Repository))
+      expect(second.get(Consumer).repository).toBe(second.get(Repository))
+      expect(first.get(Repository)).not.toBe(second.get(Repository))
+      expect(factory).toHaveBeenCalledOnce()
+    } finally {
+      await Promise.all([first.close(), second.close()])
+    }
+    const nextDefinition = defineApplication({ modules: [Root, Shared] })
+    expect(nextDefinition.model.diagnostics).toEqual([])
+    expect(factory).toHaveBeenCalledTimes(2)
+  })
 
   it.each([true, false])(
     'Provider・Execution・Lifecycleで同じimport visibilityを使う（export=%s）',
@@ -153,7 +176,6 @@ describe('静的・動的Module API', () => {
           exports: exported ? [Repository] : [],
         }
       })
-      const shared = Template()
       const execution = task<void, void>({
         name: 'probe',
         factory:
@@ -163,14 +185,14 @@ describe('静的・動的Module API', () => {
           },
       })
       const Root = defineModule({
-        imports: [shared],
+        imports: [Template],
         providers: [Consumer],
         executions: [execution],
         lifecycle: {
           onModuleInit: hook({ inject: [Repository], run: () => {} }),
         },
       })
-      const model = buildApplicationModel({ modules: [Root, shared] })
+      const model = buildApplicationModel({ modules: [Root, Template] })
       expect(calls).toBe(1)
       if (exported) expect(model.diagnostics).toEqual([])
       else
@@ -191,18 +213,18 @@ describe('静的・動的Module API', () => {
     expect(model.nodes.filter((node) => node.kind === 'module')).toHaveLength(2)
   })
 
-  it('静的instanceと動的templateへ付けたソース位置をModelに反映する', () => {
+  it('静的instanceと引数なしtemplateへ付けたソース位置をModelに反映する', () => {
     const source = { file: '/app/static.ts', line: 3, column: 1 }
     const Static = registerSourceLocation(
       defineModule({ name: 'Static' }),
       source,
     )
     const Dynamic = registerSourceLocation(
-      defineModule((name: string) => ({ name })),
+      defineModule(() => ({ name: 'Dynamic' })),
       { ...source, line: 5 },
     )
     const model = buildApplicationModel({
-      modules: [Static, Dynamic('Dynamic')],
+      modules: [Static, Dynamic],
     })
     expect(
       model.nodes

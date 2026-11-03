@@ -108,7 +108,7 @@ export type {
   ModuleModelNode,
   ProviderModelNode,
 } from './model.js'
-export { defineModule, moduleTypeInfo } from './module.js'
+export { asModuleInstance, defineModule, moduleTypeInfo } from './module.js'
 export type {
   AnyModuleTemplate,
   ExtensionsOfModuleDefinition,
@@ -116,6 +116,7 @@ export type {
   ModuleExtensions,
   ModuleHostApis,
   ModuleInstance,
+  ModuleInput,
   ModuleTemplate,
   ModuleTypeInfo,
 } from './module.js'

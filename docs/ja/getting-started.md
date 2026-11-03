@@ -107,7 +107,9 @@ const AppModule = defineModule({
 })
 ```
 
-同じinstanceの参照はGraph内で共有されます。動的factoryを明示的に呼ぶたびに別instanceが作られるので、共有したい場合は結果を変数に保存してください。`modules`と`imports`は生成済みinstanceだけを受け付けます。引数なしのfactoryも呼び出してから登録してください。
+同じinstanceの参照はGraph内で共有されます。引数なしのfactoryは`modules`や`imports`へそのまま渡せます。同じfactoryを複数箇所へ登録しても、Modelの構築ごとに一度だけ呼び出します。異なるModelの構築間では結果を共有しません。
+
+引数付きのfactoryは、設定を渡して呼び出した結果を登録してください。明示的に呼ぶたびに別instanceが作られるので、共有したい場合は結果を変数に保存します。`asModuleInstance()`で生成済みinstanceを取得することもできます。
 
 ## portable Kernel Hostからテストする
 

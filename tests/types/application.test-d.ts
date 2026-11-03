@@ -7,7 +7,9 @@ import {
   defineExecution,
   defineExecutionExtension,
   defineModule,
+  asModuleInstance,
   type ExecutionDefinition,
+  type ModuleInput,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
@@ -19,13 +21,6 @@ import type { MessagePortHostApi } from '@loutrejs/loutre/message-port'
 import { consume, cron, fixedDelay, queue, task } from '@loutrejs/loutre/tasks'
 import { z } from 'zod'
 import type { RuntimeEngine } from '@loutrejs/loutre/runtime'
-// @ts-expect-error 未生成Moduleを受け付ける互換用unionは公開しない。
-import type { ModuleInput } from '@loutrejs/loutre'
-// @ts-expect-error Moduleの暗黙生成helperは公開しない。
-import { asModuleInstance } from '@loutrejs/loutre'
-
-void asModuleInstance
-
 // @ts-expect-error Denoは公開Runtime identityから削除した
 const removedRuntime: RuntimeEngine = 'deno'
 void removedRuntime
@@ -298,12 +293,22 @@ const staticHttpApp = createKernelApplication({
 staticHttpApp.http.fetch(new Request('http://localhost/health'))
 // @ts-expect-error HTTPのみの静的ModuleにはTasks Host APIは無い
 staticHttpApp.tasks
-// @ts-expect-error 引数なしtemplateも生成してからApplicationへ登録する。
-defineApplication({ modules: [HttpModule] })
-// @ts-expect-error 引数なしtemplateも生成してからimportsへ登録する。
-defineModule({ imports: [HttpModule] })
-// @ts-expect-error Modelも未生成templateを正規化しない。
+const implicitHttpApp = createKernelApplication({
+  application: defineApplication({ modules: [HttpModule] }),
+})
+implicitHttpApp.http.fetch(new Request('http://localhost/health'))
+// @ts-expect-error HTTPのみの引数なしModuleにはTasks Host APIは無い。
+implicitHttpApp.tasks
+const implicitImportsApp = createKernelApplication({
+  application: defineApplication({
+    modules: [defineModule({ imports: [HttpModule] })],
+  }),
+})
+implicitImportsApp.http.fetch(new Request('http://localhost/health'))
 buildApplicationModel({ modules: [HttpModule] })
+const moduleInputs: readonly ModuleInput[] = [StaticHttpModule, HttpModule]
+void moduleInputs
+asModuleInstance(HttpModule).definition
 nodeRuntime.create({
   application: workerDefinition,
   arguments: { instance: 'worker' },
