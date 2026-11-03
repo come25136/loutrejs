@@ -8,6 +8,7 @@ import {
   hook,
   inject,
   provide,
+  token,
   LoggerModule,
   LoggerService,
   LoggerToken,
@@ -20,6 +21,106 @@ import {
 } from '@loutrejs/loutre/runtime'
 
 describe('ApplicationのLogger DI', () => {
+  it('別名Providerが注入されたLoggerを返しても元の実体のlifecycleを一度だけ実行する', async () => {
+    const events: string[] = []
+    class CustomLoggerService extends LoggerService {
+      onModuleInit() {
+        events.push('init')
+      }
+      onApplicationBootstrap() {
+        events.push('bootstrap')
+      }
+      onModuleDestroy() {
+        events.push('destroy')
+      }
+      beforeApplicationShutdown() {
+        events.push('before')
+      }
+      onApplicationShutdown() {
+        events.push('shutdown')
+      }
+      override onApplicationDispose() {
+        events.push('dispose')
+        super.onApplicationDispose()
+      }
+    }
+    const Alias = token<LoggerService>('logger.alias')
+    const app = await bootstrapApplication({
+      application: defineApplication({
+        modules: [
+          defineModule({
+            providers: [provide(LoggerToken).useClass(CustomLoggerService)],
+            exports: [LoggerToken],
+          }),
+          defineModule({
+            providers: [
+              provide(Alias).useFactory({
+                inject: [LoggerToken],
+                use: (logger: LoggerService) => logger,
+              }),
+            ],
+          }),
+        ],
+      }),
+    })
+    try {
+      expect(app.get(Alias).backend).toBe(app.get(LoggerToken).backend)
+      expect(app.get(Alias).context.source).toBe('logger.alias')
+    } finally {
+      await app.close()
+    }
+    expect(events).toEqual([
+      'init',
+      'bootstrap',
+      'destroy',
+      'before',
+      'shutdown',
+      'dispose',
+    ])
+  })
+
+  it('凍結された関数プロパティを持つLoggerでも注入先のsourceで出力できる', async () => {
+    const records: LogRecord[] = []
+    class FrozenLoggerService extends LoggerService {
+      override readonly info = (
+        message: string,
+        context: Readonly<Record<string, unknown>> = {},
+      ) => super.info(message, context)
+      constructor() {
+        super({ write: (record) => records.push(record) })
+        Object.freeze(this)
+      }
+    }
+    class Consumer {
+      readonly logger = inject(LoggerToken)
+    }
+    const root = new FrozenLoggerService()
+    const app = await bootstrapApplication({
+      application: defineApplication({
+        modules: [
+          defineModule({
+            providers: [provide(LoggerToken).useValue(root), Consumer],
+            exports: [LoggerToken],
+          }),
+        ],
+      }),
+    })
+    try {
+      const injected = Object.freeze(app.get(Consumer).logger)
+      root.info('root')
+      injected.info('injected')
+      expect(injected).toBeInstanceOf(FrozenLoggerService)
+      expect(injected.context.source).toBe('Consumer')
+      expect(root.context.source).toBe('Application')
+      expect(records.map(({ message, source }) => [message, source])).toEqual([
+        ['root', 'Application'],
+        ['injected', 'Consumer'],
+      ])
+    } finally {
+      await app.close()
+    }
+  })
+
   it('child APIを提供せず、元のカスタム実装を並行呼び出ししても注入先のsourceを混ぜない', async () => {
     const pending = Promise.withResolvers<void>()
     class Backend implements LoggerBackend {

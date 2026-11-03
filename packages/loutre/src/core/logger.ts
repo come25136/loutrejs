@@ -47,7 +47,7 @@ class SilentLoggerBackend implements LoggerBackend {
 }
 
 export class LoggerService {
-  #disposed = false
+  static readonly #disposed = new WeakSet<LoggerService>()
   static readonly [frameworkProvidedTokenBrand] = true
   static readonly [loggerTokenBrand] = true
   readonly [loggerInstanceBrand] = true
@@ -65,45 +65,46 @@ export class LoggerService {
     message: string,
     context: Readonly<Record<string, unknown>> = {},
   ): void {
-    this.#write('debug', message, context)
+    LoggerService.#write(this, 'debug', message, context)
   }
 
   info(message: string, context: Readonly<Record<string, unknown>> = {}): void {
-    this.#write('info', message, context)
+    LoggerService.#write(this, 'info', message, context)
   }
 
   warn(message: string, context: Readonly<Record<string, unknown>> = {}): void {
-    this.#write('warn', message, context)
+    LoggerService.#write(this, 'warn', message, context)
   }
 
   error(
     message: string,
     context: Readonly<Record<string, unknown>> = {},
   ): void {
-    this.#write('error', message, context)
+    LoggerService.#write(this, 'error', message, context)
   }
 
   onApplicationDispose(): void {
-    this.#disposed = true
+    LoggerService.#disposed.add(this)
   }
 
-  #write(
+  static #write(
+    logger: LoggerService,
     level: LogLevel,
     message: string,
     context: Readonly<Record<string, unknown>>,
   ): void {
     const record: LogRecord = {
-      ...this.context,
+      ...logger.context,
       ...context,
       timestamp: new Date().toISOString(),
       level,
       message,
     }
-    if (this.#disposed) {
+    if (LoggerService.#disposed.has(logger)) {
       writeToConsole(level, serializeLogRecord(record))
       return
     }
-    this.backend.write(record)
+    logger.backend.write(record)
   }
 }
 

@@ -31,6 +31,7 @@ import {
 import { Container, assertDeclaredDependency } from './di.js'
 import { ExecutionTracker } from './execution-tracker.js'
 import { LoggerToken } from './logger.js'
+import { loggerLifecycleOwner } from './logger-source.js'
 
 export interface ApplicationKernelRuntimeOptions {
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
@@ -350,15 +351,16 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
 
   #onProviderCreated(provider: ProviderDescriptor, value: unknown): void {
     const node = this.#providerNodes.get(provider)
+    const owner = loggerLifecycleOwner(value)
     if (
       node &&
       provider.scope === 'application' &&
-      !this.#trackedInstances.has(value)
+      !this.#trackedInstances.has(owner)
     ) {
-      this.#trackedInstances.add(value)
-      this.#createdInstances.push(value)
+      this.#trackedInstances.add(owner)
+      this.#createdInstances.push(owner)
       const instances = this.#providerInstances.get(node.moduleId) ?? []
-      instances.push(value)
+      instances.push(owner)
       this.#providerInstances.set(node.moduleId, instances)
     }
     const instrumentation = this.#instrumentation

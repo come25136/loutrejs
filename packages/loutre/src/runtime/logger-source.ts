@@ -1,4 +1,24 @@
 import type { LoggerService, LogLevel } from './logger.js'
+import { isLogger } from '../core/logger-internal.js'
+import {
+  loggerInstanceBrand,
+  loggerSourceRoot,
+} from '../core/logger-identity.js'
+
+export function loggerLifecycleOwner(value: LoggerService): LoggerService
+export function loggerLifecycleOwner(value: unknown): unknown
+export function loggerLifecycleOwner(value: unknown): unknown {
+  if (!isLogger(value) || !(loggerSourceRoot in value)) return value
+  let owner: LoggerService = value
+  const visited = new Set<LoggerService>()
+  while (loggerSourceRoot in owner && !visited.has(owner)) {
+    visited.add(owner)
+    const root = owner[loggerSourceRoot]
+    if (!isLogger(root)) break
+    owner = root
+  }
+  return owner
+}
 
 export function bindLoggerSource(
   logger: LoggerService,
@@ -15,24 +35,25 @@ export function bindLoggerSource(
     warn: bind('warn'),
     error: bind('error'),
   }
-  return new Proxy(logger, {
+  const reference: LoggerService & {
+    readonly [loggerSourceRoot]: LoggerService
+  } = {
+    [loggerInstanceBrand]: true,
+    [loggerSourceRoot]: loggerLifecycleOwner(logger),
+    backend: logger.backend,
+    context,
+    ...methods,
+    onApplicationDispose: () => logger.onApplicationDispose(),
+  }
+  Object.setPrototypeOf(reference, Reflect.getPrototypeOf(logger))
+  // 凍結した元の実体を対象にすると、出力メソッドとcontextを委譲用に置き換えられない。
+  return new Proxy(reference, {
     get(target, property) {
-      switch (property) {
-        case 'context':
-          return context
-        case 'debug':
-          return methods.debug
-        case 'info':
-          return methods.info
-        case 'warn':
-          return methods.warn
-        case 'error':
-          return methods.error
-      }
+      if (Object.hasOwn(target, property)) return Reflect.get(target, property)
       // private fieldを持つ実装のreceiverをproxyへ置き換えない。
-      const value = Reflect.get(target, property, target)
+      const value = Reflect.get(logger, property, logger)
       return typeof value === 'function' && property !== 'constructor'
-        ? value.bind(target)
+        ? value.bind(logger)
         : value
     },
   })
