@@ -140,7 +140,7 @@ export function bindManifest<Context extends object = object>(input: {
             throw new TypeError(
               `${name}.${fieldName}.${key}は関数にしてください。`,
             )
-        const { maxBatchSize, ...snapshotOptions } = options
+        const { maxBatchSize, ...snapshotOptions } = { ...options }
         const definition: DataDefinition = Object.freeze({
           identity: fieldCoordinate(name, fieldName),
           options: Object.freeze({

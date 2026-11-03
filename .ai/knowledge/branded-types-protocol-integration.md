@@ -33,3 +33,9 @@ RuntimeDevtoolsInstrumentationが生成したイベントをJSONと実WebSocket�
 ### 復旧方法・再発防止策
 
 RuntimeSpanKindはCoreのoperation kindの型を参照し、送信側のassertionを除く。decoderはkindが文字列であることを検証し、Extension固有の名前は制限しない。event.typeの閉じたunionは維持する。実GraphQLのoperationと独自operationの受信・終了通知・後続通信を統合テストで確認し、文字列以外のkindの拒否も別に検証する。
+
+## GraphQLのバッチ設定をスナップショットする境界
+
+継承または非列挙の `maxBatchSize` を分割代入で直接読み取ると、従来のスプレッドでコピーされなかった設定が適用される。確認には、継承した上限を持つResolverに親2件のクエリを実行し、`load` に両方が一度に渡ることを検証する。
+
+従来どおり列挙可能な自身のプロパティをコピーし、そのスナップショットに含まれる上限をブランド化する。型の追加でプロパティの取得範囲を広げない。
