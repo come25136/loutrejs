@@ -88,7 +88,9 @@ try {
       await fetch('http://127.0.0.1:18787/shutdown')
     },
   )
-  console.log('Cloudflare Workers (workerd 2026-08-24) conformance: passed')
+  console.log(
+    'Cloudflare Workers (compatibility_date 2026-08-24) conformance: passed',
+  )
 } finally {
   await terminateChild(child)
   child.stdout.destroy()

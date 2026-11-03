@@ -36,7 +36,9 @@ async function main(): Promise<void> {
     await attachment.close('conformance')
     port1.close()
     port2.close()
-    console.log('Electron 43 MessagePort conformance: passed')
+    console.log(
+      `Electron ${process.versions.electron} MessagePort conformance: passed`,
+    )
     app.exit(0)
   } catch (error) {
     await attachment.close('conformance').catch(() => undefined)
