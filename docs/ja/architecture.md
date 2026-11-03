@@ -235,12 +235,11 @@ class MyService {
 要求元ごとに異なる情報を保存する独自loggerには、要求のたびに新しいinstanceを作る`transient`を使います。application scopeでは、一つのinstanceと、構築時に保存したconsumerが共有されます。
 
 ```ts
-import { inject, injectInquirer, provide } from '@loutrejs/loutre'
-import { Logger } from '@loutrejs/loutre/runtime'
+import { inject, injectInquirer, provide, LoggerToken } from '@loutrejs/loutre'
 
 class AppLogger {
   readonly consumer = injectInquirer()
-  readonly logger = inject(Logger)
+  readonly logger = inject(LoggerToken)
 }
 
 const loggerProvider = provide(AppLogger).useClass(AppLogger, {
@@ -254,15 +253,15 @@ const loggerProvider = provide(AppLogger).useClass(AppLogger, {
 
 Loutreは予約tokenの`LoggerToken`に登録されたProviderを、Applicationのroot Loggerとして扱います。登録を省略すると、既定のLoggerとconsole backendをapplication scopeで生成します。
 
-組み込み実装は`LoggerService`、標準のconsole出力を提供するModuleは`LoggerModule`です。Applicationの構成に明示する場合は、`LoggerModule`を直接指定します。Moduleを省略した場合も同じ標準Providerを使います。
+組み込み実装は`LoggerService`です。標準のconsole出力を使う場合、Logger用のProvider登録やModuleの指定は不要です。
 
 ```ts
-import { defineApplication, LoggerModule } from '@loutrejs/loutre'
+import { defineApplication } from '@loutrejs/loutre'
 
-const application = defineApplication({ modules: [LoggerModule, AppModule] })
+const application = defineApplication({ modules: [AppModule] })
 ```
 
-通常Providerの登録方法で組み込み実装を指定する場合は、`provide(LoggerToken).useClass(LoggerService)`を使います。標準構成を使うために独自クラスを定義する必要はありません。
+標準構成を明示するための`LoggerModule`も提供します。`modules: [LoggerModule, AppModule]`と指定しても、省略時と同じ標準Providerを使います。`LoggerToken`は利用側の注入先と、カスタム実装の登録先に使います。
 
 Provider、Execution、middlewareでは`inject(LoggerToken)`を使います。要求元の`source`を持つchild Loggerが渡され、同じApplicationのbackendを共有します。起動コードでは`app.get(LoggerToken)`でrootを取得します。sourceは`Application`となり、利用側で名前を付ける必要はありません。
 
@@ -303,7 +302,7 @@ const JsonLoggerModule = defineModule({
 const application = defineApplication({ modules: [JsonLoggerModule] })
 ```
 
-登録は`provide(LoggerToken).useClass(JsonLoggerService)`、利用は`inject(LoggerToken)`と分けます。`providers: [JsonLoggerService]`だけでは、独自クラス自身をtokenとして登録するため、ApplicationのLoggerの差し替えにはなりません。
+登録は`provide(LoggerToken).useClass(JsonLoggerService)`、利用は`inject(LoggerToken)`と分けます。カスタム実装へ差し替えた場合も、利用側の取得方法は変わりません。`providers: [JsonLoggerService]`だけでは、独自クラス自身をtokenとして登録するため、ApplicationのLoggerの差し替えにはなりません。
 
 予約tokenのProviderはapplication scopeで一つだけ登録し、Application直下Moduleの`exports`から公開します。このbindingはApplication全体に適用されるため、利用するModuleごとにLoggerのModuleをimportする必要はありません。backend内部の依存には通常のModule visibilityを適用します。従来の`Logger`は`LoggerService`の互換aliasとして残り、既存の`inject(Logger)`も同じ予約tokenとして利用できます。
 
@@ -329,7 +328,7 @@ APIやTaskのhandlerでは、`factory`で取得したサービスを使います
 #### Env / Args・Logger・終了処理などの補足
 
 - Env（環境設定）とArgs（起動時の引数）は、それぞれModuleの`environment`とApplicationの`arguments`に宣言します。`useValue()`で渡す値、Env、Args自体は、構築中に別のサービスを取得しません。
-- 組み込み`Logger`はLoutreが提供するためProvider登録を省略できますが、利用側で`inject(Logger)`やfactoryの`inject: [Logger]`と宣言する必要はあります。すでに作成済みのサービスを受け取る場合も、依存の宣言は必要です。
+- 組み込み`LoggerService`はLoutreが提供するためProvider登録を省略できますが、利用側で`inject(LoggerToken)`やfactoryの`inject: [LoggerToken]`と宣言する必要はあります。すでに作成済みのサービスを受け取る場合も、依存の宣言は必要です。
 - 初期化・終了処理のLifecycle hookは、`hook({ inject: [...], run: ... })`の`inject`配列で依存を指定します。
 - HTTPのmiddleware（HTTP Layer）の依存も、所属するAPIの依存として調べます。必要なサービスはmiddlewareの`factory`で取得し、実行時だけ追加しないでください。
 

@@ -53,7 +53,7 @@ describe('ApplicationのLogger DI', () => {
     }
   })
 
-  it('Envに依存するbackendを初期化し、起動コード・Provider・middleware・Executionで共有する', async () => {
+  it('カスタムbackendを予約token経由で起動コード・Provider・middleware・Executionへ共有する', async () => {
     const events: string[] = []
     class LogEnv extends defineEnv(z.object({ LABEL: z.string() })) {}
     class Backend implements LoggerBackend {
@@ -76,7 +76,7 @@ describe('ApplicationのLogger DI', () => {
       }
     }
     const ROOT = LoggerToken
-    class CustomLoggerService extends Logger {
+    class CustomLoggerService extends LoggerService {
       constructor(backend = inject(Backend)) {
         super(backend)
       }
@@ -87,7 +87,7 @@ describe('ApplicationのLogger DI', () => {
       exports: [LoggerToken],
     })
     class Service {
-      readonly logger = inject(Logger)
+      readonly logger = inject(LoggerToken)
       onModuleInit() {
         this.logger.info('service.init')
       }
@@ -108,7 +108,7 @@ describe('ApplicationのLogger DI', () => {
     const tracing = http.middleware({
       name: 'Tracing',
       factory:
-        (logger = inject(Logger)) =>
+        (logger = inject(LoggerToken)) =>
         async (_context, next) => {
           logger.info('middleware')
           return next()
@@ -124,7 +124,7 @@ describe('ApplicationのLogger DI', () => {
           responses: { ok: { status: 204 } },
         },
       }),
-      factory: (logger = inject(Logger)) => ({
+      factory: (logger = inject(LoggerToken)) => ({
         health(context) {
           logger.info('execution')
           return context.response.ok({})
@@ -136,7 +136,7 @@ describe('ApplicationのLogger DI', () => {
       executions: [endpoint],
       lifecycle: {
         onApplicationShutdown: hook({
-          inject: [Logger],
+          inject: [LoggerToken],
           run: (logger) => logger.info('module.shutdown'),
         }),
       },
@@ -169,7 +169,7 @@ describe('ApplicationのLogger DI', () => {
       environment: { LABEL: 'fixture' },
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
-    const root = app.get(Logger)
+    const root = app.get(LoggerToken)
     const backend = root.backend as Backend
     try {
       expect(root).toBe(app.get(ROOT))

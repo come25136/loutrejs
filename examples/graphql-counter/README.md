@@ -71,8 +71,8 @@ Run a standard `graphql-ws` client from another terminal at the repository root.
 ```sh
 node --input-type=module <<'JS'
 import { createClient } from 'graphql-ws'
-import { Logger } from '@loutrejs/loutre/runtime'
-const logger = new Logger()
+import { LoggerService } from '@loutrejs/loutre'
+const logger = new LoggerService()
 const client = createClient({ url: 'ws://127.0.0.1:3000/graphql', retryAttempts: 0 })
 const stop = client.subscribe(
   { query: 'subscription { counterChanged { value step { amount } } }' },

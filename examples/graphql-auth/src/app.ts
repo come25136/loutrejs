@@ -1,4 +1,4 @@
-import { defineApplication, defineModule, LoggerModule } from '@loutrejs/loutre'
+import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { Users } from './auth/users.js'
 import { HealthHttp } from './http/endpoint.js'
 import { AppEnv } from './config/env.js'
@@ -11,4 +11,4 @@ const AuthModule = defineModule({
   executions: [HealthHttp, ProfileGraphQL],
 })
 
-export default defineApplication({ modules: [LoggerModule, AuthModule] })
+export default defineApplication({ modules: [AuthModule] })

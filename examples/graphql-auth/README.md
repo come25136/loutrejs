@@ -13,7 +13,7 @@ npm run generate --workspace @loutrejs/example-graphql-auth
 npm run start --workspace @loutrejs/example-graphql-auth
 ```
 
-[LoggingModule](./src/logging/logger.ts)で`provide(LoggerToken).useClass(LoggerService)`を登録します。`main.ts`は`app.get(LoggerToken)`から取得して起動後のHTTP／WS接続先を出力し、Providerやmiddlewareも同じbackendを共有します。sourceは起動コードでは`Application`、注入先ではconsumer名が自動で付きます。
+Loggerの設定は省略し、標準のconsole出力を使います。`main.ts`は`app.get(LoggerToken)`から取得して起動後のHTTP／WS接続先を出力します。Providerやmiddlewareは`inject(LoggerToken)`で取得し、同じbackendを共有します。sourceは起動コードでは`Application`、注入先ではconsumer名が自動で付きます。
 
 既定のポートは3000です。`PORT=3001`で変更できます。
 
@@ -140,9 +140,9 @@ curl http://127.0.0.1:3000/graphql \
 
 ```js
 import { createClient } from 'graphql-ws'
-import { Logger } from '@loutrejs/loutre/runtime'
+import { LoggerService } from '@loutrejs/loutre'
 
-const logger = new Logger()
+const logger = new LoggerService()
 
 const client = createClient({
   url: 'ws://127.0.0.1:3000/graphql',
