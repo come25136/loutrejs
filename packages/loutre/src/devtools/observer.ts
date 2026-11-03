@@ -8,23 +8,13 @@ import type {
 import type { ModelNodeId } from '../core/model/identity.js'
 import type { RuntimeExecutionId } from '../core/identity.js'
 import type { EpochMs, DurationMs } from '../core/units.js'
-import type { RuntimeExecutionMetadata } from '../core/instrumentation.js'
+import type {
+  RuntimeExecutionMetadata,
+  RuntimeOperationMetadata,
+} from '../core/instrumentation.js'
 import type { DevtoolsValuePreview } from './values.js'
 
-export type RuntimeSpanKind =
-  | 'execution'
-  | 'http.request'
-  | 'http.middleware'
-  | 'http.handler'
-  | 'task.handler'
-  | 'message-port.handler'
-  | 'websocket.handler'
-  | 'di.resolve'
-  | 'provider.construct'
-  | 'provider.method'
-  | 'response'
-  | 'dependency'
-  | 'custom'
+export type RuntimeSpanKind = RuntimeOperationMetadata['kind']
 
 export interface SerializedDevtoolsError {
   readonly name?: string

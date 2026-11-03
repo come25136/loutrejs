@@ -19,6 +19,7 @@ import {
   type ModelNodeId,
   type CapabilityIdentity,
   type RuntimeExecutionMetadata,
+  type RuntimeOperationMetadata,
   type Token,
 } from '@loutrejs/loutre'
 import {
@@ -34,6 +35,7 @@ import {
   parseCapsuleId,
   type TraceId,
   type CapsuleId,
+  type RuntimeSpanKind,
 } from '@loutrejs/loutre/devtools'
 import {
   utf8ByteOffset,
@@ -143,3 +145,9 @@ void [
   counter,
   owner,
 ]
+
+function preserveOperationKind(operation: RuntimeOperationMetadata) {
+  const kind: RuntimeSpanKind = operation.kind
+  return kind
+}
+void preserveOperationKind

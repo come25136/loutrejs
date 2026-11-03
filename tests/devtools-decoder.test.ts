@@ -26,6 +26,32 @@ describe('DevToolsの受信境界', () => {
     expect(parseRunId(1)).toBeUndefined()
   })
 
+  it.each(['graphql.operation', 'custom.extension.operation'])(
+    '%sのspanをoperation名で制限せず受信する',
+    (kind) => {
+      const span = {
+        type: 'span.started',
+        runId: event.runId,
+        seq: event.seq,
+        timestamp: event.timestamp,
+        traceId: event.traceId,
+        spanId: event.spanId,
+        name: event.name,
+        kind,
+      }
+      expect(decodeRuntimeEvent(span)).toEqual(span)
+    },
+  )
+
+  it.each([undefined, null, 42, {}, []])(
+    '文字列以外のkindを持つspanを拒否する: %j',
+    (kind) => {
+      expect(
+        decodeRuntimeEvent({ ...event, type: 'span.started', kind }),
+      ).toBeUndefined()
+    },
+  )
+
   it.each([
     'parentSpanId',
     'graphNodeId',

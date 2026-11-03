@@ -74,6 +74,10 @@ JSONの受信値は`unknown`として扱う。既存の`isHelloMessage`、`isCom
 
 特にApplication channelの`isRuntimeEvent`は現在、共通フィールドの一部しか検証していない。brandを付けるときは、optionalな`parentSpanId`、`capsuleId`、Replay元のIDも存在すれば検証する。イベントのdiscriminantごとの必須フィールドも確認し、部分的な検証でイベント全体の型を保証したことにしない。正規に生成されたmessageの形式は変えず、不正なmessageの拒否は検証の修正としてテストする。
 
+operationの`kind`はCoreの`RuntimeOperationMetadata.kind`が所有し、Extensionが任意の文字列を指定できる。DevToolsの`RuntimeSpanKind`もその型を参照する。受信時は文字列であることを検証し、組み込みoperation名の固定リストで制限しない。イベントの`type`が持つ閉じたunionと、Extensionが拡張する`kind`を混同しない。
+
+GraphQLの実operationと独自Extensionのoperationが生成するstart／endイベントをNodeのApplication channelへ通し、kindの保存、購読の継続、接続の維持を確認する。decoderに手書きの組み込みイベントだけを渡すテストで送受信の整合を代用しない。
+
 ### 保存・検索・公開API
 
 Runtime event、Trace context、Replay context、Inspector request/result、Capsule preview、CLIのsummary型まで同じID型を使う。`executionId`と`graphNodeId`もCoreが所有する型を引き継ぐ。時刻・duration・TTL・sequence・capture上限についても、[全体方針](loutre_branded_types_adoption.md)に従って意味と単位を区別する。

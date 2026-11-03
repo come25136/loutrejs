@@ -19,3 +19,17 @@ Branded Types導入と、HTTP ContractからGraphQLへ委任する変更を並�
 ## 再発防止策
 
 自動マージできたことと型・動作の整合を区別する。stringへの拡張やunknownへの二重assertionで回避せず、型の所有者と生成境界を揃える。exampleの移動先、生成物、Runtimeと配布packageのconsumerを含めて検証する。
+
+## operation kindの送受信契約
+
+### 発生条件・原因
+
+受信イベントの構造検証を追加するとき、CoreのRuntimeOperationMetadata.kindは任意のstringである一方、DevToolsのRuntimeSpanKindとdecoderへ組み込み名の固定リストを置くと、正規のExtensionイベントを拒否する。GraphQLのgraphql.operationでもバッチ全体が拒否され、Application channelが1008 invalid event batchで切断された。送信側の型assertionが契約の不一致を隠していた。
+
+### 安全な確認方法
+
+RuntimeDevtoolsInstrumentationが生成したイベントをJSONと実WebSocket経由でApplication channelへ送り、イベントの保存とRunの接続維持を確認する。decoderへ手書きの組み込みイベントを渡すテストだけでは、送信側との不一致を検出できない。
+
+### 復旧方法・再発防止策
+
+RuntimeSpanKindはCoreのoperation kindの型を参照し、送信側のassertionを除く。decoderはkindが文字列であることを検証し、Extension固有の名前は制限しない。event.typeの閉じたunionは維持する。実GraphQLのoperationと独自operationの受信・終了通知・後続通信を統合テストで確認し、文字列以外のkindの拒否も別に検証する。

@@ -36,11 +36,7 @@ import type {
   RuntimeInvocationResult,
 } from './inspector.js'
 import type { DevtoolsModuleOptions } from './module.js'
-import {
-  serializeDevtoolsError,
-  type RuntimeObserver,
-  type RuntimeSpanKind,
-} from './observer.js'
+import { serializeDevtoolsError, type RuntimeObserver } from './observer.js'
 import {
   discoverProviderMethods,
   instrumentProviderMethods,
@@ -274,7 +270,7 @@ export class RuntimeDevtoolsInstrumentation
       ...(metadata.graphNodeId === undefined
         ? {}
         : { graphNodeId: metadata.graphNodeId }),
-      kind: metadata.kind as RuntimeSpanKind,
+      kind: metadata.kind,
       name: metadata.name,
       ...(capsule === undefined
         ? {}

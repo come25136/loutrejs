@@ -1,8 +1,4 @@
-import type {
-  RuntimeEvent,
-  RuntimeSpanKind,
-  SerializedDevtoolsError,
-} from './observer.js'
+import type { RuntimeEvent, SerializedDevtoolsError } from './observer.js'
 import type { DevtoolsValue, DevtoolsValuePreview } from './values.js'
 import { runtimeExecutionId } from '../core/identity.js'
 import { epochMilliseconds, milliseconds } from '../core/units.js'
@@ -76,22 +72,6 @@ function serializedError(value: unknown): value is SerializedDevtoolsError {
   )
 }
 
-const spanKinds: readonly string[] = [
-  'execution',
-  'http.request',
-  'http.middleware',
-  'http.handler',
-  'task.handler',
-  'message-port.handler',
-  'websocket.handler',
-  'di.resolve',
-  'provider.construct',
-  'provider.method',
-  'response',
-  'dependency',
-  'custom',
-]
-
 function replayModes(
   value: unknown,
 ): value is readonly ('direct' | 'transport')[] {
@@ -99,10 +79,6 @@ function replayModes(
     Array.isArray(value) &&
     value.every((mode) => mode === 'direct' || mode === 'transport')
   )
-}
-
-function spanKind(value: unknown): value is RuntimeSpanKind {
-  return typeof value === 'string' && spanKinds.includes(value)
 }
 
 export function decodeRuntimeEvent(value: unknown): RuntimeEvent | undefined {
@@ -184,7 +160,7 @@ export function decodeRuntimeEvent(value: unknown): RuntimeEvent | undefined {
         name: value.name,
       }
     case 'span.started':
-      if (typeof value.name !== 'string' || !spanKind(value.kind))
+      if (typeof value.name !== 'string' || typeof value.kind !== 'string')
         return undefined
       return { ...base, type: value.type, kind: value.kind, name: value.name }
     case 'execution.ended':
