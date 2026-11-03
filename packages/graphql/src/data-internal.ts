@@ -2,9 +2,14 @@ import { type GraphQLFieldCoordinate, type BatchSize } from './identity.js'
 import type { GraphQLResolveInfo, GraphQLSchema } from 'graphql'
 import type { FieldOptions } from './data-types.js'
 
+export type RuntimeFieldOptions = Omit<
+  FieldOptions<unknown, unknown, unknown, unknown>,
+  'requires'
+> & { readonly requires?: readonly string[] }
+
 export interface DataDefinition {
   readonly identity: GraphQLFieldCoordinate
-  readonly options: Omit<FieldOptions<any, any, any, any>, 'maxBatchSize'> & {
+  readonly options: Omit<RuntimeFieldOptions, 'maxBatchSize'> & {
     readonly maxBatchSize?: BatchSize
   }
 }

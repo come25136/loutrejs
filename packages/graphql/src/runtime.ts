@@ -27,6 +27,7 @@ import {
   invokeData,
   registerSchemaMetadata,
   type DataDefinition,
+  type RuntimeFieldOptions,
 } from './data-internal.js'
 import { storeManifest, type GraphQLManifest } from './manifest-internal.js'
 import { validateEndpointSchema } from './validation.js'
@@ -115,12 +116,7 @@ export function bindManifest<Context extends object = object>(input: {
           throw new TypeError(
             'Subscriptionのroot Fieldは標準subscribe / resolve Resolverを使用してください。',
           )
-        const options = resolver as import('./data-types.js').FieldOptions<
-          any,
-          any,
-          any,
-          any
-        >
+        const options = resolver as RuntimeFieldOptions
         if (typeof options.load !== 'function')
           throw new TypeError(`${name}.${fieldName}.loadは関数にしてください。`)
         if (

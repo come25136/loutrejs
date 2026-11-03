@@ -158,12 +158,13 @@ export function defineGraphQLImplementation<
           const runtime = validateRuntime(definition.factory(), !!wsOptions)
 
           return async (context) => {
-            const input: GraphQLHttpContextInput = {
-              transport: 'http',
+            // transportの有効判定はfactory入力の条件型をnarrowしない。
+            const input = {
+              transport: 'http' as const,
               request: context.request,
               signal: context.request.signal,
               state: context.state,
-            }
+            } as ImplementationInput<TRoute, THttp, TWs, NoInfer<TState>>
             let requestError = false
             const response = await createHandler<Record<string, unknown>>({
               schema: bound.schema,

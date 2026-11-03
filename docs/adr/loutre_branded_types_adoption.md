@@ -221,6 +221,8 @@ Websiteは独立したwire decoderと型を所有する現在の構成を維持�
 
 完了時は、各表の型について、生成元、変換境界、Map / Set、callback、serialize直前、受信後まで追えることを確認する。残る`Map<string, ...>`や`Map<symbol, ...>`を機械的にゼロにすることは目標にしない。残すものが任意のproperty名・外部API・表示などのどの契約に当たるかを説明できる状態にする。
 
+GraphQLのBatch設定は、登録時の検証を維持し、検証済みのバッチ上限を内部型へ引き継ぐ。個別のResolverが扱うParent・Args・Context・Resultは実行基盤ではunknownとして扱い、公開側の推論はSDL由来のBindingに残す。HTTPとWSの入力型はfactoryから呼び出しまで保持し、transportの選択とmiddlewareのstateを確定する境界で対応付ける。
+
 ## 互換性と移行
 
 公開TypeScript APIには破壊的変更がある。Modelやinstrumentation metadataを手書きする場合は、domainのparser・factoryと時刻の変換関数で値を確定する。Model由来ではない合成execution IDには`syntheticExecutionId()`を使用する。通常の宣言用object literal、Schemaの入出力推論、JSON上の文字列・数値表現は維持する。

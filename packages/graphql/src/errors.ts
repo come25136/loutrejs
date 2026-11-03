@@ -1,10 +1,13 @@
 import { GraphQLError, type GraphQLFormattedError } from 'graphql'
-import type { GraphQLContextInput, GraphQLRuntime } from './types.js'
 
-export function formatGraphQLError(
-  runtime: GraphQLRuntime,
+type ErrorFormatter<TInput> = {
+  formatError?(error: GraphQLError, input: TInput): GraphQLFormattedError
+}
+
+export function formatGraphQLError<TInput>(
+  runtime: ErrorFormatter<TInput>,
   error: GraphQLError,
-  input: GraphQLContextInput,
+  input: TInput,
 ): GraphQLFormattedError {
   if (!runtime.formatError) return error.toJSON()
   const formatted = runtime.formatError(error, input)
@@ -15,10 +18,10 @@ export function formatGraphQLError(
   }
 }
 
-export function formatHttpError(
-  runtime: GraphQLRuntime,
+export function formatHttpError<TInput>(
+  runtime: ErrorFormatter<TInput>,
   error: Readonly<GraphQLError | Error>,
-  input: GraphQLContextInput,
+  input: TInput,
 ): GraphQLError | Error {
   if (!runtime.formatError) return error
   const graphqlError =
