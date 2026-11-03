@@ -203,7 +203,6 @@ function workerFixture(pendingDrain: boolean) {
           executions: [defineExecution(extension, {})],
         }),
       ],
-      logger: logging.root,
     }),
     events,
     records,

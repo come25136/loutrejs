@@ -1469,7 +1469,7 @@ describe('Loutre CLI', () => {
   })
 
   it.each(['text', 'json', 'mermaid'])(
-    'DI graphの%sでLoggerからroot・backendまで表示する',
+    'DI graphの%sでLoggerとbackendの依存を表示する',
     async (format) => {
       const output = io()
       expect(
@@ -1486,12 +1486,7 @@ describe('Loutre CLI', () => {
         ),
       ).toBe(0)
       const rendered = output.stdout.join('\n')
-      for (const name of [
-        'WorkerService',
-        'Logger',
-        'ApplicationLogger',
-        'Backend',
-      ])
+      for (const name of ['WorkerService', 'Logger', 'Backend'])
         expect(rendered).toContain(name)
       if (format === 'json') {
         const graph = JSON.parse(rendered)
@@ -1499,8 +1494,7 @@ describe('Loutre CLI', () => {
           graph.nodes.find((node: { name?: string }) => node.name === name).id
         for (const [from, to] of [
           ['WorkerService', 'Logger'],
-          ['Logger', 'ApplicationLogger'],
-          ['ApplicationLogger', 'Backend'],
+          ['Logger', 'Backend'],
         ]) {
           expect(graph.edges).toContainEqual({
             from: id(from!),
@@ -1510,8 +1504,8 @@ describe('Loutre CLI', () => {
         }
       }
       if (format === 'mermaid') {
-        const loggerId = mermaidNodeId(output, 'Application Logger: Logger')
-        const rootId = mermaidNodeId(output, 'Provider: ApplicationLogger')
+        const loggerId = mermaidNodeId(output, 'Provider: Logger')
+        const rootId = mermaidNodeId(output, 'Provider: Backend')
         expect(rendered).toContain(`${loggerId} -->|"injects"| ${rootId}`)
       }
     },
@@ -1544,7 +1538,7 @@ describe('Loutre CLI', () => {
         write(record: LogRecord): void
       }
       try {
-        root.child({ source: 'Main' }).info('startup')
+        root.info('startup')
         const response = await application.http.fetch(
           new Request('http://test/'),
         )
@@ -1561,7 +1555,7 @@ describe('Loutre CLI', () => {
         ]),
       ).toEqual([
         ['service.init', 'WorkerService', 'bundle'],
-        ['startup', 'Main', 'bundle'],
+        ['startup', 'Application', 'bundle'],
         ['middleware', 'LoggingMiddleware', 'bundle'],
         ['execution', 'LoggingEndpoint', 'bundle'],
         ['service.shutdown', 'WorkerService', 'bundle'],

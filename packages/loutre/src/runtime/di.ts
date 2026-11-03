@@ -11,10 +11,9 @@ import {
   type ProviderDescriptor,
   type TokenLike,
 } from '../core/index.js'
-import type { Logger } from './logger.js'
+import { LoggerToken, type Logger } from './logger.js'
 import {
   defaultLoggerProviders,
-  defaultLoggerToken,
   isLogger,
   isLoggerToken,
 } from '../core/logger-internal.js'
@@ -32,7 +31,6 @@ export interface ContainerHooks {
 }
 
 export interface ContainerOptions {
-  readonly logger?: TokenLike<Logger>
   readonly dependencies?: ReadonlyMap<TokenLike, readonly TokenLike[]>
   readonly hooks?: ContainerHooks
   readonly environment?: ReadonlyMap<EnvClass, object>
@@ -54,12 +52,18 @@ export class Container {
     providers: readonly ProviderDescriptor[],
     options: ContainerOptions = {},
   ) {
-    if (isLogger(options)) {
+    if (isLogger(options) || 'logger' in options) {
       throw new DependencyResolutionError(
-        'LUTRE_LOGGER_TOKEN: Container accepts { logger: rootToken }, not a Logger instance.',
+        'LUTRE_LOGGER_CONFIGURATION: Register provide(LoggerToken).useClass(LoggerService) in providers.',
       )
     }
-    this.#loggerToken = options.logger ?? defaultLoggerToken
+    const configured = providers.find((provider) =>
+      isLoggerToken(provider.provide),
+    )
+    this.#loggerToken =
+      configured && isLoggerToken(configured.provide)
+        ? configured.provide
+        : LoggerToken
     this.#dependencies = options.dependencies
     this.#hooks = options.hooks ?? {}
     for (const [environment, value] of options.environment ?? []) {
@@ -68,19 +72,20 @@ export class Container {
     for (const [argumentsContract, value] of options.arguments ?? []) {
       this.#arguments.set(argumentsContract, value)
     }
-    const declarations =
-      options.logger === undefined &&
-      !providers.some((provider) => provider.provide === defaultLoggerToken)
-        ? [...providers, ...defaultLoggerProviders()]
-        : providers
+    const declarations = configured
+      ? providers
+      : [...providers, ...defaultLoggerProviders()]
 
     for (const provider of declarations) {
-      if (isLoggerToken(provider.provide)) {
+      if (isLoggerToken(provider.provide) && provider.scope !== 'application') {
         throw new DependencyResolutionError(
-          'LUTRE_LOGGER_RESERVED: Declare the root Logger under another token and select it with Application.logger.',
+          'LUTRE_LOGGER_SCOPE: LoggerToken must have application scope.',
         )
       }
-      const existing = this.#providers.get(provider.provide)
+      const key = isLoggerToken(provider.provide)
+        ? this.#loggerToken
+        : provider.provide
+      const existing = this.#providers.get(key)
       if (existing) {
         if (
           existing.kind === provider.kind &&
@@ -106,7 +111,7 @@ export class Container {
           `LUTRE_DI_DUPLICATE: Duplicate provider for ${tokenName(provider.provide)}`,
         )
       }
-      this.#providers.set(provider.provide, provider)
+      this.#providers.set(key, provider)
     }
   }
 
@@ -150,9 +155,8 @@ export class Container {
   }
 
   get<T>(token: TokenLike<T>): T {
-    if (isLoggerToken(token))
-      return requireLogger(this.get(this.#loggerToken)) as T
-    const provider = this.#providers.get(token)
+    const requested = isLoggerToken(token) ? this.#loggerToken : token
+    const provider = this.#providers.get(requested)
     if (!provider) {
       if (isEnvClass(token)) {
         throw new DependencyResolutionError(
@@ -189,8 +193,9 @@ export class Container {
         `LUTRE_ARGS_005: Arguments ${provider.provide.name} requires runtime Arguments before Application initialization.`,
       )
     }
-    if (this.#applicationCache.has(token)) {
-      return this.#applicationCache.get(token) as T
+    if (this.#applicationCache.has(requested)) {
+      const value = this.#applicationCache.get(requested)
+      return (isLoggerToken(requested) ? requireLogger(value) : value) as T
     }
     throw new DependencyResolutionError(
       `LUTRE_DI_NOT_INITIALIZED: ${tokenName(token)} has not been constructed by Application initialization.`,
@@ -203,9 +208,10 @@ export class Container {
     lineage: readonly TokenLike[] = [],
     inquirer?: DependencyConsumer,
   ): T {
-    const cycleStart = lineage.indexOf(token)
+    const requested = isLoggerToken(token) ? this.#loggerToken : token
+    const cycleStart = lineage.indexOf(requested)
     if (cycleStart >= 0) {
-      const cycle = [...lineage.slice(cycleStart), token]
+      const cycle = [...lineage.slice(cycleStart), requested]
         .map(tokenName)
         .join(' -> ')
       throw new DependencyResolutionError(
@@ -213,13 +219,7 @@ export class Container {
       )
     }
 
-    if (isLoggerToken(token)) {
-      const root = requireLogger(
-        this.#resolve(this.#loggerToken, undefined, [...lineage, token]),
-      )
-      return root.child(source === undefined ? {} : { source }) as T
-    }
-    const provider = this.#providers.get(token)
+    const provider = this.#providers.get(requested)
     if (!provider) {
       if (isEnvClass(token)) {
         throw new DependencyResolutionError(
@@ -236,16 +236,23 @@ export class Container {
       )
     }
 
-    const nextLineage = [...lineage, token]
-    if (provider.scope !== 'application') {
-      return this.#create(provider, nextLineage, inquirer) as T
+    const nextLineage = [...lineage, requested]
+    let value: unknown
+    if (
+      provider.scope === 'application' &&
+      this.#applicationCache.has(requested)
+    ) {
+      value = this.#applicationCache.get(requested)
+    } else {
+      value = this.#create(provider, nextLineage, inquirer)
+      if (provider.scope === 'application')
+        this.#applicationCache.set(requested, value)
     }
-    if (this.#applicationCache.has(token)) {
-      return this.#applicationCache.get(token) as T
+    if (isLoggerToken(requested)) {
+      const root = requireLogger(value)
+      return (source === undefined ? root : root.child({ source })) as T
     }
-    const instance = this.#create(provider, nextLineage, inquirer)
-    this.#applicationCache.set(token, instance)
-    return instance as T
+    return value as T
   }
 
   #create(

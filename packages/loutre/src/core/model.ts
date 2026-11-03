@@ -34,9 +34,10 @@ import { snapshotExecutionExtension } from './model/snapshot.js'
 import { validateHostNamespaces, validateNodeIds } from './model/validation.js'
 import {
   compileApplicationLogger,
-  connectApplicationLogger,
+  validateApplicationLogger,
 } from './model/logger.js'
-import { defaultLoggerToken } from './logger-internal.js'
+import { findProviderNode } from './model/context.js'
+import { isLoggerToken } from './logger-internal.js'
 import { getSourceLocation } from './source-location.js'
 import { isTokenVisible, moduleDeclaresToken } from './model/visibility.js'
 
@@ -117,9 +118,9 @@ export function buildApplicationModel(
 ): ApplicationModel {
   const context = createModelBuildContext(options)
   collectModuleDeclarations(context)
-  resolveModuleExports(context)
   compileArgumentsProvider(context)
   compileApplicationLogger(context)
+  resolveModuleExports(context)
   resolveProviderDependencies(context)
   resolveLifecycleDependencies(context)
 
@@ -131,7 +132,6 @@ export function buildApplicationModel(
     diagnostics,
     providers,
     executions,
-    providerNodes,
   } = context
 
   const extensionExecutions = new Map<
@@ -401,7 +401,7 @@ export function buildApplicationModel(
       grouped.executions.push(execution)
       extensionExecutions.set(extension.identity, grouped)
       for (const dependency of execution.dependencies) {
-        const provider = providerNodes.get(dependency)
+        const provider = findProviderNode(context, dependency)
         if (provider) {
           edges.push({ from: execution.id, to: provider.id, kind: 'injects' })
           const providerModule = modules.find(
@@ -409,6 +409,7 @@ export function buildApplicationModel(
           )
           if (
             providerModule &&
+            !isLoggerToken(dependency) &&
             provider.moduleId !== moduleId &&
             !moduleDeclaresToken(module, dependency) &&
             !isTokenVisible(context, module, providerModule, dependency)
@@ -549,13 +550,12 @@ export function buildApplicationModel(
 
   const extensions = new ApplicationModelExtensionRegistry(extensionGroups)
 
-  connectApplicationLogger(context)
+  validateApplicationLogger(context)
   validateHostNamespaces(extensionGroups, diagnostics)
   validateNodeIds(nodes, diagnostics)
 
   return Object.freeze({
     kind: 'application-model' as const,
-    logger: options.logger ?? defaultLoggerToken,
     ...(options.arguments === undefined
       ? {}
       : { arguments: options.arguments }),

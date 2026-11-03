@@ -1,3 +1,4 @@
+import { isLoggerToken } from '../logger-internal.js'
 import type { ModuleInstance } from '../module.js'
 import type { ModelBuildContext } from './context.js'
 import { normalizeProvider } from '../provider.js'
@@ -7,9 +8,12 @@ export function moduleDeclaresToken(
   module: ModuleInstance,
   token: TokenLike,
 ): boolean {
-  return (module.definition.providers ?? []).some(
-    (declaration) => normalizeProvider(declaration).provide === token,
-  )
+  return (module.definition.providers ?? []).some((declaration) => {
+    const provided = normalizeProvider(declaration).provide
+    return (
+      provided === token || (isLoggerToken(provided) && isLoggerToken(token))
+    )
+  })
 }
 
 export function isTokenVisible(
@@ -22,7 +26,14 @@ export function isTokenVisible(
   if (visited.has(source)) return false
   visited.add(source)
   for (const imported of context.imports.get(source) ?? []) {
-    if (!imported.definition.exports?.includes(token)) continue
+    if (
+      !imported.definition.exports?.some(
+        (exported) =>
+          exported === token ||
+          (isLoggerToken(exported) && isLoggerToken(token)),
+      )
+    )
+      continue
     if (imported === target) return true
     if (isTokenVisible(context, imported, target, token, new Set(visited)))
       return true

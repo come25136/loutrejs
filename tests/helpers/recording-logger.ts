@@ -1,15 +1,15 @@
-import { defineModule, provide, token } from '@loutrejs/loutre'
+import { defineModule, provide, LoggerToken } from '@loutrejs/loutre'
 import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
 
 export function recordingLogger(records: LogRecord[]) {
-  const root = token<Logger>('test.logger')
+  class RecordingLogger extends Logger {
+    constructor() {
+      super({ write: (record) => records.push(record) })
+    }
+  }
   const module = defineModule({
-    providers: [
-      provide(root).useFactory({
-        use: () => new Logger({ write: (record) => records.push(record) }),
-      }),
-    ],
-    exports: [root],
+    providers: [provide(LoggerToken).useClass(RecordingLogger)],
+    exports: [LoggerToken],
   })
-  return { module, root }
+  return { module, root: LoggerToken }
 }

@@ -4,6 +4,8 @@ import {
   defineEnv,
   defineModule,
   inject,
+  provide,
+  LoggerToken,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import {
@@ -38,7 +40,7 @@ class ApplicationLogger extends Logger {
 }
 
 class WorkerService {
-  readonly logger = inject(Logger)
+  readonly logger = inject(LoggerToken)
   onModuleInit() {
     this.logger.info('service.init')
   }
@@ -50,7 +52,7 @@ class WorkerService {
 const middleware = http.middleware({
   name: 'LoggingMiddleware',
   factory:
-    (logger = inject(Logger)) =>
+    (logger = inject(LoggerToken)) =>
     async (_context, next) => {
       logger.info('middleware')
       return next()
@@ -66,7 +68,7 @@ const endpoint = http.implementation({
       responses: { ok: { status: 204 } },
     },
   }),
-  factory: (logger = inject(Logger)) => ({
+  factory: (logger = inject(LoggerToken)) => ({
     health(context) {
       logger.info('execution')
       return context.response.ok({})
@@ -75,12 +77,11 @@ const endpoint = http.implementation({
 })
 const Logging = defineModule({
   environment: [LogEnv],
-  providers: [Backend, ApplicationLogger],
-  exports: [ApplicationLogger],
+  providers: [Backend, provide(LoggerToken).useClass(ApplicationLogger)],
+  exports: [LoggerToken],
 })
 const App = defineModule({ providers: [WorkerService], executions: [endpoint] })
 
 export default defineApplication({
   modules: [App, Logging],
-  logger: ApplicationLogger,
 })

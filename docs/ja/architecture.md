@@ -252,54 +252,57 @@ const loggerProvider = provide(AppLogger).useClass(AppLogger, {
 
 ### ApplicationのLogger
 
-設定を省略すると、LoutreがApplicationごとにroot Loggerとconsole backendを生成します。Provider、Execution、middlewareでは`inject(Logger)`を使うと、要求元の`source`を持つchild Loggerが渡されます。childは同じApplicationのbackendを共有します。
+Loutreは予約tokenの`LoggerToken`に登録されたProviderを、Applicationのroot Loggerとして扱います。登録を省略すると、既定のLoggerとconsole backendをapplication scopeで生成します。
 
-起動コードでは、初期化済みApplicationからrootを取得します。Loggerの実体を`app.ts`からexportする必要はありません。
+Provider、Execution、middlewareでは`inject(LoggerToken)`を使います。要求元の`source`を持つchild Loggerが渡され、同じApplicationのbackendを共有します。起動コードでは`app.get(LoggerToken)`でrootを取得します。sourceは`Application`となり、利用側で名前を付ける必要はありません。
 
 ```ts
-import { Logger } from '@loutrejs/loutre/runtime'
+import { LoggerToken } from '@loutrejs/loutre'
 
 const app = await nodeRuntime.create({ application })
-const logger = app.get(Logger).child({ source: 'Main' })
-logger.info('Application ready')
+app.get(LoggerToken).info('Application ready')
 ```
 
-独自backendを使う場合は、通常のProviderとしてrootとbackendを登録し、rootのtokenを`defineApplication({ logger })`で選択します。
+独自のLoggerクラスは、通常の`provide(...).useClass(...)`で登録します。constructorの既定引数に`inject()`を書き、backendなどの依存を取得できます。
 
 ```ts
 import {
   defineApplication,
   defineModule,
+  inject,
   provide,
-  token,
+  LoggerToken,
 } from '@loutrejs/loutre'
 import { JsonConsoleLoggerBackend, Logger } from '@loutrejs/loutre/runtime'
 
-const AppLogger = token<Logger>('application.logger')
+class LoggerService extends Logger {
+  constructor(backend = inject(JsonConsoleLoggerBackend)) {
+    super(backend)
+  }
+}
+
 const LoggingModule = defineModule({
   providers: [
     JsonConsoleLoggerBackend,
-    provide(AppLogger).useFactory({
-      inject: [JsonConsoleLoggerBackend],
-      use: (backend: JsonConsoleLoggerBackend) => new Logger(backend),
-    }),
+    provide(LoggerToken).useClass(LoggerService),
   ],
-  exports: [AppLogger],
+  exports: [LoggerToken],
 })
 
-const application = defineApplication({
-  modules: [LoggingModule],
-  logger: AppLogger,
-})
+const application = defineApplication({ modules: [LoggingModule] })
 ```
 
-rootはapplication scopeとし、Application直下Moduleの`exports`から公開します。backendは通常のProviderなので、EnvironmentやほかのProviderを`inject()`できます。非同期の準備は`onModuleInit`へ、終了時のflushやcloseは`onApplicationDispose`へ置きます。rootとその依存は、Environment・Argumentsの検証後、ほかのProviderより先に初期化します。backendが保持する資源のlifecycleをApplicationで管理する場合は、backendもapplication scopeにしてください。
+登録は`provide(LoggerToken).useClass(LoggerService)`、利用は`inject(LoggerToken)`と分けます。`providers: [LoggerService]`だけでは、`LoggerService`自身をtokenとして登録するため、ApplicationのLoggerの差し替えにはなりません。
 
-`Logger`は注入時のsourceを付ける予約tokenです。`provide(Logger)`ではなく別のroot tokenを宣言してください。rootの依存から`Logger`を要求すると循環になるため、Modelが経路付きで拒否します。factoryの依存指定は通常どおり`inject: [...]`を使います。
+予約tokenのProviderはapplication scopeで一つだけ登録し、Application直下Moduleの`exports`から公開します。このbindingはApplication全体に適用されるため、利用するModuleごとにLoggingModuleをimportする必要はありません。backend内部の依存には通常のModule visibilityを適用します。既存の`inject(Logger)`も同じ予約tokenとして利用できます。
 
-同じDefinitionから複数Applicationを作っても、factoryで作ったrootとbackendは共有されません。`useValue`で実体を指定した場合は、通常のvalue providerと同様に、その指定した実体が共有されます。
+backendは通常のProviderなので、EnvironmentやほかのProviderを`inject()`できます。非同期の準備は`onModuleInit`へ、終了時のflushやcloseは`onApplicationDispose`へ置きます。Loggerとその依存はEnvironment・Argumentsの検証後、ほかのProviderより先に初期化します。Applicationで資源のlifecycleを管理するbackendはapplication scopeにしてください。
 
-Logger準備前の失敗は例外として呼び出し元へ返します。終了後に保持していたLoggerへ出したログはconsoleへ送られ、終了済みbackendを再利用しません。従来のLoggerインスタンス指定と`bootstrapApplication({ logger: ... })`による差し替えは使用できません。
+rootの依存から`LoggerToken`を要求すると循環になるため、Modelが経路付きで拒否します。factory providerを使う場合も、依存指定は通常どおり`inject: [...]`です。
+
+同じDefinitionから複数Applicationを作っても、classやfactoryで作ったLoggerとbackendは共有されません。`useValue`で実体を指定した場合は、通常のvalue providerと同様に、その実体が共有されます。
+
+Logger準備前の失敗は元の例外として呼び出し元へ返します。終了後に保持していたLoggerへ出したログはconsoleへ送られ、終了済みbackendを再利用しません。`defineApplication({ logger: ... })`や起動時のLogger overrideは使用せず、ModuleのProvider登録を使ってください。
 
 ### Providerの登録方法ごとのルール
 

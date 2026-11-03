@@ -12,7 +12,7 @@ import {
   inject,
   normalizeProvider,
   provide,
-  token,
+  LoggerToken,
 } from '@loutrejs/loutre'
 
 describe('CapabilityとLogger', () => {
@@ -47,6 +47,7 @@ describe('CapabilityとLogger', () => {
         timestamp: expect.any(String),
         level: 'info',
         message: 'ユーザーを取得しました',
+        source: 'Application',
         module: 'UsersModule',
         procedure: 'users.get',
         requestId: 'req-1',
@@ -106,14 +107,11 @@ describe('CapabilityとLogger', () => {
       { write: (record) => records.push(record) },
       { application: 'fixture' },
     )
-    const ROOT = token<Logger>('test.logger')
-    const container = new Container(
-      [
-        normalizeProvider(Consumer),
-        provide(ROOT).useFactory({ use: () => rootLogger }),
-      ],
-      { logger: ROOT },
-    )
+    const ROOT = LoggerToken
+    const container = new Container([
+      normalizeProvider(Consumer),
+      provide(ROOT).useFactory({ use: () => rootLogger }),
+    ])
 
     const consumer = container.resolve(Consumer)
     consumer.logger.info('DIから出力しました')

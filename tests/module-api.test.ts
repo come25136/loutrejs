@@ -13,7 +13,7 @@ import {
   provide,
   type ModuleDefinition,
 } from '@loutrejs/loutre'
-import { silentLogger, silentLoggingModule } from './helpers/silent-logger.js'
+import { silentLoggingModule } from './helpers/silent-logger.js'
 import { z } from 'zod'
 
 describe('静的・動的Module API', () => {
@@ -61,7 +61,6 @@ describe('静的・動的Module API', () => {
     expect(dynamic.template).toBe(Dynamic)
     const definition = defineApplication({
       modules: [Root, silentLoggingModule],
-      logger: silentLogger,
     })
     expect(definition.model.diagnostics).toEqual([])
     const app = await bootstrapApplication({ application: definition })

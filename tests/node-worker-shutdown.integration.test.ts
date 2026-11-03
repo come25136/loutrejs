@@ -3,7 +3,7 @@ import { Server } from 'node:http'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 
 import { nodeRuntime } from '@loutrejs/node'
-import { silentLogger, silentLoggingModule } from './helpers/silent-logger.js'
+import { silentLoggingModule } from './helpers/silent-logger.js'
 
 const signals = ['SIGINT', 'SIGTERM'] as const
 const listeners = (): readonly (readonly unknown[])[] =>
@@ -21,7 +21,6 @@ function worker(onShutdown: (signal?: string) => void | Promise<void>) {
       silentLoggingModule,
       defineModule(() => ({ providers: [Resource] }))(),
     ],
-    logger: silentLogger,
   })
 }
 

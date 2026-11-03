@@ -5,7 +5,7 @@ import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { nodeRuntime, type NodeListenerHandle } from '@loutrejs/node'
 import { RuntimeDevtoolsInstrumentation } from '@loutrejs/loutre/devtools'
 import * as nodeDevtools from '../packages/node/src/devtools.js'
-import { silentLogger, silentLoggingModule } from './helpers/silent-logger.js'
+import { silentLoggingModule } from './helpers/silent-logger.js'
 
 function failingApplication(events: string[], error: Error) {
   class Resource {
@@ -30,7 +30,6 @@ function failingApplication(events: string[], error: Error) {
       silentLoggingModule,
       defineModule({ providers: [Resource], executions: [controller] }),
     ],
-    logger: silentLogger,
   })
 }
 

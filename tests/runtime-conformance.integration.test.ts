@@ -10,17 +10,15 @@ import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
 import { UsersModule } from '../integrations/http-crud/src/index.js'
 import { EventsHttpModule } from '../integrations/streaming/src/index.js'
-import { silentLogger, silentLoggingModule } from './helpers/silent-logger.js'
+import { silentLoggingModule } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>
   defineApplication({
     modules: [silentLoggingModule, UsersModule()],
-    logger: silentLogger,
   })
 const eventsDefinition = () =>
   defineApplication({
     modules: [silentLoggingModule, EventsHttpModule()],
-    logger: silentLogger,
   })
 
 describe('Runtime conformance harness', () => {

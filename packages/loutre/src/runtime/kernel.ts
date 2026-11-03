@@ -91,7 +91,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   ) {
     if ('logger' in options) {
       throw new TypeError(
-        'LUTRE_LOGGER_CONFIGURATION: Select a Provider token with defineApplication({ logger }); runtime Logger overrides are not supported.',
+        'LUTRE_LOGGER_CONFIGURATION: Register provide(LoggerToken).useClass(LoggerService) in Module.providers; runtime Logger overrides are not supported.',
       )
     }
     this.model = assertValidApplicationModel(model)
@@ -117,7 +117,6 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
       )
     }
     this.container = new Container(model.providers, {
-      logger: model.logger,
       dependencies: new Map(
         [...this.#providerNodes.values()].map((node) => [
           node.token,

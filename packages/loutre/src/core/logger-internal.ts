@@ -1,16 +1,20 @@
-import { ConsoleLoggerBackend, Logger, type LoggerBackend } from './logger.js'
+import {
+  ConsoleLoggerBackend,
+  Logger,
+  LoggerToken,
+  type LoggerBackend,
+} from './logger.js'
+import { inject } from './injection.js'
 import { provide, type ProviderDescriptor } from './provider.js'
 import { token } from './token.js'
-import { loggerInstanceBrand, loggerTokenBrand } from './logger-identity.js'
+import {
+  loggerInstanceBrand,
+  isLoggerTokenIdentity,
+} from './logger-identity.js'
 
-export function isLoggerToken(value: unknown): boolean {
+export function isLoggerToken(value: unknown): value is typeof Logger {
   // Loggerの派生クラスもrootにできるため、継承された印は予約tokenの判定に使わない。
-  return (
-    typeof value === 'function' &&
-    Object.hasOwn(value, loggerTokenBrand) &&
-    loggerTokenBrand in value &&
-    value[loggerTokenBrand] === true
-  )
+  return isLoggerTokenIdentity(value)
 }
 
 export function isLogger(value: unknown): value is Logger {
@@ -22,17 +26,17 @@ export function isLogger(value: unknown): value is Logger {
   )
 }
 
-export const defaultLoggerToken = token<Logger>('loutre.logger.root')
 const defaultBackendToken = token<LoggerBackend>('loutre.logger.backend')
+
+class DefaultLogger extends Logger {
+  constructor(backend = inject(defaultBackendToken)) {
+    super(backend)
+  }
+}
 
 export function defaultLoggerProviders(): readonly ProviderDescriptor[] {
   return [
-    provide(defaultBackendToken).useFactory({
-      use: () => new ConsoleLoggerBackend(),
-    }),
-    provide(defaultLoggerToken).useFactory({
-      inject: [defaultBackendToken],
-      use: (backend: LoggerBackend) => new Logger(backend),
-    }),
+    provide(defaultBackendToken).useClass(ConsoleLoggerBackend),
+    provide(LoggerToken).useClass(DefaultLogger),
   ]
 }

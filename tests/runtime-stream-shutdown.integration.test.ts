@@ -4,7 +4,7 @@ import { http } from '@loutrejs/loutre/http'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { z } from 'zod'
 import { reserveHttpPort } from './helpers/http-server.js'
-import { silentLogger, silentLoggingModule } from './helpers/silent-logger.js'
+import { silentLoggingModule } from './helpers/silent-logger.js'
 
 describe('runtime streaming shutdown lifetime', () => {
   beforeEach(() => {
@@ -154,7 +154,6 @@ function blockingSseFixture() {
   return {
     definition: defineApplication({
       modules: [silentLoggingModule, Module()],
-      logger: silentLogger,
     }),
     events,
   }

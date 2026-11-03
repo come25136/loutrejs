@@ -55,7 +55,6 @@ describe('HTTP Execution Extension', () => {
     const application = await bootstrapApplication({
       application: defineApplication({
         modules: [Module(), logging.module],
-        logger: logging.root,
       }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })

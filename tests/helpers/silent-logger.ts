@@ -1,8 +1,7 @@
-import { defineModule } from '@loutrejs/loutre'
+import { defineModule, provide, LoggerToken } from '@loutrejs/loutre'
 import { SilentLogger } from '@loutrejs/loutre/runtime'
 
-export const silentLogger = SilentLogger
 export const silentLoggingModule = defineModule({
-  providers: [SilentLogger],
-  exports: [SilentLogger],
+  providers: [provide(LoggerToken).useClass(SilentLogger)],
+  exports: [LoggerToken],
 })

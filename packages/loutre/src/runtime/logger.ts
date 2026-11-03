@@ -2,6 +2,7 @@ export {
   ConsoleLoggerBackend,
   JsonConsoleLoggerBackend,
   Logger,
+  LoggerToken,
   SilentLogger,
 } from '../core/logger.js'
 export type {

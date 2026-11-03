@@ -8,7 +8,7 @@ import {
   hook,
   inject,
   provide,
-  token,
+  LoggerToken,
 } from '@loutrejs/loutre'
 import { bindHttpServer, http } from '@loutrejs/loutre/http'
 import {
@@ -40,17 +40,16 @@ describe('ApplicationのLogger DI', () => {
         this.ready = false
       }
     }
-    const ROOT = token<Logger>('app.logger')
+    const ROOT = LoggerToken
+    class LoggerService extends Logger {
+      constructor(backend = inject(Backend)) {
+        super(backend)
+      }
+    }
     const Logging = defineModule({
       environment: [LogEnv],
-      providers: [
-        Backend,
-        provide(ROOT).useFactory({
-          inject: [Backend],
-          use: (backend: Backend) => new Logger(backend),
-        }),
-      ],
-      exports: [ROOT],
+      providers: [Backend, provide(LoggerToken).useClass(LoggerService)],
+      exports: [LoggerToken],
     })
     class Service {
       readonly logger = inject(Logger)
@@ -109,20 +108,25 @@ describe('ApplicationのLogger DI', () => {
     })
     const definition = defineApplication({
       modules: [App, Logging],
-      logger: ROOT,
     })
     expect(definition.model.diagnostics).toEqual([])
-    const loggerNode = definition.model.nodes.find(
-      (node) =>
-        node.kind === 'framework' &&
-        node.frameworkKind === 'application-logger',
-    )!
     const rootNode = definition.model.nodes.find(
-      (node) => node.kind === 'provider' && node.token === ROOT,
+      (node) => node.kind === 'provider' && node.token === LoggerToken,
+    )!
+    const backendNode = definition.model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === Backend,
+    )!
+    const serviceNode = definition.model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === Service,
     )!
     expect(definition.model.edges).toContainEqual({
-      from: loggerNode.id,
+      from: serviceNode.id,
       to: rootNode.id,
+      kind: 'injects',
+    })
+    expect(definition.model.edges).toContainEqual({
+      from: rootNode.id,
+      to: backendNode.id,
       kind: 'injects',
     })
     const app = await bootstrapApplication({
@@ -135,7 +139,7 @@ describe('ApplicationのLogger DI', () => {
     try {
       expect(root).toBe(app.get(ROOT))
       expect(app.get(Service).logger.backend).toBe(backend)
-      root.child({ source: 'Main' }).info('startup')
+      root.info('startup')
       await app.http.fetch(new Request('http://test/'))
     } finally {
       await app.close()
@@ -148,7 +152,7 @@ describe('ApplicationのLogger DI', () => {
       ]),
     ).toEqual([
       ['service.init', 'Service', 'fixture'],
-      ['startup', 'Main', 'fixture'],
+      ['startup', 'Application', 'fixture'],
       ['middleware', 'Tracing', 'fixture'],
       ['execution', 'Endpoint', 'fixture'],
       ['service.destroy', 'Service', 'fixture'],
@@ -206,7 +210,7 @@ describe('ApplicationのLogger DI', () => {
         events.push('backend.dispose')
       }
     }
-    const ROOT = token<Logger>('broken.logger')
+    const ROOT = LoggerToken
     const Logging = defineModule({
       providers: [
         Connection,
@@ -221,7 +225,7 @@ describe('ApplicationのLogger DI', () => {
       exports: [ROOT],
     })
     const app = createKernelApplication({
-      application: defineApplication({ modules: [Logging], logger: ROOT }),
+      application: defineApplication({ modules: [Logging] }),
     })
     await expect(app.init()).rejects.toMatchObject({
       errors: [failure, cleanupFailure],
@@ -249,7 +253,7 @@ describe('ApplicationのLogger DI', () => {
         events.push('dispose')
       }
     }
-    const ROOT = token<Logger>('root')
+    const ROOT = LoggerToken
     const Logging = defineModule({
       providers: [
         Backend,
@@ -262,7 +266,7 @@ describe('ApplicationのLogger DI', () => {
     })
     await expect(
       bootstrapApplication({
-        application: defineApplication({ modules: [Logging], logger: ROOT }),
+        application: defineApplication({ modules: [Logging] }),
       }),
     ).rejects.toBe(failure)
     expect(events).toEqual(['dispose'])
@@ -270,7 +274,7 @@ describe('ApplicationのLogger DI', () => {
 
   it('Logger準備前のEnvironment失敗ではrootを構築せず元のerrorを返す', async () => {
     class Environment extends defineEnv(z.object({ KEY: z.string() })) {}
-    const ROOT = token<Logger>('root')
+    const ROOT = LoggerToken
     const construct = vi.fn(() => new Logger())
     const Logging = defineModule({
       environment: [Environment],
@@ -281,7 +285,7 @@ describe('ApplicationのLogger DI', () => {
     try {
       await expect(
         bootstrapApplication({
-          application: defineApplication({ modules: [Logging], logger: ROOT }),
+          application: defineApplication({ modules: [Logging] }),
           environment: {},
         }),
       ).rejects.toThrow()
@@ -295,7 +299,7 @@ describe('ApplicationのLogger DI', () => {
   it('backend終了後に保持したchildへ出した診断をconsoleへ送り、backendを再利用しない', async () => {
     const write = vi.fn()
     const dispose = vi.fn()
-    const ROOT = token<Logger>('root')
+    const ROOT = LoggerToken
     class Backend implements LoggerBackend {
       write = write
       onApplicationDispose = dispose
@@ -311,7 +315,7 @@ describe('ApplicationのLogger DI', () => {
       exports: [ROOT],
     })
     const app = await bootstrapApplication({
-      application: defineApplication({ modules: [Logging], logger: ROOT }),
+      application: defineApplication({ modules: [Logging] }),
     })
     const logger = app.get(Logger).child({ source: 'Runtime' })
     const output = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -342,7 +346,7 @@ describe('ApplicationのLogger DI', () => {
     class Backend {
       readonly logger = inject(Logger)
     }
-    const ROOT = token<Logger>('app.logger')
+    const ROOT = LoggerToken
     const Logging = defineModule({
       providers: [
         Backend,
@@ -353,18 +357,17 @@ describe('ApplicationのLogger DI', () => {
       ],
       exports: [ROOT],
     })
-    const definition = defineApplication({ modules: [Logging], logger: ROOT })
+    const definition = defineApplication({ modules: [Logging] })
     expect(definition.model.diagnostics).toContainEqual(
       expect.objectContaining({
         code: 'LUTRE_LOGGER_CYCLE',
-        message:
-          'Circular Logger dependency: Logger -> app.logger -> Backend -> Logger',
+        message: 'Circular Logger dependency: Logger -> Backend -> Logger',
       }),
     )
   })
 
   it('rootのscope・公開範囲・予約tokenへの登録をModelで検証する', () => {
-    const ROOT = token<Logger>('root')
+    const ROOT = LoggerToken
     const privateRoot = defineModule({
       providers: [
         provide(ROOT).useFactory({
@@ -375,25 +378,31 @@ describe('ApplicationのLogger DI', () => {
     })
     const model = defineApplication({
       modules: [privateRoot],
-      logger: ROOT,
     }).model
     expect(model.diagnostics.map((item) => item.code)).toEqual(
       expect.arrayContaining(['LUTRE_LOGGER_SCOPE', 'LUTRE_LOGGER_VISIBILITY']),
     )
-    expect(
-      defineApplication({
-        modules: [
-          defineModule({ providers: [provide(Logger).useValue(new Logger())] }),
-        ],
-      }).model.diagnostics,
-    ).toContainEqual(expect.objectContaining({ code: 'LUTRE_LOGGER_RESERVED' }))
+    const duplicate = defineApplication({
+      modules: [
+        defineModule({
+          providers: [
+            provide(LoggerToken).useClass(Logger),
+            provide(LoggerToken).useClass(Logger),
+          ],
+          exports: [LoggerToken],
+        }),
+      ],
+    }).model
+    expect(duplicate.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_PROVIDER_DUPLICATE' }),
+    )
   })
 
   it('rootを再exportして選択してもbackendのModule visibilityを維持する', () => {
     class Backend {
       write() {}
     }
-    const ROOT = token<Logger>('root')
+    const ROOT = LoggerToken
     const Logging = defineModule({
       providers: [
         Backend,
@@ -405,9 +414,7 @@ describe('ApplicationのLogger DI', () => {
       exports: [ROOT],
     })
     const Root = defineModule({ imports: [Logging], exports: [ROOT] })
-    expect(
-      defineApplication({ modules: [Root], logger: ROOT }).model.diagnostics,
-    ).toEqual([])
+    expect(defineApplication({ modules: [Root] }).model.diagnostics).toEqual([])
     class Leaking {
       readonly backend = inject(Backend)
     }
@@ -417,7 +424,7 @@ describe('ApplicationのLogger DI', () => {
       exports: [ROOT],
     })
     expect(
-      defineApplication({ modules: [Invalid], logger: ROOT }).model.diagnostics,
+      defineApplication({ modules: [Invalid] }).model.diagnostics,
     ).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_MODULE_VISIBILITY' }),
     )
@@ -431,18 +438,18 @@ describe('ApplicationのLogger DI', () => {
     expect(() => createKernelApplication(legacyOptions)).toThrow(
       'LUTRE_LOGGER_CONFIGURATION',
     )
-    expect(
-      defineApplication({ modules: [], logger: new Logger() as never }).model
-        .diagnostics,
-    ).toContainEqual(expect.objectContaining({ code: 'LUTRE_LOGGER_TOKEN' }))
-    const ROOT = token<Logger>('root')
+    const legacyDefinition = { modules: [], logger: new Logger() }
+    expect(() => defineApplication(legacyDefinition)).toThrow(
+      'LUTRE_LOGGER_CONFIGURATION',
+    )
+    const ROOT = LoggerToken
     const Logging = defineModule({
       providers: [provide(ROOT).useFactory({ use: () => ({}) as Logger })],
       exports: [ROOT],
     })
     await expect(
       bootstrapApplication({
-        application: defineApplication({ modules: [Logging], logger: ROOT }),
+        application: defineApplication({ modules: [Logging] }),
       }),
     ).rejects.toThrow('LUTRE_LOGGER_VALUE')
   })
@@ -462,7 +469,7 @@ describe('ApplicationのLogger DI', () => {
         throw new Error('unselected.init')
       }
     }
-    const ROOT = token<Logger>('root')
+    const ROOT = LoggerToken
     const Logging = defineModule({
       environment: [Environment],
       providers: [
@@ -474,7 +481,7 @@ describe('ApplicationのLogger DI', () => {
       exports: [ROOT],
     })
     const app = await bootstrapApplication({
-      application: defineApplication({ modules: [Logging], logger: ROOT }),
+      application: defineApplication({ modules: [Logging] }),
       environment: { DRIVER: 'a' },
     })
     try {
@@ -499,5 +506,61 @@ describe('ApplicationのLogger DI', () => {
         message: expect.stringContaining('CustomLogger'),
       }),
     )
+  })
+
+  it('クラス自身の登録と予約tokenへのuseClass登録を区別する', async () => {
+    class LoggerService extends Logger {}
+    const named = await bootstrapApplication({
+      application: defineApplication({
+        modules: [defineModule({ providers: [LoggerService] })],
+      }),
+    })
+    try {
+      expect(named.get(LoggerToken)).not.toBeInstanceOf(LoggerService)
+      expect(named.get(LoggerService)).toBeInstanceOf(LoggerService)
+    } finally {
+      await named.close()
+    }
+
+    const reserved = await bootstrapApplication({
+      application: defineApplication({
+        modules: [
+          defineModule({
+            providers: [provide(LoggerToken).useClass(LoggerService)],
+            exports: [LoggerToken],
+          }),
+        ],
+      }),
+    })
+    try {
+      expect(reserved.get(LoggerToken)).toBeInstanceOf(LoggerService)
+      expect(reserved.get(LoggerToken).context.source).toBe('Application')
+    } finally {
+      await reserved.close()
+    }
+  })
+
+  it('Loggerクラスの省略登録も同じ予約tokenとして解決する', async () => {
+    class Service {
+      readonly logger = inject(LoggerToken)
+    }
+    const app = await bootstrapApplication({
+      application: defineApplication({
+        modules: [
+          defineModule({
+            providers: [Logger, Service],
+            exports: [LoggerToken],
+          }),
+        ],
+      }),
+    })
+    try {
+      expect(app.get(LoggerToken)).toBe(app.get(Logger))
+      expect(app.get(LoggerToken).context.source).toBe('Application')
+      expect(app.get(Service).logger.context.source).toBe('Service')
+      expect(app.get(Service).logger.backend).toBe(app.get(LoggerToken).backend)
+    } finally {
+      await app.close()
+    }
   })
 })

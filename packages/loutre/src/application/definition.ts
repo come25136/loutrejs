@@ -8,10 +8,8 @@ import type {
   ModuleExtensions,
   ModuleInput,
   SchemaInput,
-  TokenLike,
 } from '../core/index.js'
 import { buildApplicationModel } from '../core/index.js'
-import type { Logger } from '../runtime/index.js'
 
 export interface ApplicationDefinitionOptions<
   TModules extends readonly ModuleInput[],
@@ -19,7 +17,6 @@ export interface ApplicationDefinitionOptions<
 > {
   readonly modules: TModules
   readonly arguments?: TArguments
-  readonly logger?: TokenLike<Logger>
 }
 
 export interface ApplicationDefinition<
@@ -38,11 +35,15 @@ export function defineApplication<
 >(
   options: ApplicationDefinitionOptions<TModules, TArguments>,
 ): ApplicationDefinition<TModules, TArguments> {
+  if ('logger' in options) {
+    throw new TypeError(
+      'LUTRE_LOGGER_CONFIGURATION: Register provide(LoggerToken).useClass(LoggerService) in Module.providers.',
+    )
+  }
   return Object.freeze({
     kind: 'application-definition',
     model: buildApplicationModel({
       modules: options.modules,
-      ...(options.logger === undefined ? {} : { logger: options.logger }),
       ...(options.arguments === undefined
         ? {}
         : { arguments: options.arguments }),

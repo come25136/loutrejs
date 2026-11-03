@@ -1,3 +1,4 @@
+export { LoggerToken } from './logger.js'
 export { defineArgs, isArgsClass, loadArgs } from './args.js'
 export type { ArgsClass, ArgsKey, ArgsSchema } from './args.js'
 export {

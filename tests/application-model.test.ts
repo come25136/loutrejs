@@ -217,7 +217,6 @@ describe('Application Model', () => {
     const application = await bootstrapApplication({
       application: defineApplication({
         modules: [Module(), logging.module],
-        logger: logging.root,
       }),
     })
 

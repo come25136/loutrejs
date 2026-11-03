@@ -126,7 +126,6 @@ type GraphViewNodeKind =
   | 'middleware'
   | 'handler'
   | 'runtime-capability'
-  | 'application-logger'
 
 interface GraphViewNodeBase {
   readonly label: string
@@ -681,10 +680,7 @@ function renderDiText(
   write: (value: string) => void,
 ): void {
   const relevant = graph.nodes.filter(
-    (node) =>
-      node.kind === 'provider' ||
-      node.kind === 'execution' ||
-      isApplicationLoggerNode(node),
+    (node) => node.kind === 'provider' || node.kind === 'execution',
   )
   const ids = new Set<ModelNodeId>(relevant.map((node) => node.id))
   const edges = graph.edges.filter(
@@ -1169,17 +1165,13 @@ function selectApplicationNodes(
           node.kind === 'module' ||
           node.kind === 'provider' ||
           node.kind === 'execution' ||
-          isApplicationLoggerNode(node) ||
           isRuntimeCapabilityNode(node),
       ),
     )
     .with('modules', () => [...graph.modules])
     .with('di', () =>
       graph.nodes.filter(
-        (node) =>
-          node.kind === 'provider' ||
-          node.kind === 'execution' ||
-          isApplicationLoggerNode(node),
+        (node) => node.kind === 'provider' || node.kind === 'execution',
       ),
     )
     .with('executions', () => [...graph.executions])
@@ -1192,9 +1184,7 @@ function projectGraphViewNode(node: GraphNodeIR): GraphViewNode {
     id: node.id,
     kind: isRuntimeCapabilityNode(node)
       ? 'runtime-capability'
-      : isApplicationLoggerNode(node)
-        ? 'application-logger'
-        : (node.kind as GraphViewNodeKind),
+      : (node.kind as GraphViewNodeKind),
     label: nodeLabel(node),
     ...(node.module === undefined ? {} : { module: node.module }),
     ...(node.executionKind === undefined
@@ -1213,13 +1203,6 @@ function isRuntimeCapabilityNode(node: GraphNodeIR): boolean {
   return (
     node.kind === 'framework' &&
     node.attributes?.frameworkKind === 'runtime-capability'
-  )
-}
-
-function isApplicationLoggerNode(node: GraphNodeIR): boolean {
-  return (
-    node.kind === 'framework' &&
-    node.attributes?.frameworkKind === 'application-logger'
   )
 }
 
@@ -1418,7 +1401,6 @@ function mermaidNodeLabel(node: GraphViewNode): string {
     .with({ kind: 'middleware' }, () => 'Middleware')
     .with({ kind: 'handler' }, () => 'Handler')
     .with({ kind: 'runtime-capability' }, () => 'Runtime Capability')
-    .with({ kind: 'application-logger' }, () => 'Application Logger')
     .exhaustive()
   const label = mermaidText(`${role}: ${node.label}`)
   if (node.source === undefined) return label
@@ -1449,7 +1431,6 @@ function mermaidNodeClass(node: GraphViewNode): MermaidNodeClass {
     .with({ kind: 'middleware' }, () => 'middleware' as const)
     .with({ kind: 'handler' }, () => 'handler' as const)
     .with({ kind: 'runtime-capability' }, () => 'runtimeCapability' as const)
-    .with({ kind: 'application-logger' }, () => 'provider' as const)
     .exhaustive()
 }
 

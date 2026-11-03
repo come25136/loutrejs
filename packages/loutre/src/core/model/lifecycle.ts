@@ -1,3 +1,4 @@
+import { isLoggerToken } from '../logger-internal.js'
 import { lifecycleNodeId, type ModuleId } from './identity.js'
 import { diagnostic } from '../diagnostic.js'
 import type { ModuleInstance } from '../module.js'
@@ -8,7 +9,7 @@ import type {
   ApplicationModelNode,
   LifecycleModelNode,
 } from './types.js'
-import type { ModelBuildContext } from './context.js'
+import { findProviderNode, type ModelBuildContext } from './context.js'
 import { snapshotLifecycleHook } from './snapshot.js'
 import { isTokenVisible, moduleDeclaresToken } from './visibility.js'
 
@@ -34,13 +35,12 @@ export function appendLifecycleNodes(
 }
 
 export function resolveLifecycleDependencies(context: ModelBuildContext): void {
-  const { nodes, providerNodes, modules, moduleIds, edges, diagnostics } =
-    context
+  const { nodes, modules, moduleIds, edges, diagnostics } = context
   for (const lifecycle of nodes.filter(
     (node): node is LifecycleModelNode => node.kind === 'lifecycle',
   )) {
     for (const dependency of lifecycle.hook.inject) {
-      const provider = providerNodes.get(dependency)
+      const provider = findProviderNode(context, dependency)
       if (provider) {
         edges.push({ from: lifecycle.id, to: provider.id, kind: 'injects' })
         const sourceModule = modules.find(
@@ -51,6 +51,7 @@ export function resolveLifecycleDependencies(context: ModelBuildContext): void {
         )
         if (
           sourceModule &&
+          !isLoggerToken(dependency) &&
           providerModule &&
           provider.moduleId !== lifecycle.moduleId &&
           !moduleDeclaresToken(sourceModule, dependency) &&

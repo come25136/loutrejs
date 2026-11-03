@@ -1,3 +1,4 @@
+import { isLoggerToken } from '../logger-internal.js'
 import {
   moduleId,
   providerNodeId,
@@ -80,4 +81,18 @@ export function createModelBuildContext(
     providerNodes: new Map(),
     nextProviderId: () => providerNodeId(++providerOrdinal),
   }
+}
+
+export function findProviderNode(
+  context: Pick<ModelBuildContext, 'providerNodes'>,
+  token: TokenLike,
+): ProviderModelNode | undefined {
+  return (
+    context.providerNodes.get(token) ??
+    (isLoggerToken(token)
+      ? [...context.providerNodes.values()].find((node) =>
+          isLoggerToken(node.token),
+        )
+      : undefined)
+  )
 }

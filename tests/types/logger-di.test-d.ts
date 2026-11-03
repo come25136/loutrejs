@@ -3,25 +3,34 @@ import {
   defineApplication,
   defineModule,
   provide,
-  token,
+  inject,
+  LoggerToken,
   type OnApplicationDispose,
 } from '@loutrejs/loutre'
 import { Logger } from '@loutrejs/loutre/runtime'
 
-const ROOT = token<Logger>('application.logger')
+class LoggerService extends Logger {}
 const Logging = defineModule({
-  providers: [provide(ROOT).useFactory({ use: () => new Logger() })],
-  exports: [ROOT],
+  providers: [provide(LoggerToken).useClass(LoggerService)],
+  exports: [LoggerToken],
 })
-const definition = defineApplication({ modules: [Logging], logger: ROOT })
+const definition = defineApplication({ modules: [Logging] })
 const app = createKernelApplication({ application: definition })
-const logger: Logger = app.get(Logger)
+const logger: Logger = app.get(LoggerToken)
 const disposable: OnApplicationDispose = logger
 void disposable
 
-// @ts-expect-error Loggerの実体ではなくProviderのtokenを指定する。
-defineApplication({ modules: [], logger: new Logger() })
-// @ts-expect-error Logger以外を返すProviderは選択できない。
-defineApplication({ modules: [], logger: token<string>('message') })
+class Consumer {
+  readonly logger: Logger = inject(LoggerToken)
+}
+void Consumer
+
+// @ts-expect-error rootの選択はModule.providersで宣言する。
+defineApplication({ modules: [], logger: LoggerService })
+class Invalid {
+  readonly value = 'message'
+}
+// @ts-expect-error Logger以外のクラスは予約tokenに登録できない。
+provide(LoggerToken).useClass(Invalid)
 // @ts-expect-error Modelを迂回する起動時のLogger差し替えは提供しない。
 createKernelApplication({ application: definition, logger: new Logger() })

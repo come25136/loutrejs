@@ -99,8 +99,8 @@ describe('Runtime instrumentation boundary', () => {
     expect(executionInvocation).toMatchObject({ input: { value: 21 } })
     expect(operationInvocation).toMatchObject({ input: { value: 21 } })
     expect(calls).toEqual([
-      'provider:loutre.logger.backend:application:factory',
-      'provider:loutre.logger.root:application:factory',
+      'provider:loutre.logger.backend:application:class',
+      'provider:Logger:application:class',
       'provider:Repository:application:class',
       'execution:task.invocation:demo',
       'execution:run',

@@ -52,10 +52,14 @@ export class Logger {
   static readonly [loggerTokenBrand] = true
   readonly [loggerInstanceBrand] = true
 
+  readonly context: Readonly<Record<string, unknown>>
+
   constructor(
     readonly backend: LoggerBackend = new ConsoleLoggerBackend(),
-    readonly context: Readonly<Record<string, unknown>> = {},
-  ) {}
+    context: Readonly<Record<string, unknown>> = {},
+  ) {
+    this.context = { source: 'Application', ...context }
+  }
 
   child(context: Readonly<Record<string, unknown>>): Logger {
     const child = new Logger(this.backend, { ...this.context, ...context })
@@ -108,6 +112,8 @@ export class Logger {
     this.backend.write(record)
   }
 }
+
+export const LoggerToken = Logger
 
 export class SilentLogger extends Logger {
   constructor(context: Readonly<Record<string, unknown>> = {}) {

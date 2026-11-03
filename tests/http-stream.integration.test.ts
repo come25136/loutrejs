@@ -2,13 +2,12 @@ import { defineApplication } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
 import { EventsHttpModule } from '../integrations/streaming/src/index.js'
 import { reserveHttpPort } from './helpers/http-server.js'
-import { silentLogger, silentLoggingModule } from './helpers/silent-logger.js'
+import { silentLoggingModule } from './helpers/silent-logger.js'
 
 describe('HTTP streaming integration', () => {
   it('各itemをschema validationしてSSEとして逐次serializeする', async () => {
     const definition = defineApplication({
       modules: [silentLoggingModule, EventsHttpModule()],
-      logger: silentLogger,
     })
     const port = await reserveHttpPort()
     const app = await nodeRuntime.create({ application: definition })

@@ -21,6 +21,7 @@ export {
   ConsoleLoggerBackend,
   JsonConsoleLoggerBackend,
   Logger,
+  LoggerToken,
   SilentLogger,
 } from './logger.js'
 export type {
