@@ -219,11 +219,12 @@ function attachApplication(
       return
     }
 
-    if (!isEventBatchMessage(message) || message.runId !== runId) {
+    const batch = decodeEventBatchMessage(message)
+    if (!batch || batch.runId !== runId) {
       websocket.close(1008, 'invalid event batch')
       return
     }
-    options.eventStore.append(message.runId, message.events)
+    options.eventStore.append(batch.runId, batch.events)
   })
 
   websocket.once('close', () => {
@@ -284,14 +285,26 @@ function isHelloMessage(value: unknown): value is HelloMessage {
   )
 }
 
-function isEventBatchMessage(value: unknown): value is EventBatchMessage {
-  return (
-    isRecord(value) &&
-    value.type === 'event.batch' &&
-    parseRunId(value.runId) !== undefined &&
-    Array.isArray(value.events) &&
-    value.events.every(isRuntimeEvent)
+function decodeEventBatchMessage(
+  value: unknown,
+): EventBatchMessage | undefined {
+  if (
+    !isRecord(value) ||
+    value.type !== 'event.batch' ||
+    !Array.isArray(value.events)
   )
+    return undefined
+
+  const runId = parseRunId(value.runId)
+  if (runId === undefined) return undefined
+
+  const events: RuntimeEvent[] = []
+  for (const entry of value.events) {
+    const event = decodeRuntimeEvent(entry)
+    if (!event) return undefined
+    events.push(event)
+  }
+  return { type: 'event.batch', runId, events }
 }
 
 function isCommandResultMessage(value: unknown): value is CommandResultMessage {
@@ -301,10 +314,6 @@ function isCommandResultMessage(value: unknown): value is CommandResultMessage {
     parseInspectorRequestId(value.requestId) !== undefined &&
     typeof value.ok === 'boolean'
   )
-}
-
-function isRuntimeEvent(value: unknown): value is RuntimeEvent {
-  return decodeRuntimeEvent(value) !== undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

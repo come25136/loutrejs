@@ -193,6 +193,7 @@ Websiteは独立したwire decoderと型を所有する現在の構成を維持�
 
 - 種類だけを区別するIDは、そのdomainのparserで文字列として受け入れ、既存の接頭辞や任意形式を維持する。値域・構文・正規化を保証する型は、その処理を終えた関数だけが返す。
 - rawな入力型とbrand済みの内部型を分ける。内部関数へ`BrandedType | string`や`BrandedNumber | number`を広げて移行を済ませない。
+- Application channelはイベントバッチ全体をdecodeし、検証済みのイベントをストアへ渡す。途中で検証に失敗したバッチは保存しない。
 - JSONの結果は`unknown`からdecodeする。`JSON.parse(...) as RuntimeEvent`や`devtoolsRequest<T>()`の型引数だけで検証済みと見なさない。
 - brand assertionはdomainの生成・検証・変換実装に限定する。呼び出し側、Mapのlookup直前、fixtureの各フィールドにcastを散らさない。
 - optional fieldも、存在すれば種類と値を検査する。受信objectの一部を確認しただけで全体をnarrowしない。
