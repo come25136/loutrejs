@@ -1,6 +1,6 @@
 import {
   ConsoleLoggerBackend,
-  Logger,
+  LoggerService,
   LoggerToken,
   type LoggerBackend,
 } from './logger.js'
@@ -12,12 +12,12 @@ import {
   isLoggerTokenIdentity,
 } from './logger-identity.js'
 
-export function isLoggerToken(value: unknown): value is typeof Logger {
+export function isLoggerToken(value: unknown): value is typeof LoggerService {
   // Loggerの派生クラスもrootにできるため、継承された印は予約tokenの判定に使わない。
   return isLoggerTokenIdentity(value)
 }
 
-export function isLogger(value: unknown): value is Logger {
+export function isLogger(value: unknown): value is LoggerService {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -28,7 +28,7 @@ export function isLogger(value: unknown): value is Logger {
 
 const defaultBackendToken = token<LoggerBackend>('loutre.logger.backend')
 
-class DefaultLogger extends Logger {
+class DefaultLogger extends LoggerService {
   constructor(backend = inject(defaultBackendToken)) {
     super(backend)
   }

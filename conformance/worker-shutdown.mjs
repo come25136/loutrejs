@@ -3,10 +3,10 @@ import {
   defineApplication,
   defineModule,
   inject,
+  LoggerService,
   LoggerToken,
   provide,
 } from '@loutrejs/loutre'
-import { Logger } from '@loutrejs/loutre/runtime'
 import { task } from '@loutrejs/loutre/tasks'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { nodeRuntime } from '@loutrejs/node'
@@ -55,7 +55,7 @@ const job = task({
     },
 })
 
-class ShutdownLogger extends Logger {
+class ShutdownLogger extends LoggerService {
   constructor() {
     super({
       write(record) {

@@ -8,6 +8,8 @@ import {
   hook,
   inject,
   provide,
+  LoggerModule,
+  LoggerService,
   LoggerToken,
 } from '@loutrejs/loutre'
 import { bindHttpServer, http } from '@loutrejs/loutre/http'
@@ -18,6 +20,39 @@ import {
 } from '@loutrejs/loutre/runtime'
 
 describe('ApplicationのLogger DI', () => {
+  it('LoggerModuleが標準Loggerを公開し、backendをApplication内で共有してApplication間では分離する', async () => {
+    class Consumer {
+      readonly logger = inject(LoggerToken)
+    }
+    const definition = defineApplication({
+      modules: [LoggerModule, defineModule({ providers: [Consumer] })],
+    })
+    expect(definition.model.diagnostics).toEqual([])
+    const first = await bootstrapApplication({ application: definition })
+    const second = await bootstrapApplication({ application: definition })
+    try {
+      const root = first.get(LoggerToken)
+      const consumer = first.get(Consumer).logger
+      expect(root).toBeInstanceOf(LoggerService)
+      expect(LoggerService.name).toBe('LoggerService')
+      expect(Logger).toBe(LoggerService)
+      expect(root.context.source).toBe('Application')
+      expect(consumer.context.source).toBe('Consumer')
+      expect(consumer.backend).toBe(root.backend)
+      expect(second.get(LoggerToken)).not.toBe(root)
+      expect(second.get(LoggerToken).backend).not.toBe(root.backend)
+      const implicit = defineApplication({ modules: [] }).model.providers
+      expect(
+        definition.model.providers.filter(
+          (provider) => provider.provide !== Consumer,
+        ),
+      ).toEqual(implicit)
+    } finally {
+      await second.close()
+      await first.close()
+    }
+  })
+
   it('Envに依存するbackendを初期化し、起動コード・Provider・middleware・Executionで共有する', async () => {
     const events: string[] = []
     class LogEnv extends defineEnv(z.object({ LABEL: z.string() })) {}
@@ -41,14 +76,14 @@ describe('ApplicationのLogger DI', () => {
       }
     }
     const ROOT = LoggerToken
-    class LoggerService extends Logger {
+    class CustomLoggerService extends Logger {
       constructor(backend = inject(Backend)) {
         super(backend)
       }
     }
     const Logging = defineModule({
       environment: [LogEnv],
-      providers: [Backend, provide(LoggerToken).useClass(LoggerService)],
+      providers: [Backend, provide(LoggerToken).useClass(CustomLoggerService)],
       exports: [LoggerToken],
     })
     class Service {
@@ -509,15 +544,15 @@ describe('ApplicationのLogger DI', () => {
   })
 
   it('クラス自身の登録と予約tokenへのuseClass登録を区別する', async () => {
-    class LoggerService extends Logger {}
+    class CustomLoggerService extends Logger {}
     const named = await bootstrapApplication({
       application: defineApplication({
-        modules: [defineModule({ providers: [LoggerService] })],
+        modules: [defineModule({ providers: [CustomLoggerService] })],
       }),
     })
     try {
-      expect(named.get(LoggerToken)).not.toBeInstanceOf(LoggerService)
-      expect(named.get(LoggerService)).toBeInstanceOf(LoggerService)
+      expect(named.get(LoggerToken)).not.toBeInstanceOf(CustomLoggerService)
+      expect(named.get(CustomLoggerService)).toBeInstanceOf(CustomLoggerService)
     } finally {
       await named.close()
     }
@@ -526,14 +561,14 @@ describe('ApplicationのLogger DI', () => {
       application: defineApplication({
         modules: [
           defineModule({
-            providers: [provide(LoggerToken).useClass(LoggerService)],
+            providers: [provide(LoggerToken).useClass(CustomLoggerService)],
             exports: [LoggerToken],
           }),
         ],
       }),
     })
     try {
-      expect(reserved.get(LoggerToken)).toBeInstanceOf(LoggerService)
+      expect(reserved.get(LoggerToken)).toBeInstanceOf(CustomLoggerService)
       expect(reserved.get(LoggerToken).context.source).toBe('Application')
     } finally {
       await reserved.close()

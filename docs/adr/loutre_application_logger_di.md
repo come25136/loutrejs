@@ -12,6 +12,8 @@ Applicationの外でLoggerを生成すると、backendが必要とするEnvironm
 
 ApplicationのLoggerは予約tokenの`LoggerToken`に通常Providerとして登録する。公開例は`provide(LoggerToken).useClass(LoggerService)`とし、取得は`inject(LoggerToken)`へ分ける。Logger専用の設定factoryや`inject()`への登録用overloadは設けない。
 
+組み込み実装の公開名を`LoggerService`とし、注入先の`LoggerToken`と役割を区別する。標準構成を明示するための`LoggerModule`も提供する。Moduleと未指定時の補完は同じProvider宣言を使い、構成経路によってbackendの依存や寿命が変わることを避ける。従来の`Logger`は互換aliasとして維持する。
+
 class providerの省略形はそのクラス自身への登録であり、別の予約tokenへの対応付けは`provide(...).useClass(...)`で明示する。選択用の独自tokenと`application.logger`を両方要求すると、通常Provider登録とは別の構成経路ができるため採用しない。予約tokenの宣言をApplication直下Moduleからexportし、Application全体へ適用する。backend内部には通常のModule visibilityを維持する。
 
 Loggerはapplication scopeのrootとして構築し、`inject(LoggerToken)`ではconsumerのsourceを付けたchildを返す。`app.get(LoggerToken)`はrootを返し、sourceは`Application`とする。実体とbackendは共有し、sourceを利用側へ手書きさせない。既存の`Logger`クラスも同じ予約tokenの別名として維持する。

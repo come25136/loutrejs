@@ -6,7 +6,7 @@ import {
 import { runtimeSupportFeatures } from '../runtime/capability.js'
 import { RuntimeShutdown } from '../runtime/shutdown.js'
 import { ProcessShutdownHooks } from '../runtime/shutdown-hooks.js'
-import { Logger } from '../runtime/logger.js'
+import { LoggerToken } from '../runtime/logger.js'
 import {
   createBunWebSocketDriver,
   type BunUpgradeServer,
@@ -114,7 +114,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
 
   const closeApplication = application.close.bind(application)
   let server: BunServer | undefined
-  const logger = application.get(Logger).child({ source: 'BunRuntime' })
+  const logger = application.get(LoggerToken).child({ source: 'BunRuntime' })
   let serving = false
   let serverClosingPromise: Promise<void> | undefined
 

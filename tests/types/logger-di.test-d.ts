@@ -4,24 +4,30 @@ import {
   defineModule,
   provide,
   inject,
+  LoggerModule,
+  LoggerService,
   LoggerToken,
   type OnApplicationDispose,
 } from '@loutrejs/loutre'
 import { Logger } from '@loutrejs/loutre/runtime'
 
-class LoggerService extends Logger {}
+class CustomLoggerService extends LoggerService {}
 const Logging = defineModule({
-  providers: [provide(LoggerToken).useClass(LoggerService)],
+  providers: [provide(LoggerToken).useClass(CustomLoggerService)],
   exports: [LoggerToken],
 })
 const definition = defineApplication({ modules: [Logging] })
 const app = createKernelApplication({ application: definition })
-const logger: Logger = app.get(LoggerToken)
+const logger: LoggerService = app.get(LoggerToken)
+const legacyLogger: Logger = logger
+void legacyLogger
+defineApplication({ modules: [LoggerModule] })
+provide(LoggerToken).useClass(LoggerService)
 const disposable: OnApplicationDispose = logger
 void disposable
 
 class Consumer {
-  readonly logger: Logger = inject(LoggerToken)
+  readonly logger: LoggerService = inject(LoggerToken)
 }
 void Consumer
 

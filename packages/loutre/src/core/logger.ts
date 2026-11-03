@@ -46,7 +46,7 @@ class SilentLoggerBackend implements LoggerBackend {
   write(_record: LogRecord): void {}
 }
 
-export class Logger {
+export class LoggerService {
   #state = { disposed: false }
   static readonly [frameworkProvidedTokenBrand] = true
   static readonly [loggerTokenBrand] = true
@@ -61,8 +61,11 @@ export class Logger {
     this.context = { source: 'Application', ...context }
   }
 
-  child(context: Readonly<Record<string, unknown>>): Logger {
-    const child = new Logger(this.backend, { ...this.context, ...context })
+  child(context: Readonly<Record<string, unknown>>): LoggerService {
+    const child = new LoggerService(this.backend, {
+      ...this.context,
+      ...context,
+    })
     child.#state = this.#state
     return child
   }
@@ -113,9 +116,11 @@ export class Logger {
   }
 }
 
-export const LoggerToken = Logger
+export { LoggerService as Logger }
 
-export class SilentLogger extends Logger {
+export const LoggerToken = LoggerService
+
+export class SilentLogger extends LoggerService {
   constructor(context: Readonly<Record<string, unknown>> = {}) {
     super(new SilentLoggerBackend(), context)
   }

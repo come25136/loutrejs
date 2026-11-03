@@ -11,7 +11,7 @@ import {
   type ProviderDescriptor,
   type TokenLike,
 } from '../core/index.js'
-import { LoggerToken, type Logger } from './logger.js'
+import { LoggerToken, type LoggerService } from './logger.js'
 import {
   defaultLoggerProviders,
   isLogger,
@@ -40,7 +40,7 @@ export interface ContainerOptions {
 export class Container {
   readonly #providers = new Map<TokenLike, ProviderDescriptor>()
   readonly #applicationCache = new Map<TokenLike, unknown>()
-  readonly #loggerToken: TokenLike<Logger>
+  readonly #loggerToken: TokenLike<LoggerService>
   readonly #dependencies:
     | ReadonlyMap<TokenLike, readonly TokenLike[]>
     | undefined
@@ -390,10 +390,10 @@ function isRuntimeInputProvider(
   return provider.kind === 'environment' || provider.kind === 'arguments'
 }
 
-function requireLogger(value: unknown): Logger {
+function requireLogger(value: unknown): LoggerService {
   if (!isLogger(value)) {
     throw new DependencyResolutionError(
-      'LUTRE_LOGGER_VALUE: The root Logger Provider must return a Logger instance.',
+      'LUTRE_LOGGER_VALUE: The root Logger Provider must return a LoggerService instance.',
     )
   }
   return value

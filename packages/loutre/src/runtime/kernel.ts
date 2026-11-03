@@ -30,7 +30,7 @@ import {
 } from '../core/index.js'
 import { Container, assertDeclaredDependency } from './di.js'
 import { ExecutionTracker } from './execution-tracker.js'
-import { Logger } from './logger.js'
+import { LoggerToken } from './logger.js'
 
 export interface ApplicationKernelRuntimeOptions {
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
@@ -175,7 +175,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     try {
       this.#validateCapabilities()
       await this.#bindRuntimeInputs()
-      this.container.resolve(Logger)
+      this.container.resolve(LoggerToken)
       await this.#initializeConstructedProviders()
       await this.#initializeProviders()
       for (const modelExtension of this.model.extensions) {
