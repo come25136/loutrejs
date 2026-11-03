@@ -9,7 +9,7 @@ import {
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import {
-  Logger,
+  LoggerService,
   type LoggerBackend,
   type LogRecord,
 } from '@loutrejs/loutre/runtime'
@@ -33,7 +33,7 @@ export class Backend implements LoggerBackend {
   }
 }
 
-class ApplicationLogger extends Logger {
+class ApplicationLogger extends LoggerService {
   constructor(backend = inject(Backend)) {
     super(backend)
   }

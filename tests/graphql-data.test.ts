@@ -398,8 +398,8 @@ it('Dateを返すCustom Scalar引数を安全に別Batchへ分離する', async 
     () => ({
       DateTime: new GraphQLScalarType({
         name: 'DateTime',
-        serialize: (value) => String(value),
-        parseValue: (value) => new Date(String(value)),
+        coerceOutputValue: (value) => String(value),
+        coerceInputValue: (value) => new Date(String(value)),
       }),
       Query: { parents: () => [{}, {}] },
       Parent: { child: { load } },
@@ -641,8 +641,8 @@ it('Scalar / enum Binding後のdefault Argumentsをcoerceし、Abstract TypeのR
     () => ({
       DateTime: new GraphQLScalarType({
         name: 'DateTime',
-        serialize: (value) => String(value),
-        parseValue: (value) => new Date(String(value)),
+        coerceOutputValue: (value) => String(value),
+        coerceInputValue: (value) => new Date(String(value)),
       }),
       Role: { MEMBER: 1, ADMIN: 2 },
       Query: {
@@ -693,8 +693,8 @@ it('Opaque Scalarのplain objectと循環値も保守的に分離する', async 
   const f = fixture(sdl, () => ({
     Token: new GraphQLScalarType({
       name: 'Token',
-      serialize: (value) => String(value),
-      parseValue: () => {
+      coerceOutputValue: (value) => String(value),
+      coerceInputValue: () => {
         const value: Record<string, unknown> = {}
         value.self = value
         return value

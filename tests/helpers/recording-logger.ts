@@ -1,8 +1,8 @@
 import { defineModule, provide, LoggerToken } from '@loutrejs/loutre'
-import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
+import { LoggerService, type LogRecord } from '@loutrejs/loutre/runtime'
 
 export function recordingLogger(records: LogRecord[]) {
-  class RecordingLogger extends Logger {
+  class RecordingLogger extends LoggerService {
     constructor() {
       super({ write: (record) => records.push(record) })
     }

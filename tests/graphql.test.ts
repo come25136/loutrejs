@@ -1708,7 +1708,9 @@ it.each([false, true])(
   (registered) => {
     const scalar = new GraphQLScalarType({
       name: 'Timestamp',
-      ...(registered ? { serialize: (value: unknown) => String(value) } : {}),
+      ...(registered
+        ? { coerceOutputValue: (value: unknown) => String(value) }
+        : {}),
     })
     const schema = new GraphQLSchema({
       query: new GraphQLObjectType({

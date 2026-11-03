@@ -304,7 +304,7 @@ const application = defineApplication({ modules: [JsonLoggerModule] })
 
 登録は`provide(LoggerToken).useClass(JsonLoggerService)`、利用は`inject(LoggerToken)`と分けます。カスタム実装へ差し替えた場合も、利用側の取得方法は変わりません。`providers: [JsonLoggerService]`だけでは、独自クラス自身をtokenとして登録するため、ApplicationのLoggerの差し替えにはなりません。
 
-予約tokenのProviderはapplication scopeで一つだけ登録し、Application直下Moduleの`exports`から公開します。このbindingはApplication全体に適用されるため、利用するModuleごとにLoggerのModuleをimportする必要はありません。backend内部の依存には通常のModule visibilityを適用します。従来の`Logger`は`LoggerService`の互換aliasとして残り、既存の`inject(Logger)`も同じ予約tokenとして利用できます。
+予約tokenのProviderはapplication scopeで一つだけ登録し、Application直下Moduleの`exports`から公開します。このbindingはApplication全体に適用されるため、利用するModuleごとにLoggerのModuleをimportする必要はありません。backend内部の依存には通常のModule visibilityを適用します。
 
 backendは通常のProviderなので、EnvironmentやほかのProviderを`inject()`できます。非同期の準備は`onModuleInit`へ、終了時のflushやcloseは`onApplicationDispose`へ置きます。Loggerとその依存はEnvironment・Argumentsの検証後、ほかのProviderより先に初期化します。Applicationで資源のlifecycleを管理するbackendはapplication scopeにしてください。
 

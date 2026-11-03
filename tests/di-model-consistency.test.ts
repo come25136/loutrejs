@@ -17,7 +17,8 @@ import {
   type DependencyConsumer,
   type ExecutionRuntimeBinding,
 } from '@loutrejs/loutre'
-import { DependencyResolutionError, Logger } from '@loutrejs/loutre/runtime'
+import { LoggerToken } from '@loutrejs/loutre'
+import { DependencyResolutionError } from '@loutrejs/loutre/runtime'
 import { bindHttpServer, http } from '@loutrejs/loutre/http'
 import { task, tasksExtension } from '@loutrejs/loutre/tasks'
 import { messagePort } from '@loutrejs/loutre/message-port'
@@ -106,7 +107,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
 
   it('framework-provided Loggerにも宣言照合を適用する', async () => {
     class ConsumerAware {
-      readonly logger = injectInquirer() ? inject(Logger) : undefined
+      readonly logger = injectInquirer() ? inject(LoggerToken) : undefined
     }
     class Consumer {
       readonly value = inject(ConsumerAware)
@@ -124,7 +125,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
       ],
     })
     await expect(bootstrapApplication({ application })).rejects.toThrow(
-      'ConsumerAware requested Logger',
+      'ConsumerAware requested LoggerToken',
     )
   })
 
@@ -448,14 +449,14 @@ describe('canonical Modelと実行時DIの依存照合', () => {
           kind: 'execution' as const,
           id: 'bound.fixture',
           executionKind: 'fixture',
-          dependencies: [Logger],
+          dependencies: [LoggerToken],
           capabilities: [],
           compiled: null,
         }
       },
       createRuntime({ executions }) {
         runtimeBinding = executions[0]
-        expect(runtimeBinding?.resolve(Logger).context.source).toBe(
+        expect(runtimeBinding?.resolve(LoggerToken).context.source).toBe(
           'bound.fixture',
         )
         return { close() {} }

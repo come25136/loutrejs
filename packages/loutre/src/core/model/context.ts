@@ -6,11 +6,7 @@ import {
   type ProviderNodeId,
 } from './identity.js'
 import type { Diagnostic } from '../diagnostic.js'
-import {
-  asModuleInstance,
-  type ModuleInput,
-  type ModuleInstance,
-} from '../module.js'
+import type { ModuleInstance } from '../module.js'
 import type { ProviderDescriptor } from '../provider.js'
 import type { TokenLike } from '../token.js'
 import type {
@@ -36,27 +32,22 @@ export interface ModelBuildContext {
   nextProviderId(): ProviderNodeId
 }
 
-function collectModules(roots: readonly ModuleInput[]) {
+function collectModules(roots: readonly ModuleInstance[]) {
   const modules: ModuleInstance[] = []
   const imports = new Map<ModuleInstance, readonly ModuleInstance[]>()
-  const instances = new Map<ModuleInput, ModuleInstance>()
-  const normalize = (input: ModuleInput): ModuleInstance => {
-    const existing = instances.get(input)
-    if (existing) return existing
-    const instance = asModuleInstance(input)
-    instances.set(input, instance)
-    return instance
-  }
-  const visit = (input: ModuleInput) => {
-    const module = normalize(input)
+  const visit = (module: ModuleInstance) => {
+    if (module?.kind !== 'module-instance')
+      throw new TypeError(
+        'Application modules and imports require Module instances.',
+      )
     if (imports.has(module)) return
-    const imported = (module.definition.imports ?? []).map(normalize)
+    const imported = [...(module.definition.imports ?? [])]
     imports.set(module, imported)
     for (const child of imported) visit(child)
     modules.push(module)
   }
   for (const root of roots) visit(root)
-  return { modules, imports, rootModules: roots.map(normalize) }
+  return { modules, imports, rootModules: [...roots] }
 }
 
 export function createModelBuildContext(

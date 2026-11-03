@@ -20,7 +20,6 @@ export type { RuntimeEngine } from './engine.js'
 export {
   ConsoleLoggerBackend,
   JsonConsoleLoggerBackend,
-  Logger,
   LoggerService,
   LoggerToken,
   SilentLogger,

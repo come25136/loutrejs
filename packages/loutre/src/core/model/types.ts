@@ -13,7 +13,7 @@ import type {
   RuntimeCapability,
 } from '../extension.js'
 import type { LifecycleHook } from '../lifecycle.js'
-import type { ModuleInstance, ModuleTemplate } from '../module.js'
+import type { ModuleInstance } from '../module.js'
 import type { ProviderDescriptor } from '../provider.js'
 import type { Diagnostic } from '../diagnostic.js'
 import type { TokenLike } from '../token.js'
@@ -129,6 +129,6 @@ export interface ApplicationModel {
 }
 
 export interface ApplicationModelBuildOptions {
-  readonly modules: readonly (ModuleInstance | ModuleTemplate<void>)[]
+  readonly modules: readonly ModuleInstance[]
   readonly arguments?: ArgsClass
 }

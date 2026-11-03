@@ -6,11 +6,6 @@ import {
   type GraphQLSchema,
 } from 'graphql'
 
-const outputCoercion = (type: {
-  readonly serialize: unknown
-  readonly coerceOutputValue?: unknown
-}) => type.coerceOutputValue ?? type.serialize
-
 export function validateEndpointSchema(schema: GraphQLSchema) {
   assertValidSchema(schema)
 
@@ -19,7 +14,7 @@ export function validateEndpointSchema(schema: GraphQLSchema) {
     if (
       isScalarType(type) &&
       !isSpecifiedScalarType(type) &&
-      outputCoercion(type) === outputCoercion(defaults)
+      type.coerceOutputValue === defaults.coerceOutputValue
     )
       throw new TypeError(`${type.name} must define scalar output coercion.`)
   }
