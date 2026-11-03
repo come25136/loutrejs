@@ -182,6 +182,42 @@ describe('GraphQL CLI', () => {
     )
   })
 
+  it('clientの変数が参照する入力型とenumを一度だけ生成する', async () => {
+    const f = await fixture()
+    await writeFile(
+      join(f.cwd, 'schema.graphql'),
+      `
+      scalar DateTime
+      enum Order { ASC DESC }
+      input Pagination { order: Order = ASC, limit: Int! }
+      input Filters { pagination: Pagination }
+      input UnusedInput { key: String }
+      type Query { search(filters: Filters!, unused: UnusedInput): Order! }
+      `,
+    )
+    await writeFile(
+      join(f.cwd, 'operation.graphql'),
+      'query Search($filters: Filters!) { search(filters: $filters) }',
+    )
+    expect(
+      await f.invoke([
+        'generate',
+        '--config',
+        'config.json',
+        '--target',
+        'client',
+      ]),
+      f.stderr.join('\n'),
+    ).toBe(0)
+    const client = await readFile(join(f.cwd, 'client.ts'), 'utf8')
+    expect(client.match(/export type Pagination =/g)).toHaveLength(1)
+    expect(client.match(/export type Order =/g)).toHaveLength(1)
+    expect(client).toContain('export type Filters =')
+    expect(client).toContain('export type SearchQueryVariables =')
+    expect(client).toContain('export const SearchDocument')
+    expect(client).not.toContain('UnusedInput')
+  })
+
   it('targetを選択し、入力globをconfigの位置から解決する', async () => {
     const f = await fixture()
     expect(
