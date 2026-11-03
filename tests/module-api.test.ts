@@ -13,7 +13,7 @@ import {
   provide,
   type ModuleDefinition,
 } from '@loutrejs/loutre'
-import { SilentLogger } from '@loutrejs/loutre/runtime'
+import { silentLoggingModule } from './helpers/silent-logger.js'
 import { z } from 'zod'
 
 describe('静的・動的Module API', () => {
@@ -60,8 +60,7 @@ describe('静的・動的Module API', () => {
     expect(dynamic.args).toEqual({ url: 'postgres://localhost/app' })
     expect(dynamic.template).toBe(Dynamic)
     const definition = defineApplication({
-      modules: [Root],
-      logger: new SilentLogger(),
+      modules: [Root, silentLoggingModule],
     })
     expect(definition.model.diagnostics).toEqual([])
     const app = await bootstrapApplication({ application: definition })
@@ -87,7 +86,7 @@ describe('静的・動的Module API', () => {
     })
     expect(model.diagnostics).toEqual([])
     expect(model.nodes.filter((node) => node.kind === 'module')).toHaveLength(3)
-    expect(model.providers).toHaveLength(1)
+    expect(model.providers).toHaveLength(3)
     expect(model.edges.filter((edge) => edge.kind === 'imports')).toHaveLength(
       2,
     )

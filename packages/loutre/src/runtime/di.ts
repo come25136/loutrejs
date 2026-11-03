@@ -11,7 +11,13 @@ import {
   type ProviderDescriptor,
   type TokenLike,
 } from '../core/index.js'
-import { Logger } from './logger.js'
+import { LoggerToken, type LoggerService } from './logger.js'
+import {
+  defaultLoggerProviders,
+  isLogger,
+  isLoggerToken,
+} from '../core/logger-internal.js'
+import { bindLoggerSource } from './logger-source.js'
 import { match } from 'ts-pattern'
 
 export class DependencyResolutionError extends Error {
@@ -26,7 +32,6 @@ export interface ContainerHooks {
 }
 
 export interface ContainerOptions {
-  readonly logger?: Logger
   readonly dependencies?: ReadonlyMap<TokenLike, readonly TokenLike[]>
   readonly hooks?: ContainerHooks
   readonly environment?: ReadonlyMap<EnvClass, object>
@@ -36,7 +41,7 @@ export interface ContainerOptions {
 export class Container {
   readonly #providers = new Map<TokenLike, ProviderDescriptor>()
   readonly #applicationCache = new Map<TokenLike, unknown>()
-  readonly #logger: Logger
+  readonly #loggerToken: TokenLike<LoggerService>
   readonly #dependencies:
     | ReadonlyMap<TokenLike, readonly TokenLike[]>
     | undefined
@@ -46,24 +51,42 @@ export class Container {
 
   constructor(
     providers: readonly ProviderDescriptor[],
-    options: Logger | ContainerOptions = {},
+    options: ContainerOptions = {},
   ) {
-    this.#logger =
-      options instanceof Logger ? options : (options.logger ?? new Logger())
-    this.#dependencies =
-      options instanceof Logger ? undefined : options.dependencies
-    this.#hooks = options instanceof Logger ? {} : (options.hooks ?? {})
-    if (!(options instanceof Logger)) {
-      for (const [environment, value] of options.environment ?? []) {
-        this.#environment.set(environment, value)
-      }
-      for (const [argumentsContract, value] of options.arguments ?? []) {
-        this.#arguments.set(argumentsContract, value)
-      }
+    if (isLogger(options) || 'logger' in options) {
+      throw new DependencyResolutionError(
+        'LUTRE_LOGGER_CONFIGURATION: Register provide(LoggerToken).useClass(LoggerService) in providers.',
+      )
     }
+    const configured = providers.find((provider) =>
+      isLoggerToken(provider.provide),
+    )
+    this.#loggerToken =
+      configured && isLoggerToken(configured.provide)
+        ? configured.provide
+        : LoggerToken
+    this.#dependencies = options.dependencies
+    this.#hooks = options.hooks ?? {}
+    for (const [environment, value] of options.environment ?? []) {
+      this.#environment.set(environment, value)
+    }
+    for (const [argumentsContract, value] of options.arguments ?? []) {
+      this.#arguments.set(argumentsContract, value)
+    }
+    const declarations = configured
+      ? providers
+      : [...providers, ...defaultLoggerProviders()]
 
-    for (const provider of providers) {
-      const existing = this.#providers.get(provider.provide)
+    for (const provider of declarations) {
+      if (isLoggerToken(provider.provide) && provider.scope !== 'application') {
+        throw new DependencyResolutionError(
+          'LUTRE_LOGGER_SCOPE: LoggerToken must have application scope.',
+        )
+      }
+      const key = isLoggerToken(provider.provide)
+        ? this.#loggerToken
+        : provider.provide
+      const existing = this.#providers.get(key)
       if (existing) {
         if (
           existing.kind === provider.kind &&
@@ -89,7 +112,7 @@ export class Container {
           `LUTRE_DI_DUPLICATE: Duplicate provider for ${tokenName(provider.provide)}`,
         )
       }
-      this.#providers.set(provider.provide, provider)
+      this.#providers.set(key, provider)
     }
   }
 
@@ -133,7 +156,8 @@ export class Container {
   }
 
   get<T>(token: TokenLike<T>): T {
-    const provider = this.#providers.get(token)
+    const requested = isLoggerToken(token) ? this.#loggerToken : token
+    const provider = this.#providers.get(requested)
     if (!provider) {
       if (isEnvClass(token)) {
         throw new DependencyResolutionError(
@@ -170,8 +194,9 @@ export class Container {
         `LUTRE_ARGS_005: Arguments ${provider.provide.name} requires runtime Arguments before Application initialization.`,
       )
     }
-    if (this.#applicationCache.has(token)) {
-      return this.#applicationCache.get(token) as T
+    if (this.#applicationCache.has(requested)) {
+      const value = this.#applicationCache.get(requested)
+      return (isLoggerToken(requested) ? requireLogger(value) : value) as T
     }
     throw new DependencyResolutionError(
       `LUTRE_DI_NOT_INITIALIZED: ${tokenName(token)} has not been constructed by Application initialization.`,
@@ -184,9 +209,10 @@ export class Container {
     lineage: readonly TokenLike[] = [],
     inquirer?: DependencyConsumer,
   ): T {
-    const cycleStart = lineage.indexOf(token)
+    const requested = isLoggerToken(token) ? this.#loggerToken : token
+    const cycleStart = lineage.indexOf(requested)
     if (cycleStart >= 0) {
-      const cycle = [...lineage.slice(cycleStart), token]
+      const cycle = [...lineage.slice(cycleStart), requested]
         .map(tokenName)
         .join(' -> ')
       throw new DependencyResolutionError(
@@ -194,11 +220,8 @@ export class Container {
       )
     }
 
-    const provider = this.#providers.get(token)
+    const provider = this.#providers.get(requested)
     if (!provider) {
-      if (Object.is(token, Logger)) {
-        return this.#logger.child(source === undefined ? {} : { source }) as T
-      }
       if (isEnvClass(token)) {
         throw new DependencyResolutionError(
           `LUTRE_ENV_002: ${token.name} is injected by ${source ?? 'Application'} but is not declared by any Module.environment.`,
@@ -214,16 +237,23 @@ export class Container {
       )
     }
 
-    const nextLineage = [...lineage, token]
-    if (provider.scope !== 'application') {
-      return this.#create(provider, nextLineage, inquirer) as T
+    const nextLineage = [...lineage, requested]
+    let value: unknown
+    if (
+      provider.scope === 'application' &&
+      this.#applicationCache.has(requested)
+    ) {
+      value = this.#applicationCache.get(requested)
+    } else {
+      value = this.#create(provider, nextLineage, inquirer)
+      if (provider.scope === 'application')
+        this.#applicationCache.set(requested, value)
     }
-    if (this.#applicationCache.has(token)) {
-      return this.#applicationCache.get(token) as T
+    if (isLoggerToken(requested)) {
+      const root = requireLogger(value)
+      return (source === undefined ? root : bindLoggerSource(root, source)) as T
     }
-    const instance = this.#create(provider, nextLineage, inquirer)
-    this.#applicationCache.set(token, instance)
-    return instance as T
+    return value as T
   }
 
   #create(
@@ -361,6 +391,15 @@ function isRuntimeInputProvider(
   return provider.kind === 'environment' || provider.kind === 'arguments'
 }
 
+function requireLogger(value: unknown): LoggerService {
+  if (!isLogger(value)) {
+    throw new DependencyResolutionError(
+      'LUTRE_LOGGER_VALUE: The root Logger Provider must return a LoggerService instance.',
+    )
+  }
+  return value
+}
+
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return (
     ((typeof value === 'object' && value !== null) ||
@@ -375,7 +414,10 @@ export function assertDeclaredDependency(
   token: TokenLike,
   dependencies: readonly TokenLike[],
 ): void {
-  if (!dependencies.includes(token)) {
+  if (
+    !dependencies.includes(token) &&
+    !(isLoggerToken(token) && dependencies.some(isLoggerToken))
+  ) {
     throw new DependencyResolutionError(
       `LUTRE_DI_UNDECLARED_DEPENDENCY: ${consumer} requested ${tokenName(token)}, but it is not declared in the canonical Application Model. Declare dependencies unconditionally; construction metadata and runtime values must not add dependencies.`,
     )

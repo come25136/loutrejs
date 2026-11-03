@@ -15,6 +15,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
 
 describe('Loutre CLI', () => {
   it.each([runCli, runOpenApiCli])(
@@ -55,6 +56,49 @@ describe('Loutre CLI', () => {
         .split('\n')
         .find((line) => line.includes(fragment)) ?? ''
     )
+  }
+
+  function mermaidNodeId(output: ReturnType<typeof io>, label: string): string {
+    const line = output.stdout
+      .join('\n')
+      .split('\n')
+      .find(
+        (candidate) =>
+          /^\s*n\d+\[/.test(candidate) && candidate.includes(label),
+      )
+    expect(line).toBeDefined()
+    return line!.trim().split('[')[0]!
+  }
+
+  function mermaidClassIds(
+    output: ReturnType<typeof io>,
+    className: string,
+  ): string[] {
+    const line = output.stdout
+      .join('\n')
+      .split('\n')
+      .find(
+        (candidate) =>
+          candidate.trim().startsWith('class ') &&
+          candidate.endsWith(` ${className}`),
+      )
+    return line?.trim().split(' ')[1]?.split(',') ?? []
+  }
+
+  function mermaidLinkStyle(
+    output: ReturnType<typeof io>,
+    sourceLabel: string,
+  ): string {
+    const source = mermaidNodeId(output, sourceLabel)
+    const edges = output.stdout
+      .join('\n')
+      .split('\n')
+      .filter((line) => /^\s*n\d+ -->/.test(line))
+    const index = edges.findIndex((line) =>
+      line.trim().startsWith(`${source} -->`),
+    )
+    expect(index).toBeGreaterThanOrEqual(0)
+    return graphLine(output, `linkStyle ${index} `)
   }
 
   async function waitForFileValue(
@@ -1137,20 +1181,26 @@ describe('Loutre CLI', () => {
     expect(graphLine(output, 'classDef provider')).toContain('fill:#DCFCE7')
     expect(graphLine(output, 'classDef controller')).toContain('fill:#DBEAFE')
     expect(graphLine(output, 'classDef middleware')).toContain('fill:#F3E8FF')
-    expect(lines).toContain('  class n1 provider')
-    expect(lines).toContain('  class n2 controller')
-    expect(lines).toContain('  class n7 middleware')
-    expect(lines).toContain(
-      '  linkStyle 0 stroke:#6D28D9,color:#111827,stroke-width:2px',
+    expect(mermaidClassIds(output, 'provider')).toContain(
+      mermaidNodeId(output, 'Provider: UsersService'),
     )
-    expect(lines).toContain(
-      '  linkStyle 2 stroke:#1D4ED8,color:#111827,stroke-width:2px',
+    expect(mermaidClassIds(output, 'controller')).toContain(
+      mermaidNodeId(output, 'HTTP Controller: UsersController'),
     )
-    expect(lines).toContain(
-      '  linkStyle 5 stroke:#B45309,color:#111827,stroke-width:2px',
+    expect(mermaidClassIds(output, 'middleware')).toContain(
+      mermaidNodeId(output, 'Middleware:'),
     )
-    expect(lines).toContain(
-      '  linkStyle 8 stroke:#7E22CE,color:#111827,stroke-width:2px',
+    expect(mermaidLinkStyle(output, 'Module: UsersModule')).toContain(
+      'stroke:#6D28D9,color:#111827,stroke-width:2px',
+    )
+    expect(
+      mermaidLinkStyle(output, 'HTTP Controller: UsersController'),
+    ).toContain('stroke:#1D4ED8,color:#111827,stroke-width:2px')
+    expect(mermaidLinkStyle(output, 'Route: GET')).toContain(
+      'stroke:#B45309,color:#111827,stroke-width:2px',
+    )
+    expect(mermaidLinkStyle(output, 'Middleware:')).toContain(
+      'stroke:#7E22CE,color:#111827,stroke-width:2px',
     )
     expect(lines).toContain(
       '  style sg0 fill:#F8FAFC,stroke:#6D28D9,color:#111827,stroke-width:2px',
@@ -1185,9 +1235,9 @@ describe('Loutre CLI', () => {
     expect(graphLine(output, 'classDef provider')).toContain(
       'fill:#14532D,stroke:#4ADE80,color:#FFFFFF',
     )
-    expect(graphLine(output, 'linkStyle 2')).toContain(
-      'stroke:#60A5FA,color:#F8FAFC',
-    )
+    expect(
+      mermaidLinkStyle(output, 'HTTP Controller: UsersController'),
+    ).toContain('stroke:#60A5FA,color:#F8FAFC')
     expect(graphLine(output, 'style sg0')).toContain('color:#FFFFFF')
   })
 
@@ -1415,6 +1465,103 @@ describe('Loutre CLI', () => {
       const output = io()
       expect(await runCli([command, 'src/app.ts'], output.value)).toBe(2)
       expect(output.stderr).toEqual([`Unknown command: ${command}`])
+    }
+  })
+
+  it.each(['text', 'json', 'mermaid'])(
+    'DI graphの%sでLoggerとbackendの依存を表示する',
+    async (format) => {
+      const output = io()
+      expect(
+        await runCli(
+          [
+            'graph',
+            'di',
+            '--format',
+            format,
+            '--entry',
+            'tests/fixtures/logger-di-app.ts',
+          ],
+          output.value,
+        ),
+      ).toBe(0)
+      const rendered = output.stdout.join('\n')
+      for (const name of ['WorkerService', 'Logger', 'Backend'])
+        expect(rendered).toContain(name)
+      if (format === 'json') {
+        const graph = JSON.parse(rendered)
+        const id = (name: string) =>
+          graph.nodes.find((node: { name?: string }) => node.name === name).id
+        for (const [from, to] of [
+          ['WorkerService', 'Logger'],
+          ['Logger', 'Backend'],
+        ]) {
+          expect(graph.edges).toContainEqual({
+            from: id(from!),
+            to: id(to!),
+            kind: 'injects',
+          })
+        }
+      }
+      if (format === 'mermaid') {
+        const loggerId = mermaidNodeId(output, 'Provider: Logger')
+        const rootId = mermaidNodeId(output, 'Provider: Backend')
+        expect(rendered).toContain(`${loggerId} -->|"injects"| ${rootId}`)
+      }
+    },
+  )
+
+  it('bundle済みLoggerの生成・注入・終了をHostのContainerで管理する', async () => {
+    const output = io()
+    const directory = await mkdtemp(join(tmpdir(), 'loutre-logger-bundle-'))
+    try {
+      expect(
+        await runCli(
+          ['build', 'tests/fixtures/logger-di-app.ts', '--out-dir', directory],
+          output.value,
+        ),
+      ).toBe(0)
+      const built = await import(
+        pathToFileURL(join(directory, 'application.mjs')).href
+      )
+      const definition =
+        built.default as typeof import('./fixtures/logger-di-app.js').default
+      const application = await bootstrapApplication({
+        application: definition,
+        environment: { LABEL: 'bundle' },
+        capabilities: [bindHttpServer({ runtime: 'bundle-test' })],
+      })
+      const root = application.get(Logger)
+      const backend = root.backend as {
+        records: LogRecord[]
+        disposed: boolean
+        write(record: LogRecord): void
+      }
+      try {
+        root.info('startup')
+        const response = await application.http.fetch(
+          new Request('http://test/'),
+        )
+        expect(response.status).toBe(204)
+      } finally {
+        await application.close()
+      }
+      expect(backend.disposed).toBe(true)
+      expect(
+        backend.records.map((record) => [
+          record.message,
+          record.source,
+          record.label,
+        ]),
+      ).toEqual([
+        ['service.init', 'WorkerService', 'bundle'],
+        ['startup', 'Application', 'bundle'],
+        ['middleware', 'LoggingMiddleware', 'bundle'],
+        ['execution', 'LoggingEndpoint', 'bundle'],
+        ['service.shutdown', 'WorkerService', 'bundle'],
+      ])
+    } finally {
+      await rm(directory, { recursive: true, force: true })
     }
   })
 

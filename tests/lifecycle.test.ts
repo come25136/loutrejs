@@ -1,5 +1,9 @@
 import {
   buildApplicationModel,
+  bootstrapApplication,
+  inject,
+  provide,
+  token,
   createKernelApplication,
   defineApplication,
   defineModule,
@@ -229,5 +233,104 @@ describe('Application Lifecycle', () => {
     )
     expect(initialized).toBe(false)
     expect(destroyed).toBe(false)
+  })
+
+  it('最終解放は全shutdown hookの後に依存から利用者の生成と逆の順で行う', async () => {
+    const events: string[] = []
+    class Connection {
+      onApplicationDispose() {
+        events.push('connection.dispose')
+      }
+    }
+    class Service {
+      readonly connection = inject(Connection)
+      onApplicationShutdown() {
+        events.push('service.shutdown')
+      }
+      onApplicationDispose() {
+        events.push('service.dispose')
+      }
+    }
+    const Module = defineModule({
+      providers: [Service, Connection],
+      lifecycle: {
+        onApplicationDispose: hook({
+          inject: [Connection],
+          run: () => {
+            events.push('module.dispose')
+          },
+        }),
+      },
+    })
+    const app = await bootstrapApplication({
+      application: defineApplication({ modules: [Module] }),
+    })
+    await app.close()
+    await app.close()
+    expect(events).toEqual([
+      'service.shutdown',
+      'module.dispose',
+      'service.dispose',
+      'connection.dispose',
+    ])
+  })
+
+  it('別tokenから同じ実体を公開してもlifecycleを二重実行しない', async () => {
+    const events: string[] = []
+    class Resource {
+      onModuleInit() {
+        events.push('init')
+      }
+      onApplicationBootstrap() {
+        events.push('bootstrap')
+      }
+      onModuleDestroy() {
+        events.push('destroy')
+      }
+      onApplicationDispose() {
+        events.push('dispose')
+      }
+    }
+    const ALIAS = token<Resource>('resource.alias')
+    const Module = defineModule({
+      providers: [
+        Resource,
+        provide(ALIAS).useFactory({
+          inject: [Resource],
+          use: (value: Resource) => value,
+        }),
+      ],
+    })
+    const app = await bootstrapApplication({
+      application: defineApplication({ modules: [Module] }),
+    })
+    expect(app.get(ALIAS)).toBe(app.get(Resource))
+    await app.close()
+    expect(events).toEqual(['init', 'bootstrap', 'destroy', 'dispose'])
+  })
+
+  it('constructorが失敗してもその構築中に生成した依存を回収する', async () => {
+    const events: string[] = []
+    const failure = new Error('construction failed')
+    class Connection {
+      onModuleDestroy() {
+        events.push('destroy')
+      }
+      onApplicationDispose() {
+        events.push('dispose')
+      }
+    }
+    class Broken {
+      readonly connection = inject(Connection)
+      constructor() {
+        if (this.connection instanceof Connection) throw failure
+      }
+    }
+    const Module = defineModule({ providers: [Broken, Connection] })
+    const app = createKernelApplication({
+      application: defineApplication({ modules: [Module] }),
+    })
+    await expect(app.init()).rejects.toBe(failure)
+    expect(events).toEqual(['destroy', 'dispose'])
   })
 })

@@ -17,7 +17,7 @@ HTTP is available at http://127.0.0.1:3000/graphql and WebSocket at ws://127.0.0
 
 ## Server Structure
 
-`src/app.ts`は構成、`src/main.ts`は起動を担当します。公開URLは[src/http/endpoint.ts](./src/http/endpoint.ts)、GraphQLのContext・Resolver・manifest・接続設定は`src/graphql/endpoint.ts`、生成物は`src/graphql/generated/`、業務サービスは`src/domain/`にまとめます。
+`src/app.ts`は構成、`src/main.ts`は起動を担当します。起動ログは`app.get(LoggerToken)`で取得したApplicationのLoggerへ出力し、業務サービスとbackendを共有します。公開URLは[src/http/endpoint.ts](./src/http/endpoint.ts)、GraphQLのContext・Resolver・manifest・接続設定は`src/graphql/endpoint.ts`、生成物は`src/graphql/generated/`、業務サービスは`src/domain/`にまとめます。
 
 - [contracts/counter.graphql](./contracts/counter.graphql): Shared API contract.
 - [graphql.config.ts](./graphql.config.ts): Server type generation and domain mapping.
@@ -71,8 +71,8 @@ Run a standard `graphql-ws` client from another terminal at the repository root.
 ```sh
 node --input-type=module <<'JS'
 import { createClient } from 'graphql-ws'
-import { Logger } from '@loutrejs/loutre/runtime'
-const logger = new Logger()
+import { LoggerService } from '@loutrejs/loutre'
+const logger = new LoggerService()
 const client = createClient({ url: 'ws://127.0.0.1:3000/graphql', retryAttempts: 0 })
 const stop = client.subscribe(
   { query: 'subscription { counterChanged { value step { amount } } }' },

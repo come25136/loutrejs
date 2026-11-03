@@ -1,19 +1,20 @@
+import { isLoggerToken } from '../logger-internal.js'
 import { diagnostic } from '../diagnostic.js'
 import { argumentsProvider } from '../provider.js'
 import { isFrameworkProvidedToken } from '../token-internal.js'
 import { tokenName, type TokenLike } from '../token.js'
 import type { ProviderModelNode } from './types.js'
-import type { ModelBuildContext } from './context.js'
+import { findProviderNode, type ModelBuildContext } from './context.js'
 import { snapshotProvider } from './snapshot.js'
 import { isTokenVisible, moduleDeclaresToken } from './visibility.js'
 
 export function resolveModuleExports(context: ModelBuildContext): void {
-  const { modules, moduleIds, providerNodes, edges, diagnostics } = context
+  const { modules, moduleIds, edges, diagnostics } = context
   for (const module of modules) {
     const moduleId = moduleIds.get(module)!
     for (const exported of module.definition.exports ?? []) {
       if (moduleDeclaresToken(module, exported as TokenLike)) continue
-      const provider = providerNodes.get(exported as TokenLike)
+      const provider = findProviderNode(context, exported as TokenLike)
       const providerModule = provider
         ? modules.find(
             (candidate) => moduleIds.get(candidate) === provider.moduleId,
@@ -68,19 +69,19 @@ export function compileArgumentsProvider(context: ModelBuildContext): void {
 export function resolveProviderDependencies(context: ModelBuildContext): void {
   const { providerNodes, modules, moduleIds, edges, diagnostics } = context
   for (const provider of providerNodes.values()) {
-    if (provider.moduleId === 'application') continue
     const sourceModule = modules.find(
       (candidate) => moduleIds.get(candidate) === provider.moduleId,
     )
-    if (!sourceModule) continue
     for (const dependency of provider.dependencies) {
-      const target = providerNodes.get(dependency)
+      const target = findProviderNode(context, dependency)
       if (target) {
         edges.push({ from: provider.id, to: target.id, kind: 'injects' })
         const targetModule = modules.find(
           (candidate) => moduleIds.get(candidate) === target.moduleId,
         )
         if (
+          sourceModule &&
+          !isLoggerToken(dependency) &&
           targetModule &&
           target.moduleId !== provider.moduleId &&
           !moduleDeclaresToken(sourceModule, dependency) &&

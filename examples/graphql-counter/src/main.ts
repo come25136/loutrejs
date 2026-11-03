@@ -1,8 +1,10 @@
+import { LoggerToken } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
-import application, { logger } from './app.js'
+import application from './app.js'
 import { AppEnv } from './config/env.js'
 
 const app = await nodeRuntime.create({ application })
+const logger = app.get(LoggerToken)
 const { port } = app.get(AppEnv)
 const { port: listeningPort } = await app.serve({ port, hostname: '127.0.0.1' })
 

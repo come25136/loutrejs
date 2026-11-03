@@ -5,7 +5,7 @@ import { normalizeProvider, type ProviderDescriptor } from '../provider.js'
 import type { TokenLike } from '../token.js'
 import { tokenName } from '../token.js'
 import type { ProviderModelNode } from './types.js'
-import type { ModelBuildContext } from './context.js'
+import { findProviderNode, type ModelBuildContext } from './context.js'
 import { appendLifecycleNodes } from './lifecycle.js'
 import { snapshotProvider } from './snapshot.js'
 import { getSourceLocation } from '../source-location.js'
@@ -61,7 +61,7 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
           ? getSourceLocation(normalized.useClass)
           : getSourceLocation(declaration)
       const providerId = context.nextProviderId()
-      const existingProvider = providerNodes.get(provider.provide)
+      const existingProvider = findProviderNode(context, provider.provide)
       if (
         existingProvider?.provider.kind === 'environment' &&
         provider.kind === 'environment'
@@ -107,7 +107,7 @@ export function collectModuleDeclarations(context: ModelBuildContext): void {
   }
 }
 
-function collectProviderDependencies(
+export function collectProviderDependencies(
   provider: ProviderDescriptor,
 ): readonly TokenLike[] {
   return match(provider)

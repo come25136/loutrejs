@@ -1,4 +1,9 @@
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import {
+  defineApplication,
+  defineModule,
+  provide,
+  LoggerToken,
+} from '@loutrejs/loutre'
 import {
   ApplicationShutdownError,
   SilentLogger,
@@ -82,11 +87,14 @@ const failing = await bunRuntime.create({
   application: defineApplication({
     modules: [
       defineModule({
+        providers: [provide(LoggerToken).useClass(SilentLogger)],
+        exports: [LoggerToken],
+      }),
+      defineModule({
         providers: [BrokenShutdown],
         executions: [shutdownController],
       }),
     ],
-    logger: new SilentLogger(),
   }),
 })
 const failingListener = await failing.serve({

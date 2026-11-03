@@ -10,7 +10,10 @@ export interface ProcessSignalSource {
 export interface ProcessShutdownHooksOptions {
   readonly source: ProcessSignalSource
   readonly close: (signal: ShutdownSignal) => Promise<void>
-  readonly onError: (error: unknown, signal: ShutdownSignal) => void
+  readonly onError: (
+    error: unknown,
+    signal: ShutdownSignal,
+  ) => void | Promise<void>
 }
 
 export class ProcessShutdownHooks {
@@ -58,7 +61,8 @@ export class ProcessShutdownHooks {
         await this.#options.close(signal)
         return
       } catch (error) {
-        this.#reportError(error, signal)
+        // ログ送信の完了待ちでshutdownの再試行を止めない。
+        void this.#reportError(error, signal)
         if (
           !(error instanceof ApplicationShutdownError) ||
           error.safeCleanupBoundaryReached ||
@@ -68,16 +72,16 @@ export class ProcessShutdownHooks {
         try {
           await error.retryAfter
         } catch (retryError) {
-          this.#reportError(retryError, signal)
+          void this.#reportError(retryError, signal)
           return
         }
       }
     }
   }
 
-  #reportError(error: unknown, signal: ShutdownSignal): void {
+  async #reportError(error: unknown, signal: ShutdownSignal): Promise<void> {
     try {
-      this.#options.onError(error, signal)
+      await this.#options.onError(error, signal)
     } catch (reportingError) {
       console.error(
         'Runtime shutdown error reporter failed',

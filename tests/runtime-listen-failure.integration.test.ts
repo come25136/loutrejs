@@ -3,10 +3,12 @@ import { defineApplication } from '@loutrejs/loutre'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { nodeRuntime } from '@loutrejs/node'
 import { UsersModule } from '../integrations/http-crud/src/index.js'
-import { silentLogger } from './helpers/silent-logger.js'
+import { silentLoggingModule } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>
-  defineApplication({ modules: [UsersModule()], logger: silentLogger })
+  defineApplication({
+    modules: [silentLoggingModule, UsersModule()],
+  })
 
 describe('runtime listen failure', () => {
   let startupOutput: string[]

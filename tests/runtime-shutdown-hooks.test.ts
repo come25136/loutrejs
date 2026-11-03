@@ -1,5 +1,8 @@
 import { EventEmitter } from 'node:events'
-import { ProcessShutdownHooks } from '@loutrejs/loutre/runtime'
+import {
+  ApplicationShutdownError,
+  ProcessShutdownHooks,
+} from '@loutrejs/loutre/runtime'
 
 describe('Process shutdown hookの所有権', () => {
   it('複数Applicationは互いのlistenerを消さず、各Applicationを一度だけ終了する', async () => {
@@ -72,31 +75,75 @@ describe('Process shutdown hookの所有権', () => {
     },
   )
 
-  it('error reporterの失敗も未処理のPromise rejectionにしない', async () => {
+  it.each(['同期', '非同期'])(
+    '%sのerror reporter失敗も未処理のPromise rejectionにしない',
+    async (kind) => {
+      const source = new EventEmitter()
+      const error = new Error('close failed')
+      const reportingError = new Error('report failed')
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {})
+      try {
+        const hooks = new ProcessShutdownHooks({
+          source,
+          close: async () => {
+            throw error
+          },
+          onError: () => {
+            if (kind === '同期') throw reportingError
+            return Promise.reject(reportingError)
+          },
+        })
+        hooks.setEnabled(true)
+        source.emit('SIGTERM')
+        await vi.waitFor(() =>
+          expect(consoleError).toHaveBeenCalledExactlyOnceWith(
+            'Runtime shutdown error reporter failed',
+            error,
+            reportingError,
+          ),
+        )
+      } finally {
+        consoleError.mockRestore()
+      }
+    },
+  )
+
+  it('非同期error reporterの完了を待たずに終了を再試行し、遅れた報告失敗も回収する', async () => {
     const source = new EventEmitter()
-    const error = new Error('close failed')
+    const reporting = Promise.withResolvers<void>()
     const reportingError = new Error('report failed')
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const shutdownError = new ApplicationShutdownError([], 'shutdown pending', {
+      safeCleanupBoundaryReached: false,
+      retryAfter: Promise.resolve(),
+    })
+    const close = vi
+      .fn()
+      .mockRejectedValueOnce(shutdownError)
+      .mockResolvedValue(undefined)
+    const output = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const hooks = new ProcessShutdownHooks({
+      source,
+      close,
+      onError: () => reporting.promise,
+    })
     try {
-      const hooks = new ProcessShutdownHooks({
-        source,
-        close: async () => {
-          throw error
-        },
-        onError: () => {
-          throw reportingError
-        },
-      })
       hooks.setEnabled(true)
       source.emit('SIGTERM')
-      await Promise.resolve()
-      expect(consoleError).toHaveBeenCalledExactlyOnceWith(
-        'Runtime shutdown error reporter failed',
-        error,
-        reportingError,
+      await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(2))
+      reporting.reject(reportingError)
+      await vi.waitFor(() =>
+        expect(output).toHaveBeenCalledExactlyOnceWith(
+          'Runtime shutdown error reporter failed',
+          shutdownError,
+          reportingError,
+        ),
       )
     } finally {
-      consoleError.mockRestore()
+      reporting.resolve()
+      hooks.dispose()
+      output.mockRestore()
     }
   })
 })

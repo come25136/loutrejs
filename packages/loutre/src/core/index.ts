@@ -1,3 +1,5 @@
+export { LoggerService, LoggerToken } from './logger.js'
+export { LoggerModule } from './logger-module.js'
 export { defineArgs, isArgsClass, loadArgs } from './args.js'
 export type { ArgsClass, ArgsKey, ArgsSchema } from './args.js'
 export {
@@ -83,6 +85,7 @@ export type {
   ModuleLifecycle,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  OnApplicationDispose,
   OnModuleDestroy,
   OnModuleInit,
 } from './lifecycle.js'

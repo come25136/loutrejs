@@ -10,7 +10,6 @@ import type {
   SchemaInput,
 } from '../core/index.js'
 import { buildApplicationModel } from '../core/index.js'
-import type { Logger } from '../runtime/index.js'
 
 export interface ApplicationDefinitionOptions<
   TModules extends readonly ModuleInput[],
@@ -18,7 +17,6 @@ export interface ApplicationDefinitionOptions<
 > {
   readonly modules: TModules
   readonly arguments?: TArguments
-  readonly logger?: Logger
 }
 
 export interface ApplicationDefinition<
@@ -29,7 +27,6 @@ export interface ApplicationDefinition<
   readonly model: ApplicationModel
   readonly modules: TModules
   readonly arguments: TArguments
-  readonly logger?: Logger
 }
 
 export function defineApplication<
@@ -38,6 +35,11 @@ export function defineApplication<
 >(
   options: ApplicationDefinitionOptions<TModules, TArguments>,
 ): ApplicationDefinition<TModules, TArguments> {
+  if ('logger' in options) {
+    throw new TypeError(
+      'LUTRE_LOGGER_CONFIGURATION: Register provide(LoggerToken).useClass(LoggerService) in Module.providers.',
+    )
+  }
   return Object.freeze({
     kind: 'application-definition',
     model: buildApplicationModel({
@@ -48,7 +50,6 @@ export function defineApplication<
     }),
     modules: options.modules,
     arguments: options.arguments as TArguments,
-    ...(options.logger === undefined ? {} : { logger: options.logger }),
   })
 }
 

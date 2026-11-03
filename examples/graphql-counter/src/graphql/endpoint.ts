@@ -1,6 +1,5 @@
 import { graphql } from '@loutrejs/graphql'
-import { inject } from '@loutrejs/loutre'
-import { Logger } from '@loutrejs/loutre/runtime'
+import { inject, LoggerToken } from '@loutrejs/loutre'
 import {
   CounterStore,
   CounterRangeError,
@@ -63,7 +62,7 @@ export const CounterEndpoint = graphql.implementation({
   factory: (
     counter = inject(CounterStore),
     steps = inject(StepService),
-    logger = inject(Logger),
+    logger = inject(LoggerToken),
   ) => ({
     formatError(error, input) {
       if (error.originalError instanceof CounterRangeError)

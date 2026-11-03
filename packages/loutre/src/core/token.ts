@@ -1,5 +1,6 @@
 import type { Descriptor } from '../internal/brand.js'
 import type { TokenKey } from './identity.js'
+import { isLoggerTokenIdentity } from './logger-identity.js'
 export interface TokenOptions {
   readonly description?: string
 }
@@ -34,5 +35,6 @@ export function token<T>(id: string, options: TokenOptions = {}): Token<T> {
 }
 
 export function tokenName(value: TokenLike): string {
+  if (isLoggerTokenIdentity(value)) return 'Logger'
   return typeof value === 'function' ? value.name : value.id
 }
