@@ -76,27 +76,16 @@ export async function subscribeManifest(
     schema: bound.schema,
     contextValue: sourceView.context,
   }
-  const compatible = GraphQL as typeof GraphQL & {
-    validateSubscriptionArgs?: typeof GraphQL.validateSubscriptionArgs
-    createSourceEventStream: (
-      input: ExecutionArgs,
-    ) => ReturnType<typeof GraphQL.createSourceEventStream>
-  }
-  let validated: ValidatedSubscriptionArgs | undefined
+  let validated: ValidatedSubscriptionArgs
   let source
   try {
-    if (compatible.validateSubscriptionArgs) {
-      const result = compatible.validateSubscriptionArgs(sourceArgs)
-      if (!('schema' in result)) {
-        sourceView.close()
-        return { errors: result }
-      }
-      validated = result
-      source = await GraphQL.createSourceEventStream(validated)
-    } else {
-      // v16は未検証ExecutionArgsを受け取るため、v17の宣言だけでは表現できない。
-      source = await compatible.createSourceEventStream(sourceArgs)
+    const result = GraphQL.validateSubscriptionArgs(sourceArgs)
+    if (!('schema' in result)) {
+      sourceView.close()
+      return { errors: result }
     }
+    validated = result
+    source = await GraphQL.createSourceEventStream(validated)
   } catch (error) {
     sourceView.close()
     if (error instanceof GraphQL.GraphQLError) return { errors: [error] }
@@ -127,17 +116,11 @@ export async function subscribeManifest(
         stats,
       )
       try {
-        const value = validated
-          ? await GraphQL.executeSubscriptionEvent({
-              ...validated,
-              rootValue: event.value,
-              contextValue: view.context,
-            })
-          : await GraphQL.execute({
-              ...args,
-              rootValue: event.value,
-              contextValue: view.context,
-            })
+        const value = await GraphQL.executeSubscriptionEvent({
+          ...validated,
+          rootValue: event.value,
+          contextValue: view.context,
+        })
         return { done: false, value }
       } finally {
         view.close()

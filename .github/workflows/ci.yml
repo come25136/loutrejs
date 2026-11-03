@@ -90,7 +90,7 @@ jobs:
       - name: Pack published packages
         run: node scripts/pack-packages.mjs
 
-      - name: Verify GraphQL.js 16/17 consumers
+      - name: Verify GraphQL.js 17 consumers
         run: node conformance/graphql-versions.mjs
 
       - name: Upload package tarballs

@@ -4,8 +4,8 @@ import type { Resolvers } from './generated/types.js'
 export const resolvers = {
   DateTime: new GraphQLScalarType({
     name: 'DateTime',
-    serialize: (value) => (value as Date).toISOString(),
-    parseValue: (value) => new Date(String(value)),
+    coerceOutputValue: (value) => (value as Date).toISOString(),
+    coerceInputValue: (value) => new Date(String(value)),
   }),
   Query: {
     at: ({ args }) => args.value,

@@ -1,7 +1,5 @@
 import {
   fieldCoordinate,
-  typeName,
-  type GraphQLTypeName,
   batchSize,
   type GraphQLFieldCoordinate,
 } from './identity.js'
@@ -12,15 +10,10 @@ import {
   isUnionType,
   isScalarType,
   isEnumType,
-  isInputObjectType,
-  getNamedType,
-  valueFromAST,
   type GraphQLFieldResolver,
   type GraphQLScalarType,
   type GraphQLTypeResolver,
   type GraphQLIsTypeOfFn,
-  type GraphQLArgument,
-  type GraphQLInputField,
   type DocumentNode,
 } from 'graphql'
 import {
@@ -51,9 +44,6 @@ export function bindManifest<Context extends object = object>(input: {
         throw new TypeError(`${name}にScalar Resolverが必要です。`)
       const scalar = binding as Partial<GraphQLScalarType>
       for (const key of [
-        'serialize',
-        'parseValue',
-        'parseLiteral',
         'coerceOutputValue',
         'coerceInputValue',
         'coerceInputLiteral',
@@ -199,27 +189,6 @@ export function bindManifest<Context extends object = object>(input: {
             metadata.set(fieldCoordinate(type.name, name), definition)
         }
       }
-    }
-  }
-  const visited = new Set<GraphQLTypeName>()
-  const defaults = (field: GraphQLArgument | GraphQLInputField) => {
-    const type = getNamedType(field.type)
-    const name = typeName(type.name)
-    if (isInputObjectType(type) && !visited.has(name)) {
-      visited.add(name)
-      for (const child of Object.values(type.getFields())) defaults(child)
-    }
-    if (!field.astNode?.defaultValue) return
-    // v17はAST defaultを遅延coerceするため、v16の値へ置き換えない。
-    if (!Object.hasOwn(field, 'default'))
-      field.defaultValue = valueFromAST(field.astNode.defaultValue, field.type)
-  }
-  for (const type of Object.values(schema.getTypeMap())) {
-    if (isInputObjectType(type)) {
-      for (const field of Object.values(type.getFields())) defaults(field)
-    } else if (isObjectType(type) || isInterfaceType(type)) {
-      for (const field of Object.values(type.getFields()))
-        for (const argument of field.args) defaults(argument)
     }
   }
   validateEndpointSchema(schema)

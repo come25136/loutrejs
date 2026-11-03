@@ -20,7 +20,8 @@ import {
   type ExecutionExtensionRuntimeContext,
   type ExecutionExtensionRuntime,
 } from '@loutrejs/loutre'
-import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
+import { LoggerToken } from '@loutrejs/loutre'
+import type { LogRecord } from '@loutrejs/loutre/runtime'
 
 interface ProbeDriver {
   invoke(name: string): Promise<string>
@@ -211,7 +212,7 @@ describe('Application Model', () => {
     const records: LogRecord[] = []
     const logging = recordingLogger(records)
     class Service {
-      readonly logger = inject(Logger)
+      readonly logger = inject(LoggerToken)
     }
     const Module = defineModule(() => ({ providers: [Service] }))
     const application = await bootstrapApplication({

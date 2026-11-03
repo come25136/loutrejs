@@ -1,12 +1,13 @@
 import * as fixture from './helpers/identities.js'
 import {
+  LoggerToken,
   defineApplication,
   defineModule,
   provide,
   token,
   type RuntimeInstrumentation,
 } from '@loutrejs/loutre'
-import { ApplicationKernelRuntime, Logger } from '@loutrejs/loutre/runtime'
+import { ApplicationKernelRuntime } from '@loutrejs/loutre/runtime'
 
 describe('Runtime instrumentation boundary', () => {
   it('coreはexecution/operation/providerの意味情報だけをgeneric instrumentationへ渡す', async () => {
@@ -100,7 +101,7 @@ describe('Runtime instrumentation boundary', () => {
     expect(operationInvocation).toMatchObject({ input: { value: 21 } })
     expect(calls).toEqual([
       'provider:loutre.logger.backend:application:class',
-      'provider:Logger:application:class',
+      'provider:LoggerToken:application:class',
       'provider:Repository:application:class',
       'execution:task.invocation:demo',
       'execution:run',
@@ -134,8 +135,8 @@ describe('Runtime instrumentation boundary', () => {
     await runtime.initialize()
     expect(runtime.get(Service)).toBe(service)
     expect(created).toEqual([
-      runtime.get(Logger).backend,
-      runtime.get(Logger),
+      runtime.get(LoggerToken).backend,
+      runtime.get(LoggerToken),
       service,
     ])
     await runtime.shutdown()

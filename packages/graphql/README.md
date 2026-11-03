@@ -1,6 +1,6 @@
 # @loutrejs/graphql
 
-CLIが生成したStatic SchemaをResolverとbindManifestで接続し、LoutreのHTTP / WebSocket Executionへ接続します。HTTPはgraphql-http、WebSocketはgraphql-ws、GraphQL ExecutionはGraphQL.jsへ委譲します。
+CLIが生成したStatic SchemaをResolverとbindManifestで接続し、LoutreのHTTP / WebSocket Executionへ接続します。HTTPはgraphql-http、WebSocketはgraphql-ws、GraphQL ExecutionはGraphQL.js 17へ委譲します。GraphQL.jsは17系を使用してください。
 
 ```sh
 npm install @loutrejs/loutre @loutrejs/graphql graphql
@@ -38,6 +38,8 @@ export const endpoint = graphql.implementation({
 factoryとcontextは必須です。manifestが要求するContextを返してください。schema / typeDefs / rootValueを渡す経路は廃止しています。
 
 Resolverはresolve({ parent, args, context, info })を使い、getFieldSelection(info)で先読み用の選択Field情報を取得できます。Batch取得を行うFieldには{ requires, read, load, authorize, maxBatchSize }を直接書きます。生成Resolvers<AppContext>とbindManifest<AppContext>がParent / Args / ResultをSDLとdomain mappingから推論します。
+
+独自ScalarはGraphQL.js 17の`coerceOutputValue`・`coerceInputValue`・`coerceInputLiteral`を使って定義します。`bindManifest`には`GraphQLScalarType`のinstance、または必要なcoercion関数を持つobjectを渡してください。
 
 HTTP contextの入力はtransport / request / signal / middleware stateです。WebSocketはtransport / opening request / connectionParams / operationId / operation signal / connection stateを渡します。DI Serviceと長寿命ContextのlifetimeはBatch QueueのScopeとは別です。BatchはQuery Operation、Mutation root Field、Subscription Delivery Eventごとに分離します。
 

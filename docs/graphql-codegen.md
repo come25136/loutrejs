@@ -177,10 +177,9 @@ The endpoint factory can optionally return `formatError(error, input)` to config
 
 ```ts
 import { ZodError } from 'zod'
-import { inject } from '@loutrejs/loutre'
-import { Logger } from '@loutrejs/loutre/runtime'
+import { inject, LoggerToken } from '@loutrejs/loutre'
 
-factory: (logger = inject(Logger)) => ({
+factory: (logger = inject(LoggerToken)) => ({
   context: ({ signal }) => ({ signal }),
   formatError(error, input) {
     if (error.originalError instanceof ZodError) {

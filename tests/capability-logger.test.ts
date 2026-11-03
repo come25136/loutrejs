@@ -1,7 +1,7 @@
 import { runtimeSupportFeatures } from '@loutrejs/loutre/runtime'
 import {
   Container,
-  Logger,
+  LoggerService,
   SilentLogger,
   checkRuntimeSupport,
   type LogRecord,
@@ -19,8 +19,8 @@ describe('CapabilityとLogger', () => {
   it('Modelの既定Logger ProviderをContainerで二重登録しない', () => {
     const model = buildApplicationModel({ modules: [] })
     const container = new Container(model.providers)
-    expect(container.resolve(Logger).backend).toBe(
-      container.get(Logger).backend,
+    expect(container.resolve(LoggerToken).backend).toBe(
+      container.get(LoggerToken).backend,
     )
   })
   it('Application requirementとRuntime capabilityの差分を返す', () => {
@@ -37,7 +37,7 @@ describe('CapabilityとLogger', () => {
     const backend: LoggerBackend = {
       write: (record) => records.push(record),
     }
-    const logger = new Logger(backend, { module: 'UsersModule' })
+    const logger = new LoggerService(backend, { module: 'UsersModule' })
     logger.info('ユーザーを取得しました', {
       procedure: 'users.get',
       requestId: 'req-1',
@@ -78,12 +78,12 @@ describe('CapabilityとLogger', () => {
 
   it('constructor Loggerにはstatic sourceだけをDI時に付与する', () => {
     class Consumer {
-      constructor(readonly logger = inject(Logger)) {}
+      constructor(readonly logger = inject(LoggerToken)) {}
     }
     const records: LogRecord[] = []
     const container = new Container([normalizeProvider(Consumer)])
     const consumer = container.resolve(Consumer)
-    const contextual = new Logger(
+    const contextual = new LoggerService(
       { write: (record) => records.push(record) },
       consumer.logger.context,
     )
@@ -99,10 +99,10 @@ describe('CapabilityとLogger', () => {
 
   it('Containerへ渡したLogger backendをconstructor Loggerでも共有する', () => {
     class Consumer {
-      constructor(readonly logger = inject(Logger)) {}
+      constructor(readonly logger = inject(LoggerToken)) {}
     }
     const records: LogRecord[] = []
-    const rootLogger = new Logger(
+    const rootLogger = new LoggerService(
       { write: (record) => records.push(record) },
       { application: 'fixture' },
     )

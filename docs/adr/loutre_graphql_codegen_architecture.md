@@ -23,6 +23,8 @@ GraphQL SDLからResolver型だけをCodegenすると、Runtimeへ同じSDLを�
 
 ## 2. Decision
 
+GraphQL.jsは17系へ統一する。Subscriptionの検証・実行とScalarのcoercionは17の公開APIを使用し、16向けの分岐やdefault値の事前変換を持たない。二つの実行契約を維持すると、Operation / Subscription eventのScopeと遅延coercionの検証経路が増えるためである。
+
 ### 2.1 CLI-generated SchemaとApplication-owned Binding
 
 **`graphql.schema()`および`data.prepare()`は採用しない。** また、アプリ開発者に`makeExecutableSchema()`を呼ばせない。
@@ -482,7 +484,7 @@ Resolver定義はModule lifetime、Batch QueueはExecution lifetime。DIのServi
 3. GraphQL.jsの標準的なEvent Executionを行い、結果をGraphQL-WSへ流す。
 4. complete/disconnect/drainではiterator cleanup（`return()`）、Abort、Operation Trace終了を保証する。
 
-GraphQL.js v16/v17での公開API差異は**両バージョンのconformance test**で確認する。標準GraphQL実行の意味論を独自実装で置き換えない。
+GraphQL.js 17の公開APIを使用し、公開tarballを使うconformance testで確認する。標準GraphQL実行の意味論を独自実装で置き換えない。
 
 ## 8. Authorization, Data Consistency and Errors
 
@@ -597,7 +599,7 @@ loutre graphql generate --config graphql.config.ts --watch
 3. **Runtime Binding:** ManifestからGraphQLSchemaを1回構築し、Standard Resolver / Data Resolverを結合・検証。`graphql.implementation({ manifest })`を正式入口にする。value import循環を防ぐ。
 4. **Read-through / Batch:** `read`、`requires`、`load`、引数の自動正規化、Execution ScopeによるBatchの分離・中断・Authorization。
 5. **選択Field情報:** AST・fragment・alias・abstract type・引数の正規化。Manifest Metadataと結合。
-6. **Operation Scope:** HTTP Query、Mutation Root、WS Query/MutationとSubscription Event境界。GraphQL.js 16/17互換性検証。
+6. **Operation Scope:** HTTP Query、Mutation Root、WS Query/MutationとSubscription Event境界。GraphQL.js 17で検証する。
 7. **Example / 運用:** 既存GraphQL exampleを新Manifest入口へ変更し、100注文・200明細fixture、Trace、Node/Bun/Workersテストを追加。
 
 別PRへ分割せず、PR #112内で仕様を一貫して成立させる。
@@ -630,7 +632,7 @@ loutre graphql generate --config graphql.config.ts --watch
 | E07 | 異なるHTTPリクエスト                | 同じ引数・FieldでもBatch Schedulerを共有しない                                                                         |
 | E08 | 同一WebSocket接続の複数operation    | Operation単位でBatch Schedulerを分離する                                                                               |
 | E03 | Cancellation                        | HTTP Abort、WS complete、disconnect、drainでcleanupする                                                                |
-| E04 | Runtime Compatibility               | GraphQL.js 16/17、Node/Bun/Workersの統合テストを通す                                                                   |
+| E04 | Runtime Compatibility               | GraphQL.js 17、Node/Bun/Workersの統合テストを通す                                                                      |
 | E05 | 注文fixture                         | Eager/Lazy/Hybridの3戦略が同じGraphQL結果を返す                                                                        |
 | E06 | トレース                            | Operation単位でreuse/batch/時間を観測できる                                                                            |
 
@@ -640,7 +642,7 @@ loutre graphql generate --config graphql.config.ts --watch
 
 Public Type Testで標準Resolverと直接書いたBatch設定のContextual Typingを検証する。Parentの内部キー、coerced Args、Custom Scalar、nullability、loadの配列要素を確認し、不正なType / Field、requires、戻り値、resolve / loadの併用はNegative Type Testへ含める。
 
-Runtime TestではBatchの順序・分割、先読み値の再利用、authorizeの先行実行、選択Field情報、Mutation / Subscription Scope、並行Operationの分離と中断を確認する。公開tarballを使う独立consumerでGraphQL.js 16 / 17の生成・型チェック・HTTP / WebSocket実行を検証する。
+Runtime TestではBatchの順序・分割、先読み値の再利用、authorizeの先行実行、選択Field情報、Mutation / Subscription Scope、並行Operationの分離と中断を確認する。公開tarballを使う独立consumerでGraphQL.js 17の生成・型チェック・HTTP / WebSocket実行を検証する。
 
 ## 15. Consequences and Open Questions
 
@@ -660,7 +662,7 @@ Runtime TestではBatchの順序・分割、先読み値の再利用、authorize
 - 生成物が複数ファイルになるため、atomic generation、watch/HMR、Resolver Import順序の管理が必要。
 - Schema ASTからGraphQLSchemaを作るため、**起動時初期化は残る**。ManifestはGraphQLSchemaの完全な事前シリアライズではない。
 - `requires`の実際の値をCLIが全て静的抽出するわけではない。Generated Typesによる`keyof Parent`チェックと、Batch設定のRuntime Bindingによる検証を併用する。
-- Mutation Root単位とSubscriptionイベント単位のScopeを、GraphQL.js v16/v17で安全に切る実行アダプターの詳細は実装検証が必要。
+- Mutation Root単位とSubscriptionイベント単位のScopeを、GraphQL.js 17で安全に切る実行アダプターの詳細は実装検証が必要。
 - Field Authorizationの公開APIと、Custom Scalar引数やselection-dependent `load`を保守的に分割する内部アルゴリズムは、実装時のconformance testで確定させる。`argsKey`と`partition`の公開APIは導入しない。
 
 **最終判断**：PR #112では、**「CLIでSchemaとResolver型を生成し、Applicationが型付きBindingで接続する」**方式を採用する。LoutreはSchema構築をアプリへ要求せず、Schemaの静的構造をビルド時に、Resolver関数とData Metadataを起動時に、要求に応じたSelection/BatchをOperation実行時に扱う。

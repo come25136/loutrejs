@@ -9,7 +9,13 @@ import {
   LoggerToken,
   type OnApplicationDispose,
 } from '@loutrejs/loutre'
+// @ts-expect-error Loggerの旧名は公開しない。
 import { Logger } from '@loutrejs/loutre/runtime'
+// @ts-expect-error Loggerの旧名はCoreにも公開しない。
+import { Logger as CoreLogger } from '@loutrejs/loutre'
+
+void Logger
+void CoreLogger
 
 class CustomLoggerService extends LoggerService {}
 const Logging = defineModule({
@@ -19,8 +25,6 @@ const Logging = defineModule({
 const definition = defineApplication({ modules: [Logging] })
 const app = createKernelApplication({ application: definition })
 const logger: LoggerService = app.get(LoggerToken)
-const legacyLogger: Logger = logger
-void legacyLogger
 defineApplication({ modules: [LoggerModule] })
 provide(LoggerToken).useClass(LoggerService)
 const disposable: OnApplicationDispose = logger
@@ -41,5 +45,8 @@ class Invalid {
 }
 // @ts-expect-error Logger以外のクラスは予約tokenに登録できない。
 provide(LoggerToken).useClass(Invalid)
-// @ts-expect-error Modelを迂回する起動時のLogger差し替えは提供しない。
-createKernelApplication({ application: definition, logger: new Logger() })
+createKernelApplication({
+  application: definition,
+  // @ts-expect-error Modelを迂回する起動時のLogger差し替えは提供しない。
+  logger: new LoggerService(),
+})
