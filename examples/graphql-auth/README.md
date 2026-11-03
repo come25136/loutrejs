@@ -39,19 +39,17 @@ src/
 ├── config/env.ts              # 環境設定
 ├── auth/                     # 認証サービスと共有state
 ├── http/                     # 公開ルートとHTTP処理
-│   ├── contract.ts
-│   ├── authentication.ts
-│   └── health.ts
+│   └── endpoint.ts
 └── graphql/                  # GraphQLの実装
     ├── endpoint.ts
     └── generated/
 ```
 
-Context・Resolver・manifest・接続設定は`graphql/endpoint.ts`にまとめます。`http/contract.ts`を公開URLの正本にし、GraphQLはそのルート参照を使います。SDLは`contracts/auth.graphql`、codegenの設定は`graphql.config.ts`に置きます。
+Context・Resolver・manifest・接続設定は`graphql/endpoint.ts`にまとめます。`http/endpoint.ts`にContract・認証middleware・HTTP handlerをまとめ、公開URLの正本にします。GraphQLはそのルート参照を使います。SDLは`contracts/auth.graphql`、codegenの設定は`graphql.config.ts`に置きます。
 
 ## 宣言とDI
 
-[http/contract.ts](./src/http/contract.ts)で、通常HTTPの`/health`とGraphQLの`/graphql`を定義します。[http/authentication.ts](./src/http/authentication.ts)のmiddlewareが、HTTPヘッダーからBearerまたはAPI keyを読み取ります。
+[http/endpoint.ts](./src/http/endpoint.ts)で、通常HTTPの`/health`とGraphQLの`/graphql`を定義します。同じファイルの認証middlewareが、HTTPヘッダーからBearerまたはAPI keyを読み取ります。
 
 ```ts
 const ApiContract = http.contract({
@@ -72,7 +70,7 @@ const ApiContract = http.contract({
 認証middleware内で次のように分岐します。Upgradeではユーザーをまだ確定しないため、stateの寄与は`Partial<AuthState>`にします。全propertyがoptionalなので、追加しない分岐は`next()`と書けます。
 
 ```ts
-export const httpAuthentication = http.middleware<Partial<AuthState>>({
+const httpAuthentication = http.middleware<Partial<AuthState>>({
   name: 'HttpAuthentication',
   factory:
     (users = inject(Users)) =>
@@ -92,7 +90,7 @@ export const httpAuthentication = http.middleware<Partial<AuthState>>({
 })
 ```
 
-[http/health.ts](./src/http/health.ts)は通常HTTP、[graphql/endpoint.ts](./src/graphql/endpoint.ts)はGraphQL HTTPとWSを担当します。GraphQL実装は同じルート参照から両方の入口を作ります。
+[http/endpoint.ts](./src/http/endpoint.ts)は通常HTTP、[graphql/endpoint.ts](./src/graphql/endpoint.ts)はGraphQL HTTPとWSを担当します。GraphQL実装は同じルート参照から両方の入口を作ります。
 
 ```ts
 const ProfileGraphQL = graphql.implementation({

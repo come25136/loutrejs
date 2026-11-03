@@ -104,7 +104,7 @@ Plain resolver functions and `{ resolve }` receive `{ parent, args, context, inf
 
 `load` receives `{ parents, args, context, signal, selection }`. Both `__resolveType` and `__isTypeOf` receive `{ parent, context, info }`. Destructure only the properties you need; there is no positional argument order to memorize. At binding time, the runtime adapts these objects to GraphQL.js positional arguments. Scalars follow the standard `GraphQLScalarType` contract.
 
-公開URLは`src/http/contract.ts`で定義し、`src/graphql/endpoint.ts`から参照します。上記のResolver、Context、manifest、接続設定は同じendpointファイルへまとめられます。
+公開URLは`src/http/endpoint.ts`で定義し、`src/graphql/endpoint.ts`から参照します。上記のResolver、Context、manifest、接続設定は同じendpointファイルへまとめられます。
 
 ```ts
 import { http } from '@loutrejs/loutre/http'
@@ -117,7 +117,7 @@ export const ApiContract = http.contract({
 ```ts
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { ApiContract } from '../http/contract.js'
+import { ApiContract } from '../http/endpoint.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
 import { OrderService } from '../domain/order.js'

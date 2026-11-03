@@ -2,7 +2,7 @@ import { graphql, ConnectionRejected } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
 import { Users, type User } from '../auth/users.js'
 import type { AuthState } from '../auth/state.js'
-import { ApiContract } from '../http/contract.js'
+import { ApiContract } from '../http/endpoint.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
 

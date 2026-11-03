@@ -117,7 +117,7 @@ export const resolvers = {
 
 生成された`bindManifest`でSDLとResolverを関連付ける。Endpointの`factory`では、ApplicationのDIで受け取ったServiceをContextへ接続する。
 
-公開URLは`src/http/contract.ts`で定義し、`src/graphql/endpoint.ts`から参照します。上記のResolver、Context、manifest、接続設定は同じendpointファイルへまとめられます。
+公開URLは`src/http/endpoint.ts`で定義し、`src/graphql/endpoint.ts`から参照します。上記のResolver、Context、manifest、接続設定は同じendpointファイルへまとめられます。
 
 ```ts
 import { http } from '@loutrejs/loutre/http'
@@ -130,7 +130,7 @@ export const ApiContract = http.contract({
 ```ts
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { ApiContract } from '../http/contract.js'
+import { ApiContract } from '../http/endpoint.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
 import { CounterStore } from '../domain/counter.js'

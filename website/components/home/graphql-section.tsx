@@ -27,7 +27,7 @@ export const ApiContract = http.contract({
 
 const endpointSource = `import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
-import { ApiContract } from '../http/contract.js'
+import { ApiContract } from '../http/endpoint.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
 import { CounterStore } from '../domain/counter.js'
@@ -116,7 +116,7 @@ export function GraphQLSection({ locale }: { readonly locale: Locale }) {
                   ),
                 },
                 {
-                  path: 'src/http/contract.ts',
+                  path: 'src/http/endpoint.ts',
                   language: 'typescript',
                   content: (
                     <HighlightedCode

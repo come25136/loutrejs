@@ -3,7 +3,7 @@ import { http } from '@loutrejs/loutre/http'
 import { Users } from '../auth/users.js'
 import type { AuthState } from '../auth/state.js'
 
-export const httpAuthentication = http.middleware<Partial<AuthState>>({
+const httpAuthentication = http.middleware<Partial<AuthState>>({
   name: 'HttpAuthentication',
   factory:
     (users = inject(Users)) =>
@@ -26,4 +26,24 @@ export const httpAuthentication = http.middleware<Partial<AuthState>>({
 
       return next({ currentUser: { id: user.id } })
     },
+})
+
+export const ApiContract = http.contract({
+  health: {
+    method: 'GET',
+    path: '/health',
+    responses: { ok: { status: 204 } },
+  },
+  graphql: {
+    raw: true,
+    method: '*',
+    path: '/graphql',
+    middlewares: [httpAuthentication],
+  },
+})
+
+export const HealthHttp = http.implementation({
+  name: 'HealthHttp',
+  contract: ApiContract,
+  factory: () => ({ health: (ctx) => ctx.response.ok({}) }),
 })

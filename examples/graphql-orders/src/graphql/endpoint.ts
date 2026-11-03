@@ -1,7 +1,7 @@
 import { graphql, getFieldSelection } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
 import { CommerceService } from '../domain/commerce.js'
-import type { createApiContract } from '../http/contract.js'
+import type { createApiContract } from '../http/endpoint.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
 

@@ -29,12 +29,12 @@ Change `strategy` to EAGER, LAZY, or HYBRID to compare them. In a separate Query
 
 ## Suggested Reading Order
 
-GraphQLのContext・Resolver・manifest・接続設定は`src/graphql/endpoint.ts`、生成物は`src/graphql/generated/`、公開URLは`src/http/contract.ts`、業務サービスは`src/domain/`へ置きます。Moduleへ渡すpathを変えても、HTTP Contractがルートの正本です。
+GraphQLのContext・Resolver・manifest・接続設定は`src/graphql/endpoint.ts`、生成物は`src/graphql/generated/`、公開URLは`src/http/endpoint.ts`、業務サービスは`src/domain/`へ置きます。Moduleへ渡すpathを変えても、HTTP Contractがルートの正本です。
 
 - [contracts/orders.graphql](./contracts/orders.graphql): Public contract and default arguments.
 - [graphql.config.ts](./graphql.config.ts): SDL, domain mapping, and generated output paths.
 - [src/domain/commerce.ts](./src/domain/commerce.ts): Pagination, prefetching, and lookups keyed by a composite including Tenant and Revision.
-- [src/http/contract.ts](./src/http/contract.ts): 公開pathを持つHTTP Contractを作成します。
+- [src/http/endpoint.ts](./src/http/endpoint.ts): 公開pathを持つHTTP Contractを作成します。
 - [src/graphql/endpoint.ts](./src/graphql/endpoint.ts): Context・Resolver・manifestと、Contractのルート参照・DI・HTTP／WSの設定をまとめます。
 - [src/app.ts](./src/app.ts): Module・Provider・Executionを組み立てます。
 

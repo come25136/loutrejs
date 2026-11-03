@@ -7,7 +7,7 @@ import {
   type CounterChanged,
 } from '../domain/counter.js'
 import { StepService } from '../domain/step.js'
-import { ApiContract } from '../http/contract.js'
+import { ApiContract } from '../http/endpoint.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
 

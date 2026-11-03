@@ -33,7 +33,8 @@ describe('トップページのGraphQL紹介', () => {
       expect(
         selectedTabs.some(([, content]) => content.includes('endpoint.ts')),
       ).toBe(true)
-      expect(html).toContain('contract.ts')
+      expect(load(html).text()).toContain('../http/endpoint.js')
+      expect(html).not.toContain('contract.ts')
       expect(html).not.toContain('resolvers.ts')
       expect(
         codeBlocks.some(

@@ -17,7 +17,7 @@ HTTP is available at http://127.0.0.1:3000/graphql and WebSocket at ws://127.0.0
 
 ## Server Structure
 
-`src/app.ts`は構成、`src/main.ts`は起動を担当します。公開URLは[src/http/contract.ts](./src/http/contract.ts)、GraphQLのContext・Resolver・manifest・接続設定は`src/graphql/endpoint.ts`、生成物は`src/graphql/generated/`、業務サービスは`src/domain/`にまとめます。
+`src/app.ts`は構成、`src/main.ts`は起動を担当します。公開URLは[src/http/endpoint.ts](./src/http/endpoint.ts)、GraphQLのContext・Resolver・manifest・接続設定は`src/graphql/endpoint.ts`、生成物は`src/graphql/generated/`、業務サービスは`src/domain/`にまとめます。
 
 - [contracts/counter.graphql](./contracts/counter.graphql): Shared API contract.
 - [graphql.config.ts](./graphql.config.ts): Server type generation and domain mapping.
