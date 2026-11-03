@@ -8,7 +8,7 @@ import {
   AddDocument,
   SnapshotDocument,
 } from '../../conformance/graphql/client/counter.js'
-import type { AppContext } from '../../examples/graphql-counter/src/graphql/context.js'
+import type { AppContext } from '../../examples/graphql-counter/src/graphql/endpoint.js'
 
 const counter: ResolversParentTypes['Counter'] = { value: 1, stepId: 'default' }
 const value: number = counter.value
@@ -60,9 +60,9 @@ import type {
   OrderItem,
   Product,
 } from '../../examples/graphql-orders/src/domain/commerce.js'
-import type { AppContext as OrderContext } from '../../examples/graphql-orders/src/graphql/context.js'
+import type { AppContext as OrderContext } from '../../examples/graphql-orders/src/graphql/endpoint.js'
 import { graphql, data, getFieldSelection } from '@loutrejs/graphql'
-import { manifest } from '../../examples/graphql-orders/src/graphql/manifest.js'
+import { manifest } from '../../examples/graphql-orders/src/graphql/endpoint.js'
 
 const alternate = {
   Query: {

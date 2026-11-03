@@ -44,13 +44,10 @@ src/
 │   └── health.ts
 └── graphql/                  # GraphQLの実装
     ├── endpoint.ts
-    ├── manifest.ts
-    ├── context.ts
-    ├── resolvers.ts
     └── generated/
 ```
 
-`http/contract.ts`を公開URLの正本にし、GraphQLはそのルート参照を使います。SDLは`contracts/auth.graphql`、codegenの設定は`graphql.config.ts`に置きます。
+Context・Resolver・manifest・接続設定は`graphql/endpoint.ts`にまとめます。`http/contract.ts`を公開URLの正本にし、GraphQLはそのルート参照を使います。SDLは`contracts/auth.graphql`、codegenの設定は`graphql.config.ts`に置きます。
 
 ## 宣言とDI
 

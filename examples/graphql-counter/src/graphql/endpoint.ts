@@ -1,11 +1,59 @@
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
 import { Logger } from '@loutrejs/loutre/runtime'
-import { CounterStore, CounterRangeError } from '../domain/counter.js'
+import {
+  CounterStore,
+  CounterRangeError,
+  type CounterChanged,
+} from '../domain/counter.js'
 import { StepService } from '../domain/step.js'
 import { ApiContract } from '../http/contract.js'
-import { manifest } from './manifest.js'
-import type { AppContext } from './context.js'
+import { bindManifest } from './generated/bindings.js'
+import { schemaDocument } from './generated/schema-ast.js'
+
+export interface AppContext {
+  readonly counter: CounterStore
+  readonly steps: StepService
+  readonly signal: AbortSignal
+}
+
+export const manifest = bindManifest<AppContext>({
+  schemaDocument,
+  resolvers: {
+    Query: {
+      counter: ({ context }) => context.counter.current(),
+      activeSubscriptions: ({ context }) => context.counter.activeSubscriptions,
+      stepBatchCount: ({ context }) => context.steps.batchCount,
+    },
+    Mutation: {
+      increment: ({ args: { amount }, context }) =>
+        context.counter.increment(amount),
+      reset: ({ args: { value }, context }) => context.counter.reset(value),
+    },
+    Counter: {
+      step: {
+        requires: ['stepId'],
+        load: async ({ parents: counters, context, signal }) => {
+          const values = await context.steps.findByIds(
+            counters.map((counter) => counter.stepId),
+            signal,
+          )
+          return values.map((step) => {
+            if (!step) throw new Error('Step not found.')
+            return step
+          })
+        },
+      },
+    },
+    Subscription: {
+      counterChanged: {
+        subscribe: ({ context }) => context.counter.watch(context.signal),
+        resolve: ({ parent: event }: { parent: CounterChanged }) =>
+          event.counterChanged,
+      },
+    },
+  },
+})
 
 export const CounterEndpoint = graphql.implementation({
   name: 'Counter',

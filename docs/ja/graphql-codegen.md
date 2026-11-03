@@ -100,7 +100,6 @@ Enumの内部値がSDLの名前と異なる場合は、Server targetの`enumValu
 
 ```ts
 import type { Resolvers } from './generated/types.js'
-import type { AppContext } from './context.js'
 
 export const resolvers = {
   Query: {
@@ -118,7 +117,7 @@ export const resolvers = {
 
 生成された`bindManifest`でSDLとResolverを関連付ける。Endpointの`factory`では、ApplicationのDIで受け取ったServiceをContextへ接続する。
 
-公開URLは`src/http/contract.ts`で定義し、`src/graphql/endpoint.ts`から参照します。
+公開URLは`src/http/contract.ts`で定義し、`src/graphql/endpoint.ts`から参照します。上記のResolver、Context、manifest、接続設定は同じendpointファイルへまとめられます。
 
 ```ts
 import { http } from '@loutrejs/loutre/http'
@@ -134,9 +133,12 @@ import { inject } from '@loutrejs/loutre'
 import { ApiContract } from '../http/contract.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
-import { resolvers } from './resolvers.js'
 import { CounterStore } from '../domain/counter.js'
-import type { AppContext } from './context.js'
+
+interface AppContext {
+  readonly counter: CounterStore
+  readonly signal: AbortSignal
+}
 
 const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 

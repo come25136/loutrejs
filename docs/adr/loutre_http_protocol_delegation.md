@@ -100,6 +100,6 @@ GraphQL exampleではApplicationに渡すLoggerを起動コードと共有し、
 
 exampleは、公開URLの定義から実装、DIの組み立てまでを責務ごとに追える配置にする。`app.ts`はModule・Provider・Executionの組み立て、`main.ts`はruntimeの起動を担当する。
 
-HTTP Contract・HTTP middleware・通常HTTPの実装は`src/http/`、GraphQLのendpoint・manifest・Context・Resolver・生成物は`src/graphql/`へ置く。認証の共有stateとサービスは`src/auth/`、業務サービスは各exampleの既存featureディレクトリへ置く。GraphQL SDLは`contracts/*.graphql`を正本とし、HTTP Contractとは分ける。
+HTTP Contract・HTTP middleware・通常HTTPの実装は`src/http/`へ置く。小規模なGraphQL exampleのContext・Resolver・manifest・接続設定は`src/graphql/endpoint.ts`一つにまとめ、生成コードは`src/graphql/generated/`へ置く。関連する短い宣言をファイルごとに分断せず、一つのendpointから処理全体を追えるようにする。独立した機能として大きくなった場合に分割する。認証の共有stateとサービスは`src/auth/`、業務サービスは各exampleの既存featureディレクトリへ置く。GraphQL SDLは`contracts/*.graphql`を正本とし、HTTP Contractとは分ける。
 
 GraphQL endpointは`http/contract.ts`のルート参照を受け取り、pathを重複定義しない。可変pathを扱うOrdersでも、Moduleが作ったContractの参照をendpointへ渡す。生成物を移動するときはcodegenのoutputとmapperの相対importを揃え、生成物の再作成で検証する。

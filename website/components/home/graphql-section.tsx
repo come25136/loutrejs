@@ -19,19 +19,6 @@ type Mutation {
   increment(amount: Int!): Counter!
 }`
 
-const resolverSource = `import type { Resolvers } from './generated/types.js'
-import type { AppContext } from './context.js'
-
-export const resolvers = {
-  Query: {
-    counter: ({ context }) => context.counter.current(),
-  },
-  Mutation: {
-    increment: ({ args, context }) =>
-      context.counter.increment(args.amount),
-  },
-} satisfies Resolvers<AppContext>`
-
 const contractSource = `import { http } from '@loutrejs/loutre/http'
 
 export const ApiContract = http.contract({
@@ -43,13 +30,24 @@ import { inject } from '@loutrejs/loutre'
 import { ApiContract } from '../http/contract.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
-import { resolvers } from './resolvers.js'
 import { CounterStore } from '../domain/counter.js'
-import type { AppContext } from './context.js'
+
+interface AppContext {
+  readonly counter: CounterStore
+  readonly signal: AbortSignal
+}
 
 const manifest = bindManifest<AppContext>({
   schemaDocument,
-  resolvers,
+  resolvers: {
+    Query: {
+      counter: ({ context }) => context.counter.current(),
+    },
+    Mutation: {
+      increment: ({ args, context }) =>
+        context.counter.increment(args.amount),
+    },
+  },
 })
 
 export const endpoint = graphql.implementation({
@@ -106,17 +104,6 @@ export function GraphQLSection({ locale }: { readonly locale: Locale }) {
                 },
               ],
               [
-                {
-                  path: 'src/graphql/resolvers.ts',
-                  language: 'typescript',
-                  content: (
-                    <HighlightedCode
-                      source={resolverSource}
-                      lineNumbers
-                      className="pb-6 pt-2"
-                    />
-                  ),
-                },
                 {
                   path: 'src/http/contract.ts',
                   language: 'typescript',
