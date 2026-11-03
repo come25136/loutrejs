@@ -1,16 +1,7 @@
-import { defineModule, inject, provide, LoggerToken } from '@loutrejs/loutre'
-import { ConsoleLoggerBackend, Logger } from '@loutrejs/loutre/runtime'
-
-class LoggerService extends Logger {
-  constructor(backend = inject(ConsoleLoggerBackend)) {
-    super(backend)
-  }
-}
+import { defineModule, provide, LoggerToken } from '@loutrejs/loutre'
+import { Logger } from '@loutrejs/loutre/runtime'
 
 export const LoggingModule = defineModule({
-  providers: [
-    ConsoleLoggerBackend,
-    provide(LoggerToken).useClass(LoggerService),
-  ],
+  providers: [provide(LoggerToken).useClass(Logger)],
   exports: [LoggerToken],
 })
