@@ -593,6 +593,7 @@ describe('Loutre Devtools control channel', () => {
               executionId: 'UsersController',
               executionKind: 'http.request',
               name: 'GET /users/{id}',
+              unrecognizedField: 'wire-only',
             },
             {
               type: 'execution.ended',
@@ -609,7 +610,11 @@ describe('Loutre Devtools control channel', () => {
         }),
       )
 
-      expect(await runtimeEvent).toHaveLength(2)
+      const events = await runtimeEvent
+      expect(events).toHaveLength(2)
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ unrecognizedField: 'wire-only' }),
+      )
       await vi.waitFor(async () => {
         const payload = await client.request<{ traces: unknown[] }>(
           'runtime.traces',

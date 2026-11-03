@@ -36,3 +36,10 @@ export type {
   TriggerDefinition,
   TriggerDefinitionData,
 } from './extension.js'
+
+export type {
+  TaskExecutionKey,
+  TaskName,
+  TriggerName,
+  QueueName,
+} from './identity.js'

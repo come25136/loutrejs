@@ -1,3 +1,4 @@
+import * as fixture from './helpers/devtools-fixtures.js'
 import { describe, expect, it } from 'vitest'
 import { buildTimeline } from '../lib/devtools-timeline.js'
 import type { RuntimeEvent } from '../lib/devtools-runtime.js'
@@ -5,7 +6,7 @@ import type { RuntimeEvent } from '../lib/devtools-runtime.js'
 describe('DevTools runtime data', () => {
   it('structured runtime eventsからtimelineを構築する', () => {
     const events: RuntimeEvent[] = [
-      {
+      fixture.runtimeEvent({
         type: 'execution.started',
         runId: 'run_1',
         seq: 1,
@@ -15,8 +16,8 @@ describe('DevTools runtime data', () => {
         executionId: 'task.test',
         executionKind: 'task.invocation',
         name: 'test',
-      },
-      {
+      }),
+      fixture.runtimeEvent({
         type: 'execution.ended',
         runId: 'run_1',
         seq: 2,
@@ -26,7 +27,7 @@ describe('DevTools runtime data', () => {
         executionId: 'task.test',
         durationMs: 10,
         status: 'ok',
-      },
+      }),
     ]
     expect(buildTimeline(events).entries).toHaveLength(1)
   })
@@ -39,7 +40,10 @@ import {
 
 describe('DevTools runtime deep links', () => {
   it('traceとspanを固有URLへencodeする', () => {
-    const href = devtoolsRuntimeHref('trace_a/b', 'span_x y')
+    const href = devtoolsRuntimeHref(
+      fixture.traceId('trace_a/b'),
+      fixture.spanId('span_x y'),
+    )
     expect(href).toBe('?trace=trace_a%2Fb&span=span_x+y')
     expect(parseDevtoolsRuntimeTarget(href)).toEqual({
       traceId: 'trace_a/b',

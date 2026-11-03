@@ -1,0 +1,55 @@
+# GraphQL WS接続フックと終了処理
+
+## 発生条件
+
+ConnectionInit handlerの非同期処理中にWS接続が終了する場合、またはstateへ保存したユーザー情報を更新後の表示データにも使う場合。
+
+`graphql-ws`の接続フックをLoutre Runtimeから設定し、init待ち中に切断・drainする場合、または終了フックが例外を投げる場合。
+
+## 原因
+
+ConnectionInitはstateまたはConnectionRejectedを返して完了するprotocol handlerであり、接続全体を囲むmiddlewareではない。handler内のfinallyで接続resourceを解放すると、operationより先に解放してしまう。接続resourceの解放はonCloseへ置く。
+
+stateは接続中に共有するため、認証時のユーザーオブジェクトを返すだけでは後から更新した表示データを取得できない。認証結果の保持と最新データの取得は分ける。
+
+connectionInitの未完了Promiseを受信taskとして無条件に待つと、接続終了後もsessionを解放できない。反対に、終了フックを同じabort待機で包むと、終了時にはsignalが既にabortされているためフック自身を実行できない。
+
+また、disposeがフックの例外でrejectすると、続けて書いたoperation・iterator・taskのcleanupが飛ばされる。接続フックを追加するだけでも、終了処理全体のエラー境界を確認する必要がある。
+
+## 安全な確認方法
+
+ConnectionInit handlerがresourceをstateで返し、onCloseで解放するケースを確認する。接続中のQueryとSubscriptionはresourceを使え、operationのcleanup後に後処理を実行できること、後処理の失敗をsessionのtraceへ報告してleaseを解放できることを検証する。
+
+前処理を未完了にしたまま切断・drainし、遅いstateがACKやContextへ公開されないことを確認する。HTTPで利用者の名前を変更した後、同じWS接続のQueryでも新しい名前を取得でき、資格情報の検証回数が増えないことを確認する。
+
+接続記録の削除を実際のNode serverで確認する場合は、providerの参照を`app.close()`より前に取得する。停止後の`app.get()`は`LUTRE_APPLICATION_STATE`で拒否されるため、接続記録が残ったという誤った失敗と混同しない。誤った検証で失敗した場合は、起動中に取得したproviderを使って再実行する。
+
+任意のpayload・Request・接続signalがDIしたフックへ届くことを確認する。connectionInitを未完了にしたまま切断・drainし、待機の終了と遅いackの抑止を確認する。ack前後でonDisconnect / onCloseの呼び出し条件を分け、終了フックの例外がsessionのtraceへ記録されてもiteratorとleaseが解放されることを確認する。
+
+## 復旧方法
+
+ConnectionInitの戻り値をstateとして公開し、購読の終了処理後にonCloseへstateを渡す。前処理中に中断した場合は非協調的なhandlerを無期限に待たず、遅い戻り値をabort済みsignalで拒否する。handlerが前処理中に確保したresourceの解放には接続signalを使う。
+
+stateにユーザーIDを保存し、Resolverで最新のドメインデータを取得する。handlerの待機も接続signalで中断し、終了時にframeworkの接続状態への参照を破棄する。
+
+connectionInitの待機は接続signalで中断し、listenerをfinallyで外す。終了フックはgraphql-wsの順序でawaitする。native実装は購読のreturnやonDisconnectの例外でonCloseを省略するため、adapterがnative Contextを保持し、operation cleanup後に終了フックを順番に実行する。失敗は終了時にまとめて報告する。dispose・受信task・operationのcleanupは失敗を集めて最後に報告し、途中の失敗で残りの解放を省略しない。
+
+## 再発防止策
+
+HTTPは既存のhttp.middlewares、GraphQL WSはendpointのfactory().wsにライフサイクルを置く。WSのためにHTTPと同層のlayerや遅延DI resolverを追加しない。依存はendpoint factoryで取得し、canonical Modelへ登録する。HTTPヘッダーとConnectionInit payloadを暗黙にfallbackさせず、認証方式ごとに受け付ける入力をテストする。
+
+ConnectionInit handlerのローカル変数とstateは接続ごとに作り、factoryで取得したサービスと寿命を混同しない。stateの型はhandlerが返すオブジェクトから推論する。拒否はConnectionRejectedで表し、HTTP Responseやnextを使わない。stateをACK payloadへ流用しない。
+
+接続・operation・アプリの認証サービスの寿命を分離する。接続フックのために認証方式、identity、再認証頻度の規約を作らない。factory().wsは型だけでなく実行時にも接続フックへ限定し、schemaやexecutionを上書きさせない。依存ライブラリの接続フックの順序や戻り値は変更せず、そのまま適合テストする。
+
+## テストclientの終了判定
+
+`graphql-ws`の`iterate()`を`retryAttempts: 0`で使うと、serverの正常なdrainでも1001のCloseEventとしてrejectする。`done: true`だけを期待すると、購読の解放に失敗したと誤認する。serverの終了codeとiterator / leaseの解放をそれぞれ確認し、client側は1001の受信を検証する。
+
+## 型と実行の不一致を防ぐ
+
+オブジェクトをstateとして受け取る型にPromiseも含めると、async handlerのPromise<void>が「同期的に返したオブジェクト」として型チェックに通ることがある。state候補にはthenを持たない制約を置き、戻り値なし・Response・配列を返す型テストと、JavaScriptからの不正な戻り値を検証する実行時テストを両方残す。エラーを回避するためにanyでアプリの戻り値を隠さない。
+
+factory内にWS handlerを書いても、静的なws有効化なしではhostとModelにWSが登録されない。型チェックだけに頼らず、Model構築時にも設定の矛盾を診断する。HTTPとWSの既定値を独立させ、WSを追加しただけでHTTPが無効にならないことを実serverで確認する。
+
+ConnectionRejectedの理由はクライアントへ実際に届く公開情報である。通常の例外のmessageを拒否理由へ転用しない。4403と指定理由をNode WebSocket clientでも確認し、123バイトの上限は文字数ではなくUTF-8のバイト数で検証する。

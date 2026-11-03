@@ -10,7 +10,7 @@ import {
   projectApplicationModel,
   type ApplicationModelGraphIR,
 } from '../graph/index.js'
-import { ApplicationKernelRuntime, type Logger } from '../runtime/index.js'
+import { ApplicationKernelRuntime } from '../runtime/index.js'
 import type {
   ApplicationDefinition,
   ApplicationExtensionHostApis,
@@ -33,7 +33,6 @@ export type KernelApplicationOptions<
   readonly application: TDefinition
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
   readonly environment?: unknown
-  readonly logger?: Logger
   readonly forceShutdownTimeoutMs?: number
   readonly instrumentation?: RuntimeInstrumentation
 } & BootstrapArguments<TDefinition>
@@ -43,10 +42,8 @@ export function createKernelApplication<
 >(
   options: KernelApplicationOptions<TDefinition>,
 ): KernelHostedApplication<TDefinition> {
-  const logger = options.logger ?? options.application.logger
   const runtime = new ApplicationKernelRuntime(options.application.model, {
     ...options,
-    ...(logger === undefined ? {} : { logger }),
     ...('environment' in options
       ? { environmentSource: options.environment }
       : {}),
@@ -97,9 +94,7 @@ export function createKernelApplication<
         return runtime.shutdown(signal)
       },
       [Symbol.asyncDispose]() {
-        return (
-          application as unknown as Pick<KernelApplicationBase, 'close'>
-        ).close()
+        return this.close()
       },
     },
   )

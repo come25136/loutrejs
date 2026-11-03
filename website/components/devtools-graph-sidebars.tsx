@@ -1,5 +1,6 @@
 'use client'
 
+import type { TraceId, GraphViewNodeId } from '../lib/devtools-identity'
 import { ChevronDown, ChevronRight, CircleDot, Copy } from 'lucide-react'
 import { Fragment, useMemo, useState } from 'react'
 import {
@@ -56,7 +57,7 @@ export function NodeTree({
   graph: GraphSnapshot
   emptyMessage: string
   selectedId?: string
-  onSelect: (id: string) => void
+  onSelect: (id: GraphViewNodeId) => void
 }) {
   const tree = useMemo(() => buildDevtoolsNodeTree(graph), [graph])
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(
@@ -113,8 +114,8 @@ function NodeTreeRow({
   ancestorContinues: readonly boolean[]
   selectedId?: string
   collapsedIds: ReadonlySet<string>
-  onSelect: (id: string) => void
-  onToggle: (id: string) => void
+  onSelect: (id: GraphViewNodeId) => void
+  onToggle: (id: GraphViewNodeId) => void
 }) {
   const hasChildren = item.children.length > 0
   const collapsed = collapsedIds.has(item.node.id)
@@ -223,12 +224,12 @@ export function Inspector({
 }: {
   node?: GraphNode
   snapshot: GraphSnapshot
-  onSelect: (id: string) => void
+  onSelect: (id: GraphViewNodeId) => void
   labels: DevtoolsGraphInspectorLabels
   locale: Locale
   baseUrl: string
   connected: boolean
-  onOpenTrace: (traceId: string) => void
+  onOpenTrace: (traceId: TraceId) => void
 }) {
   if (!node) {
     return (

@@ -1,7 +1,9 @@
-import type { NodeProps } from '@xyflow/react'
-import type { LoutreFlowNode } from './graph-adapter'
+import type { Node, NodeProps } from '@xyflow/react'
+import type { SemanticNodeData, FlowNodeType } from './graph-adapter'
 
-export function ModuleGroup({ data }: NodeProps<LoutreFlowNode>) {
+export function ModuleGroup({
+  data,
+}: NodeProps<Node<SemanticNodeData, FlowNodeType>>) {
   return (
     <div className="module-group">
       <span>Module scope</span>

@@ -19,9 +19,7 @@ const packageVersion = JSON.parse(
 const versions = (process.argv[3] ?? '16.14.2,17.0.2').split(',')
 for (const version of versions) {
   if (!/^\d+\.\d+\.\d+$/u.test(version)) {
-    throw new Error(
-      `GraphQLの検証versionには固定versionを指定してください: ${version}`,
-    )
+    throw new Error(`GraphQL conformance requires an exact version: ${version}`)
   }
 }
 const directory = await mkdtemp(join(tmpdir(), 'loutre-graphql-versions-'))
@@ -132,13 +130,14 @@ try {
       join(cwd, 'src/app.ts'),
       `import { defineApplication,defineModule } from '@loutrejs/loutre'
       import { graphql } from '@loutrejs/graphql'
+      import { http } from '@loutrejs/loutre/http'
       import { bindManifest } from './generated/bindings.js'
       import { schemaDocument } from '../shared-contract/schema-ast.js'
       import type { AppContext } from './context.js'
       import { resolvers } from './resolvers.js'
       const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
       export const state={parent:{id:'same'},revision:0,calls:0,cleanups:0}
-      const Module=defineModule(()=>({executions:[graphql.endpoint({name:'Compatibility',path:'/graphql',manifest,transports:{http:true,websocket:true},factory:()=>({context:({signal})=>({signal,state}),formatError:(error,input)=>({message:error.originalError?'Internal server error':error.message,extensions:{transport:input.transport}})})})]}))
+      const Module=defineModule(()=>({executions:[graphql.implementation({name:'Compatibility',route:http.contract({graphql:{raw:true,method:'*',path:'/graphql'}}).routes.graphql,manifest,transports:{http:true,websocket:true},factory:()=>({context:({signal})=>({signal,state}),formatError:(error,input)=>({message:error.originalError?'Internal server error':error.message,extensions:{transport:input.transport}})})})]}))
       export default defineApplication({modules:[Module()]})`,
     )
     await writeFile(

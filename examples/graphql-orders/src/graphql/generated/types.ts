@@ -8,7 +8,7 @@ import type {
   Account as AccountDomain,
   Product as ProductDomain,
   Category as CategoryDomain,
-} from '../domain/commerce.js'
+} from '../../domain/commerce.js'
 export type Maybe<T> = T | null
 export type InputMaybe<T> = Maybe<T>
 export type RequireFields<T, K extends keyof T> = Omit<T, K> & {

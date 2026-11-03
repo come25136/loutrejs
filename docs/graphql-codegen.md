@@ -35,7 +35,7 @@ export default {
 } satisfies GraphQLCodegenConfig
 ```
 
-`schema`, `documents`, and `output` paths are relative to the configuration file. Mapper imports are relative to the generated `types.ts`. Resolver Modules must provide a named export called `resolvers`. Reserve the server output directory for generated files, and keep the client output outside that directory. The client target is optional if you only need server generation.
+`schema`, `documents`, and `output` paths are relative to the configuration file. Mapper imports are relative to the generated `types.ts`. Reserve the server output directory for generated files, and keep the client output outside that directory. The client target is optional if you only need server generation.
 
 ```sh
 loutre graphql generate --config graphql.config.ts
@@ -69,7 +69,6 @@ If an Enum's internal values differ from its SDL names, configure the mapping us
 ```ts
 import { getFieldSelection } from '@loutrejs/graphql'
 import type { Resolvers } from './generated/types.js'
-import type { AppContext } from './context.js'
 
 export const resolvers = {
   Query: {
@@ -105,19 +104,36 @@ Plain resolver functions and `{ resolve }` receive `{ parent, args, context, inf
 
 `load` receives `{ parents, args, context, signal, selection }`. Both `__resolveType` and `__isTypeOf` receive `{ parent, context, info }`. Destructure only the properties you need; there is no positional argument order to memorize. At binding time, the runtime adapts these objects to GraphQL.js positional arguments. Scalars follow the standard `GraphQLScalarType` contract.
 
+公開URLは`src/http/endpoint.ts`で定義し、`src/graphql/endpoint.ts`から参照します。上記のResolver、Context、manifest、接続設定は同じendpointファイルへまとめられます。
+
+```ts
+import { http } from '@loutrejs/loutre/http'
+
+export const ApiContract = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})
+```
+
 ```ts
 import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
+import { ApiContract } from '../http/endpoint.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
-import type { AppContext } from './context.js'
-import { resolvers } from './resolvers.js'
+import { OrderService } from '../domain/order.js'
+import { CatalogService } from '../domain/catalog.js'
+
+interface AppContext {
+  readonly orders: OrderService
+  readonly catalog: CatalogService
+  readonly signal: AbortSignal
+}
 
 const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 
-export const endpoint = graphql.endpoint({
+export const endpoint = graphql.implementation({
   name: 'Commerce',
-  path: '/graphql',
+  route: ApiContract.routes.graphql,
   manifest,
   transports: { http: true, websocket: true },
   factory: (
@@ -134,9 +150,9 @@ export const endpoint = graphql.endpoint({
 ```ts
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
-import type { AppContext } from './context.js'
+import { CounterStore } from '../domain/counter.js'
 
-const manifest = bindManifest<AppContext>({
+const manifest = bindManifest<{ readonly counter: CounterStore }>({
   schemaDocument,
   resolvers: {
     Query: {
@@ -161,8 +177,10 @@ The endpoint factory can optionally return `formatError(error, input)` to config
 
 ```ts
 import { ZodError } from 'zod'
+import { inject } from '@loutrejs/loutre'
+import { Logger } from '@loutrejs/loutre/runtime'
 
-factory: () => ({
+factory: (logger = inject(Logger)) => ({
   context: ({ signal }) => ({ signal }),
   formatError(error, input) {
     if (error.originalError instanceof ZodError) {
@@ -175,7 +193,10 @@ factory: () => ({
       }
     }
     if (!error.originalError) return error.toJSON()
-    console.error(`[GraphQL ${input.transport}]`, error.originalError)
+    logger.error('GraphQL operation failed', {
+      transport: input.transport,
+      error: error.originalError,
+    })
     return { message: 'Internal server error' }
   },
 })

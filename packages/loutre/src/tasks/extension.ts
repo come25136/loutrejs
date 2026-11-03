@@ -1,3 +1,16 @@
+import { dependencyConsumerId } from '../core/identity.js'
+import { milliseconds, type DurationMs } from '../core/units.js'
+import {
+  taskExecutionKey,
+  taskName as compiledTaskName,
+  triggerName,
+  queueName,
+  type TaskExecutionKey,
+  type TaskName,
+  type TriggerName,
+  type QueueName,
+} from './identity.js'
+import type { ExecutionNodeId } from '../core/model/identity.js'
 import {
   collectInjectedDependencies,
   defineExecution,
@@ -16,7 +29,11 @@ import {
   type StandardSchemaV1,
   type Token,
 } from '../core/index.js'
-import { isValidCronExpression, matchesCronTrigger } from './runtime/cron.js'
+import {
+  isValidCronExpression,
+  matchesCronTrigger,
+  parseCronSchedule,
+} from './runtime/cron.js'
 import { match } from 'ts-pattern'
 
 export type TaskRuntime<TInput, TOutput> = [TInput] extends [void]
@@ -49,7 +66,7 @@ const queueDriverToken: unique symbol = Symbol.for(
 ) as typeof queueDriverToken
 
 export interface TaskExecutionIdentity {
-  readonly [taskExecutionIdentityKey]: symbol
+  readonly [taskExecutionIdentityKey]: TaskExecutionKey
 }
 
 type AnyTaskDefinition = ExecutionDefinition &
@@ -91,7 +108,7 @@ export interface QueueDescriptor<
   TName extends string = string,
 > {
   readonly kind: 'queue'
-  readonly name: TName
+  readonly name: QueueName<TName>
   readonly payload: TSchema
   readonly [queueDriverToken]: Token<QueueConsumerDriver>
 }
@@ -132,38 +149,38 @@ type TasksDefinitionData =
 
 export interface TasksCompiledTask {
   readonly type: 'task'
-  readonly taskExecutionId: symbol
-  readonly name: string
+  readonly taskExecutionId: TaskExecutionKey
+  readonly name: TaskName
   readonly factory: () => (...arguments_: any[]) => any
 }
 
 export interface TasksCompiledCronTrigger {
   readonly type: 'cron'
-  readonly name: string
+  readonly name: TriggerName
   readonly expression: string
   readonly timezone: string
   readonly overlap: CronOverlap
-  readonly taskExecutionId: symbol
-  readonly taskName: string
+  readonly taskExecutionId: TaskExecutionKey
+  readonly taskName: TaskName
 }
 
 export interface TasksCompiledFixedDelayTrigger {
   readonly type: 'fixed-delay'
-  readonly name: string
-  readonly delay: number
+  readonly name: TriggerName
+  readonly delay: DurationMs
   readonly immediate: boolean
-  readonly taskExecutionId: symbol
-  readonly taskName: string
+  readonly taskExecutionId: TaskExecutionKey
+  readonly taskName: TaskName
 }
 
 export interface TasksCompiledQueueConsumerTrigger {
   readonly type: 'queue-consumer'
-  readonly name: string
-  readonly queueName: string
+  readonly name: TriggerName
+  readonly queueName: QueueName
   readonly queuePayload: StandardSchemaV1
   readonly queueDriver: Token<QueueConsumerDriver>
-  readonly taskExecutionId: symbol
-  readonly taskName: string
+  readonly taskExecutionId: TaskExecutionKey
+  readonly taskName: TaskName
 }
 
 export type TasksCompiledExecution =
@@ -174,7 +191,7 @@ export type TasksCompiledExecution =
 
 export interface TasksExtensionRuntime {
   run<TInput, TOutput>(
-    taskExecutionId: symbol,
+    taskExecutionId: TaskExecutionKey,
     taskName: string,
     ...arguments_: [TInput] extends [void]
       ? readonly []
@@ -218,8 +235,8 @@ export const tasksExtension = defineExecutionExtension<
         dependencies: collectInjectedDependencies(
           {
             kind: 'execution',
-            id: `task:${candidate.name}`,
-            name: candidate.name,
+            id: dependencyConsumerId(`task:${candidate.name}`),
+            name: compiledTaskName(candidate.name),
           },
           () => candidate.factory(),
         ),
@@ -227,7 +244,7 @@ export const tasksExtension = defineExecutionExtension<
         compiled: Object.freeze({
           type: 'task',
           taskExecutionId: candidate[taskExecutionIdentityKey],
-          name: candidate.name,
+          name: compiledTaskName(candidate.name),
           factory: candidate.factory as TasksCompiledTask['factory'],
         }),
       }))
@@ -239,12 +256,12 @@ export const tasksExtension = defineExecutionExtension<
         capabilities: [],
         compiled: Object.freeze({
           type: 'cron',
-          name: candidate.name,
+          name: triggerName(candidate.name),
           expression: candidate.expression,
           timezone: candidate.timezone,
           overlap: candidate.overlap,
           taskExecutionId: candidate.task[taskExecutionIdentityKey],
-          taskName: candidate.task.name,
+          taskName: compiledTaskName(candidate.task.name),
         }),
       }))
       .with({ type: 'fixed-delay' }, (candidate) => ({
@@ -255,11 +272,11 @@ export const tasksExtension = defineExecutionExtension<
         capabilities: [],
         compiled: Object.freeze({
           type: 'fixed-delay',
-          name: candidate.name,
-          delay: candidate.delay,
+          name: triggerName(candidate.name),
+          delay: milliseconds(candidate.delay),
           immediate: candidate.immediate,
           taskExecutionId: candidate.task[taskExecutionIdentityKey],
-          taskName: candidate.task.name,
+          taskName: compiledTaskName(candidate.task.name),
         }),
       }))
       .with({ type: 'queue-consumer' }, (candidate) => ({
@@ -270,12 +287,12 @@ export const tasksExtension = defineExecutionExtension<
         capabilities: [],
         compiled: Object.freeze({
           type: 'queue-consumer',
-          name: candidate.name,
+          name: triggerName(candidate.name),
           queueName: candidate.queue.name,
           queuePayload: candidate.queue.payload,
           queueDriver: queueRuntimeToken(candidate.queue),
           taskExecutionId: candidate.task[taskExecutionIdentityKey],
-          taskName: candidate.task.name,
+          taskName: compiledTaskName(candidate.task.name),
         }),
       }))
       .exhaustive()
@@ -353,7 +370,7 @@ export const tasksExtension = defineExecutionExtension<
       .with({ type: 'fixed-delay' }, (candidate) => ({
         type: 'fixed-delay',
         name: candidate.name,
-        delay: candidate.delay,
+        delay: milliseconds(candidate.delay),
         immediate: candidate.immediate,
         task: candidate.taskName,
       }))
@@ -412,7 +429,9 @@ export function task<TInput = void, TOutput = void>(definition: {
   readonly name: string
   readonly factory: () => TaskRuntime<TInput, TOutput>
 }): TaskDefinition<TInput, TOutput> {
-  const taskExecutionId = Symbol(`loutre.tasks.execution:${definition.name}`)
+  const taskExecutionId = taskExecutionKey(
+    Symbol(`loutre.tasks.execution:${definition.name}`),
+  )
   return defineExecution(tasksExtension, {
     type: 'task' as const,
     name: definition.name,
@@ -473,7 +492,7 @@ export function queue<
   readonly name: TName
   readonly payload: TSchema
 }): QueueDescriptor<TSchema, TName> {
-  const payload = declaration.payload as unknown
+  const payload: unknown = declaration.payload
   if (
     payload === null ||
     (typeof payload !== 'object' && typeof payload !== 'function') ||
@@ -485,7 +504,7 @@ export function queue<
   }
   return Object.freeze({
     kind: 'queue',
-    name: declaration.name,
+    name: queueName(declaration.name),
     payload: declaration.payload,
     [queueDriverToken]: token<QueueConsumerDriver>(
       `loutre.tasks.queue-driver.${declaration.name}`,
@@ -542,8 +561,13 @@ function createTasksRuntime(
   bindings: readonly ExecutionRuntimeBinding<TasksCompiledExecution>[],
   applicationRuntime: ExecutionKernelRuntime,
 ): TasksExtensionRuntime {
-  const runtimes = new Map<symbol, (...arguments_: any[]) => any>()
-  const runtimeExecutionIds = new Map<symbol, string>()
+  const runtimes = new Map<
+    TaskExecutionKey,
+    {
+      readonly invoke: (...arguments_: any[]) => any
+      readonly executionId: ExecutionNodeId
+    }
+  >()
   const triggers: ExecutionRuntimeBinding<TasksCompiledExecution>[] = []
   for (const { execution, resolve } of bindings) {
     const compiled = execution.compiled
@@ -555,15 +579,17 @@ function createTasksRuntime(
       {
         consumer: {
           kind: 'execution',
-          id: `task:${compiled.name}`,
+          id: dependencyConsumerId(`task:${compiled.name}`),
           name: compiled.name,
         },
         resolve: (dependency, consumer) => resolve(dependency, { consumer }),
       },
       () => compiled.factory(),
     )
-    runtimes.set(compiled.taskExecutionId, runtime)
-    runtimeExecutionIds.set(compiled.taskExecutionId, execution.id)
+    runtimes.set(compiled.taskExecutionId, {
+      invoke: runtime,
+      executionId: execution.id,
+    })
   }
 
   let triggerHandles: TriggerHandle[] = []
@@ -574,7 +600,7 @@ function createTasksRuntime(
   const activeInvocations = new Set<Promise<unknown>>()
 
   const invokeTask = (
-    taskExecutionId: symbol,
+    taskExecutionId: TaskExecutionKey,
     taskName: string,
     arguments_: readonly unknown[],
   ): Promise<unknown> => {
@@ -586,7 +612,7 @@ function createTasksRuntime(
       return Promise.reject(new Error(`LUTRE_TASK_NOT_REGISTERED: ${taskName}`))
     }
     const invocation = (async () => {
-      const executionId = runtimeExecutionIds.get(taskExecutionId) ?? taskName
+      const executionId = runtime.executionId
       const hasInput = arguments_.length > 0
       const input = hasInput ? arguments_[0] : undefined
       const lease = applicationRuntime.beginExecution(
@@ -605,7 +631,8 @@ function createTasksRuntime(
       let result: unknown
       let hasResult = false
       try {
-        const invoke = () => Reflect.apply(runtime, undefined, arguments_)
+        const invoke = () =>
+          Reflect.apply(runtime.invoke, undefined, arguments_)
         result = await (lease.run ? lease.run(invoke) : invoke())
         hasResult = true
         return result
@@ -626,7 +653,7 @@ function createTasksRuntime(
   }
 
   const run = (
-    taskExecutionId: symbol,
+    taskExecutionId: TaskExecutionKey,
     taskName: string,
     ...arguments_: any[]
   ): Promise<unknown> => invokeTask(taskExecutionId, taskName, arguments_)
@@ -746,7 +773,7 @@ type TriggerHandle = { stop(): Promise<void> }
 async function startTrigger(
   trigger: Exclude<TasksCompiledExecution, TasksCompiledTask>,
   run: (
-    taskExecutionId: symbol,
+    taskExecutionId: TaskExecutionKey,
     taskName: string,
     ...arguments_: any[]
   ) => Promise<unknown>,
@@ -766,18 +793,19 @@ async function startTrigger(
 function startCronTrigger(
   trigger: TasksCompiledCronTrigger,
   run: (
-    taskExecutionId: symbol,
+    taskExecutionId: TaskExecutionKey,
     taskName: string,
     ...arguments_: any[]
   ) => Promise<unknown>,
 ): TriggerHandle {
   let stopped = false
+  const schedule = parseCronSchedule(trigger.expression, trigger.timezone)
   let lastMinute: number | undefined
   const active = new Set<Promise<unknown>>()
   const tick = () => {
     if (stopped) return
     const now = new Date()
-    if (!matchesCronTrigger(trigger, now)) return
+    if (!matchesCronTrigger(schedule, now)) return
     const minute = Math.floor(now.getTime() / 60_000)
     if (lastMinute === minute) return
     lastMinute = minute
@@ -803,7 +831,7 @@ function startCronTrigger(
 function startFixedDelayTrigger(
   trigger: TasksCompiledFixedDelayTrigger,
   run: (
-    taskExecutionId: symbol,
+    taskExecutionId: TaskExecutionKey,
     taskName: string,
     ...arguments_: any[]
   ) => Promise<unknown>,
@@ -848,7 +876,7 @@ function startFixedDelayTrigger(
 async function startQueueTrigger(
   trigger: TasksCompiledQueueConsumerTrigger,
   run: (
-    taskExecutionId: symbol,
+    taskExecutionId: TaskExecutionKey,
     taskName: string,
     ...arguments_: any[]
   ) => Promise<unknown>,
@@ -874,14 +902,14 @@ async function startQueueTrigger(
   return handle
 }
 
-function taskExecutionIdentity(definition: object): symbol {
+function taskExecutionIdentity(definition: object): TaskExecutionKey {
   if (
     taskExecutionIdentityKey in definition &&
     typeof definition[taskExecutionIdentityKey] === 'symbol'
   ) {
-    return definition[taskExecutionIdentityKey]
+    return taskExecutionKey(definition[taskExecutionIdentityKey])
   }
-  return Symbol('loutre.tasks.unregistered')
+  return taskExecutionKey(Symbol('loutre.tasks.unregistered'))
 }
 
 function tasksStateError(state: string): Error {

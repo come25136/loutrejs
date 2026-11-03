@@ -1,4 +1,16 @@
 import {
+  typeName,
+  fieldName,
+  fieldCoordinate,
+  responseKey,
+  createSelectionKey,
+  selectionMergeKey,
+  opaqueSelectionMergeKey,
+  type SelectionMergeKey,
+  type SelectionKey,
+  type GraphQLFieldCoordinate,
+} from './identity.js'
+import {
   getNamedType,
   isObjectType,
   isInterfaceType,
@@ -22,7 +34,7 @@ export function getFieldSelection(info: GraphQLResolveInfo): FieldSelection {
 }
 export function analyzeSelection(
   info: GraphQLResolveInfo,
-  metadata: ReadonlyMap<string, DataDefinition>,
+  metadata: ReadonlyMap<GraphQLFieldCoordinate, DataDefinition>,
 ): FieldSelection {
   const root = info.fieldNodes[0]!
   const definition = info.parentType.getFields()[info.fieldName]!
@@ -55,12 +67,12 @@ export function analyzeSelection(
       if (node.kind === 'Field') {
         const field = type.getFields()[node.name.value]
         if (!field && node.name.value !== '__typename') continue
-        const identity = `${type.name}.${node.name.value}`
+        const identity = fieldCoordinate(type.name, node.name.value)
         const data = metadata.get(identity)
         results.push({
-          parentType: type.name,
-          fieldName: node.name.value,
-          responseKeys: [node.alias?.value ?? node.name.value],
+          parentType: typeName(type.name),
+          fieldName: fieldName(node.name.value),
+          responseKeys: [responseKey(node.alias?.value ?? node.name.value)],
           args: field
             ? getArgumentValues(field, node, info.variableValues)
             : {},
@@ -103,7 +115,7 @@ export function analyzeSelection(
           )
       }
     }
-    const merged = new Map<string, FieldSelection>()
+    const merged = new Map<SelectionMergeKey, FieldSelection>()
     for (const field of results) {
       const argsKey = normalizeFieldArguments(
         field.args,
@@ -111,8 +123,8 @@ export function analyzeSelection(
       )
       const key =
         argsKey === undefined
-          ? String(merged.size)
-          : `${field.parentType}.${field.fieldName}:${argsKey}`
+          ? opaqueSelectionMergeKey(merged.size)
+          : selectionMergeKey(field.parentType, field.fieldName, argsKey)
       const previous = merged.get(key)
       merged.set(
         key,
@@ -129,11 +141,13 @@ export function analyzeSelection(
     }
     return [...merged.values()]
   }
-  const data = metadata.get(`${info.parentType.name}.${info.fieldName}`)
+  const data = metadata.get(
+    fieldCoordinate(info.parentType.name, info.fieldName),
+  )
   return {
-    parentType: info.parentType.name,
-    fieldName: info.fieldName,
-    responseKeys: [root.alias?.value ?? info.fieldName],
+    parentType: typeName(info.parentType.name),
+    fieldName: fieldName(info.fieldName),
+    responseKeys: [responseKey(root.alias?.value ?? info.fieldName)],
     args,
     requires: data?.options.requires ?? [],
     prefetchable: data !== undefined,
@@ -147,7 +161,7 @@ export function analyzeSelection(
 export function selectionKey(
   selection: FieldSelection,
   schema: GraphQLSchema,
-): string | undefined {
+): SelectionKey | undefined {
   const children: string[] = []
   for (const child of selection.children) {
     const type = schema.getType(child.parentType)
@@ -162,5 +176,5 @@ export function selectionKey(
       `${child.parentType}.${child.fieldName}:${args}:${descendants}`,
     )
   }
-  return JSON.stringify([...new Set(children)].toSorted())
+  return createSelectionKey(JSON.stringify([...new Set(children)].toSorted()))
 }

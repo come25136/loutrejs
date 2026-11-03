@@ -1,13 +1,14 @@
+import { http as contractHttp } from '@loutrejs/loutre/http'
 import type { VariablesOf, ResultOf } from '@graphql-typed-document-node/core'
 import type {
   Resolvers,
   ResolversParentTypes,
-} from '../../examples/graphql-counter/src/generated/types.js'
+} from '../../examples/graphql-counter/src/graphql/generated/types.js'
 import {
   AddDocument,
   SnapshotDocument,
 } from '../../conformance/graphql/client/counter.js'
-import type { AppContext } from '../../examples/graphql-counter/src/graphql/context.js'
+import type { AppContext } from '../../examples/graphql-counter/src/graphql/endpoint.js'
 
 const counter: ResolversParentTypes['Counter'] = { value: 1, stepId: 'default' }
 const value: number = counter.value
@@ -54,14 +55,14 @@ result.counter.stepId
 void variables
 void wrongVariables
 
-import type { Resolvers as OrderResolvers } from '../../examples/graphql-orders/src/generated/types.js'
+import type { Resolvers as OrderResolvers } from '../../examples/graphql-orders/src/graphql/generated/types.js'
 import type {
   OrderItem,
   Product,
 } from '../../examples/graphql-orders/src/domain/commerce.js'
-import type { AppContext as OrderContext } from '../../examples/graphql-orders/src/graphql/context.js'
+import type { AppContext as OrderContext } from '../../examples/graphql-orders/src/graphql/endpoint.js'
 import { graphql, data, getFieldSelection } from '@loutrejs/graphql'
-import { manifest } from '../../examples/graphql-orders/src/graphql/manifest.js'
+import { manifest } from '../../examples/graphql-orders/src/graphql/endpoint.js'
 
 const alternate = {
   Query: {
@@ -162,9 +163,11 @@ void invalidRoot
 void invalidResult
 // @ts-expect-error loaded(undefined)を拒否する
 data.loaded(undefined)
-graphql.endpoint({
+graphql.implementation({
   name: 'InvalidContext',
-  path: '/graphql',
+  route: contractHttp.contract({
+    graphql: { raw: true, method: '*', path: '/graphql' },
+  }).routes.graphql,
   manifest,
   // @ts-expect-error Manifestが要求するContextを返す必要がある
   factory: () => ({ context: () => ({}) }),
@@ -180,7 +183,7 @@ const fromRead = {
 } satisfies ProductResolver
 void fromRead
 const perParentError = {
-  load: () => [product, new Error('対象のProductを取得できません。')],
+  load: () => [product, new Error('Cannot load the requested Product.')],
 } satisfies ProductResolver
 void perParentError
 

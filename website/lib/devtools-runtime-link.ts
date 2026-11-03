@@ -1,6 +1,14 @@
+import {
+  parseTraceId,
+  parseSpanId,
+  runtimeDeepLink,
+  type TraceId,
+  type SpanId,
+  type RuntimeDeepLink,
+} from './devtools-identity'
 export interface DevtoolsRuntimeTarget {
-  readonly traceId?: string
-  readonly spanId?: string
+  readonly traceId?: TraceId
+  readonly spanId?: SpanId
 }
 
 export function parseDevtoolsRuntimeTarget(
@@ -11,16 +19,16 @@ export function parseDevtoolsRuntimeTarget(
   if (!traceId) return {}
   const spanId = nonEmpty(params.get('span'))
   return {
-    traceId,
-    ...(spanId === undefined ? {} : { spanId }),
+    traceId: parseTraceId(traceId),
+    ...(spanId === undefined ? {} : { spanId: parseSpanId(spanId) }),
   }
 }
 
-export function devtoolsRuntimeHref(traceId: string, spanId?: string): string {
-  const params = new URLSearchParams()
-  params.set('trace', traceId)
-  if (spanId) params.set('span', spanId)
-  return `?${params.toString()}`
+export function devtoolsRuntimeHref(
+  traceId: TraceId,
+  spanId?: SpanId,
+): RuntimeDeepLink {
+  return runtimeDeepLink(traceId, spanId)
 }
 
 function nonEmpty(value: string | null): string | undefined {

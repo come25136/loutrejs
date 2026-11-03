@@ -1,3 +1,4 @@
+import * as fixture from './helpers/identities.js'
 import {
   defineModule,
   defineApplication,
@@ -297,7 +298,11 @@ describe('依存元consumerの取得', () => {
     const container = containerFor([
       provide(Dependency).useClass(Dependency, { scope: 'transient' }),
     ])
-    const consumer = { id: 'execution.test', name: 'Test', kind: 'execution' }
+    const consumer = {
+      id: fixture.dependencyConsumerId('execution.test'),
+      name: 'Test',
+      kind: 'execution',
+    }
     const value = runInInjectionContext(
       {
         consumer,
@@ -352,7 +357,10 @@ describe('依存元consumerの取得', () => {
     const second = containerFor([
       provide(Dependency).useClass(Dependency, { scope: 'transient' }),
     ])
-    const consumer = { id: 'execution.test', name: 'Test' }
+    const consumer = {
+      id: fixture.dependencyConsumerId('execution.test'),
+      name: 'Test',
+    }
     runInInjectionContext(
       {
         consumer,

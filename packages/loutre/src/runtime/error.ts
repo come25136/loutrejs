@@ -1,6 +1,8 @@
+import type { Brand } from '../internal/brand.js'
+export type ApplicationErrorId = Brand<string, 'runtime.application-error-id'>
 export interface NormalizedApplicationError {
   readonly code: 'INTERNAL_ERROR'
-  readonly errorId: string
+  readonly errorId: ApplicationErrorId
   readonly message: string
   readonly stack?: string
   readonly cause?: unknown
@@ -14,7 +16,7 @@ export function normalizeUnknownError(
 ): NormalizedApplicationError {
   return {
     code: 'INTERNAL_ERROR',
-    errorId: crypto.randomUUID(),
+    errorId: crypto.randomUUID() as ApplicationErrorId,
     message: error instanceof Error ? error.message : String(error),
     ...(error instanceof Error && error.stack !== undefined
       ? { stack: error.stack }

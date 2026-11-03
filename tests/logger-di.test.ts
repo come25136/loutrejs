@@ -1,0 +1,786 @@
+import { z } from 'zod'
+import {
+  bootstrapApplication,
+  createKernelApplication,
+  defineApplication,
+  defineEnv,
+  defineModule,
+  hook,
+  inject,
+  provide,
+  token,
+  LoggerModule,
+  LoggerService,
+  LoggerToken,
+} from '@loutrejs/loutre'
+import { bindHttpServer, http } from '@loutrejs/loutre/http'
+import {
+  Logger,
+  type LoggerBackend,
+  type LogRecord,
+} from '@loutrejs/loutre/runtime'
+
+describe('ApplicationのLogger DI', () => {
+  it('別名Providerが注入されたLoggerを返しても元の実体のlifecycleを一度だけ実行する', async () => {
+    const events: string[] = []
+    class CustomLoggerService extends LoggerService {
+      onModuleInit() {
+        events.push('init')
+      }
+      onApplicationBootstrap() {
+        events.push('bootstrap')
+      }
+      onModuleDestroy() {
+        events.push('destroy')
+      }
+      beforeApplicationShutdown() {
+        events.push('before')
+      }
+      onApplicationShutdown() {
+        events.push('shutdown')
+      }
+      override onApplicationDispose() {
+        events.push('dispose')
+        super.onApplicationDispose()
+      }
+    }
+    const Alias = token<LoggerService>('logger.alias')
+    const app = await bootstrapApplication({
+      application: defineApplication({
+        modules: [
+          defineModule({
+            providers: [provide(LoggerToken).useClass(CustomLoggerService)],
+            exports: [LoggerToken],
+          }),
+          defineModule({
+            providers: [
+              provide(Alias).useFactory({
+                inject: [LoggerToken],
+                use: (logger: LoggerService) => logger,
+              }),
+            ],
+          }),
+        ],
+      }),
+    })
+    try {
+      expect(app.get(Alias).backend).toBe(app.get(LoggerToken).backend)
+      expect(app.get(Alias).context.source).toBe('logger.alias')
+    } finally {
+      await app.close()
+    }
+    expect(events).toEqual([
+      'init',
+      'bootstrap',
+      'destroy',
+      'before',
+      'shutdown',
+      'dispose',
+    ])
+  })
+
+  it('凍結された関数プロパティを持つLoggerでも注入先のsourceで出力できる', async () => {
+    const records: LogRecord[] = []
+    class FrozenLoggerService extends LoggerService {
+      override readonly info = (
+        message: string,
+        context: Readonly<Record<string, unknown>> = {},
+      ) => super.info(message, context)
+      constructor() {
+        super({ write: (record) => records.push(record) })
+        Object.freeze(this)
+      }
+    }
+    class Consumer {
+      readonly logger = inject(LoggerToken)
+    }
+    const root = new FrozenLoggerService()
+    const app = await bootstrapApplication({
+      application: defineApplication({
+        modules: [
+          defineModule({
+            providers: [provide(LoggerToken).useValue(root), Consumer],
+            exports: [LoggerToken],
+          }),
+        ],
+      }),
+    })
+    try {
+      const injected = Object.freeze(app.get(Consumer).logger)
+      root.info('root')
+      injected.info('injected')
+      expect(injected).toBeInstanceOf(FrozenLoggerService)
+      expect(injected.context.source).toBe('Consumer')
+      expect(root.context.source).toBe('Application')
+      expect(records.map(({ message, source }) => [message, source])).toEqual([
+        ['root', 'Application'],
+        ['injected', 'Consumer'],
+      ])
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('child APIを提供せず、元のカスタム実装を並行呼び出ししても注入先のsourceを混ぜない', async () => {
+    const pending = Promise.withResolvers<void>()
+    class Backend implements LoggerBackend {
+      readonly records: LogRecord[] = []
+      write(record: LogRecord) {
+        this.records.push(record)
+      }
+    }
+    class CustomLoggerService extends LoggerService {
+      #calls = 0
+      constructor(backend = inject(Backend)) {
+        super(backend)
+      }
+      get calls() {
+        return this.#calls
+      }
+      override async info(
+        message: string,
+        context: Readonly<Record<string, unknown>> = {},
+      ) {
+        if (message === 'first') await pending.promise
+        this.#calls++
+        super.info(`custom:${message}`, context)
+      }
+    }
+    class First {
+      readonly logger = inject(LoggerToken)
+    }
+    class Second {
+      readonly logger = inject(LoggerToken)
+    }
+    const application = defineApplication({
+      modules: [
+        defineModule({
+          providers: [
+            Backend,
+            provide(LoggerToken).useClass(CustomLoggerService),
+          ],
+          exports: [LoggerToken],
+        }),
+        defineModule({ providers: [First, Second] }),
+      ],
+    })
+    const app = await bootstrapApplication({ application })
+    try {
+      const root = app.get(LoggerToken)
+      if (!(root instanceof CustomLoggerService))
+        throw new Error('登録したLogger実装が解決されませんでした')
+      const first = app.get(First).logger
+      const second = app.get(Second).logger
+      expect(first).toBeInstanceOf(CustomLoggerService)
+      expect(first.backend).toBe(root.backend)
+      expect(first).not.toHaveProperty('child')
+      expect(root).not.toHaveProperty('child')
+      const running = first.info('first')
+      await second.info('second')
+      await root.info('root')
+      pending.resolve()
+      await running
+      const backend = root.backend
+      if (!(backend instanceof Backend))
+        throw new Error('登録したbackendが解決されませんでした')
+      expect(
+        backend.records.map(({ message, source }) => [message, source]),
+      ).toEqual([
+        ['custom:second', 'Second'],
+        ['custom:root', 'Application'],
+        ['custom:first', 'First'],
+      ])
+      expect(root.calls).toBe(3)
+      expect(Reflect.get(first, 'calls')).toBe(3)
+      expect(root.context.source).toBe('Application')
+      expect(first.context.source).toBe('First')
+    } finally {
+      pending.resolve()
+      await app.close()
+    }
+  })
+
+  it('LoggerModuleが標準Loggerを公開し、backendをApplication内で共有してApplication間では分離する', async () => {
+    class Consumer {
+      readonly logger = inject(LoggerToken)
+    }
+    const definition = defineApplication({
+      modules: [LoggerModule, defineModule({ providers: [Consumer] })],
+    })
+    expect(definition.model.diagnostics).toEqual([])
+    const first = await bootstrapApplication({ application: definition })
+    const second = await bootstrapApplication({ application: definition })
+    try {
+      const root = first.get(LoggerToken)
+      const consumer = first.get(Consumer).logger
+      expect(root).toBeInstanceOf(LoggerService)
+      expect(LoggerService.name).toBe('LoggerService')
+      expect(Logger).toBe(LoggerService)
+      expect(root.context.source).toBe('Application')
+      expect(consumer.context.source).toBe('Consumer')
+      expect(consumer.backend).toBe(root.backend)
+      expect(second.get(LoggerToken)).not.toBe(root)
+      expect(second.get(LoggerToken).backend).not.toBe(root.backend)
+      const implicit = defineApplication({ modules: [] }).model.providers
+      expect(
+        definition.model.providers.filter(
+          (provider) => provider.provide !== Consumer,
+        ),
+      ).toEqual(implicit)
+    } finally {
+      await second.close()
+      await first.close()
+    }
+  })
+
+  it('カスタムbackendを予約token経由で起動コード・Provider・middleware・Executionへ共有する', async () => {
+    const events: string[] = []
+    class LogEnv extends defineEnv(z.object({ LABEL: z.string() })) {}
+    class Backend implements LoggerBackend {
+      readonly records: LogRecord[] = []
+      ready = false
+      readonly environment = inject(LogEnv)
+      async onModuleInit() {
+        await new Promise<void>((resolve) => setTimeout(resolve, 1))
+        this.ready = true
+        events.push('backend.init')
+      }
+      write(record: LogRecord) {
+        expect(this.ready).toBe(true)
+        this.records.push({ ...record, label: this.environment.LABEL })
+      }
+      async onApplicationDispose() {
+        await new Promise<void>((resolve) => setTimeout(resolve, 1))
+        events.push('backend.dispose')
+        this.ready = false
+      }
+    }
+    const ROOT = LoggerToken
+    class CustomLoggerService extends LoggerService {
+      constructor(backend = inject(Backend)) {
+        super(backend)
+      }
+    }
+    const Logging = defineModule({
+      environment: [LogEnv],
+      providers: [Backend, provide(LoggerToken).useClass(CustomLoggerService)],
+      exports: [LoggerToken],
+    })
+    class Service {
+      readonly logger = inject(LoggerToken)
+      onModuleInit() {
+        this.logger.info('service.init')
+      }
+      onModuleDestroy() {
+        this.logger.info('service.destroy')
+      }
+      beforeApplicationShutdown() {
+        this.logger.info('service.before')
+      }
+      onApplicationShutdown() {
+        this.logger.info('service.shutdown')
+      }
+      onApplicationDispose() {
+        this.logger.info('service.dispose')
+        events.push('service.dispose')
+      }
+    }
+    const tracing = http.middleware({
+      name: 'Tracing',
+      factory:
+        (logger = inject(LoggerToken)) =>
+        async (_context, next) => {
+          logger.info('middleware')
+          return next()
+        },
+    })
+    const endpoint = http.implementation({
+      name: 'Endpoint',
+      contract: http.contract({
+        health: {
+          method: 'GET',
+          path: '/',
+          middlewares: [tracing],
+          responses: { ok: { status: 204 } },
+        },
+      }),
+      factory: (logger = inject(LoggerToken)) => ({
+        health(context) {
+          logger.info('execution')
+          return context.response.ok({})
+        },
+      }),
+    })
+    const App = defineModule({
+      providers: [Service],
+      executions: [endpoint],
+      lifecycle: {
+        onApplicationShutdown: hook({
+          inject: [LoggerToken],
+          run: (logger) => logger.info('module.shutdown'),
+        }),
+      },
+    })
+    const definition = defineApplication({
+      modules: [App, Logging],
+    })
+    expect(definition.model.diagnostics).toEqual([])
+    const rootNode = definition.model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === LoggerToken,
+    )!
+    const backendNode = definition.model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === Backend,
+    )!
+    const serviceNode = definition.model.nodes.find(
+      (node) => node.kind === 'provider' && node.token === Service,
+    )!
+    expect(definition.model.edges).toContainEqual({
+      from: serviceNode.id,
+      to: rootNode.id,
+      kind: 'injects',
+    })
+    expect(definition.model.edges).toContainEqual({
+      from: rootNode.id,
+      to: backendNode.id,
+      kind: 'injects',
+    })
+    const app = await bootstrapApplication({
+      application: definition,
+      environment: { LABEL: 'fixture' },
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+    const root = app.get(LoggerToken)
+    const backend = root.backend as Backend
+    try {
+      expect(root).toBe(app.get(ROOT))
+      expect(app.get(Service).logger.backend).toBe(backend)
+      root.info('startup')
+      await app.http.fetch(new Request('http://test/'))
+    } finally {
+      await app.close()
+    }
+    expect(
+      backend.records.map((record) => [
+        record.message,
+        record.source,
+        record.label,
+      ]),
+    ).toEqual([
+      ['service.init', 'Service', 'fixture'],
+      ['startup', 'Application', 'fixture'],
+      ['middleware', 'Tracing', 'fixture'],
+      ['execution', 'Endpoint', 'fixture'],
+      ['service.destroy', 'Service', 'fixture'],
+      ['service.before', 'Service', 'fixture'],
+      ['service.shutdown', 'Service', 'fixture'],
+      [
+        'module.shutdown',
+        definition.model.nodes.find((node) => node.kind === 'lifecycle')!.id,
+        'fixture',
+      ],
+      ['service.dispose', 'Service', 'fixture'],
+    ])
+    expect(events).toEqual([
+      'backend.init',
+      'service.dispose',
+      'backend.dispose',
+    ])
+    await app.close()
+    expect(events.filter((event) => event === 'backend.dispose')).toHaveLength(
+      1,
+    )
+  })
+
+  it('同じDefinitionから起動してもrootとbackendをApplication間で共有しない', async () => {
+    const definition = defineApplication({ modules: [] })
+    const first = await bootstrapApplication({ application: definition })
+    const second = await bootstrapApplication({ application: definition })
+    try {
+      expect(first.get(Logger)).not.toBe(second.get(Logger))
+      expect(first.get(Logger).backend).not.toBe(second.get(Logger).backend)
+    } finally {
+      await Promise.all([first.close(), second.close()])
+    }
+  })
+
+  it('root構築途中の失敗でも先に生成した依存を逆順に回収し、cleanup失敗を元の例外へ併記する', async () => {
+    const events: string[] = []
+    const failure = new Error('root failed')
+    const cleanupFailure = new Error('cleanup failed')
+    class Connection {
+      onModuleDestroy() {
+        events.push('connection.destroy')
+      }
+      onApplicationDispose() {
+        events.push('connection.dispose')
+        throw cleanupFailure
+      }
+    }
+    class Backend {
+      readonly connection = inject(Connection)
+      onModuleDestroy() {
+        events.push('backend.destroy')
+      }
+      onApplicationDispose() {
+        events.push('backend.dispose')
+      }
+    }
+    const ROOT = LoggerToken
+    const Logging = defineModule({
+      providers: [
+        Connection,
+        Backend,
+        provide(ROOT).useFactory({
+          inject: [Backend],
+          use: () => {
+            throw failure
+          },
+        }),
+      ],
+      exports: [ROOT],
+    })
+    const app = createKernelApplication({
+      application: defineApplication({ modules: [Logging] }),
+    })
+    await expect(app.init()).rejects.toMatchObject({
+      errors: [failure, cleanupFailure],
+      cause: failure,
+    })
+    expect(events).toEqual([
+      'backend.destroy',
+      'connection.destroy',
+      'backend.dispose',
+      'connection.dispose',
+    ])
+    await app.close()
+    expect(events).toHaveLength(4)
+  })
+
+  it('依存の初期化失敗後にも生成済みbackendを回収する', async () => {
+    const events: string[] = []
+    const failure = new Error('backend init failed')
+    class Backend implements LoggerBackend {
+      write() {}
+      onModuleInit() {
+        throw failure
+      }
+      onApplicationDispose() {
+        events.push('dispose')
+      }
+    }
+    const ROOT = LoggerToken
+    const Logging = defineModule({
+      providers: [
+        Backend,
+        provide(ROOT).useFactory({
+          inject: [Backend],
+          use: (backend: Backend) => new Logger(backend),
+        }),
+      ],
+      exports: [ROOT],
+    })
+    await expect(
+      bootstrapApplication({
+        application: defineApplication({ modules: [Logging] }),
+      }),
+    ).rejects.toBe(failure)
+    expect(events).toEqual(['dispose'])
+  })
+
+  it('Logger準備前のEnvironment失敗ではrootを構築せず元のerrorを返す', async () => {
+    class Environment extends defineEnv(z.object({ KEY: z.string() })) {}
+    const ROOT = LoggerToken
+    const construct = vi.fn(() => new Logger())
+    const Logging = defineModule({
+      environment: [Environment],
+      providers: [provide(ROOT).useFactory({ use: construct })],
+      exports: [ROOT],
+    })
+    const output = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await expect(
+        bootstrapApplication({
+          application: defineApplication({ modules: [Logging] }),
+          environment: {},
+        }),
+      ).rejects.toThrow()
+      expect(construct).not.toHaveBeenCalled()
+      expect(output).not.toHaveBeenCalled()
+    } finally {
+      output.mockRestore()
+    }
+  })
+
+  it('backend終了後に保持した注入先のLoggerへ出した診断をconsoleへ送り、backendを再利用しない', async () => {
+    const write = vi.fn()
+    const dispose = vi.fn()
+    const ROOT = LoggerToken
+    class Backend implements LoggerBackend {
+      write = write
+      onApplicationDispose = dispose
+    }
+    const Logging = defineModule({
+      providers: [
+        Backend,
+        provide(ROOT).useFactory({
+          inject: [Backend],
+          use: (backend: Backend) => new Logger(backend),
+        }),
+      ],
+      exports: [ROOT],
+    })
+    class Consumer {
+      readonly logger = inject(LoggerToken)
+    }
+    const app = await bootstrapApplication({
+      application: defineApplication({
+        modules: [Logging, defineModule({ providers: [Consumer] })],
+      }),
+    })
+    const logger = app.get(Consumer).logger
+    const output = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await app.close()
+      const failure = new Error('failure')
+      failure.cause = failure
+      logger.error('shutdown failed', {
+        error: new AggregateError([failure], 'cleanup failed'),
+      })
+      expect(write).not.toHaveBeenCalled()
+      expect(dispose).toHaveBeenCalledOnce()
+      expect(JSON.parse(output.mock.calls[0]![0])).toMatchObject({
+        level: 'error',
+        source: 'Consumer',
+        message: 'shutdown failed',
+        error: {
+          message: 'cleanup failed',
+          errors: [{ message: 'failure', cause: '[Circular]' }],
+        },
+      })
+    } finally {
+      output.mockRestore()
+    }
+  })
+
+  it('rootの依存からLoggerへの循環をModelで経路付きで診断する', () => {
+    class Backend {
+      readonly logger = inject(Logger)
+    }
+    const ROOT = LoggerToken
+    const Logging = defineModule({
+      providers: [
+        Backend,
+        provide(ROOT).useFactory({
+          inject: [Backend],
+          use: () => new Logger(),
+        }),
+      ],
+      exports: [ROOT],
+    })
+    const definition = defineApplication({ modules: [Logging] })
+    expect(definition.model.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 'LUTRE_LOGGER_CYCLE',
+        message: 'Circular Logger dependency: Logger -> Backend -> Logger',
+      }),
+    )
+  })
+
+  it('rootのscope・公開範囲・予約tokenへの登録をModelで検証する', () => {
+    const ROOT = LoggerToken
+    const privateRoot = defineModule({
+      providers: [
+        provide(ROOT).useFactory({
+          scope: 'transient',
+          use: () => new Logger(),
+        }),
+      ],
+    })
+    const model = defineApplication({
+      modules: [privateRoot],
+    }).model
+    expect(model.diagnostics.map((item) => item.code)).toEqual(
+      expect.arrayContaining(['LUTRE_LOGGER_SCOPE', 'LUTRE_LOGGER_VISIBILITY']),
+    )
+    const duplicate = defineApplication({
+      modules: [
+        defineModule({
+          providers: [
+            provide(LoggerToken).useClass(Logger),
+            provide(LoggerToken).useClass(Logger),
+          ],
+          exports: [LoggerToken],
+        }),
+      ],
+    }).model
+    expect(duplicate.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_PROVIDER_DUPLICATE' }),
+    )
+  })
+
+  it('rootを再exportして選択してもbackendのModule visibilityを維持する', () => {
+    class Backend {
+      write() {}
+    }
+    const ROOT = LoggerToken
+    const Logging = defineModule({
+      providers: [
+        Backend,
+        provide(ROOT).useFactory({
+          inject: [Backend],
+          use: (backend: Backend) => new Logger(backend),
+        }),
+      ],
+      exports: [ROOT],
+    })
+    const Root = defineModule({ imports: [Logging], exports: [ROOT] })
+    expect(defineApplication({ modules: [Root] }).model.diagnostics).toEqual([])
+    class Leaking {
+      readonly backend = inject(Backend)
+    }
+    const Invalid = defineModule({
+      imports: [Logging],
+      providers: [Leaking],
+      exports: [ROOT],
+    })
+    expect(
+      defineApplication({ modules: [Invalid] }).model.diagnostics,
+    ).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_MODULE_VISIBILITY' }),
+    )
+  })
+
+  it('tokenでない設定とLoggerを返さないfactoryを明確に拒否する', async () => {
+    const legacyOptions = {
+      application: defineApplication({ modules: [] }),
+      logger: new Logger(),
+    }
+    expect(() => createKernelApplication(legacyOptions)).toThrow(
+      'LUTRE_LOGGER_CONFIGURATION',
+    )
+    const legacyDefinition = { modules: [], logger: new Logger() }
+    expect(() => defineApplication(legacyDefinition)).toThrow(
+      'LUTRE_LOGGER_CONFIGURATION',
+    )
+    const ROOT = LoggerToken
+    const Logging = defineModule({
+      providers: [provide(ROOT).useFactory({ use: () => ({}) as Logger })],
+      exports: [ROOT],
+    })
+    await expect(
+      bootstrapApplication({
+        application: defineApplication({ modules: [Logging] }),
+      }),
+    ).rejects.toThrow('LUTRE_LOGGER_VALUE')
+  })
+
+  it('conditional providerで選択したrootだけにlifecycleを実行する', async () => {
+    const events: string[] = []
+    class Environment extends defineEnv(
+      z.object({ DRIVER: z.enum(['a', 'b']) }),
+    ) {}
+    class Selected extends Logger {
+      onModuleInit() {
+        events.push('selected.init')
+      }
+    }
+    class Unselected extends Logger {
+      onModuleInit() {
+        throw new Error('unselected.init')
+      }
+    }
+    const ROOT = LoggerToken
+    const Logging = defineModule({
+      environment: [Environment],
+      providers: [
+        provide(ROOT).select(Environment.key('DRIVER'), {
+          a: Selected,
+          b: Unselected,
+        }),
+      ],
+      exports: [ROOT],
+    })
+    const app = await bootstrapApplication({
+      application: defineApplication({ modules: [Logging] }),
+      environment: { DRIVER: 'a' },
+    })
+    try {
+      expect(app.get(Logger)).toBeInstanceOf(Selected)
+      expect(events).toEqual(['selected.init'])
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('Loggerの派生クラスを未登録のframework tokenとして扱わない', () => {
+    class CustomLogger extends Logger {}
+    class Service {
+      readonly logger = inject(CustomLogger)
+    }
+    const model = defineApplication({
+      modules: [defineModule({ providers: [Service] })],
+    }).model
+    expect(model.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 'LUTRE_PROVIDER_DEPENDENCY_MISSING',
+        message: expect.stringContaining('CustomLogger'),
+      }),
+    )
+  })
+
+  it('クラス自身の登録と予約tokenへのuseClass登録を区別する', async () => {
+    class CustomLoggerService extends Logger {}
+    const named = await bootstrapApplication({
+      application: defineApplication({
+        modules: [defineModule({ providers: [CustomLoggerService] })],
+      }),
+    })
+    try {
+      expect(named.get(LoggerToken)).not.toBeInstanceOf(CustomLoggerService)
+      expect(named.get(CustomLoggerService)).toBeInstanceOf(CustomLoggerService)
+    } finally {
+      await named.close()
+    }
+
+    const reserved = await bootstrapApplication({
+      application: defineApplication({
+        modules: [
+          defineModule({
+            providers: [provide(LoggerToken).useClass(CustomLoggerService)],
+            exports: [LoggerToken],
+          }),
+        ],
+      }),
+    })
+    try {
+      expect(reserved.get(LoggerToken)).toBeInstanceOf(CustomLoggerService)
+      expect(reserved.get(LoggerToken).context.source).toBe('Application')
+    } finally {
+      await reserved.close()
+    }
+  })
+
+  it('Loggerクラスの省略登録も同じ予約tokenとして解決する', async () => {
+    class Service {
+      readonly logger = inject(LoggerToken)
+    }
+    const app = await bootstrapApplication({
+      application: defineApplication({
+        modules: [
+          defineModule({
+            providers: [Logger, Service],
+            exports: [LoggerToken],
+          }),
+        ],
+      }),
+    })
+    try {
+      expect(app.get(LoggerToken)).toBe(app.get(Logger))
+      expect(app.get(LoggerToken).context.source).toBe('Application')
+      expect(app.get(Service).logger.context.source).toBe('Service')
+      expect(app.get(Service).logger.backend).toBe(app.get(LoggerToken).backend)
+    } finally {
+      await app.close()
+    }
+  })
+})

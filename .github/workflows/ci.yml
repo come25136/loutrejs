@@ -77,7 +77,7 @@ jobs:
 
       - name: Check GraphQL generated contracts
         run: |
-          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts conformance/graphql/graphql.config.ts; do
+          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts examples/graphql-auth/graphql.config.ts conformance/graphql/graphql.config.ts; do
             node packages/cli/bin/loutre.js graphql generate --config "$GRAPHQL_CONFIG_FILE" --check
           done
 
@@ -212,7 +212,7 @@ jobs:
       - name: Run Bun CLI conformance
         run: |
           BUN_BIN="$(command -v bun)"
-          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts conformance/graphql/graphql.config.ts; do
+          for GRAPHQL_CONFIG_FILE in examples/graphql-counter/graphql.config.ts examples/graphql-orders/graphql.config.ts examples/graphql-auth/graphql.config.ts conformance/graphql/graphql.config.ts; do
             "$BUN_BIN" packages/cli/bin/loutre.js graphql generate --config "$GRAPHQL_CONFIG_FILE" --check
           done
           "$BUN_BIN" packages/cli/bin/loutre.js check --entry integrations/http-crud/src/app.ts
@@ -330,7 +330,7 @@ jobs:
           npm init -y >/dev/null
           NPM_CONFIG_MIN_RELEASE_AGE=0 npm install "${RUNNER_TEMP}/loutre-package-tarballs"/*.tgz --no-audit --no-fund
 
-          node --input-type=module -e "import { graphql } from '@loutrejs/graphql'; if (!graphql.endpoint) throw new Error('GraphQL package import failed')"
+          node --input-type=module -e "import { graphql } from '@loutrejs/graphql'; if (typeof graphql.implementation !== 'function') throw new Error('GraphQL implementation export is missing')"
           node --input-type=module -e "import { nodeRuntime } from '@loutrejs/node'; if (nodeRuntime.runtime !== 'node') throw new Error('Node runtime import failed')"
           node --input-type=module -e "import { http } from '@loutrejs/loutre/http'; if (!http) throw new Error('HTTP subpath import failed')"
           node node_modules/@loutrejs/cli/bin/loutre.js --help | grep -q '^Loutre CLI$'

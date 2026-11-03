@@ -9,7 +9,7 @@ import {
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
-import { silentLogger } from './helpers/silent-logger.js'
+import { silentLoggingModule } from './helpers/silent-logger.js'
 
 describe('runtime shutdown retry', () => {
   beforeEach(() => {
@@ -199,7 +199,9 @@ function httpOnlyDefinition() {
     factory: () => ({ health: (context) => context.response.ok({}) }),
   })
   const Module = defineModule(() => ({ executions: [controller] }))
-  return defineApplication({ modules: [Module()], logger: silentLogger })
+  return defineApplication({
+    modules: [silentLoggingModule, Module()],
+  })
 }
 
 function retryableShutdownFixture() {
@@ -268,8 +270,7 @@ function retryableShutdownFixture() {
     ],
   }))
   const definition = defineApplication({
-    modules: [Module()],
-    logger: silentLogger,
+    modules: [silentLoggingModule, Module()],
   })
 
   return {

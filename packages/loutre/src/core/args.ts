@@ -16,6 +16,7 @@ export type ArgsKey<TValue = unknown> = RuntimeInputKey<TValue> & {
 export interface ArgsClass<
   TSchema extends ArgsSchema = ArgsSchema,
 > extends Class<SchemaOutput<TSchema>> {
+  readonly '~loutre.descriptor': 'args'
   readonly kind: 'arguments'
   readonly schema: TSchema
   key<TKey extends keyof SchemaOutput<TSchema> & string>(
@@ -27,6 +28,7 @@ export function defineArgs<TSchema extends ArgsSchema>(
   schema: TSchema,
 ): ArgsClass<TSchema> {
   class DefinedArgs {
+    declare static readonly '~loutre.descriptor': 'args'
     static readonly kind = 'arguments' as const
     static readonly schema = schema
 
@@ -34,12 +36,16 @@ export function defineArgs<TSchema extends ArgsSchema>(
       this: ArgsClass<TSchema>,
       key: TKey,
     ): ArgsKey<SchemaOutput<TSchema>[TKey]> {
-      return {
+      const descriptor: Omit<
+        ArgsKey<SchemaOutput<TSchema>[TKey]>,
+        '~loutre.descriptor'
+      > = {
         kind: 'runtime-input-key',
         source: 'arguments',
         contract: this,
         key,
       }
+      return descriptor as ArgsKey<SchemaOutput<TSchema>[TKey]>
     }
 
     constructor(values: SchemaOutput<TSchema>) {
@@ -47,7 +53,7 @@ export function defineArgs<TSchema extends ArgsSchema>(
     }
   }
 
-  return DefinedArgs as unknown as ArgsClass<TSchema>
+  return DefinedArgs as ArgsClass<TSchema>
 }
 
 export function isArgsClass(value: unknown): value is ArgsClass {

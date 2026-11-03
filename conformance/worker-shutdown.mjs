@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
-import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
-import { Logger } from '@loutrejs/loutre/runtime'
+import {
+  defineApplication,
+  defineModule,
+  inject,
+  LoggerService,
+  LoggerToken,
+  provide,
+} from '@loutrejs/loutre'
 import { task } from '@loutrejs/loutre/tasks'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { nodeRuntime } from '@loutrejs/node'
@@ -49,17 +55,28 @@ const job = task({
     },
 })
 
-const application = await runtime.create({
-  application: defineApplication({
-    modules: [defineModule({ providers: [Resource], executions: [job] })],
-    logger: new Logger({
+class ShutdownLogger extends LoggerService {
+  constructor() {
+    super({
       write(record) {
         if (record.level !== 'error') return
         assert.equal(record.signal, 'SIGTERM')
         assert.equal(record.error.safeCleanupBoundaryReached, false)
         timeout.resolve()
       },
-    }),
+    })
+  }
+}
+
+const application = await runtime.create({
+  application: defineApplication({
+    modules: [
+      defineModule({
+        providers: [Resource, provide(LoggerToken).useClass(ShutdownLogger)],
+        exports: [LoggerToken],
+        executions: [job],
+      }),
+    ],
   }),
   forceShutdownTimeoutMs: 5,
 })

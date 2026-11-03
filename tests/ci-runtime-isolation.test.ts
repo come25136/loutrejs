@@ -24,7 +24,7 @@ async function readCiJob(jobId: string): Promise<string> {
   const start = lines.findIndex((line) => line === `  ${jobId}:`)
 
   if (start < 0) {
-    throw new Error(`CI jobが見つかりません: ${jobId}`)
+    throw new Error(`CI job not found: ${jobId}`)
   }
 
   const end = lines.findIndex(

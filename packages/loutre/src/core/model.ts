@@ -1,3 +1,15 @@
+import {
+  executionNodeId,
+  capabilityNodeId,
+  extensionNodeId,
+  type ExecutionNodeId,
+  type CapabilityNodeId,
+} from './model/identity.js'
+import type {
+  ExtensionIdentity,
+  ExtensionName,
+  ExtensionAbiVersion,
+} from './identity.js'
 import { diagnostic, isErrorDiagnostic, type Diagnostic } from './diagnostic.js'
 import {
   isExecutionDefinition,
@@ -20,6 +32,12 @@ import {
 } from './model/providers.js'
 import { snapshotExecutionExtension } from './model/snapshot.js'
 import { validateHostNamespaces, validateNodeIds } from './model/validation.js'
+import {
+  compileApplicationLogger,
+  validateApplicationLogger,
+} from './model/logger.js'
+import { findProviderNode } from './model/context.js'
+import { isLoggerToken } from './logger-internal.js'
 import { getSourceLocation } from './source-location.js'
 import { isTokenVisible, moduleDeclaresToken } from './model/visibility.js'
 
@@ -48,7 +66,7 @@ export type {
 
 class ApplicationModelExtensionRegistry implements ApplicationModelExtensions {
   readonly #ordered: readonly ApplicationModelExtension[]
-  readonly #groups: ReadonlyMap<symbol, ApplicationModelExtension>
+  readonly #groups: ReadonlyMap<ExtensionIdentity, ApplicationModelExtension>
 
   constructor(groups: readonly ApplicationModelExtension[]) {
     this.#ordered = Object.freeze([...groups])
@@ -100,8 +118,9 @@ export function buildApplicationModel(
 ): ApplicationModel {
   const context = createModelBuildContext(options)
   collectModuleDeclarations(context)
-  resolveModuleExports(context)
   compileArgumentsProvider(context)
+  compileApplicationLogger(context)
+  resolveModuleExports(context)
   resolveProviderDependencies(context)
   resolveLifecycleDependencies(context)
 
@@ -113,26 +132,28 @@ export function buildApplicationModel(
     diagnostics,
     providers,
     executions,
-    providerNodes,
   } = context
 
   const extensionExecutions = new Map<
-    symbol,
+    ExtensionIdentity,
     {
       readonly extension: ExecutionExtension
       readonly executions: ExecutionModelNode[]
     }
   >()
   const extensionNames = new Map<
-    string,
-    { readonly identity: symbol; readonly abiVersion: string }
+    ExtensionName,
+    {
+      readonly identity: ExtensionIdentity
+      readonly abiVersion: ExtensionAbiVersion
+    }
   >()
   const extensionIdentities = new Map<
-    symbol,
-    { readonly name: string; readonly extension: ExecutionExtension }
+    ExtensionIdentity,
+    { readonly name: ExtensionName; readonly extension: ExecutionExtension }
   >()
-  const executionIds = new Set<string>()
-  const capabilityNodeIds = new Set<string>()
+  const executionIds = new Set<ExecutionNodeId>()
+  const capabilityNodeIds = new Set<CapabilityNodeId>()
   const visitedDefinitions = new Set<ExecutionDefinition>()
   const compiledDefinitions = new Map<ExecutionDefinition, ExecutionModelNode>()
   const executionReferences: {
@@ -349,7 +370,7 @@ export function buildApplicationModel(
         )
         continue
       }
-      if (executionIds.has(contribution.id)) {
+      if (executionIds.has(executionNodeId(contribution.id))) {
         diagnostics.push(
           diagnostic(
             'LUTRE_EXECUTION_ID_COLLISION',
@@ -359,10 +380,11 @@ export function buildApplicationModel(
         )
         continue
       }
-      executionIds.add(contribution.id)
+      executionIds.add(executionNodeId(contribution.id))
       const executionSource = getSourceLocation(value)
       const execution: ExecutionModelNode = Object.freeze({
         ...contribution,
+        id: executionNodeId(contribution.id),
         dependencies: Object.freeze([...contribution.dependencies]),
         capabilities: Object.freeze([...contribution.capabilities]),
         moduleId,
@@ -379,7 +401,7 @@ export function buildApplicationModel(
       grouped.executions.push(execution)
       extensionExecutions.set(extension.identity, grouped)
       for (const dependency of execution.dependencies) {
-        const provider = providerNodes.get(dependency)
+        const provider = findProviderNode(context, dependency)
         if (provider) {
           edges.push({ from: execution.id, to: provider.id, kind: 'injects' })
           const providerModule = modules.find(
@@ -387,6 +409,7 @@ export function buildApplicationModel(
           )
           if (
             providerModule &&
+            !isLoggerToken(dependency) &&
             provider.moduleId !== moduleId &&
             !moduleDeclaresToken(module, dependency) &&
             !isTokenVisible(context, module, providerModule, dependency)
@@ -410,7 +433,7 @@ export function buildApplicationModel(
         }
       }
       for (const capability of execution.capabilities) {
-        const capabilityId = `capability:${capability.id}`
+        const capabilityId = capabilityNodeId(capability.id)
         if (!capabilityNodeIds.has(capabilityId)) {
           capabilityNodeIds.add(capabilityId)
           nodes.push({
@@ -493,7 +516,7 @@ export function buildApplicationModel(
 
   const extensionGroups = [...extensionExecutions.values()].map(
     ({ extension, executions: ownedExecutions }): ApplicationModelExtension => {
-      const extensionId = `extension:${extension.name}`
+      const extensionId = extensionNodeId(extension.name)
       nodes.push({
         kind: 'framework',
         id: extensionId,
@@ -527,6 +550,7 @@ export function buildApplicationModel(
 
   const extensions = new ApplicationModelExtensionRegistry(extensionGroups)
 
+  validateApplicationLogger(context)
   validateHostNamespaces(extensionGroups, diagnostics)
   validateNodeIds(nodes, diagnostics)
 

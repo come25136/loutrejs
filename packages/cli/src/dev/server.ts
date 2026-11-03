@@ -1,3 +1,23 @@
+import {
+  absoluteFsPath,
+  projectRelativePath,
+  type AbsoluteFsPath,
+} from '../paths.js'
+import {
+  normalizedWatchPath,
+  watchIgnorePattern,
+  type NormalizedWatchPath,
+  type WatchIgnorePattern,
+} from '../paths.js'
+import {
+  devtoolsBaseUrl,
+  devtoolsClientEndpoint,
+  devtoolsApplicationEndpoint,
+  type DevtoolsBaseUrl,
+  type DevtoolsClientEndpoint,
+  type DevtoolsApplicationEndpoint,
+} from './identity.js'
+import { boundPort, type BoundPort } from '@loutrejs/loutre/runtime'
 import { basename, relative } from 'node:path'
 import { watch, type FSWatcher } from 'chokidar'
 import {
@@ -60,10 +80,10 @@ export interface StartDevServerOptions {
 
 export interface DevServer {
   readonly hostname: '127.0.0.1'
-  readonly port: number
-  readonly url: string
-  readonly clientEndpoint: string
-  readonly applicationEndpoint: string
+  readonly port: BoundPort
+  readonly url: DevtoolsBaseUrl
+  readonly clientEndpoint: DevtoolsClientEndpoint
+  readonly applicationEndpoint: DevtoolsApplicationEndpoint
   close(): Promise<void>
 }
 
@@ -100,13 +120,14 @@ function rejectUnknownUpgrade(request: IncomingMessage, socket: Duplex): void {
 export async function startDevServer(
   options: StartDevServerOptions,
 ): Promise<DevServer> {
+  const projectRoot = absoluteFsPath(options.projectRoot)
   const origins = new Set(options.origins ?? DEFAULT_DEVTOOLS_ORIGINS)
   let state: GraphState = { revision: 0 }
   let reloadRequested = false
   let reloadPromise: Promise<void> | undefined
   let reloadTimer: ReturnType<typeof setTimeout> | undefined
   let watcher: FSWatcher | undefined
-  let watchedPaths: readonly string[] | undefined
+  let watchedPaths: readonly AbsoluteFsPath[] | undefined
   let controlPlane: DevtoolsControlPlane | undefined
   const eventStore = new DevtoolsEventStore(options.maxEvents)
 
@@ -123,7 +144,7 @@ export async function startDevServer(
           }
           if (loaded.watchFiles !== undefined) {
             watchedPaths = projectWatchFiles(
-              options.projectRoot,
+              projectRoot,
               loaded.watchFiles,
               options.ignore ?? [],
             )
@@ -172,13 +193,13 @@ export async function startDevServer(
   server.on('upgrade', rejectUnknownUpgrade)
 
   try {
-    watcher = watch(options.projectRoot, {
+    watcher = watch(projectRoot, {
       ignoreInitial: true,
       followSymlinks: false,
-      ignored: createWatchIgnore(options.projectRoot, options.ignore ?? []),
+      ignored: createWatchIgnore(projectRoot, options.ignore ?? []),
     })
     watcher.on('all', (_event, path) => {
-      if (!shouldReloadPath(options.projectRoot, watchedPaths, path)) return
+      if (!shouldReloadPath(projectRoot, watchedPaths, path)) return
       if (reloadTimer) clearTimeout(reloadTimer)
       reloadTimer = setTimeout(() => {
         void reload().then(() => {
@@ -221,10 +242,16 @@ export async function startDevServer(
   let closePromise: Promise<void> | undefined
   return {
     hostname: '127.0.0.1',
-    port: address.port,
-    url: `http://127.0.0.1:${address.port}`,
-    clientEndpoint: `ws://127.0.0.1:${address.port}${DEVTOOLS_CLIENT_CHANNEL_PATH}`,
-    applicationEndpoint: `ws://127.0.0.1:${address.port}${DEVTOOLS_APPLICATION_CHANNEL_PATH}`,
+    port: boundPort(address.port),
+    url: devtoolsBaseUrl(address.port),
+    clientEndpoint: devtoolsClientEndpoint(
+      address.port,
+      DEVTOOLS_CLIENT_CHANNEL_PATH,
+    ),
+    applicationEndpoint: devtoolsApplicationEndpoint(
+      address.port,
+      DEVTOOLS_APPLICATION_CHANNEL_PATH,
+    ),
     close() {
       closePromise ??= (async () => {
         if (reloadTimer) clearTimeout(reloadTimer)
@@ -284,50 +311,45 @@ function normalizeGraphLoadResult(
 }
 
 function projectWatchFiles(
-  projectRoot: string,
+  projectRoot: AbsoluteFsPath,
   files: readonly string[],
   customIgnore: readonly string[],
-): readonly string[] {
+): readonly AbsoluteFsPath[] {
   const ignored = createWatchIgnore(projectRoot, customIgnore)
   return [
     ...new Set(
-      files.filter((file) => {
-        const projectRelative = normalizeWatchPath(relative(projectRoot, file))
-        if (
-          projectRelative === '' ||
-          projectRelative === '.' ||
-          projectRelative.startsWith('../')
-        ) {
-          return false
-        }
-        return !ignored(file)
-      }),
+      files
+        .map((file) => absoluteFsPath(file))
+        .filter((file) => {
+          if (projectRelativePath(file, projectRoot) === undefined) return false
+          return !ignored(file)
+        }),
     ),
   ].toSorted()
 }
 
 function shouldReloadPath(
-  projectRoot: string,
-  watchedPaths: readonly string[] | undefined,
+  projectRoot: AbsoluteFsPath,
+  watchedPaths: readonly AbsoluteFsPath[] | undefined,
   changedPath: string,
 ): boolean {
   if (watchedPaths === undefined) return true
-  const changed = normalizeWatchPath(relative(projectRoot, changedPath))
+  const changed = normalizedWatchPath(relative(projectRoot, changedPath))
   return watchedPaths.some(
-    (path) => normalizeWatchPath(relative(projectRoot, path)) === changed,
+    (path) => normalizedWatchPath(relative(projectRoot, path)) === changed,
   )
 }
 
 function createWatchIgnore(
-  projectRoot: string,
+  projectRoot: AbsoluteFsPath,
   customIgnore: readonly string[],
 ): (path: string) => boolean {
   const custom = customIgnore
-    .map((value) => normalizeWatchPath(value))
+    .map(watchIgnorePattern)
     .filter((value) => value.length > 0 && value !== '.')
 
   return (path) => {
-    const projectRelative = normalizeWatchPath(relative(projectRoot, path))
+    const projectRelative = normalizedWatchPath(relative(projectRoot, path))
     if (
       projectRelative === '' ||
       projectRelative === '.' ||
@@ -344,15 +366,18 @@ function createWatchIgnore(
   }
 }
 
-function matchesIgnoredPath(path: string, ignored: string): boolean {
+function matchesIgnoredPath(
+  path: NormalizedWatchPath,
+  ignored: WatchIgnorePattern,
+): boolean {
   if (!ignored.includes('*') && !ignored.includes('?')) {
     if (!ignored.includes('/')) return path.split('/').includes(ignored)
-    return path === ignored || path.startsWith(`${ignored}/`)
+    return String(path) === ignored || path.startsWith(`${ignored}/`)
   }
   return globToRegExp(ignored).test(path)
 }
 
-function globToRegExp(pattern: string): RegExp {
+function globToRegExp(pattern: WatchIgnorePattern): RegExp {
   let source = '^'
   for (let index = 0; index < pattern.length; index += 1) {
     const character = pattern[index]!
@@ -372,10 +397,6 @@ function globToRegExp(pattern: string): RegExp {
     source += character.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
   }
   return new RegExp(`${source}(?:/.*)?$`)
-}
-
-function normalizeWatchPath(path: string): string {
-  return path.replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/+$/, '')
 }
 
 function waitForWatcherReady(watcher: FSWatcher): Promise<void> {

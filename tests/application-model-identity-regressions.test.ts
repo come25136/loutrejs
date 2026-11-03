@@ -268,8 +268,10 @@ describe('Application Model identity regressions', () => {
       id: 'fixture.dual-copy',
       [Symbol.for('loutre.execution-definition')]: true,
     })
+    if (!isExecutionDefinition(definition))
+      throw new Error('Execution Definitionのbrandが認識されません。')
     const Module = defineModule(() => ({
-      executions: [definition as unknown as ExecutionDefinition],
+      executions: [definition],
     }))
 
     expect(isExecutionDefinition(definition)).toBe(true)
@@ -283,7 +285,9 @@ describe('Application Model identity regressions', () => {
     const Second = class Duplicate {}
     const Module = defineModule(() => ({ providers: [First, Second] }))
     const model = buildApplicationModel({ modules: [Module()] })
-    const providers = model.nodes.filter((node) => node.kind === 'provider')
+    const providers = model.nodes.filter(
+      (node) => node.kind === 'provider' && node.moduleId !== 'application',
+    )
 
     expect(providers.map((provider) => provider.id)).toEqual([
       'provider:1',
@@ -450,7 +454,7 @@ describe('Application Model identity regressions', () => {
     }))
     const module = Module()
     const definition = defineApplication({ modules: [module] })
-    const mutable = module as unknown as {
+    const mutable = module as {
       definition: {
         providers: readonly unknown[]
         lifecycle: { onModuleInit: ReturnType<typeof hook> }

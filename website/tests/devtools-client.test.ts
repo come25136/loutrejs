@@ -55,12 +55,10 @@ class FakeWebSocket extends EventTarget {
   }
 }
 
-const originalWebSocket = globalThis.WebSocket
-
 beforeEach(() => {
   FakeWebSocket.instances.length = 0
   vi.useFakeTimers()
-  globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket
+  vi.stubGlobal('WebSocket', FakeWebSocket)
 })
 
 afterEach(() => {
@@ -68,7 +66,7 @@ afterEach(() => {
   disconnectDevtools('http://127.0.0.1:25138')
   disconnectDevtools('http://127.0.0.1:25139')
   disconnectDevtools('http://127.0.0.1:25140')
-  globalThis.WebSocket = originalWebSocket
+  vi.unstubAllGlobals()
   vi.useRealTimers()
 })
 

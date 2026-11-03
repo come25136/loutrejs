@@ -1,3 +1,10 @@
+import { isLoggerToken } from '../logger-internal.js'
+import {
+  moduleId,
+  providerNodeId,
+  type ModuleId,
+  type ProviderNodeId,
+} from './identity.js'
 import type { Diagnostic } from '../diagnostic.js'
 import {
   asModuleInstance,
@@ -16,16 +23,17 @@ import type {
 
 export interface ModelBuildContext {
   readonly options: ApplicationModelBuildOptions
+  readonly roots: readonly ModuleInstance[]
   readonly modules: readonly ModuleInstance[]
   readonly imports: ReadonlyMap<ModuleInstance, readonly ModuleInstance[]>
-  readonly moduleIds: ReadonlyMap<ModuleInstance, string>
+  readonly moduleIds: ReadonlyMap<ModuleInstance, ModuleId>
   readonly nodes: ApplicationModelNode[]
   readonly edges: ApplicationModelEdge[]
   readonly diagnostics: Diagnostic[]
   readonly providers: ProviderDescriptor[]
   readonly executions: ExecutionModelNode[]
   readonly providerNodes: Map<TokenLike, ProviderModelNode>
-  nextProviderId(): string
+  nextProviderId(): ProviderNodeId
 }
 
 function collectModules(roots: readonly ModuleInput[]) {
@@ -48,19 +56,20 @@ function collectModules(roots: readonly ModuleInput[]) {
     modules.push(module)
   }
   for (const root of roots) visit(root)
-  return { modules, imports }
+  return { modules, imports, rootModules: roots.map(normalize) }
 }
 
 export function createModelBuildContext(
   options: ApplicationModelBuildOptions,
 ): ModelBuildContext {
-  const { modules, imports } = collectModules(options.modules)
+  const { modules, imports, rootModules } = collectModules(options.modules)
   const moduleIds = new Map(
-    modules.map((module, index) => [module, `module:${index + 1}`]),
+    modules.map((module, index) => [module, moduleId(index + 1)]),
   )
   let providerOrdinal = 0
   return {
     options,
+    roots: rootModules,
     modules,
     imports,
     moduleIds,
@@ -70,6 +79,20 @@ export function createModelBuildContext(
     providers: [],
     executions: [],
     providerNodes: new Map(),
-    nextProviderId: () => `provider:${++providerOrdinal}`,
+    nextProviderId: () => providerNodeId(++providerOrdinal),
   }
+}
+
+export function findProviderNode(
+  context: Pick<ModelBuildContext, 'providerNodes'>,
+  token: TokenLike,
+): ProviderModelNode | undefined {
+  return (
+    context.providerNodes.get(token) ??
+    (isLoggerToken(token)
+      ? [...context.providerNodes.values()].find((node) =>
+          isLoggerToken(node.token),
+        )
+      : undefined)
+  )
 }

@@ -1,17 +1,25 @@
+import { type GraphQLFieldCoordinate, type BatchSize } from './identity.js'
 import type { GraphQLResolveInfo, GraphQLSchema } from 'graphql'
 import type { FieldOptions } from './data-types.js'
 
+export type RuntimeFieldOptions = Omit<
+  FieldOptions<unknown, unknown, unknown, unknown>,
+  'requires'
+> & { readonly requires?: readonly string[] }
+
 export interface DataDefinition {
-  readonly identity: string
-  readonly options: FieldOptions<any, any, any, any>
+  readonly identity: GraphQLFieldCoordinate
+  readonly options: Omit<RuntimeFieldOptions, 'maxBatchSize'> & {
+    readonly maxBatchSize?: BatchSize
+  }
 }
 const schemas = new WeakMap<
   GraphQLSchema,
-  ReadonlyMap<string, DataDefinition>
+  ReadonlyMap<GraphQLFieldCoordinate, DataDefinition>
 >()
 export function registerSchemaMetadata(
   schema: GraphQLSchema,
-  metadata: ReadonlyMap<string, DataDefinition>,
+  metadata: ReadonlyMap<GraphQLFieldCoordinate, DataDefinition>,
 ) {
   schemas.set(schema, metadata)
 }

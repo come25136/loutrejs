@@ -1,9 +1,10 @@
+import type { FlowNodeId } from '../../lib/devtools-identity'
 import type { LoutreFlowEdge, LoutreFlowNode } from './graph-adapter'
 
 export function followDraggedNode(
   nodes: readonly LoutreFlowNode[],
   edges: readonly LoutreFlowEdge[],
-  draggedNodeId: string,
+  draggedNodeId: FlowNodeId,
 ): LoutreFlowEdge[] {
   const affectedNodeIds = new Set([
     draggedNodeId,

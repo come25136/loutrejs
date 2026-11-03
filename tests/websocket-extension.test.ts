@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
+import { http } from '@loutrejs/loutre/http'
 import {
   bootstrapApplication,
   defineApplication,
@@ -78,6 +79,66 @@ function fixtureDriver(connection: FixtureConnection): WebSocketServerDriver {
 }
 
 describe('WebSocket Execution Extension', () => {
+  it.each([
+    '拒否',
+    '開始前の例外',
+    '開始後の例外',
+    'クライアント切断',
+  ] as const)('handshakeの%sでも接続とexecutionを残さない', async (mode) => {
+    const connection = new FixtureConnection()
+    const upgrade = vi.fn(fixtureDriver(connection).upgrade)
+    const handler = vi.fn()
+    const controller = new AbortController()
+    const failure = new Error('WebSocket handshake failed.')
+    const terminated = vi.spyOn(connection, 'terminate')
+    const completed = vi.fn()
+    const layer = http.middleware({
+      name: 'HandshakeValidation',
+      factory:
+        () =>
+        async ({ signal }, next) => {
+          if (mode === '拒否') return new Response('拒否', { status: 403 })
+          if (mode === '開始前の例外') throw failure
+          if (mode === 'クライアント切断') {
+            await new Promise<void>((_resolve, reject) => {
+              signal.addEventListener('abort', () => reject(signal.reason), {
+                once: true,
+              })
+              queueMicrotask(() => controller.abort(failure))
+            })
+          }
+          await next()
+          throw failure
+        },
+    })
+    const execution = websocket.implementation({
+      contract: websocket.contract({
+        route: { path: '/socket', handshake: { middlewares: [layer] } },
+      }),
+      factory: () => ({ route: handler }),
+    })
+    const Module = defineModule(() => ({ executions: [execution] }))
+    const application = await bootstrapApplication({
+      application: defineApplication({ modules: [Module()] }),
+      capabilities: [bindWebSocketServer({ runtime: 'test', upgrade })],
+      instrumentation: { beginExecution: () => ({ complete: completed }) },
+    })
+    try {
+      const response = application.websocket.upgrade(
+        new Request('http://fixture.test/socket', {
+          signal: controller.signal,
+        }),
+      )
+      if (mode === '拒否') expect((await response).status).toBe(403)
+      else await expect(response).rejects.toBe(failure)
+      expect(upgrade).toHaveBeenCalledTimes(mode === '開始後の例外' ? 1 : 0)
+      expect(terminated).toHaveBeenCalledTimes(mode === '開始後の例外' ? 1 : 0)
+      expect(handler).not.toHaveBeenCalled()
+      expect(completed).toHaveBeenCalledTimes(1)
+    } finally {
+      await application.close()
+    }
+  })
   it('nested route名を型安全なhandler keyとして公開する', () => {
     const contract = websocket.contract({
       api: {

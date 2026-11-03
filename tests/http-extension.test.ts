@@ -1,3 +1,4 @@
+import { recordingLogger } from './helpers/recording-logger.js'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { z } from 'zod'
 import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
@@ -22,7 +23,7 @@ import {
 describe('HTTP Execution Extension', () => {
   it('inject(Logger)へimplementationとmiddlewareのsourceを付与する', async () => {
     const records: LogRecord[] = []
-    const rootLogger = new Logger({ write: (record) => records.push(record) })
+    const logging = recordingLogger(records)
     const tracing = http.middleware({
       name: 'RequestTracing',
       factory:
@@ -52,9 +53,10 @@ describe('HTTP Execution Extension', () => {
     })
     const Module = defineModule(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: defineApplication({
+        modules: [Module(), logging.module],
+      }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
-      logger: rootLogger,
     })
 
     try {

@@ -1,3 +1,4 @@
+import { recordingLogger } from './helpers/recording-logger.js'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
 import {
@@ -208,13 +209,15 @@ describe('Application Model', () => {
 
   it('Application DefinitionのLoggerをProviderへ引き継ぐ', async () => {
     const records: LogRecord[] = []
-    const logger = new Logger({ write: (record) => records.push(record) })
+    const logging = recordingLogger(records)
     class Service {
       readonly logger = inject(Logger)
     }
     const Module = defineModule(() => ({ providers: [Service] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()], logger }),
+      application: defineApplication({
+        modules: [Module(), logging.module],
+      }),
     })
 
     application.get(Service).logger.info('Kernel Loggerを利用しました')

@@ -1,3 +1,4 @@
+import * as fixture from './helpers/identities.js'
 import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
 import { DevtoolsModule } from '@loutrejs/loutre/devtools'
 import { http } from '@loutrejs/loutre/http'
@@ -275,7 +276,7 @@ describe('Node runtime DevTools bridge', () => {
         )
       })
       const broken = session.instrumentation.beginExecution({
-        executionId: 'transport-broken-metadata',
+        executionId: fixture.executionNodeId('transport-broken-metadata'),
         executionKind: 'custom',
       })
       const circular: Record<string, unknown> = {}
@@ -285,7 +286,7 @@ describe('Node runtime DevTools bridge', () => {
       await new Promise((resolve) => setImmediate(resolve))
 
       const healthy = session.instrumentation.beginExecution({
-        executionId: 'transport-still-alive',
+        executionId: fixture.executionNodeId('transport-still-alive'),
         executionKind: 'custom',
       })
       healthy.complete()

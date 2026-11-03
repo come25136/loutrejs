@@ -1,0 +1,37 @@
+# HTTP Contractのrawルートと型宣言
+
+## 発生条件
+
+HTTP Contractのrawルートを別ファイルからexportし、型付きルート参照をGraphQLや通常HTTPの実装へ渡す場合。型テストだけが成功しても、rootのcheckやbuildがTS4023 / TS4082で失敗することがある。
+
+## 原因
+
+privateなunique symbolのbrandを、ルートを解決する条件型へ直接展開すると、別moduleのexportされた値の推論型がそのsymbol名を必要とする。型テストはdeclarationを無効化しており、この問題を検出できない。
+
+## 安全な確認方法
+
+同じファイル内の型テストに加え、Contractをexportするファイルと、それをimportするimplementationのファイルを分けてrootのcheckとbuildを実行する。pathのliteral型とmiddleware stateの推論が残ることも確認する。
+
+## 復旧方法
+
+brandは公開されたHttpContractRawRoute interfaceへ閉じ込め、解決済みルートの条件型からその名前付きinterfaceのbrand部分だけをOmitで参照する。middlewareの広い配列型まで交差させると、個別のtupleからstateを推論する際にanyへ広がるため、metadataの型を重複させない。private symbolそのものを公開したり、Contractの型をanyへ広げたりしない。
+
+## 再発防止策
+
+宣言出力を伴うcheck / buildと、別ファイルのexampleを検証に含める。HTTPとWSは同じ正規化済みpathとmiddlewareを使う。認証middlewareがUpgradeを見て認証を後回しにする場合も、共通処理が実行されることを確認する。HTTP認証を通した回数、ConnectionInitだけでの認証、継承前のURLの404を実serverで確認する。
+
+HTTP/1.1のWebSocket Upgradeのmethod確認をnative driverだけに任せると、テストdriverや別runtimeではPOSTでもsessionを開始できてしまう。共通WebSocket hostでGET以外を405とAllow: GETで拒否し、driverの呼び出しとExecution leaseの取得が起きないことを確認する。
+
+## Upgradeと通常HTTPの分岐を変更する場合
+
+### 発生条件・原因
+
+認証middlewareがUpgradeヘッダーを見て認証を延期する場合、Upgradeを通常HTTP handlerへ流す経路があると認証を迂回できる。Node adapterでRequestのmethodを省略するとPOSTもGETとして扱われ、拒否応答のheadersを捨てるとAllowやWWW-Authenticate等が失われる。一方、methodをそのまま渡すだけではFetchが禁止するTRACE等でRequestの作成が同期的に失敗する。元のmethodでGET以外をRequest作成前に拒否する。
+
+### 安全な確認方法
+
+通常HTTP fetchへUpgradeヘッダーとConnection: Upgradeをそれぞれ渡し、400でmiddlewareとhandlerへ到達しないことを確認する。実Node serverにはPOSTのUpgradeを送り405とAllow: GETを確認し、middlewareの拒否ではstatus・headers・bodyを確認する。WS専用実装でもmiddlewareのDI依存とcapabilityがModelへ登録されることを調べる。
+
+### 復旧方法・再発防止策
+
+middlewareの呼び出しを省略する方式へ戻さず、HTTP fetch側の拒否とWS側のhandshakeを分離する。middlewareのstateはConnectionInitへ渡し、未指定時だけoperationへそのまま引き継ぐ。next後の失敗と切断でも接続を終了しleaseを解放するテストを残す。認証を延期するstateはPartialとして表現し、必須の利用者はcontext作成時に確認する。

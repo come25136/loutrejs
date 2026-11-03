@@ -13,6 +13,7 @@ export type {
   HttpClientTransportResponse,
 } from './client.js'
 export { cors } from './cors.js'
+export { isWebSocketUpgrade } from './websocket-upgrade.js'
 export type { CorsLayerDescriptor, CorsOptions, CorsOrigin } from './cors.js'
 export { basicAuth, bearerAuth } from './auth.js'
 export type {
@@ -37,6 +38,7 @@ export {
   executionHttp as http,
   httpExecutionExtension,
   isHttpContract,
+  isHttpRawContractRoute,
   HTTP_SERVER,
   validate,
 } from './extension.js'
@@ -49,6 +51,9 @@ export type {
   HttpContractBranchDefinition,
   HttpContractNodeDefinition,
   HttpContractRouteTree,
+  HttpContractRouteDefinition,
+  HttpContractRawRouteDefinition,
+  HttpContractRawRoute,
   HttpExecutionContext,
   HttpExecutionDefinition,
   HttpExecutionRequestDefinition,
@@ -83,3 +88,8 @@ export {
 export type { HttpPathSegment, PathParamNames } from './path.js'
 
 export type { HttpRequestHeadDefinition } from './request-head.js'
+
+export * from './identity.js'
+export type { ParsedHttpPath } from './path.js'
+
+export type { BearerCredential } from './auth.js'

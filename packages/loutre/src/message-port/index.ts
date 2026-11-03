@@ -19,3 +19,12 @@ export type {
   MessagePortServerStreamResponseDefinition,
 } from './extension.js'
 export type { MessagePortHost, MessagePortLike } from './transport.js'
+
+export {
+  decodeMessagePortRequest,
+  messagePortProcedureName,
+} from './identity.js'
+export type {
+  MessagePortRequestId,
+  MessagePortProcedureName,
+} from './identity.js'

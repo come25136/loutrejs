@@ -1,3 +1,5 @@
+import { dependencyConsumerId } from './identity.js'
+import type { Descriptor } from '../internal/brand.js'
 import type { RuntimeCapability } from './extension.js'
 import { runInInjectionContext, type DependencyResolver } from './injection.js'
 import type { Type } from './type.js'
@@ -9,13 +11,15 @@ export interface GenericLayerContext<TState extends object = {}> {
 export type GenericLayerNext<TContribution extends object> =
   keyof TContribution extends never
     ? () => Promise<void>
-    : (contribution: TContribution) => Promise<void>
+    : {} extends TContribution
+      ? (contribution?: TContribution) => Promise<void>
+      : (contribution: TContribution) => Promise<void>
 
 export interface GenericLayer<
   TContext extends object = object,
   TContribution extends object = {},
   TOutcome = unknown,
-> {
+> extends Descriptor<'generic-layer'> {
   readonly kind: 'generic-layer'
   readonly state?: Type<TContribution>
   readonly name: string
@@ -25,6 +29,20 @@ export interface GenericLayer<
     next: GenericLayerNext<TContribution>,
   ) => Promise<void | TOutcome>
 }
+
+type LayerContribution<TLayer> =
+  TLayer extends GenericLayer<any, infer TState, any> ? TState : never
+
+type UnionToIntersection<T> = (
+  T extends unknown ? (value: T) => void : never
+) extends (value: infer TState) => void
+  ? TState
+  : never
+
+export type LayerState<TLayers extends readonly GenericLayer<any, any, any>[]> =
+  [TLayers[number]] extends [never]
+    ? {}
+    : UnionToIntersection<LayerContribution<TLayers[number]>> & object
 
 export function defineLayer<
   TContribution extends object = {},
@@ -42,7 +60,7 @@ export function defineLayer<
     name: declaration.name,
     capabilities: declaration.capabilities ?? [],
     factory: declaration.factory,
-  })
+  }) as GenericLayer<TContext, TContribution, TOutcome>
 }
 
 export function composeLayers<TContext extends object, TOutcome>(options: {
@@ -58,7 +76,7 @@ export function composeLayers<TContext extends object, TOutcome>(options: {
       {
         consumer: {
           kind: 'layer',
-          id: `layer:${index}:${layer.name}`,
+          id: dependencyConsumerId(`layer:${index}:${layer.name}`),
           name: layer.name,
         },
         resolve: (token, consumer) =>

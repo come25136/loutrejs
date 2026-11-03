@@ -1,5 +1,27 @@
+import { dependencyConsumerId } from '../core/identity.js'
+import { milliseconds, type DurationMs } from '../core/units.js'
+import {
+  createWebSocketSessionId,
+  webSocketProcedureName,
+  negotiatedSubprotocol,
+  observedCloseCode,
+  type WebSocketSessionId,
+  type WebSocketProcedureName,
+  type NegotiatedSubprotocol,
+  type ObservedCloseCode,
+} from './identity.js'
+import {
+  requestPathname,
+  type HttpPathTemplate,
+  type HttpNormalizedPath,
+} from '../http/identity.js'
+import type { ParsedHttpPath } from '../http/path.js'
+import type { Descriptor } from '../internal/brand.js'
+import type { ExecutionNodeId } from '../core/model/identity.js'
 import {
   collectInjectedDependencies,
+  getSourceLocation,
+  composeLayers,
   defineExecution,
   defineExecutionExtension,
   runtimeCapability,
@@ -10,6 +32,8 @@ import {
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
   type ExecutionRuntimeBinding,
+  type DependencyResolver,
+  type LayerState,
   type RuntimeCapabilityBinding,
   type SchemaOutput,
   type StandardSchemaV1,
@@ -28,6 +52,7 @@ import {
   normalizeHttpPath,
   parseHttpPath,
   type HttpPathSegment,
+  type HttpRawRouteDefinition,
 } from '../http/index.js'
 
 export type WebSocketDataMessage =
@@ -59,8 +84,8 @@ export interface WebSocketUpgradeOptions {
 }
 
 export interface WebSocketSession {
-  readonly id: string
-  readonly protocol: string
+  readonly id: WebSocketSessionId
+  readonly protocol: NegotiatedSubprotocol
 }
 
 export interface WebSocketServerDriver {
@@ -100,6 +125,7 @@ export interface WebSocketBranchDefinition {
 
 export interface WebSocketHandshakeDefinition extends HttpRequestHeadDefinition {
   readonly protocols?: readonly string[]
+  readonly middlewares?: HttpRawRouteDefinition['middlewares']
 }
 
 export interface WebSocketRouteDefinition {
@@ -114,7 +140,7 @@ export type WebSocketRouteTree = Readonly<
 
 export interface WebSocketContract<
   TRoutes extends WebSocketRouteTree = WebSocketRouteTree,
-> {
+> extends Descriptor<'websocket-contract'> {
   readonly kind: 'websocket-contract'
   readonly routes: TRoutes
 }
@@ -167,6 +193,17 @@ export type WebSocketHandlerContext<
   TRoute extends WebSocketRouteDefinition = WebSocketRouteDefinition,
 > = {
   readonly request: Request
+  readonly state: Readonly<
+    TRoute extends {
+      readonly handshake: {
+        readonly middlewares: infer TLayers extends NonNullable<
+          WebSocketHandshakeDefinition['middlewares']
+        >
+      }
+    }
+      ? LayerState<TLayers>
+      : {}
+  >
   readonly session: WebSocketSession
   readonly protocol: string
   readonly execution: ExecutionContextView
@@ -213,10 +250,10 @@ export interface WebSocketImplementationDefinition<
 }
 
 interface CompiledWebSocketRoute {
-  readonly name: string
-  readonly path: string
-  readonly normalizedPath: string
-  readonly segments: readonly HttpPathSegment[]
+  readonly name: WebSocketProcedureName
+  readonly path: HttpPathTemplate
+  readonly normalizedPath: HttpNormalizedPath
+  readonly segments: ParsedHttpPath
   readonly handshake?: WebSocketHandshakeDefinition
   readonly messages?: WebSocketMessageCodec
 }
@@ -233,7 +270,8 @@ interface ActiveSession {
 }
 
 interface RuntimeWebSocketRoute {
-  readonly executionId: string
+  readonly executionId: ExecutionNodeId
+  readonly resolve: DependencyResolver
   readonly route: CompiledWebSocketRoute
 }
 
@@ -258,31 +296,57 @@ export const websocketExtension = defineExecutionExtension<
   abiVersion: '2',
   name: 'loutre:websocket',
   compile(definition, context) {
-    return {
-      kind: 'execution',
-      id:
-        definition.name ||
-        `${context.moduleId}.websocket.${context.definitionIndex}`,
-      executionKind: 'websocket.session',
-      dependencies: collectInjectedDependencies(
+    const id =
+      definition.name ||
+      `${context.moduleId}.websocket.${context.definitionIndex}`
+    const routes = compileRouteTree(definition.contract.routes)
+    const dependencies = new Set(
+      collectInjectedDependencies(
         {
           kind: 'execution',
-          id: `websocket:${definition.name || `${context.moduleId}.websocket.${context.definitionIndex}`}`,
-          name:
-            definition.name ||
-            `${context.moduleId}.websocket.${context.definitionIndex}`,
+          id: dependencyConsumerId(`websocket:${id}`),
+          name: id,
         },
         () => definition.factory(),
       ),
-      capabilities: [WEBSOCKET_SERVER],
+    )
+    for (const route of routes) {
+      route.handshake?.middlewares?.forEach((middleware, index) => {
+        for (const dependency of collectInjectedDependencies(
+          {
+            kind: 'layer',
+            id: dependencyConsumerId(`websocket:${id}:${route.name}:${index}`),
+            name: middleware.name,
+          },
+          () => middleware.factory(),
+        ))
+          dependencies.add(dependency)
+      })
+    }
+    return {
+      kind: 'execution',
+      id,
+      executionKind: 'websocket.session',
+      dependencies: [...dependencies],
+      capabilities: [
+        ...new Set([
+          WEBSOCKET_SERVER,
+          ...routes.flatMap(
+            (route) =>
+              route.handshake?.middlewares?.flatMap(
+                (middleware) => middleware.capabilities,
+              ) ?? [],
+          ),
+        ]),
+      ],
       compiled: Object.freeze({
-        routes: Object.freeze(compileRouteTree(definition.contract.routes)),
+        routes: Object.freeze(routes),
         factory: definition.factory,
       }),
     }
   },
   validate({ executions }) {
-    const paths = new Map<string, string>()
+    const paths = new Map<HttpNormalizedPath, ExecutionNodeId>()
     return executions.flatMap((execution) =>
       execution.compiled.routes.flatMap((route) => {
         const owner = paths.get(route.normalizedPath)
@@ -311,6 +375,19 @@ export const websocketExtension = defineExecutionExtension<
     routes: execution.compiled.routes.map((route) => ({
       name: route.name,
       path: route.path,
+      ...(route.handshake?.middlewares?.length
+        ? {
+            middlewares: route.handshake.middlewares.map((middleware) => ({
+              name: middleware.name,
+              capabilities: middleware.capabilities.map(
+                (capability) => capability.id,
+              ),
+              ...(getSourceLocation(middleware) === undefined
+                ? {}
+                : { source: getSourceLocation(middleware) }),
+            })),
+          }
+        : {}),
       ...(route.messages === undefined
         ? {}
         : {
@@ -347,7 +424,10 @@ type WebSocketV2Tree<TTree extends WebSocketRouteTree> = {
 export function defineWebSocketContract<
   const TRoutes extends WebSocketRouteTree,
 >(routes: TRoutes & WebSocketV2Tree<TRoutes>): WebSocketContract<TRoutes> {
-  return Object.freeze({ kind: 'websocket-contract', routes })
+  return Object.freeze({
+    kind: 'websocket-contract',
+    routes,
+  }) as WebSocketContract<TRoutes>
 }
 
 export function defineWebSocketImplementation<
@@ -422,11 +502,11 @@ function compileRouteTree(
   tree: WebSocketRouteTree,
   parentPath = '',
   prefix = '',
-  routeNames = new Set<string>(),
+  routeNames = new Set<WebSocketProcedureName>(),
 ): readonly CompiledWebSocketRoute[] {
   return Object.entries(tree).flatMap(([name, node]) => {
     if ('request' in node || 'responses' in node)
-      throw new TypeError('WebSocket v2ではhandshakeを使用してください。')
+      throw new TypeError('Use handshake for WebSocket v2 routes.')
     if (isBranch(node)) {
       const branchPath = node.path ?? ''
       if (branchPath !== '') parseHttpPath(branchPath)
@@ -441,14 +521,16 @@ function compileRouteTree(
     const path = joinPath(parentPath, node.path)
     const segments = parseHttpPath(path)
     assertExactPathParams(path, segments, node.handshake?.params)
-    const routeName = prefix ? `${prefix}.${name}` : name
+    const routeName = webSocketProcedureName(
+      prefix ? `${prefix}.${name}` : name,
+    )
     if (routeNames.has(routeName))
       throw new TypeError(`Duplicate nested WebSocket route name: ${routeName}`)
     routeNames.add(routeName)
     return [
       Object.freeze({
         name: routeName,
-        path,
+        path: path as HttpPathTemplate,
         normalizedPath: normalizeHttpPath(segments),
         segments,
         ...(node.handshake === undefined
@@ -487,6 +569,9 @@ function snapshotHandshake(
 ): WebSocketHandshakeDefinition {
   return Object.freeze({
     ...handshake,
+    ...(handshake.middlewares === undefined
+      ? {}
+      : { middlewares: Object.freeze([...handshake.middlewares]) }),
     ...(handshake.params === undefined
       ? {}
       : { params: Object.freeze({ ...handshake.params }) }),
@@ -533,7 +618,7 @@ function createWebSocketRuntime(
         {
           consumer: {
             kind: 'execution',
-            id: `websocket:${execution.id}`,
+            id: dependencyConsumerId(`websocket:${execution.id}`),
             name: execution.id,
           },
           resolve: (token, consumer) => resolve(token, { consumer }),
@@ -543,9 +628,10 @@ function createWebSocketRuntime(
     )
   }
   const routes = bindings
-    .flatMap(({ execution }) =>
+    .flatMap(({ execution, resolve }) =>
       execution.compiled.routes.map((route): RuntimeWebSocketRoute => ({
         executionId: execution.id,
+        resolve,
         route,
       })),
     )
@@ -556,6 +642,12 @@ function createWebSocketRuntime(
     async upgrade(request) {
       if (state !== 'running') {
         return Response.json({ error: 'Service Unavailable' }, { status: 503 })
+      }
+      if (request.method !== 'GET') {
+        return new Response('WebSocket handshake requires GET.', {
+          status: 405,
+          headers: { allow: 'GET' },
+        })
       }
       let match: ReturnType<typeof findRoute>
       try {
@@ -586,7 +678,7 @@ function createWebSocketRuntime(
         offered.includes(value),
       )
       if (match.route.handshake?.protocols?.length && protocol === undefined) {
-        return new Response('WebSocket subprotocolが一致しません。', {
+        return new Response('WebSocket subprotocol mismatch.', {
           status: 400,
         })
       }
@@ -606,16 +698,44 @@ function createWebSocketRuntime(
         completePendingIngress()
         throw error
       }
-      let upgraded: WebSocketUpgradeResult
+      let upgraded: WebSocketUpgradeResult | undefined
+      let handshakeState: Readonly<Record<string, unknown>> = {}
+      const signal = AbortSignal.any([request.signal, lease.signal])
       try {
-        upgraded = await driver.upgrade(
-          request,
-          protocol === undefined ? {} : { protocol },
-        )
+        const dispatch = () =>
+          composeLayers({
+            context: { request, input: { ...input, body: undefined }, signal },
+            layers: match.route.handshake?.middlewares ?? [],
+            resolve: match.resolve,
+            terminal: async ({ state: middlewareState }) => {
+              signal.throwIfAborted()
+              handshakeState = middlewareState
+              upgraded = await driver.upgrade(
+                request,
+                protocol === undefined ? {} : { protocol },
+              )
+              return upgraded.response
+            },
+          })
+        const response = await (lease.run ? lease.run(dispatch) : dispatch())
+        if (!(response instanceof Response))
+          throw new TypeError(
+            'WebSocket handshake middleware must return a Response.',
+          )
+        signal.throwIfAborted()
+        if (!upgraded) {
+          lease.complete()
+          completePendingIngress()
+          return response
+        }
       } catch (error) {
-        lease.fail?.(error)
-        lease.complete()
-        completePendingIngress()
+        try {
+          await upgraded?.connection.terminate()
+        } finally {
+          lease.fail?.(error)
+          lease.complete()
+          completePendingIngress()
+        }
         throw error
       }
       const session = createSession(
@@ -624,6 +744,7 @@ function createWebSocketRuntime(
         applicationRuntime,
         match.route,
         input,
+        handshakeState,
         lease,
         handlers.get(match.executionId)?.[match.route.name],
         lease.run,
@@ -686,17 +807,22 @@ function findRoute(
   request: Request,
 ):
   | {
-      readonly executionId: string
+      readonly executionId: ExecutionNodeId
+      readonly resolve: DependencyResolver
       readonly route: CompiledWebSocketRoute
       readonly params: Readonly<Record<string, string>>
     }
   | undefined {
   const url = new URL(request.url)
   for (const candidate of routes) {
-    const params = matchHttpPath(candidate.route.segments, url.pathname)
+    const params = matchHttpPath(
+      candidate.route.segments,
+      requestPathname(url.pathname),
+    )
     if (params) {
       return {
         executionId: candidate.executionId,
+        resolve: candidate.resolve,
         route: candidate.route,
         params,
       }
@@ -764,6 +890,7 @@ function createSession(
     readonly query: unknown
     readonly headers: unknown
   },
+  handshakeState: Readonly<Record<string, unknown>>,
   lease: ReturnType<ExecutionKernelRuntime['beginExecution']>,
   handler:
     | ((context: WebSocketHandlerContext<any>) => void | Promise<void>)
@@ -771,8 +898,8 @@ function createSession(
   runInExecution: (<T>(operation: () => T) => T) | undefined,
 ): { readonly active: ActiveSession; readonly completion: Promise<void> } {
   const session = Object.freeze({
-    id: `ws_${crypto.randomUUID()}`,
-    protocol: connection.protocol,
+    id: createWebSocketSessionId(),
+    protocol: negotiatedSubprotocol(connection.protocol),
   })
   lease.annotate?.({
     'websocket.session.id': session.id,
@@ -830,6 +957,7 @@ function createSession(
   const messages = decodeMessages(connection.messages, route.messages)
   const context = {
     request,
+    state: handshakeState,
     session,
     protocol: session.protocol,
     execution: {
@@ -962,15 +1090,17 @@ async function encodeMessage(
   }
 }
 
-function normalizeCloseInfo(info: WebSocketCloseInfo): WebSocketCloseInfo {
+function normalizeCloseInfo(
+  info: WebSocketCloseInfo,
+): WebSocketCloseInfo & { readonly code: ObservedCloseCode } {
   return {
-    code: Number.isInteger(info.code) ? info.code : 1006,
+    code: observedCloseCode(Number.isInteger(info.code) ? info.code : 1006),
     reason: info.reason ?? '',
     wasClean: info.wasClean === true,
   }
 }
 
-function webSocketGracefulShutdownBudget(timeoutMs: number): number {
-  if (timeoutMs <= 0) return 0
-  return Math.min(5_000, Math.max(0, Math.floor(timeoutMs * 0.8)))
+function webSocketGracefulShutdownBudget(timeoutMs: DurationMs): DurationMs {
+  if (timeoutMs <= 0) return milliseconds(0)
+  return milliseconds(Math.min(5_000, Math.max(0, Math.floor(timeoutMs * 0.8))))
 }

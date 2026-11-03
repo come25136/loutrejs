@@ -1,17 +1,18 @@
+import type { GraphViewNodeId } from './devtools-identity'
 import type { GraphDiagnostic, GraphSnapshot } from './devtools'
 import type { Locale } from './i18n'
 
 export function diagnosticsByNodeId(
   snapshot: GraphSnapshot,
-): ReadonlyMap<string, readonly GraphDiagnostic[]> {
-  const nodeIds = new Set(snapshot.nodes.map((node) => node.id))
-  const diagnostics = new Map<string, GraphDiagnostic[]>()
+): ReadonlyMap<GraphViewNodeId, readonly GraphDiagnostic[]> {
+  const nodeIds = new Map<string, GraphViewNodeId>(
+    snapshot.nodes.map((node) => [node.id, node.id]),
+  )
+  const diagnostics = new Map<GraphViewNodeId, GraphDiagnostic[]>()
   for (const diagnostic of snapshot.diagnostics) {
-    if (!nodeIds.has(diagnostic.path)) continue
-    diagnostics.set(diagnostic.path, [
-      ...(diagnostics.get(diagnostic.path) ?? []),
-      diagnostic,
-    ])
+    const nodeId = nodeIds.get(diagnostic.path)
+    if (nodeId === undefined) continue
+    diagnostics.set(nodeId, [...(diagnostics.get(nodeId) ?? []), diagnostic])
   }
   return diagnostics
 }

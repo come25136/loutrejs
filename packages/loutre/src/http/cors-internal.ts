@@ -1,3 +1,12 @@
+import {
+  normalizeHttpMethod,
+  httpHeaderName,
+  corsOriginValue,
+  type HttpMethod,
+  type HttpHeaderName,
+  type CorsOriginValue,
+} from './identity.js'
+import { seconds, type DurationSeconds } from '../core/units.js'
 export type CorsOrigin =
   | string
   | readonly string[]
@@ -15,16 +24,16 @@ export interface CorsPolicyOptions {
 export type CorsPolicy = Readonly<{
   origin:
     | { readonly kind: 'wildcard' }
-    | { readonly kind: 'exact'; readonly origins: ReadonlySet<string> }
+    | { readonly kind: 'exact'; readonly origins: ReadonlySet<CorsOriginValue> }
     | {
         readonly kind: 'predicate'
         readonly predicate: (origin: string) => boolean | Promise<boolean>
       }
-  allowMethods: readonly string[] | undefined
-  allowHeaders: readonly string[] | undefined
-  exposeHeaders: readonly string[]
+  allowMethods: readonly HttpMethod[] | undefined
+  allowHeaders: readonly HttpHeaderName[] | undefined
+  exposeHeaders: readonly HttpHeaderName[]
   credentials: boolean
-  maxAge: number | undefined
+  maxAge: DurationSeconds | undefined
 }>
 
 const policies = new WeakMap<object, CorsPolicy>()
@@ -37,16 +46,20 @@ export function normalizeCorsPolicy(options: CorsPolicyOptions): CorsPolicy {
     allowMethods:
       options.allowMethods === undefined
         ? undefined
-        : normalizeTokens(options.allowMethods, 'allowMethods', true),
+        : normalizeTokens(options.allowMethods, 'allowMethods', true).map(
+            normalizeHttpMethod,
+          ),
     allowHeaders:
       options.allowHeaders === undefined
         ? undefined
-        : normalizeTokens(options.allowHeaders, 'allowHeaders', false),
+        : normalizeTokens(options.allowHeaders, 'allowHeaders', false).map(
+            httpHeaderName,
+          ),
     exposeHeaders: normalizeTokens(
       options.exposeHeaders ?? [],
       'exposeHeaders',
       false,
-    ),
+    ).map(httpHeaderName),
     credentials,
     maxAge: normalizeMaxAge(options.maxAge),
   })
@@ -151,7 +164,7 @@ async function applyOrigin(
   appendVary(headers, 'Origin')
   const allowed =
     policy.origin.kind === 'exact'
-      ? policy.origin.origins.has(origin)
+      ? policy.origin.origins.has(corsOriginValue(origin))
       : await policy.origin.predicate(origin)
   if (allowed) headers.set('access-control-allow-origin', origin)
 }
@@ -166,7 +179,7 @@ function normalizeOrigin(
 
   const origins = typeof origin === 'string' ? [origin] : [...origin]
   if (origins.length === 0) {
-    return Object.freeze({ kind: 'exact', origins: new Set<string>() })
+    return Object.freeze({ kind: 'exact', origins: new Set<CorsOriginValue>() })
   }
   for (const value of origins) {
     if (value.length === 0 || containsControlCharacter(value)) {
@@ -185,7 +198,7 @@ function normalizeOrigin(
   }
   return Object.freeze({
     kind: 'exact',
-    origins: new Set(origins),
+    origins: new Set(origins.map(corsOriginValue)),
   })
 }
 
@@ -213,12 +226,14 @@ function normalizeTokens(
   )
 }
 
-function normalizeMaxAge(maxAge: number | undefined): number | undefined {
+function normalizeMaxAge(
+  maxAge: number | undefined,
+): DurationSeconds | undefined {
   if (maxAge === undefined) return undefined
   if (!Number.isSafeInteger(maxAge) || maxAge < 0) {
     throw new TypeError('CORS maxAge must be a non-negative safe integer')
   }
-  return maxAge
+  return seconds(maxAge)
 }
 
 function appendVary(headers: Headers, value: string): void {

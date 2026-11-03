@@ -1,3 +1,5 @@
+export { LoggerService, LoggerToken } from './logger.js'
+export { LoggerModule } from './logger-module.js'
 export { defineArgs, isArgsClass, loadArgs } from './args.js'
 export type { ArgsClass, ArgsKey, ArgsSchema } from './args.js'
 export {
@@ -23,6 +25,7 @@ export type {
   AnyExecutionExtension,
   ExecutionCompileContext,
   ExecutionContribution,
+  ModelExecutionContribution,
   ExecutionRuntimeBinding,
   ExecutionDefinition,
   ExecutionDeclaration,
@@ -59,6 +62,7 @@ export type {
   GenericLayer,
   GenericLayerContext,
   GenericLayerNext,
+  LayerState,
 } from './generic-layer.js'
 export {
   collectInjectedDependencies,
@@ -81,6 +85,7 @@ export type {
   ModuleLifecycle,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  OnApplicationDispose,
   OnModuleDestroy,
   OnModuleInit,
 } from './lifecycle.js'
@@ -166,3 +171,21 @@ export type {
 } from './token.js'
 export { type } from './type.js'
 export type { Type, TypeOf } from './type.js'
+
+export type * from './model/identity.js'
+export * from './identity.js'
+export * from './units.js'
+
+export { parseModelNodeId, parseProviderNodeId } from './model/identity.js'
+
+export {
+  sourceFileReference,
+  sourceLine,
+  sourceColumn,
+} from './source-location.js'
+export type {
+  SourceLocationInput,
+  SourceFileReference,
+  SourceLine,
+  SourceColumn,
+} from './source-location.js'

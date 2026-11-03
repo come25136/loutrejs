@@ -19,36 +19,42 @@ type Mutation {
   increment(amount: Int!): Counter!
 }`
 
-const resolverSource = `import type { Resolvers } from './generated/types.js'
-import type { AppContext } from './context.js'
+const contractSource = `import { http } from '@loutrejs/loutre/http'
 
-export const resolvers = {
-  Query: {
-    counter: ({ context }) => context.counter.current(),
-  },
-  Mutation: {
-    increment: ({ args, context }) =>
-      context.counter.increment(args.amount),
-  },
-} satisfies Resolvers<AppContext>`
+export const ApiContract = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})`
 
 const endpointSource = `import { graphql } from '@loutrejs/graphql'
 import { inject } from '@loutrejs/loutre'
+import { ApiContract } from '../http/endpoint.js'
 import { bindManifest } from './generated/bindings.js'
 import { schemaDocument } from './generated/schema-ast.js'
-import { resolvers } from './resolvers.js'
 import { CounterStore } from '../domain/counter.js'
-import type { AppContext } from './context.js'
+
+interface AppContext {
+  readonly counter: CounterStore
+  readonly signal: AbortSignal
+}
 
 const manifest = bindManifest<AppContext>({
   schemaDocument,
-  resolvers,
+  resolvers: {
+    Query: {
+      counter: ({ context }) => context.counter.current(),
+    },
+    Mutation: {
+      increment: ({ args, context }) =>
+        context.counter.increment(args.amount),
+    },
+  },
 })
 
-export const endpoint = graphql.endpoint({
+export const endpoint = graphql.implementation({
   name: 'Counter',
-  path: '/graphql',
+  route: ApiContract.routes.graphql,
   manifest,
+  transports: { http: true, websocket: true },
   factory: (counter = inject(CounterStore)) => ({
     context: ({ signal }) => ({ counter, signal }),
   }),
@@ -99,22 +105,22 @@ export function GraphQLSection({ locale }: { readonly locale: Locale }) {
               ],
               [
                 {
-                  path: 'src/graphql/resolvers.ts',
+                  path: 'src/graphql/endpoint.ts',
                   language: 'typescript',
                   content: (
                     <HighlightedCode
-                      source={resolverSource}
+                      source={endpointSource}
                       lineNumbers
                       className="pb-6 pt-2"
                     />
                   ),
                 },
                 {
-                  path: 'src/graphql/endpoint.ts',
+                  path: 'src/http/endpoint.ts',
                   language: 'typescript',
                   content: (
                     <HighlightedCode
-                      source={endpointSource}
+                      source={contractSource}
                       lineNumbers
                       className="pb-6 pt-2"
                     />

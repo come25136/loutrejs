@@ -1,3 +1,4 @@
+import { absoluteFsPath, type AbsoluteFsPath } from './paths.js'
 import {
   readFile,
   mkdir,
@@ -50,14 +51,25 @@ import {
   type GraphQLCodegenTarget,
 } from './graphql-config.js'
 
+type GeneratedTypeName = string & { readonly '~loutre.codegen': 'type-name' }
+type ModuleSpecifier = string & {
+  readonly '~loutre.codegen': 'module-specifier'
+}
+const moduleSpecifier = (value: string): ModuleSpecifier =>
+  value as ModuleSpecifier
+const generatedTypeImport = (
+  binding: string,
+  specifier: ModuleSpecifier,
+): string => `import type ${binding} from '${specifier}'`
+
 export const generatedHeader =
   '// @generated loutre graphql generateの出力です。直接編集しないでください。\n'
 
 export async function inputFiles(
   patterns: readonly string[],
   cwd: string,
-): Promise<string[]> {
-  const files = new Set<string>()
+): Promise<AbsoluteFsPath[]> {
+  const files = new Set<AbsoluteFsPath>()
   for (const pattern of patterns) {
     if (/^[a-z][a-z\d+.-]*:\/\//i.test(pattern))
       throw new Error('入力はlocal SDL / operation fileを指定してください。')
@@ -69,12 +81,12 @@ export async function inputFiles(
     })
     if (matches.length === 0)
       throw new Error(`入力fileが見つかりません: ${pattern}`)
-    for (const file of matches) files.add(resolve(file))
+    for (const file of matches) files.add(absoluteFsPath(file))
   }
   return [...files].toSorted()
 }
 
-async function documents(files: readonly string[]) {
+async function documents(files: readonly AbsoluteFsPath[]) {
   return Promise.all(
     files.map(async (file) => ({
       location: file,
@@ -186,12 +198,12 @@ function inputProperties(
     )
     .join('\n')
 }
-async function formattedOutput(path: string, content: string) {
+async function formattedOutput(path: AbsoluteFsPath, content: string) {
   const module = await parseTypeScript(content, {
     syntax: 'typescript',
     comments: false,
   })
-  const aliases = new Map<string, string>()
+  const aliases = new Map<GeneratedTypeName, string>()
   const body = []
   const names = new Set<string>()
   const templateModule = await parseTypeScript('const value = Kind.NAME', {
@@ -290,7 +302,7 @@ async function formattedOutput(path: string, content: string) {
       statement.type === 'ExportDeclaration' &&
       statement.declaration.type === 'TsTypeAliasDeclaration'
     ) {
-      const name = statement.declaration.id.value
+      const name = statement.declaration.id.value as GeneratedTypeName
       const printed = (await printTypeScript({ ...module, body: [statement] }))
         .code
       const previous = aliases.get(name)
@@ -377,7 +389,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
           ]
         : [{ typescript: {} }, { operations: {} }, { documentNode: {} }],
   })
-  const output = resolve(cwd, target.output)
+  const output = absoluteFsPath(cwd, target.output)
   if (target.kind === 'client')
     return {
       name: 'client',
@@ -520,15 +532,15 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
   const extra = `\nimport type * as $LoutreData from '@loutrejs/graphql'\nexport type CoercedArguments<T, K extends keyof T> = Omit<T, K> & { readonly [P in K]-?: Exclude<T[P], undefined> }\nexport interface SchemaFields<Context extends object> { ${fields} }\nexport type Resolvers<Context extends object = object> = $LoutreData.ResolverMap<StandardResolvers<Context>, ${batchFields}>\n`
   const outputs = {
     'types.ts': content + extra,
-    'schema-ast.ts': `import type { DocumentNode } from 'graphql'\nexport const schemaDocument: DocumentNode = ${JSON.stringify(blueprint)}`,
-    'bindings.ts': `import type { DocumentNode } from 'graphql'\nimport { bindManifest as bindRuntimeManifest, type GraphQLManifest } from '@loutrejs/graphql/runtime'\nimport type { Resolvers } from './types.js'\nexport function bindManifest<Context extends object>(input: { readonly schemaDocument: DocumentNode; readonly resolvers: Resolvers<Context> }): GraphQLManifest<Context> { return bindRuntimeManifest<Context>(input) }`,
+    'schema-ast.ts': `${generatedTypeImport('{ DocumentNode }', moduleSpecifier('graphql'))}\nexport const schemaDocument: DocumentNode = ${JSON.stringify(blueprint)}`,
+    'bindings.ts': `${generatedTypeImport('{ DocumentNode }', moduleSpecifier('graphql'))}\nimport { bindManifest as bindRuntimeManifest, type GraphQLManifest } from '@loutrejs/graphql/runtime'\n${generatedTypeImport('{ Resolvers }', moduleSpecifier('./types.js'))}\nexport function bindManifest<Context extends object>(input: { readonly schemaDocument: DocumentNode; readonly resolvers: Resolvers<Context> }): GraphQLManifest<Context> { return bindRuntimeManifest<Context>(input) }`,
   }
   return {
     name: 'server',
     root: output,
     files: await Promise.all(
       Object.entries(outputs).map(([file, source]) =>
-        formattedOutput(resolve(output, file), source),
+        formattedOutput(absoluteFsPath(output, file), source),
       ),
     ),
     inputs: files,
@@ -548,9 +560,11 @@ export async function planGeneration(configPath: string, selected?: string) {
       name,
     })),
   )
-  const roots: string[] = []
+  const roots: AbsoluteFsPath[] = []
   const inputs = new Set(
-    generations.flatMap((generation) => generation.inputs).concat(configPath),
+    generations
+      .flatMap((generation) => generation.inputs)
+      .concat(absoluteFsPath(configPath)),
   )
   for (const generation of generations) {
     if (
@@ -571,7 +585,7 @@ export async function planGeneration(configPath: string, selected?: string) {
   }
   return generations
 }
-async function existingContent(path: string) {
+async function existingContent(path: AbsoluteFsPath) {
   try {
     return await readFile(path, 'utf8')
   } catch (error) {
@@ -579,7 +593,7 @@ async function existingContent(path: string) {
     throw error
   }
 }
-async function exists(path: string) {
+async function exists(path: AbsoluteFsPath) {
   try {
     await access(path)
     return true
@@ -597,8 +611,8 @@ export async function generate(
   const outputs = generations.flatMap((generation) =>
     generation.files.map((file) => ({ ...file, name: generation.name })),
   )
-  const changed: string[] = []
-  const obsoleteRoots = new Set<string>()
+  const changed: AbsoluteFsPath[] = []
+  const obsoleteRoots = new Set<AbsoluteFsPath>()
   for (const output of outputs) {
     const previous = await existingContent(output.path)
     if (previous !== undefined && !previous.startsWith(generatedHeader))
@@ -613,11 +627,14 @@ export async function generate(
         onlyFiles: true,
         dot: true,
       })
-      for (const path of existing) {
+      for (const existingPath of existing) {
+        const path = absoluteFsPath(existingPath)
         if (generation.files.some((file) => file.path === path)) continue
         if (
           path === resolve(generation.root, 'data.ts') &&
-          (await existingContent(path))?.startsWith(generatedHeader)
+          (await existingContent(absoluteFsPath(path)))?.startsWith(
+            generatedHeader,
+          )
         ) {
           changed.push(path)
           obsoleteRoots.add(generation.root)
@@ -629,9 +646,9 @@ export async function generate(
   }
   if (!check && changed.length) {
     const stages: {
-      root: string
-      temporary: string
-      backup: string
+      root: AbsoluteFsPath
+      temporary: AbsoluteFsPath
+      backup: AbsoluteFsPath
       previous: boolean
       mutated: boolean
       preserveBackup: boolean
@@ -644,8 +661,10 @@ export async function generate(
         )
           continue
         await mkdir(dirname(generation.root), { recursive: true })
-        const temporary = `${generation.root}.${randomUUID()}.tmp`
-        const backup = `${generation.root}.${randomUUID()}.tmp`
+        const temporary = absoluteFsPath(
+          `${generation.root}.${randomUUID()}.tmp`,
+        )
+        const backup = absoluteFsPath(`${generation.root}.${randomUUID()}.tmp`)
         const stage = {
           root: generation.root,
           temporary,

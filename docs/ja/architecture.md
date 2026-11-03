@@ -188,6 +188,8 @@ LoutreはApplicationを起動する前に、`inject()`などから「どのサ�
 
 記録したサービスを毎回すべて使う必要はありません。必要なサービスは常に同じように取得し、使うかどうかはメソッドやhandler内の処理で判断してください。
 
+`LayerState<typeof layers>`は、generic layerの配列からstate contributionを結合した型を取得する型utilityです。HTTP endpointとGraphQL HTTPのstate推論で利用します。
+
 ### 独自loggerなどで依存元を取得する
 
 `injectInquirer()`は、今作っているサービスを直接要求した相手を返します。返された相手をconsumerと呼びます。ログに要求元の名前を付けるなどの補足情報（metadata）に使い、取得するサービスの切り替えには使わないでください。
@@ -233,12 +235,11 @@ class MyService {
 要求元ごとに異なる情報を保存する独自loggerには、要求のたびに新しいinstanceを作る`transient`を使います。application scopeでは、一つのinstanceと、構築時に保存したconsumerが共有されます。
 
 ```ts
-import { inject, injectInquirer, provide } from '@loutrejs/loutre'
-import { Logger } from '@loutrejs/loutre/runtime'
+import { inject, injectInquirer, provide, LoggerToken } from '@loutrejs/loutre'
 
 class AppLogger {
   readonly consumer = injectInquirer()
-  readonly logger = inject(Logger)
+  readonly logger = inject(LoggerToken)
 }
 
 const loggerProvider = provide(AppLogger).useClass(AppLogger, {
@@ -247,6 +248,71 @@ const loggerProvider = provide(AppLogger).useClass(AppLogger, {
 ```
 
 `ServiceA`が`inject(AppLogger)`すると、`AppLogger.consumer`は`ServiceA`です。組み込みLoggerの`context.source`は、そのLoggerを要求した`AppLogger`になります。factoryでも`use`内から`injectInquirer()`を使えますが、必要なサービスは登録時の`inject`配列で指定します。
+
+### ApplicationのLogger
+
+Loutreは予約tokenの`LoggerToken`に登録されたProviderを、Applicationのroot Loggerとして扱います。登録を省略すると、既定のLoggerとconsole backendをapplication scopeで生成します。
+
+組み込み実装は`LoggerService`です。標準のconsole出力を使う場合、Logger用のProvider登録やModuleの指定は不要です。
+
+```ts
+import { defineApplication } from '@loutrejs/loutre'
+
+const application = defineApplication({ modules: [AppModule] })
+```
+
+標準構成を明示するための`LoggerModule`も提供します。`modules: [LoggerModule, AppModule]`と指定しても、省略時と同じ標準Providerを使います。`LoggerToken`は利用側の注入先と、カスタム実装の登録先に使います。
+
+Provider、Execution、middlewareでは`inject(LoggerToken)`を使います。DIが要求元の`source`を各ログのcontextへ付与し、登録されたLogger実装へ渡します。同じApplicationのLoggerとbackendを使うため、カスタム実装のoverrideも維持されます。起動コードでは`app.get(LoggerToken)`でrootを取得します。sourceは`Application`となり、利用側で名前を付ける必要はありません。
+
+```ts
+import { LoggerToken } from '@loutrejs/loutre'
+
+const app = await nodeRuntime.create({ application })
+app.get(LoggerToken).info('Application ready')
+```
+
+出力先を変更する独自のLoggerクラスも、通常の`provide(...).useClass(...)`で登録します。constructorの既定引数に`inject()`を書き、backendなどの依存を取得できます。独自構成を使う場合は、そのModuleを`LoggerModule`の代わりに指定します。
+
+```ts
+import {
+  defineApplication,
+  defineModule,
+  inject,
+  provide,
+  LoggerService,
+  LoggerToken,
+} from '@loutrejs/loutre'
+import { JsonConsoleLoggerBackend } from '@loutrejs/loutre/runtime'
+
+class JsonLoggerService extends LoggerService {
+  constructor(backend = inject(JsonConsoleLoggerBackend)) {
+    super(backend)
+  }
+}
+
+const JsonLoggerModule = defineModule({
+  providers: [
+    JsonConsoleLoggerBackend,
+    provide(LoggerToken).useClass(JsonLoggerService),
+  ],
+  exports: [LoggerToken],
+})
+
+const application = defineApplication({ modules: [JsonLoggerModule] })
+```
+
+登録は`provide(LoggerToken).useClass(JsonLoggerService)`、利用は`inject(LoggerToken)`と分けます。カスタム実装へ差し替えた場合も、利用側の取得方法は変わりません。`providers: [JsonLoggerService]`だけでは、独自クラス自身をtokenとして登録するため、ApplicationのLoggerの差し替えにはなりません。
+
+予約tokenのProviderはapplication scopeで一つだけ登録し、Application直下Moduleの`exports`から公開します。このbindingはApplication全体に適用されるため、利用するModuleごとにLoggerのModuleをimportする必要はありません。backend内部の依存には通常のModule visibilityを適用します。従来の`Logger`は`LoggerService`の互換aliasとして残り、既存の`inject(Logger)`も同じ予約tokenとして利用できます。
+
+backendは通常のProviderなので、EnvironmentやほかのProviderを`inject()`できます。非同期の準備は`onModuleInit`へ、終了時のflushやcloseは`onApplicationDispose`へ置きます。Loggerとその依存はEnvironment・Argumentsの検証後、ほかのProviderより先に初期化します。Applicationで資源のlifecycleを管理するbackendはapplication scopeにしてください。
+
+rootの依存から`LoggerToken`を要求すると循環になるため、Modelが経路付きで拒否します。factory providerを使う場合も、依存指定は通常どおり`inject: [...]`です。
+
+同じDefinitionから複数Applicationを作っても、classやfactoryで作ったLoggerとbackendは共有されません。`useValue`で実体を指定した場合は、通常のvalue providerと同様に、その実体が共有されます。
+
+Logger準備前の失敗は元の例外として呼び出し元へ返します。終了後に保持していたLoggerへ出したログはconsoleへ送られ、終了済みbackendを再利用しません。`defineApplication({ logger: ... })`や起動時のLogger overrideは使用せず、ModuleのProvider登録を使ってください。
 
 ### Providerの登録方法ごとのルール
 
@@ -262,7 +328,7 @@ APIやTaskのhandlerでは、`factory`で取得したサービスを使います
 #### Env / Args・Logger・終了処理などの補足
 
 - Env（環境設定）とArgs（起動時の引数）は、それぞれModuleの`environment`とApplicationの`arguments`に宣言します。`useValue()`で渡す値、Env、Args自体は、構築中に別のサービスを取得しません。
-- 組み込み`Logger`はLoutreが提供するためProvider登録を省略できますが、利用側で`inject(Logger)`やfactoryの`inject: [Logger]`と宣言する必要はあります。すでに作成済みのサービスを受け取る場合も、依存の宣言は必要です。
+- 組み込み`LoggerService`はLoutreが提供するためProvider登録を省略できますが、利用側で`inject(LoggerToken)`やfactoryの`inject: [LoggerToken]`と宣言する必要はあります。すでに作成済みのサービスを受け取る場合も、依存の宣言は必要です。
 - 初期化・終了処理のLifecycle hookは、`hook({ inject: [...], run: ... })`の`inject`配列で依存を指定します。
 - HTTPのmiddleware（HTTP Layer）の依存も、所属するAPIの依存として調べます。必要なサービスはmiddlewareの`factory`で取得し、実行時だけ追加しないでください。
 
@@ -359,7 +425,7 @@ const app = await nodeRuntime.create({ application })
 await app.serve({ port: 3000 })
 ```
 
-shutdownはExtension-owned workとactive executionをdrainし、active executionが0になってからExtension runtimeをcloseします。その後のProvider lifecycle cleanupは`onModuleDestroy`、`beforeApplicationShutdown`、`onApplicationShutdown`の順で実行します。drainの成否にかかわらずactive executionの待機が`forceShutdownTimeoutMs`を超えた場合は、利用中のProviderをcleanupせずApplicationを`draining`に保ちます。
+shutdownはExtension-owned workとactive executionをdrainし、active executionが0になってからExtension runtimeをcloseします。その後のProvider lifecycle cleanupは`onModuleDestroy`、`beforeApplicationShutdown`、`onApplicationShutdown`の順で実行します。最後にModuleの`onApplicationDispose` hookを実行し、Providerの`onApplicationDispose`を実体の生成と逆の順で実行します。終了hookからも利用する接続やbackendは、この最終フェーズで解放してください。初期化失敗時も生成済みの依存を回収し、`onModuleDestroy`の後に`onApplicationDispose`を実行します。同じ実体を複数tokenで公開した場合も、Providerのlifecycleは一度だけ実行します。drainの成否にかかわらずactive executionの待機が`forceShutdownTimeoutMs`を超えた場合は、利用中のProviderをcleanupせずApplicationを`draining`に保ちます。
 
 ## GraphとTooling
 

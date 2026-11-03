@@ -1,3 +1,4 @@
+type Concurrency = number & { readonly '~loutre.bullmq': 'concurrency' }
 import type { ProviderDescriptor } from '@loutrejs/loutre'
 import {
   bindQueueDriver,
@@ -29,15 +30,17 @@ export function createBullMqQueueDriver(
   queue: QueueDescriptor,
   options: BullMqQueueDriverOptions,
 ): QueueConsumerDriver {
+  const requestedConcurrency = options.concurrency
   if (
-    options.concurrency !== undefined &&
-    (!Number.isInteger(options.concurrency) || options.concurrency <= 0)
+    requestedConcurrency !== undefined &&
+    (!Number.isInteger(requestedConcurrency) || requestedConcurrency <= 0)
   ) {
     throw new Error(
       'LUTRE_BULLMQ_CONCURRENCY: concurrency must be a positive integer.',
     )
   }
 
+  const concurrency = requestedConcurrency as Concurrency | undefined
   return {
     async start({ consume }) {
       const { Worker } = await loadBullMq()
@@ -49,9 +52,7 @@ export function createBullMqQueueDriver(
         {
           ...options.workerOptions,
           connection: options.connection,
-          ...(options.concurrency === undefined
-            ? {}
-            : { concurrency: options.concurrency }),
+          ...(concurrency === undefined ? {} : { concurrency }),
           ...(options.prefix === undefined ? {} : { prefix: options.prefix }),
         },
       )

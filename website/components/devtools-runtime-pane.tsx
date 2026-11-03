@@ -1,5 +1,6 @@
 'use client'
 
+import type { TraceId, SpanId, ModelNodeId } from '../lib/devtools-identity'
 import {
   Activity,
   CircleAlert,
@@ -88,10 +89,10 @@ interface RuntimePaneProps {
   readonly locale: Locale
   readonly baseUrl: string
   readonly connected: boolean
-  readonly requestedTraceId?: string
-  readonly requestedSpanId?: string
-  readonly onNavigateRuntime: (traceId: string, spanId?: string) => void
-  readonly onJumpToGraph: (graphNodeId: string) => void
+  readonly requestedTraceId?: TraceId
+  readonly requestedSpanId?: SpanId
+  readonly onNavigateRuntime: (traceId: TraceId, spanId?: SpanId) => void
+  readonly onJumpToGraph: (graphNodeId: ModelNodeId) => void
 }
 
 export function DevtoolsRuntimePane({

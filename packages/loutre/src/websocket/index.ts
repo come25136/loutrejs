@@ -39,3 +39,10 @@ export {
   createWebSocketDriverChannel,
 } from './driver.js'
 export type { EventWebSocket, WebSocketDriverChannel } from './driver.js'
+
+export type {
+  WebSocketSessionId,
+  WebSocketProcedureName,
+  NegotiatedSubprotocol,
+  ObservedCloseCode,
+} from './identity.js'

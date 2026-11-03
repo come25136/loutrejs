@@ -1,3 +1,14 @@
+import {
+  moduleGroupId,
+  flowEdgeId,
+  flowHandleId,
+  type GraphViewNodeId,
+  type FlowNodeId,
+  type FlowEdgeId,
+  type FlowHandleId,
+  type ModuleGroupId,
+} from '../../lib/devtools-identity'
+export { moduleGroupId } from '../../lib/devtools-identity'
 import type { Edge, Node } from '@xyflow/react'
 import type {
   GraphEdge,
@@ -16,7 +27,7 @@ export interface SemanticNodeData extends Record<string, unknown> {
 }
 
 export interface FlowHandle {
-  readonly id: string
+  readonly id: FlowHandleId
   readonly relativeY: number
 }
 
@@ -34,8 +45,20 @@ export interface GraphEdgeData extends Record<string, unknown> {
   readonly highlighted?: boolean
 }
 
-export type LoutreFlowNode = Node<SemanticNodeData, FlowNodeType>
-export type LoutreFlowEdge = Edge<GraphEdgeData, 'graph-edge'>
+export type LoutreFlowNode = Omit<
+  Node<SemanticNodeData, FlowNodeType>,
+  'id' | 'parentId'
+> & { readonly id: FlowNodeId; readonly parentId?: ModuleGroupId }
+export type LoutreFlowEdge = Omit<
+  Edge<GraphEdgeData, 'graph-edge'>,
+  'id' | 'source' | 'target' | 'sourceHandle' | 'targetHandle'
+> & {
+  readonly id: FlowEdgeId
+  readonly source: GraphViewNodeId
+  readonly target: GraphViewNodeId
+  readonly sourceHandle?: FlowHandleId | null
+  readonly targetHandle?: FlowHandleId | null
+}
 
 export type FlowNodeType =
   | 'module-group'
@@ -54,10 +77,6 @@ const moduleGroupPadding = {
   left: 36,
 } as const
 
-export function moduleGroupId(moduleId: string): string {
-  return `module-group:${encodeURIComponent(moduleId)}`
-}
-
 export function flowType(kind: GraphNodeKind): FlowNodeType {
   if (kind === 'entrypoint') return 'route'
   if (kind === 'runtime-capability') return 'capability'
@@ -66,7 +85,7 @@ export function flowType(kind: GraphNodeKind): FlowNodeType {
 
 export function graphEdgeLabel(
   edge: GraphEdge,
-  byId: ReadonlyMap<string, GraphNode>,
+  byId: ReadonlyMap<GraphViewNodeId, GraphNode>,
 ): string | undefined {
   if (edge.kind === 'flows-to') return undefined
   if (edge.kind !== 'owns') return edge.label ?? edge.kind
@@ -122,7 +141,9 @@ export function adaptGraph(snapshot: GraphSnapshot): {
       selectable: true,
       deletable: false,
       connectable: false,
-      ...(parentModuleId && moduleIds.has(parentModuleId)
+      ...(parentModuleId &&
+      parentModuleId !== 'application' &&
+      moduleIds.has(parentModuleId)
         ? {
             parentId: moduleGroupId(parentModuleId),
           }
@@ -132,7 +153,7 @@ export function adaptGraph(snapshot: GraphSnapshot): {
   const baseEdges = snapshot.edges
     .filter((edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to))
     .map<LoutreFlowEdge>((edge, index) => ({
-      id: `${edge.from}:${edge.kind}:${edge.to}:${index}`,
+      id: flowEdgeId(`${edge.from}:${edge.kind}:${edge.to}:${index}`),
       source: edge.from,
       target: edge.to,
       type: 'graph-edge',
@@ -146,8 +167,8 @@ export function adaptGraph(snapshot: GraphSnapshot): {
       },
     }))
 
-  const outgoing = new Map<string, LoutreFlowEdge[]>()
-  const incoming = new Map<string, LoutreFlowEdge[]>()
+  const outgoing = new Map<FlowNodeId, LoutreFlowEdge[]>()
+  const incoming = new Map<FlowNodeId, LoutreFlowEdge[]>()
   for (const edge of baseEdges) {
     outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge])
     incoming.set(edge.target, [...(incoming.get(edge.target) ?? []), edge])
@@ -164,8 +185,8 @@ export function adaptGraph(snapshot: GraphSnapshot): {
     )
     return {
       ...edge,
-      sourceHandle: `source-${sourceIndex}`,
-      targetHandle: `target-${targetIndex}`,
+      sourceHandle: flowHandleId(`source-${sourceIndex}`),
+      targetHandle: flowHandleId(`target-${targetIndex}`),
     }
   })
 
@@ -177,11 +198,11 @@ export function adaptGraph(snapshot: GraphSnapshot): {
       data: {
         ...node.data,
         sourceHandles: sourceEdges.map((_, index) => ({
-          id: `source-${index}`,
+          id: flowHandleId(`source-${index}`),
           relativeY: handleOffset(index, sourceEdges.length),
         })),
         targetHandles: targetEdges.map((_, index) => ({
-          id: `target-${index}`,
+          id: flowHandleId(`target-${index}`),
           relativeY: handleOffset(index, targetEdges.length),
         })),
       },

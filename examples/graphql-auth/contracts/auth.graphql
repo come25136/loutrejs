@@ -1,0 +1,13 @@
+type User {
+  id: ID!
+  name: String!
+}
+type Query {
+  viewer: User!
+}
+type Mutation {
+  renameViewer(name: String!): User!
+}
+type Subscription {
+  viewerChanged: User!
+}
