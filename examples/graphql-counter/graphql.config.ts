@@ -5,10 +5,10 @@ export default {
     server: {
       kind: 'server',
       schema: ['contracts/*.graphql'],
-      output: 'src/generated',
+      output: 'src/graphql/generated',
       mappers: {
-        Counter: '../domain/counter.js#Counter',
-        Step: '../domain/step.js#Step',
+        Counter: '../../domain/counter.js#Counter',
+        Step: '../../domain/step.js#Step',
       },
     },
   },

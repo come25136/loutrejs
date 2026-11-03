@@ -1,5 +1,7 @@
 import {
   collectInjectedDependencies,
+  getSourceLocation,
+  composeLayers,
   defineExecution,
   defineExecutionExtension,
   runtimeCapability,
@@ -10,6 +12,8 @@ import {
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
   type ExecutionRuntimeBinding,
+  type DependencyResolver,
+  type LayerState,
   type RuntimeCapabilityBinding,
   type SchemaOutput,
   type StandardSchemaV1,
@@ -28,6 +32,7 @@ import {
   normalizeHttpPath,
   parseHttpPath,
   type HttpPathSegment,
+  type HttpRawRouteDefinition,
 } from '../http/index.js'
 
 export type WebSocketDataMessage =
@@ -100,6 +105,7 @@ export interface WebSocketBranchDefinition {
 
 export interface WebSocketHandshakeDefinition extends HttpRequestHeadDefinition {
   readonly protocols?: readonly string[]
+  readonly middlewares?: HttpRawRouteDefinition['middlewares']
 }
 
 export interface WebSocketRouteDefinition {
@@ -167,6 +173,17 @@ export type WebSocketHandlerContext<
   TRoute extends WebSocketRouteDefinition = WebSocketRouteDefinition,
 > = {
   readonly request: Request
+  readonly state: Readonly<
+    TRoute extends {
+      readonly handshake: {
+        readonly middlewares: infer TLayers extends NonNullable<
+          WebSocketHandshakeDefinition['middlewares']
+        >
+      }
+    }
+      ? LayerState<TLayers>
+      : {}
+  >
   readonly session: WebSocketSession
   readonly protocol: string
   readonly execution: ExecutionContextView
@@ -234,6 +251,7 @@ interface ActiveSession {
 
 interface RuntimeWebSocketRoute {
   readonly executionId: string
+  readonly resolve: DependencyResolver
   readonly route: CompiledWebSocketRoute
 }
 
@@ -258,25 +276,51 @@ export const websocketExtension = defineExecutionExtension<
   abiVersion: '2',
   name: 'loutre:websocket',
   compile(definition, context) {
-    return {
-      kind: 'execution',
-      id:
-        definition.name ||
-        `${context.moduleId}.websocket.${context.definitionIndex}`,
-      executionKind: 'websocket.session',
-      dependencies: collectInjectedDependencies(
+    const id =
+      definition.name ||
+      `${context.moduleId}.websocket.${context.definitionIndex}`
+    const routes = compileRouteTree(definition.contract.routes)
+    const dependencies = new Set(
+      collectInjectedDependencies(
         {
           kind: 'execution',
-          id: `websocket:${definition.name || `${context.moduleId}.websocket.${context.definitionIndex}`}`,
-          name:
-            definition.name ||
-            `${context.moduleId}.websocket.${context.definitionIndex}`,
+          id: `websocket:${id}`,
+          name: id,
         },
         () => definition.factory(),
       ),
-      capabilities: [WEBSOCKET_SERVER],
+    )
+    for (const route of routes) {
+      route.handshake?.middlewares?.forEach((middleware, index) => {
+        for (const dependency of collectInjectedDependencies(
+          {
+            kind: 'layer',
+            id: `websocket:${id}:${route.name}:${index}`,
+            name: middleware.name,
+          },
+          () => middleware.factory(),
+        ))
+          dependencies.add(dependency)
+      })
+    }
+    return {
+      kind: 'execution',
+      id,
+      executionKind: 'websocket.session',
+      dependencies: [...dependencies],
+      capabilities: [
+        ...new Set([
+          WEBSOCKET_SERVER,
+          ...routes.flatMap(
+            (route) =>
+              route.handshake?.middlewares?.flatMap(
+                (middleware) => middleware.capabilities,
+              ) ?? [],
+          ),
+        ]),
+      ],
       compiled: Object.freeze({
-        routes: Object.freeze(compileRouteTree(definition.contract.routes)),
+        routes: Object.freeze(routes),
         factory: definition.factory,
       }),
     }
@@ -311,6 +355,19 @@ export const websocketExtension = defineExecutionExtension<
     routes: execution.compiled.routes.map((route) => ({
       name: route.name,
       path: route.path,
+      ...(route.handshake?.middlewares?.length
+        ? {
+            middlewares: route.handshake.middlewares.map((middleware) => ({
+              name: middleware.name,
+              capabilities: middleware.capabilities.map(
+                (capability) => capability.id,
+              ),
+              ...(getSourceLocation(middleware) === undefined
+                ? {}
+                : { source: getSourceLocation(middleware) }),
+            })),
+          }
+        : {}),
       ...(route.messages === undefined
         ? {}
         : {
@@ -426,7 +483,7 @@ function compileRouteTree(
 ): readonly CompiledWebSocketRoute[] {
   return Object.entries(tree).flatMap(([name, node]) => {
     if ('request' in node || 'responses' in node)
-      throw new TypeError('WebSocket v2ではhandshakeを使用してください。')
+      throw new TypeError('Use handshake for WebSocket v2 routes.')
     if (isBranch(node)) {
       const branchPath = node.path ?? ''
       if (branchPath !== '') parseHttpPath(branchPath)
@@ -487,6 +544,9 @@ function snapshotHandshake(
 ): WebSocketHandshakeDefinition {
   return Object.freeze({
     ...handshake,
+    ...(handshake.middlewares === undefined
+      ? {}
+      : { middlewares: Object.freeze([...handshake.middlewares]) }),
     ...(handshake.params === undefined
       ? {}
       : { params: Object.freeze({ ...handshake.params }) }),
@@ -543,9 +603,10 @@ function createWebSocketRuntime(
     )
   }
   const routes = bindings
-    .flatMap(({ execution }) =>
+    .flatMap(({ execution, resolve }) =>
       execution.compiled.routes.map((route): RuntimeWebSocketRoute => ({
         executionId: execution.id,
+        resolve,
         route,
       })),
     )
@@ -556,6 +617,12 @@ function createWebSocketRuntime(
     async upgrade(request) {
       if (state !== 'running') {
         return Response.json({ error: 'Service Unavailable' }, { status: 503 })
+      }
+      if (request.method !== 'GET') {
+        return new Response('WebSocket handshake requires GET.', {
+          status: 405,
+          headers: { allow: 'GET' },
+        })
       }
       let match: ReturnType<typeof findRoute>
       try {
@@ -586,7 +653,7 @@ function createWebSocketRuntime(
         offered.includes(value),
       )
       if (match.route.handshake?.protocols?.length && protocol === undefined) {
-        return new Response('WebSocket subprotocolが一致しません。', {
+        return new Response('WebSocket subprotocol mismatch.', {
           status: 400,
         })
       }
@@ -606,16 +673,44 @@ function createWebSocketRuntime(
         completePendingIngress()
         throw error
       }
-      let upgraded: WebSocketUpgradeResult
+      let upgraded: WebSocketUpgradeResult | undefined
+      let handshakeState: Readonly<Record<string, unknown>> = {}
+      const signal = AbortSignal.any([request.signal, lease.signal])
       try {
-        upgraded = await driver.upgrade(
-          request,
-          protocol === undefined ? {} : { protocol },
-        )
+        const dispatch = () =>
+          composeLayers({
+            context: { request, input: { ...input, body: undefined }, signal },
+            layers: match.route.handshake?.middlewares ?? [],
+            resolve: match.resolve,
+            terminal: async ({ state: middlewareState }) => {
+              signal.throwIfAborted()
+              handshakeState = middlewareState
+              upgraded = await driver.upgrade(
+                request,
+                protocol === undefined ? {} : { protocol },
+              )
+              return upgraded.response
+            },
+          })
+        const response = await (lease.run ? lease.run(dispatch) : dispatch())
+        if (!(response instanceof Response))
+          throw new TypeError(
+            'WebSocket handshake middleware must return a Response.',
+          )
+        signal.throwIfAborted()
+        if (!upgraded) {
+          lease.complete()
+          completePendingIngress()
+          return response
+        }
       } catch (error) {
-        lease.fail?.(error)
-        lease.complete()
-        completePendingIngress()
+        try {
+          await upgraded?.connection.terminate()
+        } finally {
+          lease.fail?.(error)
+          lease.complete()
+          completePendingIngress()
+        }
         throw error
       }
       const session = createSession(
@@ -624,6 +719,7 @@ function createWebSocketRuntime(
         applicationRuntime,
         match.route,
         input,
+        handshakeState,
         lease,
         handlers.get(match.executionId)?.[match.route.name],
         lease.run,
@@ -687,6 +783,7 @@ function findRoute(
 ):
   | {
       readonly executionId: string
+      readonly resolve: DependencyResolver
       readonly route: CompiledWebSocketRoute
       readonly params: Readonly<Record<string, string>>
     }
@@ -697,6 +794,7 @@ function findRoute(
     if (params) {
       return {
         executionId: candidate.executionId,
+        resolve: candidate.resolve,
         route: candidate.route,
         params,
       }
@@ -764,6 +862,7 @@ function createSession(
     readonly query: unknown
     readonly headers: unknown
   },
+  handshakeState: Readonly<Record<string, unknown>>,
   lease: ReturnType<ExecutionKernelRuntime['beginExecution']>,
   handler:
     | ((context: WebSocketHandlerContext<any>) => void | Promise<void>)
@@ -830,6 +929,7 @@ function createSession(
   const messages = decodeMessages(connection.messages, route.messages)
   const context = {
     request,
+    state: handshakeState,
     session,
     protocol: session.protocol,
     execution: {

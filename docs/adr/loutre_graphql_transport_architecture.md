@@ -56,22 +56,24 @@ Package Distribution ADRのpublic package制限は、このpackage追加に合�
 
 ## Public API
 
-基本APIは`graphql.endpoint()`とする。
+基本APIは`graphql.implementation()`とし、HTTP Contractのrawルートを参照する。[HTTP Contractからの委任](./loutre_http_protocol_delegation.md)をルート所有権の正本とする。
 
 Schemaとresolverの結合は[GraphQL Codegen ADR](loutre_graphql_codegen_architecture.md)のApplicationのbindManifestへ委譲する。
 
 ```ts
 import { manifest } from './graphql/manifest.js'
 
-const GraphQLApi = graphql.endpoint({
+const Api = http.contract({
+  graphql: { raw: true, method: '*', path: '/graphql' },
+})
+
+const GraphQLApi = graphql.implementation({
   name: 'GraphQLApi',
-  path: '/graphql',
+  route: Api.routes.graphql,
   manifest,
   transports: {
     http: true,
-    websocket: {
-      connectionInitWaitTimeout: 3_000,
-    },
+    websocket: { connectionInitWaitTimeout: 3_000 },
   },
   factory: (trips = inject(TripService)) => ({
     context({ request, signal }) {
@@ -85,7 +87,7 @@ const GraphQLApi = graphql.endpoint({
 })
 ```
 
-`graphql.endpoint()`は内部でHTTP / WebSocket Executionを生成する。
+`graphql.implementation()`は内部でHTTP / WebSocket Executionを生成する。
 
 ## 複合Execution
 
@@ -112,11 +114,7 @@ GraphQL over HTTPは既存のresponse variant contractへ押し込まず、HTTP 
 ```ts
 http.raw({
   name: 'GraphQLApi.http',
-  route: {
-    method: '*',
-    path: '/graphql',
-    middlewares: [auth(), rateLimit()],
-  },
+  route: { ...Api.routes.graphql, protocol: 'graphql' },
   factory: () => async (ctx) => {
     return graphqlHandler(ctx.request)
   },
@@ -208,6 +206,7 @@ interface HttpExecutionRequestDefinition extends HttpRequestHeadDefinition {
 
 interface WebSocketHandshakeDefinition extends HttpRequestHeadDefinition {
   readonly protocols?: readonly string[]
+  readonly middlewares?: HttpRawRouteDefinition['middlewares']
 }
 ```
 
@@ -337,6 +336,24 @@ GraphQL field / operation内容に依存するauthorizationはGraphQL resolver /
 WebSocket側は`graphql-ws`の`makeServer()`を利用する。
 
 Loutre WebSocket contextを`graphql-ws`が要求するsocket interfaceへadapterする。
+
+接続処理の拡張はRuntimeの`ws`へまとめる。ConnectionInit handlerの戻り値から型付きstateを受け取り、終了処理には`graphql-ws`の`onDisconnect` / `onClose`を利用する。native hookにはopening requestと接続のsignalを`extra`へ渡し、引数・戻り値の意味を維持する。
+
+LoutreはDI、接続とoperationの寿命、型、cleanupを所有する。認証方式、利用者の形、再認証の頻度はアプリ側で決める。HTTP middlewareやContextから同じサービスを呼ぶためだけに、共通authenticate、予約されたidentity、認証Policyを追加しない。通常HTTPの認証middlewareの仕様も変更しない。
+
+schema / execute / subscribeとoperation用フックはmanifest executionとlease管理の境界なので、そのまま上書きする経路を公開しない。公開フックは明示的に接続し、終了フックが失敗してもiterator・operation・受信taskのcleanupを実行する。利用方法は[package README](../../packages/graphql/README.md#接続終了のライフサイクル)を正本とする。
+
+HTTP ContractのmiddlewareはUpgradeにも適用し、認証をConnectionInitへ延期するかはmiddleware自身がhttp.isWebSocketUpgrade(request)で決める。handshakeのstateはConnectionInitで参照でき、handlerを省略した場合は接続stateへそのまま引き継ぐ。handlerを指定した場合は、その戻り値を接続stateとして使う。middlewareのnextはhandshakeまでを担当し、接続の終了処理はWS lifecycleへ置く。詳細は[HTTP Contractの委任ADR](./loutre_http_protocol_delegation.md)を正本とする。
+
+同じURLを使う認証例は[GraphQL認証example](../../examples/graphql-auth/README.md)を正本とする。HTTPは既存middlewareへ認証を置き、GraphQL WSはendpointのfactory内のwsへライフサイクルを直接定義する。HTTPとWSを同じ抽象度のlayerへ揃えることを目的にしない。
+
+path・method・HTTP middlewareはHTTP Contract、transports.http / transports.websocketは有効化や静的設定、factoryはDIしたサービスを使う実行時handlerとContext生成を所有する。connectionInitの戻り値からstateの型を推論し、HTTPの認証結果と同じ形ならContext・Resolverを共通化する。stateはACK payloadとは分離する。
+
+WS専用layerの宣言や継続処理、遅延DI resolverを追加しない。ConnectionInitはstateまたはConnectionRejectedを返すprotocol handlerとし、HTTP Responseやmiddlewareのnextを要求しない。接続開始の入口をconnectionInitに一本化し、同じタイミングのonConnectを重ねて公開しない。ConnectionRejectedはGraphQL adapterが提供する接続拒否の結果であり、認証方式を定義しない。指定した公開理由を4403のclose reasonへ渡し、通常の例外は1011として区別する。認証の依存はendpoint factoryのinjectからcanonical Modelへ登録する。
+
+HTTPは既定で有効、WSは既定で無効とし、一方の設定から他方の有効性を変えない。factory().wsの指定には静的なWS有効化を要求し、型とModel構築の両方で矛盾を拒否する。静的な有効化はhost capabilityとcanonical Modelの構築に必要なため、factoryの実行結果からtransportを追加しない。
+
+接続終了時にはoperationと購読の終了処理を待ち、nativeの終了フックへstateを渡す。init前・拒否時はstateがない。前処理中の中断では非協調的なhandlerを無期限に待たず、遅いstateを公開しない。
 
 1 connection上で複数operationが同時実行されるため、message receive loopはoperation処理を逐次blockしない。
 

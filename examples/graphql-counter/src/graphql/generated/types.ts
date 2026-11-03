@@ -1,7 +1,7 @@
 // @generated loutre graphql generateの出力です。直接編集しないでください。
 import type { GraphQLResolveInfo } from 'graphql'
-import type { Counter as CounterDomain } from '../domain/counter.js'
-import type { Step as StepDomain } from '../domain/step.js'
+import type { Counter as CounterDomain } from '../../domain/counter.js'
+import type { Step as StepDomain } from '../../domain/step.js'
 export type Maybe<T> = T | null
 export type InputMaybe<T> = Maybe<T>
 export type RequireFields<T, K extends keyof T> = Omit<T, K> & {

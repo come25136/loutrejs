@@ -1,9 +1,10 @@
+import { ConnectionRejected } from './connection-rejected.js'
 import type { ExecutionOperationLease } from '@loutrejs/loutre'
 import type {
   WebSocketHandlerContext,
   WebSocketMessageCodec,
 } from '@loutrejs/loutre/websocket'
-import { makeServer, parseMessage, MessageType } from 'graphql-ws'
+import { makeServer, parseMessage, MessageType, type Context } from 'graphql-ws'
 import {
   parse,
   validate,
@@ -13,7 +14,11 @@ import {
   type ExecutionResult,
   type GraphQLFormattedError,
 } from 'graphql'
-import type { GraphQLRuntime, GraphQLWebSocketContextInput } from './types.js'
+import type {
+  GraphQLRuntime,
+  GraphQLWebSocketContextInput,
+  GraphQLWebSocketExtra,
+} from './types.js'
 import { formatGraphQLError } from './errors.js'
 import type { BoundManifest } from './manifest-internal.js'
 import {
@@ -49,7 +54,7 @@ type SessionContext = WebSocketHandlerContext<{
 export async function serveGraphQLWebSocket(
   context: SessionContext,
   bound: BoundManifest,
-  runtime: GraphQLRuntime,
+  runtime: GraphQLRuntime<any, any, any, any>,
   options: { readonly connectionInitWaitTimeout?: number },
 ): Promise<void> {
   const operations = new Map<string, Operation>()
@@ -85,11 +90,52 @@ export async function serveGraphQLWebSocket(
       throw failure
     }
   }
-  const server = makeServer({
+  let state: Readonly<Record<string, unknown>> | undefined
+  let connectionContext:
+    | Context<Record<string, unknown> | undefined, GraphQLWebSocketExtra>
+    | undefined
+  const hooks = runtime.ws
+  const server = makeServer<
+    Record<string, unknown> | undefined,
+    GraphQLWebSocketExtra
+  >({
     schema,
     ...(options.connectionInitWaitTimeout === undefined
       ? {}
       : { connectionInitWaitTimeout: options.connectionInitWaitTimeout }),
+    onConnect(connection) {
+      connectionContext = connection
+      return whileConnected(async () => {
+        const result = hooks?.connectionInit
+          ? await hooks.connectionInit({
+              request: context.request,
+              signal: context.signal,
+              payload: connection.connectionParams,
+              state: context.state,
+            })
+          : context.state
+        context.signal.throwIfAborted()
+        if (result instanceof ConnectionRejected) {
+          await context.close(4403, result.reason)
+          return false
+        }
+        if (
+          !result ||
+          typeof result !== 'object' ||
+          Array.isArray(result) ||
+          result instanceof Response
+        )
+          throw new TypeError(
+            'connectionInit must return a state object or ConnectionRejected.',
+          )
+
+        state = Object.freeze(result) as Readonly<Record<string, unknown>>
+        return true
+      }, context.signal)
+    },
+    onClose(connection) {
+      connectionContext = connection
+    },
     async onSubscribe(connection, id, payload) {
       const controller = new AbortController()
       const lease = context.execution.beginOperation({
@@ -98,12 +144,18 @@ export async function serveGraphQLWebSocket(
       })
       const input: GraphQLWebSocketContextInput = {
         transport: 'websocket',
+        state: state!,
         request: context.request,
         connectionParams: connection.connectionParams,
         operationId: id,
         signal: controller.signal,
       }
-      const operation: Operation = { controller, lease, input, finished: false }
+      const operation: Operation = {
+        controller,
+        lease,
+        input,
+        finished: false,
+      }
       operations.set(id, operation)
       lease.annotate?.({
         'graphql.session.id': context.session.id,
@@ -214,7 +266,13 @@ export async function serveGraphQLWebSocket(
         receive = callback
       },
     },
-    undefined,
+    {
+      request: context.request,
+      signal: context.signal,
+      get state() {
+        return state
+      },
+    },
   )
   context.signal.addEventListener('abort', abortAll, { once: true })
   const dispatch = (data: string) => {
@@ -250,6 +308,43 @@ export async function serveGraphQLWebSocket(
     tasks.add(task)
     if (id !== undefined) operationTasks.set(id, task)
   }
+  async function cleanupSession(): Promise<void> {
+    abortAll()
+    const info = await context.closed
+    try {
+      const results: PromiseSettledResult<unknown>[] = await Promise.allSettled(
+        [dispose(info.code, info.reason), ...tasks],
+      )
+      results.push(
+        ...(await Promise.allSettled(
+          [...operations.values()].map((operation) => operation.cleanup?.()),
+        )),
+      )
+      if (connectionContext) {
+        const connection = connectionContext
+        const callbacks = [
+          ...(connection.acknowledged
+            ? [() => hooks?.onDisconnect?.(connection, info.code, info.reason)]
+            : []),
+          () => hooks?.onClose?.(connection, info.code, info.reason),
+        ]
+        for (const invoke of callbacks)
+          results.push(
+            ...(await Promise.allSettled([Promise.resolve().then(invoke)])),
+          )
+      }
+      const errors = results
+        .filter((result) => result.status === 'rejected')
+        .map((result) => result.reason)
+      if (errors.length === 1) throw errors[0]
+      if (errors.length > 1)
+        throw new AggregateError(errors, 'GraphQL WebSocket cleanup failed.')
+    } finally {
+      state = undefined
+      context.signal.removeEventListener('abort', abortAll)
+      for (const id of operations.keys()) finish(id)
+    }
+  }
   try {
     for await (const message of context.input.messages) {
       if (!message.isValid) {
@@ -259,18 +354,32 @@ export async function serveGraphQLWebSocket(
       dispatch(message.value)
     }
   } finally {
-    abortAll()
-    const info = await context.closed
-    try {
-      await dispose(info.code, info.reason)
-      await Promise.all(
-        [...operations.values()].map((operation) => operation.cleanup?.()),
-      )
-      await Promise.all(tasks)
-    } finally {
-      context.signal.removeEventListener('abort', abortAll)
-      for (const id of operations.keys()) finish(id)
-    }
+    await cleanupSession()
+  }
+}
+
+async function whileConnected<T>(
+  invoke: () => T | Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  signal.throwIfAborted()
+  let abort!: () => void
+  const aborted = new Promise<never>((_resolve, reject) => {
+    abort = () => reject(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+  })
+  try {
+    const result = await Promise.race([
+      Promise.resolve().then(() => {
+        signal.throwIfAborted()
+        return invoke()
+      }),
+      aborted,
+    ])
+    signal.throwIfAborted()
+    return result
+  } finally {
+    signal.removeEventListener('abort', abort)
   }
 }
 

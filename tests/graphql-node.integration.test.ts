@@ -1,15 +1,23 @@
+import { http as contractHttp } from '@loutrejs/loutre/http'
 import { manifestFromSchema } from './helpers/graphql-manifest.js'
 import { request as httpRequest } from 'node:http'
 import { once } from 'node:events'
 import { describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { buildSchema } from 'graphql'
-import { graphql } from '@loutrejs/graphql'
+import {
+  graphql,
+  ConnectionRejected,
+  type GraphQLWebSocketHooks,
+} from '@loutrejs/graphql'
 import { defineApplication, defineModule } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
 import { serverAudits } from 'graphql-http'
 
-async function create(http: boolean) {
+async function create(
+  http: boolean | undefined,
+  hooks: GraphQLWebSocketHooks = {},
+) {
   const schema = buildSchema(
     'type Query { hello: String! } type Subscription { hello: String! }',
   )
@@ -19,12 +27,14 @@ async function create(http: boolean) {
     yield 'Hello World'
   }
   hello.resolve = (event: string) => event
-  const endpoint = graphql.endpoint({
+  const endpoint = graphql.implementation({
     name: 'Native',
-    path: '/graphql',
+    route: contractHttp.contract({
+      graphql: { raw: true, method: '*', path: '/graphql' },
+    }).routes.graphql,
     manifest: manifestFromSchema(schema),
-    transports: { http, websocket: true },
-    factory: () => ({ context: () => ({}) }),
+    transports: { http: http, websocket: true },
+    factory: () => ({ context: () => ({}), ws: hooks }),
   })
   const Module = defineModule(() => ({ executions: [endpoint] }))
   const app = await nodeRuntime.create({
@@ -40,7 +50,70 @@ async function create(http: boolean) {
 }
 
 describe('Node native HTTP/WebSocket', () => {
-  it.each([true, false])(
+  it.each(['payload', 'header', 'reject'] as const)(
+    'native接続の%sをアプリ指定の接続フックで判断する',
+    async (mode) => {
+      const { app, url } = await create(true, {
+        connectionInit({ payload, request }) {
+          return payload?.secret === 'valid' ||
+            request.headers.get('x-api-key') === 'valid'
+            ? {}
+            : new ConnectionRejected('Authentication required.')
+        },
+      })
+      const socket = new WebSocket(
+        url.replace('http:', 'ws:'),
+        ['graphql-transport-ws'],
+        {
+          headers: mode === 'header' ? { 'x-api-key': 'valid' } : {},
+        },
+      )
+      try {
+        await once(socket, 'open')
+        if (mode === 'reject') {
+          const closed = once(socket, 'close')
+          socket.send(
+            JSON.stringify({
+              type: 'connection_init',
+              payload: { secret: 'invalid' },
+            }),
+          )
+          const [code, reason] = await closed
+          expect(code).toBe(4403)
+          expect(String(reason)).toBe('Authentication required.')
+        } else {
+          let received = once(socket, 'message')
+          socket.send(
+            JSON.stringify({
+              type: 'connection_init',
+              ...(mode === 'payload' ? { payload: { secret: 'valid' } } : {}),
+            }),
+          )
+          expect(JSON.parse(String((await received)[0]))).toEqual({
+            type: 'connection_ack',
+          })
+          received = once(socket, 'message')
+          socket.send(
+            JSON.stringify({
+              id: 'q',
+              type: 'subscribe',
+              payload: { query: '{hello}' },
+            }),
+          )
+          expect(JSON.parse(String((await received)[0]))).toEqual({
+            id: 'q',
+            type: 'next',
+            payload: { data: { hello: 'Hello World' } },
+          })
+        }
+      } finally {
+        socket.terminate()
+        await app.close()
+      }
+    },
+  )
+
+  it.each([true, false, undefined])(
     'HTTP=%sで同一serverのupgradeに接続しprotocolとQueryを確認する',
     async (http) => {
       const { app, url } = await create(http)
@@ -70,7 +143,7 @@ describe('Node native HTTP/WebSocket', () => {
           payload: { data: { hello: 'Hello World' } },
         })
         const response = await fetch(`${url}?query=%7Bhello%7D`)
-        expect(response.status).toBe(http ? 200 : 404)
+        expect(response.status).toBe(http !== false ? 200 : 404)
         await response.text()
         const closing = once(socket, 'close')
         await app.close()

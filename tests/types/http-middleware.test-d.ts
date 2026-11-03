@@ -125,3 +125,62 @@ http.contract({
     },
   },
 })
+
+const optionalIdentity = http.middleware<
+  Partial<{ currentUser: { id: string } }>
+>({
+  name: 'OptionalIdentity',
+  factory: () => async (_context, next) => {
+    await next()
+    await next({})
+    await next({ currentUser: { id: 'user-1' } })
+    if (invalidInput) {
+      // @ts-expect-error optionalでも渡したstateの型は検証する
+      await next({ currentUser: { id: 42 } })
+      // @ts-expect-error 宣言していないpropertyは渡せない
+      await next({ unknown: true })
+    }
+  },
+})
+http.implementation({
+  contract: http.contract({
+    profile: {
+      method: 'GET',
+      path: '/optional',
+      middlewares: [optionalIdentity],
+      responses: { ok: { status: 204 } },
+    },
+  }),
+  factory: () => ({
+    profile: (context) => {
+      const userId: string | undefined = context.state.currentUser?.id
+      // @ts-expect-error optionalなstateを必須として扱わない
+      const user: { id: string } = context.state.currentUser
+      void [userId, user]
+      return context.response.ok({})
+    },
+  }),
+})
+defineLayer<{ traceId?: string }>({
+  name: 'OptionalTrace',
+  factory: () => async (_context, next) => {
+    await next()
+    await next({ traceId: 'trace-1' })
+  },
+})
+http.middleware({
+  name: 'NoState',
+  factory: () => async (_context, next) => {
+    await next()
+    // @ts-expect-error stateを宣言していないmiddlewareには寄与を渡せない
+    if (invalidInput) await next({ unexpected: true })
+  },
+})
+http.middleware<{ currentUser: { id: string } | undefined }>({
+  name: 'RequiredProperty',
+  factory: () => async (_context, next) => {
+    // @ts-expect-error undefinedを許可する値でもproperty自体は必須
+    if (invalidInput) await next()
+    await next({ currentUser: undefined })
+  },
+})

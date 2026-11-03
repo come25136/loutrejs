@@ -137,6 +137,8 @@ outcome passthrough
 
 HTTP response variant、WebSocket close code等のprotocol-specific short-circuit semanticsは各Extensionが所有する。
 
+Layerのstate contributionが未指定または全propertyがoptionalの場合、stateを追加しない分岐は`next()`で表す。必須propertyがある場合は`next(state)`を要求し、渡した値の型を維持する。
+
 Layerが`next()`を呼んだままawaitまたはreturnせず終了することは禁止する。Coreはdownstream Promiseを回収してから`LUTRE_LAYER_NEXT_NOT_AWAITED`を返し、downstream errorも`AggregateError`に保持する。これによりLayer終了後にdetached executionを残さない。
 
 ## 4. Coreが知らないもの

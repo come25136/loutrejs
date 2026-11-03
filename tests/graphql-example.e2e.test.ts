@@ -5,6 +5,7 @@ import { AddDocument } from '../conformance/graphql/client/counter.js'
 import {
   runWorkspaceCommand,
   startWorkspace,
+  waitForOutput,
   waitForPort,
 } from './helpers/example-process.js'
 import { reserveHttpPort } from './helpers/http-server.js'
@@ -39,6 +40,10 @@ it('GraphQL exampleでHTTP mutationを別clientの購読へ配信し、停止・
 
   try {
     await waitForPort(port)
+    await waitForOutput(example, 'GraphQL endpoints ready')
+    expect(example.output()).toContain(
+      `websocket=ws://127.0.0.1:${port}/graphql`,
+    )
     const before = await request('query { stepBatchCount }')
     expect(
       await request(
@@ -130,6 +135,32 @@ it('GraphQL exampleでHTTP mutationを別clientの購読へ配信し、停止・
     expect(errors).toEqual([])
   } finally {
     await Promise.all(clients.map((client) => client.dispose()))
+    await example.stop()
+  }
+})
+
+it('認証exampleの接続先をApplicationと共有するLoggerで出力する', async () => {
+  const port = await reserveHttpPort()
+  const example = startWorkspace('@loutrejs/example-graphql-auth', 'start', {
+    PORT: String(port),
+  })
+  try {
+    await waitForOutput(example, 'GraphQL endpoints ready')
+    expect(example.output()).toMatch(
+      /\[Loutre\].*LOG.*GraphQL endpoints ready/u,
+    )
+    expect(example.output()).toContain(`http=http://127.0.0.1:${port}/graphql`)
+    expect(example.output()).toContain(
+      `websocket=ws://127.0.0.1:${port}/graphql`,
+    )
+    expect(
+      (
+        await fetch(
+          `http://127.0.0.1:${port}/graphql?query=%7Bviewer%7Bid%7D%7D`,
+        )
+      ).status,
+    ).toBe(401)
+  } finally {
     await example.stop()
   }
 })

@@ -9,7 +9,9 @@ export interface GenericLayerContext<TState extends object = {}> {
 export type GenericLayerNext<TContribution extends object> =
   keyof TContribution extends never
     ? () => Promise<void>
-    : (contribution: TContribution) => Promise<void>
+    : {} extends TContribution
+      ? (contribution?: TContribution) => Promise<void>
+      : (contribution: TContribution) => Promise<void>
 
 export interface GenericLayer<
   TContext extends object = object,
@@ -25,6 +27,20 @@ export interface GenericLayer<
     next: GenericLayerNext<TContribution>,
   ) => Promise<void | TOutcome>
 }
+
+type LayerContribution<TLayer> =
+  TLayer extends GenericLayer<any, infer TState, any> ? TState : never
+
+type UnionToIntersection<T> = (
+  T extends unknown ? (value: T) => void : never
+) extends (value: infer TState) => void
+  ? TState
+  : never
+
+export type LayerState<TLayers extends readonly GenericLayer<any, any, any>[]> =
+  [TLayers[number]] extends [never]
+    ? {}
+    : UnionToIntersection<LayerContribution<TLayers[number]>> & object
 
 export function defineLayer<
   TContribution extends object = {},

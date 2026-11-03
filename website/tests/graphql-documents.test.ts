@@ -12,7 +12,7 @@ describe('GraphQLドキュメント', () => {
       ).toBe(true)
 
       const document = getDocument('graphql-codegen', locale)
-      expect(document.content).toContain('graphql.endpoint')
+      expect(document.content).toContain('graphql.implementation')
       expect(document.headings.length).toBeGreaterThan(0)
     },
   )
