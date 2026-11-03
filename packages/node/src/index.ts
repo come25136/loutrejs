@@ -26,7 +26,7 @@ import {
   startStartupPresentation,
 } from '@loutrejs/loutre/presentation'
 import {
-  Logger,
+  LoggerToken,
   ProcessShutdownHooks,
   RuntimeShutdown,
   assertRuntimeEngine,
@@ -126,7 +126,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
 
   const closeApplication = application.close.bind(application)
   let server: Server | undefined
-  const logger = application.get(Logger).child({ source: 'NodeRuntime' })
+  const logger = application.get(LoggerToken)
   let serving = false
   let serverClosingPromise: Promise<void> | undefined
   let serverListeningPromise: Promise<void> | undefined
@@ -241,7 +241,11 @@ async function create<const TDefinition extends ApplicationDefinition>(
     source: process,
     close,
     onError: (error, signal) =>
-      logger.error('Node runtime shutdown failed', { error, signal }),
+      logger.error('Node runtime shutdown failed', {
+        source: 'NodeRuntime',
+        error,
+        signal,
+      }),
   })
 
   Object.assign(application, { serve, close })

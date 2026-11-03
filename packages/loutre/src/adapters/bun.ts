@@ -114,7 +114,7 @@ async function create<const TDefinition extends ApplicationDefinition>(
 
   const closeApplication = application.close.bind(application)
   let server: BunServer | undefined
-  const logger = application.get(LoggerToken).child({ source: 'BunRuntime' })
+  const logger = application.get(LoggerToken)
   let serving = false
   let serverClosingPromise: Promise<void> | undefined
 
@@ -211,7 +211,11 @@ async function create<const TDefinition extends ApplicationDefinition>(
     source: process,
     close,
     onError: (error, signal) =>
-      logger.error('Bun runtime shutdown failed', { error, signal }),
+      logger.error('Bun runtime shutdown failed', {
+        source: 'BunRuntime',
+        error,
+        signal,
+      }),
   })
 
   Object.assign(application, { serve, close })
