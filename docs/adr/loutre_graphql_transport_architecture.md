@@ -385,7 +385,7 @@ graphql-ws
 Client
 ```
 
-GraphQL.js 16では`execute()`、17では`executeSubscriptionEvent()`を利用し、eventごとにScopeを破棄する。
+GraphQL.js 17の`executeSubscriptionEvent()`を利用し、eventごとにScopeを破棄する。
 
 Client `complete` またはsocket close時にはactive iteratorへ`return()`を伝播する。
 

@@ -254,7 +254,7 @@ DI dependencyはconstructor / factoryのdefault parameterへ宣言する。
 ```ts
 constructor(
   readonly env = inject(AppEnv),
-  readonly logger = inject(Logger),
+  readonly logger = inject(LoggerToken),
 ) {}
 ```
 

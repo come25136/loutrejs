@@ -1,4 +1,4 @@
-import { createKernelApplication } from '@loutrejs/loutre'
+import { LoggerToken, createKernelApplication } from '@loutrejs/loutre'
 import { bootstrapApplication } from '@loutrejs/loutre'
 import { bindHttpServer } from '@loutrejs/loutre/http'
 import { runCli } from '@loutrejs/cli'
@@ -15,7 +15,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
+import type { LogRecord } from '@loutrejs/loutre/runtime'
 
 describe('Loutre CLI', () => {
   it.each([runCli, runOpenApiCli])(
@@ -1486,15 +1486,15 @@ describe('Loutre CLI', () => {
         ),
       ).toBe(0)
       const rendered = output.stdout.join('\n')
-      for (const name of ['WorkerService', 'Logger', 'Backend'])
+      for (const name of ['WorkerService', 'LoggerToken', 'Backend'])
         expect(rendered).toContain(name)
       if (format === 'json') {
         const graph = JSON.parse(rendered)
         const id = (name: string) =>
           graph.nodes.find((node: { name?: string }) => node.name === name).id
         for (const [from, to] of [
-          ['WorkerService', 'Logger'],
-          ['Logger', 'Backend'],
+          ['WorkerService', 'LoggerToken'],
+          ['LoggerToken', 'Backend'],
         ]) {
           expect(graph.edges).toContainEqual({
             from: id(from!),
@@ -1504,7 +1504,7 @@ describe('Loutre CLI', () => {
         }
       }
       if (format === 'mermaid') {
-        const loggerId = mermaidNodeId(output, 'Provider: Logger')
+        const loggerId = mermaidNodeId(output, 'Provider: LoggerToken')
         const rootId = mermaidNodeId(output, 'Provider: Backend')
         expect(rendered).toContain(`${loggerId} -->|"injects"| ${rootId}`)
       }
@@ -1531,7 +1531,7 @@ describe('Loutre CLI', () => {
         environment: { LABEL: 'bundle' },
         capabilities: [bindHttpServer({ runtime: 'bundle-test' })],
       })
-      const root = application.get(Logger)
+      const root = application.get(LoggerToken)
       const backend = root.backend as {
         records: LogRecord[]
         disposed: boolean

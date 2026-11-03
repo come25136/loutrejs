@@ -16,10 +16,12 @@ const tarballs = resolve(process.argv[2] ?? 'dist/package-tarballs')
 const packageVersion = JSON.parse(
   await readFile(new URL('../package.json', import.meta.url), 'utf8'),
 ).version
-const versions = (process.argv[3] ?? '16.14.2,17.0.2').split(',')
+const versions = (process.argv[3] ?? '17.0.2').split(',')
 for (const version of versions) {
-  if (!/^\d+\.\d+\.\d+$/u.test(version)) {
-    throw new Error(`GraphQL conformance requires an exact version: ${version}`)
+  if (!/^17\.\d+\.\d+$/u.test(version)) {
+    throw new Error(
+      `GraphQL conformance requires an exact 17.x version: ${version}`,
+    )
   }
 }
 const directory = await mkdtemp(join(tmpdir(), 'loutre-graphql-versions-'))
@@ -93,7 +95,7 @@ try {
       export const resolvers = {
         ...enumResolvers,
         Status: { ACTIVE:0, INACTIVE:2 },
-        DateTime: new GraphQLScalarType({name:'DateTime',serialize: value => (value as Date).toISOString(),parseValue:value=>new Date(String(value))}),
+        DateTime: new GraphQLScalarType({name:'DateTime',coerceOutputValue: value => (value as Date).toISOString(),coerceInputValue:value=>new Date(String(value))}),
         Query: {
           node: ({context})=>context.state.parent, result: ({context})=>context.state.parent,
           spec: ()=>({id:'spec'}), map: {load:({parents})=>parents.map(()=>({id:'map'}))},

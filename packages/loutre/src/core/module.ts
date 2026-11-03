@@ -11,7 +11,7 @@ import { environmentProvider, type ProviderDeclaration } from './provider.js'
 export interface ModuleDefinition {
   readonly name?: string
   readonly description?: string
-  readonly imports?: readonly ModuleInput[]
+  readonly imports?: readonly ModuleInstance[]
   readonly environment?: readonly EnvClass[]
   readonly providers?: readonly ProviderDeclaration[]
   readonly executions?: readonly ExecutionDeclaration[]
@@ -33,7 +33,7 @@ type DirectExtensions<TDefinition extends ModuleDefinition> =
     : never
 
 type ImportedExtensions<TDefinition extends ModuleDefinition> =
-  TDefinition['imports'] extends readonly ModuleInput[]
+  TDefinition['imports'] extends readonly ModuleInstance[]
     ? ModuleExtensions<TDefinition['imports'][number]>
     : never
 
@@ -44,9 +44,7 @@ export type ExtensionsOfModuleDefinition<
 export type ModuleExtensions<TModule> =
   TModule extends ModuleInstance<infer TDefinition>
     ? ExtensionsOfModuleDefinition<TDefinition>
-    : TModule extends ModuleTemplate<void, infer TDefinition>
-      ? ExtensionsOfModuleDefinition<TDefinition>
-      : never
+    : never
 
 export type ModuleHostApis<TModule> = HostApiOfExtension<
   ModuleExtensions<TModule>
@@ -80,8 +78,6 @@ export type ModuleTemplate<
   readonly instantiate: (args: Args) => ModuleInstance<TDefinition>
   readonly [moduleTypeInfo]?: ModuleTypeInfo<TDefinition>
 }
-
-export type ModuleInput = ModuleInstance | ModuleTemplate<void>
 
 export function defineModule<const TDefinition extends ModuleDefinition>(
   definition: TDefinition,
@@ -134,8 +130,4 @@ function createModuleTemplate<Args, TDefinition extends ModuleDefinition>(
   })
 
   return template
-}
-
-export function asModuleInstance(module: ModuleInput): ModuleInstance {
-  return module.kind === 'module-instance' ? module : module()
 }

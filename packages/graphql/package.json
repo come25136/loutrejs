@@ -24,7 +24,7 @@
   },
   "peerDependencies": {
     "@loutrejs/loutre": "^0.9.2",
-    "graphql": "^16.11.0 || ^17.0.0"
+    "graphql": "^17.0.0"
   },
   "repository": {
     "type": "git",

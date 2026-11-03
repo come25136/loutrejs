@@ -1,7 +1,8 @@
 import { recordingLogger } from './helpers/recording-logger.js'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { z } from 'zod'
-import { Logger, type LogRecord } from '@loutrejs/loutre/runtime'
+import { LoggerToken } from '@loutrejs/loutre'
+import type { LogRecord } from '@loutrejs/loutre/runtime'
 import {
   bootstrapApplication,
   type ApplicationExtensions,
@@ -21,13 +22,13 @@ import {
 } from '@loutrejs/loutre/http'
 
 describe('HTTP Execution Extension', () => {
-  it('inject(Logger)へimplementationとmiddlewareのsourceを付与する', async () => {
+  it('inject(LoggerToken)へimplementationとmiddlewareのsourceを付与する', async () => {
     const records: LogRecord[] = []
     const logging = recordingLogger(records)
     const tracing = http.middleware({
       name: 'RequestTracing',
       factory:
-        (logger = inject(Logger)) =>
+        (logger = inject(LoggerToken)) =>
         async (_context, next) => {
           logger.info('middleware')
           await next()
@@ -44,7 +45,7 @@ describe('HTTP Execution Extension', () => {
     const controller = http.implementation({
       name: 'HelloController',
       contract,
-      factory: (logger = inject(Logger)) => ({
+      factory: (logger = inject(LoggerToken)) => ({
         hello(context) {
           logger.info('handler')
           return context.response.ok({})

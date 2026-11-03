@@ -183,10 +183,9 @@ Endpointの`factory`から任意の`formatError(error, input)`を返すと、HTT
 
 ```ts
 import { ZodError } from 'zod'
-import { inject } from '@loutrejs/loutre'
-import { Logger } from '@loutrejs/loutre/runtime'
+import { inject, LoggerToken } from '@loutrejs/loutre'
 
-factory: (logger = inject(Logger)) => ({
+factory: (logger = inject(LoggerToken)) => ({
   context: ({ signal }) => ({ signal }),
   formatError(error, input) {
     if (error.originalError instanceof ZodError) {

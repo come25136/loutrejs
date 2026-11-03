@@ -108,8 +108,6 @@ export class LoggerService {
   }
 }
 
-export { LoggerService as Logger }
-
 export const LoggerToken = LoggerService
 
 export class SilentLogger extends LoggerService {

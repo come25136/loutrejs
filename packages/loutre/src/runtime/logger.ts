@@ -1,7 +1,6 @@
 export {
   ConsoleLoggerBackend,
   JsonConsoleLoggerBackend,
-  Logger,
   LoggerService,
   LoggerToken,
   SilentLogger,

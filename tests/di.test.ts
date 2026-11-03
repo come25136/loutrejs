@@ -1,5 +1,6 @@
 import * as fixture from './helpers/identities.js'
 import {
+  LoggerToken,
   defineModule,
   defineApplication,
   composeLayers,
@@ -16,11 +17,7 @@ import {
   token,
   type ProviderDeclaration,
 } from '@loutrejs/loutre'
-import {
-  Container,
-  DependencyResolutionError,
-  Logger,
-} from '@loutrejs/loutre/runtime'
+import { Container, DependencyResolutionError } from '@loutrejs/loutre/runtime'
 
 interface Clock {
   readonly id: number
@@ -189,7 +186,7 @@ describe('依存元consumerの取得', () => {
   it('Model構築とApplication起動を通してconsumerを取得できる', async () => {
     class AppLogger {
       readonly consumer = injectInquirer()
-      readonly logger = inject(Logger)
+      readonly logger = inject(LoggerToken)
     }
     class Service {
       readonly logger = inject(AppLogger)
@@ -215,7 +212,7 @@ describe('依存元consumerの取得', () => {
     class AppLogger {
       constructor(
         readonly inquirer = injectInquirer(),
-        readonly logger = inject(Logger),
+        readonly logger = inject(LoggerToken),
       ) {}
     }
     class ServiceA {
