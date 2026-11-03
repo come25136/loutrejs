@@ -28,11 +28,11 @@ versionはsupport policyとCI matrixが管理する。`node-26`、`bun-1.4-stabl
 
 ## 1. Current support snapshot
 
-2026-08-28時点のbaselineに、2026-10-15のBun minimum更新を反映したsupport範囲は次の通り。
+2026-08-28時点のbaselineに、2026-10-15のBun minimum更新と2026-11-03のElectron matrix更新を反映したsupport範囲は次の通り。
 
 - Node.js: support中LTSは22 / 24、Primaryは24 LTS
 - Bun: minimumは1.4.0、Primaryは現行stableの1.4
-- Electron: upstreamでsupport中のstable majorすべてとして42 / 43 / 44、Primaryは44
+- Electron: upstreamでsupport中のstable majorすべてとして43 / 44 / 45、Primaryは45
 - workerd: lockfile-pinned releaseを検証し、そのreleaseをPrimaryとする
 - AWS Lambda: AWSがGA提供するNode.js managed runtimeとしてnodejs22.x / nodejs24.x、Primaryはnodejs24.x
 
@@ -108,7 +108,7 @@ Bun向けgenerated projectは`engines.bun: >=1.4.0`を宣言する。portable pa
 
 Electronはupstreamがsupportしているstable majorをすべてsupportする。
 
-2026-08-28時点では42 / 43 / 44をCIで検証する。
+2026-11-03の更新では43 / 44 / 45をCIで検証する。
 
 upstream EOLに到達したmajorはLoutreのsupport matrixからも外す。特定majorをruntime identityへ埋め込まない。
 
@@ -159,9 +159,9 @@ Bun
 └ 1.4.0
 
 Electron
-├ 42.11.18
 ├ 43.8.3
-└ 44.9.3
+├ 44.9.3
+└ 45.0.0
 
 Cloudflare Workers
 └ workerd package-lock.json pinned release
