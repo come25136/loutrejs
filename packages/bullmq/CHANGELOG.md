@@ -1,5 +1,13 @@
 # @loutrejs/bullmq
 
+## 0.10.1
+
+### Patch Changes
+
+- d14ea65: GraphQL CLIのclient targetで、operationが参照する入力型とenumを一度だけ生成します。入れ子の入力型を変数に使ったときに起こる型定義の衝突を解消します。
+- Updated dependencies [d14ea65]
+  - @loutrejs/loutre@0.10.1
+
 ## 0.10.0
 
 ### Minor Changes
