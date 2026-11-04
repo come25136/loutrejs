@@ -387,7 +387,7 @@ async function generateTarget(target: GraphQLCodegenTarget, cwd: string) {
               },
             },
           ]
-        : [{ typescript: {} }, { operations: {} }, { documentNode: {} }],
+        : [{ operations: {} }, { documentNode: {} }],
   })
   const output = absoluteFsPath(cwd, target.output)
   if (target.kind === 'client')

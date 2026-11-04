@@ -58,7 +58,7 @@ loutre graphql generate --config graphql.config.ts --watch
 
 `schema`、`documents`、`output`のパスは設定ファイルからの相対パスになる。Serverの出力ディレクトリは生成専用にし、手書きのソースを置かない。生成ファイルは直接変更せず、SDLを修正してから再生成する。
 
-Client向けのtargetを追加すると、名前付きOperationとFragmentから変数・結果型と`TypedDocumentNode`を生成できる。Clientの出力先はServerの出力ディレクトリの外に置き、Client側のプロジェクトに`@graphql-typed-document-node/core`を追加する。Serverの生成だけならClient targetは不要。
+Client向けのtargetを追加すると、名前付きOperationとFragmentから変数・結果型と`TypedDocumentNode`を生成できる。Clientの出力先はServerの出力ディレクトリの外に置き、Client側のプロジェクトに`@graphql-typed-document-node/core`を追加する。Serverの生成だけならClient targetは不要。Clientはoperationが参照する入力型・enumを生成し、未使用のschema型を持ち込まない。
 
 ```ts
 client: {
