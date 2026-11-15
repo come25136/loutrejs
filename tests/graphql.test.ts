@@ -1841,7 +1841,7 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
       expect(Object.isFrozen(api.contexts[0]!.state)).toBe(true)
       const graph = projectApplicationModel(api.definition.model)
       const execution = graph.executions.find(
-        (node) => node.executionKind === 'websocket.session',
+        (node) => node.executionKind === 'graphql.endpoint',
       )!
       const provider = graph.providers.find(
         (node) => node.name === 'Authentication',

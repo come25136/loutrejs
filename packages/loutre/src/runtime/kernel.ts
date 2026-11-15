@@ -10,6 +10,7 @@ import {
   tokenName,
   type ApplicationModel,
   type ExecutionExtension,
+  type ExecutionDelegateHandle,
   type ExecutionExtensionRuntime,
   type ExecutionKernelRuntime,
   type ExecutionRuntimeBinding,
@@ -32,6 +33,7 @@ import { Container, assertDeclaredDependency } from './di.js'
 import { ExecutionTracker } from './execution-tracker.js'
 import { LoggerToken } from './logger.js'
 import { loggerLifecycleOwner } from './logger-source.js'
+import { selectExecutionDelegate } from '../core/extension.js'
 
 export interface ApplicationKernelRuntimeOptions {
   readonly capabilities?: readonly RuntimeCapabilityBinding[]
@@ -128,6 +130,17 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         created: (provider, value) => this.#onProviderCreated(provider, value),
       },
     })
+    const delegates = new Map<
+      ExecutionNodeId,
+      Map<ExecutionDelegateHandle<unknown>, ExecutionNodeId>
+    >()
+    for (const { from, to, handle } of this.model.delegations) {
+      const targets =
+        delegates.get(from) ??
+        new Map<ExecutionDelegateHandle<unknown>, ExecutionNodeId>()
+      targets.set(handle, to)
+      delegates.set(from, targets)
+    }
     for (const { extension, executions } of this.model.extensions) {
       this.#executionBindings.set(
         extension.identity,
@@ -149,7 +162,25 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
                   : context),
               })
             }
-            return Object.freeze({ execution, resolve })
+            const resolveDelegate = <TApi>(
+              handle: ExecutionDelegateHandle<TApi>,
+            ): TApi => {
+              if (this.#state !== 'running' && this.#state !== 'draining') {
+                throw applicationStateError(this.#state)
+              }
+              const targetId = delegates.get(execution.id)?.get(handle)
+              if (targetId === undefined) {
+                throw new Error(
+                  `LUTRE_EXECUTION_DELEGATE_UNDECLARED: ${execution.id}`,
+                )
+              }
+              return selectExecutionDelegate(
+                handle,
+                this.extensionRuntime.bind(this),
+                targetId,
+              )
+            }
+            return Object.freeze({ execution, resolve, resolveDelegate })
           }),
         ),
       )

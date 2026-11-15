@@ -28,11 +28,14 @@ import {
   runInInjectionContext,
   validateSchema,
   type ExecutionDefinition,
+  type ExecutionDelegation,
   type ExecutionContextView,
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
   type ExecutionRuntimeBinding,
+  type DependencyConsumerDescriptor,
   type DependencyResolver,
+  type TokenLike,
   type LayerState,
   type RuntimeCapabilityBinding,
   type SchemaOutput,
@@ -219,24 +222,37 @@ type UnionToIntersection<TValue> = (
   ? TIntersection
   : never
 
+// route名が未確定のContractを再帰展開すると型が収束しないため、具体的なtreeだけを展開する。
 type WebSocketHandlersForTree<
   TTree extends WebSocketRouteTree,
   TPrefix extends string = '',
-> = UnionToIntersection<
-  {
-    readonly [
-      TName in keyof TTree & string
-    ]: TTree[TName] extends WebSocketBranchDefinition
-      ? WebSocketHandlersForTree<TTree[TName]['routes'], `${TPrefix}${TName}.`>
-      : TTree[TName] extends WebSocketRouteDefinition
-        ? {
-            readonly [THandlerName in `${TPrefix}${TName}`]: (
-              context: WebSocketHandlerContext<TTree[TName]>,
-            ) => void | Promise<void>
-          }
-        : never
-  }[keyof TTree & string]
->
+> = string extends keyof TTree
+  ? Readonly<
+      Record<
+        string,
+        (
+          context: WebSocketHandlerContext<WebSocketRouteDefinition>,
+        ) => void | Promise<void>
+      >
+    >
+  : UnionToIntersection<
+      {
+        readonly [
+          TName in keyof TTree & string
+        ]: TTree[TName] extends WebSocketBranchDefinition
+          ? WebSocketHandlersForTree<
+              TTree[TName]['routes'],
+              `${TPrefix}${TName}.`
+            >
+          : TTree[TName] extends WebSocketRouteDefinition
+            ? {
+                readonly [THandlerName in `${TPrefix}${TName}`]: (
+                  context: WebSocketHandlerContext<TTree[TName]>,
+                ) => void | Promise<void>
+              }
+            : never
+      }[keyof TTree & string]
+    >
 
 export type WebSocketHandlers<TContract extends WebSocketContract> =
   WebSocketHandlersForTree<TContract['routes']>
@@ -249,6 +265,14 @@ export interface WebSocketImplementationDefinition<
   readonly factory: () => WebSocketHandlers<TContract>
 }
 
+export interface WebSocketDelegatedDefinition<
+  TContract extends WebSocketContract = WebSocketContract,
+> {
+  readonly name: string
+  readonly contract: TContract
+  readonly delegate: ExecutionDelegation<NoInfer<WebSocketHandlers<TContract>>>
+}
+
 interface CompiledWebSocketRoute {
   readonly name: WebSocketProcedureName
   readonly path: HttpPathTemplate
@@ -258,9 +282,19 @@ interface CompiledWebSocketRoute {
   readonly messages?: WebSocketMessageCodec
 }
 
+interface WebSocketDefinition {
+  readonly name: string
+  readonly contract: WebSocketContract
+  readonly delegations: readonly ExecutionDelegation<unknown>[]
+  collectDependencies(
+    consumer: DependencyConsumerDescriptor,
+  ): readonly TokenLike[]
+  createHandlerResolver(binding: ExecutionRuntimeBinding): () => unknown
+}
+
 interface CompiledWebSocketExecution {
   readonly routes: readonly CompiledWebSocketRoute[]
-  readonly factory: WebSocketImplementationDefinition['factory']
+  readonly createHandlerResolver: WebSocketDefinition['createHandlerResolver']
 }
 
 interface ActiveSession {
@@ -286,14 +320,14 @@ export interface WebSocketHostApi {
 }
 
 export const websocketExtension = defineExecutionExtension<
-  WebSocketImplementationDefinition & ExecutionDefinition,
+  WebSocketDefinition & ExecutionDefinition,
   CompiledWebSocketExecution,
   'websocket',
   WebSocketHostApi,
   WebSocketExtensionRuntime
 >({
   kind: 'execution-extension',
-  abiVersion: '2',
+  abiVersion: '3',
   name: 'loutre:websocket',
   compile(definition, context) {
     const id =
@@ -301,14 +335,11 @@ export const websocketExtension = defineExecutionExtension<
       `${context.moduleId}.websocket.${context.definitionIndex}`
     const routes = compileRouteTree(definition.contract.routes)
     const dependencies = new Set(
-      collectInjectedDependencies(
-        {
-          kind: 'execution',
-          id: dependencyConsumerId(`websocket:${id}`),
-          name: id,
-        },
-        () => definition.factory(),
-      ),
+      definition.collectDependencies({
+        kind: 'execution',
+        id: dependencyConsumerId(`websocket:${id}`),
+        name: id,
+      }),
     )
     for (const route of routes) {
       route.handshake?.middlewares?.forEach((middleware, index) => {
@@ -328,6 +359,7 @@ export const websocketExtension = defineExecutionExtension<
       id,
       executionKind: 'websocket.session',
       dependencies: [...dependencies],
+      delegations: definition.delegations,
       capabilities: [
         ...new Set([
           WEBSOCKET_SERVER,
@@ -341,7 +373,7 @@ export const websocketExtension = defineExecutionExtension<
       ],
       compiled: Object.freeze({
         routes: Object.freeze(routes),
-        factory: definition.factory,
+        createHandlerResolver: definition.createHandlerResolver,
       }),
     }
   },
@@ -409,8 +441,9 @@ export const websocketExtension = defineExecutionExtension<
 
 export type WebSocketExecutionDefinition<
   TContract extends WebSocketContract = WebSocketContract,
-> = WebSocketImplementationDefinition<TContract> &
-  ExecutionDefinition<typeof websocketExtension>
+> = { readonly contract: TContract } & ExecutionDefinition<
+  typeof websocketExtension
+>
 
 type WebSocketV2Tree<TTree extends WebSocketRouteTree> = {
   readonly [K in keyof TTree]: TTree[K] extends WebSocketBranchDefinition
@@ -435,13 +468,62 @@ export function defineWebSocketImplementation<
 >(definition: {
   readonly name?: string
   readonly contract: TContract
-  readonly factory: WebSocketImplementationDefinition<TContract>['factory']
-}): WebSocketExecutionDefinition<TContract> {
+  readonly factory: () => WebSocketHandlers<TContract>
+}): WebSocketImplementationDefinition<TContract> &
+  ExecutionDefinition<typeof websocketExtension>
+export function defineWebSocketImplementation(definition: {
+  readonly name?: string
+  readonly contract: WebSocketContract
+  readonly factory: () => unknown
+}): ExecutionDefinition<typeof websocketExtension> {
+  const { factory } = definition
   return defineExecution(websocketExtension, {
+    ...definition,
     name: definition.name ?? '',
-    contract: definition.contract,
-    factory: definition.factory,
-  }) as WebSocketExecutionDefinition<TContract>
+    delegations: [],
+    collectDependencies: (consumer: DependencyConsumerDescriptor) =>
+      collectInjectedDependencies(consumer, factory),
+    createHandlerResolver({ execution, resolve }: ExecutionRuntimeBinding) {
+      const handlers = runInInjectionContext(
+        {
+          consumer: {
+            kind: 'execution',
+            id: dependencyConsumerId(`websocket:${execution.id}`),
+            name: execution.id,
+          },
+          resolve: (token, consumer) => resolve(token, { consumer }),
+        },
+        factory,
+      )
+      return () => handlers
+    },
+  } satisfies WebSocketDefinition)
+}
+
+export function defineWebSocketDelegate<
+  const TContract extends WebSocketContract,
+>(definition: {
+  readonly name?: string
+  readonly contract: TContract
+  readonly delegate: ExecutionDelegation<NoInfer<WebSocketHandlers<TContract>>>
+}): WebSocketDelegatedDefinition<TContract> &
+  ExecutionDefinition<typeof websocketExtension>
+export function defineWebSocketDelegate(definition: {
+  readonly name?: string
+  readonly contract: WebSocketContract
+  readonly delegate: ExecutionDelegation<unknown>
+}): ExecutionDefinition<typeof websocketExtension> {
+  const { delegate } = definition
+  return defineExecution(websocketExtension, {
+    ...definition,
+    name: definition.name ?? '',
+    delegations: [delegate],
+    collectDependencies: () => [],
+    createHandlerResolver:
+      ({ resolveDelegate }: ExecutionRuntimeBinding) =>
+      () =>
+        resolveDelegate(delegate.handle),
+  } satisfies WebSocketDefinition)
 }
 
 export function bindWebSocketServer(
@@ -472,6 +554,7 @@ function defineCodec<
 export const websocket = Object.freeze({
   contract: defineWebSocketContract,
   implementation: defineWebSocketImplementation,
+  delegate: defineWebSocketDelegate,
   json: <
     const TInput extends StandardSchemaV1 | undefined = undefined,
     const TOutput extends StandardSchemaV1 | undefined = undefined,
@@ -599,32 +682,14 @@ function createWebSocketRuntime(
   driver: WebSocketServerDriver,
   applicationRuntime: ExecutionKernelRuntime,
 ): WebSocketExtensionRuntime {
-  const handlers = new Map<
-    string,
-    Readonly<
-      Record<
-        string,
-        (context: WebSocketHandlerContext<any>) => void | Promise<void>
-      >
-    >
-  >()
+  const handlerResolvers = new Map<ExecutionNodeId, () => unknown>()
   const sessions = new Set<ActiveSession>()
   let state: 'running' | 'draining' | 'stopped' = 'running'
   const ingress = new IngressGate()
-  for (const { execution, resolve } of bindings) {
-    handlers.set(
-      execution.id,
-      runInInjectionContext(
-        {
-          consumer: {
-            kind: 'execution',
-            id: dependencyConsumerId(`websocket:${execution.id}`),
-            name: execution.id,
-          },
-          resolve: (token, consumer) => resolve(token, { consumer }),
-        },
-        () => execution.compiled.factory() as never,
-      ),
+  for (const binding of bindings) {
+    handlerResolvers.set(
+      binding.execution.id,
+      binding.execution.compiled.createHandlerResolver(binding),
     )
   }
   const routes = bindings
@@ -746,7 +811,7 @@ function createWebSocketRuntime(
         input,
         handshakeState,
         lease,
-        handlers.get(match.executionId)?.[match.route.name],
+        handlerResolvers.get(match.executionId),
         lease.run,
       )
       sessions.add(session.active)
@@ -892,9 +957,7 @@ function createSession(
   },
   handshakeState: Readonly<Record<string, unknown>>,
   lease: ReturnType<ExecutionKernelRuntime['beginExecution']>,
-  handler:
-    | ((context: WebSocketHandlerContext<any>) => void | Promise<void>)
-    | undefined,
+  resolveHandlers: (() => unknown) | undefined,
   runInExecution: (<T>(operation: () => T) => T) | undefined,
 ): { readonly active: ActiveSession; readonly completion: Promise<void> } {
   const session = Object.freeze({
@@ -982,10 +1045,15 @@ function createSession(
     closed,
     close,
     ...(route.messages?.output === undefined ? {} : { send }),
-  } as WebSocketHandlerContext<any>
+  }
   const completion = (async () => {
     try {
-      if (!handler) {
+      const handlers = resolveHandlers?.()
+      if (typeof handlers !== 'object' || handlers === null) {
+        throw new Error(`LUTRE_WEBSOCKET_HANDLER_MISSING: ${route.name}`)
+      }
+      const handler: unknown = Reflect.get(handlers, route.name)
+      if (typeof handler !== 'function') {
         throw new Error(`LUTRE_WEBSOCKET_HANDLER_MISSING: ${route.name}`)
       }
       const invoke = () => handler(context)

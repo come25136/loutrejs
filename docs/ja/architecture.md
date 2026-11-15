@@ -18,6 +18,8 @@ flowchart TB
   tasks["Tasks Extension"] --> model
   messagePort["MessagePort Extension"] --> model
   websocket["WebSocket Extension"] --> model
+  graphql["GraphQL Extension"] --> model
+  mcp["MCP Extension"] --> model
 
   runtime --> node["Node.js"]
   runtime --> bun["Bun"]
@@ -41,13 +43,15 @@ HTTP、Task、MessagePort、WebSocket、Queue consumerなどのexecution semanti
 
 ## Packages
 
-| 公開package        | Role                                                         |
-| ------------------ | ------------------------------------------------------------ |
-| `@loutrejs/loutre` | Application Graph Kernel、DI、Lifecycle、Runtime abstraction |
-| `@loutrejs/node`   | Node.js Runtime Adapter                                      |
-| `@loutrejs/bullmq` | BullMQ Queue Consumer Driver                                 |
-| `@loutrejs/cli`    | Graph inspection、validation、build、deployment tooling      |
-| `create-loutre`    | project initializer                                          |
+| 公開package         | Role                                                         |
+| ------------------- | ------------------------------------------------------------ |
+| `@loutrejs/loutre`  | Application Graph Kernel、DI、Lifecycle、Runtime abstraction |
+| `@loutrejs/node`    | Node.js Runtime Adapter                                      |
+| `@loutrejs/bullmq`  | BullMQ Queue Consumer Driver                                 |
+| `@loutrejs/graphql` | GraphQL EndpointとHTTP / WebSocketからの委任                 |
+| `@loutrejs/mcp`     | MCP ToolとStreamable HTTP                                    |
+| `@loutrejs/cli`     | Graph inspection、validation、build、deployment tooling      |
+| `create-loutre`     | project initializer                                          |
 
 main packageの主要subpathは次の通りです。
 
@@ -167,6 +171,8 @@ await app.tasks.start()
 ## MessagePortとWebSocket
 
 MessagePortは`@loutrejs/loutre/message-port`、WebSocketは`@loutrejs/loutre/websocket`が提供し、それぞれのexecution model、runtime、Host API、Graph projectionを所有します。WebSocketはHTTP upgrade handshakeのためpublicなHTTP Extension surfaceにも依存しますが、Coreはtransport非依存のままです。
+
+WebSocketの実装は`websocket.implementation()`でhandlerを組み立て、別Executionへ委任する場合は`websocket.delegate()`で接続します。HTTPの委任には`http.delegate()`を使います。宣言と所有権は[Transportの宣言と委任](../adr/loutre_execution_extension_contract_architecture.md#35-transportの宣言と委任)を参照してください。
 
 ## DIとModule visibility
 
@@ -442,6 +448,10 @@ loutre doctor --entry src/app.ts --runtime node
 OpenAPIもExecution Extensionのprojectionです。CoreはHTTP route semanticsを知りません。
 
 Provider構築、Module正規化、終了フックの責務を分けた判断は[所有権ADR](../adr/loutre_construction_and_runtime_ownership.md)を参照してください。
+
+GraphQLとMCPはprotocol runtimeを専用Executionで所有し、HTTPとWebSocketの入口からdelegateで接続します。GraphQLの状態の寿命は[GraphQL transport設計](../adr/loutre_graphql_transport_architecture.md#状態の寿命と共有範囲)を参照してください。
+
+MCP endpointとToolのContextを分ける設計は[MCPサーバー設計ADR](../adr/loutre_mcp_server_architecture.md)を参照してください。
 
 ## Design invariant
 

@@ -3,16 +3,28 @@ import { z } from 'zod'
 import { http } from '@loutrejs/loutre/http'
 import {
   bootstrapApplication,
+  collectInjectedDependencies,
   defineApplication,
+  defineExecution,
+  defineExecutionExtension,
   defineModule,
+  delegateExecution,
+  dependencyConsumerId,
+  inject,
+  runInInjectionContext,
+  type ExecutionDefinition,
+  type ExecutionExtensionRuntime,
+  type ExecutionNodeId,
 } from '@loutrejs/loutre'
 import {
   bindWebSocketServer,
   websocket,
   type WebSocketCloseInfo,
   type WebSocketConnectionDriver,
+  type WebSocketContract,
   type WebSocketDataMessage,
   type WebSocketHandlerContext,
+  type WebSocketHandlers,
   type WebSocketHostApi,
   type WebSocketServerDriver,
 } from '@loutrejs/loutre/websocket'
@@ -78,7 +90,343 @@ function fixtureDriver(connection: FixtureConnection): WebSocketServerDriver {
   }
 }
 
+function delegatedSocketTarget<TContract extends WebSocketContract>(
+  factory: () => WebSocketHandlers<TContract>,
+  events: string[] = [],
+) {
+  interface Definition extends ExecutionDefinition {
+    readonly factory: typeof factory
+  }
+  interface Runtime extends ExecutionExtensionRuntime {
+    handlers(id: ExecutionNodeId): WebSocketHandlers<TContract>
+  }
+  const extension = defineExecutionExtension<
+    Definition,
+    { readonly factory: typeof factory },
+    never,
+    {},
+    Runtime
+  >({
+    kind: 'execution-extension',
+    name: '@fixture/socket-protocol',
+    abiVersion: '1',
+    compile(definition) {
+      return {
+        kind: 'execution',
+        id: 'socket.protocol',
+        executionKind: 'fixture.protocol',
+        dependencies: collectInjectedDependencies(
+          {
+            id: dependencyConsumerId('socket.protocol'),
+            name: 'SocketProtocol',
+          },
+          definition.factory,
+        ),
+        capabilities: [],
+        compiled: { factory: definition.factory },
+      }
+    },
+    createRuntime({ executions }) {
+      const handlers = new Map(
+        executions.map(({ execution, resolve }) => [
+          execution.id,
+          runInInjectionContext(
+            {
+              consumer: {
+                id: dependencyConsumerId(execution.id),
+                name: 'SocketProtocol',
+              },
+              resolve: (token) => resolve(token),
+            },
+            execution.compiled.factory,
+          ),
+        ]),
+      )
+      return {
+        handlers(id) {
+          const value = handlers.get(id)
+          if (value === undefined) throw new Error('委譲先がありません。')
+          return value
+        },
+        drain() {
+          events.push('protocol.drain')
+        },
+        close() {
+          events.push('protocol.close')
+        },
+      }
+    },
+  })
+  return defineExecution(extension, { factory })
+}
+
 describe('WebSocket Execution Extension', () => {
+  it.each([false, true])(
+    '委譲先の初期化順が逆=%sでも所有ModuleのDIとmiddleware・codecを使う',
+    async (reverse) => {
+      class Authentication {
+        readonly tenant = '組織1'
+      }
+      class Service {
+        value = 0
+      }
+      const authentication = http.middleware<{ tenant: string }>({
+        name: 'Authentication',
+        factory:
+          (auth = inject(Authentication)) =>
+          async (_input, next) =>
+            next({ tenant: auth.tenant }),
+      })
+      const contract = websocket.contract({
+        api: {
+          path: '/api',
+          routes: {
+            echo: {
+              path: '/{room}',
+              handshake: {
+                params: { room: z.string() },
+                middlewares: [authentication],
+              },
+              messages: websocket.json({
+                input: z.number(),
+                output: z.object({ tenant: z.string(), value: z.number() }),
+              }),
+            },
+          },
+        },
+      })
+      const target = delegatedSocketTarget<typeof contract>(
+        (service = inject(Service)) => ({
+          async 'api.echo'(context) {
+            expect(context.input.params.room).toBe('room1')
+            for await (const message of context.input.messages) {
+              if (message.isValid) service.value += message.value
+            }
+            await context.send({
+              tenant: context.state.tenant,
+              value: service.value,
+            })
+            await context.close()
+          },
+        }),
+      )
+      const source = websocket.delegate({
+        name: 'socket.source',
+        contract,
+        delegate: delegateExecution(target, (runtime, id) =>
+          runtime.handlers(id),
+        ),
+      })
+      const sourceModule = defineModule({
+        providers: [Authentication],
+        executions: [source],
+      })
+      const targetModule = defineModule({
+        providers: [Service],
+        executions: [target],
+      })
+      const definition = defineApplication({
+        modules: reverse
+          ? [targetModule, sourceModule]
+          : [sourceModule, targetModule],
+      })
+      expect(definition.model.diagnostics).toEqual([])
+      expect(definition.model.edges).toContainEqual({
+        kind: 'delegates',
+        from: 'socket.source',
+        to: 'socket.protocol',
+      })
+      const serviceNode = definition.model.nodes.find(
+        (node) => node.kind === 'provider' && node.token === Service,
+      )!
+      const authenticationNode = definition.model.nodes.find(
+        (node) => node.kind === 'provider' && node.token === Authentication,
+      )!
+      expect(definition.model.edges).toContainEqual({
+        kind: 'injects',
+        from: 'socket.protocol',
+        to: serviceNode.id,
+      })
+      expect(definition.model.edges).toContainEqual({
+        kind: 'injects',
+        from: 'socket.source',
+        to: authenticationNode.id,
+      })
+      expect(definition.model.edges).not.toContainEqual({
+        kind: 'injects',
+        from: 'socket.source',
+        to: serviceNode.id,
+      })
+      for (let index = 0; index < 2; index += 1) {
+        const connection = new FixtureConnection([{ type: 'text', data: '2' }])
+        await using app = await bootstrapApplication({
+          application: definition,
+          capabilities: [bindWebSocketServer(fixtureDriver(connection))],
+        })
+        expect(
+          (
+            await app.websocket.upgrade(
+              new Request('http://fixture.test/api/room1'),
+            )
+          ).status,
+        ).toBe(200)
+        await connection.closed
+        expect(connection.sent).toEqual([
+          { type: 'text', data: JSON.stringify({ tenant: '組織1', value: 2 }) },
+        ])
+      }
+    },
+  )
+
+  it('委譲先の登録漏れをModelで拒否する', () => {
+    const contract = websocket.contract({ endpoint: { path: '/socket' } })
+    const factory = () => ({ endpoint: async () => undefined })
+    const target = delegatedSocketTarget<typeof contract>(factory)
+    const delegate = delegateExecution(target, (runtime, id) =>
+      runtime.handlers(id),
+    )
+    const source = websocket.delegate({ contract, delegate })
+    const missing = defineApplication({
+      modules: [defineModule({ executions: [source] })],
+    })
+    expect(missing.model.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'LUTRE_EXECUTION_DELEGATE_MISSING' }),
+    )
+  })
+
+  it('middlewareが拒否した接続では委譲先を呼ばない', async () => {
+    const connection = new FixtureConnection()
+    const upgrade = vi.fn(fixtureDriver(connection).upgrade)
+    const handler = vi.fn(async () => undefined)
+    const contract = websocket.contract({
+      endpoint: {
+        path: '/socket',
+        handshake: {
+          middlewares: [
+            http.middleware({
+              name: 'Deny',
+              factory: () => async () => new Response(null, { status: 403 }),
+            }),
+          ],
+        },
+      },
+    })
+    const target = delegatedSocketTarget<typeof contract>(() => ({
+      endpoint: handler,
+    }))
+    const source = websocket.delegate({
+      contract,
+      delegate: delegateExecution(target, (runtime, id) =>
+        runtime.handlers(id),
+      ),
+    })
+    await using app = await bootstrapApplication({
+      application: defineApplication({
+        modules: [defineModule({ executions: [source, target] })],
+      }),
+      capabilities: [bindWebSocketServer({ runtime: 'test', upgrade })],
+    })
+    expect(
+      (await app.websocket.upgrade(new Request('http://fixture.test/socket')))
+        .status,
+    ).toBe(403)
+    expect(upgrade).not.toHaveBeenCalled()
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('委譲先の例外でも接続とLeaseを終了する', async () => {
+    const connection = new FixtureConnection()
+    const completed = vi.fn()
+    const failed = vi.fn()
+    const contract = websocket.contract({ endpoint: { path: '/socket' } })
+    const target = delegatedSocketTarget<typeof contract>(() => ({
+      endpoint: async () => {
+        throw new Error('処理に失敗しました。')
+      },
+    }))
+    const source = websocket.delegate({
+      contract,
+      delegate: delegateExecution(target, (runtime, id) =>
+        runtime.handlers(id),
+      ),
+    })
+    await using app = await bootstrapApplication({
+      application: defineApplication({
+        modules: [defineModule({ executions: [source, target] })],
+      }),
+      capabilities: [bindWebSocketServer(fixtureDriver(connection))],
+      instrumentation: {
+        beginExecution: () => ({ complete: completed, fail: failed }),
+      },
+    })
+    await app.websocket.upgrade(new Request('http://fixture.test/socket'))
+    expect((await connection.closed).code).toBe(1011)
+    await app.close()
+    expect(completed).toHaveBeenCalledOnce()
+    expect(failed).toHaveBeenCalledOnce()
+  })
+
+  it('委譲先のhandlerが終了するまでprotocolとProviderを保持する', async () => {
+    const events: string[] = []
+    const connection = new FixtureConnection()
+    const entered = deferred<void>()
+    const finish = deferred<void>()
+    class Service {
+      onModuleDestroy() {
+        events.push('provider.destroy')
+      }
+    }
+    const contract = websocket.contract({ endpoint: { path: '/socket' } })
+    const target = delegatedSocketTarget<typeof contract>(
+      (service = inject(Service)) => ({
+        async endpoint(context) {
+          void service
+          entered.resolve()
+          await context.closed
+          await finish.promise
+          events.push('handler.finished')
+        },
+      }),
+      events,
+    )
+    const source = websocket.delegate({
+      contract,
+      delegate: delegateExecution(target, (runtime, id) =>
+        runtime.handlers(id),
+      ),
+    })
+    const app = await bootstrapApplication({
+      application: defineApplication({
+        modules: [
+          defineModule({ providers: [Service], executions: [source, target] }),
+        ],
+      }),
+      capabilities: [bindWebSocketServer(fixtureDriver(connection))],
+    })
+    try {
+      await app.websocket.upgrade(new Request('http://fixture.test/socket'))
+      await entered.promise
+      const closing = app.close()
+      await connection.closed
+      expect(events).toEqual(['protocol.drain'])
+      expect(
+        (await app.websocket.upgrade(new Request('http://fixture.test/socket')))
+          .status,
+      ).toBe(503)
+      finish.resolve()
+      await closing
+      expect(events).toEqual([
+        'protocol.drain',
+        'handler.finished',
+        'protocol.close',
+        'provider.destroy',
+      ])
+    } finally {
+      finish.resolve()
+      await app.close()
+    }
+  })
+
   it.each([
     '拒否',
     '開始前の例外',

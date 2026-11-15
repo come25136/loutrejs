@@ -16,8 +16,8 @@ import {
   type GraphQLFormattedError,
 } from 'graphql'
 import type {
-  GraphQLRuntime,
-  GraphQLContextInput,
+  GraphQLProtocolRuntime,
+  GraphQLWebSocketContextInput,
   GraphQLWebSocketExtra,
 } from './types.js'
 import { formatGraphQLError } from './errors.js'
@@ -47,24 +47,26 @@ type TextSchema = {
     types: { input: string; output: string }
   }
 }
-type SessionContext = WebSocketHandlerContext<{
+export type GraphQLSessionContext = WebSocketHandlerContext<{
   path: string
   messages: WebSocketMessageCodec<TextSchema, TextSchema>
 }>
 
-export async function serveGraphQLWebSocket<
-  TInput extends GraphQLContextInput<object, object>,
-  TState extends object,
-  THandshakeState extends object,
->(
-  context: SessionContext,
+export async function serveGraphQLWebSocket(
+  context: GraphQLSessionContext,
   bound: BoundManifest,
-  runtime: GraphQLRuntime<object, TInput, TState, THandshakeState>,
+  runtime: GraphQLProtocolRuntime,
   options: { readonly connectionInitWaitTimeout?: number },
 ): Promise<void> {
-  const operations = new Map<GraphQLOperationId, Operation<TInput>>()
+  const operations = new Map<
+    GraphQLOperationId,
+    Operation<GraphQLWebSocketContextInput<object>>
+  >()
   const schema = bound.schema
-  const executionOperations = new WeakMap<ExecutionArgs, Operation<TInput>>()
+  const executionOperations = new WeakMap<
+    ExecutionArgs,
+    Operation<GraphQLWebSocketContextInput<object>>
+  >()
   const tasks = new Set<Promise<void>>()
   const operationTasks = new Map<GraphQLOperationId, Promise<void>>()
   let receive!: (data: string) => Promise<void>
@@ -81,11 +83,11 @@ export async function serveGraphQLWebSocket<
       operation.controller.abort(context.signal.reason)
   }
   const run = <T>(
-    operation: Operation<TInput> | undefined,
+    operation: Operation<GraphQLWebSocketContextInput<object>> | undefined,
     invoke: () => T,
   ): T => (operation?.lease.run ? operation.lease.run(invoke) : invoke())
   const format = (
-    operation: Operation<TInput>,
+    operation: Operation<GraphQLWebSocketContextInput<object>>,
     error: GraphQLError,
   ): GraphQLFormattedError => {
     if (operation.formattingFailure) throw operation.formattingFailure.error
@@ -97,17 +99,17 @@ export async function serveGraphQLWebSocket<
       throw failure
     }
   }
-  let state: Readonly<TState> | undefined
+  let state: Readonly<object> | undefined
   let connectionContext:
     | Context<
         Record<string, unknown> | undefined,
-        GraphQLWebSocketExtra<TState>
+        GraphQLWebSocketExtra<object>
       >
     | undefined
   const hooks = runtime.ws
   const server = makeServer<
     Record<string, unknown> | undefined,
-    GraphQLWebSocketExtra<TState>
+    GraphQLWebSocketExtra<object>
   >({
     schema,
     ...(options.connectionInitWaitTimeout === undefined
@@ -121,7 +123,7 @@ export async function serveGraphQLWebSocket<
               request: context.request,
               signal: context.signal,
               payload: connection.connectionParams,
-              state: context.state as Readonly<THandshakeState>,
+              state: context.state,
             })
           : context.state
         context.signal.throwIfAborted()
@@ -139,7 +141,7 @@ export async function serveGraphQLWebSocket<
             'connectionInit must return a state object or ConnectionRejected.',
           )
 
-        state = Object.freeze(result) as Readonly<TState>
+        state = Object.freeze(result)
         return true
       }, context.signal)
     },
@@ -153,16 +155,15 @@ export async function serveGraphQLWebSocket<
         kind: 'graphql.operation',
         name: payload.operationName || id,
       })
-      // factoryの条件型は呼び出し側でWSが有効な場合にこの入力を含む。
-      const input = {
-        transport: 'websocket' as const,
+      const input: GraphQLWebSocketContextInput<object> = {
+        transport: 'websocket',
         state: state!,
         request: context.request,
         connectionParams: connection.connectionParams,
         operationId: operationKey,
         signal: controller.signal,
-      } as TInput
-      const operation: Operation<TInput> = {
+      }
+      const operation: Operation<GraphQLWebSocketContextInput<object>> = {
         controller,
         lease,
         input,

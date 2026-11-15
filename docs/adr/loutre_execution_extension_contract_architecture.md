@@ -108,6 +108,52 @@ heartbeat --references--> hello task
 
 Definition objectはclosure構築中だけ利用し、Application Modelへraw objectとして保持しない。Runtime、Graph、CLI、Buildはcompile済みnode/edgeだけを見る。
 
+### 3.2 Extension間の実行委任
+
+`delegateExecution(target, select)`で型付きの委任を宣言する。参照元のcompileが委任を返すと、Modelは明示登録済みの参照先を確認し、`delegates`エッジと解決用のハンドルを保持する。委任先のDefinitionはそれを登録したModuleが所有し、委任から定義の収集やHost APIの追加は行わない。委任先が未登録、またはコンパイルできない場合はModel診断とする。
+
+参照元は実行時に自分のbindingでハンドルを解決する。KernelはModelに記録した委任先のExecution IDとExtension Runtimeを渡し、`select`の戻り値を呼び出しに使う。解決はApplicationの起動完了後に行うため、Extensionの初期化順に依存しない。委任先の処理とDIは、そのExtensionが管理する。
+
+### 3.3 合成と委任を選ぶ基準
+
+`ExecutionGroup`は複数の宣言をModuleへまとめて登録し、`delegates`は登録済みExecution間の実行時の接続を表す。GraphQLとMCPは両者を組み合わせる。
+
+transportとprotocolは別の責務を持つ。HTTPとWebSocketは公開ルート、middleware、接続と実行Leaseを所有する。GraphQLとMCPは専用Executionとしてprotocol runtimeとそのDIを所有し、transportから委任を受ける。Coreはprotocol名による分岐を持たず、宣言済みの接続を検証して解決する。
+
+委任先のAPIの取得と、実行単位の粒度は分けて判断する。GraphQL operationとMCP Tool呼び出しは動的なsub-operationとして追跡し、protocolのModule visibilityとProvider依存はendpointが保持する。`delegates` edgeから初期化や終了の順序を導出しない。
+
+### 3.4 GraphQLとMCPのprotocol runtimeの所有権
+
+両者のtransport接続をdelegateへ統一する。GraphQL endpointのruntimeとfactoryの依存を一つのExecutionへ集約し、HTTPとWebSocketで共有する。runtimeはApplicationごとに生成し、Definitionやmanifestのclosureへ保存しない。生成と解決の単位を揃えることで、transportの有効化によってprotocolの状態やDIの所有者が変わることを避ける。
+
+transportのfactoryへprotocol処理を埋め込む案は、複数の入口が共有するruntimeの所有権が分散するため採用しない。共有runtimeをProviderにする案も、protocolの依存と終了をProviderとExecutionへ分け、登録済みExecutionへの接続方法を別途定める必要があるため採用しない。
+
+公開APIは`graphql.implementation()`と`mcp.implementation()`を入口とし、protocolと有効なtransportをgroupへまとめる。HTTP middlewareとUpgrade middlewareの依存はそれぞれのtransportへ記録し、protocol factoryの依存は委譲先のExecutionへ記録する。委譲元は要求処理時に自身のbindingで委譲先を解決する。
+
+Socketと接続LeaseはWebSocket、GraphQLのiteratorとoperationの終了はGraphQLが所有する。Kernelは全Extensionのdrainを調整し、active executionの完了後にruntimeをcloseする。接続の終了処理中も委譲先を利用できるようにする。
+
+GraphQLの状態の共有範囲は[状態の寿命と共有範囲](./loutre_graphql_transport_architecture.md#状態の寿命と共有範囲)を正本とする。受け入れ条件は、endpoint単位のruntime共有、複数Application間の分離、ModuleごとのDI検証、middleware stateとContextの型推論、初期化順への非依存、初期化失敗時の回収、接続とoperationの中断・終了の検証とする。
+
+### 3.5 Transportの宣言と委任
+
+通常のhandlerは`http.implementation()`、`http.raw()`、`websocket.implementation()`で宣言し、登録済みExecutionへの委任は`http.delegate()`、`websocket.delegate()`で宣言する。factoryとdelegateを選択するunionをcompileやRuntimeへ持ち回らない。宣言時に依存収集とhandler構築の契約へ揃え、Model構築と起動はその契約だけを扱う。委任はhandlerの取得方法であり、transportの実行経路を増やすものではない。
+
+HTTPの委任先はraw HTTP handlerを返す。WebSocketの委任先は、そのContractのroute名をkeyとする`WebSocketHandlers<typeof contract>`を返す。nested route名、handshakeのstateと入出力schemaはContractから推論する。
+
+```ts
+const socket = websocket.delegate({
+  name: 'api.websocket',
+  contract,
+  delegate: delegateExecution(endpoint, (runtime, id) => runtime.handlers(id)),
+})
+```
+
+Upgrade middlewareの依存とWebSocket Capabilityは委譲元へ、protocolの依存は委譲先へ記録する。参照先の明示登録と`delegates` edgeの検証はCoreの既存契約を使う。
+
+委譲先は要求または接続のhandler実行時に解決する。Transport Runtimeの初期化では参照先のRuntimeを要求しないため、Extensionの初期化順に依存しない。handler解決結果はApplicationのDefinitionへ保存しない。
+
+routing、handshake、codec、Socket、接続LeaseとdrainはWebSocketが所有する。middlewareが拒否した要求では委譲先のhandlerを実行しない。委譲先の例外でも接続とLeaseを終了し、handlerが継続している間は委譲先RuntimeとProviderを保持する。protocolのcloseは接続の処理完了後に行う。
+
 ## 4. compile
 
 `compile()`はDefinitionをcanonical Application Model contributionへ変換する。
@@ -180,6 +226,7 @@ interface ExecutionContribution<TCompiled = unknown> {
   readonly executionKind: string
   readonly dependencies: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
+  readonly delegations?: readonly ExecutionDelegation<unknown>[]
   readonly compiled: TCompiled
 }
 ```

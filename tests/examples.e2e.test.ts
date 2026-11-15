@@ -15,10 +15,50 @@ const databaseDrizzleWorkspace = '@loutrejs/example-database-drizzle-postgres'
 const databasePrismaWorkspace = '@loutrejs/example-database-prisma-postgres'
 const helloCliWorkspace = '@loutrejs/example-hello-cli'
 const helloHttpWorkspace = '@loutrejs/example-hello-http'
+const mcpCounterWorkspace = '@loutrejs/example-mcp-counter'
 const nestedContractAuthWorkspace = '@loutrejs/example-nested-contract-auth'
 const helloWorkerWorkspace = '@loutrejs/example-hello-worker'
 
 describe('example projects', { concurrent: false }, () => {
+  it('MCP カウンターの一覧と呼び出しを scope で制御する', async () => {
+    const checked = runWorkspaceCommand(mcpCounterWorkspace, 'check')
+    expect(checked.status, checked.stderr || checked.stdout).toBe(0)
+
+    const port = await reserveHttpPort()
+    const env = { PORT: String(port), MCP_TOKEN: 'demo-read' }
+    const example = startWorkspace(mcpCounterWorkspace, 'start', env)
+    const client = (args: string[] = [], token = env.MCP_TOKEN) =>
+      runWorkspaceCommand(mcpCounterWorkspace, 'client', args, {
+        ...env,
+        MCP_TOKEN: token,
+      })
+    const output = (result: ReturnType<typeof client>) => {
+      expect(result.status, result.stderr || result.stdout).toBe(0)
+      return JSON.parse(result.stdout.trim().split('\n').at(-1)!)
+    }
+
+    try {
+      await waitForPort(port)
+      expect(output(client())).toEqual(['counter.get'])
+      expect(output(client(['counter.get']))).toEqual({ value: 0 })
+
+      const denied = client(['counter.increment', '{"by":2}'])
+      expect(denied.status).toBe(1)
+      expect(denied.stderr).toContain('counter:read counter:write')
+
+      expect(output(client([], 'demo-write'))).toEqual([
+        'counter.get',
+        'counter.increment',
+      ])
+      expect(
+        output(client(['counter.increment', '{"by":2}'], 'demo-write')),
+      ).toEqual({ value: 2 })
+      expect(output(client(['counter.get']))).toEqual({ value: 2 })
+    } finally {
+      await example.stop()
+    }
+  })
+
   it('Hello HTTP projectをstartして外部HTTP requestへ応答する', async () => {
     const port = await reserveHttpPort()
     const example = startWorkspace(helloHttpWorkspace, 'start', {

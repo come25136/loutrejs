@@ -35,7 +35,7 @@ export const endpoint = graphql.implementation({
 })
 ```
 
-factoryとcontextは必須です。manifestが要求するContextを返してください。schema / typeDefs / rootValueを渡す経路は廃止しています。
+factoryとcontextは必須です。factoryの実体はApplicationごとのendpointにつき一度生成し、HTTPとWebSocketで共有します。factoryで保持する状態やtransient Providerも同じ範囲で共有します。Contextはoperationごとに作り、接続の認証情報はConnectionInitのstateへ置いてください。manifestが要求するContextを返してください。schema / typeDefs / rootValueを渡す経路は廃止しています。
 
 Resolverはresolve({ parent, args, context, info })を使い、getFieldSelection(info)で先読み用の選択Field情報を取得できます。Batch取得を行うFieldには{ requires, read, load, authorize, maxBatchSize }を直接書きます。生成Resolvers<AppContext>とbindManifest<AppContext>がParent / Args / ResultをSDLとdomain mappingから推論します。
 

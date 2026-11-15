@@ -16,6 +16,7 @@ import {
   flattenExecutions,
   type AnyExecutionExtension,
   type ExecutionContribution,
+  type ExecutionDelegation,
   type ExecutionDefinition,
   type ExecutionExtension,
 } from './extension.js'
@@ -156,6 +157,10 @@ export function buildApplicationModel(
   const capabilityNodeIds = new Set<CapabilityNodeId>()
   const visitedDefinitions = new Set<ExecutionDefinition>()
   const compiledDefinitions = new Map<ExecutionDefinition, ExecutionModelNode>()
+  const pendingDelegations: {
+    readonly from: ExecutionNodeId
+    readonly declaration: ExecutionDelegation<unknown>
+  }[] = []
   const executionReferences: {
     readonly from: ExecutionDefinition
     readonly to: ExecutionDefinition
@@ -382,8 +387,9 @@ export function buildApplicationModel(
       }
       executionIds.add(executionNodeId(contribution.id))
       const executionSource = getSourceLocation(value)
+      const { delegations, ...compiledContribution } = contribution
       const execution: ExecutionModelNode = Object.freeze({
-        ...contribution,
+        ...compiledContribution,
         id: executionNodeId(contribution.id),
         dependencies: Object.freeze([...contribution.dependencies]),
         capabilities: Object.freeze([...contribution.capabilities]),
@@ -391,6 +397,9 @@ export function buildApplicationModel(
         ...(executionSource === undefined ? {} : { source: executionSource }),
       })
       compiledDefinitions.set(value, execution)
+      for (const declaration of delegations ?? []) {
+        pendingDelegations.push({ from: execution.id, declaration })
+      }
       executions.push(execution)
       nodes.push(execution)
       edges.push({ from: moduleId, to: execution.id, kind: 'owns' })
@@ -514,6 +523,24 @@ export function buildApplicationModel(
     edges.push({ from: from.id, to: to.id, kind: 'references' })
   }
 
+  const delegations: ApplicationModel['delegations'][number][] = []
+  for (const { from, declaration } of pendingDelegations) {
+    const target = compiledDefinitions.get(declaration.target)
+    if (!rootDefinitionOwners.has(declaration.target) || target === undefined) {
+      diagnostics.push(
+        diagnostic(
+          'LUTRE_EXECUTION_DELEGATE_MISSING',
+          `Execution ${from} must delegate to an explicitly registered Execution Definition.`,
+          from,
+        ),
+      )
+      continue
+    }
+    const edge = { kind: 'delegates' as const, from, to: target.id }
+    edges.push(edge)
+    delegations.push(Object.freeze({ ...edge, handle: declaration.handle }))
+  }
+
   const extensionGroups = [...extensionExecutions.values()].map(
     ({ extension, executions: ownedExecutions }): ApplicationModelExtension => {
       const extensionId = extensionNodeId(extension.name)
@@ -563,6 +590,7 @@ export function buildApplicationModel(
     nodes: Object.freeze(nodes.map((node) => Object.freeze(node))),
     edges: Object.freeze(edges.map((edge) => Object.freeze(edge))),
     executions: Object.freeze(executions),
+    delegations: Object.freeze(delegations),
     extensions,
     diagnostics: Object.freeze(
       diagnostics.map((item) => Object.freeze({ ...item })),

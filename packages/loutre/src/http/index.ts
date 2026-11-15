@@ -34,6 +34,7 @@ export {
   defineHttpImplementation,
   defineHttpMiddleware,
   defineHttpRaw,
+  defineHttpDelegate,
   httpError,
   executionHttp as http,
   httpExecutionExtension,
@@ -44,6 +45,7 @@ export {
 } from './extension.js'
 export type {
   HttpRawDefinition,
+  HttpRawDelegatedDefinition,
   HttpRawRouteDefinition,
   HttpRawExecutionContext,
   HttpRawExecutionDefinition,

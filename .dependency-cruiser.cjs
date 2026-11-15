@@ -2,23 +2,23 @@
 module.exports = {
   forbidden: [
     {
-      name: 'GraphQLをCoreとruntime adapterから分離する',
+      name: '外部protocol ExtensionをCoreとruntime adapterから分離する',
       severity: 'error',
       from: { path: '^packages/(?:loutre|node)/src(?:/|$)' },
       to: {
-        path: '^packages/graphql(?:/|$)|^node_modules/(?:graphql|graphql-http|graphql-ws)(?:/|$)',
+        path: '^packages/(?:graphql|mcp)(?:/|$)|^node_modules/(?:graphql|graphql-http|graphql-ws|@modelcontextprotocol)(?:/|$)',
       },
     },
     {
-      name: 'GraphQL integrationのruntime固有依存を禁止する',
+      name: '外部protocol Extensionのruntime固有依存を禁止する',
       severity: 'error',
-      from: { path: '^packages/graphql/src(?:/|$)' },
+      from: { path: '^packages/(?:graphql|mcp)/src(?:/|$)' },
       to: { path: '^packages/(?:node|loutre/src/(?:adapters|runtime))(?:/|$)' },
     },
     {
-      name: 'GraphQLをNode組み込みAPIから分離する',
+      name: '外部protocol ExtensionをNode組み込みAPIから分離する',
       severity: 'error',
-      from: { path: '^packages/graphql/src(?:/|$)' },
+      from: { path: '^packages/(?:graphql|mcp)/src(?:/|$)' },
       to: { dependencyTypes: ['core'] },
     },
     {

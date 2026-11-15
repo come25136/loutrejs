@@ -33,12 +33,14 @@ import {
   SchemaValidationError,
   validateSchema,
   type ExecutionDefinition,
+  type ExecutionDelegation,
   type ExecutionContextView,
-  type ExecutionExtension,
   type ExecutionExtensionDrainContext,
   type ExecutionKernelRuntime,
   type ExecutionRuntimeBinding,
+  type DependencyConsumerDescriptor,
   type DependencyResolver,
+  type TokenLike,
   type GenericLayer,
   type RuntimeCapabilityBinding,
   type SchemaInput,
@@ -637,16 +639,70 @@ export interface HttpRawDefinition<
   ) => Response | Promise<Response>
 }
 
-export type HttpRawExecutionDefinition = HttpRawDefinition &
-  ExecutionDefinition<typeof httpExecutionExtension>
+export interface HttpRawDelegatedDefinition<
+  TMiddlewares extends readonly AnyHttpMiddleware[] =
+    readonly AnyHttpMiddleware[],
+> {
+  readonly name?: string
+  readonly route: HttpRawRouteDefinition & {
+    readonly middlewares?: TMiddlewares
+  }
+  readonly delegate: ExecutionDelegation<
+    (
+      context: HttpRawExecutionContext<RawMiddlewareState<TMiddlewares>>,
+    ) => Response | Promise<Response>
+  >
+}
+
+export type HttpRawExecutionDefinition = ExecutionDefinition<
+  typeof httpExecutionExtension
+>
 
 export function defineHttpRaw<
   const TMiddlewares extends readonly AnyHttpMiddleware[] = readonly [],
 >(
   definition: HttpRawDefinition<TMiddlewares>,
-): HttpRawDefinition<TMiddlewares> &
-  ExecutionDefinition<typeof httpExecutionExtension> {
-  return defineExecution(httpExecutionExtension, { ...definition, raw: true })
+): HttpRawDefinition<TMiddlewares> & HttpRawExecutionDefinition
+export function defineHttpRaw(definition: {
+  readonly name?: string
+  readonly route: HttpRawRouteDefinition
+  readonly factory: () => unknown
+}): HttpRawExecutionDefinition {
+  const { factory } = definition
+  return defineExecution(httpExecutionExtension, {
+    ...definition,
+    name: definition.name ?? '',
+    compileRoutes: () => [compileRawRoute(definition.route)],
+    delegations: [],
+    collectDependencies: (consumer: DependencyConsumerDescriptor) =>
+      collectInjectedDependencies(consumer, factory),
+    createHandlers(binding: ExecutionRuntimeBinding) {
+      const handler = runHttpFactory(factory, binding)
+      return createRawHttpHandlers(() => handler)
+    },
+  } satisfies HttpDefinition)
+}
+
+export function defineHttpDelegate<
+  const TMiddlewares extends readonly AnyHttpMiddleware[] = readonly [],
+>(
+  definition: HttpRawDelegatedDefinition<TMiddlewares>,
+): HttpRawDelegatedDefinition<TMiddlewares> & HttpRawExecutionDefinition
+export function defineHttpDelegate(definition: {
+  readonly name?: string
+  readonly route: HttpRawRouteDefinition
+  readonly delegate: ExecutionDelegation<unknown>
+}): HttpRawExecutionDefinition {
+  const { delegate } = definition
+  return defineExecution(httpExecutionExtension, {
+    ...definition,
+    name: definition.name ?? '',
+    compileRoutes: () => [compileRawRoute(definition.route)],
+    delegations: [delegate],
+    collectDependencies: () => [],
+    createHandlers: ({ resolveDelegate }: ExecutionRuntimeBinding) =>
+      createRawHttpHandlers(() => resolveDelegate(delegate.handle)),
+  } satisfies HttpDefinition)
 }
 
 export type CompiledHttpResponseDefinition = HttpExecutionResponseDefinition &
@@ -684,14 +740,25 @@ interface RuntimeHttpContext {
 type InitialHttpContext = HttpMiddlewareContext &
   Pick<RuntimeHttpContext, 'response'>
 
+interface CompiledHttpHandlers {
+  readonly [name: string]: (
+    context: RuntimeHttpContext,
+  ) => HttpMiddlewareOutcome | Promise<HttpMiddlewareOutcome>
+}
+
+interface HttpDefinition {
+  readonly name: string
+  readonly delegations: readonly ExecutionDelegation<unknown>[]
+  compileRoutes(): readonly CompiledHttpRoute[]
+  collectDependencies(
+    consumer: DependencyConsumerDescriptor,
+  ): readonly TokenLike[]
+  createHandlers(binding: ExecutionRuntimeBinding): CompiledHttpHandlers
+}
+
 interface CompiledHttpExecution {
   readonly routes: readonly CompiledHttpRoute[]
-  readonly factory: () => Record<
-    string,
-    (
-      context: RuntimeHttpContext,
-    ) => HttpMiddlewareOutcome | Promise<HttpMiddlewareOutcome>
-  >
+  readonly createHandlers: HttpDefinition['createHandlers']
 }
 
 interface RuntimeHttpRoute {
@@ -709,44 +776,26 @@ export interface HttpHostApi {
   fetch(request: Request): Promise<Response>
 }
 
-declare const httpExecutionExtensionIdentity: unique symbol
-
 export const httpExecutionExtension = defineExecutionExtension<
-  (HttpImplementationDefinition | HttpRawDefinition) & ExecutionDefinition,
+  HttpDefinition & ExecutionDefinition,
   CompiledHttpExecution,
   'http',
   HttpHostApi,
   HttpExtensionRuntime
 >({
   kind: 'execution-extension',
-  abiVersion: '1',
+  abiVersion: '3',
   name: 'loutre:http',
   compile(definition, context) {
-    const raw = 'route' in definition
-    const routes: CompiledHttpRoute[] = raw
-      ? [compileRawRoute(definition.route)]
-      : Object.entries(definition.contract.routes).flatMap(([name, route]) =>
-          route.raw === true
-            ? []
-            : [
-                compileHttpRoute(
-                  name,
-                  route,
-                  getSourceLocation(definition.contract),
-                ),
-              ],
-        )
+    const routes = definition.compileRoutes()
     const id =
       definition.name || `${context.moduleId}.http.${context.definitionIndex}`
     const dependencies = new Set(
-      collectInjectedDependencies(
-        {
-          kind: 'execution',
-          id: dependencyConsumerId(`http:${id}`),
-          name: id,
-        },
-        () => definition.factory(),
-      ),
+      definition.collectDependencies({
+        kind: 'execution',
+        id: dependencyConsumerId(`http:${id}`),
+        name: id,
+      }),
     )
     routes.forEach((route) => {
       route.middlewares.forEach((middleware, index) => {
@@ -767,6 +816,7 @@ export const httpExecutionExtension = defineExecutionExtension<
       id,
       executionKind: 'http.request',
       dependencies: [...dependencies],
+      delegations: definition.delegations,
       capabilities: [
         ...new Set([
           HTTP_SERVER,
@@ -777,9 +827,7 @@ export const httpExecutionExtension = defineExecutionExtension<
       ],
       compiled: Object.freeze({
         routes: Object.freeze(routes),
-        factory: (raw
-          ? () => ({ raw: definition.factory() })
-          : definition.factory) as CompiledHttpExecution['factory'],
+        createHandlers: definition.createHandlers,
       }),
     }
   },
@@ -839,13 +887,7 @@ export const httpExecutionExtension = defineExecutionExtension<
     namespace: 'http',
     create: ({ runtime }) => ({ fetch: (request) => runtime.fetch(request) }),
   },
-}) as ExecutionExtension<
-  (HttpImplementationDefinition | HttpRawDefinition) & ExecutionDefinition,
-  CompiledHttpExecution,
-  'http',
-  HttpHostApi,
-  HttpExtensionRuntime
-> & { readonly [httpExecutionExtensionIdentity]: true }
+})
 
 export type HttpExecutionDefinition<
   TContract extends HttpContract = HttpContract,
@@ -1228,12 +1270,34 @@ export function defineHttpImplementation<
   readonly name?: string
   readonly contract: TContract
   readonly factory: HttpImplementationDefinition<TContract>['factory']
-}): HttpExecutionDefinition<TContract> {
+}): HttpExecutionDefinition<TContract>
+export function defineHttpImplementation(definition: {
+  readonly name?: string
+  readonly contract: HttpContract
+  readonly factory: () => unknown
+}): ExecutionDefinition<typeof httpExecutionExtension> {
+  const { factory } = definition
   return defineExecution(httpExecutionExtension, {
+    ...definition,
     name: definition.name ?? '',
-    contract: definition.contract,
-    factory: definition.factory,
-  }) as HttpExecutionDefinition<TContract>
+    compileRoutes: () =>
+      Object.entries(definition.contract.routes).flatMap(([name, route]) =>
+        route.raw === true
+          ? []
+          : [
+              compileHttpRoute(
+                name,
+                route,
+                getSourceLocation(definition.contract),
+              ),
+            ],
+      ),
+    delegations: [],
+    collectDependencies: (consumer: DependencyConsumerDescriptor) =>
+      collectInjectedDependencies(consumer, factory),
+    createHandlers: (binding: ExecutionRuntimeBinding) =>
+      createHttpHandlers(runHttpFactory(factory, binding)),
+  } satisfies HttpDefinition)
 }
 
 export function bindHttpServer(
@@ -1268,6 +1332,7 @@ export const validate = Object.freeze({
 export const executionHttp = Object.freeze({
   isWebSocketUpgrade,
   raw: defineHttpRaw,
+  delegate: defineHttpDelegate,
   contract: defineHttpContract,
   implementation: defineHttpImplementation,
   middleware: defineHttpMiddleware,
@@ -1587,30 +1652,103 @@ function assertValidHttpRouteDefinition(
   }
 }
 
+function runHttpFactory(
+  factory: () => unknown,
+  { execution, resolve }: ExecutionRuntimeBinding,
+): unknown {
+  return runInInjectionContext(
+    {
+      consumer: {
+        kind: 'execution',
+        id: dependencyConsumerId(`http:${execution.id}`),
+        name: execution.id,
+      },
+      resolve: (token, consumer) => resolve(token, { consumer }),
+    },
+    factory,
+  )
+}
+
+function createHttpHandlers(value: unknown): CompiledHttpHandlers {
+  if (!isHttpInputRecord(value)) {
+    throw new TypeError('HTTP factoryはhandlerのオブジェクトを返してください。')
+  }
+  const handlers: Record<string, CompiledHttpHandlers[string]> = {}
+  for (const [name, handler] of Object.entries(value)) {
+    if (typeof handler !== 'function') {
+      throw new TypeError(`HTTP handler ${name}は関数である必要があります。`)
+    }
+    handlers[name] = async (context) => {
+      const result: unknown = await handler(context)
+      if (!isHttpExecutionResult(result)) {
+        throw new TypeError(
+          `HTTP handler ${name}はHTTP resultを返してください。`,
+        )
+      }
+      return result
+    }
+  }
+  return handlers
+}
+
+function isHttpHeaders(value: unknown): value is HttpHeaders {
+  return (
+    isHttpInputRecord(value) &&
+    Object.values(value).every(
+      (header) =>
+        header === undefined ||
+        typeof header === 'string' ||
+        (Array.isArray(header) &&
+          header.every((part: unknown) => typeof part === 'string')),
+    )
+  )
+}
+
+function isHttpExecutionResult(value: unknown): value is HttpExecutionResult {
+  return (
+    isHttpInputRecord(value) &&
+    value.kind === 'http-result' &&
+    typeof value.response === 'string' &&
+    'body' in value &&
+    (value.headers === undefined || isHttpHeaders(value.headers))
+  )
+}
+
+function createRawHttpHandlers(resolve: () => unknown): CompiledHttpHandlers {
+  return {
+    async raw({ request, execution, signal, state }) {
+      const handler = resolve()
+      if (typeof handler !== 'function') {
+        throw new TypeError('Raw HTTP handlerは関数である必要があります。')
+      }
+      if (request === undefined || execution === undefined) {
+        throw new Error('Raw HTTP handlerにはHTTP contextが必要です。')
+      }
+      const result: unknown = await handler({
+        request,
+        execution,
+        signal,
+        state,
+      })
+      if (!(result instanceof Response)) {
+        throw new TypeError('Raw HTTP handlerはResponseを返してください。')
+      }
+      return result
+    },
+  }
+}
+
 function createHttpExtensionRuntime(
   bindings: readonly ExecutionRuntimeBinding<CompiledHttpExecution>[],
   applicationRuntime: ExecutionKernelRuntime,
 ): HttpExtensionRuntime {
   const ingress = new IngressGate()
   const activeResponseStreams = new Set<ActiveHttpResponseStream>()
-  const handlers = new Map<
-    string,
-    ReturnType<CompiledHttpExecution['factory']>
-  >()
-  for (const { execution, resolve } of bindings) {
+  const handlers = new Map<string, CompiledHttpHandlers>()
+  for (const binding of bindings) {
     handlers.set(
-      execution.id,
-      runInInjectionContext(
-        {
-          consumer: {
-            kind: 'execution',
-            id: dependencyConsumerId(`http:${execution.id}`),
-            name: execution.id,
-          },
-          resolve: (token, consumer) => resolve(token, { consumer }),
-        },
-        () => execution.compiled.factory(),
-      ),
+      binding.execution.id,
+      binding.execution.compiled.createHandlers(binding),
     )
   }
   const routes = bindings
@@ -1877,7 +2015,7 @@ function createHttpExtensionRuntime(
                       invoke: (input) =>
                         replayHttpHandler(
                           applicationRuntime,
-                          handler as Parameters<typeof replayHttpHandler>[1],
+                          handler,
                           match,
                           input,
                           middlewareContext.state,
@@ -2132,11 +2270,11 @@ async function replayHttpHandler(
   applicationRuntime: ExecutionKernelRuntime,
   handler: (
     context: RuntimeHttpContext,
-  ) => HttpExecutionResult | Promise<HttpExecutionResult>,
+  ) => HttpMiddlewareOutcome | Promise<HttpMiddlewareOutcome>,
   match: RuntimeHttpRoute & { readonly params: Record<string, string> },
   input: unknown,
   state: Readonly<Record<string, unknown>>,
-): Promise<HttpExecutionResult> {
+): Promise<HttpMiddlewareOutcome> {
   if (!isHttpInputRecord(input) || !isHttpInputRecord(input.params)) {
     throw new TypeError('LUTRE_DEVTOOLS_HTTP_HANDLER_INPUT_REQUIRED')
   }
@@ -2159,7 +2297,7 @@ async function replayHttpHandler(
       signal: lease.signal,
       state,
     })
-  let result: HttpExecutionResult | undefined
+  let result: HttpMiddlewareOutcome | undefined
   let hasResult = false
   try {
     result = await (lease.run ? lease.run(invoke) : invoke())

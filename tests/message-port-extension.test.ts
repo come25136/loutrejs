@@ -234,6 +234,9 @@ describe('MessagePort Execution Extension', () => {
           resolve: () => {
             throw new Error('このfixtureは依存を宣言しない')
           },
+          resolveDelegate: () => {
+            throw new Error('このfixtureは委任を宣言しない')
+          },
         })),
         capabilities: new RuntimeCapabilityRegistry(),
         applicationRuntime,

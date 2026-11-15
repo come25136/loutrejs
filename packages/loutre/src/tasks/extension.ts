@@ -569,10 +569,11 @@ function createTasksRuntime(
     }
   >()
   const triggers: ExecutionRuntimeBinding<TasksCompiledExecution>[] = []
-  for (const { execution, resolve } of bindings) {
+  for (const binding of bindings) {
+    const { execution, resolve } = binding
     const compiled = execution.compiled
     if (compiled.type !== 'task') {
-      triggers.push({ execution, resolve })
+      triggers.push(binding)
       continue
     }
     const runtime = runInInjectionContext(
