@@ -37,3 +37,7 @@ Markdownも同じ責務分離を意識すること。ドキュメントを、コ
 # 型assertion
 
 - `as unknown`と`<unknown>`による型assertionは禁止する。`any`や汎用cast関数を経由した迂回も行わず、入力の検証、型付きの戻り値の構築、または型宣言の修正で解決する。brandの付与に必要な単一assertionは、そのdomainの生成・検証・変換関数に限定する。
+
+# 責務境界の契約
+
+- 内部の要求・結果そのものの種類は`kind`を判別子とする閉じたunionにし、受け手は`ts-pattern`で網羅的に処理する。`transport`などドメイン固有の意味を持つ属性は改名せず、そのまま判別に利用できる。処理状態には`status`を使う。外部規格の名前は維持する。詳細は[契約ADR](../docs/adr/loutre_typed_boundary_contracts.md)を正本とする。
