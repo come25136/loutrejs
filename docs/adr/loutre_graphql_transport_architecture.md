@@ -19,24 +19,53 @@ GraphQL対応にあたり、次の課題を解消する必要がある。
 
 ## 決定
 
-GraphQLは新しいExecution Extensionにはしない。
+`@loutrejs/graphql`は専用Execution ExtensionとしてendpointのruntimeとDIを所有する。HTTPとWebSocketはHTTP Contractから入口を生成し、Modelの`delegates` edgeで同じendpointへ接続する。MCPも同じ委任契約を使う。
 
-`@loutrejs/graphql` を独立packageとして追加し、HTTP ExecutionとWebSocket Executionを合成するprotocol integrationとして実装する。
+transportごとのfactoryでGraphQL runtimeを作ると、一つのendpointの依存と共有状態がHTTPとWebSocketに分かれる。endpointを所有者にすることで、transportの有効化に依存せずruntimeの生成単位とDI境界を決められる。接続の所有権はWebSocket、protocolのContext生成とoperation処理はGraphQLへ置く。
 
-```text
-GraphQL Endpoint
-       │
-       ├── HTTP Execution
-       │      └── graphql-http
-       │             └── graphql.execute()
-       │
-       └── WebSocket Execution
-              └── graphql-ws
-                     ├── graphql.execute()
-                     └── graphql.subscribe()
+```mermaid
+flowchart LR
+  http["HTTP Execution"] -->|delegates| endpoint["GraphQL Endpoint Execution"]
+  ws["WebSocket Execution"] -->|delegates| endpoint
+  endpoint -->|injects| provider["Provider"]
+  endpoint --> operation["operation・resolverの実行"]
 ```
 
+委任の検証と解決は[Execution Extension契約](./loutre_execution_extension_contract_architecture.md#32-extension間の実行委任)を正本とする。
+
 実行時は標準の`GraphQLSchema`を使用し、Loutre独自のGraphQL Contract DSLは導入しない。共有する契約SDLから型付きresolverとclient型を生成する方針は[型生成とdomain mappingの設計](./loutre_graphql_codegen_architecture.md)に従う。
+
+## 状態の寿命と共有範囲
+
+runtimeの実体はApplicationごとのendpointにつき一つ生成する。Model構築時のfactory呼び出しは依存の収集に使い、実体の生成とは区別する。DefinitionやmanifestへApplication固有のruntimeを保存しない。
+
+| 状態                                         | 生成・共有の単位                                                             | 所有者                         |
+| -------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------ |
+| Schema・resolver定義を結合したmanifest       | 同じmanifestを指定したendpointから参照する静的定義                           | Applicationの宣言              |
+| factoryの戻り値とclosure内の状態             | Application × endpoint。HTTP要求とWebSocket接続で共有する                    | GraphQL Endpoint Execution     |
+| factoryで注入するapplication scopeのProvider | 同じProvider登録を解決する範囲でApplication内に共有する                      | DI Container                   |
+| factoryで注入して保持するtransient Provider  | endpointのfactoryで解決して保持し、HTTPとWebSocketで共有する                 | GraphQL Endpoint Execution     |
+| HTTP middlewareのstate                       | requestごとにmiddlewareを実行して得る                                        | HTTP Execution                 |
+| Upgrade middlewareのstate                    | 接続のhandshakeごとにmiddlewareを実行して得る                                | WebSocket Execution            |
+| ConnectionInitのstate                        | 接続ごとに生成し、その接続のoperationから参照する                            | GraphQL接続処理                |
+| GraphQL Context                              | HTTPとWebSocketのoperationごとに`context()`を呼ぶ                            | GraphQL operation              |
+| SubscriptionのContext                        | 購読開始時に生成し、同じ購読の配送eventで参照する                            | GraphQL Subscription           |
+| Data ResolutionのBatch                       | Query operation、Mutationのroot field、Subscriptionの配送eventごとに分離する | Data Resolution Scope          |
+| 中断状態                                     | HTTP要求、WebSocket接続、接続内のoperationごとに管理する                     | 各transportとGraphQL operation |
+
+factoryで解決したtransient Providerはrequestやoperationごとの生成にはならない。factory内のカウンターも同じendpointのHTTPとWebSocketから共有する。別endpointと別Applicationのruntimeは個別に生成する。
+
+`context()`や`connectionInit()`の呼び出し単位と、戻り値のobject identityは区別する。共有objectを返すと、そのobjectは呼び出し間で共有される。ConnectionInitのfreezeは浅いため、nested objectの可変状態も自動では分離されない。認証情報やoperation固有の可変データは、その呼び出しの入力から個別に構築する。
+
+GraphQL factoryの依存はendpointに、HTTP middlewareの依存はHTTP Executionに、Upgrade middlewareの依存はWebSocket Executionに記録する。起動時にendpointのfactoryを自身のModuleのResolverで実行する。委譲先のhandlerは要求処理時に解決するため、Extensionの初期化順に依存しない。
+
+終了時はtransportが新規受付を止め、接続や実行中の処理をdrainする。GraphQLはoperationとiteratorの終了を待ち、接続終了フックを実行する。Kernelはactive executionがなくなった後にGraphQL runtimeをcloseし、その後にProviderを解放する。
+
+中断通知は処理の完了を意味しない。ConnectionInit、Context生成、resolver、Batchの`load()`、Subscriptionの`next()`が中断後も継続する場合、そのPromiseの完了までoperationまたはsessionを保持する。iteratorの`return()`が先に完了しても、開始済みの`next()`やeventの実行が残る間は解放しない。`return()`が`done: false`を返す場合はcleanupを継続する。iteratorの操作とcleanupはHTTP・MessagePortでも使うCoreの`AsyncIteratorLifecycle`で追跡し、protocol固有のevent実行とScopeの完了はGraphQLが所有する。
+
+GraphQL.jsはNonNullエラーなどで、並行Fieldの完了前に実行結果を返す場合がある。Query・Mutation・Subscriptionのeventは、SDKの`asyncWorkFinished`まで待ってから解放する。SDKの実行結果だけを完了条件にしたり、FieldごとのPromise registryを独自実装したりしない。SDKから切り離して起動したBatch取得はScopeで追跡する。
+
+中断に協調しない処理が残る場合、Kernelは終了期限で失敗を返し、Providerとdraining状態を保持する。後から処理が完了した場合は`close()`を再試行できる。応答の抑止やSDK側の待機解除を理由に、未完了の処理を追跡対象から外す方式は採用しない。
 
 ## package境界
 
@@ -87,11 +116,11 @@ const GraphQLApi = graphql.implementation({
 })
 ```
 
-`graphql.implementation()`は内部でHTTP / WebSocket Executionを生成する。
+`graphql.implementation()`はGraphQL Endpoint Executionと、有効化されたHTTP / WebSocket Executionを生成する。
 
 ## 複合Execution
 
-GraphQL endpointは複数Executionを返すため、Coreへ汎用的なExecution groupを追加する。
+GraphQL endpointとtransportのExecutionは`ExecutionGroup`にまとめ、同じModuleへ登録する。
 
 ```ts
 export interface ExecutionGroup {
@@ -112,12 +141,13 @@ GraphQL固有のsemanticsはCoreへ入れない。
 GraphQL over HTTPは既存のresponse variant contractへ押し込まず、HTTP Extensionへprotocol integration向けのraw endpointを追加する。
 
 ```ts
-http.raw({
+http.delegate({
   name: 'GraphQLApi.http',
   route: { ...Api.routes.graphql, protocol: 'graphql' },
-  factory: () => async (ctx) => {
-    return graphqlHandler(ctx.request)
-  },
+  delegate: delegateExecution(
+    endpoint,
+    (runtime, id) => runtime.endpoint(id).http,
+  ),
 })
 ```
 
@@ -349,7 +379,7 @@ HTTP ContractのmiddlewareはUpgradeにも適用し、認証をConnectionInitへ
 
 path・method・HTTP middlewareはHTTP Contract、transports.http / transports.websocketは有効化や静的設定、factoryはDIしたサービスを使う実行時handlerとContext生成を所有する。connectionInitの戻り値からstateの型を推論し、HTTPの認証結果と同じ形ならContext・Resolverを共通化する。stateはACK payloadとは分離する。
 
-WS専用layerの宣言や継続処理、遅延DI resolverを追加しない。ConnectionInitはstateまたはConnectionRejectedを返すprotocol handlerとし、HTTP Responseやmiddlewareのnextを要求しない。接続開始の入口をconnectionInitに一本化し、同じタイミングのonConnectを重ねて公開しない。ConnectionRejectedはGraphQL adapterが提供する接続拒否の結果であり、認証方式を定義しない。指定した公開理由を4403のclose reasonへ渡し、通常の例外は1011として区別する。認証の依存はendpoint factoryのinjectからcanonical Modelへ登録する。
+WS専用layerの宣言や継続処理、遅延DI resolverを追加しない。ConnectionInitはstateまたはConnectionRejectedを返すprotocol handlerとし、HTTP Responseやmiddlewareのnextを要求しない。接続開始の入口をconnectionInitに一本化し、同じタイミングのonConnectを重ねて公開しない。ConnectionRejectedはGraphQL adapterが提供する接続拒否の結果であり、認証方式を定義しない。指定した公開理由を4403のclose reasonへ渡し、通常の例外は1011として区別する。認証の依存はendpoint factoryのinjectからGraphQL Endpoint Executionへ登録する。
 
 HTTPは既定で有効、WSは既定で無効とし、一方の設定から他方の有効性を変えない。factory().wsの指定には静的なWS有効化を要求し、型とModel構築の両方で矛盾を拒否する。静的な有効化はhost capabilityとcanonical Modelの構築に必要なため、factoryの実行結果からtransportを追加しない。
 
@@ -413,7 +443,9 @@ terminate()
 
 ## AbortSignal
 
-HTTPでは`request.signal`を利用する。
+HTTPではリクエストとKernelの中断を結合したExecutionの`signal`を利用する。
+
+通常HTTPとraw handlerは同じExecutionの`signal`を受け取る。`request`自体は元の入力を保持するが、handlerやGraphQL Contextの`signal`と`request.signal`のobject identityは契約に含めない。
 
 WebSocketではoperationごとにAbortControllerを作る。
 

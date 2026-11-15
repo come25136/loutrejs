@@ -1,41 +1,41 @@
-export {
-  bindQueueDriver,
-  consume,
-  cron,
-  fixedDelay,
-  queue,
-  task,
-  tasksExtension,
-} from './extension.js'
+export { bindQueueDriver, queue } from './queue.js'
+export { consume, cron, fixedDelay, task } from './declaration.js'
+export { tasksExtension } from './extension.js'
 export type {
   CronOverlap,
-  CronTriggerDefinition,
   CronTriggerDefinitionData,
-  FixedDelayTriggerDefinition,
   FixedDelayTriggerDefinitionData,
-  QueueConsumerDriver,
-  QueueConsumerHandle,
-  QueueConsumerTriggerDefinition,
   QueueConsumerTriggerDefinitionData,
-  QueueDescriptor,
-  QueuePayload,
   TaskArguments,
-  TaskDefinition,
   TaskDefinitionData,
   TaskExecutionIdentity,
   TaskInput,
   TaskOutput,
   TaskRuntime,
+  TasksExtensionRuntime,
+  TasksHostApi,
+  TriggerDefinitionData,
+} from './contract.js'
+export type {
+  CronTriggerDefinition,
+  FixedDelayTriggerDefinition,
+  QueueConsumerTriggerDefinition,
+  TaskDefinition,
+  TriggerDefinition,
+} from './declaration.js'
+export type {
+  QueueConsumerDriver,
+  QueueConsumerHandle,
+  QueueDescriptor,
+  QueuePayload,
+} from './queue.js'
+export type {
   TasksCompiledCronTrigger,
   TasksCompiledExecution,
   TasksCompiledFixedDelayTrigger,
   TasksCompiledQueueConsumerTrigger,
   TasksCompiledTask,
-  TasksExtensionRuntime,
-  TasksHostApi,
-  TriggerDefinition,
-  TriggerDefinitionData,
-} from './extension.js'
+} from './compiled.js'
 
 export type {
   TaskExecutionKey,

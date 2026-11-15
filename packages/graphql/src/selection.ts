@@ -1,3 +1,4 @@
+import { match } from 'ts-pattern'
 import {
   typeName,
   fieldName,
@@ -56,64 +57,74 @@ export function analyzeSelection(
     seen = new Set<string>(),
   ): FieldSelection[] => {
     const results: FieldSelection[] = []
-    for (const node of nodes) {
+    for (const selection of nodes) {
       if (
-        getDirectiveValues(GraphQLSkipDirective, node, info.variableValues)
+        getDirectiveValues(GraphQLSkipDirective, selection, info.variableValues)
           ?.if === true ||
-        getDirectiveValues(GraphQLIncludeDirective, node, info.variableValues)
-          ?.if === false
+        getDirectiveValues(
+          GraphQLIncludeDirective,
+          selection,
+          info.variableValues,
+        )?.if === false
       )
         continue
-      if (node.kind === 'Field') {
-        const field = type.getFields()[node.name.value]
-        if (!field && node.name.value !== '__typename') continue
-        const identity = fieldCoordinate(type.name, node.name.value)
-        const data = metadata.get(identity)
-        results.push({
-          parentType: typeName(type.name),
-          fieldName: fieldName(node.name.value),
-          responseKeys: [responseKey(node.alias?.value ?? node.name.value)],
-          args: field
-            ? getArgumentValues(field, node, info.variableValues)
-            : {},
-          requires: data?.options.requires ?? [],
-          prefetchable: data !== undefined,
-          children: field
-            ? children(
-                node.selectionSet?.selections ?? [],
-                getNamedType(field.type),
-              )
-            : [],
+      match(selection)
+        .with({ kind: 'Field' }, (node) => {
+          const field = type.getFields()[node.name.value]
+          if (!field && node.name.value !== '__typename') return
+          const identity = fieldCoordinate(type.name, node.name.value)
+          const data = metadata.get(identity)
+          results.push({
+            parentType: typeName(type.name),
+            fieldName: fieldName(node.name.value),
+            responseKeys: [responseKey(node.alias?.value ?? node.name.value)],
+            args: field
+              ? getArgumentValues(field, node, info.variableValues)
+              : {},
+            requires: data?.options.requires ?? [],
+            prefetchable: data !== undefined,
+            children: field
+              ? children(
+                  node.selectionSet?.selections ?? [],
+                  getNamedType(field.type),
+                )
+              : [],
+          })
         })
-      } else if (node.kind === 'InlineFragment') {
-        const condition =
-          node.typeCondition &&
-          info.schema.getType(node.typeCondition.name.value)
-        if (
-          !condition ||
-          condition === type ||
-          (isAbstractType(condition) && info.schema.isSubType(condition, type))
-        )
-          results.push(...collect(node.selectionSet.selections, type, seen))
-      } else {
-        if (seen.has(node.name.value)) continue
-        const fragment = info.fragments[node.name.value]
-        if (!fragment) continue
-        const condition = info.schema.getType(fragment.typeCondition.name.value)
-        if (
-          condition === type ||
-          (condition &&
-            isAbstractType(condition) &&
-            info.schema.isSubType(condition, type))
-        )
-          results.push(
-            ...collect(
-              fragment.selectionSet.selections,
-              type,
-              new Set([...seen, node.name.value]),
-            ),
+        .with({ kind: 'InlineFragment' }, (node) => {
+          const condition =
+            node.typeCondition &&
+            info.schema.getType(node.typeCondition.name.value)
+          if (
+            !condition ||
+            condition === type ||
+            (isAbstractType(condition) &&
+              info.schema.isSubType(condition, type))
           )
-      }
+            results.push(...collect(node.selectionSet.selections, type, seen))
+        })
+        .with({ kind: 'FragmentSpread' }, (node) => {
+          if (seen.has(node.name.value)) return
+          const fragment = info.fragments[node.name.value]
+          if (!fragment) return
+          const condition = info.schema.getType(
+            fragment.typeCondition.name.value,
+          )
+          if (
+            condition === type ||
+            (condition &&
+              isAbstractType(condition) &&
+              info.schema.isSubType(condition, type))
+          )
+            results.push(
+              ...collect(
+                fragment.selectionSet.selections,
+                type,
+                new Set([...seen, node.name.value]),
+              ),
+            )
+        })
+        .exhaustive()
     }
     const merged = new Map<SelectionMergeKey, FieldSelection>()
     for (const field of results) {

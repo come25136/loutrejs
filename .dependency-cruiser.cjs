@@ -1,24 +1,74 @@
+const protocolSource =
+  '^packages/(?:loutre/src/(?:http|websocket|tasks|message-port)|(?:graphql|mcp)/src)'
+
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {
   forbidden: [
     {
-      name: 'GraphQLをCoreとruntime adapterから分離する',
+      name: 'protocolの契約を実行実装と宣言APIから分離する',
       severity: 'error',
-      from: { path: '^packages/(?:loutre|node)/src(?:/|$)' },
+      from: { path: `${protocolSource}/(?:contract|compiled|types)\\.ts$` },
       to: {
-        path: '^packages/graphql(?:/|$)|^node_modules/(?:graphql|graphql-http|graphql-ws)(?:/|$)',
+        path: `${protocolSource}/(?:runtime(?:/|\\.ts$)|(?:extension|declaration)\\.ts$)`,
       },
     },
     {
-      name: 'GraphQL integrationのruntime固有依存を禁止する',
+      name: 'protocolのcompileを宣言APIと実行状態から分離する',
       severity: 'error',
-      from: { path: '^packages/graphql/src(?:/|$)' },
+      from: {
+        path: `${protocolSource}/(?:compiler\\.ts$|codecs/|cron-schedule\\.ts$)`,
+      },
+      to: {
+        path: `${protocolSource}/(?:runtime(?:/|\\.ts$)|(?:extension|declaration)\\.ts$)`,
+      },
+    },
+    ...[
+      ['http', 'packages/loutre/src/http'],
+      ['websocket', 'packages/loutre/src/websocket'],
+      ['tasks', 'packages/loutre/src/tasks'],
+      ['message-port', 'packages/loutre/src/message-port'],
+      ['graphql', 'packages/graphql/src'],
+      ['mcp', 'packages/mcp/src'],
+    ].flatMap(([protocol, path]) => [
+      {
+        name: `protocolのRuntimeを登録と公開facadeから分離する:${protocol}`,
+        severity: 'error',
+        from: { path: `^${path}/runtime(?:/|\\.ts$)` },
+        to: { path: `^${path}/(?:extension|declaration|index)\\.ts$` },
+      },
+      {
+        name: `protocolの契約を自身の公開facadeから分離する:${protocol}`,
+        severity: 'error',
+        from: { path: `^${path}/(?:contract|compiled|types)\\.ts$` },
+        to: { path: `^${path}/index\\.ts$` },
+      },
+      {
+        name: `protocolのcompileを自身の公開facadeから分離する:${protocol}`,
+        severity: 'error',
+        from: {
+          path: `^${path}/(?:compiler\\.ts$|codecs/|cron-schedule\\.ts$)`,
+        },
+        to: { path: `^${path}/index\\.ts$` },
+      },
+    ]),
+    {
+      name: '外部protocol ExtensionをCoreとruntime adapterから分離する',
+      severity: 'error',
+      from: { path: '^packages/(?:loutre|node)/src(?:/|$)' },
+      to: {
+        path: '^packages/(?:graphql|mcp)(?:/|$)|^node_modules/(?:graphql|graphql-http|graphql-ws|@modelcontextprotocol)(?:/|$)',
+      },
+    },
+    {
+      name: '外部protocol Extensionのruntime固有依存を禁止する',
+      severity: 'error',
+      from: { path: '^packages/(?:graphql|mcp)/src(?:/|$)' },
       to: { path: '^packages/(?:node|loutre/src/(?:adapters|runtime))(?:/|$)' },
     },
     {
-      name: 'GraphQLをNode組み込みAPIから分離する',
+      name: '外部protocol ExtensionをNode組み込みAPIから分離する',
       severity: 'error',
-      from: { path: '^packages/graphql/src(?:/|$)' },
+      from: { path: '^packages/(?:graphql|mcp)/src(?:/|$)' },
       to: { dependencyTypes: ['core'] },
     },
     {

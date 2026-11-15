@@ -57,8 +57,21 @@ describe('HTTP Contractのrawルート', () => {
       factory: () => (ctx) => Response.json(ctx.state),
     })
     const Module = defineModule(() => ({ executions: [regular, delegated] }))
+    const definition = defineApplication({ modules: [Module()] })
+    expect(definition.model.executions.map(({ compiled }) => compiled)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'contract',
+          routes: [expect.objectContaining({ kind: 'contract' })],
+        }),
+        expect.objectContaining({
+          kind: 'raw',
+          routes: [expect.objectContaining({ kind: 'raw' })],
+        }),
+      ]),
+    )
     const app = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: definition,
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {

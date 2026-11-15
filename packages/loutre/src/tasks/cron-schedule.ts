@@ -1,4 +1,4 @@
-import type { Brand } from '../../internal/brand.js'
+import type { Brand } from '../internal/brand.js'
 export type CronExpression = Brand<string, 'tasks.cron-expression'>
 export type IanaTimeZone = Brand<string, 'tasks.iana-timezone'>
 

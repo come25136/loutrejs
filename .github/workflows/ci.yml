@@ -88,7 +88,9 @@ jobs:
         run: node scripts/verify-packages.mjs
 
       - name: Pack published packages
-        run: node scripts/pack-packages.mjs
+        run: |
+          node scripts/pack-packages.mjs
+          cp conformance/mcp-package-smoke.test.mjs dist/package-tarballs/
 
       - name: Verify GraphQL.js 17 consumers
         run: node conformance/graphql-versions.mjs
@@ -97,7 +99,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: loutre-package-tarballs
-          path: dist/package-tarballs/*.tgz
+          path: |
+            dist/package-tarballs/*.tgz
+            dist/package-tarballs/mcp-package-smoke.test.mjs
           if-no-files-found: error
 
       - name: Upload initializer build
@@ -323,14 +327,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          tarballs="${RUNNER_TEMP}/loutre-package-tarballs"
           consumer="${RUNNER_TEMP}/loutre-package-consumer-node"
           rm -rf "$consumer"
           mkdir -p "$consumer"
           cd "$consumer"
           npm init -y >/dev/null
-          NPM_CONFIG_MIN_RELEASE_AGE=0 npm install "${RUNNER_TEMP}/loutre-package-tarballs"/*.tgz --no-audit --no-fund
+          NPM_CONFIG_MIN_RELEASE_AGE=0 npm install "$tarballs"/*.tgz zod@4.6.5 --no-audit --no-fund
 
           node --input-type=module -e "import { graphql } from '@loutrejs/graphql'; if (typeof graphql.implementation !== 'function') throw new Error('GraphQL implementation export is missing')"
+          cp "$tarballs/mcp-package-smoke.test.mjs" .
+          node --test mcp-package-smoke.test.mjs
           node --input-type=module -e "import { nodeRuntime } from '@loutrejs/node'; if (nodeRuntime.runtime !== 'node') throw new Error('Node runtime import failed')"
           node --input-type=module -e "import { http } from '@loutrejs/loutre/http'; if (!http) throw new Error('HTTP subpath import failed')"
           node node_modules/@loutrejs/cli/bin/loutre.js --help | grep -q '^Loutre CLI$'

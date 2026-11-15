@@ -601,7 +601,7 @@ describe('GraphQL HTTP', () => {
     }
   })
 
-  it('Request.signalをHTTP contextへ渡し、raw endpointをOpenAPIへ展開しない', async () => {
+  it('要求の中断をHTTP contextのExecution signalへ伝え、raw endpointをOpenAPIへ展開しない', async () => {
     const api = await fixture()
     const controller = new AbortController()
     try {
@@ -610,7 +610,7 @@ describe('GraphQL HTTP', () => {
       })
       const response = await api.app.http.fetch(request)
       await response.text()
-      expect(api.contexts[0]?.signal).toBe(request.signal)
+      expect(api.contexts[0]?.signal).not.toBe(request.signal)
       controller.abort()
       expect(api.contexts[0]?.signal.aborted).toBe(true)
       expect(
@@ -1841,7 +1841,7 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
       expect(Object.isFrozen(api.contexts[0]!.state)).toBe(true)
       const graph = projectApplicationModel(api.definition.model)
       const execution = graph.executions.find(
-        (node) => node.executionKind === 'websocket.session',
+        (node) => node.executionKind === 'graphql.endpoint',
       )!
       const provider = graph.providers.find(
         (node) => node.name === 'Authentication',
@@ -1906,7 +1906,7 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
   })
 
   it.each(['close', 'drain'] as const)(
-    '未完了ConnectionInit中の%sで待機を終え、遅い成功を公開しない',
+    'ConnectionInit中の%sで中断を通知し、実処理の完了を待って遅い成功を公開しない',
     async (mode) => {
       let resolve!: (value: Record<string, unknown>) => void
       let signal!: AbortSignal
@@ -1924,11 +1924,14 @@ describe('HTTP middlewareとGraphQL WSライフサイクル', () => {
         await vi.waitFor(() => expect(resolve).toBeTypeOf('function'))
         if (mode === 'close')
           connection.channel.finish({ code: 1000, reason: '', wasClean: true })
-        await api.app.close()
-        expect(signal.aborted).toBe(true)
+        const closing = api.app.close()
+        await vi.waitFor(() => expect(signal.aborted).toBe(true))
+        const session = api.trace.traces.find(
+          (trace) => trace.kind === 'websocket.session',
+        )!
+        expect(session.complete).not.toHaveBeenCalled()
         resolve({ secret: 'late' })
-        await Promise.resolve()
-        await Promise.resolve()
+        await closing
         expect(connection.sent).toEqual([])
         expect(api.contexts).toEqual([])
         expect(

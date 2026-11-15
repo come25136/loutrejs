@@ -6,7 +6,7 @@ LoutreはChangesetsでreleaseを管理します。ただしChangesetは各featur
 
 1. release対象の`main`差分を前回tagから確認し、release versionとrelease noteを決めます。
 2. `chore(release): prepare X.Y.Z` PRを作り、そのPRでrelease note用Changesetを作成します。
-3. release Changesetには公開対象6packageをすべて明示し、同じSemVer bumpへ揃えます。
+3. release Changesetには公開対象のpackageをすべて明示し、同じSemVer bumpへ揃えます。
 4. release準備PRを`main`へmergeします。
 5. Release workflowがChangesetを消費して`chore(release): version packages` PRを作成または更新します。
 6. version PRでpackage version、internal dependency、lockfile、CHANGELOG、generated versionを確認します。
@@ -14,7 +14,7 @@ LoutreはChangesetsでreleaseを管理します。ただしChangesetは各featur
 
 feature / fix / refactor / docsなど通常のPRではrelease note用Changesetを変更しません。CIも`chore(release): ...`以外のPRによるrelease note用Changeset変更を拒否します。
 
-`@loutrejs/loutre`、`@loutrejs/node`、`@loutrejs/bullmq`、`@loutrejs/graphql`、`@loutrejs/cli`、`create-loutre`はfixed groupのため、常に同じversionでreleaseします。
+`@loutrejs/loutre`、`@loutrejs/node`、`@loutrejs/bullmq`、`@loutrejs/graphql`、`@loutrejs/mcp`、`@loutrejs/cli`、`create-loutre`はfixed groupのため、常に同じversionでreleaseします。
 
 ## npm認証
 

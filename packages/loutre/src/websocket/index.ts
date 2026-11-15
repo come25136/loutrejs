@@ -1,11 +1,11 @@
+export { bindWebSocketServer, WEBSOCKET_SERVER } from './capability.js'
 export {
-  bindWebSocketServer,
   defineWebSocketContract,
   defineWebSocketImplementation,
-  WEBSOCKET_SERVER,
+  defineWebSocketDelegate,
   websocket,
-  websocketExtension,
-} from './extension.js'
+} from './declaration.js'
+export { websocketExtension } from './extension.js'
 export {
   WebSocketConnectionNotOpenError,
   WebSocketMessageDecodeError,
@@ -21,7 +21,7 @@ export type {
   WebSocketConnectionDriver,
   WebSocketContract,
   WebSocketDataMessage,
-  WebSocketExecutionDefinition,
+  WebSocketDelegatedDefinition,
   WebSocketExtensionRuntime,
   WebSocketHandlerContext,
   WebSocketHandlers,
@@ -33,7 +33,8 @@ export type {
   WebSocketRouteTree,
   WebSocketServerDriver,
   WebSocketUpgradeResult,
-} from './extension.js'
+} from './contract.js'
+export type { WebSocketExecutionDefinition } from './declaration.js'
 export {
   createEventWebSocketConnection,
   createWebSocketDriverChannel,

@@ -8,7 +8,7 @@ release時は前回releaseからの差分をまとめて確認し、`chore(relea
 npm run changeset
 ```
 
-Loutreの公開packageはfixed groupとして同じversionでreleaseします。release Changesetでは公開対象6packageをすべて明示し、`patch` / `minor` / `major`の分類も同じrelease単位に揃えます。
+Loutreの公開packageはfixed groupとして同じversionでreleaseします。release Changesetでは公開対象のpackageをすべて明示し、`patch` / `minor` / `major`の分類も同じrelease単位に揃えます。
 
 Changesetを含むrelease準備PRを`main`へmergeすると、GitHub Actionsがversion更新用の`chore(release): version packages` PRを作成または更新します。version更新とnpm publishはGitHub Actionsが管理するため、通常の開発では`npm run release:version`や`npm run release:publish`を直接実行しません。
 

@@ -40,6 +40,7 @@ export default defineConfig({
       '@loutrejs/loutre': resolve('packages/loutre/src/index.ts'),
       '@loutrejs/graphql/runtime': resolve('packages/graphql/src/runtime.ts'),
       '@loutrejs/graphql': resolve('packages/graphql/src/index.ts'),
+      '@loutrejs/mcp': resolve('packages/mcp/src/index.ts'),
       '@loutrejs/node': resolve('packages/node/src/index.ts'),
       '@loutrejs/bullmq': resolve('packages/bullmq/src/index.ts'),
       '@loutrejs/cli': resolve('packages/cli/src/index.ts'),

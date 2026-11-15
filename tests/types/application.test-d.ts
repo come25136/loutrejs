@@ -214,7 +214,7 @@ const customMessagePortExtension = defineExecutionExtension<
     namespace: 'messagePort',
     create: () => ({
       invoke: async () => ({
-        kind: 'message-port-result',
+        kind: 'unary',
         response: 'ok',
         value: undefined,
       }),

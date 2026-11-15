@@ -10,13 +10,14 @@ Execution Extensionをsource moduleとして分離することと、利用者が
 
 ## Decision
 
-公開packageは次の6つに限定する。
+公開packageは次のとおり。
 
 ```text
 @loutrejs/loutre
 @loutrejs/node
 @loutrejs/bullmq
 @loutrejs/graphql
+@loutrejs/mcp
 @loutrejs/cli
 create-loutre
 ```
@@ -47,7 +48,7 @@ Tasks、MessagePort、WebSocketは内部では独立したExecution Extensionと
 
 ## GraphQL integration
 
-`@loutrejs/graphql`はHTTPとWebSocket Executionを合成するprotocol integrationとして公開する。標準の`GraphQLSchema`とGraphQL ecosystemのpeer dependency境界を維持し、GraphQLを使わない利用者へparser/executorやprotocol libraryの依存を強制しない。設計判断の正本は[GraphQLトランスポート設計](./loutre_graphql_transport_architecture.md)とする。
+`@loutrejs/graphql`はGraphQL Endpoint Executionを所有するExtensionとして公開し、HTTPとWebSocketのExecutionからdelegateで接続する。標準の`GraphQLSchema`とGraphQL ecosystemのpeer dependency境界を維持し、GraphQLを使わない利用者へparser/executorやprotocol libraryの依存を強制しない。設計判断の正本は[GraphQLトランスポート設計](./loutre_graphql_transport_architecture.md)とする。
 
 GraphQLサンプルにも、そのソース・開発コマンド・利用手順が直接使う依存だけを宣言する。サーバーのWebSocket transportに必要な`graphql-ws`は`@loutrejs/graphql`が所有するため、クライアントを使わないOrdersサンプルでは重複して宣言しない。クライアントの利用手順を持つCounterサンプルは開発用の宣言を保持する。
 
@@ -63,7 +64,9 @@ flowchart TD
 
 ## Package compatibility
 
-利用者のApplication、Execution Extension、Token、ProviderなどのliveなCore値やpublic型を`@loutrejs/loutre`とのpackage境界を越えて受け渡すpackageは、`@loutrejs/loutre`を通常の`dependencies`ではなくrequired `peerDependencies`として宣言する。現在この契約を持つのは`@loutrejs/node`、`@loutrejs/bullmq`、`@loutrejs/graphql`である。これにより利用者とadapter/integrationが同じCore type universeとruntime instanceを共有し、package managerがprivateなLoutre copyをpackage配下へ導入することを避ける。
+GraphQLとMCPには同じ依存境界を適用する。Core、組み込みtransport、Runtime Adapterから両ExtensionとそのSDKへは依存せず、両ExtensionからRuntime AdapterやNode組み込みAPIへも依存しない。protocolを追加してもportableなKernelの責務と利用者の必須依存が増えないよう、この境界を依存検査で保証する。
+
+利用者のApplication、Execution Extension、Token、ProviderなどのliveなCore値やpublic型を`@loutrejs/loutre`とのpackage境界を越えて受け渡すpackageは、`@loutrejs/loutre`を通常の`dependencies`ではなくrequired `peerDependencies`として宣言する。現在この契約を持つのは`@loutrejs/node`、`@loutrejs/bullmq`、`@loutrejs/graphql`、`@loutrejs/mcp`である。これにより利用者とadapter/integrationが同じCore type universeとruntime instanceを共有し、package managerがprivateなLoutre copyをpackage配下へ導入することを避ける。
 
 互換rangeはSemantic Versioningのbreaking boundaryと一致させる。
 
@@ -94,8 +97,10 @@ identity判定はname文字列だけに依存しない。`defineExecutionExtensi
 
 Execution Extensionであること、source directoryを分けること、外部dependencyを使うことだけでは、public package追加の根拠にしない。
 
+`@loutrejs/mcp`の配布境界の理由は[MCPサーバー設計ADR](./loutre_mcp_server_architecture.md)を参照する。
+
 ## Consequences
 
-release、Changesets、tarball検証は6packageだけを対象とする。protocolごとのsource facadeと`package.json`のsubpath exportsを一致させ、public API boundaryを明示する。
+release、Changesets、tarball検証は上記の公開packageを対象とする。protocolごとのsource facadeと`package.json`のsubpath exportsを一致させ、public API boundaryを明示する。
 
 旧配布名`@loutrejs/tasks`、`@loutrejs/message-port`、`@loutrejs/websocket`は公開対象にせず、新しいcompatibility wrapperも設けない。

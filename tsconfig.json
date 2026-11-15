@@ -48,7 +48,8 @@
         "./packages/loutre/src/http/openapi.ts"
       ],
       "@loutrejs/graphql": ["./packages/graphql/src/index.ts"],
-      "@loutrejs/graphql/runtime": ["./packages/graphql/src/runtime.ts"]
+      "@loutrejs/graphql/runtime": ["./packages/graphql/src/runtime.ts"],
+      "@loutrejs/mcp": ["./packages/mcp/src/index.ts"]
     },
     "types": ["node", "vitest/globals"]
   },
