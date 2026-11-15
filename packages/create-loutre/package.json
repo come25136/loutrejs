@@ -19,7 +19,7 @@
   "dependencies": {
     "@clack/prompts": "^1.8.1",
     "@loutrejs/loutre": "^0.11.0",
-    "commander": "^15.0.0",
+    "commander": "^15.1.0",
     "ts-pattern": "^5.9.2"
   },
   "repository": {

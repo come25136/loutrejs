@@ -18,7 +18,7 @@
     "@loutrejs/graphql": "0.11.0",
     "@loutrejs/loutre": "0.11.0",
     "@loutrejs/node": "0.11.0",
-    "graphql": "^17.0.2",
+    "graphql": "^17.1.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
