@@ -43,7 +43,10 @@ match(compiled)
   // @ts-expect-error queue-consumerを処理しないmatchは完結しない
   .exhaustive()
 
-const frame: WebSocketDataMessage = { kind: 'text', data: '本文' }
+const frame: WebSocketDataMessage = { type: 'text', data: '本文' }
 // @ts-expect-error binary frameは文字列を持たない
-const wrongFrame: WebSocketDataMessage = { kind: 'binary', data: '本文' }
+const wrongFrame: WebSocketDataMessage = { type: 'binary', data: '本文' }
 void [frame, wrongFrame]
+// @ts-expect-error WebSocket frameの表現形式はtypeで指定する
+const missingFrameType: WebSocketDataMessage = { kind: 'text', data: '本文' }
+void missingFrameType

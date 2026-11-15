@@ -30,7 +30,7 @@ factoryは起動時に参照元ExecutionのDIで実体を作り、delegateは呼
 
 この違いはcompile境界で一度処理し、Runtimeは共通のhandler resolverを使う。宣言へ依存収集・handler構築の任意callbackを埋め込む方式は、種類と必要な値の対応を型から確認できず、HTTPとWebSocketに同じDI処理が重複するため採用しない。
 
-TasksはCoreの`ExecutionDefinition.kind`とTasks自身の種類を混在させない。Tasksの宣言payloadとcompiled payloadが、それぞれTasksの`kind`を持つ。WebSocketの内部frameと入力検証結果も`kind`で区別し、codecとframeの組合せを網羅的に処理する。HTTPのrawと契約付きrouteはcompile後も区別できる契約を持つ。
+TasksはCoreの`ExecutionDefinition.kind`とTasks自身の種類を混在させない。Tasksの宣言payloadとcompiled payloadが、それぞれTasksの`kind`を持つ。WebSocket frameの`text`／`binary`は表現形式を表す既存の`type`を維持し、codecとframeの組合せを網羅的に処理する。入力検証結果は`kind`で区別する。HTTPのrawと契約付きrouteはcompile後も区別できる契約を持つ。
 
 MessagePort Runtimeは`kind: 'unary' | 'stream'`の実行結果を返し、transportはそのkindに従ってwire messageへ変換する。値がAsyncIterableかどうかでtransportが応答形式を再判定すると、unaryとして検証済みの値までstreamとして扱うため採用しない。
 

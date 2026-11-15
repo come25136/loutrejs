@@ -136,8 +136,8 @@ export function createBunWebSocketDriver() {
       message(socket: BunSocket, message: string | Uint8Array) {
         socket.data.receive(
           typeof message === 'string'
-            ? { kind: 'text', data: message }
-            : { kind: 'binary', data: new Uint8Array(message) },
+            ? { type: 'text', data: message }
+            : { type: 'binary', data: new Uint8Array(message) },
         )
       },
       close(socket: BunSocket, code: number, reason: string) {

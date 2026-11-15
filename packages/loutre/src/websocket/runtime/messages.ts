@@ -54,19 +54,19 @@ function decodeMessage(
     kind,
     message,
   ])
-    .with(['json', { kind: 'text' }], ([, frame]) => {
+    .with(['json', { type: 'text' }], ([, frame]) => {
       try {
         return JSON.parse(frame.data)
       } catch (error) {
         throw new WebSocketMessageDecodeError(error)
       }
     })
-    .with(['text', { kind: 'text' }], ([, frame]) => frame.data)
-    .with(['binary', { kind: 'binary' }], ([, frame]) => frame.data)
+    .with(['text', { type: 'text' }], ([, frame]) => frame.data)
+    .with(['binary', { type: 'binary' }], ([, frame]) => frame.data)
     .with(
-      ['json', { kind: 'binary' }],
-      ['text', { kind: 'binary' }],
-      ['binary', { kind: 'text' }],
+      ['json', { type: 'binary' }],
+      ['text', { type: 'binary' }],
+      ['binary', { type: 'text' }],
       () => {
         throw new WebSocketMessageDecodeError()
       },
@@ -83,16 +83,16 @@ export async function encodeMessage(
   try {
     return patternMatch(codec.kind)
       .returnType<WebSocketDataMessage>()
-      .with('json', () => ({ kind: 'text', data: JSON.stringify(output) }))
+      .with('json', () => ({ type: 'text', data: JSON.stringify(output) }))
       .with('text', () => {
         if (typeof output !== 'string')
           throw new TypeError('文字列が必要です。')
-        return { kind: 'text', data: output }
+        return { type: 'text', data: output }
       })
       .with('binary', () => {
         if (!(output instanceof Uint8Array))
           throw new TypeError('Uint8Arrayが必要です。')
-        return { kind: 'binary', data: output }
+        return { type: 'binary', data: output }
       })
       .exhaustive()
   } catch (error) {

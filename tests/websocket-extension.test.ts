@@ -164,26 +164,26 @@ describe('WebSocket Execution Extension', () => {
   it.each([
     {
       codec: 'json',
-      frame: { kind: 'text', data: '{"value":1}' },
+      frame: { type: 'text', data: '{"value":1}' },
       valid: true,
     },
     {
       codec: 'json',
-      frame: { kind: 'binary', data: new Uint8Array([1]) },
+      frame: { type: 'binary', data: new Uint8Array([1]) },
       valid: false,
     },
-    { codec: 'text', frame: { kind: 'text', data: '本文' }, valid: true },
+    { codec: 'text', frame: { type: 'text', data: '本文' }, valid: true },
     {
       codec: 'text',
-      frame: { kind: 'binary', data: new Uint8Array([1]) },
+      frame: { type: 'binary', data: new Uint8Array([1]) },
       valid: false,
     },
     {
       codec: 'binary',
-      frame: { kind: 'binary', data: new Uint8Array([1]) },
+      frame: { type: 'binary', data: new Uint8Array([1]) },
       valid: true,
     },
-    { codec: 'binary', frame: { kind: 'text', data: '本文' }, valid: false },
+    { codec: 'binary', frame: { type: 'text', data: '本文' }, valid: false },
   ] satisfies readonly {
     codec: 'json' | 'text' | 'binary'
     frame: WebSocketDataMessage
@@ -323,7 +323,7 @@ describe('WebSocket Execution Extension', () => {
         to: serviceNode.id,
       })
       for (let index = 0; index < 2; index += 1) {
-        const connection = new FixtureConnection([{ kind: 'text', data: '2' }])
+        const connection = new FixtureConnection([{ type: 'text', data: '2' }])
         await using app = await bootstrapApplication({
           application: definition,
           capabilities: [bindWebSocketServer(fixtureDriver(connection))],
@@ -337,7 +337,7 @@ describe('WebSocket Execution Extension', () => {
         ).toBe(200)
         await connection.closed
         expect(connection.sent).toEqual([
-          { kind: 'text', data: JSON.stringify({ tenant: '組織1', value: 2 }) },
+          { type: 'text', data: JSON.stringify({ tenant: '組織1', value: 2 }) },
         ])
       }
     },
@@ -636,8 +636,8 @@ describe('WebSocket Execution Extension', () => {
 
   it('1 connectionを1 executionとしてcodecとsend orderingを管理する', async () => {
     const connection = new FixtureConnection([
-      { kind: 'text', data: '{' },
-      { kind: 'text', data: JSON.stringify({ type: 'hello' }) },
+      { type: 'text', data: '{' },
+      { type: 'text', data: JSON.stringify({ type: 'hello' }) },
     ])
     const received: boolean[] = []
     const contract = websocket.contract({
@@ -693,9 +693,9 @@ describe('WebSocket Execution Extension', () => {
 
     expect(received).toEqual([false, true])
     expect(connection.sent).toEqual([
-      { kind: 'text', data: JSON.stringify({ sequence: 1 }) },
-      { kind: 'text', data: JSON.stringify({ sequence: 2 }) },
-      { kind: 'text', data: JSON.stringify({ sequence: 3 }) },
+      { type: 'text', data: JSON.stringify({ sequence: 1 }) },
+      { type: 'text', data: JSON.stringify({ sequence: 2 }) },
+      { type: 'text', data: JSON.stringify({ sequence: 3 }) },
     ])
     expect(connection.closeRequests).toEqual([
       { code: 1000, reason: 'complete' },

@@ -269,7 +269,7 @@ async function fixture(
       ...connection,
       send(message: Record<string, unknown>) {
         connection.channel.receive({
-          kind: 'text',
+          type: 'text',
           data: JSON.stringify(message),
         })
       },

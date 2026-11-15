@@ -44,7 +44,7 @@
 
 - `factory`と`delegate`の存在判定をcompileやRuntimeの各段階で繰り返す構造は、既存APIへの継ぎ足しとして指摘された。破壊的変更を前提に、宣言の入口から共通の契約へ揃える。
 - union自体を問題視しない。責務境界の要求・結果そのものの種類は明示的な`kind`を持つ閉じたunionにし、受け手が`ts-pattern`の`match(...).exhaustive()`で網羅する方針が採用された。状態には`status`を使う。
-- `kind`はドメイン属性より一段上の種類を表す。GraphQL Contextの`transport`を`kind`へ改名した変更は広げすぎとして指摘された。意味のある属性名を維持し、網羅性の保証と機械的な命名統一を混同しない。
+- `kind`はドメイン属性より一段上の種類を表す。GraphQL Contextの`transport`やWebSocket frameの`type`を`kind`へ改名した変更は広げすぎとして指摘された。意味のある属性名を維持し、網羅性の保証と機械的な命名統一を混同しない。
 - 種類と必要な値の対応をoptional fieldや任意callbackへ隠さない。同じ判定を複数段階へ持ち回らず、境界で一度処理して共通の内部表現へ変換する。詳細は[責務境界の契約ADR](../../docs/adr/loutre_typed_boundary_contracts.md)を参照する。
 - 型の不整合をassertionで隠さない。入力検証、型付きの値の構築、型宣言の修正で解消し、middleware stateとContextの推論を維持する。禁止するassertionの詳細は[AGENTS.md](../AGENTS.md#型assertion)に従う。
 

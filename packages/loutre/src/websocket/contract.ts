@@ -15,8 +15,8 @@ import { type HttpRawRouteDefinition } from '../http/contract.js'
 import { type Descriptor } from '../internal/brand.js'
 
 export type WebSocketDataMessage =
-  | { readonly kind: 'text'; readonly data: string }
-  | { readonly kind: 'binary'; readonly data: Uint8Array }
+  | { readonly type: 'text'; readonly data: string }
+  | { readonly type: 'binary'; readonly data: Uint8Array }
 
 export interface WebSocketCloseInfo {
   readonly code: number

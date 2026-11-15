@@ -128,12 +128,12 @@ export function createEventWebSocketConnection(
     },
   })
   socket.addEventListener('message', ({ data }) => {
-    if (typeof data === 'string') channel.receive({ kind: 'text', data })
+    if (typeof data === 'string') channel.receive({ type: 'text', data })
     else if (data instanceof ArrayBuffer)
-      channel.receive({ kind: 'binary', data: new Uint8Array(data) })
+      channel.receive({ type: 'binary', data: new Uint8Array(data) })
     else if (ArrayBuffer.isView(data))
       channel.receive({
-        kind: 'binary',
+        type: 'binary',
         data: new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
       })
   })

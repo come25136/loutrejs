@@ -129,7 +129,7 @@ async function fixture(
           const connection = createWebSocketDriverChannel({
             protocol: 'graphql-transport-ws',
             async send(message) {
-              if (message.kind !== 'text')
+              if (message.type !== 'text')
                 throw new Error('text frameが必要です。')
               const value: unknown = JSON.parse(message.data)
               sent.push(
@@ -184,7 +184,7 @@ async function fixture(
       const active = channel
       return {
         send(value: object) {
-          active.receive({ kind: 'text', data: JSON.stringify(value) })
+          active.receive({ type: 'text', data: JSON.stringify(value) })
         },
         disconnect() {
           active.finish({ code: 1000, reason: '', wasClean: true })
