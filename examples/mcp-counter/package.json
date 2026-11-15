@@ -1,0 +1,25 @@
+{
+  "name": "@loutrejs/example-mcp-counter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "check": "loutre check --entry src/app.ts",
+    "start": "tsx src/main.ts",
+    "client": "tsx src/client.ts"
+  },
+  "dependencies": {
+    "@loutrejs/loutre": "0.10.1",
+    "@loutrejs/mcp": "0.10.1",
+    "@loutrejs/node": "0.10.1",
+    "@modelcontextprotocol/client": "2.4.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@loutrejs/cli": "0.10.1",
+    "tsx": "^4.23.15"
+  }
+}

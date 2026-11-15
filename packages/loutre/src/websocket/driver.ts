@@ -2,7 +2,7 @@ import type {
   WebSocketCloseInfo,
   WebSocketConnectionDriver,
   WebSocketDataMessage,
-} from './extension.js'
+} from './contract.js'
 
 export interface WebSocketDriverChannel {
   readonly connection: WebSocketConnectionDriver

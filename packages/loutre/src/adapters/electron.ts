@@ -1,3 +1,7 @@
+import type {
+  MessagePortHostApi,
+  MessagePortInvocationResult,
+} from '../message-port/index.js'
 import { runtimeSupportFeatures } from '../runtime/capability.js'
 import {
   createKernelApplication,
@@ -103,17 +107,11 @@ function attach<const TDefinition extends ApplicationDefinition>(
   }
 }
 
-interface MessagePortHostResult {
-  readonly response: string
-  readonly value: unknown
-}
-
-interface MessagePortHostApi {
-  invoke(method: string, input?: unknown): Promise<MessagePortHostResult>
-}
-
 function attachElectronMessagePortInvocation(
-  invoke: (method: string, input?: unknown) => Promise<MessagePortHostResult>,
+  invoke: (
+    method: string,
+    input?: unknown,
+  ) => Promise<MessagePortInvocationResult>,
   port: MessagePortLike | ElectronMessagePortMainLike,
 ): void {
   attachMessagePort({ invoke }, normalizeMessagePort(port))

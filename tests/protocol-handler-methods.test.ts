@@ -1,0 +1,248 @@
+import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
+import {
+  bootstrapApplication,
+  defineApplication,
+  defineModule,
+} from '@loutrejs/loutre'
+import {
+  bindHttpServer,
+  http,
+  type HttpExecutionContext,
+  type HttpHandlers,
+} from '@loutrejs/loutre/http'
+import {
+  bindWebSocketServer,
+  websocket,
+  type WebSocketCloseInfo,
+  type WebSocketHandlerContext,
+} from '@loutrejs/loutre/websocket'
+import { mcp, type McpRuntime, type McpOAuthRuntime } from '@loutrejs/mcp'
+
+const contract = http.contract({
+  echo: {
+    method: 'GET',
+    path: '/echo',
+    responses: { ok: { status: 200, body: z.string() } },
+  },
+})
+type HttpContext = HttpExecutionContext<typeof contract.routes.echo>
+class HttpController {
+  #message = '応答'
+  echo(context: HttpContext) {
+    return context.response.ok({ body: this.#message })
+  }
+}
+const factories: Record<string, () => HttpHandlers<typeof contract>> = {
+  prototype上のmethod: () => new HttpController(),
+  非列挙のmethod: () =>
+    Object.defineProperty(
+      { echo: (context: HttpContext) => context.response.ok({ body: '応答' }) },
+      'echo',
+      { enumerable: false },
+    ),
+  契約外のプロパティ: () => ({
+    echo: (context) => context.response.ok({ body: '応答' }),
+    metadata: '設定',
+    get unrelated() {
+      throw new Error('契約外の参照')
+    },
+  }),
+}
+
+describe('protocolのmethod契約', () => {
+  it.each(Object.entries(factories))(
+    'HTTPは%sを持つhandlerを利用できる',
+    async (_, factory) => {
+      await using application = await bootstrapApplication({
+        application: defineApplication({
+          modules: [
+            defineModule({
+              executions: [http.implementation({ contract, factory })],
+            }),
+          ],
+        }),
+        capabilities: [bindHttpServer({ runtime: 'test' })],
+      })
+      const response = await application.http.fetch(
+        new Request('http://fixture.test/echo'),
+      )
+      expect(response.status).toBe(200)
+      await expect(response.text()).resolves.toBe('応答')
+    },
+  )
+
+  it('WebSocketはprototype上のmethodを元のinstanceで呼び出す', async () => {
+    const wsContract = websocket.contract({ echo: { path: '/ws' } })
+    class Controller {
+      #message = '応答'
+      async echo(
+        context: WebSocketHandlerContext<typeof wsContract.routes.echo>,
+      ) {
+        await context.close(1000, this.#message)
+      }
+    }
+    let finish!: (info: WebSocketCloseInfo) => void
+    const closed = new Promise<WebSocketCloseInfo>((resolve) => {
+      finish = resolve
+    })
+    await using application = await bootstrapApplication({
+      application: defineApplication({
+        modules: [
+          defineModule({
+            executions: [
+              websocket.implementation({
+                contract: wsContract,
+                factory: () => new Controller(),
+              }),
+            ],
+          }),
+        ],
+      }),
+      capabilities: [
+        bindWebSocketServer({
+          runtime: 'test',
+          async upgrade() {
+            return {
+              response: new Response(),
+              connection: {
+                protocol: '',
+                messages: (async function* () {})(),
+                closed,
+                async send() {},
+                async close(code = 1000, reason = '') {
+                  finish({ code, reason, wasClean: true })
+                },
+                terminate() {
+                  finish({ code: 1006, reason: '', wasClean: false })
+                },
+              },
+            }
+          },
+        }),
+      ],
+    })
+    await application.websocket.upgrade(new Request('http://fixture.test/ws'))
+    await expect(closed).resolves.toMatchObject({ code: 1000, reason: '応答' })
+  })
+
+  const tool = mcp.tool({
+    name: 'echo',
+    description: '確認',
+    scopes: [],
+    input: z.object({}),
+    output: z.object({ text: z.string(), count: z.number() }),
+  })
+  class OAuth implements McpOAuthRuntime {
+    readonly publicOrigin = 'https://fixture.test'
+    readonly authorizationServers = ['https://issuer.test']
+    #subject = 'user'
+    verifyAccessToken() {
+      return {
+        subject: this.#subject,
+        issuer: this.authorizationServers[0]!,
+        resource: `${this.publicOrigin}/mcp`,
+        expiresAt: Date.now() / 1000 + 60,
+        scopes: [],
+      }
+    }
+    allowInvocation() {
+      return this.#subject === 'user'
+    }
+  }
+  class Tools {
+    #count = 0
+    echo() {
+      return { text: '応答', count: ++this.#count }
+    }
+  }
+  class Runtime implements McpRuntime<readonly [typeof tool], object> {
+    readonly oauth = new OAuth()
+    readonly tools = new Tools()
+    #state = {}
+    context() {
+      return this.#state
+    }
+  }
+  const toolFactories: Record<
+    string,
+    () => McpRuntime<readonly [typeof tool], object>
+  > = {
+    prototype上のmethod: () => new Runtime(),
+    非列挙のmethod: () => ({
+      oauth: new OAuth(),
+      context: () => ({}),
+      tools: Object.defineProperty(
+        { echo: () => ({ text: '応答', count: 1 }) },
+        'echo',
+        { enumerable: false },
+      ),
+    }),
+    契約外のプロパティ: () => ({
+      oauth: new OAuth(),
+      context: () => ({}),
+      tools: {
+        echo: () => ({ text: '応答', count: 1 }),
+        metadata: '設定',
+        get unrelated() {
+          throw new Error('契約外の参照')
+        },
+      },
+    }),
+  }
+  it.each(Object.entries(toolFactories))(
+    'MCPは%sを持つToolとOAuthのmethodを利用できる',
+    async (_, factory) => {
+      const endpoint = mcp.implementation({
+        name: 'check',
+        version: '1',
+        route: http.contract({
+          endpoint: { raw: true, method: '*', path: '/mcp' },
+        }).routes.endpoint,
+        tools: [tool],
+        factory,
+      })
+      await using application = await bootstrapApplication({
+        application: defineApplication({
+          modules: [defineModule({ executions: [endpoint] })],
+        }),
+        capabilities: [bindHttpServer({ runtime: 'test' })],
+      })
+      const response = await application.http.fetch(
+        new Request('https://fixture.test/mcp', {
+          method: 'POST',
+          headers: {
+            host: 'fixture.test',
+            authorization: 'Bearer valid',
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            'mcp-method': 'tools/call',
+            'mcp-name': 'echo',
+            'mcp-protocol-version': '2026-07-28',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/call',
+            params: {
+              name: 'echo',
+              arguments: {},
+              _meta: {
+                'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                'io.modelcontextprotocol/clientInfo': {
+                  name: 'test',
+                  version: '1',
+                },
+                'io.modelcontextprotocol/clientCapabilities': {},
+              },
+            },
+          }),
+        }),
+      )
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toMatchObject({
+        result: { structuredContent: { text: '応答', count: 1 } },
+      })
+    },
+  )
+})

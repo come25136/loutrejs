@@ -1,5 +1,9 @@
 export { LoggerService, LoggerToken } from './logger.js'
 export { LoggerModule } from './logger-module.js'
+export {
+  AsyncIteratorLifecycle,
+  AsyncIteratorCleanupDeadlineError,
+} from './async-iterator-lifecycle.js'
 export { defineArgs, isArgsClass, loadArgs } from './args.js'
 export type { ArgsClass, ArgsKey, ArgsSchema } from './args.js'
 export {
@@ -16,6 +20,7 @@ export {
   bindRuntimeCapability,
   defineExecution,
   defineExecutionExtension,
+  delegateExecution,
   executionDefinitionBrand,
   isExecutionDefinition,
   runtimeCapability,
@@ -24,7 +29,11 @@ export {
 export type {
   AnyExecutionExtension,
   ExecutionCompileContext,
+  ExecutionHandlerSource,
+  ExecutionHandlerResolver,
   ExecutionContribution,
+  ExecutionDelegation,
+  ExecutionDelegateHandle,
   ModelExecutionContribution,
   ExecutionRuntimeBinding,
   ExecutionDefinition,
@@ -188,3 +197,5 @@ export type {
   SourceLine,
   SourceColumn,
 } from './source-location.js'
+export { compileExecutionHandler, resolveExecutionMethod } from './handler.js'
+export type { CompiledExecutionHandler, ExecutionMethod } from './handler.js'

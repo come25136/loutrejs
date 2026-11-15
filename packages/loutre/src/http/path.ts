@@ -1,3 +1,4 @@
+import { match as patternMatch } from 'ts-pattern'
 import type { Brand } from '../internal/brand.js'
 import type {
   HttpNormalizedPath,
@@ -73,7 +74,12 @@ export function normalizeHttpPath(
 ): HttpNormalizedPath {
   if (segments.length === 0) return '/' as HttpNormalizedPath
   return `/${segments
-    .map((segment) => (segment.kind === 'static' ? segment.value : '{}'))
+    .map((segment) =>
+      patternMatch(segment)
+        .with({ kind: 'static' }, ({ value }) => value)
+        .with({ kind: 'param' }, () => '{}')
+        .exhaustive(),
+    )
     .join('/')}` as HttpNormalizedPath
 }
 
@@ -94,15 +100,18 @@ export function matchHttpPath(
   const params: Record<string, string> = {}
   for (const [index, routeSegment] of segments.entries()) {
     const requestSegment = requestSegments[index]!
-    if (routeSegment.kind === 'static') {
-      if (routeSegment.value !== requestSegment) return undefined
-      continue
-    }
-    try {
-      params[routeSegment.name] = decodeURIComponent(requestSegment)
-    } catch (error) {
-      throw new HttpPathDecodeError(error)
-    }
+    const matched = patternMatch(routeSegment)
+      .with({ kind: 'static' }, ({ value }) => value === requestSegment)
+      .with({ kind: 'param' }, ({ name }) => {
+        try {
+          params[name] = decodeURIComponent(requestSegment)
+        } catch (error) {
+          throw new HttpPathDecodeError(error)
+        }
+        return true
+      })
+      .exhaustive()
+    if (!matched) return undefined
   }
   return params
 }
@@ -115,8 +124,14 @@ export function compareHttpPathSpecificity(
   for (let index = 0; index < length; index += 1) {
     const leftSegment = left[index]!
     const rightSegment = right[index]!
-    if (leftSegment.kind === rightSegment.kind) continue
-    return leftSegment.kind === 'static' ? -1 : 1
+    const order = patternMatch<
+      [HttpPathSegment['kind'], HttpPathSegment['kind']]
+    >([leftSegment.kind, rightSegment.kind])
+      .with(['static', 'static'], ['param', 'param'], () => 0)
+      .with(['static', 'param'], () => -1)
+      .with(['param', 'static'], () => 1)
+      .exhaustive()
+    if (order !== 0) return order
   }
   return right.length - left.length
 }

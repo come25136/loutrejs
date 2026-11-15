@@ -18,6 +18,8 @@ flowchart TB
   tasks["Tasks Extension"] --> model
   messagePort["MessagePort Extension"] --> model
   websocket["WebSocket Extension"] --> model
+  graphql["GraphQL Extension"] --> model
+  mcp["MCP Extension"] --> model
 
   runtime --> node["Node.js"]
   runtime --> bun["Bun"]
@@ -41,13 +43,15 @@ HTTP、Task、MessagePort、WebSocket、Queue consumerなどのexecution semanti
 
 ## Packages
 
-| 公開package        | Role                                                         |
-| ------------------ | ------------------------------------------------------------ |
-| `@loutrejs/loutre` | Application Graph Kernel、DI、Lifecycle、Runtime abstraction |
-| `@loutrejs/node`   | Node.js Runtime Adapter                                      |
-| `@loutrejs/bullmq` | BullMQ Queue Consumer Driver                                 |
-| `@loutrejs/cli`    | Graph inspection、validation、build、deployment tooling      |
-| `create-loutre`    | project initializer                                          |
+| 公開package         | Role                                                         |
+| ------------------- | ------------------------------------------------------------ |
+| `@loutrejs/loutre`  | Application Graph Kernel、DI、Lifecycle、Runtime abstraction |
+| `@loutrejs/node`    | Node.js Runtime Adapter                                      |
+| `@loutrejs/bullmq`  | BullMQ Queue Consumer Driver                                 |
+| `@loutrejs/graphql` | GraphQL EndpointとHTTP / WebSocketからの委任                 |
+| `@loutrejs/mcp`     | MCP ToolとStreamable HTTP                                    |
+| `@loutrejs/cli`     | Graph inspection、validation、build、deployment tooling      |
+| `create-loutre`     | project initializer                                          |
 
 main packageの主要subpathは次の通りです。
 
@@ -167,6 +171,8 @@ await app.tasks.start()
 ## MessagePortとWebSocket
 
 MessagePortは`@loutrejs/loutre/message-port`、WebSocketは`@loutrejs/loutre/websocket`が提供し、それぞれのexecution model、runtime、Host API、Graph projectionを所有します。WebSocketはHTTP upgrade handshakeのためpublicなHTTP Extension surfaceにも依存しますが、Coreはtransport非依存のままです。
+
+WebSocketの実装は`websocket.implementation()`でhandlerを組み立て、別Executionへ委任する場合は`websocket.delegate()`で接続します。HTTPの委任には`http.delegate()`を使います。宣言と所有権は[Transportの宣言と委任](../adr/loutre_execution_extension_contract_architecture.md#35-transportの宣言と委任)を参照してください。
 
 ## DIとModule visibility
 
@@ -336,7 +342,7 @@ APIやTaskのhandlerでは、`factory`で取得したサービスを使います
 
 この節は、独自の処理形式をLoutreへ追加するExtensionの開発者向けです。標準のHTTP・Tasks・WebSocket・MessagePortを使うApplicationでは、この仕組みを意識した設定やAPI呼び出しは不要です。通常は前節までの`inject()`を使ってください。
 
-独自Extensionでは、`compile()`が返す`dependencies`に、その処理（Execution）が必要とするProviderを記録します。Applicationの起動・終了を管理するKernelは、各Executionの宣言に対応する専用のResolver（Providerを取り出す関数）を生成します。
+独自Extensionでhandlerを構築する場合は、`compile()`の`context.compileHandler()`でfactoryまたはdelegateを登録します。Coreが依存と委譲をModelへ記録するため、handlerから`dependencies`を転記する必要はありません。factoryを使わずProviderを直接解決する場合は、`compile()`が返す`dependencies`に必要なProviderを記録します。Applicationの起動・終了を管理するKernelは、各Executionの宣言に対応する専用のResolver（Providerを取り出す関数）を生成します。
 
 `createRuntime()`とHostの`create()`は、`executions`として`ExecutionRuntimeBinding`の配列を受け取ります。各要素は`{ execution, resolve }`です。`execution`はModelに記録されたExecutionへの参照、`resolve`はそのExecutionの依存宣言に対応する専用Resolverで、役割が異なります。
 
@@ -443,6 +449,12 @@ OpenAPIもExecution Extensionのprojectionです。CoreはHTTP route semantics�
 
 Provider構築、Module正規化、終了フックの責務を分けた判断は[所有権ADR](../adr/loutre_construction_and_runtime_ownership.md)を参照してください。
 
+GraphQLとMCPはprotocol runtimeを専用Executionで所有し、HTTPとWebSocketの入口からdelegateで接続します。GraphQLの状態の寿命は[GraphQL transport設計](../adr/loutre_graphql_transport_architecture.md#状態の寿命と共有範囲)を参照してください。
+
+MCP endpointとToolのContextを分ける設計は[MCPサーバー設計ADR](../adr/loutre_mcp_server_architecture.md)を参照してください。
+
 ## Design invariant
+
+内部の責務境界では、複数種類のpayloadを`kind`で判別し、処理状態は`status`で表します。受け手が種類の追加を見落とさないよう、閉じたunionを`ts-pattern`で網羅します。[契約の設計判断](../adr/loutre_typed_boundary_contracts.md)を参照してください。
 
 canonical Application Modelは一つだけです。Runtime adapter、CLI、build、Graph projection、Execution ExtensionがApplicationの並行modelを持つことはありません。

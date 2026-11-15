@@ -2,22 +2,23 @@ export {
   defineMessagePortContract,
   defineMessagePortImplementation,
   messagePort,
-  messagePortExtension,
-} from './extension.js'
+} from './declaration.js'
+export { messagePortExtension } from './extension.js'
 export { attachMessagePort } from './transport.js'
 export type {
   MessagePortContext,
   MessagePortContract,
-  MessagePortExecutionDefinition,
   MessagePortExtensionRuntime,
   MessagePortHandlers,
   MessagePortHostApi,
   MessagePortImplementationData,
   MessagePortResponseDefinition,
   MessagePortResult,
+  MessagePortInvocationResult,
   MessagePortRouteDefinition,
   MessagePortServerStreamResponseDefinition,
-} from './extension.js'
+} from './contract.js'
+export type { MessagePortExecutionDefinition } from './declaration.js'
 export type { MessagePortHost, MessagePortLike } from './transport.js'
 
 export {

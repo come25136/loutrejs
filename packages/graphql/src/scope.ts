@@ -1,3 +1,4 @@
+import { match } from 'ts-pattern'
 import {
   fieldCoordinate,
   batchKey,
@@ -9,7 +10,7 @@ import {
   type DataScopeKey,
 } from './identity.js'
 import { registerExecutor, type DataDefinition } from './data-internal.js'
-import type { FieldSelection } from './data-types.js'
+import type { FieldSelection, ReadResult } from './data-types.js'
 import type { BoundManifest } from './manifest-internal.js'
 import { normalizeFieldArguments } from './arguments.js'
 import { analyzeSelection, selectionKey } from './selection.js'
@@ -47,6 +48,7 @@ interface Batch {
 class Scope {
   readonly #batches = new Map<DataDefinition, Map<BatchKey, Batch>>()
   readonly #pending = new Set<Request>()
+  readonly #active = new Set<Promise<void>>()
   readonly #signal: AbortSignal
   readonly #context: object
   readonly #stats: DataStatistics
@@ -65,9 +67,10 @@ class Scope {
     this.#pending.clear()
     this.#batches.clear()
   }
-  close() {
+  async close() {
     this.#signal.removeEventListener('abort', this.abort)
     this.#batches.clear()
+    await Promise.allSettled(this.#active)
   }
   load(
     definition: DataDefinition,
@@ -108,7 +111,12 @@ class Scope {
       this.#pending.add(request)
       if (!target.requests.length)
         queueMicrotask(() => {
-          void this.flush(target)
+          const pending = this.flush(target)
+          this.#active.add(pending)
+          void pending.then(
+            () => this.#active.delete(pending),
+            () => this.#active.delete(pending),
+          )
         })
       target.requests.push(request)
     })
@@ -223,7 +231,7 @@ export function executionView(
           info,
         })
       scopedSignal.throwIfAborted()
-      let read
+      let read: ReadResult<unknown> | undefined
       if (definition.options.read)
         read = definition.options.read({
           parent,
@@ -247,59 +255,62 @@ export function executionView(
         )
           read = { kind: 'loaded', value: descriptor.value }
       }
-      if (read) {
-        if (read.kind === 'loaded') {
-          if (read.value === undefined)
+      const load = () => {
+        for (const key of definition.options.requires ?? []) {
+          if (
+            !parent ||
+            (typeof parent !== 'object' && typeof parent !== 'function') ||
+            !(key in parent) ||
+            (parent as Record<string, unknown>)[key] === undefined
+          )
+            throw new TypeError(
+              `${definition.identity}に必要な内部キー${key}がありません。`,
+            )
+        }
+        let path = info.path
+        while (path.prev) path = path.prev
+        const scopeKey = dataScopeKey(
+          info.operation.operation === 'mutation'
+            ? String(path.key)
+            : 'operation',
+        )
+        let scope = scopes.get(scopeKey)
+        if (!scope) {
+          scope = new Scope(view, scopedSignal, stats)
+          scopes.set(scopeKey, scope)
+        }
+        return scope.load(
+          definition,
+          parent,
+          args,
+          selection,
+          normalizeFieldArguments(
+            args as Record<string, unknown>,
+            info.parentType.getFields()[info.fieldName]!.args,
+          ),
+          selectionKey(selection, info.schema),
+        )
+      }
+      return match(read)
+        .with({ kind: 'loaded' }, ({ value }) => {
+          if (value === undefined)
             throw new TypeError(
               `${definition.identity}.readはloaded(undefined)を返せません。`,
             )
           stats.reused++
-          return read.value
-        }
-        if (read.kind !== 'missing')
+          return value
+        })
+        .with({ kind: 'missing' }, undefined, load)
+        .exhaustive(() => {
           throw new TypeError(`${definition.identity}.readが不正です。`)
-      }
-      for (const key of definition.options.requires ?? []) {
-        if (
-          !parent ||
-          (typeof parent !== 'object' && typeof parent !== 'function') ||
-          !(key in parent) ||
-          (parent as Record<string, unknown>)[key] === undefined
-        )
-          throw new TypeError(
-            `${definition.identity}に必要な内部キー${key}がありません。`,
-          )
-      }
-      let path = info.path
-      while (path.prev) path = path.prev
-      const scopeKey = dataScopeKey(
-        info.operation.operation === 'mutation'
-          ? String(path.key)
-          : 'operation',
-      )
-      let scope = scopes.get(scopeKey)
-      if (!scope) {
-        scope = new Scope(view, scopedSignal, stats)
-        scopes.set(scopeKey, scope)
-      }
-      return scope.load(
-        definition,
-        parent,
-        args,
-        selection,
-        normalizeFieldArguments(
-          args as Record<string, unknown>,
-          info.parentType.getFields()[info.fieldName]!.args,
-        ),
-        selectionKey(selection, info.schema),
-      )
+        })
     },
   )
   return {
     context: view,
-    close() {
+    async close() {
       controller.abort()
-      for (const scope of scopes.values()) scope.close()
+      await Promise.all([...scopes.values()].map((scope) => scope.close()))
       scopes.clear()
     },
   }

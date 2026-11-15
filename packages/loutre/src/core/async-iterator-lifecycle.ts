@@ -1,4 +1,4 @@
-import { epochNow, type EpochMs } from '../core/units.js'
+import { epochNow, type EpochMs } from './units.js'
 const cleanupYieldInterval = 32
 
 export class AsyncIteratorCleanupDeadlineError extends Error {
@@ -30,7 +30,7 @@ export class AsyncIteratorLifecycle<T> {
 
   async return(reason?: unknown): Promise<IteratorResult<T>> {
     if (!this.#iterator.return) {
-      const result = { done: true as const, value: reason as T }
+      const result = { done: true as const, value: reason }
       this.#record(result)
       return result
     }
@@ -54,13 +54,13 @@ export class AsyncIteratorLifecycle<T> {
     deadline: () => EpochMs | undefined,
     timeoutMessage: string,
   ): Promise<void> {
-    if (this.#returnPending) await this.#waitForIdle()
+    if (this.#returnPending) await this.waitForIdle()
     if (this.#done) return
     if (!this.#returnContinuationPending) {
       const result = await this.return(reason)
       if (result.done) return
     }
-    await this.#waitForIdle()
+    await this.waitForIdle()
     let continuationSteps = 0
     while (!this.#done) {
       const currentDeadline = deadline()
@@ -98,7 +98,7 @@ export class AsyncIteratorLifecycle<T> {
     return result
   }
 
-  #waitForIdle(): Promise<void> {
+  waitForIdle(): Promise<void> {
     return this.#inFlight === 0
       ? Promise.resolve()
       : new Promise<void>((resolve) => this.#idleWaiters.add(resolve))

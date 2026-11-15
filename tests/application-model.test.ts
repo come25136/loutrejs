@@ -10,6 +10,7 @@ import {
   defineEnv,
   defineExecution,
   defineExecutionExtension,
+  delegateExecution,
   defineModule,
   inject,
   hook,
@@ -22,6 +23,7 @@ import {
 } from '@loutrejs/loutre'
 import { LoggerToken } from '@loutrejs/loutre'
 import type { LogRecord } from '@loutrejs/loutre/runtime'
+import { bindHttpServer, http } from '@loutrejs/loutre/http'
 
 interface ProbeDriver {
   invoke(name: string): Promise<string>
@@ -140,6 +142,51 @@ function createProbeExtension(events: string[] = []) {
 }
 
 describe('Application Model', () => {
+  it('委任先の明示登録を検証し、Extensionの初期化順に依存せず委任する', async () => {
+    const { extension } = createProbeExtension()
+    const target = defineExecution(extension, {
+      id: 'probe.target',
+      dispatch: 'linked',
+    })
+    const source = http.delegate({
+      name: 'http.source',
+      route: { method: 'GET', path: '/source' },
+      delegate: delegateExecution(
+        target,
+        (runtime, id) => async () => new Response(await runtime.invoke(id)),
+      ),
+    })
+    const Source = defineModule({ executions: [source] })
+    expect(
+      defineApplication({ modules: [Source] }).model.diagnostics,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: 'LUTRE_EXECUTION_DELEGATE_MISSING',
+        path: 'http.source',
+      }),
+    )
+
+    const Target = defineModule({ executions: [target] })
+    const application = defineApplication({ modules: [Source, Target] })
+    expect(application.model.edges).toContainEqual({
+      from: 'http.source',
+      to: 'probe.target',
+      kind: 'delegates',
+    })
+    await using app = await bootstrapApplication({
+      application,
+      capabilities: [
+        bindHttpServer({ runtime: 'test' }),
+        bindRuntimeCapability(PROBE_DRIVER, { invoke: async (name) => name }),
+      ],
+    })
+    expect(
+      await (
+        await app.http.fetch(new Request('http://localhost/source'))
+      ).text(),
+    ).toBe('linked')
+  })
+
   it('Extension execution referenceを再帰展開してcanonical edgeへ固定する', () => {
     const fixture = createProbeExtension()
     const child = defineExecution(fixture.extension, {

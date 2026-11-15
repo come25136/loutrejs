@@ -8,7 +8,10 @@ import type {
   ExtensionIdentity,
 } from './identity.js'
 import type { DurationMs } from './units.js'
-import type { DependencyResolver } from './injection.js'
+import type {
+  DependencyResolver,
+  DependencyConsumerDescriptor,
+} from './injection.js'
 import type { Diagnostic } from './diagnostic.js'
 import type {
   RuntimeExecutionMetadata,
@@ -137,26 +140,97 @@ export interface ExecutionExtensionRuntime {
   close?(): void | Promise<void>
 }
 
+export type ExecutionHandlerSource<THandler> =
+  | { readonly kind: 'factory'; readonly factory: () => THandler }
+  | {
+      readonly kind: 'delegate'
+      readonly delegate: ExecutionDelegation<THandler>
+    }
+
+export interface ExecutionHandlerResolver<THandler> {
+  createResolver(binding: ExecutionRuntimeBinding): () => THandler
+}
+
 export interface ExecutionCompileContext {
   readonly moduleId: ModuleId
   readonly definitionIndex: number
+  compileHandler<THandler>(
+    source: ExecutionHandlerSource<THandler>,
+    consumer: DependencyConsumerDescriptor,
+  ): ExecutionHandlerResolver<THandler>
+  collectDependencies(
+    consumer: DependencyConsumerDescriptor,
+    factory: () => unknown,
+  ): void
 }
 
 export interface ExecutionContribution<TCompiled = unknown> {
   readonly kind: 'execution'
   readonly id: string
   readonly executionKind: string
-  readonly dependencies: readonly TokenLike[]
+  readonly dependencies?: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
+  readonly delegations?: readonly ExecutionDelegation<unknown>[]
   readonly compiled: TCompiled
 }
 
-export type ModelExecutionContribution<TCompiled = unknown> =
-  ExecutionContribution<TCompiled> & { readonly id: ExecutionNodeId }
+export type ModelExecutionContribution<TCompiled = unknown> = Omit<
+  ExecutionContribution<TCompiled>,
+  'dependencies' | 'delegations'
+> & {
+  readonly id: ExecutionNodeId
+  readonly dependencies: readonly TokenLike[]
+}
+
+type ExecutionRuntimeLookup = <TRuntime extends ExecutionExtensionRuntime>(
+  extension: ExecutionExtension<any, any, any, any, TRuntime>,
+) => TRuntime
+
+const executionDelegateSelect: unique symbol = Symbol.for(
+  'loutre.execution-delegate-select',
+)
+
+export interface ExecutionDelegateHandle<TApi> {
+  readonly [executionDelegateSelect]: (
+    lookup: ExecutionRuntimeLookup,
+    id: ExecutionNodeId,
+  ) => TApi
+}
+
+export interface ExecutionDelegation<TApi> {
+  readonly target: ExecutionDefinition
+  readonly handle: ExecutionDelegateHandle<TApi>
+}
+
+export function delegateExecution<
+  TRuntime extends ExecutionExtensionRuntime,
+  TApi,
+>(
+  target: ExecutionDefinition<ExecutionExtension<any, any, any, any, TRuntime>>,
+  select: (runtime: NoInfer<TRuntime>, id: ExecutionNodeId) => TApi,
+): ExecutionDelegation<TApi> {
+  const extension = target.extension
+  const handle: ExecutionDelegateHandle<TApi> = Object.freeze({
+    [executionDelegateSelect]: (
+      lookup: ExecutionRuntimeLookup,
+      id: ExecutionNodeId,
+    ) => select(lookup(extension), id),
+  })
+  return Object.freeze({ target, handle })
+}
+
+export function selectExecutionDelegate<TApi>(
+  handle: ExecutionDelegateHandle<TApi>,
+  lookup: ExecutionRuntimeLookup,
+  id: ExecutionNodeId,
+): TApi {
+  return handle[executionDelegateSelect](lookup, id)
+}
 
 export interface ExecutionRuntimeBinding<TCompiled = unknown> {
   readonly execution: ModelExecutionContribution<TCompiled>
   readonly resolve: DependencyResolver
+  resolveDelegate<TApi>(handle: ExecutionDelegateHandle<TApi>): TApi
 }
 
 export interface ExecutionExtensionValidationContext<TCompiled = unknown> {

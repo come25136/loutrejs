@@ -3,7 +3,10 @@ import {
   decodeInspectorCommand,
   parseRunId,
 } from '@loutrejs/loutre/devtools'
-import { attachMessagePort } from '@loutrejs/loutre/message-port'
+import {
+  attachMessagePort,
+  type MessagePortHost,
+} from '@loutrejs/loutre/message-port'
 
 const event = {
   type: 'execution.started',
@@ -153,7 +156,11 @@ describe('DevToolsの受信境界', () => {
 describe('MessagePortの受信境界', () => {
   it('不正なenvelopeをhandlerへ渡さず、正規のIDを応答へ引き継ぐ', async () => {
     let receive!: (event: unknown) => void
-    const invoke = vi.fn(async () => ({ response: 'ok', value: 42 }))
+    const invoke = vi.fn<MessagePortHost['invoke']>(async () => ({
+      kind: 'unary',
+      response: 'ok',
+      value: 42,
+    }))
     const postMessage = vi.fn()
     attachMessagePort(
       { invoke },

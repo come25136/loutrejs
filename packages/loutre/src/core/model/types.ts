@@ -9,6 +9,7 @@ import type {
 import type { ArgsClass } from '../args.js'
 import type {
   AnyExecutionExtension,
+  ExecutionDelegateHandle,
   ExecutionExtension,
   RuntimeCapability,
 } from '../extension.js'
@@ -94,6 +95,7 @@ export type ApplicationModelEdge =
       ProviderNodeId
     >
   | Edge<'references', ExecutionNodeId, ExecutionNodeId>
+  | Edge<'delegates', ExecutionNodeId, ExecutionNodeId>
   | Edge<'requires', ExecutionNodeId, CapabilityNodeId>
   | Edge<'starts', ExtensionNodeId, ExecutionNodeId>
   | Edge<'wraps', ApplicationModelNode['id'], ApplicationModelNode['id']>
@@ -124,6 +126,13 @@ export interface ApplicationModel {
   readonly nodes: readonly ApplicationModelNode[]
   readonly edges: readonly ApplicationModelEdge[]
   readonly executions: readonly ExecutionModelNode[]
+  readonly delegations: readonly (Edge<
+    'delegates',
+    ExecutionNodeId,
+    ExecutionNodeId
+  > & {
+    readonly handle: ExecutionDelegateHandle<unknown>
+  })[]
   readonly extensions: ApplicationModelExtensions
   readonly diagnostics: readonly Diagnostic[]
 }

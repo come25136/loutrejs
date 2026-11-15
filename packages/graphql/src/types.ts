@@ -117,3 +117,55 @@ export interface GraphQLImplementationDefinition<
   }
   readonly factory: () => GraphQLRuntime<TContext>
 }
+
+interface GraphQLProtocolHooks {
+  connectionInit?(
+    input: GraphQLConnectionInitContext<object>,
+  ): ReturnType<GraphQLConnectionInitHandler<object, object>>
+  onDisconnect?(
+    ...args: Parameters<
+      NonNullable<GraphQLWebSocketHooks<object, object>['onDisconnect']>
+    >
+  ): ReturnType<
+    NonNullable<GraphQLWebSocketHooks<object, object>['onDisconnect']>
+  >
+  onClose?(
+    ...args: Parameters<
+      NonNullable<GraphQLWebSocketHooks<object, object>['onClose']>
+    >
+  ): ReturnType<NonNullable<GraphQLWebSocketHooks<object, object>['onClose']>>
+}
+
+export interface GraphQLProtocolRuntime {
+  context(input: GraphQLContextInput<object, object>): object | Promise<object>
+  formatError?(
+    error: GraphQLError,
+    input: GraphQLContextInput<object, object>,
+  ): GraphQLFormattedError
+  readonly ws?: {
+    readonly [K in keyof GraphQLProtocolHooks]:
+      | GraphQLProtocolHooks[K]
+      | undefined
+  }
+}
+
+import {
+  type WebSocketHandlerContext,
+  type WebSocketMessageCodec,
+} from '@loutrejs/loutre/websocket'
+
+type TextSchema = {
+  '~standard': {
+    version: 1
+    vendor: string
+    validate(
+      value: unknown,
+    ): { value: string } | { issues: readonly { message: string }[] }
+    types: { input: string; output: string }
+  }
+}
+
+export type GraphQLSessionContext = WebSocketHandlerContext<{
+  path: string
+  messages: WebSocketMessageCodec<TextSchema, TextSchema>
+}>

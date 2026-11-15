@@ -1,3 +1,5 @@
+import { match } from 'ts-pattern'
+import type { MessagePortInvocationResult } from './contract.js'
 import {
   decodeMessagePortRequest,
   type MessagePortProcedureName,
@@ -6,7 +8,7 @@ export interface MessagePortHost {
   invoke(
     method: MessagePortProcedureName,
     input?: unknown,
-  ): Promise<{ readonly response: string; readonly value: unknown }>
+  ): Promise<MessagePortInvocationResult>
 }
 
 export type MessagePortLike = {
@@ -26,28 +28,17 @@ export function attachMessagePort(
     if (!request) return
     try {
       const result = await host.invoke(request.procedure, request.input)
-      if (isAsyncIterable(result.value)) {
-        for await (const value of result.value) {
-          port.postMessage({
-            id: request.id,
-            response: result.response,
-            value,
-            done: false,
-          })
-        }
-        port.postMessage({
-          id: request.id,
-          response: result.response,
-          done: true,
+      await match(result)
+        .with({ kind: 'stream' }, async ({ response, value: stream }) => {
+          for await (const value of stream) {
+            port.postMessage({ id: request.id, response, value, done: false })
+          }
+          port.postMessage({ id: request.id, response, done: true })
         })
-      } else {
-        port.postMessage({
-          id: request.id,
-          response: result.response,
-          value: result.value,
-          done: true,
+        .with({ kind: 'unary' }, ({ response, value }) => {
+          port.postMessage({ id: request.id, response, value, done: true })
         })
-      }
+        .exhaustive()
     } catch (error) {
       port.postMessage({
         id: request.id,
@@ -57,13 +48,4 @@ export function attachMessagePort(
     }
   })
   port.start?.()
-}
-
-function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    Symbol.asyncIterator in value &&
-    typeof value[Symbol.asyncIterator] === 'function'
-  )
 }

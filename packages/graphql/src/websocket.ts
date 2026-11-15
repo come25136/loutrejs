@@ -1,32 +1,30 @@
-import { operationId, type GraphQLOperationId } from './identity.js'
-import { ConnectionRejected } from './connection-rejected.js'
-import type { ExecutionOperationLease } from '@loutrejs/loutre'
-import type {
-  WebSocketHandlerContext,
-  WebSocketMessageCodec,
-} from '@loutrejs/loutre/websocket'
-import { makeServer, parseMessage, MessageType, type Context } from 'graphql-ws'
+import { type ExecutionOperationLease } from '@loutrejs/loutre'
 import {
-  parse,
-  validate,
-  getOperationAST,
-  GraphQLError,
-  type ExecutionArgs,
-  type ExecutionResult,
-  type GraphQLFormattedError,
-} from 'graphql'
-import type {
-  GraphQLRuntime,
-  GraphQLContextInput,
-  GraphQLWebSocketExtra,
+  type GraphQLSessionContext,
+  type GraphQLProtocolRuntime,
+  type GraphQLWebSocketContextInput,
+  type GraphQLWebSocketExtra,
 } from './types.js'
-import { formatGraphQLError } from './errors.js'
-import type { BoundManifest } from './manifest-internal.js'
+import { type BoundManifest } from './manifest-internal.js'
+import { type GraphQLOperationId, operationId } from './identity.js'
 import {
+  type ExecutionArgs,
+  GraphQLError,
+  type GraphQLFormattedError,
+  parse,
+  getOperationAST,
+  validate,
+  type ExecutionResult,
+} from 'graphql'
+import { formatGraphQLError } from './errors.js'
+import { type Context, makeServer, parseMessage, MessageType } from 'graphql-ws'
+import { ConnectionRejected } from './connection-rejected.js'
+import {
+  incrementalErrors,
   executeManifest,
   subscribeManifest,
-  incrementalErrors,
 } from './execution.js'
+import { match } from 'ts-pattern'
 
 interface Operation<TInput> {
   readonly input: TInput
@@ -37,34 +35,21 @@ interface Operation<TInput> {
   finished: boolean
 }
 
-type TextSchema = {
-  '~standard': {
-    version: 1
-    vendor: string
-    validate(
-      value: unknown,
-    ): { value: string } | { issues: readonly { message: string }[] }
-    types: { input: string; output: string }
-  }
-}
-type SessionContext = WebSocketHandlerContext<{
-  path: string
-  messages: WebSocketMessageCodec<TextSchema, TextSchema>
-}>
-
-export async function serveGraphQLWebSocket<
-  TInput extends GraphQLContextInput<object, object>,
-  TState extends object,
-  THandshakeState extends object,
->(
-  context: SessionContext,
+export async function serveGraphQLWebSocket(
+  context: GraphQLSessionContext,
   bound: BoundManifest,
-  runtime: GraphQLRuntime<object, TInput, TState, THandshakeState>,
+  runtime: GraphQLProtocolRuntime,
   options: { readonly connectionInitWaitTimeout?: number },
 ): Promise<void> {
-  const operations = new Map<GraphQLOperationId, Operation<TInput>>()
+  const operations = new Map<
+    GraphQLOperationId,
+    Operation<GraphQLWebSocketContextInput<object>>
+  >()
   const schema = bound.schema
-  const executionOperations = new WeakMap<ExecutionArgs, Operation<TInput>>()
+  const executionOperations = new WeakMap<
+    ExecutionArgs,
+    Operation<GraphQLWebSocketContextInput<object>>
+  >()
   const tasks = new Set<Promise<void>>()
   const operationTasks = new Map<GraphQLOperationId, Promise<void>>()
   let receive!: (data: string) => Promise<void>
@@ -81,11 +66,11 @@ export async function serveGraphQLWebSocket<
       operation.controller.abort(context.signal.reason)
   }
   const run = <T>(
-    operation: Operation<TInput> | undefined,
+    operation: Operation<GraphQLWebSocketContextInput<object>> | undefined,
     invoke: () => T,
   ): T => (operation?.lease.run ? operation.lease.run(invoke) : invoke())
   const format = (
-    operation: Operation<TInput>,
+    operation: Operation<GraphQLWebSocketContextInput<object>>,
     error: GraphQLError,
   ): GraphQLFormattedError => {
     if (operation.formattingFailure) throw operation.formattingFailure.error
@@ -97,72 +82,71 @@ export async function serveGraphQLWebSocket<
       throw failure
     }
   }
-  let state: Readonly<TState> | undefined
+  let state: Readonly<object> | undefined
   let connectionContext:
     | Context<
         Record<string, unknown> | undefined,
-        GraphQLWebSocketExtra<TState>
+        GraphQLWebSocketExtra<object>
       >
     | undefined
   const hooks = runtime.ws
   const server = makeServer<
     Record<string, unknown> | undefined,
-    GraphQLWebSocketExtra<TState>
+    GraphQLWebSocketExtra<object>
   >({
     schema,
     ...(options.connectionInitWaitTimeout === undefined
       ? {}
       : { connectionInitWaitTimeout: options.connectionInitWaitTimeout }),
-    onConnect(connection) {
+    async onConnect(connection) {
       connectionContext = connection
-      return whileConnected(async () => {
-        const result = hooks?.connectionInit
-          ? await hooks.connectionInit({
-              request: context.request,
-              signal: context.signal,
-              payload: connection.connectionParams,
-              state: context.state as Readonly<THandshakeState>,
-            })
-          : context.state
-        context.signal.throwIfAborted()
-        if (result instanceof ConnectionRejected) {
-          await context.close(4403, result.reason)
-          return false
-        }
-        if (
-          !result ||
-          typeof result !== 'object' ||
-          Array.isArray(result) ||
-          result instanceof Response
+      context.signal.throwIfAborted()
+      const result = hooks?.connectionInit
+        ? await hooks.connectionInit({
+            request: context.request,
+            signal: context.signal,
+            payload: connection.connectionParams,
+            state: context.state,
+          })
+        : context.state
+      context.signal.throwIfAborted()
+      if (result instanceof ConnectionRejected) {
+        await context.close(4403, result.reason)
+        return false
+      }
+      if (
+        !result ||
+        typeof result !== 'object' ||
+        Array.isArray(result) ||
+        result instanceof Response
+      )
+        throw new TypeError(
+          'connectionInit must return a state object or ConnectionRejected.',
         )
-          throw new TypeError(
-            'connectionInit must return a state object or ConnectionRejected.',
-          )
 
-        state = Object.freeze(result) as Readonly<TState>
-        return true
-      }, context.signal)
+      state = Object.freeze(result)
+      return true
     },
     onClose(connection) {
       connectionContext = connection
     },
     async onSubscribe(connection, id, payload) {
+      context.signal.throwIfAborted()
       const operationKey = operationId(id)
       const controller = new AbortController()
       const lease = context.execution.beginOperation({
         kind: 'graphql.operation',
         name: payload.operationName || id,
       })
-      // factoryの条件型は呼び出し側でWSが有効な場合にこの入力を含む。
-      const input = {
-        transport: 'websocket' as const,
+      const input: GraphQLWebSocketContextInput<object> = {
+        transport: 'websocket',
         state: state!,
         request: context.request,
         connectionParams: connection.connectionParams,
         operationId: operationKey,
         signal: controller.signal,
-      } as TInput
-      const operation: Operation<TInput> = {
+      }
+      const operation: Operation<GraphQLWebSocketContextInput<object>> = {
         controller,
         lease,
         input,
@@ -359,39 +343,20 @@ export async function serveGraphQLWebSocket<
   }
   try {
     for await (const message of context.input.messages) {
-      if (!message.isValid) {
-        await context.close(4400, 'Invalid message received')
-        break
-      }
-      dispatch(message.value)
+      const keepReceiving = await match(message)
+        .with({ kind: 'valid' }, ({ value }) => {
+          dispatch(value)
+          return true
+        })
+        .with({ kind: 'invalid' }, async () => {
+          await context.close(4400, 'Invalid message received')
+          return false
+        })
+        .exhaustive()
+      if (!keepReceiving) break
     }
   } finally {
     await cleanupSession()
-  }
-}
-
-async function whileConnected<T>(
-  invoke: () => T | Promise<T>,
-  signal: AbortSignal,
-): Promise<T> {
-  signal.throwIfAborted()
-  let abort!: () => void
-  const aborted = new Promise<never>((_resolve, reject) => {
-    abort = () => reject(signal.reason)
-    signal.addEventListener('abort', abort, { once: true })
-  })
-  try {
-    const result = await Promise.race([
-      Promise.resolve().then(() => {
-        signal.throwIfAborted()
-        return invoke()
-      }),
-      aborted,
-    ])
-    signal.throwIfAborted()
-    return result
-  } finally {
-    signal.removeEventListener('abort', abort)
   }
 }
 
@@ -409,32 +374,18 @@ function cancellableIterator(
   let returning: Promise<IteratorResult<ExecutionResult>> | undefined
   const done = { done: true as const, value: undefined }
   const signal = operation.controller.signal
-  let resolveAborted!: (result: IteratorResult<ExecutionResult>) => void
-  const aborted = new Promise<IteratorResult<ExecutionResult>>((resolve) => {
-    resolveAborted = resolve
-  })
-  const abort = () => {
-    ended = true
-    resolveAborted(done)
-  }
-  signal.addEventListener('abort', abort, { once: true })
-  if (signal.aborted) abort()
   return {
     [Symbol.asyncIterator]() {
       return this
     },
     async next() {
-      if (ended) return done
+      if (ended || signal.aborted) return done
       try {
-        const result = await Promise.race([
-          runSource(() => source.next()),
-          aborted,
-        ])
+        const result = await runSource(() => source.next())
         if (result.done) {
           ended = true
-          signal.removeEventListener('abort', abort)
         }
-        return ended ? done : result
+        return ended || signal.aborted ? done : result
       } catch (error) {
         operation.lease.fail?.(error)
         throw error
@@ -444,7 +395,6 @@ function cancellableIterator(
       if (returning) return returning
       ended = true
       operation.controller.abort()
-      signal.removeEventListener('abort', abort)
       returning = Promise.resolve()
         .then(() => runSource(() => source.return?.()))
         .then(() => done)

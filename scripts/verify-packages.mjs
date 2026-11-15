@@ -10,6 +10,7 @@ const expectedPublicPackages = new Set([
   '@loutrejs/loutre',
   '@loutrejs/node',
   '@loutrejs/graphql',
+  '@loutrejs/mcp',
   '@loutrejs/bullmq',
   '@loutrejs/cli',
   'create-loutre',
