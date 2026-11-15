@@ -1,10 +1,12 @@
 import * as GraphQL from 'graphql'
+import { AsyncIteratorLifecycle } from '@loutrejs/loutre'
 import type {
   ExecutionArgs,
   ExecutionResult,
   DocumentNode,
   GraphQLError,
   ValidatedSubscriptionArgs,
+  ValidatedExecutionArgs,
 } from 'graphql'
 import type { BoundManifest } from './manifest-internal.js'
 import {
@@ -46,14 +48,45 @@ export async function executeManifest(
   const stats = options.stats ?? statistics()
   const view = executionView(bound, args.contextValue, options.signal, stats)
   try {
-    return await GraphQL.execute({
+    return await executeAndWait(
+      () =>
+        GraphQL.validateExecutionArgs({
+          ...args,
+          schema: bound.schema,
+          contextValue: view.context,
+        }),
+      GraphQL.executeRootSelectionSet,
+      view,
+    )
+  } finally {
+    options.annotate?.(statisticsAttributes(stats))
+  }
+}
+
+async function executeAndWait<TArgs extends ValidatedExecutionArgs>(
+  prepare: () => TArgs | readonly GraphQLError[],
+  execute: (args: TArgs) => ExecutionResult | Promise<ExecutionResult>,
+  view: { close(): Promise<void> },
+): Promise<ExecutionResult> {
+  const finished = Promise.withResolvers<void>()
+  let started = false
+  try {
+    const args = prepare()
+    if (!('schema' in args)) return { errors: args }
+    started = true
+    return await execute({
       ...args,
-      schema: bound.schema,
-      contextValue: view.context,
+      hooks: {
+        ...args.hooks,
+        asyncWorkFinished(info) {
+          finished.resolve()
+          args.hooks?.asyncWorkFinished?.(info)
+        },
+      },
     })
   } finally {
-    view.close()
-    options.annotate?.(statisticsAttributes(stats))
+    await view.close()
+    if (started) await finished.promise
   }
 }
 
@@ -81,32 +114,28 @@ export async function subscribeManifest(
   try {
     const result = GraphQL.validateSubscriptionArgs(sourceArgs)
     if (!('schema' in result)) {
-      sourceView.close()
+      await sourceView.close()
       return { errors: result }
     }
     validated = result
     source = await GraphQL.createSourceEventStream(validated)
   } catch (error) {
-    sourceView.close()
+    await sourceView.close()
     if (error instanceof GraphQL.GraphQLError) return { errors: [error] }
     throw error
   }
   if (!(Symbol.asyncIterator in source)) {
-    sourceView.close()
+    await sourceView.close()
     return source
   }
-  const iterator = source[Symbol.asyncIterator]()
+  const iterator = new AsyncIteratorLifecycle(source[Symbol.asyncIterator]())
+  const pending = new Set<Promise<IteratorResult<ExecutionResult>>>()
   let returning: Promise<IteratorResult<ExecutionResult>> | undefined
-  const mapped: AsyncIterableIterator<ExecutionResult> = {
-    [Symbol.asyncIterator]() {
-      return this
-    },
-    async next() {
-      if (returning || options.signal.aborted)
-        return { done: true, value: undefined }
+  const next = async (): Promise<IteratorResult<ExecutionResult>> => {
+    try {
       const event = await iterator.next()
       if (event.done || options.signal.aborted) {
-        sourceView.close()
+        await sourceView.close()
         return { done: true, value: undefined }
       }
       const view = executionView(
@@ -116,21 +145,52 @@ export async function subscribeManifest(
         stats,
       )
       try {
-        const value = await GraphQL.executeSubscriptionEvent({
-          ...validated,
-          rootValue: event.value,
-          contextValue: view.context,
-        })
+        const value = await executeAndWait(
+          () => ({
+            ...validated,
+            rootValue: event.value,
+            contextValue: view.context,
+          }),
+          GraphQL.executeSubscriptionEvent,
+          view,
+        )
         return { done: false, value }
       } finally {
-        view.close()
         options.annotate?.(statisticsAttributes(stats))
       }
+    } catch (error) {
+      await sourceView.close()
+      throw error
+    }
+  }
+  const mapped: AsyncIterableIterator<ExecutionResult> = {
+    [Symbol.asyncIterator]() {
+      return this
+    },
+    next() {
+      if (returning || options.signal.aborted)
+        return Promise.resolve({ done: true, value: undefined })
+      const operation = next()
+      pending.add(operation)
+      void operation.then(
+        () => pending.delete(operation),
+        () => pending.delete(operation),
+      )
+      return operation
     },
     return() {
       returning ??= Promise.resolve().then(async () => {
-        sourceView.close()
-        await iterator.return?.()
+        try {
+          await iterator.drain(
+            undefined,
+            () => undefined,
+            'GraphQL Subscriptionのcleanupが終了していません。',
+          )
+        } finally {
+          await iterator.waitForIdle()
+          await Promise.allSettled(pending)
+          await sourceView.close()
+        }
         return { done: true as const, value: undefined }
       })
       return returning

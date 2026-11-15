@@ -1,150 +1,149 @@
-import { validateSchema, type StandardSchemaV1 } from '../../core/index.js'
-import { match } from 'ts-pattern'
+import {
+  type HttpExecutionRouteDefinition,
+  type HttpExecutionResult,
+  type HttpHeaders,
+} from '../contract.js'
+import {
+  validateResponseHeaders,
+  responseHeadersSchema,
+  mergeResponseHeaders,
+  responseHeadersDefaults,
+  applyFrameworkResponseHeaders,
+  applyResponseHeaders,
+} from '../codecs/response.js'
+import {
+  type HttpExecutionResultWithFrameworkHeaders,
+  httpFrameworkHeaders,
+} from '../result.js'
+import {
+  createServerSentEventStream,
+  createLeasedReadableStream,
+} from './stream.js'
+import { validateSchema } from '../../core/index.js'
+import { type FinalizedHttpResult } from './types.js'
 
-type HttpHeaderValue = string | readonly string[]
-type HttpHeaders = Readonly<Record<string, HttpHeaderValue | undefined>>
+export async function finalizeHttpResult(
+  route: HttpExecutionRouteDefinition,
+  result: HttpExecutionResult,
+  signal: AbortSignal,
+  completeExecution: () => void,
+): Promise<FinalizedHttpResult> {
+  const response = route.responses[result.response]
+  if (!response) {
+    throw new Error(`LUTRE_HTTP_RESPONSE_UNDECLARED: ${result.response}`)
+  }
+  const responseHeaders = await validateResponseHeaders(
+    responseHeadersSchema(response.headers),
+    result.headers,
+  )
+  const headers = mergeResponseHeaders(
+    responseHeadersDefaults(response.headers),
+    responseHeaders,
+  )
+  applyFrameworkResponseHeaders(
+    headers,
+    (result as HttpExecutionResultWithFrameworkHeaders)[httpFrameworkHeaders],
+  )
 
-interface HttpResponseHeadersWithDefaults {
-  readonly schema: StandardSchemaV1
-  readonly defaults: HttpHeaders
-}
-
-type HttpResponseHeadersDefinition =
-  | StandardSchemaV1
-  | HttpHeaders
-  | HttpResponseHeadersWithDefaults
-
-export async function validateResponseHeaders(
-  schema: StandardSchemaV1 | undefined,
-  headers: HttpHeaders | undefined,
-): Promise<HttpHeaders | undefined> {
-  if (!schema) {
-    if (headers !== undefined) {
-      throw new Error('Undeclared HTTP response header was returned')
+  if (response.stream === 'server') {
+    if (!response.body || !isAsyncIterable(result.body)) {
+      throw new Error('Server-stream response requires an AsyncIterable body')
     }
-    return undefined
+    applyResponseHeaders(headers, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache',
+    })
+    const serverStream = createServerSentEventStream(
+      result.body,
+      response.body,
+      signal,
+      completeExecution,
+    )
+    return {
+      response: new Response(serverStream.stream, {
+        status: response.status,
+        headers,
+      }),
+      streamControl: serverStream,
+    }
   }
-  const validated = await validateSchema(schema, headers)
-  if (validated === undefined) return undefined
-  if (!isHttpHeaders(validated)) {
-    throw new Error('HTTP response header schema produced an invalid value')
+
+  const body = response.body
+    ? await validateSchema(response.body, result.body)
+    : undefined
+  if (body === undefined) {
+    return {
+      response: new Response(null, { status: response.status, headers }),
+    }
   }
-  return validated
+  if (body instanceof ReadableStream) {
+    const responseStream = createLeasedReadableStream(
+      body,
+      signal,
+      completeExecution,
+    )
+    return {
+      response: new Response(responseStream.stream, {
+        status: response.status,
+        headers,
+      }),
+      streamControl: responseStream,
+    }
+  }
+  if (
+    typeof body === 'string' ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body) ||
+    body instanceof Blob ||
+    body instanceof FormData ||
+    body instanceof URLSearchParams
+  ) {
+    return {
+      response: new Response(body as BodyInit, {
+        status: response.status,
+        headers,
+      }),
+    }
+  }
+  if (!headers.has('content-type')) {
+    headers.set('content-type', 'application/json; charset=utf-8')
+  }
+  return {
+    response: new Response(JSON.stringify(body), {
+      status: response.status,
+      headers,
+    }),
+  }
 }
 
-export function responseHeadersSchema(
-  headers: HttpResponseHeadersDefinition | undefined,
-): StandardSchemaV1 | undefined {
-  return match(headers)
-    .when(isStandardSchema, (schema) => schema)
-    .when(isResponseHeadersWithDefaults, (definition) => definition.schema)
-    .otherwise(() => undefined)
+export async function mapDeclaredError(
+  route: HttpExecutionRouteDefinition,
+  error: unknown,
+): Promise<HttpExecutionResult | undefined> {
+  for (const [responseName, response] of Object.entries(route.responses)) {
+    const mapping = response.error
+    if (!mapping?.definition.is(error)) continue
+    const mapped = await mapping.map(error)
+    if (typeof mapped !== 'object' || mapped === null || !('body' in mapped)) {
+      throw new Error('HTTP error mapping must return a body')
+    }
+    return {
+      kind: 'http-result',
+      response: responseName,
+      body: mapped.body,
+      ...('headers' in mapped
+        ? { headers: mapped.headers as HttpHeaders }
+        : {}),
+    }
+  }
+  return undefined
 }
 
-export function responseHeadersDefaults(
-  headers: HttpResponseHeadersDefinition | undefined,
-): HttpHeaders | undefined {
-  return match(headers)
-    .with(undefined, () => undefined)
-    .when(isStandardSchema, () => undefined)
-    .when(isResponseHeadersWithDefaults, (definition) => definition.defaults)
-    .otherwise((definition) => definition)
-}
-
-export function isStandardSchema(value: unknown): value is StandardSchemaV1 {
-  return typeof value === 'object' && value !== null && '~standard' in value
-}
-
-export function isResponseHeadersWithDefaults(
-  value: unknown,
-): value is HttpResponseHeadersWithDefaults {
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
   return (
     typeof value === 'object' &&
     value !== null &&
-    'schema' in value &&
-    isStandardSchema(value.schema)
+    Symbol.asyncIterator in value &&
+    typeof value[Symbol.asyncIterator] === 'function'
   )
-}
-
-export function mergeResponseHeaders(
-  defaults: HttpHeaders | undefined,
-  dynamic: HttpHeaders | undefined,
-): Headers {
-  const headers = new Headers()
-  applyResponseHeaders(headers, defaults)
-  applyResponseHeaders(headers, dynamic)
-  return headers
-}
-
-export function applyResponseHeaders(
-  headers: Headers,
-  source: HttpHeaders | undefined,
-): void {
-  if (!source) return
-  for (const [name, value] of Object.entries(source)) {
-    if (value === undefined) continue
-    headers.delete(name)
-    if (typeof value === 'string') {
-      headers.set(name, value)
-      continue
-    }
-    for (const item of value) headers.append(name, item)
-  }
-}
-
-export function applyFrameworkHeadersToResponse(
-  response: Response,
-  source: Headers | undefined,
-): Response {
-  if (!source) return response
-  const headers = new Headers(response.headers)
-  applyFrameworkResponseHeaders(headers, Object.fromEntries(source.entries()))
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  })
-}
-
-export function applyFrameworkResponseHeaders(
-  headers: Headers,
-  source: HttpHeaders | undefined,
-): void {
-  if (!source) return
-  for (const [name, value] of Object.entries(source)) {
-    if (value === undefined) continue
-    if (name.toLowerCase() === 'vary') {
-      const values = typeof value === 'string' ? [value] : value
-      for (const item of values.flatMap((header) => header.split(','))) {
-        appendVary(headers, item.trim())
-      }
-      continue
-    }
-    applyResponseHeaders(headers, { [name]: value })
-  }
-}
-
-function isHttpHeaders(value: unknown): value is HttpHeaders {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false
-  }
-  return Object.values(value).every(
-    (header) =>
-      header === undefined ||
-      typeof header === 'string' ||
-      (Array.isArray(header) &&
-        header.every((item) => typeof item === 'string')),
-  )
-}
-
-function appendVary(headers: Headers, value: string): void {
-  if (value.length === 0) return
-  const values = (headers.get('vary') ?? '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-  if (!values.some((item) => item.toLowerCase() === value.toLowerCase())) {
-    values.push(value)
-  }
-  headers.set('vary', values.join(', '))
 }

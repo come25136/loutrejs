@@ -161,6 +161,71 @@ function delegatedSocketTarget<TContract extends WebSocketContract>(
 }
 
 describe('WebSocket Execution Extension', () => {
+  it.each([
+    {
+      codec: 'json',
+      frame: { kind: 'text', data: '{"value":1}' },
+      valid: true,
+    },
+    {
+      codec: 'json',
+      frame: { kind: 'binary', data: new Uint8Array([1]) },
+      valid: false,
+    },
+    { codec: 'text', frame: { kind: 'text', data: '本文' }, valid: true },
+    {
+      codec: 'text',
+      frame: { kind: 'binary', data: new Uint8Array([1]) },
+      valid: false,
+    },
+    {
+      codec: 'binary',
+      frame: { kind: 'binary', data: new Uint8Array([1]) },
+      valid: true,
+    },
+    { codec: 'binary', frame: { kind: 'text', data: '本文' }, valid: false },
+  ] satisfies readonly {
+    codec: 'json' | 'text' | 'binary'
+    frame: WebSocketDataMessage
+    valid: boolean
+  }[])(
+    'codecとframeの組合せ %j を検証して同じ形式で返す',
+    async ({ codec, frame, valid }) => {
+      const connection = new FixtureConnection([frame])
+      const outcomes: string[] = []
+      const contract = websocket.contract({
+        endpoint: {
+          path: '/codec',
+          messages: websocket[codec]({
+            input: z.unknown(),
+            output: z.unknown(),
+          }),
+        },
+      })
+      const implementation = websocket.implementation({
+        contract,
+        factory: () => ({
+          async endpoint(context) {
+            for await (const message of context.input.messages) {
+              outcomes.push(message.kind)
+              if (message.kind === 'valid') await context.send(message.value)
+            }
+            await context.close()
+          },
+        }),
+      })
+      await using app = await bootstrapApplication({
+        application: defineApplication({
+          modules: [defineModule({ executions: [implementation] })],
+        }),
+        capabilities: [bindWebSocketServer(fixtureDriver(connection))],
+      })
+      await app.websocket.upgrade(new Request('http://fixture.test/codec'))
+      await connection.closed
+      expect(outcomes).toEqual([valid ? 'valid' : 'invalid'])
+      expect(connection.sent).toEqual(valid ? [frame] : [])
+    },
+  )
   it.each([false, true])(
     '委譲先の初期化順が逆=%sでも所有ModuleのDIとmiddleware・codecを使う',
     async (reverse) => {
@@ -200,7 +265,7 @@ describe('WebSocket Execution Extension', () => {
           async 'api.echo'(context) {
             expect(context.input.params.room).toBe('room1')
             for await (const message of context.input.messages) {
-              if (message.isValid) service.value += message.value
+              if (message.kind === 'valid') service.value += message.value
             }
             await context.send({
               tenant: context.state.tenant,
@@ -258,7 +323,7 @@ describe('WebSocket Execution Extension', () => {
         to: serviceNode.id,
       })
       for (let index = 0; index < 2; index += 1) {
-        const connection = new FixtureConnection([{ type: 'text', data: '2' }])
+        const connection = new FixtureConnection([{ kind: 'text', data: '2' }])
         await using app = await bootstrapApplication({
           application: definition,
           capabilities: [bindWebSocketServer(fixtureDriver(connection))],
@@ -272,7 +337,7 @@ describe('WebSocket Execution Extension', () => {
         ).toBe(200)
         await connection.closed
         expect(connection.sent).toEqual([
-          { type: 'text', data: JSON.stringify({ tenant: '組織1', value: 2 }) },
+          { kind: 'text', data: JSON.stringify({ tenant: '組織1', value: 2 }) },
         ])
       }
     },
@@ -571,8 +636,8 @@ describe('WebSocket Execution Extension', () => {
 
   it('1 connectionを1 executionとしてcodecとsend orderingを管理する', async () => {
     const connection = new FixtureConnection([
-      { type: 'text', data: '{' },
-      { type: 'text', data: JSON.stringify({ type: 'hello' }) },
+      { kind: 'text', data: '{' },
+      { kind: 'text', data: JSON.stringify({ type: 'hello' }) },
     ])
     const received: boolean[] = []
     const contract = websocket.contract({
@@ -591,7 +656,7 @@ describe('WebSocket Execution Extension', () => {
       factory: () => ({
         async chat(context) {
           for await (const message of context.input.messages) {
-            received.push(message.isValid)
+            received.push(message.kind === 'valid')
           }
           await Promise.all([
             context.send({ sequence: 1 }),
@@ -628,9 +693,9 @@ describe('WebSocket Execution Extension', () => {
 
     expect(received).toEqual([false, true])
     expect(connection.sent).toEqual([
-      { type: 'text', data: JSON.stringify({ sequence: 1 }) },
-      { type: 'text', data: JSON.stringify({ sequence: 2 }) },
-      { type: 'text', data: JSON.stringify({ sequence: 3 }) },
+      { kind: 'text', data: JSON.stringify({ sequence: 1 }) },
+      { kind: 'text', data: JSON.stringify({ sequence: 2 }) },
+      { kind: 'text', data: JSON.stringify({ sequence: 3 }) },
     ])
     expect(connection.closeRequests).toEqual([
       { code: 1000, reason: 'complete' },

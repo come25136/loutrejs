@@ -1,3 +1,4 @@
+import { match } from 'ts-pattern'
 import {
   normalizeHttpMethod,
   httpHeaderName,
@@ -156,17 +157,17 @@ async function applyOrigin(
   policy: CorsPolicy,
   origin: string,
 ): Promise<void> {
-  if (policy.origin.kind === 'wildcard') {
-    headers.set('access-control-allow-origin', '*')
-    return
-  }
-
-  appendVary(headers, 'Origin')
-  const allowed =
-    policy.origin.kind === 'exact'
-      ? policy.origin.origins.has(corsOriginValue(origin))
-      : await policy.origin.predicate(origin)
-  if (allowed) headers.set('access-control-allow-origin', origin)
+  if (policy.origin.kind !== 'wildcard') appendVary(headers, 'Origin')
+  const allowed = await match(policy.origin)
+    .with({ kind: 'wildcard' }, () => '*')
+    .with({ kind: 'exact' }, ({ origins }) =>
+      origins.has(corsOriginValue(origin)) ? origin : undefined,
+    )
+    .with({ kind: 'predicate' }, async ({ predicate }) =>
+      (await predicate(origin)) ? origin : undefined,
+    )
+    .exhaustive()
+  if (allowed !== undefined) headers.set('access-control-allow-origin', allowed)
 }
 
 function normalizeOrigin(

@@ -220,7 +220,7 @@ describe('Task/Trigger Application', () => {
         (execution) => execution.id === 'trigger.orders.consumer',
       )?.extension?.metadata,
     ).toEqual({
-      type: 'queue-consumer',
+      kind: 'queue-consumer',
       name: 'orders.consumer',
       queue: 'orders',
       task: 'orders.process',

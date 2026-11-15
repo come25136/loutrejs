@@ -26,8 +26,8 @@ import { createGraphQLHttpHandler } from './http.js'
 import {
   graphqlExtension,
   type GraphQLEndpointDefinition,
-  type GraphQLEndpointHandlers,
 } from './extension.js'
+import { type GraphQLEndpointHandlers } from './compiled.js'
 import type {
   GraphQLHttpContextInput,
   GraphQLWebSocketContextInput,

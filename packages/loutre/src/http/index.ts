@@ -28,27 +28,24 @@ export type {
   BearerAuthUnauthorized,
   HttpAuthenticationFailure,
 } from './auth.js'
+export { bindHttpServer, HTTP_SERVER } from './capability.js'
 export {
-  bindHttpServer,
   defineHttpContract,
   defineHttpImplementation,
   defineHttpMiddleware,
   defineHttpRaw,
   defineHttpDelegate,
-  httpError,
   executionHttp as http,
-  httpExecutionExtension,
-  isHttpContract,
-  isHttpRawContractRoute,
-  HTTP_SERVER,
   validate,
-} from './extension.js'
+} from './declaration.js'
+export { httpError } from './result.js'
+export { httpExecutionExtension } from './extension.js'
+export { isHttpContract, isHttpRawContractRoute } from './contract.js'
 export type {
   HttpRawDefinition,
   HttpRawDelegatedDefinition,
   HttpRawRouteDefinition,
   HttpRawExecutionContext,
-  HttpRawExecutionDefinition,
   HttpContract,
   HttpContractBranchDefinition,
   HttpContractNodeDefinition,
@@ -57,7 +54,6 @@ export type {
   HttpContractRawRouteDefinition,
   HttpContractRawRoute,
   HttpExecutionContext,
-  HttpExecutionDefinition,
   HttpExecutionRequestDefinition,
   HttpExecutionResponseDefinition,
   HttpExecutionResult,
@@ -75,11 +71,15 @@ export type {
   HttpResponseHeadersDefinition,
   HttpResponseResult,
   HttpResponseHeadersWithDefaults,
-  HttpServerDriver,
   HttpValidationMiddleware,
   HttpValidationPart,
   ResolvedHttpContractRoutes,
-} from './extension.js'
+} from './contract.js'
+export type {
+  HttpRawExecutionDefinition,
+  HttpExecutionDefinition,
+} from './declaration.js'
+export type { HttpServerDriver } from './capability.js'
 export {
   compareHttpPathSpecificity,
   HttpPathDecodeError,

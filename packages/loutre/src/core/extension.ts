@@ -8,7 +8,10 @@ import type {
   ExtensionIdentity,
 } from './identity.js'
 import type { DurationMs } from './units.js'
-import type { DependencyResolver } from './injection.js'
+import type {
+  DependencyResolver,
+  DependencyConsumerDescriptor,
+} from './injection.js'
 import type { Diagnostic } from './diagnostic.js'
 import type {
   RuntimeExecutionMetadata,
@@ -137,16 +140,35 @@ export interface ExecutionExtensionRuntime {
   close?(): void | Promise<void>
 }
 
+export type ExecutionHandlerSource<THandler> =
+  | { readonly kind: 'factory'; readonly factory: () => THandler }
+  | {
+      readonly kind: 'delegate'
+      readonly delegate: ExecutionDelegation<THandler>
+    }
+
+export interface ExecutionHandlerResolver<THandler> {
+  createResolver(binding: ExecutionRuntimeBinding): () => THandler
+}
+
 export interface ExecutionCompileContext {
   readonly moduleId: ModuleId
   readonly definitionIndex: number
+  compileHandler<THandler>(
+    source: ExecutionHandlerSource<THandler>,
+    consumer: DependencyConsumerDescriptor,
+  ): ExecutionHandlerResolver<THandler>
+  collectDependencies(
+    consumer: DependencyConsumerDescriptor,
+    factory: () => unknown,
+  ): void
 }
 
 export interface ExecutionContribution<TCompiled = unknown> {
   readonly kind: 'execution'
   readonly id: string
   readonly executionKind: string
-  readonly dependencies: readonly TokenLike[]
+  readonly dependencies?: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
   readonly delegations?: readonly ExecutionDelegation<unknown>[]
   readonly compiled: TCompiled
@@ -154,9 +176,10 @@ export interface ExecutionContribution<TCompiled = unknown> {
 
 export type ModelExecutionContribution<TCompiled = unknown> = Omit<
   ExecutionContribution<TCompiled>,
-  'delegations'
+  'dependencies' | 'delegations'
 > & {
   readonly id: ExecutionNodeId
+  readonly dependencies: readonly TokenLike[]
 }
 
 type ExecutionRuntimeLookup = <TRuntime extends ExecutionExtensionRuntime>(

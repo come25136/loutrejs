@@ -64,7 +64,8 @@ describe('Task Execution Extension', () => {
       name: 'snapshot-task',
       factory: () => async () => 'compiled-runtime',
     })
-    const hostInput = { ...registered }
+    const declaration = { ...registered.declaration }
+    const hostInput = { ...registered, declaration }
     const trigger = fixedDelay({
       name: 'snapshot-trigger',
       delay: 10_000,
@@ -78,9 +79,8 @@ describe('Task Execution Extension', () => {
       .values()[0]!
       .executions.map((execution) => execution.compiled as object)
 
-    ;(hostInput as { name: string }).name = 'mutated-task'
-    ;(hostInput as { factory: () => () => string }).factory = () => () =>
-      'mutated-runtime'
+    declaration.name = 'mutated-task'
+    declaration.factory = () => () => 'mutated-runtime'
 
     expect(compiled).not.toContainEqual(
       expect.objectContaining({ definition: expect.anything() }),

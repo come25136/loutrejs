@@ -61,6 +61,12 @@ GraphQL factoryの依存はendpointに、HTTP middlewareの依存はHTTP Executi
 
 終了時はtransportが新規受付を止め、接続や実行中の処理をdrainする。GraphQLはoperationとiteratorの終了を待ち、接続終了フックを実行する。Kernelはactive executionがなくなった後にGraphQL runtimeをcloseし、その後にProviderを解放する。
 
+中断通知は処理の完了を意味しない。ConnectionInit、Context生成、resolver、Batchの`load()`、Subscriptionの`next()`が中断後も継続する場合、そのPromiseの完了までoperationまたはsessionを保持する。iteratorの`return()`が先に完了しても、開始済みの`next()`やeventの実行が残る間は解放しない。`return()`が`done: false`を返す場合はcleanupを継続する。iteratorの操作とcleanupはHTTP・MessagePortでも使うCoreの`AsyncIteratorLifecycle`で追跡し、protocol固有のevent実行とScopeの完了はGraphQLが所有する。
+
+GraphQL.jsはNonNullエラーなどで、並行Fieldの完了前に実行結果を返す場合がある。Query・Mutation・Subscriptionのeventは、SDKの`asyncWorkFinished`まで待ってから解放する。SDKの実行結果だけを完了条件にしたり、FieldごとのPromise registryを独自実装したりしない。SDKから切り離して起動したBatch取得はScopeで追跡する。
+
+中断に協調しない処理が残る場合、Kernelは終了期限で失敗を返し、Providerとdraining状態を保持する。後から処理が完了した場合は`close()`を再試行できる。応答の抑止やSDK側の待機解除を理由に、未完了の処理を追跡対象から外す方式は採用しない。
+
 ## package境界
 
 新しいpublic packageを追加する。
@@ -438,6 +444,8 @@ terminate()
 ## AbortSignal
 
 HTTPではリクエストとKernelの中断を結合したExecutionの`signal`を利用する。
+
+通常HTTPとraw handlerは同じExecutionの`signal`を受け取る。`request`自体は元の入力を保持するが、handlerやGraphQL Contextの`signal`と`request.signal`のobject identityは契約に含めない。
 
 WebSocketではoperationごとにAbortControllerを作る。
 

@@ -1,51 +1,26 @@
+import { type McpPrincipal, type McpToolRuntime } from '../types.js'
+import { type ExecutionContextView } from '@loutrejs/loutre'
 import {
-  createMcpHandler,
-  type CallToolResult,
+  type McpOAuthOptions,
+  type McpOAuthRuntime,
+  httpsUrl,
+  type McpVerifiedAccessToken,
+} from '../oauth.js'
+import {
   getOAuthProtectedResourceMetadataUrl,
-  hostHeaderValidationResponse,
+  createMcpHandler,
   McpServer,
-  OAuthError,
-  OAuthErrorCode,
-  originValidationResponse,
   ProtocolError,
   ProtocolErrorCode,
+  type CallToolResult,
+  hostHeaderValidationResponse,
+  originValidationResponse,
   requireBearerAuth,
+  OAuthError,
+  OAuthErrorCode,
 } from '@modelcontextprotocol/server'
-import type { HttpRawExecutionContext } from '@loutrejs/loutre/http'
-import type { McpPrincipal, McpToolRuntime } from './types.js'
-import type { ExecutionContextView } from '@loutrejs/loutre'
-
-type Awaitable<T> = T | Promise<T>
-
-export interface McpVerifiedAccessToken extends McpPrincipal {
-  readonly resource: string
-  readonly expiresAt: number
-}
-
-export interface McpOAuthRuntime {
-  readonly publicOrigin: string
-  readonly authorizationServers: readonly string[]
-  readonly verifyAccessToken: (
-    token: string,
-    signal: AbortSignal,
-  ) => Awaitable<McpVerifiedAccessToken | undefined>
-  readonly allowInvocation: (
-    principal: McpPrincipal,
-    signal: AbortSignal,
-  ) => Awaitable<boolean>
-}
-
-export interface McpOAuthOptions {
-  readonly requiredScopes?: readonly string[]
-  readonly allowedOrigins?: readonly string[]
-}
-
-export interface McpHttpRuntime {
-  request(context: HttpRawExecutionContext): Promise<Response>
-  metadata(context: HttpRawExecutionContext): Response
-}
-
-export const oauthScopePattern = /^[\x21\x23-\x5B\x5D-\x7E]+$/
+import { match } from 'ts-pattern'
+import { type McpHttpRuntime } from '../contract.js'
 
 interface RequestState {
   readonly principal: McpPrincipal
@@ -57,22 +32,6 @@ interface RequestState {
 }
 
 const requestTimeoutMs = 30_000
-
-function httpsUrl(value: string): URL {
-  const url = new URL(value)
-  if (
-    url.protocol !== 'https:' ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
-    throw new TypeError(
-      'MCP OAuthのURLにはHTTPSを使い、認証情報、クエリ、フラグメントを除いてください。',
-    )
-  }
-  return url
-}
 
 export function createMcpHttpRuntime(
   info: { readonly name: string; readonly version: string },
@@ -93,7 +52,6 @@ export function createMcpHttpRuntime(
     throw new TypeError('MCP OAuthの認可サーバーを指定してください。')
   }
   for (const issuer of authorizationServers) httpsUrl(issuer)
-  const { verifyAccessToken, allowInvocation } = options
   const origins = [...(oauth.allowedOrigins ?? [])]
   const requestStates = new WeakMap<Request, RequestState>()
   const requiredScopes = [...new Set(oauth.requiredScopes ?? [])].toSorted()
@@ -155,7 +113,7 @@ export function createMcpHttpRuntime(
             let allowed: boolean
             try {
               signal.throwIfAborted()
-              allowed = await allowInvocation(principal, signal)
+              allowed = await options.allowInvocation(principal, signal)
             } catch {
               throw new ProtocolError(
                 ProtocolErrorCode.InternalError,
@@ -180,15 +138,17 @@ export function createMcpHttpRuntime(
                 })
               const result = await (operation.run ? operation.run(run) : run())
               operation.annotate?.({ 'mcp.result': result.kind })
-              if (result.kind === 'error')
-                return {
-                  content: [{ type: 'text', text: result.message }],
+              return match(result)
+                .returnType<CallToolResult>()
+                .with({ kind: 'error' }, ({ message }) => ({
+                  content: [{ type: 'text', text: message }],
                   isError: true,
-                }
-              return {
-                structuredContent: result.value,
-                content: [{ type: 'text', text: JSON.stringify(result.value) }],
-              }
+                }))
+                .with({ kind: 'success' }, ({ value }) => ({
+                  structuredContent: value,
+                  content: [{ type: 'text', text: JSON.stringify(value) }],
+                }))
+                .exhaustive()
             } catch {
               operation.fail?.(new Error('MCP Toolの実行に失敗しました。'))
               throw new ProtocolError(
@@ -251,7 +211,7 @@ export function createMcpHttpRuntime(
               }
               let verified: McpVerifiedAccessToken | undefined
               try {
-                verified = await verifyAccessToken(token, signal)
+                verified = await options.verifyAccessToken(token, signal)
               } catch {
                 throw new Error('MCPアクセストークンの検証に失敗しました。')
               }

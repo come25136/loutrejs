@@ -41,7 +41,7 @@ describe('MessagePort Execution Extension', () => {
     await expect(
       application.messagePort.invoke('greet', { name: 'Loutre' }),
     ).resolves.toEqual({
-      kind: 'message-port-result',
+      kind: 'unary',
       response: 'ok',
       value: { message: 'Hello, Loutre' },
     })
@@ -72,7 +72,7 @@ describe('MessagePort Execution Extension', () => {
       await expect(
         application.messagePort.invoke('echo', 'stable'),
       ).resolves.toEqual({
-        kind: 'message-port-result',
+        kind: 'unary',
         response: 'ok',
         value: 'stable',
       })

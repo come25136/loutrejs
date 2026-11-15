@@ -19,15 +19,15 @@ import {
   type ApplicationModel,
   type StandardSchemaV1,
 } from '../core/index.js'
+import { httpExecutionExtension } from './extension.js'
 import {
-  httpExecutionExtension,
   isHttpContract,
   type HttpContract,
   type HttpExecutionResponseDefinition,
   type HttpExecutionRouteDefinition,
   type HttpResponseHeadersDefinition,
   type HttpResponseHeadersWithDefaults,
-} from './extension.js'
+} from './contract.js'
 import { findHttpRouteConflicts } from './route-validation.js'
 import { match } from 'ts-pattern'
 
@@ -161,7 +161,12 @@ function httpOperationTargets(source: OpenApiSource): HttpOperationTarget[] {
   const http = source.extensions.get(httpExecutionExtension)
   return (http?.executions ?? []).flatMap((execution) =>
     execution.compiled.routes
-      .filter((route) => !route.raw)
+      .flatMap((route) =>
+        match(route)
+          .with({ kind: 'raw' }, () => [])
+          .with({ kind: 'contract' }, (value) => [value])
+          .exhaustive(),
+      )
       .map((route) => ({
         procedure: route.name,
         definition: {

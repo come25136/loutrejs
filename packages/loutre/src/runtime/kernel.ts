@@ -1,3 +1,4 @@
+import { match } from 'ts-pattern'
 import { milliseconds, type DurationMs } from '../core/units.js'
 import type { ModuleId, ExecutionNodeId } from '../core/model/identity.js'
 import type { ExtensionIdentity, CapabilityId } from '../core/identity.js'
@@ -45,7 +46,7 @@ export interface ApplicationKernelRuntimeOptions {
 
 const defaultForceShutdownTimeoutMs = 5_000
 
-type RuntimeState =
+type RuntimeStatus =
   | 'created'
   | 'initializing'
   | 'running'
@@ -84,7 +85,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   readonly #argumentsSource: unknown
   readonly #forceShutdownTimeoutMs: DurationMs
   readonly #instrumentation: RuntimeInstrumentation | undefined
-  #state: RuntimeState = 'created'
+  #status: RuntimeStatus = 'created'
   #initialization: Promise<void> | undefined
   #shutdown: Promise<void> | undefined
 
@@ -147,8 +148,8 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         Object.freeze(
           executions.map((execution) => {
             const resolve: DependencyResolver = (token, context) => {
-              if (this.#state === 'created' || this.#state === 'stopped') {
-                throw applicationStateError(this.#state)
+              if (this.#status === 'created' || this.#status === 'stopped') {
+                throw applicationStateError(this.#status)
               }
               assertDeclaredDependency(
                 execution.id,
@@ -165,8 +166,8 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
             const resolveDelegate = <TApi>(
               handle: ExecutionDelegateHandle<TApi>,
             ): TApi => {
-              if (this.#state !== 'running' && this.#state !== 'draining') {
-                throw applicationStateError(this.#state)
+              if (this.#status !== 'running' && this.#status !== 'draining') {
+                throw applicationStateError(this.#status)
               }
               const targetId = delegates.get(execution.id)?.get(handle)
               if (targetId === undefined) {
@@ -188,22 +189,25 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   }
 
   initialize(): Promise<void> {
-    if (this.#state === 'running') return Promise.resolve()
     if (this.#initialization) return this.#initialization
-    if (this.#state === 'draining' || this.#state === 'stopped') {
-      return Promise.reject(applicationStateError(this.#state))
-    }
-    const initialization = this.#initialize().finally(() => {
-      if (this.#initialization === initialization) {
-        this.#initialization = undefined
-      }
-    })
-    this.#initialization = initialization
-    return initialization
+    return match(this.#status)
+      .with('running', () => Promise.resolve())
+      .with('draining', 'stopped', (status) =>
+        Promise.reject(applicationStateError(status)),
+      )
+      .with('created', 'initializing', () => {
+        const initialization = this.#initialize().finally(() => {
+          if (this.#initialization === initialization)
+            this.#initialization = undefined
+        })
+        this.#initialization = initialization
+        return initialization
+      })
+      .exhaustive()
   }
 
   async #initialize(): Promise<void> {
-    this.#state = 'initializing'
+    this.#status = 'initializing'
     try {
       this.#validateCapabilities()
       await this.#bindRuntimeInputs()
@@ -218,10 +222,10 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
         })
         this.#extensionRuntimes.set(modelExtension.extension.identity, runtime)
       }
-      this.#state = 'running'
+      this.#status = 'running'
     } catch (error) {
       const cleanupErrors = await this.#rollbackInitialization()
-      this.#state = 'stopped'
+      this.#status = 'stopped'
       if (cleanupErrors.length > 0) {
         throw new AggregateError(
           [error, ...cleanupErrors],
@@ -323,7 +327,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   }
 
   get<TValue>(token: TokenLike<TValue>): TValue {
-    if (this.#state !== 'running') throw applicationStateError(this.#state)
+    if (this.#status !== 'running') throw applicationStateError(this.#status)
     return this.container.get(token)
   }
 
@@ -343,7 +347,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     metadata?: RuntimeExecutionMetadata,
     invocation?: RuntimeInvocationRegistration,
   ): ExecutionLease {
-    if (this.#state !== 'running') throw applicationStateError(this.#state)
+    if (this.#status !== 'running') throw applicationStateError(this.#status)
     const tracked = this.#executions.begin()
     if (metadata === undefined) return tracked
 
@@ -413,7 +417,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
   }
 
   shutdown(signal?: string): Promise<void> {
-    if (this.#state === 'stopped') return Promise.resolve()
+    if (this.#status === 'stopped') return Promise.resolve()
     if (this.#shutdown) return this.#shutdown
     const shutdown = this.#shutdownApplication(signal).finally(() => {
       if (this.#shutdown === shutdown) this.#shutdown = undefined
@@ -424,13 +428,13 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
 
   async #shutdownApplication(signal?: string): Promise<void> {
     if (this.#initialization) await this.#initialization.catch(() => undefined)
-    if (this.#state === 'created') {
-      this.#state = 'stopped'
+    if (this.#status === 'created') {
+      this.#status = 'stopped'
       await closeInstrumentation(this.#instrumentation)
       return
     }
-    if (this.#state === 'stopped') return
-    this.#state = 'draining'
+    if (this.#status === 'stopped') return
+    this.#status = 'draining'
     const errors: unknown[] = []
     const drainOperations: {
       readonly result: Promise<void>
@@ -508,7 +512,7 @@ export class ApplicationKernelRuntime implements ExecutionKernelRuntime {
     this.#extensionDrainOperations.clear()
     await this.#cleanupProviders(signal, errors)
     await this.#disposeProviders(errors)
-    this.#state = 'stopped'
+    this.#status = 'stopped'
     await closeInstrumentation(this.#instrumentation)
     if (errors.length > 0) {
       throw new ApplicationShutdownError(
@@ -802,8 +806,8 @@ async function callLifecycle(
   await Reflect.apply(candidate, instance, signal === undefined ? [] : [signal])
 }
 
-function applicationStateError(state: RuntimeState): Error {
+function applicationStateError(status: RuntimeStatus): Error {
   return new Error(
-    `LUTRE_APPLICATION_STATE: Application is ${state} and cannot perform this operation.`,
+    `LUTRE_APPLICATION_STATE: Application is ${status} and cannot perform this operation.`,
   )
 }

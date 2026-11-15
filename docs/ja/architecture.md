@@ -342,7 +342,7 @@ APIやTaskのhandlerでは、`factory`で取得したサービスを使います
 
 この節は、独自の処理形式をLoutreへ追加するExtensionの開発者向けです。標準のHTTP・Tasks・WebSocket・MessagePortを使うApplicationでは、この仕組みを意識した設定やAPI呼び出しは不要です。通常は前節までの`inject()`を使ってください。
 
-独自Extensionでは、`compile()`が返す`dependencies`に、その処理（Execution）が必要とするProviderを記録します。Applicationの起動・終了を管理するKernelは、各Executionの宣言に対応する専用のResolver（Providerを取り出す関数）を生成します。
+独自Extensionでhandlerを構築する場合は、`compile()`の`context.compileHandler()`でfactoryまたはdelegateを登録します。Coreが依存と委譲をModelへ記録するため、handlerから`dependencies`を転記する必要はありません。factoryを使わずProviderを直接解決する場合は、`compile()`が返す`dependencies`に必要なProviderを記録します。Applicationの起動・終了を管理するKernelは、各Executionの宣言に対応する専用のResolver（Providerを取り出す関数）を生成します。
 
 `createRuntime()`とHostの`create()`は、`executions`として`ExecutionRuntimeBinding`の配列を受け取ります。各要素は`{ execution, resolve }`です。`execution`はModelに記録されたExecutionへの参照、`resolve`はそのExecutionの依存宣言に対応する専用Resolverで、役割が異なります。
 
@@ -454,5 +454,7 @@ GraphQLとMCPはprotocol runtimeを専用Executionで所有し、HTTPとWebSocke
 MCP endpointとToolのContextを分ける設計は[MCPサーバー設計ADR](../adr/loutre_mcp_server_architecture.md)を参照してください。
 
 ## Design invariant
+
+内部の責務境界では、複数種類のpayloadを`kind`で判別し、処理状態は`status`で表します。受け手が種類の追加を見落とさないよう、閉じたunionを`ts-pattern`で網羅します。[契約の設計判断](../adr/loutre_typed_boundary_contracts.md)を参照してください。
 
 canonical Application Modelは一つだけです。Runtime adapter、CLI、build、Graph projection、Execution ExtensionがApplicationの並行modelを持つことはありません。

@@ -92,13 +92,15 @@ ConnectionInit handlerは`request`・`payload`・接続の`signal`・handshake m
 
 拒否する場合は`@loutrejs/graphql`の`ConnectionRejected`を返します。`new ConnectionRejected('Authentication required.')`なら、クライアントへ4403とその理由を通知します。理由は公開情報として扱い、UTF-8で123バイト以内にします。省略時は「Connection rejected.」です。HTTP Response、boolean、戻り値の省略は受け付けません。stateはACK payloadへ送らず、最上位を読み取り専用にして接続ごとに保持します。
 
-前処理中に切断・drainした場合は待機を終了し、遅い成功を公開しません。非同期I/Oには接続のsignalを渡してください。前処理中に確保したresourceは、signalによる中断も含めてアプリ側で解放してください。
+前処理中に切断・drainした場合はsignalで中断を通知し、遅い成功を公開しません。非同期I/Oには接続のsignalを渡してください。前処理中に確保したresourceは、signalによる中断も含めてアプリ側で解放してください。フレームワークは前処理が完了するまでsessionとProviderを保持します。
 
 ### 接続終了のライフサイクル
 
 `factory().ws`の`onDisconnect`・`onClose`は`graphql-ws`の引数・戻り値に従います。`extra.request`はopening request、`extra.signal`は接続のsignal、`extra.state`はConnectionInitで受け取ったstateです。init前や拒否された接続ではstateは`undefined`です。
 
 onDisconnectはACK済み接続、onCloseはACK前を含む終了時に呼びます。購読の終了処理後に呼び出すため、接続中に保持するresourceはonCloseで解放できます。終了フックはabort済みsignalでも終了を待ちます。購読の終了処理やonDisconnectが失敗してもonCloseを呼び出し、失敗を集めて報告した後にsessionを解放します。
+
+中断後も継続するConnectionInit・Context生成・resolver・Batch取得・iterator操作の完了を待ちます。終了期限までに完了しない場合は`close()`が失敗し、Providerを保持します。処理が終了した後で`close()`を再試行してください。HTTP Contextのsignalにも要求の中断とApplicationの終了を伝播します。
 
 接続開始の処理はconnectionInitへまとめます。認証方式・payloadのキー・再認証の方針はアプリ側で決めます。[同じURLを使う認証example](../../examples/graphql-auth/README.md)を参照してください。
 

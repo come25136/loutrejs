@@ -86,6 +86,8 @@ interface ExecutionExtension<
 
 CoreはExtension名や`executionKind`の値でprotocol-specific分岐を行わない。
 
+`compile()`のcontextはhandlerのcompileとfactoryの依存収集を所有する。`context.compileHandler(source, consumer)`はRuntime用のresolverを返し、収集した依存と委譲をCoreがContributionへ統合する。`context.collectDependencies(consumer, factory)`はmiddlewareなど追加のfactoryを対象とする。これにより、Extensionがhandlerのmetadataを転記し忘れてModelとRuntimeが食い違う構造を避ける。Contributionの`dependencies`と`delegations`は追加の明示宣言に限定し、省略時は空として扱う。Runtimeへ渡すModelでは、依存は常に解決済みの配列として保持する。
+
 ### 3.1 Execution reference closure
 
 Extensionは`references()`で、あるDefinitionが同じExtension内で直接参照する別Execution Definitionを宣言できる。CoreはModuleのroot `executions`からこの参照を再帰的に辿り、同じDefinition objectは1回だけcompileしてcanonical Application Modelへ含める。参照関係はraw Definitionではなく`references` edgeとしてModelへ固定する。
@@ -136,7 +138,7 @@ GraphQLの状態の共有範囲は[状態の寿命と共有範囲](./loutre_grap
 
 ### 3.5 Transportの宣言と委任
 
-通常のhandlerは`http.implementation()`、`http.raw()`、`websocket.implementation()`で宣言し、登録済みExecutionへの委任は`http.delegate()`、`websocket.delegate()`で宣言する。factoryとdelegateを選択するunionをcompileやRuntimeへ持ち回らない。宣言時に依存収集とhandler構築の契約へ揃え、Model構築と起動はその契約だけを扱う。委任はhandlerの取得方法であり、transportの実行経路を増やすものではない。
+通常のhandlerは`http.implementation()`、`http.raw()`、`websocket.implementation()`で宣言し、登録済みExecutionへの委任は`http.delegate()`、`websocket.delegate()`で宣言する。宣言は`kind: 'factory' | 'delegate'`のhandler取得契約へ変換する。Coreがcompile境界で網羅的に処理し、依存と共通のhandler resolverへ揃える。Runtimeは宣言の種類を再判定しない。契約の規約と採用理由は[責務境界の判別可能な契約](./loutre_typed_boundary_contracts.md)を正本とする。
 
 HTTPの委任先はraw HTTP handlerを返す。WebSocketの委任先は、そのContractのroute名をkeyとする`WebSocketHandlers<typeof contract>`を返す。nested route名、handshakeのstateと入出力schemaはContractから推論する。
 
@@ -209,7 +211,7 @@ factory: (users = inject(UserRepository)) => ({
 })
 ```
 
-Extensionの`compile()`はこの同期constructionをdependency probeし、得られたtokenを`ExecutionContribution.dependencies`へ正規化する。Runtimeでは同じfactoryをInjection Context内で呼び、`inject()`を実値へresolveする。Application Modelの内部都合を公開Execution APIの`inject`配列へ漏らしてはならない。
+Extensionの`compile()`はこの同期constructionをcompile contextへ登録し、Coreがdependency probeで得られたtokenをModelの依存へ正規化する。Runtimeでは同じfactoryをInjection Context内で呼び、`inject()`を実値へresolveする。Application Modelの内部都合を公開Execution APIの`inject`配列へ漏らしてはならない。
 
 このためImplementation、Layer、Taskのfactory constructionはpureであることを公開contractとする。factory本体ではhandler closureの組み立てと`inject()`によるdependency宣言だけを行い、I/O、timer、resource生成、business operationはhandler実行またはLifecycleへ置く。dependency probeとRuntime初期化の双方でfactory constructionが起こり得るため、factory construction自体のexactly-once実行には依存しない。
 
@@ -217,14 +219,14 @@ Factory Provider / Lifecycle hookのexplicit dependency metadataは別のCore AP
 
 ## 5. Compiled Execution Contribution
 
-Coreへ渡すcanonical contributionは次の形とする。
+ExtensionがCoreへ返すcompile結果は次の形とする。Coreはcontextに登録された情報と明示宣言を集約し、canonical Application Modelでは`dependencies`を必須の配列として保持する。
 
 ```ts
 interface ExecutionContribution<TCompiled = unknown> {
   readonly kind: 'execution'
   readonly id: string
   readonly executionKind: string
-  readonly dependencies: readonly TokenLike[]
+  readonly dependencies?: readonly TokenLike[]
   readonly capabilities: readonly RuntimeCapability[]
   readonly delegations?: readonly ExecutionDelegation<unknown>[]
   readonly compiled: TCompiled

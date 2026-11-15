@@ -148,3 +148,24 @@ export interface GraphQLProtocolRuntime {
       | undefined
   }
 }
+
+import {
+  type WebSocketHandlerContext,
+  type WebSocketMessageCodec,
+} from '@loutrejs/loutre/websocket'
+
+type TextSchema = {
+  '~standard': {
+    version: 1
+    vendor: string
+    validate(
+      value: unknown,
+    ): { value: string } | { issues: readonly { message: string }[] }
+    types: { input: string; output: string }
+  }
+}
+
+export type GraphQLSessionContext = WebSocketHandlerContext<{
+  path: string
+  messages: WebSocketMessageCodec<TextSchema, TextSchema>
+}>

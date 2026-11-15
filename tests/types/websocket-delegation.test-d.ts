@@ -59,7 +59,7 @@ const handlers: WebSocketHandlers<typeof contract> = {
     // @ts-expect-error 宣言していないstateは公開しない
     context.state.secret
     for await (const message of context.input.messages) {
-      if (message.isValid) {
+      if (message.kind === 'valid') {
         const value: number = message.value
         await context.send({ value })
         // @ts-expect-error 出力schemaと異なる値は送信できない

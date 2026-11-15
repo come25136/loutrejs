@@ -15,11 +15,14 @@ import {
   isExecutionDefinition,
   flattenExecutions,
   type AnyExecutionExtension,
-  type ExecutionContribution,
   type ExecutionDelegation,
   type ExecutionDefinition,
   type ExecutionExtension,
 } from './extension.js'
+import {
+  compileExecution,
+  type CollectedExecutionContribution,
+} from './compilation.js'
 import type { ModuleInstance } from './module.js'
 import { isFrameworkProvidedToken } from './token-internal.js'
 import { tokenName } from './token.js'
@@ -363,9 +366,9 @@ export function buildApplicationModel(
         extension: canonicalExtension,
       })
 
-      let contribution: ExecutionContribution
+      let contribution: CollectedExecutionContribution
       try {
-        contribution = extension.compile(value as never, {
+        contribution = compileExecution(extension, value as never, {
           moduleId,
           definitionIndex,
         })

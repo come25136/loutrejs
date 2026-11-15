@@ -5,7 +5,7 @@ import type {
   HttpExecutionResult,
   HttpMiddleware,
   HttpMiddlewareContext,
-} from './extension.js'
+} from './contract.js'
 
 export interface BasicAuthCredentials extends Descriptor<'basic-auth-credentials'> {
   readonly username: string

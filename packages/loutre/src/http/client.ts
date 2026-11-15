@@ -20,7 +20,7 @@ import type {
   HttpHeaders,
   HttpResponseHeadersDefinition,
   HttpResponseHeadersWithDefaults,
-} from './extension.js'
+} from './contract.js'
 import { parseHttpPath, type PathParamNames } from './path.js'
 import { match } from 'ts-pattern'
 
@@ -201,14 +201,17 @@ function interpolatePath(
   if (segments.length === 0) return requestPathname('/')
   return requestPathname(
     `/${segments
-      .map((segment) => {
-        if (segment.kind === 'static') return segment.value
-        const value = params?.[segment.name]
-        if (value === undefined) {
-          throw new Error(`Missing HTTP path parameter: ${segment.name}`)
-        }
-        return encodeURIComponent(String(value))
-      })
+      .map((segment) =>
+        match(segment)
+          .with({ kind: 'static' }, ({ value }) => value)
+          .with({ kind: 'param' }, ({ name }) => {
+            const value = params?.[name]
+            if (value === undefined)
+              throw new Error(`Missing HTTP path parameter: ${name}`)
+            return encodeURIComponent(String(value))
+          })
+          .exhaustive(),
+      )
       .join('/')}`,
   )
 }
