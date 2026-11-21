@@ -44,7 +44,6 @@ interface CompiledHttpRouteBase {
 export type CompiledHttpContractRoute = CompiledHttpRouteBase & {
   readonly kind: 'contract'
   readonly definition: CompiledHttpRouteDefinition
-  readonly responseVariants: Readonly<Record<string, string | undefined>>
 }
 
 export type CompiledHttpRawRoute = CompiledHttpRouteBase & {

@@ -407,15 +407,14 @@ export function createHttpExtensionRuntime(
             'Raw handlers and middleware must return a Response.',
           )
         const finalized = await finalizeHttpResult(
-          match.route,
+          match.route.definition,
           result,
           lease.signal,
           finishExecution,
-          corsHeaders,
         )
         if (finalized.streamControl)
           adoptResponseStream(finalized.streamControl)
-        return annotateResponse(finalized.response)
+        return complete(finalized.response)
       } catch (error) {
         if (error instanceof HttpInputDecodeError) {
           return annotateResponse(
@@ -437,22 +436,27 @@ export function createHttpExtensionRuntime(
         try {
           const response = await patternMatch(match.route)
             .with({ kind: 'raw' }, () => undefined)
-            .with({ kind: 'contract' }, async (route) => {
-              const mapped = await mapDeclaredError(route.definition, error)
+            .with({ kind: 'contract' }, async ({ definition }) => {
+              const mapped = await mapDeclaredError(definition, error)
               if (!mapped) return undefined
               const finalized = await finalizeHttpResult(
-                route,
+                definition,
                 mapped,
                 lease.signal,
                 finishExecution,
-                await safeCorsHeaders(route.middlewares, request),
               )
               if (finalized.streamControl)
                 adoptResponseStream(finalized.streamControl)
               return finalized.response
             })
             .exhaustive()
-          if (response) return annotateResponse(response)
+          if (response)
+            return annotateResponse(
+              applyFrameworkHeadersToResponse(
+                response,
+                await safeCorsHeaders(match.route.middlewares, request),
+              ),
+            )
         } catch {
           // 内部のmapping/finalization errorをclientへ公開しない。
         }

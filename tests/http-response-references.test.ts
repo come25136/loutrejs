@@ -71,10 +71,10 @@ it('同じstatusの応答を参照で選択し、継承した応答を複数のA
         headers: { origin: 'https://app.test' },
       }),
     )
-    expect(response.headers.get('loutre-response')).toBe('detail')
+    expect(response.headers.has('loutre-response')).toBe(false)
     expect(
       response.headers.get('access-control-expose-headers')?.split(', '),
-    ).toEqual(['x-page', 'loutre-response'])
+    ).toEqual(['x-page'])
     const client = createHttpClient(
       contract,
       fetchHttpTransport({
@@ -82,9 +82,7 @@ it('同じstatusの応答を参照で選択し、継承した応答を複数のA
         fetch: (input, init) => app.http.fetch(new Request(input, init)),
       }),
     )
-    const detail = await client.read()
-    expect(detail.body).toEqual({ id: 'one', value: 42 })
-    expect(detail.headers).not.toHaveProperty('loutre-response')
+    await expect(client.read()).rejects.toThrow('ambiguous response')
     expect((await client.other()).headers).not.toHaveProperty('loutre-response')
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ id: 'one', value: 42 })
@@ -98,7 +96,7 @@ it('同じstatusの応答を参照で選択し、継承した応答を複数のA
   )
 })
 
-it('同じstatusのJSONとSSEをそれぞれのmedia typeと応答名で復元する', async () => {
+it('同じstatusのJSONとSSEをそれぞれのmedia typeで復元する', async () => {
   const contract = http.contract(tree)
   const document = generateOpenApi(contract, {
     info: { title: '混合応答', version: '1' },
@@ -123,7 +121,6 @@ it('同じstatusのJSONとSSEをそれぞれのmedia typeと応答名で復元�
         new Response('data: 42\n\n', {
           headers: {
             'content-type': 'text/event-stream',
-            'loutre-response': 'events',
           },
         }),
     }),
@@ -183,41 +180,66 @@ it.each(['kind', 'routes'])(
   },
 )
 
-it('独自transportの同一statusは候補を一意に解決し、誤った応答名や曖昧なbodyを拒否する', async () => {
+it('独自transportでも公開された内容で検証し、応答名を称するヘッダーで候補を選ばない', async () => {
   const contract = http.contract(tree)
-  const read = (body: object, name?: string | readonly string[]) =>
+  const headers = { 'loutre-response': 'detail' }
+  const read = (body: object) =>
     createHttpClient(contract, async () => ({
       status: 200,
       body,
-      headers: name === undefined ? {} : { 'Loutre-Response': name },
+      headers,
     })).read()
   await expect(read({ id: 'one' })).resolves.toMatchObject({
     body: { id: 'one' },
+    headers,
   })
   await expect(read({ id: 'one', value: 1 })).rejects.toThrow(
     'ambiguous response',
   )
-  await expect(
-    read({ id: 'one', value: 1 }, ['detail']),
-  ).resolves.toMatchObject({ body: { id: 'one', value: 1 } })
-  await expect(
-    read({ id: 'one', value: 1 }, ['basic', 'detail']),
-  ).rejects.toThrow('does not match')
-  await expect(read({ id: 'one' }, 'detail')).rejects.toThrow('does not match')
-  await expect(read({ id: 'one' }, 'other')).rejects.toThrow('does not match')
 })
 
-it('同じstatusを区別する予約ヘッダーと業務ヘッダーの重複を宣言時に通知する', () => {
-  expect(() =>
-    http.contract({
-      read: {
-        method: 'GET',
-        path: '/read',
-        responses: {
-          empty: { status: 200 },
-          other: { status: 200, headers: { 'Loutre-Response': '業務用' } },
-        },
+it('同じ403を返す二つの分岐はステータス・ヘッダー・本文が一致する', async () => {
+  const denied = { status: 403, body: z.string() } as const
+  const contract = http.contract({
+    check: {
+      method: 'GET',
+      path: '/check',
+      responses: {
+        permissionDenied: denied,
+        accountSuspended: denied,
       },
+    },
+  })
+  let suspended = false
+  const implementation = http.implementation({
+    contract,
+    factory: () => ({
+      check: () =>
+        suspended
+          ? { schema: contract.check.accountSuspended, body: 'Forbidden' }
+          : { schema: contract.check.permissionDenied, body: 'Forbidden' },
     }),
-  ).toThrow('Reserved HTTP response header')
+  })
+  await using app = await bootstrapApplication({
+    application: application({
+      modules: [module({ executions: [implementation] })],
+    }),
+    capabilities: [bindHttpServer({ runtime: 'test' })],
+  })
+  const read = async () => {
+    const response = await app.http.fetch(
+      new Request('https://fixture.test/check'),
+    )
+    return {
+      status: response.status,
+      headers: Object.fromEntries(response.headers),
+      body: await response.text(),
+    }
+  }
+  const first = await read()
+  expect(first.status).toBe(403)
+  expect(first.body).toBe('Forbidden')
+  expect(first.headers).not.toHaveProperty('loutre-response')
+  suspended = true
+  expect(await read()).toEqual(first)
 })

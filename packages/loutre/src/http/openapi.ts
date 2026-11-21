@@ -1,4 +1,3 @@
-import { encodeResponseVariant, responseVariantHeader } from './identity.js'
 import {
   openApiOperationId,
   openApiSchemaName,
@@ -476,14 +475,6 @@ function mergeResponseHeaders(
       current.push(schema)
       result.set(headerName, current)
     }
-  }
-  if (entries.length > 1) {
-    result.set(responseVariantHeader, [
-      {
-        type: 'string',
-        enum: entries.map(({ name }) => encodeResponseVariant(name)),
-      },
-    ])
   }
   if (result.size === 0) return undefined
   return Object.fromEntries(

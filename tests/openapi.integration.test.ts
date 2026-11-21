@@ -257,9 +257,7 @@ describe('OpenAPI generation', () => {
         }),
       ]),
     )
-    expect(
-      operation?.responses['400'].headers['loutre-response'].schema.enum,
-    ).toEqual(['failedA', 'failedB'])
+    expect(operation?.responses['400']).not.toHaveProperty('headers')
     expect(
       operation?.responses['400'].content['application/json'].schema.anyOf,
     ).toHaveLength(2)

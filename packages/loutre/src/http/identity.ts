@@ -31,9 +31,3 @@ export function normalizeMediaType(
   const normalized = value?.split(';', 1)[0]?.trim().toLowerCase()
   return normalized ? (normalized as NormalizedMediaType) : undefined
 }
-
-export const responseVariantHeader = 'loutre-response'
-
-export function encodeResponseVariant(name: string): string {
-  return encodeURIComponent(JSON.stringify(name).slice(1, -1))
-}

@@ -1,7 +1,5 @@
 import {
   normalizeMediaType,
-  encodeResponseVariant,
-  responseVariantHeader,
   normalizeHttpMethod,
   httpBaseUrl,
   requestPathname,
@@ -228,8 +226,8 @@ async function decodeResponse(
   response: HttpClientTransportResponse,
 ): Promise<unknown> {
   const target = describeHttpTarget(definition, procedure)
-  const candidates = Object.entries(definition.responses).filter(
-    ([, candidate]) => candidate.status === response.status,
+  const candidates = Object.values(definition.responses).filter(
+    (candidate) => candidate.status === response.status,
   )
   if (candidates.length === 0) {
     throw new HttpClientResponseError(
@@ -242,24 +240,9 @@ async function decodeResponse(
   }
 
   let lastValidationError: SchemaValidationError | undefined
-  let headers = response.headers ?? {}
-  let variant: string | undefined
-  if (candidates.length > 1) {
-    const fields = Object.entries(headers)
-    const values = fields.flatMap(([name, value]) =>
-      name.toLowerCase() === responseVariantHeader ? (value ?? []) : [],
-    )
-    if (values.length > 0) {
-      variant = values.join(', ')
-      headers = Object.fromEntries(
-        fields.filter(([name]) => name.toLowerCase() !== responseVariantHeader),
-      )
-    }
-  }
+  const headers = response.headers ?? {}
   let decoded: { status: number; body: unknown; headers: unknown } | undefined
-  for (const [name, candidate] of candidates) {
-    if (variant !== undefined && variant !== encodeResponseVariant(name))
-      continue
+  for (const candidate of candidates) {
     try {
       let body: unknown
       if (candidate.stream === 'server') {
@@ -287,7 +270,7 @@ async function decodeResponse(
           definition.method,
           definition.path,
           procedure,
-          `${target} returned an ambiguous response without the ${responseVariantHeader} header`,
+          `${target} returned an ambiguous response matching multiple Contract definitions`,
         )
       }
       decoded = Object.freeze({

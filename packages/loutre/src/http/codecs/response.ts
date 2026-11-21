@@ -116,7 +116,7 @@ export function applyFrameworkResponseHeaders(
     if (name.toLowerCase() === 'vary') {
       const values = typeof value === 'string' ? [value] : value
       for (const item of values.flatMap((header) => header.split(','))) {
-        appendHeaderToken(headers, name, item.trim())
+        appendVary(headers, item.trim())
       }
       continue
     }
@@ -137,18 +137,14 @@ export function isHttpHeaders(value: unknown): value is HttpHeaders {
   )
 }
 
-export function appendHeaderToken(
-  headers: Headers,
-  name: string,
-  value: string,
-): void {
+function appendVary(headers: Headers, value: string): void {
   if (value.length === 0) return
-  const values = (headers.get(name) ?? '')
+  const values = (headers.get('vary') ?? '')
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
   if (!values.some((item) => item.toLowerCase() === value.toLowerCase())) {
     values.push(value)
   }
-  headers.set(name, values.join(', '))
+  headers.set('vary', values.join(', '))
 }
