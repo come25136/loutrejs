@@ -25,13 +25,19 @@ type MethodKeys<T> = {
 }[keyof T]
 
 export type DeclaredExecutionMethods<TActual, TDeclared> =
-  Exclude<MethodKeys<TActual>, keyof TDeclared> extends never ? unknown : never
+  Exclude<
+    Extract<MethodKeys<TActual>, string | number>,
+    keyof TDeclared
+  > extends never
+    ? unknown
+    : never
 
 export function assertDeclaredExecutionMethods(
   value: object,
   names: readonly string[],
 ): void {
   const declared = new Set(names)
+  const visited = new Set<string>()
   for (
     let owner: object | null = value;
     owner && owner !== Object.prototype;
@@ -40,9 +46,11 @@ export function assertDeclaredExecutionMethods(
     for (const [name, descriptor] of Object.entries(
       Object.getOwnPropertyDescriptors(owner),
     )) {
+      if (visited.has(name)) continue
+      visited.add(name)
       if (
-        name !== 'constructor' &&
         typeof descriptor.value === 'function' &&
+        !(name === 'constructor' && descriptor.value.prototype === owner) &&
         !declared.has(name)
       ) {
         throw new TypeError(`Undeclared execution method: ${name}`)
@@ -60,13 +68,19 @@ export function resolveExecutionMethod(
     (typeof value !== 'object' && typeof value !== 'function')
   )
     return undefined
-  if (!Object.hasOwn(value, name) && Object.hasOwn(Object.prototype, name)) {
-    let owner = Object.getPrototypeOf(value)
+  const method: unknown = Reflect.get(value, name)
+  if (Object.hasOwn(Object.prototype, name)) {
+    let owner: object | null = value
     while (owner && !Object.hasOwn(owner, name))
       owner = Object.getPrototypeOf(owner)
-    if (owner === Object.prototype) return undefined
+    if (
+      owner === Object.prototype ||
+      (name === 'constructor' &&
+        typeof method === 'function' &&
+        method.prototype === owner)
+    )
+      return undefined
   }
-  const method: unknown = Reflect.get(value, name)
   if (typeof method !== 'function') return undefined
   return (...arguments_) => Reflect.apply(method, value, arguments_)
 }

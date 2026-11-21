@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { bootstrapApplication, application, module } from '@loutrejs/loutre'
+import {
+  bootstrapApplication,
+  application,
+  module,
+  assertDeclaredExecutionMethods,
+  resolveExecutionMethod,
+} from '@loutrejs/loutre'
 import {
   bindHttpServer,
   http,
@@ -52,6 +58,30 @@ const factories: Record<string, () => HttpHandlers<typeof contract>> = {
 }
 
 describe('protocolのmethod契約', () => {
+  it('継承で隠れたメソッドを数えず、クラスのコンストラクタをhandlerに使わない', () => {
+    class Base {
+      helper() {
+        return '継承元'
+      }
+    }
+    const instance = Object.defineProperty(new Base(), 'helper', {
+      value: '設定',
+    })
+    expect(() => assertDeclaredExecutionMethods(instance, [])).not.toThrow()
+    expect(resolveExecutionMethod(instance, 'constructor')).toBeUndefined()
+    const handlers = {
+      constructor() {
+        return '明示した応答'
+      },
+    }
+    expect(() => assertDeclaredExecutionMethods(handlers, [])).toThrow(
+      'constructor',
+    )
+    expect(resolveExecutionMethod(handlers, 'constructor')?.()).toBe(
+      '明示した応答',
+    )
+  })
+
   it.each(Object.entries(factories))(
     'HTTPは%sを持つhandlerを利用できる',
     async (_, factory) => {
