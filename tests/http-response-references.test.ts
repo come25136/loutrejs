@@ -26,7 +26,7 @@ const tree = {
         method: 'GET',
         path: '/read',
         responses: {
-          basic: { status: 200, body: z.object({ id: z.string() }) },
+          basic: { status: 200, body: z.strictObject({ id: z.string() }) },
           detail: {
             status: 200,
             body: z.object({ id: z.string(), value: z.number() }),
@@ -82,7 +82,7 @@ it('同じstatusの応答を参照で選択し、継承した応答を複数のA
         fetch: (input, init) => app.http.fetch(new Request(input, init)),
       }),
     )
-    await expect(client.read()).rejects.toThrow('ambiguous response')
+    expect((await client.read()).body).toEqual({ id: 'one', value: 42 })
     expect((await client.other()).headers).not.toHaveProperty('loutre-response')
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ id: 'one', value: 42 })
@@ -180,22 +180,28 @@ it.each(['kind', 'routes'])(
   },
 )
 
-it('独自transportでも公開された内容で検証し、応答名を称するヘッダーで候補を選ばない', async () => {
-  const contract = http.contract(tree)
+it('スキーマが重なる場合は公開された内容に最初に一致した結果を返す', async () => {
+  const contract = http.contract({
+    read: {
+      method: 'GET',
+      path: '/read',
+      responses: {
+        basic: { status: 200, body: z.object({ id: z.string() }) },
+        detail: tree.api.routes.read.responses.detail,
+      },
+    },
+  })
   const headers = { 'loutre-response': 'detail' }
-  const read = (body: object) =>
-    createHttpClient(contract, async () => ({
-      status: 200,
-      body,
-      headers,
-    })).read()
-  await expect(read({ id: 'one' })).resolves.toMatchObject({
+  const client = createHttpClient(contract, async () => ({
+    status: 200,
+    body: { id: 'one', value: 1 },
+    headers,
+  }))
+  await expect(client.read()).resolves.toEqual({
+    status: 200,
     body: { id: 'one' },
     headers,
   })
-  await expect(read({ id: 'one', value: 1 })).rejects.toThrow(
-    'ambiguous response',
-  )
 })
 
 it('同じ403を返す二つの分岐はステータス・ヘッダー・本文が一致する', async () => {

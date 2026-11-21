@@ -241,7 +241,6 @@ async function decodeResponse(
 
   let lastValidationError: SchemaValidationError | undefined
   const headers = response.headers ?? {}
-  let decoded: { status: number; body: unknown; headers: unknown } | undefined
   for (const candidate of candidates) {
     try {
       let body: unknown
@@ -264,16 +263,7 @@ async function decodeResponse(
       const decodedHeaders = headerSchema
         ? await validateSchema(headerSchema, headers)
         : headers
-      if (decoded) {
-        throw new HttpClientResponseError(
-          response.status,
-          definition.method,
-          definition.path,
-          procedure,
-          `${target} returned an ambiguous response matching multiple Contract definitions`,
-        )
-      }
-      decoded = Object.freeze({
+      return Object.freeze({
         status: response.status,
         body,
         headers: decodedHeaders,
@@ -284,7 +274,6 @@ async function decodeResponse(
     }
   }
 
-  if (decoded) return decoded
   throw new HttpClientResponseError(
     response.status,
     definition.method,

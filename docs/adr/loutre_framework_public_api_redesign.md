@@ -64,7 +64,7 @@ Handlerは短縮参照を使う。既存の `routes` プロパティはGraphQL/M
 
 ### 同じstatusに複数のSchema
 
-応答参照はサーバーが返す内容を検証するために使う。内部の分岐理由までクライアントに伝わるのを防ぐため、選択した応答名は通信に付加しない。型付きクライアントは公開された status・body・headers で候補を検証し、複数が一致した場合はエラーを返す。宣言順で選ぶと部分集合のSchemaでフィールドが失われるためである。
+サーバーでは Handler が応答参照を選ぶ。選択した名前は HTTP 応答に付加しない。クライアントは同じ status の候補を `responses` の列挙順に検証し、最初に一致した結果を返す。公開上区別したい応答に、受理する値が重ならないスキーマを定義するのは Contract 作者の責任である。
 
 ```ts
 const UsersContract = http.contract({
@@ -102,7 +102,7 @@ const UsersHttp = http.implementation({
 })
 ```
 
-`ok` / `detailed` はともにHTTP 200であっても別レスポンス。Runtimeは選ばれたreferenceに対応する **一つのSchema** を検証する。bodyの形状や最初に一致したSchema、あるいはstatusだけから名前付きレスポンスを推測してはならない。これによりZodが未知のプロパティをstripする場合も、違うSchemaでデータを変換してしまう問題を防ぐ。
+`ok` と `detailed` はどちらも HTTP 200 を返す。サーバーは選ばれた参照のスキーマだけで検証するため、要約用スキーマの設定にかかわらず、詳細応答のフィールドをそのまま送信できる。
 
 ### Error mapping、SSE、Headers、Bodyless
 
