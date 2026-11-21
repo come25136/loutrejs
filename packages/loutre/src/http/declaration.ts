@@ -122,15 +122,20 @@ export function defineHttpContract(
       return [name, operation.definition] as const
     }),
   )
-  return Object.freeze({
+  const contract = {
     ...Object.fromEntries(
       compiled.map((route) => [route.name, route.definition.responses]),
     ),
     [compiledContractRoutes]: Object.freeze(compiled),
-    kind: 'http-contract',
+    kind: 'http-contract' as const,
     [httpContractBrand]: true as const,
     routes: Object.freeze(canonicalRoutes),
+  }
+  Object.defineProperties(contract, {
+    [httpContractBrand]: { enumerable: false },
+    [compiledContractRoutes]: { enumerable: false },
   })
+  return Object.freeze(contract)
 }
 
 function resolveHttpContractRoutes(

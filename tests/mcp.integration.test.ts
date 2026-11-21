@@ -204,6 +204,37 @@ describe('MCP Streamable HTTP', () => {
     expect(operations).toContain('mcp.tool')
   })
 
+  it('生成後にコピーされたContractから別のTool集合を登録できない', () => {
+    const route = http.contract({
+      endpoint: { raw: true, method: '*', path: '/mcp' },
+    }).routes.endpoint
+    const contract = mcp.contract({})
+    expect(() =>
+      mcp.implementation({
+        route,
+        name: 'copied',
+        version: '1',
+        contract: { ...contract, tools: {} },
+        factory: () => ({
+          oauth: oauthConfiguration(),
+          context: () => ({}),
+          tools: {},
+        }),
+      }),
+    ).toThrow('mcp.contract()')
+    expect(() =>
+      // @ts-expect-error MCPで列挙できないキーは型と実行時の両方で拒否する
+      mcp.contract({
+        [Symbol('tool')]: {
+          description: '確認',
+          scopes: [],
+          input: z.object({}),
+          output: z.object({}),
+        },
+      }),
+    ).toThrow('文字列')
+  })
+
   it('MCP入口とOAuthメタデータの両方でHTTPルートの衝突を診断する', () => {
     const api = http.contract({
       mcp: { raw: true, method: '*', path: '/mcp' },

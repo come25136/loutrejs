@@ -119,6 +119,7 @@ export function isHttpRawContractRoute(
   return (
     typeof value === 'object' &&
     value !== null &&
+    Object.hasOwn(value, httpContractRawRouteBrand) &&
     (value as Partial<HttpContractRawRoute>)[httpContractRawRouteBrand] === true
   )
 }
@@ -369,6 +370,7 @@ export function isHttpContract(value: unknown): value is HttpContract {
   const candidate = value as Partial<HttpContract>
   return (
     candidate.kind === 'http-contract' &&
+    Object.hasOwn(candidate, httpContractBrand) &&
     candidate[httpContractBrand] === true &&
     typeof candidate.routes === 'object' &&
     candidate.routes !== null

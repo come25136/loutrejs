@@ -16,6 +16,7 @@ import {
   http,
 } from '@loutrejs/loutre/http'
 import {
+  mcpContractBrand,
   type McpImplementationOptions,
   type McpTools,
   type McpToolOptions,
@@ -36,16 +37,24 @@ export interface McpImplementation extends ExecutionGroup<
 > {}
 
 export function defineMcpContract<const TTools extends McpTools>(
-  tools: TTools & {
-    [K in keyof TTools]: Record<
-      Exclude<keyof TTools[K], keyof McpToolOptions>,
-      never
-    >
-  },
-): McpContract<TTools>
+  tools: TTools &
+    Record<Extract<keyof TTools, symbol>, never> & {
+      [K in keyof TTools]: Record<
+        Exclude<keyof TTools[K], keyof McpToolOptions>,
+        never
+      >
+    },
+): McpContract<{
+  readonly [K in keyof TTools]: Readonly<Omit<TTools[K], 'scopes'>> & {
+    readonly scopes: Readonly<TTools[K]['scopes']>
+  }
+}>
 export function defineMcpContract(tools: McpTools): McpContract {
-  return Object.freeze({
-    kind: 'mcp-contract',
+  if (Object.getOwnPropertySymbols(tools).length)
+    throw new TypeError('MCP Tool名には文字列を指定してください。')
+  const contract = {
+    kind: 'mcp-contract' as const,
+    [mcpContractBrand]: true as const,
     tools: Object.freeze(
       Object.fromEntries(
         Object.entries(tools).map(([name, tool]) => {
@@ -60,7 +69,9 @@ export function defineMcpContract(tools: McpTools): McpContract {
         }),
       ),
     ),
-  })
+  }
+  Object.defineProperty(contract, mcpContractBrand, { enumerable: false })
+  return Object.freeze(contract)
 }
 
 export function defineMcpImplementation<
@@ -88,7 +99,12 @@ export function defineMcpImplementation(
   },
 ): ExecutionGroup {
   const { route, name, version, contract, factory } = options
-  if (!contract || contract.kind !== 'mcp-contract' || 'tools' in options)
+  if (
+    !contract ||
+    !Object.hasOwn(contract, mcpContractBrand) ||
+    contract[mcpContractBrand] !== true ||
+    'tools' in options
+  )
     throw new TypeError(
       'MCP endpointのToolはmcp.contract()で宣言してください。',
     )

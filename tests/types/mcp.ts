@@ -105,3 +105,17 @@ mcp.implementation({
     tools: { get_order: () => ({ id: 1 }), other: () => ({ id: 2 }) },
   }),
 })
+
+const mutableTools = {
+  read: {
+    description: '確認',
+    scopes: ['read'],
+    input: z.object({}),
+    output: z.object({}),
+  },
+}
+const snapshot = mcp.contract(mutableTools)
+// @ts-expect-error スナップショットのscopeは読み取り専用
+snapshot.tools.read.scopes.push('write')
+// @ts-expect-error スナップショットの定義は読み取り専用
+snapshot.tools.read.description = '変更'

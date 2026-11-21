@@ -24,8 +24,11 @@ export interface McpToolDefinition extends McpToolOptions {
 
 export type McpTools = Readonly<Record<string, McpToolOptions>>
 
+export const mcpContractBrand: unique symbol = Symbol.for('loutre.mcp-contract')
+
 export interface McpContract<TTools extends McpTools = McpTools> {
   readonly kind: 'mcp-contract'
+  readonly [mcpContractBrand]: true
   readonly tools: TTools
 }
 

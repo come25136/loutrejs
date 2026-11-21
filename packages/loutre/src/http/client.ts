@@ -15,11 +15,12 @@ import {
   type SchemaOutput,
   type StandardSchemaV1,
 } from '../core/index.js'
-import type {
-  HttpContract,
-  HttpExecutionResponseDefinition,
-  HttpExecutionRouteDefinition,
-  HttpHeaders,
+import {
+  isHttpContract,
+  type HttpContract,
+  type HttpExecutionResponseDefinition,
+  type HttpExecutionRouteDefinition,
+  type HttpHeaders,
 } from './contract.js'
 import { responseHeadersSchema } from './codecs/response.js'
 import { parseHttpPath, type PathParamNames } from './path.js'
@@ -169,6 +170,10 @@ export function createHttpClient<const TContract extends HttpContract>(
   contract: TContract,
   transport: HttpClientTransport,
 ): HttpClient<TContract> {
+  if (!isHttpContract(contract))
+    throw new TypeError(
+      'createHttpClient() requires a Contract created by http.contract().',
+    )
   const client: Record<
     string,
     (request?: Record<string, unknown>) => Promise<unknown>

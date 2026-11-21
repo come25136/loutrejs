@@ -5,6 +5,7 @@ import {
   createHttpClient,
   http,
   isHttpRawContractRoute,
+  isHttpContract,
 } from '@loutrejs/loutre/http'
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 
@@ -38,8 +39,36 @@ describe('HTTP Contractのrawルート', () => {
     expect(
       isHttpRawContractRoute({ raw: true, method: '*', path: '/protocol' }),
     ).toBe(false)
+    expect(isHttpRawContractRoute({ ...api.routes.delegated })).toBe(false)
+    expect(isHttpRawContractRoute(Object.create(api.routes.delegated))).toBe(
+      false,
+    )
     expect(isHttpRawContractRoute(api.routes.health)).toBe(false)
     expect(Object.isFrozen(api.routes.delegated)).toBe(true)
+  })
+
+  it('コピーしたContractのルートとコンパイル済みルートを混在させない', () => {
+    const api = contract()
+    const copy = {
+      ...api,
+      routes: {
+        ...api.routes,
+        health: { ...api.routes.health, path: '/changed' },
+      },
+    }
+    expect(isHttpContract(copy)).toBe(false)
+    expect(isHttpContract(Object.create(api))).toBe(false)
+    expect(() =>
+      http.implementation({
+        contract: copy,
+        factory: () => {
+          throw new Error('呼び出される前に拒否される')
+        },
+      }),
+    ).toThrow('http.contract()')
+    expect(() =>
+      createHttpClient(copy, async () => ({ status: 204, body: undefined })),
+    ).toThrow('http.contract()')
   })
 
   it('通常HTTPのimplementationとraw処理を同じContractから個別に配備する', async () => {

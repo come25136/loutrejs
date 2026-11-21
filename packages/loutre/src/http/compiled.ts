@@ -4,6 +4,7 @@ import {
   type AnyHttpMiddleware,
   type HttpRawRouteDefinition,
   type HttpContract,
+  isHttpContract,
 } from './contract.js'
 import { type Descriptor } from '../internal/brand.js'
 import {
@@ -60,9 +61,10 @@ export interface CompiledHttpContract extends HttpContract {
 }
 
 export function isCompiledHttpContract(
-  contract: HttpContract,
+  contract: unknown,
 ): contract is CompiledHttpContract {
   return (
+    isHttpContract(contract) &&
     compiledContractRoutes in contract &&
     Array.isArray(contract[compiledContractRoutes])
   )
