@@ -239,6 +239,36 @@ describe('Task Execution Extension', () => {
     )
   })
 
+  it('長いfixedDelayは指定時刻まで待ち、次の待機中に停止できる', async () => {
+    vi.useFakeTimers()
+    const run = vi.fn(async () => {})
+    const job = task({ name: 'monthly', factory: () => run })
+    const delay = 2 ** 31 + 100
+    const schedule = trigger.fixedDelay({
+      name: 'monthly-trigger',
+      delay,
+      task: job,
+    })
+    try {
+      await using app = await bootstrapApplication({
+        application: createApplication({
+          modules: [module({ executions: [schedule] })],
+        }),
+      })
+      await app.tasks.start()
+      await vi.advanceTimersByTimeAsync(delay - 1)
+      expect(run).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(run).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(2 ** 31 - 1)
+      await app.tasks.stop()
+      await vi.advanceTimersByTimeAsync(delay)
+      expect(run).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('close後は保持済みTrigger APIからresourceを再生成できない', async () => {
     const job = task({ name: 'closed-task', factory: () => async () => {} })
     const schedule = trigger.fixedDelay({
