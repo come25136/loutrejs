@@ -243,13 +243,14 @@ async function decodeResponse(
 
   let lastValidationError: SchemaValidationError | undefined
   let headers = response.headers ?? {}
-  let variant: string | readonly string[] | undefined
+  let variant: string | undefined
   if (candidates.length > 1) {
     const fields = Object.entries(headers)
-    variant = fields.find(
-      ([name]) => name.toLowerCase() === responseVariantHeader,
-    )?.[1]
-    if (variant !== undefined) {
+    const values = fields.flatMap(([name, value]) =>
+      name.toLowerCase() === responseVariantHeader ? (value ?? []) : [],
+    )
+    if (values.length > 0) {
+      variant = values.join(', ')
       headers = Object.fromEntries(
         fields.filter(([name]) => name.toLowerCase() !== responseVariantHeader),
       )

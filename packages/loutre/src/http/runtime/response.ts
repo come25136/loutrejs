@@ -61,11 +61,13 @@ export async function finalizeHttpResult(
         `Reserved HTTP response header: ${responseVariantHeader}`,
       )
     headers.set(responseVariantHeader, variant)
-    appendHeaderToken(
-      headers,
-      'access-control-expose-headers',
-      responseVariantHeader,
-    )
+    if (headers.has('access-control-allow-origin')) {
+      appendHeaderToken(
+        headers,
+        'access-control-expose-headers',
+        responseVariantHeader,
+      )
+    }
   }
 
   if (response.stream === 'server') {

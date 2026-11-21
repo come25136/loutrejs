@@ -185,7 +185,7 @@ it.each(['kind', 'routes'])(
 
 it('独自transportの同一statusは候補を一意に解決し、誤った応答名や曖昧なbodyを拒否する', async () => {
   const contract = http.contract(tree)
-  const read = (body: object, name?: string) =>
+  const read = (body: object, name?: string | readonly string[]) =>
     createHttpClient(contract, async () => ({
       status: 200,
       body,
@@ -197,6 +197,12 @@ it('独自transportの同一statusは候補を一意に解決し、誤った応�
   await expect(read({ id: 'one', value: 1 })).rejects.toThrow(
     'ambiguous response',
   )
+  await expect(
+    read({ id: 'one', value: 1 }, ['detail']),
+  ).resolves.toMatchObject({ body: { id: 'one', value: 1 } })
+  await expect(
+    read({ id: 'one', value: 1 }, ['basic', 'detail']),
+  ).rejects.toThrow('does not match')
   await expect(read({ id: 'one' }, 'detail')).rejects.toThrow('does not match')
   await expect(read({ id: 'one' }, 'other')).rejects.toThrow('does not match')
 })
