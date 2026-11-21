@@ -3,8 +3,8 @@ import { parse } from 'graphql'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   inject,
 } from '@loutrejs/loutre'
 import { bindHttpServer, http } from '@loutrejs/loutre/http'
@@ -116,10 +116,8 @@ async function fixture(
   let channel: WebSocketDriverChannel | undefined
   const sent: { type: string; id?: string | undefined }[] = []
   const application = await bootstrapApplication({
-    application: defineApplication({
-      modules: [
-        defineModule({ providers: [Resource], executions: [endpoint] }),
-      ],
+    application: createApplication({
+      modules: [module({ providers: [Resource], executions: [endpoint] })],
     }),
     capabilities: [
       bindHttpServer({ runtime: 'test' }),

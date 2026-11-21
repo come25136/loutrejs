@@ -1,8 +1,8 @@
 import * as fixture from './helpers/identities.js'
 import {
   LoggerToken,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   provide,
   token,
   type RuntimeInstrumentation,
@@ -17,8 +17,8 @@ describe('Runtime instrumentation boundary', () => {
       }
     }
 
-    const application = defineApplication({
-      modules: [defineModule(() => ({ providers: [Repository] }))()],
+    const application = createApplication({
+      modules: [module(() => ({ providers: [Repository] }))()],
     })
     const calls: string[] = []
     let executionInvocation: unknown
@@ -116,9 +116,9 @@ describe('Runtime instrumentation boundary', () => {
   it('useValue providerもproviderCreatedへ通知する', async () => {
     const Service = token<{ ping(): string }>('runtime-instrumentation-value')
     const service = { ping: () => 'pong' }
-    const application = defineApplication({
+    const application = createApplication({
       modules: [
-        defineModule(() => ({
+        module(() => ({
           providers: [provide(Service).useValue(service)],
         }))(),
       ],
@@ -148,8 +148,8 @@ describe('Runtime instrumentation boundary', () => {
         return 42
       }
     }
-    const application = defineApplication({
-      modules: [defineModule(() => ({ providers: [Repository] }))()],
+    const application = createApplication({
+      modules: [module(() => ({ providers: [Repository] }))()],
     })
     const runtime = new ApplicationKernelRuntime(application.model, {
       instrumentation: {
@@ -191,8 +191,8 @@ describe('Runtime instrumentation boundary', () => {
         throw new Error('init failed')
       }
     }
-    const application = defineApplication({
-      modules: [defineModule(() => ({ providers: [BrokenProvider] }))()],
+    const application = createApplication({
+      modules: [module(() => ({ providers: [BrokenProvider] }))()],
     })
     let closeCount = 0
     const runtime = new ApplicationKernelRuntime(application.model, {

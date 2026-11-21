@@ -1,5 +1,5 @@
 import type { ApplicationModel } from '../core/model/types.js'
-import { defineModule } from '../core/module.js'
+import { module } from '../core/module.js'
 import { provide } from '../core/provider.js'
 import { token } from '../core/token.js'
 
@@ -23,7 +23,7 @@ const devtoolsOptionsToken = token<Readonly<DevtoolsModuleOptions>>(
   'loutre.devtools.options',
 )
 
-const devtoolsModuleTemplate = defineModule<DevtoolsModuleOptions | undefined>(
+const devtoolsModuleTemplate = module<DevtoolsModuleOptions | undefined>(
   (options = {}) => ({
     name: 'LoutreDevtoolsModule',
     providers: [

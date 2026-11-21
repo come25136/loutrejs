@@ -5,8 +5,8 @@ import WebSocket from 'ws'
 import { nodeRuntime } from '@loutrejs/node'
 import { graphql, ConnectionRejected } from '@loutrejs/graphql'
 import {
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   inject,
   projectApplicationModel,
 } from '@loutrejs/loutre'
@@ -56,7 +56,7 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
   const regular = http.implementation({
     name: 'Health',
     contract: Api,
-    factory: () => ({ health: (ctx) => ctx.response.ok({}) }),
+    factory: () => ({ health: () => ({ schema: Api.health.ok }) }),
   })
   const delegated = graphql.implementation({
     name: 'Profile',
@@ -73,11 +73,11 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
       context: ({ state }) => ({ greeting: greeting.text, user: state.user }),
     }),
   })
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     providers: [Greeting],
     executions: [regular, delegated],
   }))
-  const application = defineApplication({ modules: [Module()] })
+  const application = createApplication({ modules: [Module()] })
   expect(application.model.diagnostics).toEqual([])
   for (const source of [Api, application.model])
     expect(
@@ -200,11 +200,11 @@ it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒�
     transports: { http: false, websocket: true },
     factory: () => ({ context: () => ({}) }),
   })
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     providers: [Gate],
     executions: [execution],
   }))
-  const application = defineApplication({ modules: [Module()] })
+  const application = createApplication({ modules: [Module()] })
   const graph = projectApplicationModel(application.model)
   const ws = graph.executions.find(
     (node) => node.executionKind === 'websocket.session',

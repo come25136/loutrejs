@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process'
 
 const workerSource = `
-import { defineApplication, defineModule } from '@loutrejs/loutre'
-import { fixedDelay, task } from '@loutrejs/loutre/tasks'
+import { application, module as createModule } from '@loutrejs/loutre'
+import { trigger, task } from '@loutrejs/loutre/tasks'
 import { nodeRuntime } from '@loutrejs/node'
 
 class Resource {
@@ -15,9 +15,9 @@ const tick = task({
   name: 'tick',
   factory: () => async () => console.log('TICK'),
 })
-const trigger = fixedDelay({ name: 'poll', delay: 20, immediate: true, task: tick })
-const module = defineModule(() => ({ providers: [Resource], executions: [trigger] }))()
-const app = await nodeRuntime.create({ application: defineApplication({ modules: [module] }) })
+const schedule = trigger.fixedDelay({ name: 'poll', delay: 20, immediate: true, task: tick })
+const module = createModule(() => ({ providers: [Resource], executions: [schedule] }))()
+const app = await nodeRuntime.create({ application: application({ modules: [module] }) })
 await app.tasks.start()
 console.log('READY')
 `

@@ -2,9 +2,9 @@ import {
   bootstrapApplication,
   buildApplicationModel,
   createKernelApplication,
-  defineApplication,
-  defineEnv,
-  defineModule,
+  application as createApplication,
+  env as declareEnv,
+  module,
   inject,
   loadEnv,
   provide,
@@ -36,7 +36,7 @@ const AppEnvSchema = z
     tls: env.TLS ? { ca: env.TLS_CA! } : (false as const),
   }))
 
-class AppEnv extends defineEnv(AppEnvSchema) {}
+class AppEnv extends declareEnv(AppEnvSchema) {}
 
 describe('Environment Contract', () => {
   it('Standard Schema validationとtransform後outputをEnvとして公開する', async () => {
@@ -64,12 +64,12 @@ describe('Environment Contract', () => {
         this.port = env.port
       }
     }
-    const AppModule = defineModule(() => ({
+    const AppModule = module(() => ({
       environment: [AppEnv],
       providers: [Service],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [AppModule()] }),
+      application: createApplication({ modules: [AppModule()] }),
       environment: { PORT: '8080', TLS: 'false' },
     })
 
@@ -79,10 +79,10 @@ describe('Environment Contract', () => {
   })
 
   it('cross-field validation failureをSchemaValidationErrorにする', async () => {
-    const AppModule = defineModule(() => ({ environment: [AppEnv] }))
+    const AppModule = module(() => ({ environment: [AppEnv] }))
     await expect(
       bootstrapApplication({
-        application: defineApplication({ modules: [AppModule()] }),
+        application: createApplication({ modules: [AppModule()] }),
         environment: { PORT: '8080', TLS: 'true' },
       }),
     ).rejects.toBeInstanceOf(SchemaValidationError)
@@ -102,7 +102,7 @@ describe('Environment Contract', () => {
         readonly after = inject(AFTER),
       ) {}
     }
-    const AppModule = defineModule(() => ({
+    const AppModule = module(() => ({
       environment: [AppEnv],
       providers: [Database, Service, provide(AFTER).useValue('after')],
     }))
@@ -134,7 +134,7 @@ describe('Environment Contract', () => {
     class NeedsEnv {
       constructor(readonly env = inject(AppEnv)) {}
     }
-    const MissingModule = defineModule(() => ({ providers: [NeedsEnv] }))
+    const MissingModule = module(() => ({ providers: [NeedsEnv] }))
     expect(
       buildApplicationModel({ modules: [MissingModule()] }).diagnostics,
     ).toContainEqual(
@@ -142,7 +142,7 @@ describe('Environment Contract', () => {
     )
 
     const env = await loadEnv(AppEnv, { PORT: '3000', TLS: 'false' })
-    const ConflictModule = defineModule(() => ({
+    const ConflictModule = module(() => ({
       environment: [AppEnv],
       providers: [provide(AppEnv).useValue(env)],
     }))
@@ -161,12 +161,12 @@ describe('Environment Contract', () => {
     class SecureDriver {
       readonly driver = 'secure'
     }
-    class DriverEnv extends defineEnv(
+    class DriverEnv extends declareEnv(
       z.object({ DRIVER: z.enum(['plain', 'secure']) }).transform((env) => ({
         driver: env.DRIVER,
       })),
     ) {}
-    const AppModule = defineModule(() => ({
+    const AppModule = module(() => ({
       environment: [DriverEnv],
       providers: [
         provide(DRIVER).select(DriverEnv.key('driver'), {
@@ -176,7 +176,7 @@ describe('Environment Contract', () => {
       ],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [AppModule()] }),
+      application: createApplication({ modules: [AppModule()] }),
       environment: { DRIVER: 'secure' },
     })
 
@@ -189,7 +189,7 @@ describe('Environment Contract', () => {
       constructor(readonly env = inject(AppEnv)) {}
     }
     class TransientService {}
-    const AppModule = defineModule(() => ({
+    const AppModule = module(() => ({
       environment: [AppEnv],
       providers: [
         Service,
@@ -199,7 +199,7 @@ describe('Environment Contract', () => {
       ],
     }))
     const application = createKernelApplication({
-      application: defineApplication({ modules: [AppModule()] }),
+      application: createApplication({ modules: [AppModule()] }),
       environment: { PORT: '4321', TLS: 'false' },
     })
 

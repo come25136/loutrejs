@@ -1,11 +1,5 @@
-import { defineApplication } from '@loutrejs/loutre'
-import {
-  defineEnv,
-  defineModule,
-  inject,
-  provide,
-  token,
-} from '@loutrejs/loutre'
+import { application } from '@loutrejs/loutre'
+import { env, module, inject, provide, token } from '@loutrejs/loutre'
 import { z } from 'zod'
 
 interface MissingDependency {
@@ -15,9 +9,7 @@ interface MissingDependency {
 const MISSING = token<MissingDependency>('graph-probe.missing')
 const STORAGE = token<MemoryStorage | BrokenStorage>('graph-probe.storage')
 
-class AppEnv extends defineEnv(
-  z.object({ DRIVER: z.enum(['memory', 'broken']) }),
-) {}
+class AppEnv extends env(z.object({ DRIVER: z.enum(['memory', 'broken']) })) {}
 
 class MemoryStorage {}
 
@@ -25,7 +17,7 @@ class BrokenStorage {
   constructor(readonly missing = inject(MISSING)) {}
 }
 
-const Module = defineModule(() => ({
+const Module = module(() => ({
   environment: [AppEnv],
   providers: [
     provide(STORAGE).select(AppEnv.key('DRIVER'), {
@@ -35,4 +27,4 @@ const Module = defineModule(() => ({
   ],
 }))
 
-export default defineApplication({ modules: [Module()] })
+export default application({ modules: [Module()] })

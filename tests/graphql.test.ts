@@ -18,17 +18,17 @@ import {
 } from '@loutrejs/graphql'
 import {
   bootstrapApplication,
-  defineApplication,
+  application as createApplication,
   projectApplicationModel,
   type ProviderDeclaration,
-  defineModule,
+  module,
   inject,
   token,
   provide,
   type as stateType,
   type RuntimeInstrumentation,
 } from '@loutrejs/loutre'
-import { bearerAuth, bindHttpServer, http } from '@loutrejs/loutre/http'
+import { bindHttpServer, http } from '@loutrejs/loutre/http'
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 import {
   bindWebSocketServer,
@@ -211,14 +211,14 @@ async function fixture(
       },
     }),
   })
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     providers: [
       provide(Service).useValue('hello DI'),
       ...(options.providers ?? []),
     ],
     executions: [endpoint],
   }))
-  const definition = defineApplication({ modules: [Module()] })
+  const definition = createApplication({ modules: [Module()] })
   const trace = instrumentation()
   const connections: {
     channel: WebSocketDriverChannel
@@ -564,7 +564,7 @@ describe('GraphQL HTTP', () => {
   })
 
   it('標準bearerAuth middlewareでGraphQL HTTPを認証しchallengeとstateを保つ', async () => {
-    const auth = bearerAuth({
+    const auth = http.bearerAuth({
       realm: 'GraphQL',
       factory: () => ({
         authenticate(accessToken: string) {
@@ -1591,8 +1591,8 @@ describe('GraphQLのresolver契約', () => {
         manifest: manifestFromSchema(schema),
         factory: (() => ({ context: () => ({}), ws: hooks })) as never,
       })
-      const Module = defineModule(() => ({ executions: [endpoint] }))
-      const application = defineApplication({ modules: [Module()] })
+      const Module = module(() => ({ executions: [endpoint] }))
+      const application = createApplication({ modules: [Module()] })
       expect(application.model.diagnostics).toContainEqual(
         expect.objectContaining({ message: expect.stringContaining(name) }),
       )
@@ -1656,8 +1656,8 @@ describe('GraphQLのresolver契約', () => {
             ? { context: () => ({}), rootValue: {} }
             : {}) as never,
       })
-      const Module = defineModule(() => ({ executions: [endpoint] }))
-      const application = defineApplication({ modules: [Module()] })
+      const Module = module(() => ({ executions: [endpoint] }))
+      const application = createApplication({ modules: [Module()] })
       expect(application.model.diagnostics).toContainEqual(
         expect.objectContaining({ message: expect.stringContaining(invalid) }),
       )
@@ -1678,9 +1678,9 @@ describe('GraphQLのresolver契約', () => {
       manifest: manifestFromSchema(schema),
       factory: () => ({ context: () => ({}) }),
     })
-    const Module = defineModule(() => ({ executions: [endpoint] }))
+    const Module = module(() => ({ executions: [endpoint] }))
     const app = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {
@@ -2122,8 +2122,8 @@ describe('GraphQLの設定と型に沿った実行', () => {
           ws: { connectionInit: () => ({}) },
         })) as never,
       })
-      const Module = defineModule(() => ({ executions: [endpoint] }))
-      const app = defineApplication({ modules: [Module()] })
+      const Module = module(() => ({ executions: [endpoint] }))
+      const app = createApplication({ modules: [Module()] })
       expect(app.model.diagnostics).toContainEqual(
         expect.objectContaining({
           message: expect.stringContaining('Enable transports.websocket'),
@@ -2146,9 +2146,9 @@ describe('GraphQLの設定と型に沿った実行', () => {
         transports: { websocket: ws },
         factory: () => ({ context: () => ({}) }),
       })
-      const Module = defineModule(() => ({ executions: [endpoint] }))
+      const Module = module(() => ({ executions: [endpoint] }))
       const app = await bootstrapApplication({
-        application: defineApplication({ modules: [Module()] }),
+        application: createApplication({ modules: [Module()] }),
         capabilities: [
           bindHttpServer({ runtime: 'test' }),
           bindWebSocketServer({
@@ -2244,7 +2244,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
     })
     const regular = http.implementation({
       contract: Api,
-      factory: () => ({ normal: (ctx) => ctx.response.ok({}) }),
+      factory: () => ({ normal: () => ({ schema: Api.normal.ok }) }),
     })
     const delegated = graphql.implementation({
       name: 'Delegated',
@@ -2252,9 +2252,9 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
       manifest,
       factory: () => ({ context: () => ({}) }),
     })
-    const Module = defineModule(() => ({ executions: [regular, delegated] }))
+    const Module = module(() => ({ executions: [regular, delegated] }))
     expect(
-      defineApplication({ modules: [Module()] }).model.diagnostics,
+      createApplication({ modules: [Module()] }).model.diagnostics,
     ).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_HTTP_DUPLICATE_ROUTE' }),
     )

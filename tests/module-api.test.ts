@@ -2,9 +2,9 @@ import { task } from '@loutrejs/loutre/tasks'
 import {
   bootstrapApplication,
   buildApplicationModel,
-  defineApplication,
-  defineEnv,
-  defineModule,
+  application,
+  env,
+  module as createModule,
   inject,
   hook,
   registerSourceLocation,
@@ -17,8 +17,8 @@ import { z } from 'zod'
 
 describe('静的・動的Module API', () => {
   it('静的定義を直接instanceにし、environment providerとtemplate metadataを保持する', () => {
-    class Environment extends defineEnv(z.object({ name: z.string() })) {}
-    const module = defineModule({
+    class Environment extends env(z.object({ name: z.string() })) {}
+    const module = createModule({
       name: 'Static',
       environment: [Environment, Environment],
     })
@@ -38,26 +38,26 @@ describe('静的・動的Module API', () => {
       readonly url = inject(URL)
       readonly repository = inject(Repository)
     }
-    const Static = defineModule({
+    const Static = createModule({
       providers: [Repository],
       exports: [Repository],
     })
-    const Dynamic = defineModule((options: { url: string }) => ({
+    const Dynamic = createModule((options: { url: string }) => ({
       providers: [provide(URL).useValue(options.url)],
       exports: [URL],
     }))
-    const Repositories = defineModule({
+    const Repositories = createModule({
       imports: [Static],
       exports: [Repository],
     })
     const dynamic = Dynamic({ url: 'postgres://localhost/app' })
-    const Root = defineModule({
+    const Root = createModule({
       imports: [Repositories, dynamic],
       providers: [Service],
     })
     expect(dynamic.args).toEqual({ url: 'postgres://localhost/app' })
     expect(dynamic.template).toBe(Dynamic)
-    const definition = defineApplication({
+    const definition = application({
       modules: [Root, silentLoggingModule],
     })
     expect(definition.model.diagnostics).toEqual([])
@@ -72,13 +72,13 @@ describe('静的・動的Module API', () => {
 
   it('diamond importとrootで共有する静的参照のProviderを重複させずedgeを維持する', () => {
     class SharedService {}
-    const Shared = defineModule({
+    const Shared = createModule({
       name: 'Shared',
       providers: [SharedService],
       exports: [SharedService],
     })
-    const Left = defineModule({ name: 'Left', imports: [Shared] })
-    const Right = defineModule({ name: 'Right', imports: [Shared] })
+    const Left = createModule({ name: 'Left', imports: [Shared] })
+    const Right = createModule({ name: 'Right', imports: [Shared] })
     const model = buildApplicationModel({
       modules: [Left, Right, Shared, Left],
     })
@@ -96,7 +96,7 @@ describe('静的・動的Module API', () => {
       readonly service = inject(SharedService)
     }
     let calls = 0
-    const Template = defineModule(() => {
+    const Template = createModule(() => {
       calls += 1
       return {
         name: 'Shared',
@@ -105,8 +105,8 @@ describe('静的・動的Module API', () => {
       }
     })
     const shared = Template()
-    const Root = defineModule({ imports: [shared], providers: [Consumer] })
-    const definition = defineApplication({ modules: [Root, shared] })
+    const Root = createModule({ imports: [shared], providers: [Consumer] })
+    const definition = application({ modules: [Root, shared] })
     expect(definition.model.diagnostics).toEqual([])
     expect(
       definition.model.nodes.filter((node) => node.kind === 'module'),
@@ -115,7 +115,7 @@ describe('静的・動的Module API', () => {
       definition.model.edges.filter((edge) => edge.kind === 'imports'),
     ).toHaveLength(1)
     expect(calls).toBe(1)
-    const nextDefinition = defineApplication({ modules: [Root, shared] })
+    const nextDefinition = application({ modules: [Root, shared] })
     expect(nextDefinition.model.diagnostics).toEqual([])
     expect(calls).toBe(1)
     expect(Template()).not.toBe(shared)
@@ -126,7 +126,7 @@ describe('静的・動的Module API', () => {
     '未生成templateを%sへ登録してもfactoryを呼ばず拒否する',
     (registration) => {
       const factory = vi.fn(() => ({}))
-      const Template = defineModule(factory)
+      const Template = createModule(factory)
       const modules =
         registration === 'root'
           ? [Template]
@@ -146,7 +146,7 @@ describe('静的・動的Module API', () => {
         readonly repository = inject(Repository)
       }
       let calls = 0
-      const Template = defineModule(() => {
+      const Template = createModule(() => {
         calls += 1
         return {
           providers: [Repository],
@@ -162,7 +162,7 @@ describe('静的・動的Module API', () => {
             void repository
           },
       })
-      const Root = defineModule({
+      const Root = createModule({
         imports: [shared],
         providers: [Consumer],
         executions: [execution],
@@ -183,7 +183,7 @@ describe('静的・動的Module API', () => {
   )
 
   it('動的Moduleの明示instanceを引数が同じでも別参照として維持する', () => {
-    const Dynamic = defineModule((name: string) => ({ name }))
+    const Dynamic = createModule((name: string) => ({ name }))
     const first = Dynamic('same')
     const second = Dynamic('same')
     expect(first).not.toBe(second)
@@ -194,11 +194,11 @@ describe('静的・動的Module API', () => {
   it('静的instanceと動的templateへ付けたソース位置をModelに反映する', () => {
     const source = { file: '/app/static.ts', line: 3, column: 1 }
     const Static = registerSourceLocation(
-      defineModule({ name: 'Static' }),
+      createModule({ name: 'Static' }),
       source,
     )
     const Dynamic = registerSourceLocation(
-      defineModule((name: string) => ({ name })),
+      createModule((name: string) => ({ name })),
       { ...source, line: 5 },
     )
     const model = buildApplicationModel({

@@ -4,6 +4,7 @@ import {
   type AnyHttpMiddleware,
   type HttpRawRouteDefinition,
   type HttpContract,
+  isHttpContract,
 } from './contract.js'
 import { type Descriptor } from '../internal/brand.js'
 import {
@@ -50,13 +51,31 @@ export type CompiledHttpRawRoute = CompiledHttpRouteBase & {
   readonly protocol?: string
 }
 
+export const compiledContractRoutes = Symbol.for(
+  'loutre.http.compiled-contract-routes',
+)
+
+export interface CompiledHttpContract extends HttpContract {
+  readonly [compiledContractRoutes]: readonly CompiledHttpContractRoute[]
+}
+
+export function isCompiledHttpContract(
+  contract: unknown,
+): contract is CompiledHttpContract {
+  return (
+    isHttpContract(contract) &&
+    compiledContractRoutes in contract &&
+    Array.isArray(contract[compiledContractRoutes])
+  )
+}
+
 export type CompiledHttpRoute = CompiledHttpContractRoute | CompiledHttpRawRoute
 
 export interface HttpDefinition {
   readonly name: string
   readonly routes:
     | { readonly kind: 'raw'; readonly route: HttpRawRouteDefinition }
-    | { readonly kind: 'contract'; readonly contract: HttpContract }
+    | { readonly kind: 'contract'; readonly contract: CompiledHttpContract }
   readonly handler: ExecutionHandlerSource<unknown>
 }
 

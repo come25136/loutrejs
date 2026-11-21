@@ -1,21 +1,14 @@
-import * as fixture from './helpers/identities.js'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  defineApplication,
-  defineError,
-  defineModule,
+  application as declareApplication,
+  domainError,
+  module,
   inject,
 } from '@loutrejs/loutre'
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
-import {
-  bindHttpServer,
-  createHttpClient,
-  fetchHttpTransport,
-  http,
-  type HttpClientTransportRequest,
-} from '@loutrejs/loutre/http'
+import { bindHttpServer, http } from '@loutrejs/loutre/http'
 
 async function createApplication<
   const TContract extends ReturnType<typeof http.contract>,
@@ -24,8 +17,8 @@ async function createApplication<
   factory: Parameters<typeof http.implementation<TContract>>[0]['factory'],
 ) {
   const implementation = http.implementation({ contract, factory })
-  const Module = defineModule(() => ({ executions: [implementation] }))
-  const definition = defineApplication({ modules: [Module()] })
+  const Module = module(() => ({ executions: [implementation] }))
+  const definition = declareApplication({ modules: [Module()] })
   const application = await bootstrapApplication({
     application: definition,
     capabilities: [bindHttpServer({ runtime: 'test' })],
@@ -34,113 +27,6 @@ async function createApplication<
 }
 
 describe('HTTP Execution Extension public API surface', () => {
-  it('typed clientを新HttpContractから生成する', async () => {
-    const contract = http.contract({
-      update: {
-        method: 'PUT',
-        path: '/users/{id}',
-        request: {
-          params: { id: z.string() },
-          query: z.object({ notify: z.boolean() }),
-          headers: z.object({
-            'content-type': z.literal('application/json'),
-            'x-request-id': z.string(),
-          }),
-          body: z.object({ name: z.string() }),
-        },
-        responses: {
-          updated: {
-            status: 200,
-            body: z.object({
-              id: z.string(),
-              name: z.string().transform((value) => value.toUpperCase()),
-            }),
-            headers: z.object({ 'x-version': z.string() }),
-          },
-        },
-      },
-    })
-    let sent: HttpClientTransportRequest | undefined
-    const client = createHttpClient(contract, async (request) => {
-      sent = request
-      return {
-        status: 200,
-        body: { id: '42', name: 'Ada' },
-        headers: { 'x-version': '7' },
-      }
-    })
-
-    const response = await client.update({
-      params: { id: '42' },
-      query: { notify: true },
-      headers: {
-        'content-type': 'application/json',
-        'x-request-id': 'req-1',
-      },
-      body: { name: 'Ada' },
-    })
-
-    expect(sent).toEqual({
-      method: 'PUT',
-      path: '/users/42',
-      query: { notify: true },
-      headers: {
-        'content-type': 'application/json',
-        'x-request-id': 'req-1',
-      },
-      body: { name: 'Ada' },
-    })
-    expect(response).toEqual({
-      status: 200,
-      body: { id: '42', name: 'ADA' },
-      headers: { 'x-version': '7' },
-    })
-  })
-
-  it('fetch transportのJSON encodeを維持する', async () => {
-    let captured: Request | undefined
-    const transport = fetchHttpTransport({
-      baseUrl: 'https://fixture.test',
-      fetch: async (input, init) => {
-        captured = new Request(input, init)
-        return new Response(null, { status: 204 })
-      },
-    })
-
-    await transport({
-      method: fixture.normalizeHttpMethod('POST'),
-      path: fixture.requestPathname('/json'),
-      headers: { 'content-type': 'application/json' },
-      body: { name: 'loutre' },
-    })
-
-    expect(captured?.headers.get('content-type')).toBe('application/json')
-    await expect(captured?.json()).resolves.toEqual({ name: 'loutre' })
-  })
-
-  it('fetch transportでbodyを持たない200応答をundefinedとして扱う', async () => {
-    const contract = http.contract({
-      health: {
-        method: 'GET',
-        path: '/health',
-        responses: { ok: { status: 200 } },
-      },
-    })
-    const client = createHttpClient(
-      contract,
-      fetchHttpTransport({
-        baseUrl: 'https://fixture.test',
-        fetch: async () => new Response(null, { status: 200 }),
-      }),
-    )
-
-    await expect(client.health()).resolves.toEqual({
-      status: 200,
-      body: undefined,
-      headers: {},
-    })
-  })
-
   it('route/response metadataをOpenAPIへ投影する', async () => {
     const contract = http.contract({
       getUser: {
@@ -163,8 +49,10 @@ describe('HTTP Execution Extension public API surface', () => {
     const { application, definition } = await createApplication(
       contract,
       () => ({
-        getUser: (ctx) =>
-          ctx.response.ok({ body: { id: ctx.input.params.id } }),
+        getUser: (ctx) => ({
+          schema: contract.getUser.ok,
+          body: { id: ctx.input.params.id },
+        }),
       }),
     )
     try {
@@ -189,7 +77,7 @@ describe('HTTP Execution Extension public API surface', () => {
   })
 
   it('Domain Errorを宣言responseへmappingする', async () => {
-    const UserNotFound = defineError({
+    const UserNotFound = domainError({
       code: 'USER_NOT_FOUND',
       data: z.object({ userId: z.string() }),
     })
@@ -246,13 +134,13 @@ describe('HTTP Execution Extension public API surface', () => {
     const { application, definition } = await createApplication(
       contract,
       () => ({
-        events: (ctx) =>
-          ctx.response.ok({
-            body: (async function* () {
-              yield { sequence: 1 }
-              yield { sequence: 2 }
-            })(),
-          }),
+        events: () => ({
+          schema: contract.events.ok,
+          body: (async function* () {
+            yield { sequence: 1 }
+            yield { sequence: 2 }
+          })(),
+        }),
       }),
     )
     try {
@@ -266,19 +154,6 @@ describe('HTTP Execution Extension public API surface', () => {
       expect(await response.text()).toBe(
         'data:{"sequence":1}\n\ndata:{"sequence":2}\n\n',
       )
-
-      const client = createHttpClient(
-        contract,
-        fetchHttpTransport({
-          baseUrl: 'https://fixture.test',
-          fetch: (input, init) =>
-            application.http.fetch(new Request(input, init)),
-        }),
-      )
-      const clientResponse = await client.events()
-      const events: { sequence: number }[] = []
-      for await (const event of clientResponse.body) events.push(event)
-      expect(events).toEqual([{ sequence: 1 }, { sequence: 2 }])
 
       const document = generateOpenApi(definition.model, {
         info: { title: 'fixture', version: '1.0.0' },
@@ -303,82 +178,6 @@ describe('HTTP Execution Extension public API surface', () => {
     }
   })
 
-  it('chunk境界で分割されたSSEのCRLFを1つの改行としてdecodeする', async () => {
-    const contract = http.contract({
-      events: {
-        method: 'GET',
-        path: '/events',
-        interaction: 'server-stream',
-        responses: {
-          ok: {
-            status: 200,
-            stream: 'server',
-            body: z.object({ sequence: z.number() }),
-          },
-        },
-      },
-    })
-    const encoder = new TextEncoder()
-    const chunks = ['data:{"sequence":\r', '\ndata:1}\r', '\n\r\n'].map(
-      (chunk) => encoder.encode(chunk),
-    )
-    const client = createHttpClient(
-      contract,
-      fetchHttpTransport({
-        baseUrl: 'https://fixture.test',
-        fetch: async () =>
-          new Response(
-            new ReadableStream<Uint8Array>({
-              start(controller) {
-                for (const chunk of chunks) controller.enqueue(chunk)
-                controller.close()
-              },
-            }),
-            { headers: { 'content-type': 'text/event-stream' } },
-          ),
-      }),
-    )
-
-    const response = await client.events()
-    const events: { sequence: number }[] = []
-    for await (const event of response.body) events.push(event)
-
-    expect(events).toEqual([{ sequence: 1 }])
-  })
-
-  it('空行で終端されずEOFへ到達したSSE eventを破棄する', async () => {
-    const contract = http.contract({
-      events: {
-        method: 'GET',
-        path: '/events',
-        interaction: 'server-stream',
-        responses: {
-          ok: {
-            status: 200,
-            stream: 'server',
-            body: z.object({ sequence: z.number() }),
-          },
-        },
-      },
-    })
-    const client = createHttpClient(
-      contract,
-      fetchHttpTransport({
-        baseUrl: 'https://fixture.test',
-        fetch: async () =>
-          new Response('data:{"sequence":1}', {
-            headers: { 'content-type': 'text/event-stream' },
-          }),
-      }),
-    )
-
-    const response = await client.events()
-    const events: { sequence: number }[] = []
-    for await (const event of response.body) events.push(event)
-
-    expect(events).toEqual([])
-  })
-
   it('server-streamのitem validation失敗時にsource iteratorを終了する', async () => {
     let finalized = false
     const contract = http.contract({
@@ -396,16 +195,16 @@ describe('HTTP Execution Extension public API surface', () => {
       },
     })
     const { application } = await createApplication(contract, () => ({
-      events: (ctx) =>
-        ctx.response.ok({
-          body: (async function* () {
-            try {
-              yield { sequence: 'invalid' } as never
-            } finally {
-              finalized = true
-            }
-          })(),
-        }),
+      events: () => ({
+        schema: contract.events.ok,
+        body: (async function* () {
+          try {
+            yield { sequence: 'invalid' } as never
+          } finally {
+            finalized = true
+          }
+        })(),
+      }),
     }))
     try {
       const response = await application.http.fetch(
@@ -438,17 +237,17 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: () => ({
-        events: (ctx) =>
-          ctx.response.ok({
-            body: (async function* () {
-              try {
-                let sequence = 0
-                while (true) yield { sequence: sequence++ }
-              } finally {
-                events.push('stream.finalized')
-              }
-            })(),
-          }),
+        events: () => ({
+          schema: contract.events.ok,
+          body: (async function* () {
+            try {
+              let sequence = 0
+              while (true) yield { sequence: sequence++ }
+            } finally {
+              events.push('stream.finalized')
+            }
+          })(),
+        }),
       }),
     })
     class Resource {
@@ -456,12 +255,12 @@ describe('HTTP Execution Extension public API surface', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     const response = await application.http.fetch(
@@ -512,21 +311,22 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: () => ({
-        async events(context) {
+        async events() {
           notifyHandlerStarted()
           await handlerResume
-          return context.response.ok({
+          return {
+            schema: contract.events.ok,
             body: (async function* () {
               let sequence = 0
               while (true) yield sequence++
             })(),
-          })
+          }
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [implementation] }))
+    const Module = module(() => ({ executions: [implementation] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     const response = application.http.fetch(
@@ -557,7 +357,7 @@ describe('HTTP Execution Extension public API surface', () => {
       },
     })
     const { application } = await createApplication(contract, () => ({
-      health: (context) => context.response.ok({}),
+      health: () => ({ schema: contract.health.ok }),
     }))
 
     const closing = application.close()
@@ -619,7 +419,7 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: () => ({
-        events: (context) => context.response.ok({ body: source }),
+        events: () => ({ schema: contract.events.ok, body: source }),
       }),
     })
     class Resource {
@@ -627,12 +427,12 @@ describe('HTTP Execution Extension public API surface', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 10,
     })
@@ -689,15 +489,18 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: (resource = inject(Resource)) => ({
-        download: (context) => context.response.ok({ body: resource.stream() }),
+        download: () => ({
+          schema: contract.download.ok,
+          body: resource.stream(),
+        }),
       }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
@@ -748,7 +551,7 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: () => ({
-        events: (context) => context.response.ok({ body: source }),
+        events: () => ({ schema: contract.events.ok, body: source }),
       }),
     })
     class Resource {
@@ -756,12 +559,12 @@ describe('HTTP Execution Extension public API surface', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 10,
     })
@@ -845,7 +648,7 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: () => ({
-        events: (context) => context.response.ok({ body: source }),
+        events: () => ({ schema: contract.events.ok, body: source }),
       }),
     })
     class Resource {
@@ -853,12 +656,12 @@ describe('HTTP Execution Extension public API surface', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 10,
     })

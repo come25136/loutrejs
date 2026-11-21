@@ -6,10 +6,11 @@ import {
 import { match as patternMatch } from 'ts-pattern'
 import {
   type CompiledHttpRouteSet,
+  compiledContractRoutes,
   type HttpDefinition,
   type CompiledHttpExecution,
 } from './compiled.js'
-import { compileRawRoute, compileHttpRoute } from './compiler.js'
+import { compileRawRoute } from './compiler.js'
 import { dependencyConsumerId } from '../core/identity.js'
 import { HTTP_SERVER } from './capability.js'
 import { findHttpRouteConflicts } from './route-validation.js'
@@ -24,7 +25,7 @@ export const httpExecutionExtension = defineExecutionExtension<
   HttpExtensionRuntime
 >({
   kind: 'execution-extension',
-  abiVersion: '4',
+  abiVersion: '5',
   name: 'loutre:http',
   compile(definition, context) {
     const compiledRoutes = patternMatch(definition.routes)
@@ -36,11 +37,12 @@ export const httpExecutionExtension = defineExecutionExtension<
       .with({ kind: 'contract' }, ({ contract }) => ({
         kind: 'contract',
         routes: Object.freeze(
-          Object.entries(contract.routes).flatMap(([name, route]) =>
-            route.raw === true
-              ? []
-              : [compileHttpRoute(name, route, getSourceLocation(contract))],
-          ),
+          contract[compiledContractRoutes].map((route) => {
+            const source = route.source ?? getSourceLocation(contract)
+            return source && !route.source
+              ? Object.freeze({ ...route, source })
+              : route
+          }),
         ),
       }))
       .exhaustive()

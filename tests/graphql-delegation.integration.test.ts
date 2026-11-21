@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { graphql } from '@loutrejs/graphql'
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   inject,
   projectApplicationModel,
   provide,
@@ -77,9 +77,9 @@ describe('GraphQL endpointへの委任', () => {
         })
       const first = createEndpoint('First', '/first')
       const second = createEndpoint('Second', '/second')
-      const application = defineApplication({
+      const application = createApplication({
         modules: [
-          defineModule({
+          module({
             providers: [
               provide(Resource).useClass(Resource, { scope: 'transient' }),
             ],
@@ -186,10 +186,8 @@ describe('GraphQL endpointへの委任', () => {
         return { context: () => ({}) }
       },
     })
-    const application = defineApplication({
-      modules: [
-        defineModule({ providers: [Resource], executions: [endpoint] }),
-      ],
+    const application = createApplication({
+      modules: [module({ providers: [Resource], executions: [endpoint] })],
     })
     expect(application.model.diagnostics).toEqual([])
     await expect(

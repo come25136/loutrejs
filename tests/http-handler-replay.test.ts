@@ -2,8 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
 } from '@loutrejs/loutre'
 import { http, bindHttpServer } from '@loutrejs/loutre/http'
 import {
@@ -54,16 +54,16 @@ describe('HTTP handlerのdirect replay', () => {
       name: 'Calculator',
       contract,
       factory: () => ({
-        calculate({ input, response, state }) {
+        calculate({ input, state }) {
           const value = input.params.id * input.body.multiplier + state.offset
           calls.push(value)
-          return response.ok({ body: { value } })
+          return { schema: contract.calculate.ok, body: { value } }
         },
       }),
     })
     const application = await bootstrapApplication({
-      application: defineApplication({
-        modules: [defineModule({ executions: [controller] })],
+      application: createApplication({
+        modules: [module({ executions: [controller] })],
       }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       instrumentation,

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   bootstrapApplication,
-  defineApplication,
+  application,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   delegateExecution,
   dependencyConsumerId,
   inject,
@@ -106,12 +106,12 @@ describe('Executionのcompile context', () => {
           ),
         },
       })
-      const owner = defineModule({
+      const owner = module({
         providers: [Counter, Middleware, Explicit],
         executions: [target],
       })
-      const caller = defineModule({ executions: [source] })
-      const definition = defineApplication({
+      const caller = module({ executions: [source] })
+      const definition = application({
         modules: reverse ? [owner, caller] : [caller, owner],
       })
       expect(definition.model.diagnostics).toEqual([])
@@ -159,8 +159,8 @@ describe('Executionのcompile context', () => {
             Number(Boolean(value)),
       },
     })
-    const invalidApplication = defineApplication({
-      modules: [defineModule({ executions: [invalid] })],
+    const invalidApplication = application({
+      modules: [module({ executions: [invalid] })],
     })
     expect(invalidApplication.model.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_EXECUTION_DEPENDENCY_MISSING' }),
@@ -169,8 +169,8 @@ describe('Executionのcompile context', () => {
       name: 'valid',
       handler: { kind: 'factory', factory: () => () => 1 },
     })
-    const definition = defineApplication({
-      modules: [defineModule({ executions: [valid] })],
+    const definition = application({
+      modules: [module({ executions: [valid] })],
     })
     expect(definition.model.executions[0]!.dependencies).toEqual([])
   })

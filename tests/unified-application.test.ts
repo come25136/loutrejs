@@ -1,18 +1,11 @@
 import {
   bootstrapApplication,
-  defineApplication,
-  defineArgs,
-  defineModule,
+  application as createApplication,
+  args,
+  module,
   inject,
 } from '@loutrejs/loutre'
-import {
-  bindQueueDriver,
-  consume,
-  cron,
-  fixedDelay,
-  queue,
-  task,
-} from '@loutrejs/loutre/tasks'
+import { trigger, bindQueueDriver, queue, task } from '@loutrejs/loutre/tasks'
 import { z } from 'zod'
 
 describe('Task/Trigger Application', () => {
@@ -28,11 +21,11 @@ describe('Task/Trigger Application', () => {
         return async (input) => service.value + input
       },
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Service],
       executions: [calculate],
     }))
-    const definition = defineApplication({ modules: [Module()] })
+    const definition = createApplication({ modules: [Module()] })
     constructions = 0
     const application = await bootstrapApplication({ application: definition })
 
@@ -55,27 +48,27 @@ describe('Task/Trigger Application', () => {
         throw new Error('domain failure')
       },
     })
-    const Module = defineModule(() => ({ executions: [fail] }))
+    const Module = module(() => ({ executions: [fail] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
     await expect(application.tasks.run(fail)).rejects.toThrow('domain failure')
     await application.close()
   })
 
   test('Argumentsをbootstrap前にvalidationしてDIする', async () => {
-    class AppArgs extends defineArgs(
+    class AppArgs extends args(
       z.object({ workers: z.coerce.number().int().positive() }),
     ) {}
     const read = task<void, number>({
       name: 'arguments.read',
       factory:
-        (args = inject(AppArgs)) =>
+        (input = inject(AppArgs)) =>
         () =>
-          args.workers,
+          input.workers,
     })
-    const Module = defineModule(() => ({ executions: [read] }))
-    const definition = defineApplication({
+    const Module = module(() => ({ executions: [read] }))
+    const definition = createApplication({
       modules: [Module()],
       arguments: AppArgs,
     })
@@ -96,12 +89,12 @@ describe('Task/Trigger Application', () => {
   })
 
   test('明示したnullのArgumentsを既定値で上書きしない', async () => {
-    class AppArgs extends defineArgs(
+    class AppArgs extends args(
       z.null().transform(() => ({ source: 'null' as const })),
     ) {}
-    const Module = defineModule(() => ({ providers: [] }))
+    const Module = module(() => ({ providers: [] }))
     const application = await bootstrapApplication({
-      application: defineApplication({
+      application: createApplication({
         modules: [Module()],
         arguments: AppArgs,
       }),
@@ -121,9 +114,9 @@ describe('Task/Trigger Application', () => {
       name: 'job',
       factory: () => async () => blocker,
     })
-    const Module = defineModule(() => ({ executions: [job] }))
+    const Module = module(() => ({ executions: [job] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
     const execution = application.tasks.run(job)
     await Promise.resolve()
@@ -162,13 +155,13 @@ describe('Task/Trigger Application', () => {
         processed.push(input.id)
       },
     })
-    const nightly = cron({
+    const nightly = trigger.cron({
       name: 'cleanup.nightly',
       expression: '0 3 * * *',
       timezone: 'Asia/Tokyo',
       task: cleanup,
     })
-    const polling = fixedDelay({
+    const polling = trigger.fixedDelay({
       name: 'poll.remote',
       delay: 10_000,
       immediate: false,
@@ -179,12 +172,12 @@ describe('Task/Trigger Application', () => {
       payload: z.object({ id: z.string() }),
     })
     let consumePayload: ((payload: unknown) => Promise<void>) | undefined
-    const orderConsumer = consume({
+    const orderConsumer = trigger.consume({
       name: 'orders.consumer',
       queue: orders,
       task: process,
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [
         bindQueueDriver(orders, {
           async start({ consume: dispatch }) {
@@ -196,7 +189,7 @@ describe('Task/Trigger Application', () => {
       executions: [nightly, polling, orderConsumer],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     expect(application.graph.executions).toEqual(
@@ -240,14 +233,14 @@ describe('Task/Trigger Application', () => {
       name: 'cleanup',
       factory: () => () => undefined,
     })
-    const invalidCron = cron({
+    const invalidCron = trigger.cron({
       name: 'maintenance',
       expression: '90 25 * * *',
       timezone: 'Invalid/Timezone',
       task: cleanup,
     })
-    const Module = defineModule(() => ({ executions: [invalidCron] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [invalidCron] }))
+    const definition = createApplication({ modules: [Module()] })
     expect(definition.model.diagnostics.map(({ code }) => code)).toEqual(
       expect.arrayContaining([
         'LUTRE_TRIGGER_INVALID_CRON',

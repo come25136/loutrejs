@@ -2,14 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   inject,
 } from '@loutrejs/loutre'
 import {
-  basicAuth,
   bindHttpServer,
-  cors,
   http,
   type HttpContract,
   type HttpImplementationDefinition,
@@ -21,9 +19,9 @@ async function createHttpApplication<const TContract extends HttpContract>(
   factory: HttpImplementationDefinition<TContract>['factory'],
 ) {
   const implementation = http.implementation({ contract, factory })
-  const Module = defineModule(() => ({ executions: [implementation] }))
+  const Module = module(() => ({ executions: [implementation] }))
   return bootstrapApplication({
-    application: defineApplication({ modules: [Module()] }),
+    application: createApplication({ modules: [Module()] }),
     capabilities: [bindHttpServer({ runtime: 'test' })],
   })
 }
@@ -67,18 +65,18 @@ describe('HTTP Execution Extension regression', () => {
     const implementation = http.implementation({
       contract,
       factory: (resource = inject(Resource)) => ({
-        events: (context) => {
+        events: () => {
           void resource
-          return context.response.ok({ body: source })
+          return { schema: contract.events.ok, body: source }
         },
       }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 20,
     })
@@ -122,13 +120,14 @@ describe('HTTP Execution Extension regression', () => {
     const application = await createHttpApplication(contract, () => ({
       inspect: (context) => {
         const tag = context.input.query.tag
-        return context.response.ok({
+        return {
+          schema: contract.inspect.ok,
           body: {
             tags:
               tag === undefined ? '' : typeof tag === 'string' ? tag : [...tag],
             contentType: context.input.headers['content-type'] ?? '',
           },
-        })
+        }
       },
     }))
     try {
@@ -154,7 +153,7 @@ describe('HTTP Execution Extension regression', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      user: (context) => context.response.ok({}),
+      user: () => ({ schema: contract.user.ok }),
     }))
     try {
       const response = await application.http.fetch(
@@ -183,8 +182,8 @@ describe('HTTP Execution Extension regression', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      dynamic: (context) => context.response.ok({ body: 'dynamic' }),
-      static: (context) => context.response.ok({ body: 'static' }),
+      dynamic: () => ({ schema: contract.dynamic.ok, body: 'dynamic' }),
+      static: () => ({ schema: contract.static.ok, body: 'static' }),
     }))
     try {
       const response = await application.http.fetch(
@@ -207,7 +206,10 @@ describe('HTTP Execution Extension regression', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      search: (context) => context.response.ok({ body: context.input.query }),
+      search: (context) => ({
+        schema: contract.search.ok,
+        body: context.input.query,
+      }),
     }))
     try {
       const response = await application.http.fetch(
@@ -236,7 +238,10 @@ describe('HTTP Execution Extension regression', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      create: (context) => context.response.ok({ body: context.input.body }),
+      create: (context) => ({
+        schema: contract.create.ok,
+        body: context.input.body,
+      }),
     }))
     try {
       const normalized = await application.http.fetch(
@@ -279,8 +284,10 @@ describe('HTTP Execution Extension regression', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      upload: (context) =>
-        context.response.ok({ body: String(context.input.body.get('name')) }),
+      upload: (context) => ({
+        schema: contract.upload.ok,
+        body: String(context.input.body.get('name')),
+      }),
     }))
     try {
       const form = new FormData()
@@ -299,7 +306,7 @@ describe('HTTP Execution Extension regression', () => {
   })
 
   it('CORS preflightをOPTIONS routeなしで204完結する', async () => {
-    const middleware = cors({ origin: ['https://app.example.com'] })
+    const middleware = http.cors({ origin: ['https://app.example.com'] })
     const contract = http.contract({
       create: {
         method: 'POST',
@@ -309,7 +316,7 @@ describe('HTTP Execution Extension regression', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      create: (context) => context.response.ok({}),
+      create: () => ({ schema: contract.create.ok }),
     }))
     try {
       const response = await application.http.fetch(
@@ -350,7 +357,7 @@ describe('HTTP Execution Extension regression', () => {
     const originDecision = new Promise<boolean>((resolve) => {
       resolveOrigin = resolve
     })
-    const middleware = cors({
+    const middleware = http.cors({
       origin: async () => {
         markOriginStarted()
         return originDecision
@@ -366,11 +373,11 @@ describe('HTTP Execution Extension regression', () => {
     })
     const implementation = http.implementation({
       contract,
-      factory: () => ({ create: (context) => context.response.ok({}) }),
+      factory: () => ({ create: () => ({ schema: contract.create.ok }) }),
     })
-    const Module = defineModule(() => ({ executions: [implementation] }))
+    const Module = module(() => ({ executions: [implementation] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 10,
     })
@@ -404,7 +411,7 @@ describe('HTTP Execution Extension regression', () => {
   })
 
   it('CORS denyでもVary: Originを返しpredicate originを許可する', async () => {
-    const middleware = cors({
+    const middleware = http.cors({
       origin: async (origin) => origin.endsWith('.example.com'),
     })
     const contract = http.contract({
@@ -416,7 +423,7 @@ describe('HTTP Execution Extension regression', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      get: (context) => context.response.ok({}),
+      get: () => ({ schema: contract.get.ok }),
     }))
     try {
       const denied = await application.http.fetch(
@@ -441,12 +448,12 @@ describe('HTTP Execution Extension regression', () => {
   })
 
   it('CORS optionとauthentication realmを定義時に検証する', () => {
-    expect(() => cors({ allowMethods: ['not a method'] })).toThrow(
+    expect(() => http.cors({ allowMethods: ['not a method'] })).toThrow(
       'invalid HTTP token',
     )
-    expect(() => cors({ maxAge: -1 })).toThrow('non-negative safe integer')
+    expect(() => http.cors({ maxAge: -1 })).toThrow('non-negative safe integer')
     expect(() =>
-      basicAuth({
+      http.basicAuth({
         realm: 'bad\r\nrealm',
         factory: () => ({
           authenticate: () => undefined,
@@ -465,10 +472,10 @@ describe('HTTP Execution Extension regression', () => {
     const contract = http.contract({ snapshot: route })
     const implementation = http.implementation({
       contract,
-      factory: () => ({ snapshot: (context) => context.response.ok({}) }),
+      factory: () => ({ snapshot: () => ({ schema: contract.snapshot.ok }) }),
     })
-    const Module = defineModule(() => ({ executions: [implementation] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [implementation] }))
+    const definition = createApplication({ modules: [Module()] })
 
     ;(route as { method: string }).method = 'POST'
     ;(route as { path: string }).path = '/mutated'

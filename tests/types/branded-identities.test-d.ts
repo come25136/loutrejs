@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import {
   buildApplicationModel,
-  defineModule,
-  defineEnv,
+  module,
+  env,
   loadEnv,
   runtimeCapability,
   token,
@@ -44,7 +44,7 @@ import {
 
 class Service {}
 const model = buildApplicationModel({
-  modules: [defineModule({ providers: [Service] })],
+  modules: [module({ providers: [Service] })],
 })
 const moduleNode = model.nodes.find((node) => node.kind === 'module')!
 const providerNode = model.nodes.find((node) => node.kind === 'provider')!
@@ -107,7 +107,7 @@ const fabricated: Token<number> = plainToken
 
 const userId = z.string().brand<'UserId'>()
 type UserId = z.output<typeof userId>
-const Env = defineEnv(z.object({ OWNER: userId }))
+const Env = env(z.object({ OWNER: userId }))
 const owner: UserId = (await loadEnv(Env, { OWNER: 'owner' })).OWNER
 const contract = http.contract({
   user: {
@@ -122,7 +122,7 @@ http.implementation({
   factory: () => ({
     user(context) {
       const id: UserId = context.input.params.id
-      return context.response.ok({ body: { id } })
+      return { schema: contract.user.ok, body: { id } }
     },
   }),
 })

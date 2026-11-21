@@ -1,4 +1,4 @@
-import { buildApplicationModel, defineModule, inject } from '@loutrejs/loutre'
+import { buildApplicationModel, module, inject } from '@loutrejs/loutre'
 
 describe('Module visibility', () => {
   it('import先Moduleのprivate Providerへ依存できない', () => {
@@ -6,11 +6,11 @@ describe('Module visibility', () => {
     class Service {
       constructor(readonly repository = inject(Repository)) {}
     }
-    const repositoryModule = defineModule(() => ({
+    const repositoryModule = module(() => ({
       name: 'RepositoryModule',
       providers: [Repository],
     }))()
-    const serviceModule = defineModule(() => ({
+    const serviceModule = module(() => ({
       name: 'ServiceModule',
       imports: [repositoryModule],
       providers: [Service],
@@ -27,12 +27,12 @@ describe('Module visibility', () => {
     class Service {
       constructor(readonly repository = inject(Repository)) {}
     }
-    const repositoryModule = defineModule(() => ({
+    const repositoryModule = module(() => ({
       name: 'RepositoryModule',
       providers: [Repository],
       exports: [Repository],
     }))()
-    const serviceModule = defineModule(() => ({
+    const serviceModule = module(() => ({
       name: 'ServiceModule',
       imports: [repositoryModule],
       providers: [Service],
@@ -48,11 +48,11 @@ describe('Module visibility', () => {
     class Service {
       constructor(readonly repository = inject(Repository)) {}
     }
-    const repositoryModule = defineModule(() => ({
+    const repositoryModule = module(() => ({
       providers: [Repository],
       exports: [Repository],
     }))()
-    const serviceModule = defineModule(() => ({ providers: [Service] }))()
+    const serviceModule = module(() => ({ providers: [Service] }))()
 
     expect(
       buildApplicationModel({ modules: [repositoryModule, serviceModule] })

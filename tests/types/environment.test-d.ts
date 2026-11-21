@@ -1,4 +1,4 @@
-import { defineEnv } from '@loutrejs/loutre'
+import { env as declareEnv } from '@loutrejs/loutre'
 import { z } from 'zod'
 
 const TransformedSchema = z
@@ -11,7 +11,7 @@ const TransformedSchema = z
     driver: raw.DRIVER,
   }))
 
-class AppEnv extends defineEnv(TransformedSchema) {}
+class AppEnv extends declareEnv(TransformedSchema) {}
 declare const env: AppEnv
 
 const port: number = env.port
@@ -25,4 +25,4 @@ AppEnv.key('driver')
 AppEnv.key('PORT')
 
 // @ts-expect-error Environment schemaのoutputはobjectでなければならない
-defineEnv(z.string())
+declareEnv(z.string())

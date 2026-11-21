@@ -8,7 +8,7 @@ export const ProfileController = http.implementation({
   factory: () => ({
     profile(ctx) {
       const currentUser: User = ctx.state.currentUser
-      return ctx.response.ok({ body: currentUser })
+      return { schema: AppContract.profile.ok, body: currentUser }
     },
   }),
 })

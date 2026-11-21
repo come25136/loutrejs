@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import {
-  defineApplication,
-  defineEnv,
-  defineModule,
+  application,
+  env,
+  module,
   inject,
   provide,
   LoggerToken,
@@ -14,7 +14,7 @@ import {
   type LogRecord,
 } from '@loutrejs/loutre/runtime'
 
-class LogEnv extends defineEnv(z.object({ LABEL: z.string() })) {}
+class LogEnv extends env(z.object({ LABEL: z.string() })) {}
 
 export class Backend implements LoggerBackend {
   readonly environment = inject(LogEnv)
@@ -58,30 +58,31 @@ const middleware = http.middleware({
       return next()
     },
 })
+const routeContract = http.contract({
+  health: {
+    method: 'GET',
+    path: '/',
+    middlewares: [middleware],
+    responses: { ok: { status: 204 } },
+  },
+})
 const endpoint = http.implementation({
   name: 'LoggingEndpoint',
-  contract: http.contract({
-    health: {
-      method: 'GET',
-      path: '/',
-      middlewares: [middleware],
-      responses: { ok: { status: 204 } },
-    },
-  }),
+  contract: routeContract,
   factory: (logger = inject(LoggerToken)) => ({
-    health(context) {
+    health() {
       logger.info('execution')
-      return context.response.ok({})
+      return { schema: routeContract.health.ok }
     },
   }),
 })
-const Logging = defineModule({
+const Logging = module({
   environment: [LogEnv],
   providers: [Backend, provide(LoggerToken).useClass(ApplicationLogger)],
   exports: [LoggerToken],
 })
-const App = defineModule({ providers: [WorkerService], executions: [endpoint] })
+const App = module({ providers: [WorkerService], executions: [endpoint] })
 
-export default defineApplication({
+export default application({
   modules: [App, Logging],
 })

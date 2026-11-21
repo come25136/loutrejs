@@ -8,7 +8,7 @@ import {
   type ExecutionKernelRuntime,
 } from '../../core/index.js'
 import { decodeQuery, validateRequestHeaders } from '../codecs/request.js'
-import { createHttpResponseHelpers, isHttpInputRecord } from '../result.js'
+import { isHttpInputRecord } from '../result.js'
 import {
   type InitialHttpContext,
   type RuntimeHttpContext,
@@ -52,16 +52,9 @@ export async function createHttpContext(
       )
     : Object.fromEntries(request.headers.entries())
   const body = definition?.body ? request.body : undefined
-  const response = patternMatch(route)
-    .with({ kind: 'contract' }, ({ definition: routeDefinition }) =>
-      createHttpResponseHelpers(routeDefinition.responses),
-    )
-    .with({ kind: 'raw' }, () => createHttpResponseHelpers({}))
-    .exhaustive()
   return {
     request,
     input: { params, query, headers, body },
-    response,
     signal,
   }
 }
@@ -97,7 +90,6 @@ export async function replayHttpHandler(
         headers: input.headers,
         body: input.body,
       },
-      response: createHttpResponseHelpers(match.route.definition.responses),
       signal: lease.signal,
       state,
     })

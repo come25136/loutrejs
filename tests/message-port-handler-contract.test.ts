@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  defineApplication,
+  application as createApplication,
   defineExecution,
-  defineModule,
+  module,
 } from '@loutrejs/loutre'
 import {
   messagePort,
@@ -51,8 +51,8 @@ describe('MessagePortのhandler契約', () => {
   it.each(Object.entries(factories))('%s', async (_, factory) => {
     const execution = messagePort.implementation({ contract, factory })
     const application = await bootstrapApplication({
-      application: defineApplication({
-        modules: [defineModule({ executions: [execution] })],
+      application: createApplication({
+        modules: [module({ executions: [execution] })],
       }),
     })
     try {
@@ -81,8 +81,8 @@ describe('MessagePortのhandler契約', () => {
       })
       await expect(
         bootstrapApplication({
-          application: defineApplication({
-            modules: [defineModule({ executions: [execution] })],
+          application: createApplication({
+            modules: [module({ executions: [execution] })],
           }),
         }),
       ).rejects.toThrow('MessagePort handler echoは関数である必要があります。')

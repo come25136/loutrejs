@@ -8,11 +8,7 @@ import {
   type GraphQLConnectionInitHandler,
   type GraphQLOperationId,
 } from '@loutrejs/graphql'
-import {
-  defineApplication,
-  defineModule,
-  createKernelApplication,
-} from '@loutrejs/loutre'
+import { application, module, createKernelApplication } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { websocket, type WebSocketSessionId } from '@loutrejs/loutre/websocket'
 
@@ -103,23 +99,23 @@ const both = graphql.implementation({
     },
   }),
 })
-const HttpModule = defineModule(() => ({ executions: [httpOnly] }))
-const WsModule = defineModule(() => ({ executions: [websocketOnly] }))
-const BothModule = defineModule(() => ({ executions: [both] }))
+const HttpModule = module(() => ({ executions: [httpOnly] }))
+const WsModule = module(() => ({ executions: [websocketOnly] }))
+const BothModule = module(() => ({ executions: [both] }))
 const httpApp = createKernelApplication({
-  application: defineApplication({ modules: [HttpModule()] }),
+  application: application({ modules: [HttpModule()] }),
 })
 httpApp.http.fetch(new Request('http://test'))
 // @ts-expect-error HTTPのみのendpointにWebSocket hostを公開しない
 httpApp.websocket
 const wsApp = createKernelApplication({
-  application: defineApplication({ modules: [WsModule()] }),
+  application: application({ modules: [WsModule()] }),
 })
 wsApp.websocket.upgrade(new Request('http://test'))
 // @ts-expect-error WebSocketのみのendpointにHTTP hostを公開しない
 wsApp.http
 const bothApp = createKernelApplication({
-  application: defineApplication({ modules: [BothModule()] }),
+  application: application({ modules: [BothModule()] }),
 })
 bothApp.http.fetch(new Request('http://test'))
 bothApp.websocket.upgrade(new Request('http://test'))
@@ -419,9 +415,9 @@ const defaultHttpWithWs = graphql.implementation({
   transports: { websocket: true },
   factory,
 })
-const DefaultModule = defineModule(() => ({ executions: [defaultHttpWithWs] }))
+const DefaultModule = module(() => ({ executions: [defaultHttpWithWs] }))
 const defaultApp = createKernelApplication({
-  application: defineApplication({ modules: [DefaultModule()] }),
+  application: application({ modules: [DefaultModule()] }),
 })
 defaultApp.http.fetch(new Request('http://test'))
 defaultApp.websocket.upgrade(new Request('http://test'))

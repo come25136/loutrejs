@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
+import {
+  application as createApplication,
+  module,
+  inject,
+} from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { mcp } from '@loutrejs/mcp'
 import { nodeRuntime } from '@loutrejs/node'
@@ -16,19 +20,19 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
 
   const input = z.strictObject({})
   const output = z.object({ value: z.number() })
-  const read = mcp.tool({
-    name: 'counter.get',
-    description: '現在値を取得する',
-    scopes: ['counter:read'],
-    input,
-    output,
-  })
-  const write = mcp.tool({
-    name: 'counter.increment',
-    description: '現在値に 1 を加算する',
-    scopes: ['counter:write'],
-    input,
-    output,
+  const CounterContract = mcp.contract({
+    'counter.get': {
+      description: '現在値を取得する',
+      scopes: ['counter:read'],
+      input,
+      output,
+    },
+    'counter.increment': {
+      description: '現在値に 1 を加算する',
+      scopes: ['counter:write'],
+      input,
+      output,
+    },
   })
   const resource = 'https://127.0.0.1/mcp'
   const Api = http.contract({ mcp: { raw: true, method: '*', path: '/mcp' } })
@@ -36,7 +40,7 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
     route: Api.routes.mcp,
     name: 'smoke',
     version: '1.0.0',
-    tools: [read, write],
+    contract: CounterContract,
     oauth: { requiredScopes: ['counter:read'] },
     factory: (counter = inject(Counter)) => ({
       oauth: {
@@ -64,10 +68,8 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
       },
     }),
   })
-  const application = defineApplication({
-    modules: [
-      defineModule({ providers: [Counter], executions: [implementation] }),
-    ],
+  const application = createApplication({
+    modules: [module({ providers: [Counter], executions: [implementation] })],
   })
   const app = await nodeRuntime.create({ application, shutdownHooks: false })
   try {

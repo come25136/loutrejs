@@ -1,8 +1,8 @@
 import * as fixture from './helpers/identities.js'
 import {
   LoggerToken,
-  defineModule,
-  defineApplication,
+  module as createModule,
+  application,
   composeLayers,
   defineLayer,
   bootstrapApplication,
@@ -31,7 +31,7 @@ class ClockReader {
 }
 
 function containerFor(providers: readonly ProviderDeclaration[]): Container {
-  const Module = defineModule(() => ({ providers }))
+  const Module = createModule(() => ({ providers }))
   return new Container(
     (Module().definition.providers ?? []).map(normalizeProvider),
   )
@@ -70,7 +70,7 @@ describe('同期DI Container', () => {
         this.after = inject(CLOCK)
       }
     }
-    const module = defineModule(() => ({
+    const module = createModule(() => ({
       providers: [provide(CLOCK).useValue({ id: 1 }), Nested, Consumer],
     }))()
     const container = new Container(
@@ -191,14 +191,14 @@ describe('依存元consumerの取得', () => {
     class Service {
       readonly logger = inject(AppLogger)
     }
-    const module = defineModule(() => ({
+    const module = createModule(() => ({
       providers: [
         provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
         Service,
       ],
     }))()
     const app = await bootstrapApplication({
-      application: defineApplication({ modules: [module] }),
+      application: application({ modules: [module] }),
     })
     try {
       expect(app.get(Service).logger.consumer).toBe(Service)
@@ -408,18 +408,18 @@ describe('consumer metadataとModelの依存宣言', () => {
       class Service {
         readonly logger = inject(AppLogger)
       }
-      const repository = defineModule({
+      const repository = createModule({
         providers: [Repository],
         exports: exported ? [Repository] : [],
       })
-      const feature = defineModule({
+      const feature = createModule({
         imports: [repository],
         providers: [
           provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
           Service,
         ],
       })
-      const definition = defineApplication({ modules: [feature] })
+      const definition = application({ modules: [feature] })
       const provider = definition.model.nodes.find(
         (node) => node.kind === 'provider' && node.token === AppLogger,
       )

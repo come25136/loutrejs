@@ -119,6 +119,7 @@ export function isHttpRawContractRoute(
   return (
     typeof value === 'object' &&
     value !== null &&
+    Object.hasOwn(value, httpContractRawRouteBrand) &&
     (value as Partial<HttpContractRawRoute>)[httpContractRawRouteBrand] === true
   )
 }
@@ -327,20 +328,49 @@ export const httpContractBrand: unique symbol = Symbol.for(
   'loutre.http-contract',
 ) as typeof httpContractBrand
 
-export interface HttpContract<
+declare const httpResponseOwner: unique symbol
+type HttpResponseReference<TRoutes, TName, TVariant, TResponse> = TResponse & {
+  readonly [httpResponseOwner]: readonly [
+    (routes: TRoutes) => TRoutes,
+    TName,
+    TVariant,
+  ]
+}
+
+type HttpResponseReferences<
+  TRoutes extends Readonly<Record<string, HttpContractRouteDefinition>>,
+> = {
+  readonly [
+    TName in keyof TRoutes as TRoutes[TName] extends HttpContractRawRouteDefinition
+      ? never
+      : TName
+  ]: {
+    readonly [
+      TVariant in keyof TRoutes[TName]['responses']
+    ]: HttpResponseReference<
+      TRoutes,
+      TName,
+      TVariant,
+      TRoutes[TName]['responses'][TVariant]
+    >
+  }
+}
+
+export type HttpContract<
   TRoutes extends Readonly<Record<string, HttpContractRouteDefinition>> =
     Readonly<Record<string, HttpContractRouteDefinition>>,
-> {
+> = {
   readonly kind: 'http-contract'
   readonly routes: TRoutes
   readonly [httpContractBrand]: true
-}
+} & (string extends keyof TRoutes ? {} : HttpResponseReferences<TRoutes>)
 
 export function isHttpContract(value: unknown): value is HttpContract {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as Partial<HttpContract>
   return (
     candidate.kind === 'http-contract' &&
+    Object.hasOwn(candidate, httpContractBrand) &&
     candidate[httpContractBrand] === true &&
     typeof candidate.routes === 'object' &&
     candidate.routes !== null
@@ -463,19 +493,19 @@ export type DeclaredHttpResults<TRoute extends HttpExecutionRouteDefinition> = {
   >
 }[keyof TRoute['responses'] & string]
 
-type ResponseHelpers<
+type HandlerResult<
+  TRoutes extends HttpContract['routes'],
+  TName extends keyof TRoutes,
   TResponses extends HttpExecutionRouteDefinition['responses'],
 > = {
-  // stringとのintersectionではproperty情報が失われるため、mapped keyはkeyof TResponsesのまま保つ。
-  readonly [TVariant in keyof TResponses]: TVariant extends string
-    ? TResponses[TVariant] extends infer TResponse extends
-        HttpExecutionResponseDefinition
-      ? (
-          value: ResponseValue<TResponse>,
-        ) => DeclaredHttpResponseResult<TVariant, TResponse>
-      : never
-    : never
-}
+  [K in keyof TResponses]: TResponses[K] extends {
+    readonly error: HttpExecutionResponseDefinition['error']
+  }
+    ? never
+    : {
+        readonly schema: HttpResponseReference<TRoutes, TName, K, TResponses[K]>
+      } & ResponseValue<TResponses[K]>
+}[keyof TResponses]
 
 export type HttpExecutionContext<
   TRoute extends HttpExecutionRouteDefinition = HttpExecutionRouteDefinition,
@@ -490,7 +520,6 @@ export type HttpExecutionContext<
     >
     readonly body: RequestValue<TRoute['request'], 'body', undefined>
   }
-  readonly response: ResponseHelpers<TRoute['responses']>
   readonly signal: AbortSignal
   readonly state: Readonly<HttpMiddlewareState<TRoute>>
 }
@@ -505,12 +534,22 @@ export type HttpHandlers<TContract extends HttpContract> = {
       Extract<TContract['routes'][TName], HttpExecutionRouteDefinition>
     >,
   ) =>
-    | DeclaredHttpResults<
-        Extract<TContract['routes'][TName], HttpExecutionRouteDefinition>
+    | HandlerResult<
+        TContract['routes'],
+        TName,
+        Extract<
+          TContract['routes'][TName],
+          HttpExecutionRouteDefinition
+        >['responses']
       >
     | Promise<
-        DeclaredHttpResults<
-          Extract<TContract['routes'][TName], HttpExecutionRouteDefinition>
+        HandlerResult<
+          TContract['routes'],
+          TName,
+          Extract<
+            TContract['routes'][TName],
+            HttpExecutionRouteDefinition
+          >['responses']
         >
       >
 }

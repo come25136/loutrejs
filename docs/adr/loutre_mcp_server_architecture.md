@@ -2,6 +2,8 @@
 
 ステータスはAccepted。
 
+Toolの宣言記法は[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)に従う。Endpoint ownership、OAuth、Context、DIは本ADRで定める。
+
 ## 決定
 
 MCPはGraphQLと同じく、endpointのExecutionがruntimeとDIを所有する。単一のHTTP listenerに複数のMCP endpointを配備でき、各endpointのTool一覧、OAuth設定、共有状態、中断処理を分離する。HTTP Contractの公開ルートとOAuthメタデータの入口は、そのendpointへdelegateで接続する。
@@ -12,21 +14,22 @@ Toolを個別Executionにする案は、ToolごとのModule境界が必要な場
 
 ## 公開API
 
-`mcp.tool()`で契約を宣言し、`mcp.implementation()`のfactoryでDI、OAuthの検証処理、Context生成、Toolの実装を組み立てる。SDK固有の型は公開しない。MCPパッケージはCoreをpeer dependency、SDKを内部依存として持つ。
+`mcp.contract()`でToolの集合を宣言し、`mcp.implementation()`のfactoryでDI、OAuthの検証処理、Context生成、Toolの実装を組み立てる。SDK固有の型は公開しない。MCPパッケージはCoreをpeer dependency、SDKを内部依存として持つ。
 
 ```ts
-const readOrder = mcp.tool({
-  name: 'orders.read',
-  description: '注文を取得する',
-  scopes: ['orders:read'],
-  input: z.object({ id: z.string() }),
-  output: z.object({ status: z.string() }),
+const OrdersContract = mcp.contract({
+  'orders.read': {
+    description: '注文を取得する',
+    scopes: ['orders:read'],
+    input: z.object({ id: z.string() }),
+    output: z.object({ status: z.string() }),
+  },
 })
 const orders = mcp.implementation({
   name: 'orders',
   version: '1.0.0',
   route: Api.routes.orders,
-  tools: [readOrder],
+  contract: OrdersContract,
   oauth: { requiredScopes: ['orders:read'] },
   factory: (service = inject(OrdersService), auth = inject(AuthService)) => ({
     oauth: auth.mcp,

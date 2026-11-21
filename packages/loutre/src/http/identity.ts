@@ -11,7 +11,6 @@ export type CorsOriginValue = Brand<string, 'http.cors-origin'>
 export type ContentTypeValue = Brand<string, 'http.content-type'>
 export type NormalizedMediaType = Brand<string, 'http.media-type'>
 export type HttpResponseStatus = Brand<number, 'http.response-status'>
-export type HttpBaseUrl = Brand<string, 'http.base-url'>
 
 export const normalizeHttpMethod = (value: string): HttpMethod =>
   value.toUpperCase() as HttpMethod
@@ -23,8 +22,6 @@ export const httpHeaderName = (value: string): HttpHeaderName =>
   value as HttpHeaderName
 export const corsOriginValue = (value: string): CorsOriginValue =>
   value as CorsOriginValue
-export const httpBaseUrl = (value: string | URL): HttpBaseUrl =>
-  String(value) as HttpBaseUrl
 export function normalizeMediaType(
   value: string | null | undefined,
 ): NormalizedMediaType | undefined {

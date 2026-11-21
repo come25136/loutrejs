@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   inject,
   LoggerService,
   LoggerToken,
@@ -69,9 +69,9 @@ class ShutdownLogger extends LoggerService {
 }
 
 const application = await runtime.create({
-  application: defineApplication({
+  application: createApplication({
     modules: [
-      defineModule({
+      module({
         providers: [Resource, provide(LoggerToken).useClass(ShutdownLogger)],
         exports: [LoggerToken],
         executions: [job],

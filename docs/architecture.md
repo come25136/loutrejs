@@ -68,10 +68,10 @@ For the rationale behind separating published packages from subpath exports, see
 
 ## Application Definition and Model
 
-`defineApplication()` builds the canonical model immediately.
+`application()` builds the canonical model immediately.
 
 ```ts
-const application = defineApplication({
+const App = application({
   modules: [AppModule],
   arguments: AppArgs,
 })
@@ -82,7 +82,7 @@ An Application Definition does not own a listener, timer, or process. It contain
 A Module declares Providers and Execution Definitions:
 
 ```ts
-const AppModule = defineModule({
+const AppModule = module({
   environment: [AppEnv],
   providers: [UsersService],
   executions: [UsersHttp, heartbeat],
@@ -120,9 +120,10 @@ export const UsersHttp = http.implementation({
   contract: UsersContract,
   factory: (users = inject(UsersService)) => ({
     async get(ctx) {
-      return ctx.response.found({
+      return {
+        schema: UsersContract.get.found,
         body: await users.get(ctx.input.params.id),
-      })
+      }
     },
   }),
 })
@@ -135,7 +136,7 @@ HTTP owns route compilation, request decoding, response finalization, middleware
 Task, Trigger, and Queue Consumer semantics live in `@loutrejs/loutre/tasks`.
 
 ```ts
-import { fixedDelay, task } from '@loutrejs/loutre/tasks'
+import { trigger, task } from '@loutrejs/loutre/tasks'
 
 export const cleanup = task<void, void>({
   name: 'cleanup',
@@ -144,14 +145,14 @@ export const cleanup = task<void, void>({
   },
 })
 
-export const heartbeat = fixedDelay({
+export const heartbeat = trigger.fixedDelay({
   name: 'heartbeat',
   delay: 5_000,
   immediate: true,
   task: cleanup,
 })
 
-const WorkerModule = defineModule({
+const WorkerModule = module({
   executions: [heartbeat],
 })
 ```
@@ -159,7 +160,7 @@ const WorkerModule = defineModule({
 A hosted Application receives the Extension-owned `tasks` API only when the model contains Tasks executions.
 
 ```ts
-const app = await bootstrapApplication({ application })
+const app = await bootstrapApplication({ application: App })
 await app.tasks.run(cleanup)
 await app.tasks.start()
 ```
@@ -189,11 +190,11 @@ For using dependency-source metadata, see [Accessing dependency sources in custo
 Runtime inputs are declared as typed contracts and bound before Provider construction.
 
 ```ts
-class AppEnv extends defineEnv(
+class AppEnv extends env(
   z.object({ PORT: z.coerce.number().int().positive() }),
 ) {}
 
-const AppModule = defineModule({
+const AppModule = module({
   environment: [AppEnv],
 })
 ```
@@ -205,13 +206,13 @@ Runtime adapters provide the environment source. `bootstrapApplication()` can re
 `bootstrapApplication()` creates and initializes the portable Kernel-hosted Application.
 
 ```ts
-const app = await bootstrapApplication({ application })
+const app = await bootstrapApplication({ application: App })
 ```
 
 Runtime adapters add platform ownership around that Kernel application. Node.js, for example, owns the HTTP listener:
 
 ```ts
-const app = await nodeRuntime.create({ application })
+const app = await nodeRuntime.create({ application: App })
 await app.serve({ port: 3000 })
 ```
 

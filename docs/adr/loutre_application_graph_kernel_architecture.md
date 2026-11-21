@@ -43,6 +43,8 @@ Application ModelをRuntimeとToolingの共通Source of Truthとする。Runtime
 
 ## 2. ADRの責務分担
 
+通常HTTP Handlerの戻り値については後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)に従う。本ADRのKernel / HTTP Extension ownershipとExecution leaseは変わらない。
+
 このADRは**Coreの責務境界とApplication Modelの位置付け**だけを正本とする。
 
 Execution Extensionの具体的なcontractについては、次のADRを唯一の正本とする。
@@ -301,7 +303,7 @@ sequenceDiagram
         HttpRuntime->>HttpRuntime: decode + validate request body
         HttpRuntime->>HttpRuntime: run middleware / resolve DI / compose state
         HttpRuntime->>Impl: invoke compiled handler
-        Impl-->>HttpRuntime: contract response variant
+        Impl-->>HttpRuntime: selected contract response
         HttpRuntime->>HttpRuntime: validate response semantics
         HttpRuntime-->>Host: Response
         Host->>Kernel: lease.complete()
@@ -313,7 +315,7 @@ Build phaseでDefinitionは一度だけcompileされ、requestごとに再compil
 
 HTTP固有のroute matching、header/body validation、decoder selection、middleware short-circuit、response semanticsはHTTP Extensionが所有する。Coreがrequest execution中に理解するのはactive application workとしての`ExecutionLease`と、generic Layer / DI等のprotocol-neutral primitiveだけである。
 
-Middlewareがresponseをshort-circuitした場合はUser Implementationの呼び出しを省略するが、返されたvariantのContract整合性とHTTP response semanticsの検証責務は引き続きHTTP Extensionにある。
+Middlewareがresponseをshort-circuitした場合はUser Implementationの呼び出しを省略するが、返されたHTTP結果のContract整合性とresponse semanticsの検証責務は引き続きHTTP Extensionにある。通常Handlerの公開return形式とMiddlewareのshort-circuit用内部結果は別の境界として扱う。
 
 ## 9. Package / source boundary
 

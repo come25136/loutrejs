@@ -6,16 +6,13 @@ import type { LogRecord } from '@loutrejs/loutre/runtime'
 import {
   bootstrapApplication,
   type ApplicationExtensions,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   inject,
   type,
 } from '@loutrejs/loutre'
 import {
-  basicAuth,
-  bearerAuth,
   bindHttpServer,
-  cors,
   http,
   type HttpExecutionContext,
   type HttpHostApi,
@@ -46,15 +43,15 @@ describe('HTTP Execution Extension', () => {
       name: 'HelloController',
       contract,
       factory: (logger = inject(LoggerToken)) => ({
-        hello(context) {
+        hello() {
           logger.info('handler')
-          return context.response.ok({})
+          return { schema: contract.hello.ok }
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({
+      application: createApplication({
         modules: [Module(), logging.module],
       }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
@@ -100,13 +97,15 @@ describe('HTTP Execution Extension', () => {
     const controller = http.implementation({
       contract,
       factory: () => ({
-        profile: (context) =>
-          context.response.ok({ body: context.state.userId }),
+        profile: (context) => ({
+          schema: contract.profile.ok,
+          body: context.state.userId,
+        }),
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {
@@ -152,13 +151,15 @@ describe('HTTP Execution Extension', () => {
     const controller = http.implementation({
       contract,
       factory: () => ({
-        profile: (context) =>
-          context.response.ok({ body: context.state.userId }),
+        profile: (context) => ({
+          schema: contract.profile.ok,
+          body: context.state.userId,
+        }),
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
@@ -235,9 +236,9 @@ describe('HTTP Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
@@ -253,11 +254,11 @@ describe('HTTP Execution Extension', () => {
   })
 
   it('credential CORSのwildcardを拒否し特定originへVaryを付与する', async () => {
-    expect(() => cors({ credentials: true })).toThrow(
+    expect(() => http.cors({ credentials: true })).toThrow(
       'CORS origin cannot be a wildcard',
     )
 
-    const corsMiddleware = cors({ origin: ['https://app.example.com'] })
+    const corsMiddleware = http.cors({ origin: ['https://app.example.com'] })
     const contract = http.contract({
       hello: {
         method: 'GET',
@@ -268,11 +269,11 @@ describe('HTTP Execution Extension', () => {
     })
     const controller = http.implementation({
       contract,
-      factory: () => ({ hello: (context) => context.response.ok({}) }),
+      factory: () => ({ hello: () => ({ schema: contract.hello.ok }) }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
@@ -315,19 +316,19 @@ describe('HTTP Execution Extension', () => {
     const controller = http.implementation({
       contract,
       factory: () => ({
-        headers: (context) =>
-          context.response.ok({
-            body: { ok: true },
-            headers: {
-              'x-dynamic': 'dynamic',
-              'x-overridden': 'dynamic',
-            },
-          }),
+        headers: () => ({
+          schema: contract.headers.ok,
+          body: { ok: true },
+          headers: {
+            'x-dynamic': 'dynamic',
+            'x-overridden': 'dynamic',
+          },
+        }),
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
@@ -365,17 +366,18 @@ describe('HTTP Execution Extension', () => {
       factory: () => ({
         getUser: async (context) => {
           expect('request' in context).toBe(false)
-          return context.response.found({
+          return {
+            schema: contract.getUser.found,
             body: {
               id: context.input.params.id,
               detail: context.input.query.detail,
             },
-          })
+          }
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [controller] }))
+    const definition = createApplication({ modules: [Module()] })
     const extensionTypeCheck: ApplicationExtensions<typeof definition> =
       controller.extension
     expect(extensionTypeCheck).toBe(http.extension)
@@ -427,13 +429,13 @@ describe('HTTP Execution Extension', () => {
       name: 'duplicate.http',
       contract,
       factory: () => ({
-        first: (context) => context.response.ok({}),
-        second: (context) => context.response.ok({}),
+        first: () => ({ schema: contract.first.ok }),
+        second: () => ({ schema: contract.second.ok }),
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
 
-    const definition = defineApplication({ modules: [Module()] })
+    const definition = createApplication({ modules: [Module()] })
 
     expect(definition.model.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_HTTP_DUPLICATE_ROUTE' }),
@@ -448,7 +450,7 @@ describe('HTTP Execution Extension', () => {
       }
     }
 
-    const authentication = basicAuth({
+    const authentication = http.basicAuth({
       name: 'profile.basic-auth',
       realm: 'Loutre Test',
       factory: (users = inject(UserRepository)) => ({
@@ -486,16 +488,18 @@ describe('HTTP Execution Extension', () => {
       name: 'profile.http',
       contract,
       factory: () => ({
-        profile: (context) =>
-          context.response.ok({ body: context.state.currentUser }),
+        profile: (context) => ({
+          schema: contract.profile.ok,
+          body: context.state.currentUser,
+        }),
       }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [UserRepository],
       executions: [controller],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
@@ -523,7 +527,7 @@ describe('HTTP Execution Extension', () => {
   })
 
   it('Bearer schemeを大小文字に依存せず解釈する', async () => {
-    const authentication = bearerAuth({
+    const authentication = http.bearerAuth({
       realm: 'Loutre Test',
       factory: () => ({
         authenticate: (token: string) =>
@@ -551,11 +555,11 @@ describe('HTTP Execution Extension', () => {
     })
     const controller = http.implementation({
       contract,
-      factory: () => ({ profile: (context) => context.response.ok({}) }),
+      factory: () => ({ profile: () => ({ schema: contract.profile.ok }) }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 

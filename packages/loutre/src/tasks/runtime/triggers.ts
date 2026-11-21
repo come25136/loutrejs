@@ -82,15 +82,21 @@ function startFixedDelayTrigger(
   let stopped = false
   let timer: ReturnType<typeof setTimeout> | undefined
   let releaseSleep: (() => void) | undefined
-  const sleep = () =>
-    new Promise<void>((resolve) => {
-      releaseSleep = resolve
-      timer = setTimeout(() => {
-        timer = undefined
-        releaseSleep = undefined
-        resolve()
-      }, trigger.delay)
-    })
+  const sleep = async () => {
+    let remaining: number = trigger.delay
+    do {
+      // 32bit符号付き整数の上限を超すタイマーはNode.jsで1msに短縮される。
+      const interval = Math.min(remaining, 2 ** 31 - 1)
+      await new Promise<void>((resolve) => {
+        releaseSleep = resolve
+        timer = setTimeout(resolve, interval)
+      })
+      timer = undefined
+      releaseSleep = undefined
+      if (stopped) return
+      remaining -= interval
+    } while (remaining > 0)
+  }
   const execute = async () => {
     await run(trigger.taskExecutionId, trigger.taskName).catch(() => undefined)
   }
@@ -107,7 +113,7 @@ function startFixedDelayTrigger(
     async stop() {
       if (stopped) return
       stopped = true
-      if (timer) clearTimeout(timer)
+      if (timer !== undefined) clearTimeout(timer)
       timer = undefined
       releaseSleep?.()
       releaseSleep = undefined

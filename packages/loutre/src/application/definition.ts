@@ -29,7 +29,7 @@ export interface ApplicationDefinition<
   readonly arguments: TArguments
 }
 
-export function defineApplication<
+export function application<
   const TModules extends readonly ModuleInstance[],
   const TArguments extends ArgsClass | undefined = undefined,
 >(

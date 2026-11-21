@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import {
-  bootstrapApplication,
-  defineApplication,
-  defineModule,
-} from '@loutrejs/loutre'
+import { bootstrapApplication, application, module } from '@loutrejs/loutre'
 import {
   bindHttpServer,
-  createHttpClient,
   http,
   isHttpRawContractRoute,
+  isHttpContract,
 } from '@loutrejs/loutre/http'
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 
@@ -42,22 +38,47 @@ describe('HTTP Contractのrawルート', () => {
     expect(
       isHttpRawContractRoute({ raw: true, method: '*', path: '/protocol' }),
     ).toBe(false)
+    expect(isHttpRawContractRoute({ ...api.routes.delegated })).toBe(false)
+    expect(isHttpRawContractRoute(Object.create(api.routes.delegated))).toBe(
+      false,
+    )
     expect(isHttpRawContractRoute(api.routes.health)).toBe(false)
     expect(Object.isFrozen(api.routes.delegated)).toBe(true)
+  })
+
+  it('コピーしたContractのルートとコンパイル済みルートを混在させない', () => {
+    const api = contract()
+    const copy = {
+      ...api,
+      routes: {
+        ...api.routes,
+        health: { ...api.routes.health, path: '/changed' },
+      },
+    }
+    expect(isHttpContract(copy)).toBe(false)
+    expect(isHttpContract(Object.create(api))).toBe(false)
+    expect(() =>
+      http.implementation({
+        contract: copy,
+        factory: () => {
+          throw new Error('呼び出される前に拒否される')
+        },
+      }),
+    ).toThrow('http.contract()')
   })
 
   it('通常HTTPのimplementationとraw処理を同じContractから個別に配備する', async () => {
     const api = contract()
     const regular = http.implementation({
       contract: api,
-      factory: () => ({ health: (ctx) => ctx.response.ok({}) }),
+      factory: () => ({ health: () => ({ schema: api.health.ok }) }),
     })
     const delegated = http.raw({
       route: api.routes.delegated,
       factory: () => (ctx) => Response.json(ctx.state),
     })
-    const Module = defineModule(() => ({ executions: [regular, delegated] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [regular, delegated] }))
+    const definition = application({ modules: [Module()] })
     expect(definition.model.executions.map(({ compiled }) => compiled)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -91,18 +112,13 @@ describe('HTTP Contractのrawルート', () => {
     }
   })
 
-  it('OpenAPIと型付きHTTP clientには通常HTTPのルートだけを出す', () => {
+  it('OpenAPIには通常HTTPのルートだけを出す', () => {
     const api = contract()
     expect(
       Object.keys(
         generateOpenApi(api, { info: { title: '試験', version: '1' } }).paths,
       ),
     ).toEqual(['/api/health'])
-    const client = createHttpClient(api, async () => ({
-      status: 204,
-      body: undefined,
-    }))
-    expect(Object.keys(client)).toEqual(['health'])
   })
 
   it('rawでないルートのresponsesの書き忘れを拒否する', () => {

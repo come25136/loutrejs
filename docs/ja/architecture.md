@@ -72,10 +72,10 @@ main packageの主要subpathは次の通りです。
 
 ## Application DefinitionとModel
 
-`defineApplication()`はcanonical modelをその場で構築します。
+`application()`はcanonical modelをその場で構築します。
 
 ```ts
-const application = defineApplication({
+const App = application({
   modules: [AppModule],
   arguments: AppArgs,
 })
@@ -86,7 +86,7 @@ Application Definitionはlistener、timer、processを所有しません。Runti
 ModuleにはProviderとExecution Definitionを登録します。
 
 ```ts
-const AppModule = defineModule({
+const AppModule = module({
   environment: [AppEnv],
   providers: [UsersService],
   executions: [UsersHttp, heartbeat],
@@ -124,9 +124,10 @@ export const UsersHttp = http.implementation({
   contract: UsersContract,
   factory: (users = inject(UsersService)) => ({
     async get(ctx) {
-      return ctx.response.found({
+      return {
+        schema: UsersContract.get.found,
         body: await users.get(ctx.input.params.id),
-      })
+      }
     },
   }),
 })
@@ -139,7 +140,7 @@ routing、request decode、response finalization、middleware、authentication h
 Task、Trigger、Queue Consumerは`@loutrejs/loutre/tasks`が所有します。
 
 ```ts
-import { fixedDelay, task } from '@loutrejs/loutre/tasks'
+import { trigger, task } from '@loutrejs/loutre/tasks'
 
 export const cleanup = task<void, void>({
   name: 'cleanup',
@@ -148,14 +149,14 @@ export const cleanup = task<void, void>({
   },
 })
 
-export const heartbeat = fixedDelay({
+export const heartbeat = trigger.fixedDelay({
   name: 'heartbeat',
   delay: 5_000,
   immediate: true,
   task: cleanup,
 })
 
-const WorkerModule = defineModule({
+const WorkerModule = module({
   executions: [heartbeat],
 })
 ```
@@ -163,7 +164,7 @@ const WorkerModule = defineModule({
 Tasks executionを含むApplicationにはExtension-ownedな`tasks` Host APIが合成されます。
 
 ```ts
-const app = await bootstrapApplication({ application })
+const app = await bootstrapApplication({ application: App })
 await app.tasks.run(cleanup)
 await app.tasks.start()
 ```
@@ -262,9 +263,9 @@ Loutreは予約tokenの`LoggerToken`に登録されたProviderを、Application�
 組み込み実装は`LoggerService`です。標準のconsole出力を使う場合、Logger用のProvider登録やModuleの指定は不要です。
 
 ```ts
-import { defineApplication } from '@loutrejs/loutre'
+import { application } from '@loutrejs/loutre'
 
-const application = defineApplication({ modules: [AppModule] })
+const App = application({ modules: [AppModule] })
 ```
 
 標準構成を明示するための`LoggerModule`も提供します。`modules: [LoggerModule, AppModule]`と指定しても、省略時と同じ標準Providerを使います。`LoggerToken`は利用側の注入先と、カスタム実装の登録先に使います。
@@ -274,7 +275,7 @@ Provider、Execution、middlewareでは`inject(LoggerToken)`を使います。DI
 ```ts
 import { LoggerToken } from '@loutrejs/loutre'
 
-const app = await nodeRuntime.create({ application })
+const app = await nodeRuntime.create({ application: App })
 app.get(LoggerToken).info('Application ready')
 ```
 
@@ -282,8 +283,8 @@ app.get(LoggerToken).info('Application ready')
 
 ```ts
 import {
-  defineApplication,
-  defineModule,
+  application,
+  module,
   inject,
   provide,
   LoggerService,
@@ -297,7 +298,7 @@ class JsonLoggerService extends LoggerService {
   }
 }
 
-const JsonLoggerModule = defineModule({
+const JsonLoggerModule = module({
   providers: [
     JsonConsoleLoggerBackend,
     provide(LoggerToken).useClass(JsonLoggerService),
@@ -305,7 +306,7 @@ const JsonLoggerModule = defineModule({
   exports: [LoggerToken],
 })
 
-const application = defineApplication({ modules: [JsonLoggerModule] })
+const App = application({ modules: [JsonLoggerModule] })
 ```
 
 登録は`provide(LoggerToken).useClass(JsonLoggerService)`、利用は`inject(LoggerToken)`と分けます。カスタム実装へ差し替えた場合も、利用側の取得方法は変わりません。`providers: [JsonLoggerService]`だけでは、独自クラス自身をtokenとして登録するため、ApplicationのLoggerの差し替えにはなりません。
@@ -318,7 +319,7 @@ rootの依存から`LoggerToken`を要求すると循環になるため、Model�
 
 同じDefinitionから複数Applicationを作っても、classやfactoryで作ったLoggerとbackendは共有されません。`useValue`で実体を指定した場合は、通常のvalue providerと同様に、その実体が共有されます。
 
-Logger準備前の失敗は元の例外として呼び出し元へ返します。終了後に保持していたLoggerへ出したログはconsoleへ送られ、終了済みbackendを再利用しません。`defineApplication({ logger: ... })`や起動時のLogger overrideは使用せず、ModuleのProvider登録を使ってください。
+Logger準備前の失敗は元の例外として呼び出し元へ返します。終了後に保持していたLoggerへ出したログはconsoleへ送られ、終了済みbackendを再利用しません。`application({ logger: ... })`や起動時のLogger overrideは使用せず、ModuleのProvider登録を使ってください。
 
 ### Providerの登録方法ごとのルール
 
@@ -405,11 +406,11 @@ ResolverはApplicationごとにKernelが生成・管理します。bindingはMod
 Runtime inputはtyped contractとして宣言し、Provider constructionより先にbindします。
 
 ```ts
-class AppEnv extends defineEnv(
+class AppEnv extends env(
   z.object({ PORT: z.coerce.number().int().positive() }),
 ) {}
 
-const AppModule = defineModule({
+const AppModule = module({
   environment: [AppEnv],
 })
 ```
@@ -421,13 +422,13 @@ Runtime adapterが実環境のsourceを渡し、testやembedded executionでは`
 portableなKernel-hosted Applicationは`bootstrapApplication()`で起動します。
 
 ```ts
-const app = await bootstrapApplication({ application })
+const app = await bootstrapApplication({ application: App })
 ```
 
 Runtime adapterはその外側でplatform ownershipを追加します。Node.js / BunではHTTP listenerとprocess signalの終了フックをadapterが所有し、HTTPを持たないworkerにも同じ終了処理を適用します。`create({ shutdownHooks: false })`で終了フックを無効にできます。
 
 ```ts
-const app = await nodeRuntime.create({ application })
+const app = await nodeRuntime.create({ application: App })
 await app.serve({ port: 3000 })
 ```
 

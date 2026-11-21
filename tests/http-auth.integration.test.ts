@@ -1,7 +1,7 @@
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
 } from '@loutrejs/loutre'
 import { bindHttpServer, http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
@@ -13,7 +13,7 @@ import {
 describe('HTTP auth integration', () => {
   it('Layerが生成したContext propertyをControllerのctxから取得する', async () => {
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [AccountModule()] }),
+      application: createApplication({ modules: [AccountModule()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {
@@ -56,11 +56,11 @@ describe('HTTP auth integration', () => {
     })
     const Controller = http.implementation({
       contract: Contract,
-      factory: () => ({ get: (ctx) => ctx.response.ok({}) }),
+      factory: () => ({ get: () => ({ schema: Contract.get.ok }) }),
     })
-    const Module = defineModule(() => ({ executions: [Controller] }))
+    const Module = module(() => ({ executions: [Controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {

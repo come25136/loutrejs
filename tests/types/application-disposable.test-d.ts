@@ -1,7 +1,10 @@
-import { createKernelApplication, defineApplication } from '@loutrejs/loutre'
+import {
+  createKernelApplication,
+  application as createApplication,
+} from '@loutrejs/loutre'
 
 const application = createKernelApplication({
-  application: defineApplication({ modules: [] }),
+  application: createApplication({ modules: [] }),
 })
 const disposable: AsyncDisposable = application
 

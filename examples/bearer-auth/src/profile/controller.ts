@@ -6,7 +6,10 @@ export const BearerProfileController = http.implementation({
   contract: BearerProfileContract,
   factory: () => ({
     get(ctx) {
-      return ctx.response.ok({ body: ctx.state.currentUser })
+      return {
+        schema: BearerProfileContract.get.ok,
+        body: ctx.state.currentUser,
+      }
     },
   }),
 })

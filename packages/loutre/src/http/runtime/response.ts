@@ -29,7 +29,7 @@ export async function finalizeHttpResult(
   completeExecution: () => void,
 ): Promise<FinalizedHttpResult> {
   const response = route.responses[result.response]
-  if (!response) {
+  if (!Object.hasOwn(route.responses, result.response) || !response) {
     throw new Error(`LUTRE_HTTP_RESPONSE_UNDECLARED: ${result.response}`)
   }
   const responseHeaders = await validateResponseHeaders(

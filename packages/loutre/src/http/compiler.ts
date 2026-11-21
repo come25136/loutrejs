@@ -55,17 +55,18 @@ export function snapshotHttpContractRawRoute(
 ): HttpContractRawRoute {
   if (route.method !== '*') assertValidHttpMethod(route.method)
   parseHttpPath(route.path)
-  return inheritSourceLocation(
-    Object.freeze({
-      ...route,
-      method: route.method.toUpperCase(),
-      [httpContractRawRouteBrand]: true as const,
-      ...(route.middlewares === undefined
-        ? {}
-        : { middlewares: Object.freeze([...route.middlewares]) }),
-    }),
-    route,
-  )
+  const snapshot = {
+    ...route,
+    method: route.method.toUpperCase(),
+    [httpContractRawRouteBrand]: true as const,
+    ...(route.middlewares === undefined
+      ? {}
+      : { middlewares: Object.freeze([...route.middlewares]) }),
+  }
+  Object.defineProperty(snapshot, httpContractRawRouteBrand, {
+    enumerable: false,
+  })
+  return inheritSourceLocation(Object.freeze(snapshot), route)
 }
 
 export function compileRawRoute(

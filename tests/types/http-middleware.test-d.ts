@@ -40,7 +40,7 @@ http.implementation({
       context.request
       const userId: string = context.state.userId
       void userId
-      return context.response.ok({})
+      return { schema: contract.profile.ok }
     },
   }),
 })
@@ -78,7 +78,7 @@ http.implementation({
     trace: (context) => {
       const traceId: string = context.state.traceId
       void traceId
-      return context.response.ok({})
+      return { schema: inferredGenericContract.trace.ok }
     },
   }),
 })
@@ -104,9 +104,9 @@ http.implementation({
       const path: '/api/traced/profile' = nestedContract.routes.profile.path
       void [traceId, path]
       if (invalidInput) {
-        return context.response.unavailable({})
+        return { schema: nestedContract.profile.unavailable }
       }
-      return context.response.ok({})
+      return { schema: nestedContract.profile.ok }
     },
   }),
 })
@@ -142,22 +142,23 @@ const optionalIdentity = http.middleware<
     }
   },
 })
+const routeContract = http.contract({
+  profile: {
+    method: 'GET',
+    path: '/optional',
+    middlewares: [optionalIdentity],
+    responses: { ok: { status: 204 } },
+  },
+})
 http.implementation({
-  contract: http.contract({
-    profile: {
-      method: 'GET',
-      path: '/optional',
-      middlewares: [optionalIdentity],
-      responses: { ok: { status: 204 } },
-    },
-  }),
+  contract: routeContract,
   factory: () => ({
     profile: (context) => {
       const userId: string | undefined = context.state.currentUser?.id
       // @ts-expect-error optionalなstateを必須として扱わない
       const user: { id: string } = context.state.currentUser
       void [userId, user]
-      return context.response.ok({})
+      return { schema: routeContract.profile.ok }
     },
   }),
 })

@@ -1,4 +1,4 @@
-import { defineEnv } from '@loutrejs/loutre'
+import { env } from '@loutrejs/loutre'
 import { z } from 'zod'
 
 const AppEnvSchema = z
@@ -8,9 +8,9 @@ const AppEnvSchema = z
       .string()
       .default('postgres://loutre:loutre@127.0.0.1:54323/loutre_prisma'),
   })
-  .transform((env) => ({
-    port: env.PORT,
-    databaseUrl: new URL(env.PRISMA_DATABASE_URL),
+  .transform((values) => ({
+    port: values.PORT,
+    databaseUrl: new URL(values.PRISMA_DATABASE_URL),
   }))
 
-export class AppEnv extends defineEnv(AppEnvSchema) {}
+export class AppEnv extends env(AppEnvSchema) {}

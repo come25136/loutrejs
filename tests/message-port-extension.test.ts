@@ -3,8 +3,8 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   inject,
   RuntimeCapabilityRegistry,
   type ExecutionKernelRuntime,
@@ -32,9 +32,9 @@ describe('MessagePort Execution Extension', () => {
           context.response.ok({ message: `Hello, ${context.input.name}` }),
       }),
     })
-    const Module = defineModule(() => ({ executions: [handler] }))
+    const Module = module(() => ({ executions: [handler] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     expectTypeOf(application.messagePort).toEqualTypeOf<MessagePortHostApi>()
@@ -61,8 +61,8 @@ describe('MessagePort Execution Extension', () => {
         echo: (context) => context.response.ok(context.input),
       }),
     })
-    const Module = defineModule(() => ({ executions: [handler] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [handler] }))
+    const definition = createApplication({ modules: [Module()] })
 
     ;(route as { input: unknown }).input = z.number()
     ;(route.responses as Record<string, unknown>).ok = z.number()
@@ -213,8 +213,8 @@ describe('MessagePort Execution Extension', () => {
           values: (context) => context.response.ok(testCase.source()),
         }),
       })
-      const Module = defineModule(() => ({ executions: [execution] }))
-      const definition = defineApplication({ modules: [Module()] })
+      const Module = module(() => ({ executions: [execution] }))
+      const definition = createApplication({ modules: [Module()] })
       const group = definition.model.extensions.get(messagePortExtension)!
       const applicationRuntime: ExecutionKernelRuntime = {
         beginExecution() {
@@ -274,9 +274,9 @@ describe('MessagePort Execution Extension', () => {
         values: (context) => context.response.ok(source()),
       }),
     })
-    const Module = defineModule(() => ({ executions: [execution] }))
+    const Module = module(() => ({ executions: [execution] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
     const result = await application.messagePort.invoke('values')
     const iterator = (result.value as AsyncIterable<number>)[
@@ -326,12 +326,12 @@ describe('MessagePort Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [execution],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 20,
     })
     const result = await application.messagePort.invoke('values')
@@ -377,12 +377,12 @@ describe('MessagePort Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [execution],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 20,
     })
     const result = await application.messagePort.invoke('values')
@@ -455,9 +455,9 @@ describe('MessagePort Execution Extension', () => {
         values: (context) => context.response.ok(source),
       }),
     })
-    const Module = defineModule(() => ({ executions: [execution] }))
+    const Module = module(() => ({ executions: [execution] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 100,
     })
     const result = await application.messagePort.invoke('values')
@@ -531,12 +531,12 @@ describe('MessagePort Execution Extension', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [execution],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
     const result = await application.messagePort.invoke('values')
     const iterator = (result.value as AsyncIterable<number>)[
@@ -594,9 +594,9 @@ describe('MessagePort Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [execution] }))
+    const Module = module(() => ({ executions: [execution] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
     const invocation = application.messagePort.invoke('values')
     await handlerStarted
@@ -625,9 +625,9 @@ describe('MessagePort Execution Extension', () => {
         ping: (context) => context.response.ok('pong'),
       }),
     })
-    const Module = defineModule(() => ({ executions: [execution] }))
+    const Module = module(() => ({ executions: [execution] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     const closing = application.close()
@@ -678,12 +678,12 @@ describe('MessagePort Execution Extension', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [execution],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
     const result = await application.messagePort.invoke('values')
@@ -741,12 +741,12 @@ describe('MessagePort Execution Extension', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [execution],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
     await application.messagePort.invoke('values')
@@ -806,12 +806,12 @@ describe('MessagePort Execution Extension', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [execution],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
     await application.messagePort.invoke('values')

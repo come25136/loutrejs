@@ -6,9 +6,10 @@ export const AppController = http.implementation({
   contract: AppContract,
   factory: () => ({
     async greet(ctx) {
-      return ctx.response.ok({
+      return {
+        schema: AppContract.greet.ok,
         body: { message: `Hello, ${ctx.input.params.name}!` },
-      })
+      }
     },
   }),
 })

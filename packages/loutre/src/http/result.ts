@@ -3,7 +3,6 @@ import {
   type HttpErrorMapping,
   type HttpExecutionResult,
   type HttpHeaders,
-  type HttpExecutionRouteDefinition,
 } from './contract.js'
 
 type ErrorOf<TDefinition> =
@@ -54,57 +53,6 @@ export function withHttpFrameworkHeaders(
     ...result,
     [httpFrameworkHeaders]: { ...current, ...headers },
   } as HttpExecutionResultWithFrameworkHeaders
-}
-
-function isHttpHeaders(value: unknown): value is HttpHeaders {
-  return (
-    isHttpInputRecord(value) &&
-    Object.values(value).every(
-      (header) =>
-        header === undefined ||
-        typeof header === 'string' ||
-        (Array.isArray(header) &&
-          header.every((part: unknown) => typeof part === 'string')),
-    )
-  )
-}
-
-export function isHttpExecutionResult(
-  value: unknown,
-): value is HttpExecutionResult {
-  return (
-    isHttpInputRecord(value) &&
-    value.kind === 'http-result' &&
-    typeof value.response === 'string' &&
-    'body' in value &&
-    (value.headers === undefined || isHttpHeaders(value.headers))
-  )
-}
-
-export function createHttpResponseHelpers(
-  responses: HttpExecutionRouteDefinition['responses'],
-): Readonly<
-  Record<
-    string,
-    (value?: {
-      readonly body?: unknown
-      readonly headers?: HttpHeaders
-    }) => HttpExecutionResult
-  >
-> {
-  return Object.fromEntries(
-    Object.keys(responses).map((name) => [
-      name,
-      (
-        value: { readonly body?: unknown; readonly headers?: HttpHeaders } = {},
-      ) => ({
-        kind: 'http-result' as const,
-        response: name,
-        body: value.body,
-        ...(value.headers === undefined ? {} : { headers: value.headers }),
-      }),
-    ]),
-  )
 }
 
 export function isHttpInputRecord(

@@ -1,10 +1,4 @@
-import {
-  defineApplication,
-  defineEnv,
-  defineModule,
-  provide,
-  token,
-} from '@loutrejs/loutre'
+import { application, env, module, provide, token } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -18,9 +12,7 @@ const CONDITIONAL = token<MemoryService | DiskService>(
   'source-location.conditional',
 )
 
-class AppEnv extends defineEnv(
-  z.object({ DRIVER: z.enum(['memory', 'disk']) }),
-) {}
+class AppEnv extends env(z.object({ DRIVER: z.enum(['memory', 'disk']) })) {}
 
 export const auditMiddleware = http.middleware({
   name: 'audit',
@@ -44,13 +36,13 @@ export const SourceController = http.implementation({
   name: 'SourceController',
   contract: SourceContract,
   factory: () => ({
-    create(ctx) {
-      return ctx.response.ok({})
+    create() {
+      return { schema: SourceContract.create.ok }
     },
   }),
 })
 
-export const SourceModule = defineModule<void>(() => ({
+export const SourceModule = module<void>(() => ({
   name: 'SourceModule',
   environment: [AppEnv],
   providers: [
@@ -65,4 +57,4 @@ export const SourceModule = defineModule<void>(() => ({
   executions: [SourceController],
 }))
 
-export default defineApplication({ modules: [SourceModule()] })
+export default application({ modules: [SourceModule()] })

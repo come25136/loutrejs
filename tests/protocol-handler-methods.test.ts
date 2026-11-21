@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application,
+  module,
+  assertDeclaredExecutionMethods,
+  resolveExecutionMethod,
 } from '@loutrejs/loutre'
 import {
   bindHttpServer,
@@ -29,20 +31,25 @@ const contract = http.contract({
 type HttpContext = HttpExecutionContext<typeof contract.routes.echo>
 class HttpController {
   #message = '応答'
-  echo(context: HttpContext) {
-    return context.response.ok({ body: this.#message })
+  echo(_context: HttpContext) {
+    return { schema: contract.echo.ok, body: this.#message }
   }
 }
 const factories: Record<string, () => HttpHandlers<typeof contract>> = {
   prototype上のmethod: () => new HttpController(),
   非列挙のmethod: () =>
     Object.defineProperty(
-      { echo: (context: HttpContext) => context.response.ok({ body: '応答' }) },
+      {
+        echo: (_context: HttpContext) => ({
+          schema: contract.echo.ok,
+          body: '応答',
+        }),
+      },
       'echo',
       { enumerable: false },
     ),
   契約外のプロパティ: () => ({
-    echo: (context) => context.response.ok({ body: '応答' }),
+    echo: () => ({ schema: contract.echo.ok, body: '応答' }),
     metadata: '設定',
     get unrelated() {
       throw new Error('契約外の参照')
@@ -51,20 +58,44 @@ const factories: Record<string, () => HttpHandlers<typeof contract>> = {
 }
 
 describe('protocolのmethod契約', () => {
+  it('継承で隠れたメソッドを数えず、クラスのコンストラクタをhandlerに使わない', () => {
+    class Base {
+      helper() {
+        return '継承元'
+      }
+    }
+    const instance = Object.defineProperty(new Base(), 'helper', {
+      value: '設定',
+    })
+    expect(() => assertDeclaredExecutionMethods(instance, [])).not.toThrow()
+    expect(resolveExecutionMethod(instance, 'constructor')).toBeUndefined()
+    const handlers = {
+      constructor() {
+        return '明示した応答'
+      },
+    }
+    expect(() => assertDeclaredExecutionMethods(handlers, [])).toThrow(
+      'constructor',
+    )
+    expect(resolveExecutionMethod(handlers, 'constructor')?.()).toBe(
+      '明示した応答',
+    )
+  })
+
   it.each(Object.entries(factories))(
     'HTTPは%sを持つhandlerを利用できる',
     async (_, factory) => {
-      await using application = await bootstrapApplication({
-        application: defineApplication({
+      await using app = await bootstrapApplication({
+        application: application({
           modules: [
-            defineModule({
+            module({
               executions: [http.implementation({ contract, factory })],
             }),
           ],
         }),
         capabilities: [bindHttpServer({ runtime: 'test' })],
       })
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/echo'),
       )
       expect(response.status).toBe(200)
@@ -86,10 +117,10 @@ describe('protocolのmethod契約', () => {
     const closed = new Promise<WebSocketCloseInfo>((resolve) => {
       finish = resolve
     })
-    await using application = await bootstrapApplication({
-      application: defineApplication({
+    await using app = await bootstrapApplication({
+      application: application({
         modules: [
-          defineModule({
+          module({
             executions: [
               websocket.implementation({
                 contract: wsContract,
@@ -122,16 +153,17 @@ describe('protocolのmethod契約', () => {
         }),
       ],
     })
-    await application.websocket.upgrade(new Request('http://fixture.test/ws'))
+    await app.websocket.upgrade(new Request('http://fixture.test/ws'))
     await expect(closed).resolves.toMatchObject({ code: 1000, reason: '応答' })
   })
 
-  const tool = mcp.tool({
-    name: 'echo',
-    description: '確認',
-    scopes: [],
-    input: z.object({}),
-    output: z.object({ text: z.string(), count: z.number() }),
+  const tool = mcp.contract({
+    echo: {
+      description: '確認',
+      scopes: [],
+      input: z.object({}),
+      output: z.object({ text: z.string(), count: z.number() }),
+    },
   })
   class OAuth implements McpOAuthRuntime {
     readonly publicOrigin = 'https://fixture.test'
@@ -156,7 +188,7 @@ describe('protocolのmethod契約', () => {
       return { text: '応答', count: ++this.#count }
     }
   }
-  class Runtime implements McpRuntime<readonly [typeof tool], object> {
+  class Runtime implements McpRuntime<typeof tool, object> {
     readonly oauth = new OAuth()
     readonly tools = new Tools()
     #state = {}
@@ -164,10 +196,7 @@ describe('protocolのmethod契約', () => {
       return this.#state
     }
   }
-  const toolFactories: Record<
-    string,
-    () => McpRuntime<readonly [typeof tool], object>
-  > = {
+  const toolFactories: Record<string, () => McpRuntime<typeof tool, object>> = {
     prototype上のmethod: () => new Runtime(),
     非列挙のmethod: () => ({
       oauth: new OAuth(),
@@ -199,16 +228,16 @@ describe('protocolのmethod契約', () => {
         route: http.contract({
           endpoint: { raw: true, method: '*', path: '/mcp' },
         }).routes.endpoint,
-        tools: [tool],
+        contract: tool,
         factory,
       })
-      await using application = await bootstrapApplication({
-        application: defineApplication({
-          modules: [defineModule({ executions: [endpoint] })],
+      await using app = await bootstrapApplication({
+        application: application({
+          modules: [module({ executions: [endpoint] })],
         }),
         capabilities: [bindHttpServer({ runtime: 'test' })],
       })
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('https://fixture.test/mcp', {
           method: 'POST',
           headers: {

@@ -11,48 +11,47 @@ import { type HttpContractRawRoute } from '@loutrejs/loutre/http'
 
 export type Schema = StandardSchemaV1 & StandardJSONSchemaV1
 
-export interface McpToolOptions<
-  TName extends string,
-  TInput extends Schema,
-  TOutput extends Schema,
-> {
-  readonly name: TName
+export interface McpToolOptions {
   readonly description: string
   readonly scopes: readonly string[]
-  readonly input: TInput
-  readonly output: TOutput
+  readonly input: Schema
+  readonly output: Schema
 }
 
-export interface McpToolDefinition<
-  TName extends string = string,
-  TInput extends Schema = Schema,
-  TOutput extends Schema = Schema,
-> extends McpToolOptions<TName, TInput, TOutput> {}
+export interface McpToolDefinition extends McpToolOptions {
+  readonly name: string
+}
+
+export type McpTools = Readonly<Record<string, McpToolOptions>>
+
+export const mcpContractBrand: unique symbol = Symbol.for('loutre.mcp-contract')
+
+export interface McpContract<TTools extends McpTools = McpTools> {
+  readonly kind: 'mcp-contract'
+  readonly [mcpContractBrand]: true
+  readonly tools: TTools
+}
 
 export type McpToolHandlers<
-  TTools extends readonly McpToolDefinition[],
+  TContract extends McpContract,
   TContext extends object,
 > = {
-  readonly [TName in TTools[number]['name']]: (
-    input: SchemaOutput<
-      Extract<TTools[number], { readonly name: TName }>['input']
-    >,
+  readonly [K in keyof TContract['tools']]: (
+    input: SchemaOutput<TContract['tools'][K]['input']>,
     context: TContext,
   ) =>
-    | SchemaInput<Extract<TTools[number], { readonly name: TName }>['output']>
-    | Promise<
-        SchemaInput<Extract<TTools[number], { readonly name: TName }>['output']>
-      >
+    | SchemaInput<TContract['tools'][K]['output']>
+    | Promise<SchemaInput<TContract['tools'][K]['output']>>
 }
 
 export interface McpRuntime<
-  TTools extends readonly McpToolDefinition[] = readonly McpToolDefinition[],
+  TContract extends McpContract = McpContract,
   TContext extends object = object,
   TState extends object = object,
 > {
   readonly oauth: McpOAuthRuntime
   context(input: McpContextInput<TState>): TContext | Promise<TContext>
-  readonly tools: McpToolHandlers<TTools, NoInfer<TContext>>
+  readonly tools: McpToolHandlers<TContract, NoInfer<TContext>>
 }
 
 export interface ProtocolRuntime {
@@ -71,16 +70,17 @@ type RouteState<TRoute> = TRoute extends {
 
 export interface McpImplementationOptions<
   TRoute extends HttpContractRawRoute = HttpContractRawRoute,
-  TTools extends readonly McpToolDefinition[] = readonly McpToolDefinition[],
+  TContract extends McpContract = McpContract,
   TContext extends object = object,
 > {
   readonly name: string
   readonly version: string
   readonly route: TRoute
-  readonly tools: TTools
+  readonly contract: TContract
+  readonly tools?: never
   readonly oauth?: McpOAuthOptions
   readonly factory: () => McpRuntime<
-    NoInfer<TTools>,
+    NoInfer<TContract>,
     TContext,
     RouteState<TRoute>
   >

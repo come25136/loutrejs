@@ -1,8 +1,5 @@
-import { defineError } from '@loutrejs/loutre'
+import { domainError } from '@loutrejs/loutre'
 import {
-  basicAuth,
-  cors,
-  createHttpClient,
   http,
   type BasicAuthContext,
   type BasicAuthDefinition,
@@ -11,8 +8,6 @@ import {
   type BearerAuthDefinition,
   type BearerAuthUnauthorized,
   type CorsLayerDescriptor,
-  type HttpClient,
-  type HttpClientTransport,
 } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -68,69 +63,25 @@ const contract = http.contract({
   },
 })
 
-declare const transport: HttpClientTransport
-const client = createHttpClient(contract, transport)
-const compatible: HttpClient<typeof contract> = client
-void compatible
-
-client.get({
-  params: { id: '42' },
-  query: { includePosts: true },
-})
-client.create({
-  headers: { 'content-type': 'application/json' },
-  body: { name: 'Ada' },
-})
-client.health()
-client.events()
-
-// @ts-expect-error path parameterは必須
-client.get({ query: {} })
-// @ts-expect-error bodyを宣言したrouteではbodyが必須
-client.create({ headers: { 'content-type': 'application/json' } })
-client.create({
-  headers: {
-    // @ts-expect-error Content-TypeはContract schemaに従う
-    'content-type': 'text/plain',
-  },
-  body: { name: 'Ada' },
-})
-// @ts-expect-error requestを持たないrouteは引数を受け取らない
-client.health({})
-
-type GetResult = Awaited<ReturnType<typeof client.get>>
-declare const result: GetResult
-if (result.status === 200) {
-  const id: string = result.body.id
-  void id
-} else {
-  const status: 404 = result.status
-  const message: string = result.body.message
-  void [status, message]
-}
-
-type EventResult = Awaited<ReturnType<typeof client.events>>
-declare const events: EventResult
-const stream: AsyncIterable<{ sequence: number }> = events.body
-void stream
-
 http.implementation({
   contract,
   factory: () => ({
-    get: (ctx) => ctx.response.ok({ body: { id: '1', name: 'Loutre' } }),
-    create: (ctx) =>
-      ctx.response.created({ body: { id: '1', name: ctx.input.body.name } }),
-    health: (ctx) => ctx.response.ok({}),
-    events: (ctx) =>
-      ctx.response.ok({
-        body: (async function* () {
-          yield { sequence: 1 }
-        })(),
-      }),
+    get: () => ({ schema: contract.get.ok, body: { id: '1', name: 'Loutre' } }),
+    create: (ctx) => ({
+      schema: contract.create.created,
+      body: { id: '1', name: ctx.input.body.name },
+    }),
+    health: () => ({ schema: contract.health.ok }),
+    events: () => ({
+      schema: contract.events.ok,
+      body: (async function* () {
+        yield { sequence: 1 }
+      })(),
+    }),
   }),
 })
 
-const DomainFailure = defineError({
+const DomainFailure = domainError({
   code: 'DOMAIN_FAILURE',
   data: z.object({ message: z.string() }),
 })
@@ -175,7 +126,7 @@ const streamWithoutBody = {
 // @ts-expect-error server-stream responseはitem body schemaが必須
 http.contract(streamWithoutBody)
 
-const corsLayer: CorsLayerDescriptor = cors()
+const corsLayer: CorsLayerDescriptor = http.cors()
 void corsLayer
 
 type AuthState = { readonly currentUser: { readonly id: string } }
@@ -197,7 +148,7 @@ const basicDefinition: BasicAuthDefinition<
     }),
   }),
 }
-const basic = basicAuth(basicDefinition)
+const basic = http.basicAuth(basicDefinition)
 void basic
 
 declare const basicContext: BasicAuthContext

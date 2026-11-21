@@ -1,6 +1,7 @@
 import { type EndpointDefinition } from './compiled.js'
 import {
   type ExecutionDefinition,
+  type DeclaredExecutionMethods,
   type ExecutionGroup,
   defineExecution,
   inheritSourceLocation,
@@ -15,8 +16,11 @@ import {
   http,
 } from '@loutrejs/loutre/http'
 import {
+  mcpContractBrand,
   type McpImplementationOptions,
-  type McpToolDefinition,
+  type McpTools,
+  type McpToolOptions,
+  type McpContract,
   type ProtocolRuntime,
 } from './contract.js'
 import { getOAuthProtectedResourceMetadataUrl } from '@modelcontextprotocol/server'
@@ -32,12 +36,61 @@ export interface McpImplementation extends ExecutionGroup<
   ]
 > {}
 
+export function defineMcpContract<const TTools extends McpTools>(
+  tools: TTools &
+    Record<Extract<keyof TTools, symbol>, never> & {
+      [K in keyof TTools]: Record<
+        Exclude<keyof TTools[K], keyof McpToolOptions>,
+        never
+      >
+    },
+): McpContract<{
+  readonly [K in keyof TTools]: Readonly<Omit<TTools[K], 'scopes'>> & {
+    readonly scopes: Readonly<TTools[K]['scopes']>
+  }
+}>
+export function defineMcpContract(tools: McpTools): McpContract {
+  if (Object.getOwnPropertySymbols(tools).length)
+    throw new TypeError('MCP Tool名には文字列を指定してください。')
+  const contract = {
+    kind: 'mcp-contract' as const,
+    [mcpContractBrand]: true as const,
+    tools: Object.freeze(
+      Object.fromEntries(
+        Object.entries(tools).map(([name, tool]) => {
+          if ('name' in tool)
+            throw new TypeError(
+              'MCP Tool名はContractのキーで指定してください。',
+            )
+          return [
+            name,
+            Object.freeze({ ...tool, scopes: Object.freeze([...tool.scopes]) }),
+          ]
+        }),
+      ),
+    ),
+  }
+  Object.defineProperty(contract, mcpContractBrand, { enumerable: false })
+  return Object.freeze(contract)
+}
+
 export function defineMcpImplementation<
   const TRoute extends HttpContractRawRoute,
-  const TTools extends readonly McpToolDefinition[],
+  const TContract extends McpContract,
   TContext extends object,
+  const THandlers extends object,
 >(
-  options: McpImplementationOptions<TRoute, TTools, TContext>,
+  options: Omit<
+    McpImplementationOptions<TRoute, TContract, TContext>,
+    'factory'
+  > & {
+    readonly factory: () => ReturnType<
+      McpImplementationOptions<TRoute, NoInfer<TContract>, TContext>['factory']
+    > & {
+      readonly tools: THandlers &
+        NoInfer<DeclaredExecutionMethods<THandlers, TContract['tools']>>
+    }
+  },
 ): McpImplementation
 
 export function defineMcpImplementation(
@@ -45,7 +98,16 @@ export function defineMcpImplementation(
     readonly factory: () => ProtocolRuntime
   },
 ): ExecutionGroup {
-  const { route, name, version, tools, factory } = options
+  const { route, name, version, contract, factory } = options
+  if (
+    !contract ||
+    !Object.hasOwn(contract, mcpContractBrand) ||
+    contract[mcpContractBrand] !== true ||
+    'tools' in options
+  )
+    throw new TypeError(
+      'MCP endpointのToolはmcp.contract()で宣言してください。',
+    )
   if (typeof factory !== 'function')
     throw new TypeError('MCP endpointにはfactoryを指定してください。')
   if (!isHttpRawContractRoute(route) || route.method !== '*')
@@ -65,7 +127,11 @@ export function defineMcpImplementation(
     name,
     version,
     path: route.path,
-    tools: Object.freeze([...tools]),
+    tools: Object.freeze(
+      Object.entries(contract.tools).map(([toolName, tool]) =>
+        Object.freeze({ ...tool, name: toolName }),
+      ),
+    ),
     oauth: Object.freeze({
       requiredScopes: Object.freeze([...(options.oauth?.requiredScopes ?? [])]),
       allowedOrigins: Object.freeze([...(options.oauth?.allowedOrigins ?? [])]),

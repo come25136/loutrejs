@@ -1,4 +1,4 @@
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 import { checkRuntimeSupport } from '@loutrejs/loutre/runtime'
 import { http } from '@loutrejs/loutre/http'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
@@ -13,11 +13,11 @@ import { EventsHttpModule } from '../integrations/streaming/src/index.js'
 import { silentLoggingModule } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>
-  defineApplication({
+  application({
     modules: [silentLoggingModule, UsersModule()],
   })
 const eventsDefinition = () =>
-  defineApplication({
+  application({
     modules: [silentLoggingModule, EventsHttpModule()],
   })
 
@@ -135,12 +135,12 @@ describe('Runtime conformance harness', () => {
     const implementation = http.implementation({
       contract,
       factory: () => ({
-        events: (context) => context.response.ok({ body: source }),
+        events: () => ({ schema: contract.events.ok, body: source }),
       }),
     })
-    const Module = defineModule(() => ({ executions: [implementation] }))
+    const Module = module(() => ({ executions: [implementation] }))
     const handler = awsLambdaRuntime.bind({
-      application: defineApplication({ modules: [Module()] }),
+      application: application({ modules: [Module()] }),
       response: 'streaming',
     })
 
@@ -181,11 +181,11 @@ describe('Runtime conformance harness', () => {
             context.response.ok({ message: `Hello, ${context.input.name}` }),
         }),
       })
-      const Module = defineModule(() => ({ executions: [handler] }))
+      const Module = module(() => ({ executions: [handler] }))
       let onMessage: ((event: { readonly data: unknown }) => void) | undefined
       const posted: unknown[] = []
       const attachment = electronRuntime.attach({
-        application: defineApplication({ modules: [Module()] }),
+        application: application({ modules: [Module()] }),
         port: {
           postMessage: (value) => posted.push(value),
           on: (_type, listener) => {

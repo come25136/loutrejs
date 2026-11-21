@@ -1,15 +1,10 @@
-import {
-  defineApplication,
-  defineModule,
-  provide,
-  token,
-} from '@loutrejs/loutre'
+import { application, module, provide, token } from '@loutrejs/loutre'
 
 const VALUE = token<string>('provider`name')
 const provider = provide(VALUE).useValue('ok')
-const Module = defineModule(() => ({
+const Module = module(() => ({
   name: 'Backtick`Module',
   providers: [provider],
 }))
 
-export default defineApplication({ modules: [Module()] })
+export default application({ modules: [Module()] })

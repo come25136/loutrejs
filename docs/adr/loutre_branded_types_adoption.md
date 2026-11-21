@@ -54,7 +54,6 @@ Capabilityの文字列ID、symbol identity、Modelに投影したNode IDは、�
 | CORS policy normalize             | `CorsOriginValue`、`HttpHeaderName`、`DurationSeconds`                                                                   | Originの完全一致key、methodとheader名、秒とミリ秒の混同。[cors-internal.ts](../../packages/loutre/src/http/cors-internal.ts)                                                                                  |
 | Authentication header decode      | `BearerCredential`、decode済みの`BasicAuthCredentials`                                                                   | Authorization header全体と抽出後のcredentialの混同。認証成功を表す型にはしない。[auth.ts](../../packages/loutre/src/http/auth.ts)                                                                             |
 | OpenAPI materialization           | `OpenApiOperationId`、`OpenApiSchemaName`、`JsonSchemaReference`、内部のschema比較key                                    | procedure名、schema名、`$ref`、重複判定keyの混同。[openapi.ts](../../packages/loutre/src/http/openapi.ts)                                                                                                     |
-| HTTP client URL組み立て           | `HttpBaseUrl`、`RequestPathname`                                                                                         | base URLとpathの混同。[client.ts](../../packages/loutre/src/http/client.ts)                                                                                                                                   |
 | WebSocket session / route compile | `WebSocketSessionId`、`WebSocketProcedureName`、`NegotiatedSubprotocol`、`ObservedCloseCode`。pathの型はHTTPのものを共有 | session IDとoperation IDの混同。重複判定は`HttpNormalizedPath`を使う。driverから受け取る値と送信要求を区別する。[WebSocket Extension](../../packages/loutre/src/websocket/extension.ts)                       |
 | MessagePort receive / dispatch    | `MessagePortRequestId`、`MessagePortProcedureName`                                                                       | envelopeの相関IDと呼び出し先の混同。[transport.ts](../../packages/loutre/src/message-port/transport.ts)、[Extension](../../packages/loutre/src/message-port/extension.ts)                                     |
 
@@ -201,15 +200,17 @@ Websiteは独立したwire decoderと型を所有する現在の構成を維持�
 
 ## 適用しない値と理由
 
-| 対象                                                                  | 理由                                                                                                                                                                                                                        |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 説明文、表示label、log message、stack、任意の本文                     | 特有の生成・検証・lookup契約がなく、brandを付けても取り違えを防ぐ利用先がない                                                                                                                                               |
-| HTTP / GraphQLの業務payload全般                                       | 利用者のSchemaが所有する。Framework独自のbrandで置き換えず、既存のbrandを伝播する                                                                                                                                           |
-| username・password・Bearer tokenを一律に「認証済み」にする型          | headerの構文decodeは認証成功ではない。現在のauthenticate callbackとstate contributionで成功を表す                                                                                                                           |
-| 外部APIの`Request`、`Response`、GraphQL AST、WebSocket driver型全体   | 外部libraryの契約を維持し、値を内部へ取り込む箇所で型を確定する                                                                                                                                                             |
-| DIの対象classのinstance、一般的な構造データ                           | 同じshapeの値を許す設計を維持する。factory出力のopaque化とは責務が異なる                                                                                                                                                    |
-| protocol version、Node kind、phase、response variant、CLIの固定option | 既存のliteral unionや対応する`keyof`の方が狭く、対応関係も表現できる                                                                                                                                                        |
-| 診断のmessageや自由形式のpathを、コード表記だけで「検証済み」にする型 | `diagnostic(code, message, path)`には任意のExtension由来の値も入る。公開入口の引数の取り違えは名前付きobjectへの変更で扱え、未検証の文字列へ三種類のcastを要求する設計は採らない。Model IDを渡す場合は既存のbrandを消さない |
+| 対象                                                                            | 理由                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 説明文、表示label、log message、stack、任意の本文                               | 特有の生成・検証・lookup契約がなく、brandを付けても取り違えを防ぐ利用先がない                                                                                                                                               |
+| HTTP / GraphQLの業務payload全般                                                 | 利用者のSchemaが所有する。Framework独自のbrandで置き換えず、既存のbrandを伝播する                                                                                                                                           |
+| username・password・Bearer tokenを一律に「認証済み」にする型                    | headerの構文decodeは認証成功ではない。現在のauthenticate callbackとstate contributionで成功を表す                                                                                                                           |
+| 外部APIの`Request`、`Response`、GraphQL AST、WebSocket driver型全体             | 外部libraryの契約を維持し、値を内部へ取り込む箇所で型を確定する                                                                                                                                                             |
+| DIの対象classのinstance、一般的な構造データ                                     | 同じshapeの値を許す設計を維持する。factory出力のopaque化とは責務が異なる                                                                                                                                                    |
+| protocol version、Node kind、phase、Contractのresponse宣言キー、CLIの固定option | 既存のliteral unionや対応する`keyof`の方が狭く、対応関係も表現できる                                                                                                                                                        |
+| 診断のmessageや自由形式のpathを、コード表記だけで「検証済み」にする型           | `diagnostic(code, message, path)`には任意のExtension由来の値も入る。公開入口の引数の取り違えは名前付きobjectへの変更で扱え、未検証の文字列へ三種類のcastを要求する設計は採らない。Model IDを渡す場合は既存のbrandを消さない |
+
+HTTP Handlerの`{ schema: UsersContract.get.ok, body }`が持つresponse referenceは、単なる文字列のContractキーと異なる。後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)では、別Operation/別Contractの誤参照を防ぐ安定identityと型の相関を検証する。「固定optionならliteral unionを優先する」原則をresponse referenceの同一性検証に流用しない。
 
 ## 実装の分割と完了条件
 
@@ -235,7 +236,7 @@ HTTP handlerのdirect replayでは、入力の`params`がobjectであること�
 ## 検証
 
 - 型テストでは異なるdomainのID / symbol、秒とミリ秒、epochとmonotonic、UTF-8位置とUTF-16 indexを交換できないことを確認する。同じIDを上位層へ渡したときに型が消えないことも確認する。
-- factoryの正規出力と宣言用literalを区別するテストを追加する。Schema出力、HTTP path param、response variant、Task入出力、Queue名、GraphQL generated型の推論を維持する。
+- factoryの正規出力と宣言用literalを区別するテストを追加する。Schema出力、HTTP path param、response key（移行後はresponse reference）、Task入出力、Queue名、GraphQL generated型の推論を維持する。
 - Runtime testではdecode / 正規化・既存の値域、ID衝突とbundle境界、Replay / cleanup、cron validation、routing競合、GraphQL batchingの等価性を確認する。brandそのものをRuntimeで検査するテストは作らない。
 - Source instrumentationはBOM、絵文字・日本語、CRLF、Unicode改行を含め、SWC位置から挿入とsource locationまでの対応を確認する。
 - Websiteは誤ったoptional fieldを含むwire message、deep link、Graph node / flow IDの変換、Timelineの時間計算を確認する。

@@ -29,7 +29,7 @@ export interface ErrorDefinition<
   is(error: unknown): error is DomainError<SchemaOutput<TSchema>>
 }
 
-export function defineError<
+export function domainError<
   const TCode extends string,
   TSchema extends StandardSchemaV1,
 >(definition: {
