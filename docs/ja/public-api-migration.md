@@ -10,7 +10,6 @@ const Users = http.contract({
     method: 'GET',
     path: '/user',
     responses: {
-      summary: { status: 200, body: z.strictObject({ id: z.string() }) },
       detail: {
         status: 200,
         body: z.object({ id: z.string(), name: z.string() }),
@@ -30,7 +29,7 @@ const UsersHttp = http.implementation({
 ```
 
 - `ctx.response.ok({ body, headers })` を `{ schema: Contract.operation.ok, body, headers }` に変更します。単一応答にも参照が必要です。204は `{ schema: Contract.remove.noContent }`、SSEは `body` に `AsyncIterable` を渡します。
-- 同じ status の候補が複数あるとき、型付きクライアントは `responses` の列挙順で最初に検証が成功した結果を返します。たとえば要約用の `z.object({ id: z.string() })` は詳細応答も受理し、追加フィールドを取り除きます。クライアントで両者を区別する場合は、上の例のように要約用のスキーマを `z.strictObject` にするなど、Contract 側で区別できる形を定義してください。
+- クライアントで区別する必要がある応答には、Contract 作者が公開する本文やヘッダーで区別できるスキーマを定義してください。
 - 継承した応答には最終的なContractのoperationからアクセスします。子Contractと親Contractの参照はそれぞれのContractに属します。`kind` と `routes` は予約名なので、該当するoperation名と実装メソッド名を一緒に変更してください。
 - 業務エラーは `domainError` で定義してthrowし、Contractの `http.error` に対応付けます。Middlewareの認証失敗は従来の `{ response, body }`、raw/delegateはFetchの `Response` を使います。
 - クラスを使う場合、メソッド引数に `Parameters<HttpHandlers<typeof Users>['get']>[0]` を指定できます。別に宣言したクラスへは、Factory内のオブジェクトリテラルに効く文脈型推論が届かないためです。

@@ -62,48 +62,6 @@ const UsersHttp = http.implementation({
 
 Handlerは短縮参照を使う。既存の `routes` プロパティはGraphQL/MCPのraw route参照等で使われるため、単純に削除したり意味を変えたりしない。
 
-### 同じstatusに複数のSchema
-
-サーバーでは Handler が応答参照を選ぶ。選択した名前は HTTP 応答に付加しない。クライアントは同じ status の候補を `responses` の列挙順に検証し、最初に一致した結果を返す。公開上区別したい応答に、受理する値が重ならないスキーマを定義するのは Contract 作者の責任である。
-
-```ts
-const UsersContract = http.contract({
-  get: {
-    method: 'GET',
-    path: '/users/{id}',
-    request: {
-      params: { id: z.string() },
-      query: z.object({ detail: z.boolean().optional() }),
-    },
-    responses: {
-      ok: { status: 200, body: UserSummarySchema },
-      detailed: { status: 200, body: DetailedUserSchema },
-    },
-  },
-})
-
-const UsersHttp = http.implementation({
-  contract: UsersContract,
-  factory: (users = inject(UserRepository)) => ({
-    async get(ctx) {
-      const user = await users.find(ctx.input.params.id)
-      if (ctx.input.query.detail) {
-        return {
-          schema: UsersContract.get.detailed,
-          body: users.toDetailed(user),
-        }
-      }
-      return {
-        schema: UsersContract.get.ok,
-        body: users.toSummary(user),
-      }
-    },
-  }),
-})
-```
-
-`ok` と `detailed` はどちらも HTTP 200 を返す。サーバーは選ばれた参照のスキーマだけで検証するため、要約用スキーマの設定にかかわらず、詳細応答のフィールドをそのまま送信できる。
-
 ### Error mapping、SSE、Headers、Bodyless
 
 DomainErrorは従来どおり `throw` し、Contractの `error: http.error(UserNotFound)` がHTTPレスポンスへの変換を所有する。`http.error()` 自体はthrowではなく変換ルールの宣言。error-mapped responseは通常の成功Handler return候補に含めない。未知の例外は既存の500経路へ送る。
@@ -150,7 +108,6 @@ SSEのbodyは対応する `AsyncIterable<SchemaOutput<...>>`。要素単位のSc
 | 候補                                                        | 見送る理由                                                            |
 | ----------------------------------------------------------- | --------------------------------------------------------------------- |
 | `return body`                                               | 返却Schema/statusを一意に指定できず、明示Result方針と異なる           |
-| `return { status: 200, body }`                              | 同じstatusの複数Schemaを区別できない                                  |
 | `return { response: 'ok', body }` / `{kind:'ok',body}`      | 文字列による間接指定。契約定義の参照より冗長・弱い                    |
 | `return { schema: Contract.routes.get.responses.ok, body }` | 参照パスが長く、既存helperよりDXが悪い                                |
 | `return { ok: body }`                                       | headers等のenvelope表現と、複数キー検出のための追加規約が必要         |
