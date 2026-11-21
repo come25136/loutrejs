@@ -1,8 +1,4 @@
-import {
-  http,
-  createHttpClient,
-  type HttpContractRawRoute,
-} from '@loutrejs/loutre/http'
+import { http, type HttpContractRawRoute } from '@loutrejs/loutre/http'
 const layer = http.middleware<{ tenant: string }>({
   name: 'Tenant',
   factory: () => async (_input, next) => next({ tenant: 'もみじ' }),
@@ -43,13 +39,6 @@ http.raw({
     return new Response(tenant)
   },
 })
-const client = createHttpClient(api, async () => ({
-  status: 204,
-  body: undefined,
-}))
-client.regular()
-// @ts-expect-error rawルートは型付きHTTP clientから呼び出さない
-client.delegated()
 // @ts-expect-error rawを明示せずresponsesを省略しない
 http.contract({ invalid: { method: 'GET', path: '/invalid' } })
 http.contract({

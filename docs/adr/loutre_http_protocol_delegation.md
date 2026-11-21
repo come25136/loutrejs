@@ -74,7 +74,7 @@ const Profile = graphql.implementation({
 })
 ```
 
-raw: trueはHTTP request/responseの処理を委任する明示的な印である。responsesの書き忘れをrawとして受け付けない。rawルートはHTTP response variantとrequest body schemaを持たず、HTTP implementationのhandler一覧、型付きHTTP client、OpenAPIのoperationから除外する。単独のraw処理は既存のhttp.rawへ同じルートを渡して実装できる。raw: trueの参照はhttp.contractで正規化したものに限定し、未正規化のpathやmiddlewareをGraphQLへ直接渡す経路を設けない。
+raw: trueはHTTP request/responseの処理を委任する明示的な印である。responsesの書き忘れをrawとして受け付けない。rawルートはHTTP response variantとrequest body schemaを持たず、HTTP implementationのhandler一覧とOpenAPIのoperationから除外する。単独のraw処理は既存のhttp.rawへ同じルートを渡して実装できる。raw: trueの参照はhttp.contractで正規化したものに限定し、未正規化のpathやmiddlewareをGraphQLへ直接渡す経路を設けない。
 
 branchのpathとmiddlewareはrawルートにも継承する。branchで宣言したresponse variantは通常HTTP用であり、rawルートへ継承する組合せは型と実行時の両方で拒否する。GraphQLのHTTP入出力はmanifestとprotocolが所有するためである。
 

@@ -29,7 +29,7 @@ const UsersHttp = http.implementation({
 ```
 
 - `ctx.response.ok({ body, headers })` を `{ schema: Contract.operation.ok, body, headers }` に変更します。単一応答にも参照が必要です。204は `{ schema: Contract.remove.noContent }`、SSEは `body` に `AsyncIterable` を渡します。
-- クライアントで区別する必要がある応答には、Contract 作者が公開する本文やヘッダーで区別できるスキーマを定義してください。
+- `createHttpClient`、`fetchHttpTransport`、`HttpClientResponseError`、`httpBaseUrl` と関連する型を削除しました。HTTP の呼び出しには標準の `fetch()` などを使えます。サーバーのテストでは `app.http.fetch(new Request(url))` から Handler を実行できます。
 - 継承した応答には最終的なContractのoperationからアクセスします。子Contractと親Contractの参照はそれぞれのContractに属します。`kind` と `routes` は予約名なので、該当するoperation名と実装メソッド名を一緒に変更してください。
 - 業務エラーは `domainError` で定義してthrowし、Contractの `http.error` に対応付けます。Middlewareの認証失敗は従来の `{ response, body }`、raw/delegateはFetchの `Response` を使います。
 - クラスを使う場合、メソッド引数に `Parameters<HttpHandlers<typeof Users>['get']>[0]` を指定できます。別に宣言したクラスへは、Factory内のオブジェクトリテラルに効く文脈型推論が届かないためです。

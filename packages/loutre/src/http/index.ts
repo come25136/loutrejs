@@ -1,17 +1,3 @@
-export {
-  createHttpClient,
-  fetchHttpTransport,
-  HttpClientResponseError,
-} from './client.js'
-export type {
-  FetchHttpTransportOptions,
-  HttpClient,
-  HttpClientRequest,
-  HttpClientResponse,
-  HttpClientTransport,
-  HttpClientTransportRequest,
-  HttpClientTransportResponse,
-} from './client.js'
 export { isWebSocketUpgrade } from './websocket-upgrade.js'
 export type { CorsLayerDescriptor, CorsOptions, CorsOrigin } from './cors.js'
 export type {

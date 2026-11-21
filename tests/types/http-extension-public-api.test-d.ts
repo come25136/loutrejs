@@ -1,6 +1,5 @@
 import { domainError } from '@loutrejs/loutre'
 import {
-  createHttpClient,
   http,
   type BasicAuthContext,
   type BasicAuthDefinition,
@@ -9,8 +8,6 @@ import {
   type BearerAuthDefinition,
   type BearerAuthUnauthorized,
   type CorsLayerDescriptor,
-  type HttpClient,
-  type HttpClientTransport,
 } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -65,52 +62,6 @@ const contract = http.contract({
     },
   },
 })
-
-declare const transport: HttpClientTransport
-const client = createHttpClient(contract, transport)
-const compatible: HttpClient<typeof contract> = client
-void compatible
-
-client.get({
-  params: { id: '42' },
-  query: { includePosts: true },
-})
-client.create({
-  headers: { 'content-type': 'application/json' },
-  body: { name: 'Ada' },
-})
-client.health()
-client.events()
-
-// @ts-expect-error path parameterは必須
-client.get({ query: {} })
-// @ts-expect-error bodyを宣言したrouteではbodyが必須
-client.create({ headers: { 'content-type': 'application/json' } })
-client.create({
-  headers: {
-    // @ts-expect-error Content-TypeはContract schemaに従う
-    'content-type': 'text/plain',
-  },
-  body: { name: 'Ada' },
-})
-// @ts-expect-error requestを持たないrouteは引数を受け取らない
-client.health({})
-
-type GetResult = Awaited<ReturnType<typeof client.get>>
-declare const result: GetResult
-if (result.status === 200) {
-  const id: string = result.body.id
-  void id
-} else {
-  const status: 404 = result.status
-  const message: string = result.body.message
-  void [status, message]
-}
-
-type EventResult = Awaited<ReturnType<typeof client.events>>
-declare const events: EventResult
-const stream: AsyncIterable<{ sequence: number }> = events.body
-void stream
 
 http.implementation({
   contract,

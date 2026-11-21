@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { bootstrapApplication, application, module } from '@loutrejs/loutre'
 import {
   bindHttpServer,
-  createHttpClient,
   http,
   isHttpRawContractRoute,
   isHttpContract,
@@ -66,9 +65,6 @@ describe('HTTP Contractのrawルート', () => {
         },
       }),
     ).toThrow('http.contract()')
-    expect(() =>
-      createHttpClient(copy, async () => ({ status: 204, body: undefined })),
-    ).toThrow('http.contract()')
   })
 
   it('通常HTTPのimplementationとraw処理を同じContractから個別に配備する', async () => {
@@ -116,18 +112,13 @@ describe('HTTP Contractのrawルート', () => {
     }
   })
 
-  it('OpenAPIと型付きHTTP clientには通常HTTPのルートだけを出す', () => {
+  it('OpenAPIには通常HTTPのルートだけを出す', () => {
     const api = contract()
     expect(
       Object.keys(
         generateOpenApi(api, { info: { title: '試験', version: '1' } }).paths,
       ),
     ).toEqual(['/api/health'])
-    const client = createHttpClient(api, async () => ({
-      status: 204,
-      body: undefined,
-    }))
-    expect(Object.keys(client)).toEqual(['health'])
   })
 
   it('rawでないルートのresponsesの書き忘れを拒否する', () => {

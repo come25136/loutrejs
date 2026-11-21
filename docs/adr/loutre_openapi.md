@@ -65,7 +65,7 @@ request: {
 }
 ```
 
-旧`body: { contentType, schema }`形式は廃止する。`Content-Type`はwire上のheaderであり、typed client、runtime validation、body decode、OpenAPI projectionが同じheader宣言をsource of truthとして利用する。
+旧`body: { contentType, schema }`形式は廃止する。`Content-Type`はwire上のheaderであり、runtime validation、body decode、OpenAPI projectionが同じheader宣言をsource of truthとして利用する。
 
 bodyを宣言するrequestでは、`request.headers`のinput/output型がrequiredな`content-type: string`を持つ必要がある。`validate.body`は`validate.headers`より後に置く。runtimeはheader validation時に`Content-Type`から`charset`やmultipart `boundary`などのparameterを除いてmedia typeへ正規化し、その値をheader schemaへ渡す。header validation後に`validate.body`へ到達した時点で、実際のmedia typeに応じてbodyをdecodeしてbody schemaを検証する。
 
