@@ -5,6 +5,7 @@ import {
 } from '../contract.js'
 import {
   validateResponseHeaders,
+  appendHeaderToken,
   responseHeadersSchema,
   mergeResponseHeaders,
   responseHeadersDefaults,
@@ -20,16 +21,22 @@ import {
   createLeasedReadableStream,
 } from './stream.js'
 import { validateSchema } from '../../core/index.js'
+import type { CompiledHttpContractRoute } from '../compiled.js'
+import { responseVariantHeader } from '../identity.js'
 import { type FinalizedHttpResult } from './types.js'
 
 export async function finalizeHttpResult(
-  route: HttpExecutionRouteDefinition,
+  route: CompiledHttpContractRoute,
   result: HttpExecutionResult,
   signal: AbortSignal,
   completeExecution: () => void,
+  corsHeaders: Headers | undefined,
 ): Promise<FinalizedHttpResult> {
-  const response = route.responses[result.response]
-  if (!response) {
+  const response = route.definition.responses[result.response]
+  if (
+    !Object.hasOwn(route.definition.responses, result.response) ||
+    !response
+  ) {
     throw new Error(`LUTRE_HTTP_RESPONSE_UNDECLARED: ${result.response}`)
   }
   const responseHeaders = await validateResponseHeaders(
@@ -44,6 +51,22 @@ export async function finalizeHttpResult(
     headers,
     (result as HttpExecutionResultWithFrameworkHeaders)[httpFrameworkHeaders],
   )
+
+  if (corsHeaders)
+    applyFrameworkResponseHeaders(headers, Object.fromEntries(corsHeaders))
+  const variant = route.responseVariants[result.response]
+  if (variant !== undefined) {
+    if (headers.has(responseVariantHeader))
+      throw new TypeError(
+        `Reserved HTTP response header: ${responseVariantHeader}`,
+      )
+    headers.set(responseVariantHeader, variant)
+    appendHeaderToken(
+      headers,
+      'access-control-expose-headers',
+      responseVariantHeader,
+    )
+  }
 
   if (response.stream === 'server') {
     if (!response.body || !isAsyncIterable(result.body)) {

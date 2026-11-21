@@ -29,6 +29,8 @@ import {
 } from '../core/index.js'
 import {
   httpProcedureName,
+  encodeResponseVariant,
+  responseVariantHeader,
   normalizeHttpMethod,
   type HttpPathTemplate,
   type HttpResponseStatus,
@@ -40,6 +42,7 @@ import {
   type CompiledHttpRouteDefinition,
 } from './compiled.js'
 import {
+  responseHeadersDefaults,
   isStandardSchema,
   isResponseHeadersWithDefaults,
 } from './codecs/response.js'
@@ -117,9 +120,38 @@ export function compileHttpRoute(
       segments,
     ),
     definition,
+    responseVariants: compileResponseVariants(definition),
     middlewares: compileHttpMiddlewares(definition),
     ...(routeSource === undefined ? {} : { source: routeSource }),
   })
+}
+
+function compileResponseVariants(
+  route: CompiledHttpRouteDefinition,
+): Readonly<Record<string, string | undefined>> {
+  const entries = Object.entries(route.responses)
+  const seen = new Set<number>()
+  const shared = new Set<number>()
+  for (const [, { status }] of entries) {
+    if (seen.has(status)) shared.add(status)
+    seen.add(status)
+  }
+  return Object.freeze(
+    Object.fromEntries(
+      entries.map(([name, response]) => {
+        if (!shared.has(response.status)) return [name, undefined] as const
+        if (
+          Object.keys(responseHeadersDefaults(response.headers) ?? {}).some(
+            (key) => key.toLowerCase() === responseVariantHeader,
+          )
+        )
+          throw new TypeError(
+            `Reserved HTTP response header: ${responseVariantHeader}`,
+          )
+        return [name, encodeResponseVariant(name)] as const
+      }),
+    ),
+  )
 }
 
 function snapshotHttpRouteDefinition(

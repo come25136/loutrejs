@@ -1,5 +1,7 @@
 import {
   normalizeMediaType,
+  encodeResponseVariant,
+  responseVariantHeader,
   normalizeHttpMethod,
   httpBaseUrl,
   requestPathname,
@@ -18,9 +20,8 @@ import type {
   HttpExecutionResponseDefinition,
   HttpExecutionRouteDefinition,
   HttpHeaders,
-  HttpResponseHeadersDefinition,
-  HttpResponseHeadersWithDefaults,
 } from './contract.js'
+import { responseHeadersSchema } from './codecs/response.js'
 import { parseHttpPath, type PathParamNames } from './path.js'
 import { match } from 'ts-pattern'
 
@@ -171,7 +172,7 @@ export function createHttpClient<const TContract extends HttpContract>(
   const client: Record<
     string,
     (request?: Record<string, unknown>) => Promise<unknown>
-  > = {}
+  > = Object.create(null)
 
   for (const [procedureName, definition] of Object.entries(contract.routes)) {
     if (definition.raw === true) continue
@@ -222,8 +223,8 @@ async function decodeResponse(
   response: HttpClientTransportResponse,
 ): Promise<unknown> {
   const target = describeHttpTarget(definition, procedure)
-  const candidates = Object.values(definition.responses).filter(
-    (candidate) => candidate.status === response.status,
+  const candidates = Object.entries(definition.responses).filter(
+    ([, candidate]) => candidate.status === response.status,
   )
   if (candidates.length === 0) {
     throw new HttpClientResponseError(
@@ -236,11 +237,27 @@ async function decodeResponse(
   }
 
   let lastValidationError: SchemaValidationError | undefined
-  for (const candidate of candidates) {
+  let headers = response.headers ?? {}
+  let variant: string | readonly string[] | undefined
+  if (candidates.length > 1) {
+    const fields = Object.entries(headers)
+    variant = fields.find(
+      ([name]) => name.toLowerCase() === responseVariantHeader,
+    )?.[1]
+    if (variant !== undefined) {
+      headers = Object.fromEntries(
+        fields.filter(([name]) => name.toLowerCase() !== responseVariantHeader),
+      )
+    }
+  }
+  let decoded: { status: number; body: unknown; headers: unknown } | undefined
+  for (const [name, candidate] of candidates) {
+    if (variant !== undefined && variant !== encodeResponseVariant(name))
+      continue
     try {
       let body: unknown
       if (candidate.stream === 'server') {
-        if (!candidate.body) continue
+        if (!candidate.body || !isAsyncIterable(response.body)) continue
         body = validatedResponseStream(
           candidate.body,
           response.body,
@@ -255,16 +272,30 @@ async function decodeResponse(
         body = undefined
       }
       const headerSchema = responseHeadersSchema(candidate.headers)
-      const headers = headerSchema
-        ? await validateSchema(headerSchema, response.headers ?? {})
-        : (response.headers ?? {})
-      return Object.freeze({ status: response.status, body, headers })
+      const decodedHeaders = headerSchema
+        ? await validateSchema(headerSchema, headers)
+        : headers
+      if (decoded) {
+        throw new HttpClientResponseError(
+          response.status,
+          definition.method,
+          definition.path,
+          procedure,
+          `${target} returned an ambiguous response without the ${responseVariantHeader} header`,
+        )
+      }
+      decoded = Object.freeze({
+        status: response.status,
+        body,
+        headers: decodedHeaders,
+      })
     } catch (error) {
       if (!(error instanceof SchemaValidationError)) throw error
       lastValidationError = error
     }
   }
 
+  if (decoded) return decoded
   throw new HttpClientResponseError(
     response.status,
     definition.method,
@@ -275,47 +306,14 @@ async function decodeResponse(
   )
 }
 
-function responseHeadersSchema(
-  headers: HttpResponseHeadersDefinition | undefined,
-): StandardSchemaV1 | undefined {
-  return match(headers)
-    .when(isStandardSchema, (schema) => schema)
-    .when(isResponseHeadersWithDefaults, (definition) => definition.schema)
-    .otherwise(() => undefined)
-}
-
-function isStandardSchema(value: unknown): value is StandardSchemaV1 {
-  return typeof value === 'object' && value !== null && '~standard' in value
-}
-
-function isResponseHeadersWithDefaults(
-  value: unknown,
-): value is HttpResponseHeadersWithDefaults {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'schema' in value &&
-    isStandardSchema(value.schema)
-  )
-}
-
 function validatedResponseStream(
   schema: StandardSchemaV1,
-  value: unknown,
+  value: AsyncIterable<unknown>,
   procedure: string,
   definition: HttpExecutionRouteDefinition,
   status: number,
 ): AsyncIterable<unknown> {
   const target = describeHttpTarget(definition, procedure)
-  if (!isAsyncIterable(value)) {
-    throw new HttpClientResponseError(
-      status,
-      definition.method,
-      definition.path,
-      procedure,
-      `${target} returned a non-stream body for a server-stream response`,
-    )
-  }
   return {
     async *[Symbol.asyncIterator]() {
       try {

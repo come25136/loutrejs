@@ -104,7 +104,7 @@ const UsersContract = http.contract({
 - header schema は top-level `properties` を持つ object JSON Schema へ変換可能である必要があり、各 property を Parameter Object へ投影する
 - request bodyは`request.headers`の`content-type`有限集合を`requestBody.content`へ投影し、bodyのStandard JSON Schema input schemaを各media typeで共有する
 - unary response は `application/json` と Standard JSON Schema の output schema を使う
-- 同じ HTTP status を持つ複数の response variant は `oneOf` にまとめる
+- 同じ HTTP status を持つ複数の response variant は、重なる Schema も有効なため 同じ media type の中で `anyOf` にまとめる
 - server-stream response は `text/event-stream` とし、event payload を `itemSchema` で表現する
 - custom HTTP method は `additionalOperations` へ出力する
 
@@ -117,7 +117,6 @@ const UsersContract = http.contract({
 - Standard JSON Schema を実装していない schema
 - JSON Schema 変換の失敗
 - named header として表現できない request / response header schema
-- 同じ HTTP status に streaming と non-streaming の互換性がない variant が混在している場合
 - `operationId` の衝突
 
 したがって生成成功は、対応している OpenAPI surface の範囲内で、出力ドキュメントが Loutre HTTP Contract の忠実な projection であることを意味する。

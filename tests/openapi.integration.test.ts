@@ -202,7 +202,7 @@ describe('OpenAPI generation', () => {
     )
   })
 
-  it('uses querystring, header parameters, response oneOf and additionalOperations', () => {
+  it('uses querystring, header parameters, response anyOf and additionalOperations', () => {
     const contract = http.contract({
       copy: {
         method: 'COPY',
@@ -258,7 +258,10 @@ describe('OpenAPI generation', () => {
       ]),
     )
     expect(
-      operation?.responses['400'].content['application/json'].schema.oneOf,
+      operation?.responses['400'].headers['loutre-response'].schema.enum,
+    ).toEqual(['failedA', 'failedB'])
+    expect(
+      operation?.responses['400'].content['application/json'].schema.anyOf,
     ).toHaveLength(2)
   })
 

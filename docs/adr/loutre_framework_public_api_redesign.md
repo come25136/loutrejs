@@ -64,6 +64,8 @@ Handlerは短縮参照を使う。既存の `routes` プロパティはGraphQL/M
 
 ### 同じstatusに複数のSchema
 
+部分集合のSchemaも同じbodyを受理でき、宣言順で検証するとフィールドが失われる。statusを共有する応答には、選択した応答名を `Loutre-Response` ヘッダーで伝える。値は名前をJSON文字列にした内側をパーセントエンコードする。これにより別々に構築されたContractでも同じ参照を識別できる。
+
 ```ts
 const UsersContract = http.contract({
   get: {
