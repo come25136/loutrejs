@@ -2,6 +2,8 @@
 
 ステータス: Accepted
 
+HTTP Handlerの戻り値は後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)が移行先を定義する。ここで採用したGraphQL/MCP raw route委譲と公開URLの所有権は変更しない（Handler新APIは実装前）。
+
 ## 背景
 
 GraphQL endpointが独立してpathを持つと、通常HTTPとGraphQLの公開URL、middleware、階層が別の宣言へ分散する。ルートを一覧して変更・監査したい利用者は、HTTP Contractだけでは公開範囲を把握できない。
@@ -42,9 +44,12 @@ const Api = http.contract({
     middlewares: [httpAuthentication],
   },
 })
+// 通常HTTP Handlerは後続ADRの移行先記法（現行実装には未反映）。
 const Health = http.implementation({
   contract: Api,
-  factory: () => ({ health: (ctx) => ctx.response.ok({}) }),
+  factory: () => ({
+    health: () => ({ schema: Api.health.ok }),
+  }),
 })
 const Profile = graphql.implementation({
   name: 'Profile',

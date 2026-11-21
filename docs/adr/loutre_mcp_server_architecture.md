@@ -2,6 +2,8 @@
 
 ステータスはAccepted。
 
+このADRの`mcp.tool()` + `tools: []`は現行実装の仕様。後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)では`mcp.contract()`を未採用の変更候補として比較している。実装・採用されるまでは本ADRの宣言/APIが正本となる。Endpoint ownership、OAuth、Context、DIの決定は引き続き有効。
+
 ## 決定
 
 MCPはGraphQLと同じく、endpointのExecutionがruntimeとDIを所有する。単一のHTTP listenerに複数のMCP endpointを配備でき、各endpointのTool一覧、OAuth設定、共有状態、中断処理を分離する。HTTP Contractの公開ルートとOAuthメタデータの入口は、そのendpointへdelegateで接続する。

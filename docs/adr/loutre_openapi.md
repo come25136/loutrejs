@@ -2,26 +2,28 @@
 
 ステータス: Accepted
 
+関連: [Contract-first Tooling](./loutre_contract_first_tooling_architecture.md)、[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)
+
 ## 決定
 
 Loutre は、実行可能な HTTP Contract から OpenAPI 3.2.0 ドキュメントを生成する。
 
-どの HTTP Execution が実行可能かは canonical Application Model が決定する。一方、method、path、request schema、response schema、Content-Type、streaming interaction といった HTTP wire-level の情報は HTTP Extension が所有する compiled execution を source of truth とする。RuntimeやOpenAPI toolingが生のApplication Definitionを別経路で再解釈してはならない。実行時の schema object 自体は serializable な Graph IR には埋め込まない。
+**旧来の「compiled HTTP Executionのみ」「Application ModelのみがOpenAPIの入力」という制約は、[Contract-first Tooling ADR](./loutre_contract_first_tooling_architecture.md)により上書きされた。** HTTP wire-levelのmethod、path、request/response schema、Content-Type、streaming interactionの正本はcanonicalな`HttpContract`である。Application全体の実行可能性、Module、DI、Capabilityはcanonical Application Modelが所有する。どちらの経路も生のApplication Definitionを独自に再解釈しない。Runtime Schema objectはserializable Graph IRへ埋め込まない。
 
-公開APIは`@loutrejs/loutre/http/openapi`だけから提供する。
+公開APIは`@loutrejs/loutre/http/openapi`から提供し、`HttpContract`または`ApplicationModel`を受け付ける。
 
 ```ts
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 
-const document = generateOpenApi(application.model, {
-  info: {
-    title: 'Example API',
-    version: '1.0.0',
-  },
-})
+const options = {
+  info: { title: 'Example API', version: '1.0.0' },
+}
+
+const contractDocument = generateOpenApi(UsersContract, options)
+const applicationDocument = generateOpenApi(application.model, options)
 ```
 
-CLI からも同じ HTTP-owned projection を利用し、loadしたApplicationの`application.model`だけを渡す。CLI自身はHTTP/OpenAPI toolingへ依存してよいが、CoreからHTTPへの依存は作らない。
+CLIの`openapi --entry`もdefault exportが`HttpContract`または`ApplicationDefinition`のいずれかを受け付ける。他のApplication-awareコマンドまでContract単独に広げない。CLI自身はHTTP/OpenAPI toolingへ依存してよいが、CoreからHTTPへの依存は作らない。
 
 ```sh
 loutre openapi --entry src/application.ts
@@ -78,20 +80,22 @@ OpenAPI生成時は`request.headers`のStandard JSON Schema input projectionか�
 HTTP Contract は transport に関係するドキュメント metadata を宣言できる。
 
 ```ts
-http({
-  method: 'GET',
-  path: '/users/{id}',
-  summary: 'ユーザー取得',
-  description: 'IDで指定したユーザーを返す。',
-  tags: ['Users'],
-  deprecated: false,
-  // ...
+const UsersContract = http.contract({
+  getUser: {
+    method: 'GET',
+    path: '/users/{id}',
+    summary: 'ユーザー取得',
+    description: 'IDで指定したユーザーを返す。',
+    tags: ['Users'],
+    deprecated: false,
+    responses: { ok: { status: 200, body: UserSchema } },
+  },
 })
 ```
 
-response variant は `description` を宣言できる。
+名前付きresponse definitionは`description`を宣言できる。
 
-名前付き Contract の `operationId` は `<contract>.<procedure>` から安定して生成する。anonymous Contract では、順序依存の人工的な ID を生成せず `operationId` 自体を省略する。
+`operationId`は`generateOpenApi(..., { operationId: ({ procedure, method, path }) => ... })`で呼び出し側が明示指定する。callbackが未指定または`undefined`を返した場合は省略される。ContractとApplication Modelの両経路で、同じoptionsを渡せば同じoperationのprojectionは同等になる。
 
 ## Projection ルール
 

@@ -4,6 +4,7 @@
 - 日付: 2026-11-21 JST
 - 対象: Frameworkの公開API、型、Contract/Implementation/Module/Applicationの接続、Migration
 - 参照: [Framework-wide Public API RFC (Notion)](https://app.notion.com/p/41f4ead6c4f5819eb41dc529e78df26f?pvs=204)
+- 置換範囲: 通常HTTP Handlerの公開Result記法のみを更新対象とする。Kernel、Protocol委譲、現行MCP契約、OpenAPIのContract-first境界は維持する。
 - 関連: [Application Graph Kernel](./loutre_application_graph_kernel_architecture.md)、[Execution Extension](./loutre_execution_extension_contract_architecture.md)、[Contract-first Tooling](./loutre_contract_first_tooling_architecture.md)、[HTTP Protocol Delegation](./loutre_http_protocol_delegation.md)、[MCP Server](./loutre_mcp_server_architecture.md)、[GraphQL Transport](./loutre_graphql_transport_architecture.md)
 
 ## 背景
@@ -143,14 +144,14 @@ SSEのbodyは対応する `AsyncIterable<SchemaOutput<...>>`。要素単位のSc
 
 ### 却下した選択肢
 
-| 候補 | 見送る理由 |
-| --- | --- |
-| `return body` | 返却Schema/statusを一意に指定できず、明示Result方針と異なる |
-| `return { status: 200, body }` | 同じstatusの複数Schemaを区別できない |
-| `return { response: 'ok', body }` / `{kind:'ok',body}` | 文字列による間接指定。契約定義の参照より冗長・弱い |
-| `return { schema: Contract.routes.get.responses.ok, body }` | 参照パスが長く、既存helperよりDXが悪い |
-| `return { ok: body }` | headers等のenvelope表現と、複数キー検出のための追加規約が必要 |
-| `ctx.response.ok({body})` | 現行APIとしては簡潔だが、値を返すためにcontext helperを呼ぶ必要がある |
+| 候補                                                        | 見送る理由                                                            |
+| ----------------------------------------------------------- | --------------------------------------------------------------------- |
+| `return body`                                               | 返却Schema/statusを一意に指定できず、明示Result方針と異なる           |
+| `return { status: 200, body }`                              | 同じstatusの複数Schemaを区別できない                                  |
+| `return { response: 'ok', body }` / `{kind:'ok',body}`      | 文字列による間接指定。契約定義の参照より冗長・弱い                    |
+| `return { schema: Contract.routes.get.responses.ok, body }` | 参照パスが長く、既存helperよりDXが悪い                                |
+| `return { ok: body }`                                       | headers等のenvelope表現と、複数キー検出のための追加規約が必要         |
+| `ctx.response.ok({body})`                                   | 現行APIとしては簡潔だが、値を返すためにcontext helperを呼ぶ必要がある |
 
 ## 決定2: Public APIの統一原則（既存方針を維持）
 
