@@ -1,4 +1,4 @@
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { ApplicationShutdownError } from '@loutrejs/loutre/runtime'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
@@ -23,12 +23,12 @@ function failingApplication(events: string[], error: Error) {
   })
   const controller = http.implementation({
     contract,
-    factory: () => ({ health: (context) => context.response.ok({}) }),
+    factory: () => ({ health: () => ({ schema: contract.health.ok }) }),
   })
-  return defineApplication({
+  return application({
     modules: [
       silentLoggingModule,
-      defineModule({ providers: [Resource], executions: [controller] }),
+      module({ providers: [Resource], executions: [controller] }),
     ],
   })
 }

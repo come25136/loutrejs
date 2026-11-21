@@ -8,13 +8,14 @@ export const UsersController = http.implementation({
   contract: UsersContract,
   factory: (users = inject(UserRepository)) => ({
     create(ctx) {
-      return ctx.response.created({
+      return {
+        schema: UsersContract.create.created,
         body: users.create(
           ctx.state.transaction,
           ctx.input.body.name,
           ctx.state.currentUser.id,
         ),
-      })
+      }
     },
   }),
 })

@@ -10,7 +10,7 @@ import {
   ConnectionRejected,
   type GraphQLWebSocketHooks,
 } from '@loutrejs/graphql'
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
 import { serverAudits } from 'graphql-http'
 
@@ -36,9 +36,9 @@ async function create(
     transports: { http: http, websocket: true },
     factory: () => ({ context: () => ({}), ws: hooks }),
   })
-  const Module = defineModule(() => ({ executions: [endpoint] }))
+  const Module = module(() => ({ executions: [endpoint] }))
   const app = await nodeRuntime.create({
-    application: defineApplication({ modules: [Module()] }),
+    application: application({ modules: [Module()] }),
   })
   const { server } = await app.serve({
     port: 0,

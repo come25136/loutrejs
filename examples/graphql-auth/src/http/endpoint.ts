@@ -45,5 +45,5 @@ export const ApiContract = http.contract({
 export const HealthHttp = http.implementation({
   name: 'HealthHttp',
   contract: ApiContract,
-  factory: () => ({ health: (ctx) => ctx.response.ok({}) }),
+  factory: () => ({ health: () => ({ schema: ApiContract.health.ok }) }),
 })

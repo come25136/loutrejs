@@ -1,6 +1,6 @@
 import { http as contractHttp } from '@loutrejs/loutre/http'
 import { nodeRuntime } from '@loutrejs/node'
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 import { graphql } from '@loutrejs/graphql'
 import { manifest } from '../examples/graphql-orders/src/graphql/endpoint.js'
 import { CommerceService } from '../examples/graphql-orders/src/domain/commerce.js'
@@ -12,7 +12,7 @@ import WebSocket from 'ws'
 
 it('OrdersModuleの指定pathをHTTPとWSで共有し、既定pathへ公開しない', async () => {
   const app = await nodeRuntime.create({
-    application: defineApplication({
+    application: application({
       modules: [OrdersModule({ path: '/custom/orders' })],
     }),
   })
@@ -61,9 +61,9 @@ it('手書きBindingの100注文 / 200明細がEager・Lazy・Hybridで一致し
     transports: { http: true, websocket: true },
     factory: () => ({ context: ({ signal }) => ({ commerce, signal }) }),
   })
-  const Module = defineModule(() => ({ executions: [endpoint] }))
+  const Module = module(() => ({ executions: [endpoint] }))
   const app = await nodeRuntime.create({
-    application: defineApplication({ modules: [Module()] }),
+    application: application({ modules: [Module()] }),
   })
   const { server } = await app.serve({
     port: 0,

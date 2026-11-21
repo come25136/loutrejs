@@ -1,9 +1,9 @@
 import {
   bootstrapApplication,
   buildApplicationModel,
-  defineApplication,
-  defineEnv,
-  defineModule,
+  application,
+  env,
+  module,
   hook,
   inject,
   provide,
@@ -17,7 +17,7 @@ describe('Application Model graph', () => {
     class Service {
       constructor(readonly repository = inject(Repository)) {}
     }
-    const Module = defineModule(() => ({ providers: [Repository, Service] }))
+    const Module = module(() => ({ providers: [Repository, Service] }))
     const model = buildApplicationModel({ modules: [Module()] })
     const service = model.nodes.find(
       (node) => node.kind === 'provider' && node.token === Service,
@@ -37,14 +37,12 @@ describe('Application Model graph', () => {
   it('conditional全候補のdependencyを収集し未解決を診断する', () => {
     const MISSING = token<unknown>('graph.missing')
     const STORAGE = token<unknown>('graph.storage')
-    class Env extends defineEnv(
-      z.object({ DRIVER: z.enum(['memory', 'broken']) }),
-    ) {}
+    class Env extends env(z.object({ DRIVER: z.enum(['memory', 'broken']) })) {}
     class MemoryStorage {}
     class BrokenStorage {
       constructor(readonly missing = inject(MISSING)) {}
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       environment: [Env],
       providers: [
         provide(STORAGE).select(Env.key('DRIVER'), {
@@ -67,7 +65,7 @@ describe('Application Model graph', () => {
   it('Model構築ではlifecycleを実行せずdeclared dependency edgeだけを記録する', () => {
     const VALUE = token<string>('graph.lifecycle.value')
     let executions = 0
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [provide(VALUE).useValue('value')],
       lifecycle: {
         onModuleInit: hook({
@@ -96,23 +94,23 @@ describe('Application Model graph', () => {
     class B {
       constructor(readonly a = inject(A_TOKEN)) {}
     }
-    const CycleModule = defineModule(() => ({
+    const CycleModule = module(() => ({
       providers: [provide(A_TOKEN).useClass(A), provide(B_TOKEN).useClass(B)],
     }))
     await expect(
       bootstrapApplication({
-        application: defineApplication({ modules: [CycleModule()] }),
+        application: application({ modules: [CycleModule()] }),
       }),
     ).rejects.toThrow('LUTRE_DI_CYCLE')
 
-    const AsyncModule = defineModule(() => ({
+    const AsyncModule = module(() => ({
       providers: [
         provide(ASYNC).useFactory({ use: async (): Promise<unknown> => ({}) }),
       ],
     }))
     await expect(
       bootstrapApplication({
-        application: defineApplication({ modules: [AsyncModule()] }),
+        application: application({ modules: [AsyncModule()] }),
       }),
     ).rejects.toThrow('LUTRE_DI_ASYNC_FACTORY')
   })

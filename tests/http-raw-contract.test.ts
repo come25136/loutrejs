@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  bootstrapApplication,
-  defineApplication,
-  defineModule,
-} from '@loutrejs/loutre'
+import { bootstrapApplication, application, module } from '@loutrejs/loutre'
 import {
   bindHttpServer,
   createHttpClient,
@@ -50,14 +46,14 @@ describe('HTTP Contractのrawルート', () => {
     const api = contract()
     const regular = http.implementation({
       contract: api,
-      factory: () => ({ health: (ctx) => ctx.response.ok({}) }),
+      factory: () => ({ health: () => ({ schema: api.health.ok }) }),
     })
     const delegated = http.raw({
       route: api.routes.delegated,
       factory: () => (ctx) => Response.json(ctx.state),
     })
-    const Module = defineModule(() => ({ executions: [regular, delegated] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [regular, delegated] }))
+    const definition = application({ modules: [Module()] })
     expect(definition.model.executions.map(({ compiled }) => compiled)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

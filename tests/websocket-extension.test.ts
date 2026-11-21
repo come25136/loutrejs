@@ -4,10 +4,10 @@ import { http } from '@loutrejs/loutre/http'
 import {
   bootstrapApplication,
   collectInjectedDependencies,
-  defineApplication,
+  application as createApplication,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   delegateExecution,
   dependencyConsumerId,
   inject,
@@ -215,8 +215,8 @@ describe('WebSocket Execution Extension', () => {
         }),
       })
       await using app = await bootstrapApplication({
-        application: defineApplication({
-          modules: [defineModule({ executions: [implementation] })],
+        application: createApplication({
+          modules: [module({ executions: [implementation] })],
         }),
         capabilities: [bindWebSocketServer(fixtureDriver(connection))],
       })
@@ -282,15 +282,15 @@ describe('WebSocket Execution Extension', () => {
           runtime.handlers(id),
         ),
       })
-      const sourceModule = defineModule({
+      const sourceModule = module({
         providers: [Authentication],
         executions: [source],
       })
-      const targetModule = defineModule({
+      const targetModule = module({
         providers: [Service],
         executions: [target],
       })
-      const definition = defineApplication({
+      const definition = createApplication({
         modules: reverse
           ? [targetModule, sourceModule]
           : [sourceModule, targetModule],
@@ -351,8 +351,8 @@ describe('WebSocket Execution Extension', () => {
       runtime.handlers(id),
     )
     const source = websocket.delegate({ contract, delegate })
-    const missing = defineApplication({
-      modules: [defineModule({ executions: [source] })],
+    const missing = createApplication({
+      modules: [module({ executions: [source] })],
     })
     expect(missing.model.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_EXECUTION_DELEGATE_MISSING' }),
@@ -386,8 +386,8 @@ describe('WebSocket Execution Extension', () => {
       ),
     })
     await using app = await bootstrapApplication({
-      application: defineApplication({
-        modules: [defineModule({ executions: [source, target] })],
+      application: createApplication({
+        modules: [module({ executions: [source, target] })],
       }),
       capabilities: [bindWebSocketServer({ runtime: 'test', upgrade })],
     })
@@ -416,8 +416,8 @@ describe('WebSocket Execution Extension', () => {
       ),
     })
     await using app = await bootstrapApplication({
-      application: defineApplication({
-        modules: [defineModule({ executions: [source, target] })],
+      application: createApplication({
+        modules: [module({ executions: [source, target] })],
       }),
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
       instrumentation: {
@@ -461,9 +461,9 @@ describe('WebSocket Execution Extension', () => {
       ),
     })
     const app = await bootstrapApplication({
-      application: defineApplication({
+      application: createApplication({
         modules: [
-          defineModule({ providers: [Service], executions: [source, target] }),
+          module({ providers: [Service], executions: [source, target] }),
         ],
       }),
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
@@ -530,9 +530,9 @@ describe('WebSocket Execution Extension', () => {
       }),
       factory: () => ({ route: handler }),
     })
-    const Module = defineModule(() => ({ executions: [execution] }))
+    const Module = module(() => ({ executions: [execution] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindWebSocketServer({ runtime: 'test', upgrade })],
       instrumentation: { beginExecution: () => ({ complete: completed }) },
     })
@@ -604,11 +604,11 @@ describe('WebSocket Execution Extension', () => {
         'api.chat': async () => undefined,
       }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       executions: [invalidPath, invalidParams, duplicateNestedName],
     }))
 
-    const diagnostics = defineApplication({
+    const diagnostics = createApplication({
       modules: [Module()],
     }).model.diagnostics
 
@@ -667,8 +667,8 @@ describe('WebSocket Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [controller] }))
+    const definition = createApplication({ modules: [Module()] })
     const application = await bootstrapApplication({
       application: definition,
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
@@ -718,8 +718,8 @@ describe('WebSocket Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [controller] }))
+    const definition = createApplication({ modules: [Module()] })
 
     ;(route.handshake.params as Record<string, unknown>).roomId = z.number()
 
@@ -766,9 +766,9 @@ describe('WebSocket Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
     })
 
@@ -795,9 +795,9 @@ describe('WebSocket Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [
         bindWebSocketServer({
           runtime: 'test',
@@ -831,9 +831,9 @@ describe('WebSocket Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
     })
     await application.websocket.upgrade(new Request('http://fixture.test/wait'))
@@ -886,9 +886,9 @@ describe('WebSocket Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [
         bindWebSocketServer({
           runtime: 'test',
@@ -932,9 +932,9 @@ describe('WebSocket Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
     })
     await application.websocket.upgrade(new Request('http://fixture.test/wait'))
@@ -974,9 +974,9 @@ describe('WebSocket Execution Extension', () => {
           },
         }),
       })
-      const Module = defineModule(() => ({ executions: [controller] }))
+      const Module = module(() => ({ executions: [controller] }))
       const application = await bootstrapApplication({
-        application: defineApplication({ modules: [Module()] }),
+        application: createApplication({ modules: [Module()] }),
         capabilities: [
           bindWebSocketServer({
             runtime: 'test',
@@ -1017,12 +1017,12 @@ describe('WebSocket Execution Extension', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [controller],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
       forceShutdownTimeoutMs: 10,
     })
@@ -1056,9 +1056,9 @@ describe('WebSocket Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [
         bindWebSocketServer({
           runtime: 'test',
@@ -1093,9 +1093,9 @@ describe('WebSocket Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [
         bindWebSocketServer({
           runtime: 'test',
@@ -1160,9 +1160,9 @@ describe('WebSocket Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [
         bindWebSocketServer({
           runtime: 'test',

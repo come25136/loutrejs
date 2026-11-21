@@ -1,7 +1,7 @@
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   type StandardSchemaV1,
 } from '@loutrejs/loutre'
 import { bindHttpServer, http, validate } from '@loutrejs/loutre/http'
@@ -57,14 +57,14 @@ describe('streaming validate.body', () => {
             if (chunk.done) break
             bytes += chunk.value.byteLength
           }
-          return ctx.response.accepted({ body: { bytes } })
+          return { schema: Contract.upload.accepted, body: { bytes } }
         },
       }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       executions: [Implementation],
     }))
-    const definition = defineApplication({
+    const definition = createApplication({
       modules: [silentLoggingModule, Module()],
     })
 

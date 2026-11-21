@@ -326,10 +326,10 @@ describe('Loutre CLI', () => {
     const applicationPath = join(directory, 'app.ts')
     const counterPath = join(directory, 'attempts.txt')
     const source = [
-      "import { defineApplication, defineModule } from '../../packages/loutre/src/index.js'",
+      "import { application as createApplication, module as createModule } from '../../packages/loutre/src/index.js'",
       "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
-      'const AppModule = defineModule(() => ({ imports: [DevtoolsModule()] }))',
-      'export default defineApplication({ modules: [AppModule()] })',
+      'const AppModule = createModule(() => ({ imports: [DevtoolsModule()] }))',
+      'export default createApplication({ modules: [AppModule()] })',
       '',
     ].join('\n')
     await writeFile(applicationPath, source)
@@ -391,10 +391,10 @@ describe('Loutre CLI', () => {
     const counterPath = join(directory, 'attempts.txt')
     const stopPath = join(directory, 'stop.txt')
     const source = [
-      "import { defineApplication, defineModule } from '../../packages/loutre/src/index.js'",
+      "import { application as createApplication, module as createModule } from '../../packages/loutre/src/index.js'",
       "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
-      'const AppModule = defineModule(() => ({ imports: [DevtoolsModule()] }))',
-      'export default defineApplication({ modules: [AppModule()] })',
+      'const AppModule = createModule(() => ({ imports: [DevtoolsModule()] }))',
+      'export default createApplication({ modules: [AppModule()] })',
       '',
     ].join('\n')
     await writeFile(applicationPath, source)
@@ -446,27 +446,27 @@ describe('Loutre CLI', () => {
     const applicationPath = join(directory, 'app.ts')
     const counterPath = join(directory, 'attempts.txt')
     const invalidSource = [
-      "import { defineApplication, defineModule, inject, token } from '../../packages/loutre/src/index.js'",
+      "import { application as createApplication, module as createModule, inject, token } from '../../packages/loutre/src/index.js'",
       "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
       "const Missing = token('fixture.missing')",
       'class BrokenProvider { constructor(readonly missing = inject(Missing)) {} }',
-      'const AppModule = defineModule(() => ({',
+      'const AppModule = createModule(() => ({',
       '  imports: [DevtoolsModule()],',
       '  providers: [BrokenProvider],',
       '}))',
-      'export default defineApplication({ modules: [AppModule()] })',
+      'export default createApplication({ modules: [AppModule()] })',
       '',
     ].join('\n')
     const validSource = [
-      "import { defineApplication, defineModule, inject, provide, token } from '../../packages/loutre/src/index.js'",
+      "import { application as createApplication, module as createModule, inject, provide, token } from '../../packages/loutre/src/index.js'",
       "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
       "const Missing = token('fixture.missing')",
       'class BrokenProvider { constructor(readonly missing = inject(Missing)) {} }',
-      'const AppModule = defineModule(() => ({',
+      'const AppModule = createModule(() => ({',
       '  imports: [DevtoolsModule()],',
       '  providers: [provide(Missing).useValue({}), BrokenProvider],',
       '}))',
-      'export default defineApplication({ modules: [AppModule()] })',
+      'export default createApplication({ modules: [AppModule()] })',
       '',
     ].join('\n')
     await writeFile(applicationPath, invalidSource)
@@ -650,7 +650,7 @@ describe('Loutre CLI', () => {
       ),
     ).toBe(0)
     expect(output.stdout.join('\n')).toContain(
-      'n0["`**Module: UsersModule**<br/>*↳ …/http-crud/src/index.ts:71*`"]',
+      'n0["`**Module: UsersModule**<br/>*↳ …/http-crud/src/index.ts:73*`"]',
     )
   })
 
@@ -786,30 +786,30 @@ describe('Loutre CLI', () => {
       column,
     })
 
-    expect(node('module', 'SourceModule')?.source).toEqual(source(53, 29))
+    expect(node('module', 'SourceModule')?.source).toEqual(source(45, 29))
     expect(node('provider', 'ClassService')).toMatchObject({
       attributes: { providerKind: 'class' },
-      source: source(11, 8),
+      source: source(5, 8),
     })
     expect(node('provider', 'source-location.value')).toMatchObject({
       attributes: { providerKind: 'value' },
-      source: source(58, 5),
+      source: source(50, 5),
     })
     expect(node('provider', 'source-location.factory')).toMatchObject({
       attributes: { providerKind: 'factory' },
-      source: source(59, 5),
+      source: source(51, 5),
     })
     expect(node('provider', 'source-location.conditional')).toMatchObject({
       attributes: { providerKind: 'conditional' },
-      source: source(60, 5),
+      source: source(52, 5),
     })
     expect(node('execution', 'SourceController')?.source).toEqual(
-      source(43, 33),
+      source(35, 33),
     )
-    expect(node('entrypoint', 'POST /source')?.source).toEqual(source(32, 31))
-    expect(node('middleware', 'audit')?.source).toEqual(source(25, 32))
+    expect(node('entrypoint', 'POST /source')?.source).toEqual(source(24, 31))
+    expect(node('middleware', 'audit')?.source).toEqual(source(17, 32))
     expect(node('handler', 'SourceController.create')?.source).toEqual(
-      source(43, 33),
+      source(35, 33),
     )
   })
 
@@ -869,13 +869,13 @@ describe('Loutre CLI', () => {
       column,
     })
 
-    expect(node('provider', 'RealService')?.source).toEqual(source(15, 8))
+    expect(node('provider', 'RealService')?.source).toEqual(source(10, 8))
     expect(node('provider', 'source-location.composed-value')?.source).toEqual(
-      source(28, 20),
+      source(23, 20),
     )
-    expect(node('entrypoint', 'POST /composed')?.source).toEqual(source(30, 18))
+    expect(node('entrypoint', 'POST /composed')?.source).toEqual(source(25, 18))
     expect(node('handler', 'ComposedController.create')?.source).toEqual(
-      source(31, 20),
+      source(26, 20),
     )
     expect(node('provider', 'EventEmitter')?.source).toBeUndefined()
   })
@@ -979,7 +979,7 @@ describe('Loutre CLI', () => {
       )
     const localSource = {
       file: 'tests/fixtures/source-location-use-class-app.ts',
-      line: 9,
+      line: 4,
       column: 1,
     }
 
@@ -1043,16 +1043,16 @@ describe('Loutre CLI', () => {
     const modules = JSON.parse(output.stdout.join('\n')).modules
     expect(modules[0].source).toEqual({
       file: 'tests/fixtures/source-location-app.ts',
-      line: 53,
+      line: 45,
       column: 29,
     })
   })
 
   it.each([
-    ['modules', 'source: tests/fixtures/source-location-app.ts:53:29'],
-    ['di', 'source: tests/fixtures/source-location-app.ts:11:8'],
-    ['http', 'route source: tests/fixtures/source-location-app.ts:32:31'],
-    ['executions', 'source: tests/fixtures/source-location-app.ts:43:33'],
+    ['modules', 'source: tests/fixtures/source-location-app.ts:45:29'],
+    ['di', 'source: tests/fixtures/source-location-app.ts:5:8'],
+    ['http', 'route source: tests/fixtures/source-location-app.ts:24:31'],
+    ['executions', 'source: tests/fixtures/source-location-app.ts:35:33'],
   ] as const)(
     'graph %s textでもsource locationを保持する',
     async (subject, expected) => {
@@ -1092,7 +1092,7 @@ describe('Loutre CLI', () => {
 
     const graph = output.stdout.join('\n')
     expect(graph).toContain(
-      '`**Provider: provider#96;name**<br/>*↳ tests/fixtures/source-location-#96;backtick#96;-app.ts:9*`',
+      '`**Provider: provider#96;name**<br/>*↳ tests/fixtures/source-location-#96;backtick#96;-app.ts:4*`',
     )
     expect(graph).toContain('Module: Backtick#96;Module')
     expect(graph).not.toContain('provider`name')
@@ -1119,15 +1119,15 @@ describe('Loutre CLI', () => {
     expect(graph).toContain('"markdownAutoWrap":false')
     expect(graph).toContain('white-space:nowrap')
     expect(graph).toContain(
-      '`**Provider: ClassService**<br/>*↳ tests/fixtures/source-location-app.ts:11*`',
+      '`**Provider: ClassService**<br/>*↳ tests/fixtures/source-location-app.ts:5*`',
     )
     expect(graph).toContain(
-      '`**Route: POST /source**<br/>*↳ tests/fixtures/source-location-app.ts:32*`',
+      '`**Route: POST /source**<br/>*↳ tests/fixtures/source-location-app.ts:24*`',
     )
     expect(graph).toContain(
-      '`**Handler: SourceController.create**<br/>*↳ tests/fixtures/source-location-app.ts:43*`',
+      '`**Handler: SourceController.create**<br/>*↳ tests/fixtures/source-location-app.ts:35*`',
     )
-    expect(graph).not.toContain('source-location-app.ts:11:8')
+    expect(graph).not.toContain('source-location-app.ts:5:8')
     expect(graph).not.toContain(process.cwd())
   })
 
@@ -1517,7 +1517,13 @@ describe('Loutre CLI', () => {
     try {
       expect(
         await runCli(
-          ['build', 'tests/fixtures/logger-di-app.ts', '--out-dir', directory],
+          [
+            'build',
+            '--entry',
+            'tests/fixtures/logger-di-app.ts',
+            '--out-dir',
+            directory,
+          ],
           output.value,
         ),
       ).toBe(0)
@@ -1573,6 +1579,7 @@ describe('Loutre CLI', () => {
         await runCli(
           [
             'build',
+            '--entry',
             'integrations/application-build/src/app.ts',
             '--out-dir',
             directory,
@@ -1607,6 +1614,7 @@ describe('Loutre CLI', () => {
         await runCli(
           [
             'build',
+            '--entry',
             'tests/fixtures/source-location-tree-shaking-app.ts',
             '--out-dir',
             directory,
@@ -1629,7 +1637,13 @@ describe('Loutre CLI', () => {
     try {
       expect(
         await runCli(
-          ['build', 'examples/hello-http/src/app.ts', '--out-dir', directory],
+          [
+            'build',
+            '--entry',
+            'examples/hello-http/src/app.ts',
+            '--out-dir',
+            directory,
+          ],
           output.value,
         ),
       ).toBe(0)
@@ -1683,6 +1697,7 @@ describe('Loutre CLI', () => {
           await runCli(
             [
               'build',
+              '--entry',
               'integrations/http-crud/src/app.ts',
               '--runtime',
               runtime,
@@ -1707,7 +1722,13 @@ describe('Loutre CLI', () => {
     const output = io()
     expect(
       await runCli(
-        ['build', 'integrations/http-crud/src/app.ts', '--runtime', 'node'],
+        [
+          'build',
+          '--entry',
+          'integrations/http-crud/src/app.ts',
+          '--runtime',
+          'node',
+        ],
         output.value,
       ),
     ).toBe(2)

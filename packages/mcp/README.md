@@ -3,18 +3,19 @@
 HTTP ContractのルートからStreamable HTTPでToolを公開します。endpointごとのfactoryがruntimeとDIを所有し、同じHTTP listenerへ複数endpointを登録できます。
 
 ```ts
-const read = mcp.tool({
-  name: 'orders.read',
-  description: '注文を取得する',
-  scopes: ['orders:read'],
-  input: z.object({ id: z.string() }),
-  output: z.object({ status: z.string() }),
+const OrdersContract = mcp.contract({
+  'orders.read': {
+    description: '注文を取得する',
+    scopes: ['orders:read'],
+    input: z.object({ id: z.string() }),
+    output: z.object({ status: z.string() }),
+  },
 })
 const OrdersMcp = mcp.implementation({
   name: 'orders',
   version: '1.0.0',
   route: Api.routes.orders,
-  tools: [read],
+  contract: OrdersContract,
   oauth: { requiredScopes: ['orders:read'] },
   factory: (orders = inject(OrdersService), auth = inject(AuthService)) => ({
     oauth: auth.mcp,

@@ -211,7 +211,7 @@ Websiteは独立したwire decoderと型を所有する現在の構成を維持�
 | protocol version、Node kind、phase、Contractのresponse宣言キー、CLIの固定option | 既存のliteral unionや対応する`keyof`の方が狭く、対応関係も表現できる                                                                                                                                                        |
 | 診断のmessageや自由形式のpathを、コード表記だけで「検証済み」にする型           | `diagnostic(code, message, path)`には任意のExtension由来の値も入る。公開入口の引数の取り違えは名前付きobjectへの変更で扱え、未検証の文字列へ三種類のcastを要求する設計は採らない。Model IDを渡す場合は既存のbrandを消さない |
 
-HTTP Handlerの`{ schema: UsersContract.get.ok, body }`が持つresponse referenceは、単なる文字列のContractキーと異なる。後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)では、別Operation/別Contractの誤参照を防ぐ安定identityと型の相関を検証する。「固定optionならliteral unionを優先する」原則をresponse referenceの同一性検証に流用しない（新APIは実装前）。
+HTTP Handlerの`{ schema: UsersContract.get.ok, body }`が持つresponse referenceは、単なる文字列のContractキーと異なる。後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)では、別Operation/別Contractの誤参照を防ぐ安定identityと型の相関を検証する。「固定optionならliteral unionを優先する」原則をresponse referenceの同一性検証に流用しない。
 
 ## 実装の分割と完了条件
 

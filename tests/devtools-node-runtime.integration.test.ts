@@ -1,5 +1,9 @@
 import * as fixture from './helpers/identities.js'
-import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
+import {
+  application as createApplication,
+  module,
+  inject,
+} from '@loutrejs/loutre'
 import { DevtoolsModule } from '@loutrejs/loutre/devtools'
 import { http } from '@loutrejs/loutre/http'
 import { nodeRuntime } from '@loutrejs/node'
@@ -30,8 +34,8 @@ const PingController = http.implementation({
   name: 'PingController',
   contract: PingContract,
   factory: () => ({
-    ping(ctx) {
-      return ctx.response.ok({ body: { ok: true } })
+    ping() {
+      return { schema: PingContract.ping.ok, body: { ok: true as const } }
     },
   }),
 })
@@ -52,13 +56,13 @@ const ReplayTask = task<{ value: number }, number>({
       repository.double(input.value),
 })
 
-const AppModule = defineModule(() => ({
+const AppModule = module(() => ({
   imports: [DevtoolsModule()],
   providers: [ReplayRepository],
   executions: [PingController, ReplayTask],
 }))
 
-const application = defineApplication({ modules: [AppModule()] })
+const application = createApplication({ modules: [AppModule()] })
 
 const replayProviderNode = application.model.nodes.find(
   (node) => node.kind === 'provider' && node.token === ReplayRepository,

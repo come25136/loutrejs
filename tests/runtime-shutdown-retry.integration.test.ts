@@ -1,9 +1,9 @@
 import { nodeRuntime } from '@loutrejs/node'
 import {
-  defineApplication,
+  application as createApplication,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   type ExecutionDefinition,
   type ExecutionLease,
 } from '@loutrejs/loutre'
@@ -196,10 +196,10 @@ function httpOnlyDefinition() {
   })
   const controller = http.implementation({
     contract,
-    factory: () => ({ health: (context) => context.response.ok({}) }),
+    factory: () => ({ health: () => ({ schema: contract.health.ok }) }),
   })
-  const Module = defineModule(() => ({ executions: [controller] }))
-  return defineApplication({
+  const Module = module(() => ({ executions: [controller] }))
+  return createApplication({
     modules: [silentLoggingModule, Module()],
   })
 }
@@ -255,21 +255,21 @@ function retryableShutdownFixture() {
   })
   const controller = http.implementation({
     contract,
-    factory: () => ({ health: (context) => context.response.ok({}) }),
+    factory: () => ({ health: () => ({ schema: contract.health.ok }) }),
   })
   class Resource {
     onModuleDestroy() {
       events.push('provider.destroy')
     }
   }
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     providers: [Resource],
     executions: [
       controller,
       defineExecution(blockingExtension, { id: 'blocking.execution' }),
     ],
   }))
-  const definition = defineApplication({
+  const definition = createApplication({
     modules: [silentLoggingModule, Module()],
   })
 

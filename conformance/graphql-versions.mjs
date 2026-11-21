@@ -130,7 +130,7 @@ try {
     )
     await writeFile(
       join(cwd, 'src/app.ts'),
-      `import { defineApplication,defineModule } from '@loutrejs/loutre'
+      `import { application,module } from '@loutrejs/loutre'
       import { graphql } from '@loutrejs/graphql'
       import { http } from '@loutrejs/loutre/http'
       import { bindManifest } from './generated/bindings.js'
@@ -139,8 +139,8 @@ try {
       import { resolvers } from './resolvers.js'
       const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
       export const state={parent:{id:'same'},revision:0,calls:0,cleanups:0}
-      const Module=defineModule(()=>({executions:[graphql.implementation({name:'Compatibility',route:http.contract({graphql:{raw:true,method:'*',path:'/graphql'}}).routes.graphql,manifest,transports:{http:true,websocket:true},factory:()=>({context:({signal})=>({signal,state}),formatError:(error,input)=>({message:error.originalError?'Internal server error':error.message,extensions:{transport:input.transport}})})})]}))
-      export default defineApplication({modules:[Module()]})`,
+      const Module=module(()=>({executions:[graphql.implementation({name:'Compatibility',route:http.contract({graphql:{raw:true,method:'*',path:'/graphql'}}).routes.graphql,manifest,transports:{http:true,websocket:true},factory:()=>({context:({signal})=>({signal,state}),formatError:(error,input)=>({message:error.originalError?'Internal server error':error.message,extensions:{transport:input.transport}})})})]}))
+      export default application({modules:[Module()]})`,
     )
     await writeFile(
       join(cwd, 'verify.mjs'),
@@ -234,7 +234,7 @@ try {
       )
       await run(
         process.execPath,
-        [cli, 'build', 'src/app.ts', '--out-dir', 'built'],
+        [cli, 'build', '--entry', 'src/app.ts', '--out-dir', 'built'],
         { cwd, maxBuffer: 8 * 1024 * 1024 },
       )
       const result = await run(process.execPath, ['verify.mjs'], {

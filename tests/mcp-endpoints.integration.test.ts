@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { mcp } from '@loutrejs/mcp'
 import {
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   inject,
   provide,
 } from '@loutrejs/loutre'
@@ -59,18 +59,19 @@ describe('MCP endpointの所有権', () => {
           async ({ request }, next) =>
             next({ tenant: request.headers.get('x-tenant') ?? '' }),
       })
-      const read = mcp.tool({
-        name: 'counter.read',
-        description: '状態を取得する',
-        scopes: ['read'],
-        input: z.strictObject({}),
-        output: z.object({
-          endpoint: z.string(),
-          count: z.number(),
-          resource: z.number(),
-          tenant: z.string(),
-          subject: z.string(),
-        }),
+      const read = mcp.contract({
+        'counter.read': {
+          description: '状態を取得する',
+          scopes: ['read'],
+          input: z.strictObject({}),
+          output: z.object({
+            endpoint: z.string(),
+            count: z.number(),
+            resource: z.number(),
+            tenant: z.string(),
+            subject: z.string(),
+          }),
+        },
       })
       const create = (name: string) =>
         mcp.implementation({
@@ -84,7 +85,7 @@ describe('MCP endpointの所有権', () => {
               middlewares: [layer],
             },
           }).routes.endpoint,
-          tools: [read],
+          contract: read,
           oauth: { requiredScopes: ['read'] },
           factory: (resource = inject(Resource)) => {
             constructions += 1
@@ -121,9 +122,9 @@ describe('MCP endpointの所有権', () => {
             }
           },
         })
-      const application = defineApplication({
+      const application = createApplication({
         modules: [
-          defineModule({
+          module({
             providers: [
               provide(Resource).useClass(Resource, { scope: 'transient' }),
             ],
@@ -149,7 +150,9 @@ describe('MCP endpointの所有権', () => {
       ).toBe(false)
       constructions = 0
       const resultSchema = z.object({
-        result: z.object({ structuredContent: read.output }),
+        result: z.object({
+          structuredContent: read.tools['counter.read'].output,
+        }),
       })
       const resources = new Set<number>()
       for (let index = 0; index < 2; index += 1) {

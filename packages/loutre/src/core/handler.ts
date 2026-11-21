@@ -20,6 +20,37 @@ export interface CompiledExecutionHandler<
 
 export type ExecutionMethod = (...arguments_: readonly unknown[]) => unknown
 
+type MethodKeys<T> = {
+  [K in keyof T]-?: T[K] extends (...args: never[]) => unknown ? K : never
+}[keyof T]
+
+export type DeclaredExecutionMethods<TActual, TDeclared> =
+  Exclude<MethodKeys<TActual>, keyof TDeclared> extends never ? unknown : never
+
+export function assertDeclaredExecutionMethods(
+  value: object,
+  names: readonly string[],
+): void {
+  const declared = new Set(names)
+  for (
+    let owner: object | null = value;
+    owner && owner !== Object.prototype;
+    owner = Object.getPrototypeOf(owner)
+  ) {
+    for (const [name, descriptor] of Object.entries(
+      Object.getOwnPropertyDescriptors(owner),
+    )) {
+      if (
+        name !== 'constructor' &&
+        typeof descriptor.value === 'function' &&
+        !declared.has(name)
+      ) {
+        throw new TypeError(`Undeclared execution method: ${name}`)
+      }
+    }
+  }
+}
+
 export function resolveExecutionMethod(
   value: unknown,
   name: string,
@@ -29,6 +60,12 @@ export function resolveExecutionMethod(
     (typeof value !== 'object' && typeof value !== 'function')
   )
     return undefined
+  if (!Object.hasOwn(value, name) && Object.hasOwn(Object.prototype, name)) {
+    let owner = Object.getPrototypeOf(value)
+    while (owner && !Object.hasOwn(owner, name))
+      owner = Object.getPrototypeOf(owner)
+    if (owner === Object.prototype) return undefined
+  }
   const method: unknown = Reflect.get(value, name)
   if (typeof method !== 'function') return undefined
   return (...arguments_) => Reflect.apply(method, value, arguments_)

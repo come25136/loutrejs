@@ -430,8 +430,8 @@ export async function runCli(
     }
 
     case 'build': {
-      if (!subject) {
-        io.stderr('build requires an explicit Application entry.')
+      if (subject) {
+        io.stderr(`Unexpected argument: ${subject}. Use build --entry <entry>.`)
         return 2
       }
       const runtimeOption = readOption(args, '--runtime')
@@ -444,7 +444,8 @@ export async function runCli(
         )
         return 2
       }
-      const applicationEntry = resolve(io.cwd, subject)
+      const applicationEntry = entry()
+      if (!applicationEntry) return 2
       const graph = await loadApplicationGraph(applicationEntry, {
         projectRoot: io.cwd,
       })
@@ -1611,7 +1612,7 @@ function helpText(): string {
     '  loutre graph all|modules|di|executions|http|runtime --entry <entry> [--format text|json|mermaid] [--theme light|dark]',
     '  loutre dev --entry <entry> [--port 25136] [--origin <origin>] [--ignore <path>] -- <application command>',
     '  loutre explain <target> --entry <entry>',
-    '  loutre build <entry> [--runtime aws-lambda|cloudflare-workers] [--out-dir <directory>]',
+    '  loutre build --entry <entry> [--runtime aws-lambda|cloudflare-workers] [--out-dir <directory>]',
     '',
     'The dev command supervises your Host command and connects an opt-in DevtoolsModule to the local DevTools session.',
   ].join('\n')

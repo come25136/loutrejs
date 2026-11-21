@@ -30,7 +30,7 @@ http.implementation({
     regular: (ctx) => {
       const tenant: string = ctx.state.tenant
       void tenant
-      return ctx.response.ok({})
+      return { schema: api.regular.ok }
     },
   }),
 })

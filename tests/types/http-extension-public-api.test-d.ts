@@ -1,7 +1,5 @@
-import { defineError } from '@loutrejs/loutre'
+import { domainError } from '@loutrejs/loutre'
 import {
-  basicAuth,
-  cors,
   createHttpClient,
   http,
   type BasicAuthContext,
@@ -117,20 +115,22 @@ void stream
 http.implementation({
   contract,
   factory: () => ({
-    get: (ctx) => ctx.response.ok({ body: { id: '1', name: 'Loutre' } }),
-    create: (ctx) =>
-      ctx.response.created({ body: { id: '1', name: ctx.input.body.name } }),
-    health: (ctx) => ctx.response.ok({}),
-    events: (ctx) =>
-      ctx.response.ok({
-        body: (async function* () {
-          yield { sequence: 1 }
-        })(),
-      }),
+    get: () => ({ schema: contract.get.ok, body: { id: '1', name: 'Loutre' } }),
+    create: (ctx) => ({
+      schema: contract.create.created,
+      body: { id: '1', name: ctx.input.body.name },
+    }),
+    health: () => ({ schema: contract.health.ok }),
+    events: () => ({
+      schema: contract.events.ok,
+      body: (async function* () {
+        yield { sequence: 1 }
+      })(),
+    }),
   }),
 })
 
-const DomainFailure = defineError({
+const DomainFailure = domainError({
   code: 'DOMAIN_FAILURE',
   data: z.object({ message: z.string() }),
 })
@@ -175,7 +175,7 @@ const streamWithoutBody = {
 // @ts-expect-error server-stream responseはitem body schemaが必須
 http.contract(streamWithoutBody)
 
-const corsLayer: CorsLayerDescriptor = cors()
+const corsLayer: CorsLayerDescriptor = http.cors()
 void corsLayer
 
 type AuthState = { readonly currentUser: { readonly id: string } }
@@ -197,7 +197,7 @@ const basicDefinition: BasicAuthDefinition<
     }),
   }),
 }
-const basic = basicAuth(basicDefinition)
+const basic = http.basicAuth(basicDefinition)
 void basic
 
 declare const basicContext: BasicAuthContext

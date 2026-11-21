@@ -1,6 +1,6 @@
 import {
-  defineApplication,
-  defineModule,
+  application,
+  module,
   inject,
   token,
 } from '../../packages/loutre/src/index.js'
@@ -16,9 +16,9 @@ class BrokenService {
   constructor(readonly dependency = inject(missingService)) {}
 }
 
-const AppModule = defineModule(() => ({
+const AppModule = module(() => ({
   imports: [DevtoolsModule()],
   providers: [BrokenService],
 }))
 
-export default defineApplication({ modules: [AppModule()] })
+export default application({ modules: [AppModule()] })

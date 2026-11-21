@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   bootstrapApplication,
   compileExecutionHandler,
-  defineApplication,
+  application,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   delegateExecution,
   dependencyConsumerId,
   inject,
@@ -99,12 +99,12 @@ describe('Execution handlerの責務境界', () => {
           ),
         },
       })
-      const targetModule = defineModule({
+      const targetModule = module({
         providers: [Counter],
         executions: [target],
       })
-      const sourceModule = defineModule({ executions: [source] })
-      const definition = defineApplication({
+      const sourceModule = module({ executions: [source] })
+      const definition = application({
         modules: reverse
           ? [targetModule, sourceModule]
           : [sourceModule, targetModule],

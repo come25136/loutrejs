@@ -71,6 +71,7 @@ describe('Graph-driven CLI diagnostics', () => {
         await runCli(
           [
             'build',
+            '--entry',
             'integrations/http-crud/src/app.ts',
             '--runtime',
             'cloudflare-workers',
@@ -128,6 +129,7 @@ describe('Graph-driven CLI diagnostics', () => {
         await runCli(
           [
             'build',
+            '--entry',
             'integrations/graph-probe/src/warning-app.ts',
             '--out-dir',
             directory,

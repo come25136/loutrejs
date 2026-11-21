@@ -6,12 +6,13 @@ export const MessageController = http.implementation({
   contract: MessageContract,
   factory: () => ({
     create(ctx) {
-      return ctx.response.created({
+      return {
+        schema: MessageContract.create.created,
         body: {
           id: crypto.randomUUID(),
           text: ctx.input.body.text,
         },
-      })
+      }
     },
   }),
 })

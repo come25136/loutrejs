@@ -2,7 +2,7 @@
 
 ステータス: Accepted
 
-HTTP Handlerの戻り値は後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)が移行先を定義する。ここで採用したGraphQL/MCP raw route委譲と公開URLの所有権は変更しない（Handler新APIは実装前）。
+HTTP Handlerの戻り値は後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)が移行先を定義する。ここで採用したGraphQL/MCP raw route委譲と公開URLの所有権は変更しない。
 
 ## 背景
 
@@ -44,7 +44,6 @@ const Api = http.contract({
     middlewares: [httpAuthentication],
   },
 })
-// 通常HTTP Handlerは後続ADRの移行先記法（現行実装には未反映）。
 const Health = http.implementation({
   contract: Api,
   factory: () => ({

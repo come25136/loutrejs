@@ -63,9 +63,10 @@ export const GreetingHttp = http.implementation({
   contract: GreetingContract,
   factory: (greetings = inject(GreetingService)) => ({
     async greet(ctx) {
-      return ctx.response.ok({
+      return {
+        schema: GreetingContract.greet.ok,
         body: greetings.greet(ctx.input.params.name),
-      })
+      }
     },
   }),
 })
@@ -74,21 +75,21 @@ export const GreetingHttp = http.implementation({
 `src/app.ts`:
 
 ```ts
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 import { GreetingHttp } from './greetings/controller.js'
 import { GreetingService } from './greetings/service.js'
 
-const AppModule = defineModule({
+const AppModule = module({
   providers: [GreetingService],
   executions: [GreetingHttp],
 })
 
-export default defineApplication({
+export default application({
   modules: [AppModule],
 })
 ```
 
-`defineApplication()` builds the canonical Application Model. HTTP route details remain owned by the HTTP Extension; Core stores the execution contribution without protocol-specific branching.
+`application()` builds the canonical Application Model. HTTP route details remain owned by the HTTP Extension; Core stores the execution contribution without protocol-specific branching.
 
 For guidance on static versus dynamic Modules and shared references, see [Static and dynamic Modules (Japanese)](./ja/getting-started.md#静的moduleと動的module).
 
@@ -151,14 +152,14 @@ The Application Definition remains portable. Runtime adapters own platform-speci
 ## Add Environment
 
 ```ts
-import { defineEnv, defineModule } from '@loutrejs/loutre'
+import { env, module } from '@loutrejs/loutre'
 import { z } from 'zod'
 
-export class AppEnv extends defineEnv(
+export class AppEnv extends env(
   z.object({ PORT: z.coerce.number().int().positive().default(3000) }),
 ) {}
 
-const AppModule = defineModule({
+const AppModule = module({
   environment: [AppEnv],
   executions: [GreetingHttp],
 })
@@ -176,8 +177,8 @@ await app.serve({ port: app.get(AppEnv).PORT })
 Task semantics are provided by `@loutrejs/loutre/tasks`.
 
 ```ts
-import { defineApplication, defineModule } from '@loutrejs/loutre'
-import { fixedDelay, task } from '@loutrejs/loutre/tasks'
+import { application, module } from '@loutrejs/loutre'
+import { trigger, task } from '@loutrejs/loutre/tasks'
 
 export const cleanup = task<void, void>({
   name: 'cleanup',
@@ -186,18 +187,18 @@ export const cleanup = task<void, void>({
   },
 })
 
-export const heartbeat = fixedDelay({
+export const heartbeat = trigger.fixedDelay({
   name: 'heartbeat',
   delay: 5_000,
   immediate: true,
   task: cleanup,
 })
 
-const WorkerModule = defineModule({
+const WorkerModule = module({
   executions: [heartbeat],
 })
 
-export default defineApplication({ modules: [WorkerModule] })
+export default application({ modules: [WorkerModule] })
 ```
 
 Registering the Trigger is enough: the Tasks Extension declares its referenced Task, and Core includes that Task in the canonical Application Model automatically.
@@ -218,8 +219,8 @@ await app.tasks.start()
 Queue descriptors and consumers also come from `@loutrejs/loutre/tasks`. Drivers such as BullMQ are ordinary Providers declared in the same Module that owns the execution.
 
 ```ts
-import { defineModule } from '@loutrejs/loutre'
-import { consume, queue, task } from '@loutrejs/loutre/tasks'
+import { module } from '@loutrejs/loutre'
+import { trigger, queue, task } from '@loutrejs/loutre/tasks'
 import { bindBullMqQueue } from '@loutrejs/bullmq'
 import { z } from 'zod'
 
@@ -236,13 +237,13 @@ const processOrder = task<{ id: string }, void>({
       console.log(id),
 })
 
-const orderConsumer = consume({
+const orderConsumer = trigger.consume({
   name: 'orders.consumer',
   queue: orders,
   task: processOrder,
 })
 
-const QueueModule = defineModule({
+const QueueModule = module({
   providers: [
     bindBullMqQueue(orders, {
       connection: { host: '127.0.0.1', port: 6379 },

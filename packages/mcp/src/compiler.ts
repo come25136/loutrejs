@@ -6,7 +6,11 @@ import {
 import { oauthScopePattern } from './oauth.js'
 import { type CompiledTool } from './compiled.js'
 import { snapshotJson, isJsonObject, type JsonObject } from './json.js'
-import { resolveExecutionMethod, type ExecutionMethod } from '@loutrejs/loutre'
+import {
+  assertDeclaredExecutionMethods,
+  resolveExecutionMethod,
+  type ExecutionMethod,
+} from '@loutrejs/loutre'
 
 export function compileTool(tool: McpToolDefinition): CompiledTool {
   if (!/^[A-Za-z0-9_.-]{1,128}$/.test(tool.name) || !tool.description.trim()) {
@@ -50,6 +54,10 @@ export function validateRuntime(
       'MCPのfactoryにはoauth、context、toolsを指定してください。',
     )
   }
+  assertDeclaredExecutionMethods(
+    runtime.tools,
+    tools.map((tool) => tool.descriptor.name),
+  )
   const handlers = new Map<string, ExecutionMethod>()
   for (const {
     descriptor: { name },

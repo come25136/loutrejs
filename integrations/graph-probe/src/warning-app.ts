@@ -1,8 +1,8 @@
 import {
-  defineApplication,
+  application,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   type ExecutionDefinition,
 } from '@loutrejs/loutre'
 
@@ -32,8 +32,8 @@ const warningExtension = defineExecutionExtension<WarningDefinition, {}>({
   createRuntime: () => ({}),
 })
 
-const WarningModule = defineModule(() => ({
+const WarningModule = module(() => ({
   executions: [defineExecution(warningExtension, { id: 'fixture.warning' })],
 }))
 
-export default defineApplication({ modules: [WarningModule()] })
+export default application({ modules: [WarningModule()] })

@@ -43,7 +43,7 @@ Application ModelをRuntimeとToolingの共通Source of Truthとする。Runtime
 
 ## 2. ADRの責務分担
 
-通常HTTP Handlerの戻り値については後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)に従う。本ADRのKernel / HTTP Extension ownershipとExecution leaseは変わらない（新APIは実装前）。
+通常HTTP Handlerの戻り値については後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)に従う。本ADRのKernel / HTTP Extension ownershipとExecution leaseは変わらない。
 
 このADRは**Coreの責務境界とApplication Modelの位置付け**だけを正本とする。
 

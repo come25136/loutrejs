@@ -57,10 +57,7 @@ export function createHttpExtensionRuntime(
       patternMatch(compiled)
         .with({ kind: 'raw' }, () => createRawHttpHandlers(resolveHandler))
         .with({ kind: 'contract' }, ({ routes }) =>
-          createHttpHandlers(
-            resolveHandler(),
-            routes.map((route) => route.name),
-          ),
+          createHttpHandlers(resolveHandler(), routes),
         )
         .exhaustive(),
     )
@@ -343,7 +340,6 @@ export function createHttpExtensionRuntime(
                     handler({
                       kind: 'contract',
                       input: middlewareContext.input,
-                      response: middlewareContext.response,
                       signal: middlewareContext.signal,
                       state: middlewareContext.state,
                     }),

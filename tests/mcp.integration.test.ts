@@ -1,7 +1,7 @@
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   inject,
   provide,
   token as createToken,
@@ -37,32 +37,37 @@ function fixture(
 ) {
   const inputTransform = vi.fn((id: string) => Number(id))
   const outputTransform = vi.fn((id: number) => String(id))
-  const read = mcp.tool({
-    name: 'orders.read',
-    description: '注文を取得する',
-    scopes: ['orders:read'],
-    input: z.object({
-      id: z.string().pipe(z.string().regex(/^\d+$/)).transform(inputTransform),
-    }),
-    output: z.object({
-      id: z.number().transform(outputTransform).pipe(z.string()),
-      count: z.number(),
-      call: z.number(),
-      subject: z.string(),
-    }),
+  const read = mcp.contract({
+    'orders.read': {
+      description: '注文を取得する',
+      scopes: ['orders:read'],
+      input: z.object({
+        id: z
+          .string()
+          .pipe(z.string().regex(/^\d+$/))
+          .transform(inputTransform),
+      }),
+      output: z.object({
+        id: z.number().transform(outputTransform).pipe(z.string()),
+        count: z.number(),
+        call: z.number(),
+        subject: z.string(),
+      }),
+    },
   })
-  const write = mcp.tool({
-    name: 'orders.write',
-    description: '注文を更新する',
-    scopes: ['orders:read', 'orders:write'],
-    input: z.object({}),
-    output: z.literal(true),
+  const write = mcp.contract({
+    'orders.write': {
+      description: '注文を更新する',
+      scopes: ['orders:read', 'orders:write'],
+      input: z.object({}),
+      output: z.literal(true),
+    },
   })
   const server = mcp.implementation({
     route,
     name: 'orders',
     version: '1.0.0',
-    tools: [write, read],
+    contract: mcp.contract({ ...write.tools, ...read.tools }),
     oauth: { requiredScopes: options.requiredScopes },
     factory: (auth = inject(OAuth), orders = inject(OrdersService)) => ({
       oauth: auth,
@@ -81,9 +86,9 @@ function fixture(
       },
     }),
   })
-  const application = defineApplication({
+  const application = createApplication({
     modules: [
-      defineModule({
+      module({
         providers: [OrdersService, provide(OAuth).useValue(options)],
         executions: [server],
       }),
@@ -207,16 +212,16 @@ describe('MCP Streamable HTTP', () => {
       route: api.routes.mcp,
       name: 'orders',
       version: '1',
-      tools: [],
+      contract: mcp.contract({}),
       factory: () => ({
         oauth: oauthConfiguration(),
         context: () => ({}),
         tools: {},
       }),
     })
-    const application = defineApplication({
+    const application = createApplication({
       modules: [
-        defineModule({
+        module({
           executions: [
             endpoint,
             http.raw({
@@ -459,11 +464,8 @@ describe('MCP Streamable HTTP', () => {
       route: { method: 'GET', path: '/other' },
       factory: () => () => new Response('通常のHTTPルート'),
     })
-    const application = defineApplication({
-      modules: [
-        ...mcpApplication.modules,
-        defineModule({ executions: [other] }),
-      ],
+    const application = createApplication({
+      modules: [...mcpApplication.modules, module({ executions: [other] })],
     })
     await using app = await nodeRuntime.create({
       application,
@@ -508,14 +510,15 @@ describe('MCP Streamable HTTP', () => {
 
 it('endpointの非公開ProviderとTool契約の不正をModelで診断する', async () => {
   const { read } = fixture()
-  const invalid = mcp.tool({
-    name: 'invalid',
-    description: '不正な入力',
-    scopes: [],
-    input: z.string(),
-    output: z.string(),
+  const invalid = mcp.contract({
+    invalid: {
+      description: '不正な入力',
+      scopes: [],
+      input: z.string(),
+      output: z.string(),
+    },
   })
-  const privateModule = defineModule({ providers: [OrdersService] })
+  const privateModule = module({ providers: [OrdersService] })
   const route = (name: string) =>
     http.contract({ endpoint: { raw: true, method: '*', path: `/${name}` } })
       .routes.endpoint
@@ -531,30 +534,23 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
       }),
     },
   })
-  const application = defineApplication({
+  const application = createApplication({
     modules: [
-      defineModule({
+      module({
         imports: [privateModule],
         executions: [
           mcp.implementation({
             name: 'private',
             version: '1',
             route: route('private'),
-            tools: [read],
-            factory,
-          }),
-          mcp.implementation({
-            name: 'duplicate',
-            version: '1',
-            route: route('duplicate'),
-            tools: [read, read],
+            contract: read,
             factory,
           }),
           mcp.implementation({
             name: 'invalid',
             version: '1',
             route: route('invalid'),
-            tools: [invalid],
+            contract: invalid,
             factory: () => ({
               oauth: oauthConfiguration(),
               context: () => ({}),
@@ -572,10 +568,7 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
     ]),
   )
   expect(application.model.diagnostics.map(({ message }) => message)).toEqual(
-    expect.arrayContaining([
-      expect.stringContaining('Tool名が重複'),
-      expect.stringContaining('入力はオブジェクト'),
-    ]),
+    expect.arrayContaining([expect.stringContaining('入力はオブジェクト')]),
   )
   await expect(bootstrapApplication({ application })).rejects.toThrow(
     'Application Model is invalid',
@@ -601,23 +594,24 @@ it.each(['context', 'handler'])(
         destroy()
       }
     }
-    const slow = mcp.tool({
-      name: 'orders.slow',
-      description: '時間のかかる照会を実行する',
-      scopes: ['orders:read'],
-      input: z.object({}),
-      output: z.string(),
+    const slow = mcp.contract({
+      'orders.slow': {
+        description: '時間のかかる照会を実行する',
+        scopes: ['orders:read'],
+        input: z.object({}),
+        output: z.string(),
+      },
     })
-    const application = defineApplication({
+    const application = createApplication({
       modules: [
-        defineModule({
+        module({
           providers: [Dependency],
           executions: [
             mcp.implementation({
               route: defaultRoute,
               name: 'orders',
               version: '1',
-              tools: [slow],
+              contract: slow,
               factory: (dependency = inject(Dependency)) => ({
                 oauth: oauthConfiguration(),
                 context: async ({ signal }) => {

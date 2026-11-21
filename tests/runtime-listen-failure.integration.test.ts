@@ -1,12 +1,12 @@
 import { createServer, type Server } from 'node:http'
-import { defineApplication } from '@loutrejs/loutre'
+import { application } from '@loutrejs/loutre'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { nodeRuntime } from '@loutrejs/node'
 import { UsersModule } from '../integrations/http-crud/src/index.js'
 import { silentLoggingModule } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>
-  defineApplication({
+  application({
     modules: [silentLoggingModule, UsersModule()],
   })
 

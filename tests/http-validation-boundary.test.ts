@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
 } from '@loutrejs/loutre'
 import {
   bindHttpServer,
@@ -18,9 +18,9 @@ async function createHttpApplication<const TContract extends HttpContract>(
   factory: HttpImplementationDefinition<TContract>['factory'],
 ) {
   const implementation = http.implementation({ contract, factory })
-  const Module = defineModule(() => ({ executions: [implementation] }))
+  const Module = module(() => ({ executions: [implementation] }))
   return bootstrapApplication({
-    application: defineApplication({ modules: [Module()] }),
+    application: createApplication({ modules: [Module()] }),
     capabilities: [bindHttpServer({ runtime: 'test' })],
   })
 }
@@ -66,7 +66,10 @@ describe('HTTP validate.body boundary', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      create: (context) => context.response.ok({ body: context.input.body }),
+      create: (context) => ({
+        schema: contract.create.ok,
+        body: context.input.body,
+      }),
     }))
 
     try {
@@ -109,7 +112,10 @@ describe('HTTP validate.body boundary', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      create: (context) => context.response.ok({ body: context.input.body }),
+      create: (context) => ({
+        schema: contract.create.ok,
+        body: context.input.body,
+      }),
     }))
 
     try {
@@ -154,7 +160,7 @@ describe('HTTP validate.body boundary', () => {
           if (chunk.done) break
           length += chunk.value.byteLength
         }
-        return context.response.ok({ body: length })
+        return { schema: contract.upload.ok, body: length }
       },
     }))
 
@@ -187,7 +193,7 @@ describe('HTTP validate.body boundary', () => {
       },
     })
     const application = await createHttpApplication(contract, () => ({
-      create: (context) => context.response.ok({}),
+      create: () => ({ schema: contract.create.ok }),
     }))
 
     try {

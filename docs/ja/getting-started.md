@@ -52,7 +52,7 @@ export class GreetingService {
 
 `src/greetings/controller.ts`:
 
-`contract`を渡すと、Handlerの入力と応答の型がContractから推論されます。この例では`ctx.input.params.name`は`string`となり、`ctx.response.ok()`には`message: string`を含むbodyを渡せます。
+`contract`を渡すと、Handlerの入力と応答の型がContractから推論されます。この例では`ctx.input.params.name`は`string`となり、`GreetingContract.greet.ok`を選ぶと、bodyに`message: string`が必要です。
 
 ```ts
 import { inject } from '@loutrejs/loutre'
@@ -65,9 +65,10 @@ export const GreetingHttp = http.implementation({
   contract: GreetingContract,
   factory: (greetings = inject(GreetingService)) => ({
     async greet(ctx) {
-      return ctx.response.ok({
+      return {
+        schema: GreetingContract.greet.ok,
         body: greetings.greet(ctx.input.params.name),
-      })
+      }
     },
   }),
 })
@@ -76,33 +77,33 @@ export const GreetingHttp = http.implementation({
 `src/app.ts`:
 
 ```ts
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 import { GreetingHttp } from './greetings/controller.js'
 import { GreetingService } from './greetings/service.js'
 
-const AppModule = defineModule({
+const AppModule = module({
   providers: [GreetingService],
   executions: [GreetingHttp],
 })
 
-export default defineApplication({
+export default application({
   modules: [AppModule],
 })
 ```
 
-`defineApplication()`がcanonical Application Modelを構築します。HTTP routeの詳細はHTTP Extensionが所有し、Coreはprotocol固有の分岐を持ちません。
+`application()`がcanonical Application Modelを構築します。HTTP routeの詳細はHTTP Extensionが所有し、Coreはprotocol固有の分岐を持ちません。
 
 ### 静的Moduleと動的Module
 
-引数のないModuleは`defineModule({ ... })`で定義し、返されたinstanceをそのまま`modules`や`imports`へ渡します。設定が必要なModuleはfactoryを渡して、利用時に引数を指定します。
+引数のないModuleは`module({ ... })`で定義し、返されたinstanceをそのまま`modules`や`imports`へ渡します。設定が必要なModuleはfactoryを渡して、利用時に引数を指定します。
 
 ```ts
-const UsersModule = defineModule({ providers: [UsersService] })
-const DatabaseModule = defineModule((options: { url: string }) => ({
+const UsersModule = module({ providers: [UsersService] })
+const DatabaseModule = module((options: { url: string }) => ({
   providers: [provide(DatabaseUrl).useValue(options.url)],
   exports: [DatabaseUrl],
 }))
-const AppModule = defineModule({
+const AppModule = module({
   imports: [UsersModule, DatabaseModule({ url: 'postgres://localhost/app' })],
 })
 ```
@@ -166,14 +167,14 @@ Application Definitionはportableなままです。platform固有のlistenerやc
 ## Environmentを追加する
 
 ```ts
-import { defineEnv, defineModule } from '@loutrejs/loutre'
+import { env, module } from '@loutrejs/loutre'
 import { z } from 'zod'
 
-export class AppEnv extends defineEnv(
+export class AppEnv extends env(
   z.object({ PORT: z.coerce.number().int().positive().default(3000) }),
 ) {}
 
-const AppModule = defineModule({
+const AppModule = module({
   environment: [AppEnv],
   executions: [GreetingHttp],
 })
@@ -191,8 +192,8 @@ await app.serve({ port: app.get(AppEnv).PORT })
 Task semanticsは`@loutrejs/loutre/tasks`が提供します。
 
 ```ts
-import { defineApplication, defineModule } from '@loutrejs/loutre'
-import { fixedDelay, task } from '@loutrejs/loutre/tasks'
+import { application, module } from '@loutrejs/loutre'
+import { trigger, task } from '@loutrejs/loutre/tasks'
 
 export const cleanup = task<void, void>({
   name: 'cleanup',
@@ -201,18 +202,18 @@ export const cleanup = task<void, void>({
   },
 })
 
-export const heartbeat = fixedDelay({
+export const heartbeat = trigger.fixedDelay({
   name: 'heartbeat',
   delay: 5_000,
   immediate: true,
   task: cleanup,
 })
 
-const WorkerModule = defineModule({
+const WorkerModule = module({
   executions: [heartbeat],
 })
 
-export default defineApplication({ modules: [WorkerModule] })
+export default application({ modules: [WorkerModule] })
 ```
 
 Triggerだけを登録すれば十分です。Tasks Extensionが参照先Taskを宣言し、CoreがそのTaskをcanonical Application Modelへ自動で含めます。
@@ -233,8 +234,8 @@ await app.tasks.start()
 Queue descriptorとconsumerも`@loutrejs/loutre/tasks`から提供されます。BullMQのようなdriverは同じModuleのProviderとして宣言します。
 
 ```ts
-import { defineModule } from '@loutrejs/loutre'
-import { consume, queue, task } from '@loutrejs/loutre/tasks'
+import { module } from '@loutrejs/loutre'
+import { trigger, queue, task } from '@loutrejs/loutre/tasks'
 import { bindBullMqQueue } from '@loutrejs/bullmq'
 import { z } from 'zod'
 
@@ -251,13 +252,13 @@ const processOrder = task<{ id: string }, void>({
       console.log(id),
 })
 
-const orderConsumer = consume({
+const orderConsumer = trigger.consume({
   name: 'orders.consumer',
   queue: orders,
   task: processOrder,
 })
 
-const QueueModule = defineModule({
+const QueueModule = module({
   providers: [
     bindBullMqQueue(orders, {
       connection: { host: '127.0.0.1', port: 6379 },

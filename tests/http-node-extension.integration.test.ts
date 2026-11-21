@@ -2,10 +2,10 @@ import { nodeRuntime } from '@loutrejs/node'
 import type { Server } from 'node:http'
 import {
   bindRuntimeCapability,
-  defineApplication,
+  application as createApplication,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   runtimeCapability,
   type ExecutionDefinition,
 } from '@loutrejs/loutre'
@@ -34,14 +34,14 @@ describe('Node runtime + HTTP Execution Extension', () => {
       name: 'hello.http',
       contract,
       factory: () => ({
-        hello: (context) =>
-          context.response.ok({
-            body: { message: `Hello, ${context.input.params.name}!` },
-          }),
+        hello: (context) => ({
+          schema: contract.hello.ok,
+          body: { message: `Hello, ${context.input.params.name}!` },
+        }),
       }),
     })
-    const AppModule = defineModule(() => ({ executions: [controller] }))
-    const definition = defineApplication({ modules: [AppModule()] })
+    const AppModule = module(() => ({ executions: [controller] }))
+    const definition = createApplication({ modules: [AppModule()] })
     const port = await reserveHttpPort()
     const application = await nodeRuntime.create({ application: definition })
 
@@ -96,16 +96,16 @@ describe('Node runtime + HTTP Execution Extension', () => {
     })
     const controller = http.implementation({
       contract,
-      factory: () => ({ health: (context) => context.response.ok({}) }),
+      factory: () => ({ health: () => ({ schema: contract.health.ok }) }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       executions: [
         controller,
         defineExecution(extension, { id: 'fixture.node-extra' }),
       ],
     }))
     const application = await nodeRuntime.create({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       capabilities: [bindRuntimeCapability(EXTRA_DRIVER, { value: 'bound' })],
     })
 
@@ -123,10 +123,10 @@ describe('Node runtime + HTTP Execution Extension', () => {
     })
     const controller = http.implementation({
       contract,
-      factory: () => ({ health: (context) => context.response.ok({}) }),
+      factory: () => ({ health: () => ({ schema: contract.health.ok }) }),
     })
-    const AppModule = defineModule(() => ({ executions: [controller] }))
-    const definition = defineApplication({ modules: [AppModule()] })
+    const AppModule = module(() => ({ executions: [controller] }))
+    const definition = createApplication({ modules: [AppModule()] })
     const port = await reserveHttpPort()
     const signalListeners = {
       SIGINT: process.listenerCount('SIGINT'),

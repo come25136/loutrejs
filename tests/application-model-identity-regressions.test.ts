@@ -5,11 +5,11 @@ import {
   bindRuntimeCapability,
   bootstrapApplication,
   buildApplicationModel,
-  defineArgs,
-  defineApplication,
+  args,
+  application as createApplication,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module as createModule,
   hook,
   isExecutionDefinition,
   provide,
@@ -66,7 +66,7 @@ describe('Application Model identity regressions', () => {
   it('同じstable identityのExtension descriptorをbundle境界で同じownerへ統合する', () => {
     const first = fixtureExtension('@fixture/collision', 'compatible')
     const second = fixtureExtension('@fixture/collision', 'compatible')
-    const Module = defineModule(() => ({
+    const Module = createModule(() => ({
       executions: [
         defineExecution(first.extension, { id: 'fixture.first' }),
         defineExecution(second.extension, { id: 'fixture.second' }),
@@ -89,7 +89,7 @@ describe('Application Model identity regressions', () => {
   it('異なるExtension ABI versionをModel build時に拒否する', async () => {
     const first = fixtureExtension('@fixture/abi-mismatch', 'v1', '1')
     const second = fixtureExtension('@fixture/abi-mismatch', 'v2', '2')
-    const Module = defineModule(() => ({
+    const Module = createModule(() => ({
       executions: [
         defineExecution(first.extension, { id: 'fixture.v1' }),
         defineExecution(second.extension, { id: 'fixture.v2' }),
@@ -104,7 +104,7 @@ describe('Application Model identity regressions', () => {
     expect(first.extension.identity).not.toBe(second.extension.identity)
     await expect(
       bootstrapApplication({
-        application: defineApplication({ modules: [Module()] }),
+        application: createApplication({ modules: [Module()] }),
       }),
     ).rejects.toThrow('LUTRE_EXTENSION_ABI_MISMATCH')
   })
@@ -169,7 +169,7 @@ describe('Application Model identity regressions', () => {
         }),
         createRuntime: () => ({}),
       })
-      const Module = defineModule(() => ({
+      const Module = createModule(() => ({
         executions: [defineExecution(extension, { id: 'fixture.opaque' })],
       }))
       const model = buildApplicationModel({ modules: [Module()] })
@@ -213,7 +213,7 @@ describe('Application Model identity regressions', () => {
       id: 'fixture.snapshot',
       options,
     })
-    const Module = defineModule(() => ({ executions: [execution] }))
+    const Module = createModule(() => ({ executions: [execution] }))
     const model = buildApplicationModel({ modules: [Module()] })
     const compiled = model.extensions.get(extension)?.executions[0]?.compiled
 
@@ -230,7 +230,7 @@ describe('Application Model identity regressions', () => {
   it('stable Extension identityはbundle境界lookupにだけ利用する', () => {
     const bundled = fixtureExtension('@fixture/bundle-safe', 'compatible')
     const host = fixtureExtension('@fixture/bundle-safe', 'compatible')
-    const Module = defineModule(() => ({
+    const Module = createModule(() => ({
       executions: [
         defineExecution(bundled.extension, { id: 'fixture.bundled' }),
       ],
@@ -270,7 +270,7 @@ describe('Application Model identity regressions', () => {
     })
     if (!isExecutionDefinition(definition))
       throw new Error('Execution Definitionのbrandが認識されません。')
-    const Module = defineModule(() => ({
+    const Module = createModule(() => ({
       executions: [definition],
     }))
 
@@ -283,7 +283,7 @@ describe('Application Model identity regressions', () => {
   it('同名の別Provider tokenへordinal node IDを割り当てる', () => {
     const First = class Duplicate {}
     const Second = class Duplicate {}
-    const Module = defineModule(() => ({ providers: [First, Second] }))
+    const Module = createModule(() => ({ providers: [First, Second] }))
     const model = buildApplicationModel({ modules: [Module()] })
     const providers = model.nodes.filter(
       (node) => node.kind === 'provider' && node.moduleId !== 'application',
@@ -300,7 +300,7 @@ describe('Application Model identity regressions', () => {
 
   it('Execution ExtensionがCore node namespaceへ衝突するIDを返したら拒否する', () => {
     const fixture = fixtureExtension('@fixture/node-collision', 'collision')
-    const Module = defineModule(() => ({
+    const Module = createModule(() => ({
       executions: [
         defineExecution(fixture.extension, {
           id: 'module:1',
@@ -336,7 +336,7 @@ describe('Application Model identity regressions', () => {
           create: () => ({}),
         },
       })
-      const Module = defineModule(() => ({
+      const Module = createModule(() => ({
         executions: [defineExecution(extension, {})],
       }))
 
@@ -349,9 +349,9 @@ describe('Application Model identity regressions', () => {
   )
 
   it('Application Argumentsを通常Providerとして重複宣言したらModel build時に拒否する', async () => {
-    const Args = defineArgs(z.object({ mode: z.string() }))
-    const Module = defineModule(() => ({ providers: [Args] }))
-    const definition = defineApplication({
+    const Args = args(z.object({ mode: z.string() }))
+    const Module = createModule(() => ({ providers: [Args] }))
+    const definition = createApplication({
       modules: [Module()],
       arguments: Args,
     })
@@ -373,7 +373,7 @@ describe('Application Model identity regressions', () => {
     const SERVICE = token<object>('snapshot.service')
     const CLASS_SERVICE = token<object>('snapshot.class-service')
     const VALUE_SERVICE = token<object>('snapshot.value-service')
-    const Args = defineArgs(z.object({ mode: z.enum(['first', 'second']) }))
+    const Args = args(z.object({ mode: z.enum(['first', 'second']) }))
     class FirstService {}
     class SecondService {}
     class MutatedService {}
@@ -397,7 +397,7 @@ describe('Application Model identity regressions', () => {
         expect(message).toBe('clock:1')
       },
     })
-    const Module = defineModule(() => ({
+    const Module = createModule(() => ({
       providers: [
         provide(CLOCK).useValue(1),
         factoryProvider,
@@ -407,7 +407,7 @@ describe('Application Model identity regressions', () => {
       ],
       lifecycle: { onModuleInit: lifecycle },
     }))
-    const definition = defineApplication({
+    const definition = createApplication({
       modules: [Module()],
       arguments: Args,
     })
@@ -441,7 +441,7 @@ describe('Application Model identity regressions', () => {
         events.push('provider:model')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = createModule(() => ({
       providers: [Resource],
       lifecycle: {
         onModuleInit: hook({
@@ -453,7 +453,7 @@ describe('Application Model identity regressions', () => {
       },
     }))
     const module = Module()
-    const definition = defineApplication({ modules: [module] })
+    const definition = createApplication({ modules: [module] })
     const mutable = module as {
       definition: {
         providers: readonly unknown[]

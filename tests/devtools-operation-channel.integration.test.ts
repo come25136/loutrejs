@@ -3,8 +3,8 @@ import { parse } from 'graphql'
 import { createClient } from 'graphql-ws'
 import WebSocket from 'ws'
 import {
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   syntheticExecutionId,
 } from '@loutrejs/loutre'
 import { DevtoolsModule } from '@loutrejs/loutre/devtools'
@@ -32,10 +32,8 @@ const endpoint = graphql.implementation({
   transports: { http: false, websocket: true },
   factory: () => ({ context: () => ({}) }),
 })
-const application = defineApplication({
-  modules: [
-    defineModule({ imports: [DevtoolsModule()], executions: [endpoint] }),
-  ],
+const application = createApplication({
+  modules: [module({ imports: [DevtoolsModule()], executions: [endpoint] })],
 })
 
 async function startChannel() {

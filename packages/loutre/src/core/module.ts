@@ -79,16 +79,16 @@ export type ModuleTemplate<
   readonly [moduleTypeInfo]?: ModuleTypeInfo<TDefinition>
 }
 
-export function defineModule<const TDefinition extends ModuleDefinition>(
+export function module<const TDefinition extends ModuleDefinition>(
   definition: TDefinition,
 ): ModuleInstance<TDefinition>
 
-export function defineModule<
+export function module<
   Args = void,
   const TDefinition extends ModuleDefinition = ModuleDefinition,
 >(factory: (args: Args) => TDefinition): ModuleTemplate<Args, TDefinition>
 
-export function defineModule(
+export function module(
   definition: ModuleDefinition | ((args: any) => ModuleDefinition),
 ): ModuleInstance | AnyModuleTemplate {
   const factory =

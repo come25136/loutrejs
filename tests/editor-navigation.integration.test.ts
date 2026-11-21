@@ -194,13 +194,13 @@ function textAtRange(text: string, range: LspRange): string {
 }
 
 describe('editor navigation', () => {
-  it('ctx.response.okからContractのresponses.okへGo to Definitionできる', async () => {
+  it('AppContract.greet.okからContractのresponses.okへGo to Definitionできる', async () => {
     const controllerText = readFileSync(controller, 'utf8')
     const contractText = readFileSync(contract, 'utf8')
-    const expression = 'ctx.response.ok'
+    const expression = 'AppContract.greet.ok'
     const expressionOffset = controllerText.indexOf(expression)
     expect(expressionOffset).toBeGreaterThanOrEqual(0)
-    const okOffset = expressionOffset + 'ctx.response.'.length
+    const okOffset = expressionOffset + 'AppContract.greet.'.length
 
     const lsp = new TypeScriptLspClient(repository)
     try {

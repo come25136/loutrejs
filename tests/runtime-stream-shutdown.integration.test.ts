@@ -1,5 +1,9 @@
 import { nodeRuntime } from '@loutrejs/node'
-import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
+import {
+  application as createApplication,
+  module,
+  inject,
+} from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { z } from 'zod'
@@ -140,19 +144,19 @@ function blockingSseFixture() {
   const controller = http.implementation({
     contract,
     factory: (resource = inject(Resource)) => ({
-      events: (context) => {
+      events: () => {
         void resource
-        return context.response.events({ body: source })
+        return { schema: contract.events.events, body: source }
       },
     }),
   })
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     providers: [Resource],
     executions: [controller],
   }))
 
   return {
-    definition: defineApplication({
+    definition: createApplication({
       modules: [silentLoggingModule, Module()],
     }),
     events,

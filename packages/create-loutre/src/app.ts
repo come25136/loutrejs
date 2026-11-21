@@ -5,7 +5,7 @@ import {
 } from './identity.js'
 import { readdir } from 'node:fs/promises'
 import { basename } from 'node:path'
-import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
+import { application, module, inject } from '@loutrejs/loutre'
 import { task } from '@loutrejs/loutre/tasks'
 import type { PackageManager, ProjectTarget } from './options.js'
 import { writeStarter } from './starter.js'
@@ -46,13 +46,13 @@ export const createProject = task<CreateProjectInput, CreateProjectResult>({
       scaffolder.create(input),
 })
 
-const CreateLoutreModule = defineModule(() => ({
+const CreateLoutreModule = module(() => ({
   name: 'CreateLoutreModule',
   providers: [ProjectScaffolder],
   executions: [createProject],
 }))
 
-export default defineApplication({ modules: [CreateLoutreModule()] })
+export default application({ modules: [CreateLoutreModule()] })
 
 async function assertTargetIsEmpty(
   targetDirectory: AbsoluteFsPath,

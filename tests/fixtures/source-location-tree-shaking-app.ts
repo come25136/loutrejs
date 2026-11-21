@@ -1,10 +1,10 @@
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 
 // eslint-disable-next-line no-unused-vars
 class CompletelyUnusedSourceLocationSentinel {
   readonly marker = 'SOURCE_LOCATION_TREE_SHAKING_SENTINEL'
 }
 
-const AppModule = defineModule(() => ({ name: 'TreeShakingModule' }))
+const AppModule = module(() => ({ name: 'TreeShakingModule' }))
 
-export default defineApplication({ modules: [AppModule()] })
+export default application({ modules: [AppModule()] })

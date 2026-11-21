@@ -16,13 +16,13 @@ function createModule() {
     name: 'NamespaceNestedController',
     contract: Contract,
     factory: () => ({
-      create(ctx) {
-        return ctx.response.ok({})
+      create() {
+        return { schema: Contract.create.ok }
       },
     }),
   })
 
-  return loutre.defineModule(() => ({
+  return loutre.module(() => ({
     name: 'NamespaceNestedModule',
     providers: [NestedService],
     executions: [Controller],
@@ -31,4 +31,4 @@ function createModule() {
 
 const Module = createModule()
 
-export default loutre.defineApplication({ modules: [Module()] })
+export default loutre.application({ modules: [Module()] })

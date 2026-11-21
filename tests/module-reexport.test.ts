@@ -1,4 +1,8 @@
-import { buildApplicationModel, defineModule, inject } from '@loutrejs/loutre'
+import {
+  buildApplicationModel,
+  module as createModule,
+  inject,
+} from '@loutrejs/loutre'
 
 describe('Module re-export', () => {
   it('importしたexportを明示的にre-exportできる', () => {
@@ -6,17 +10,17 @@ describe('Module re-export', () => {
     class Service {
       constructor(readonly repository = inject(Repository)) {}
     }
-    const repositoryModule = defineModule(() => ({
+    const repositoryModule = createModule(() => ({
       name: 'RepositoryModule',
       providers: [Repository],
       exports: [Repository],
     }))()
-    const domainModule = defineModule(() => ({
+    const domainModule = createModule(() => ({
       name: 'DomainModule',
       imports: [repositoryModule],
       exports: [Repository],
     }))()
-    const applicationModule = defineModule(() => ({
+    const applicationModule = createModule(() => ({
       name: 'ApplicationModule',
       imports: [domainModule],
       providers: [Service],
@@ -29,7 +33,7 @@ describe('Module re-export', () => {
 
   it('宣言もimportもしていないtokenのexportを拒否する', () => {
     class Repository {}
-    const module = defineModule(() => ({
+    const module = createModule(() => ({
       name: 'InvalidModule',
       exports: [Repository],
     }))()

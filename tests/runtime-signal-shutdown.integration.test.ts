@@ -1,9 +1,9 @@
 import { recordingLogger } from './helpers/recording-logger.js'
 import {
-  defineApplication,
+  application,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   type ExecutionLease,
 } from '@loutrejs/loutre'
 import { type LogRecord } from '@loutrejs/loutre/runtime'
@@ -195,10 +195,10 @@ function workerFixture(pendingDrain: boolean) {
   })
   const logging = recordingLogger(records)
   return {
-    definition: defineApplication({
+    definition: application({
       modules: [
         logging.module,
-        defineModule({
+        module({
           providers: [Resource],
           executions: [defineExecution(extension, {})],
         }),

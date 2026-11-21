@@ -8,9 +8,10 @@ export const UsersController = http.implementation({
   contract: UsersContract,
   factory: (users = inject(UserRepository)) => ({
     async create(ctx) {
-      return ctx.response.created({
+      return {
+        schema: UsersContract.create.created,
         body: await users.create(ctx.state.transaction, ctx.input.body.name),
-      })
+      }
     },
   }),
 })

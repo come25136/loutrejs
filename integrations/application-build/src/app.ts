@@ -1,15 +1,9 @@
-import { defineApplication } from '@loutrejs/loutre'
+import { application } from '@loutrejs/loutre'
 import { NamedRepository as Repo } from './named-repository.js'
 import DefaultRepo from './default-repository.js'
 import * as services from './namespace-services.js'
 import { ReexportedRepository } from './barrel.js'
-import {
-  defineEnv,
-  defineModule,
-  inject,
-  provide,
-  token,
-} from '@loutrejs/loutre'
+import { env, module, inject, provide, token } from '@loutrejs/loutre'
 import { z } from 'zod'
 import { selectedRuntime } from '@loutrejs/integration-application-build/conditional'
 
@@ -47,13 +41,13 @@ const CONDITIONAL = token<MemoryService | DiskService>(
 )
 const RUNTIME_BRANCH = token<string>('application-build.runtime-branch')
 
-class AppEnv extends defineEnv(
+class AppEnv extends env(
   z.object({
     DRIVER: z.enum(['memory', 'disk']),
   }),
 ) {}
 
-const MainModule = defineModule(() => ({
+const MainModule = module(() => ({
   providers: [
     Repo,
     DefaultRepo,
@@ -67,7 +61,7 @@ const MainModule = defineModule(() => ({
   ],
 }))
 
-export const ConditionalModule = defineModule(() => ({
+export const ConditionalModule = module(() => ({
   environment: [AppEnv],
   providers: [
     Repo,
@@ -78,4 +72,4 @@ export const ConditionalModule = defineModule(() => ({
   ],
 }))
 
-export default defineApplication({ modules: [MainModule()] })
+export default application({ modules: [MainModule()] })

@@ -1,10 +1,10 @@
 # Loutre Framework-wide Public API Redesign
 
-- ステータス: Proposed（個別に採用済みの設計判断を含む）
+- ステータス: Accepted
 - 日付: 2026-11-21 JST
 - 対象: Frameworkの公開API、型、Contract/Implementation/Module/Applicationの接続、Migration
 - 参照: [Framework-wide Public API RFC (Notion)](https://app.notion.com/p/41f4ead6c4f5819eb41dc529e78df26f?pvs=204)
-- 置換範囲: 通常HTTP Handlerの公開Result記法のみを更新対象とする。Kernel、Protocol委譲、現行MCP契約、OpenAPIのContract-first境界は維持する。
+- 置換範囲: HTTP応答、MCP Tool契約、Trigger、アプリ作者向け定義、HTTP middleware、CLI entry。
 - 関連: [Application Graph Kernel](./loutre_application_graph_kernel_architecture.md)、[Execution Extension](./loutre_execution_extension_contract_architecture.md)、[Contract-first Tooling](./loutre_contract_first_tooling_architecture.md)、[HTTP Protocol Delegation](./loutre_http_protocol_delegation.md)、[MCP Server](./loutre_mcp_server_architecture.md)、[GraphQL Transport](./loutre_graphql_transport_architecture.md)
 
 ## 背景
@@ -13,7 +13,7 @@ LoutreのPublic APIはContract-first、明示的なModule境界、canonical Appl
 
 これは「すべて同じメソッド名にする」問題ではない。Protocolごとの意味、Schemaの選択、DIの所有権、Runtimeの寿命を保ったまま、同じ意味の重複表現を減らす。破壊的変更は許容し、最終的な正規APIは一種類にする。
 
-本ADRでは **HTTP応答の新しい記法を採用する設計決定**として明記する。他の領域の候補は検証と別PRが必要な **提案**と区別する。このPRは設計ドキュメントのみで、現時点でランタイムの挙動は変更しない。
+アプリ作者向けの変更と移行手順は[公開 API 移行ガイド](../ja/public-api-migration.md)を参照。
 
 ## 不変条件
 
@@ -60,7 +60,7 @@ const UsersHttp = http.implementation({
 
 `UsersContract.get.ok` は単なるZodのbody schemaではなく、**status・body・headers・stream等を持つresponse definitionの参照**である。公開Handlerの成功結果は常に `{ schema: reference, body?, headers? }` のオブジェクトとする。数値 `status`、文字列 `response` / `kind`、あるいは直接bodyを返す設計へは戻さない。
 
-これにより `ctx.response.ok({ body })` は削除できるが、`UsersContract.routes.get.responses.ok` をHandlerに繰り返し記述させる必要もない。既存の `routes` プロパティはGraphQL/MCPのraw route参照等で使われるため、単純に削除したり意味を変えたりしない。
+Handlerは短縮参照を使う。既存の `routes` プロパティはGraphQL/MCPのraw route参照等で使われるため、単純に削除したり意味を変えたりしない。
 
 ### 同じstatusに複数のSchema
 
@@ -134,11 +134,12 @@ const EventsHttp = http.implementation({
 
 SSEのbodyは対応する `AsyncIterable<SchemaOutput<...>>`。要素単位のSchema検証、SSE framing、Content-Type、Abort/Drain、Iterator cleanup、Execution leaseを維持する。別statusのstreamも `EventsContract.events.partial` を指定すれば一意に決まる。bodylessな204等は `{ schema: Contract.operation.noContent }`、動的headersは `{ schema, body, headers }` とし、Contractのheaders定義・defaultsへ従う。通常Contract HandlerからFetch `Response` を直接返して型保証を迂回しない（raw/delegateは別経路）。
 
-### 型とRuntimeに求める保証
+### 応答の所属と検証
 
 - Contractのoperation keyとresponse keyを補完し、`schema` 参照とbody/headers/streamの型相関を保持する。誤ったレスポンス、別operation/別Contractのreference、型不一致を拒否する。
-- 現行 `HttpContract` は `kind` / `routes` を持つ。これらとoperation名の衝突を無言で上書きせず、型とRuntimeで安全に扱う（compile時診断や別の安全なアクセス設計を検討）。
-- `http.contract` における解決・スナップショット化、compile、Application間の共有、DevTools replayの各段階でresponse definitionの安定したidentityを扱う。単なる `===` や同じ構造であることを根拠に他Routeの参照を受け入れない。必要ならnominal branding / canonical identityを設計する。
+- 現行 `HttpContract` は `kind` / `routes` を持つ。これらとoperation名の衝突を無言で上書きせず、型とRuntimeで安全に扱う（両方を予約名として型と実行時に拒否）。
+- Contract作成時にoperationごとの応答定義を個別にスナップショット化する。HTTP実行とreplayは同じcompiled routeを使用し、そのルートの成功応答に登録された参照だけを受け付ける。同じ入力オブジェクトで二つのContractを作っても、その所属は別になる。
+- 型のbrandにはルート集合・operation名・response名を含める。全く同じ宣言から複数回生成した値にはTypeScriptが同じ型を推論するため、インスタンス間の所属検証はRuntimeで行う。
 - Branch継承のresponseも短縮参照で型安全に取得できる。raw route、GraphQL/MCP委譲、OpenAPI、HTTP clientの既存契約を壊さない。
 - 従来の `ctx.response.*` を公開Contract Handlerから削除し、deprecated aliasを残さない。HTTP Middlewareのshort circuitは別責務として明示的に保持する。
 
@@ -165,19 +166,21 @@ SSEのbodyは対応する `AsyncIterable<SchemaOutput<...>>`。要素単位のSc
 - Logger: `LoggerModule` / `LoggerToken` の標準経路とoverrideを明確にし、暗黙Provider登録はしない。
 - Tooling: OpenAPIはContract単独またはApplication Modelから生成可能、Graph/doctorはApplication-awareのまま。Graph/DevToolsのためだけにDefinitionを変えない。
 
-## 提案1: MCPをContract-firstに統一（未採用）
+## 決定3: MCP Tool契約
 
-現行の `mcp.tool({ name,... })` と `tools: []`、実装側の `tools: {...}` に生じる名前の重複を減らす。
+Tool名はContractのキーとして宣言する。EndpointがOAuthと実行時の依存関係を所有する。
 
 ```ts
 const CounterContract = mcp.contract({
   'counter.get': {
-    description: 'Get the current counter.',
+    description: '現在値を取得する',
+    scopes: ['counter:read'],
     input: z.strictObject({}),
     output: z.object({ value: z.number() }),
   },
   'counter.increment': {
-    description: 'Increment the counter.',
+    description: '値を加算する',
+    scopes: ['counter:write'],
     input: z.strictObject({ by: z.number().int().positive() }),
     output: z.object({ value: z.number() }),
   },
@@ -188,7 +191,9 @@ const CounterMcp = mcp.implementation({
   version: '1.0.0',
   contract: CounterContract,
   route: HttpApi.routes.mcp,
-  factory: (counter = inject(CounterService)) => ({
+  factory: (counter = inject(CounterService), auth = inject(AuthService)) => ({
+    oauth: auth.mcp,
+    context: ({ principal }) => ({ principal }),
     tools: {
       'counter.get': () => ({ value: counter.get() }),
       'counter.increment': ({ by }) => ({ value: counter.increment(by) }),
@@ -197,9 +202,9 @@ const CounterMcp = mcp.implementation({
 })
 ```
 
-キーをTool名の正本とし、必須・余剰Tool・型の不一致を検査する。OAuth、requiredScopes、Tool context、Endpoint ownership、HTTP delegate、JSON Schema対応は維持。Toolを個別Executionに分けず、同名Toolの異なるEndpoint間共存を許す。旧tool配列との併用による二重source of truthは認めない。MCP全機能で表現可能かを別PRで検証してから採否を確定する。
+キーをTool名の正本とし、必須・余剰Tool・型の不一致を検査する。OAuth、requiredScopes、Tool context、Endpoint ownership、HTTP delegate、JSON Schema対応は維持。Toolを個別Executionに分けず、同名Toolの異なるEndpoint間共存を許す。旧tool配列との併用による二重source of truthは認めない。
 
-## 提案2: Task / Trigger / Queueの意味境界（未採用）
+## 決定4: Task / Trigger / Queueの意味境界
 
 ```ts
 const cleanup = task<void, void>({
@@ -221,57 +226,22 @@ const worker = trigger.consume({
 })
 ```
 
-`task` は処理本体、`trigger.cron/fixedDelay/consume` は起動条件、`queue` はpayloadとdriverを持つdescriptorとして区別する。現行APIの単純なrenameは決定しない。Queue driver binding、Cron timezone/overlap、Task closure、shutdownを維持して検証する。
+`task` は処理本体、`trigger.cron/fixedDelay/consume` は起動条件、`queue` はpayloadとdriverを持つdescriptorとして区別する。起動条件をModuleのexecutionsへ登録し、Queue driverをprovidersから供給する。
 
-## 提案3: Core命名・Middleware facade・CLIの整理（未採用）
+## 決定5: 定義、Middleware、CLI
 
-- `defineApplication` / `defineModule` / `defineEnv` / `defineArgs` / `defineError` を **一括** で評価する。名詞系 `application()` / `module()` / `env()` / `args()` 等は候補であり、単独renameを決定しない。
-- Extension作者向け `defineExecution` / `defineExecutionExtension` / `defineLayer` は低レベル構築APIとして分離し、命名統一だけを目的に変更しない。
-- `http.cors` / `http.basicAuth` / `http.bearerAuth` のfacade統一は候補だが、Generic middlewareやProtocol委譲を混同しない。認証成功/失敗の短絡表現はHTTP Handlerの新Resultとは別に設計・検証する。
-- LoggerModule / DevtoolsModule()のインスタンス生成規則、Module lifecycle、DI Probeとclass prototype methodの型補助を確認。DecoratorやLanguage Serviceは必須にしない。
-- CLIの同種entry引数は `--entry` を候補とする。GraphQLの `--config` は別の意味なのでそのまま。Runtime別のCreate/Bind/Attachの違いは説明で揃え、挙動を平坦化しない。
+アプリ作者が定義する対象は `application`、`module`、`env`、`args`、`domainError` という名詞でそろえる。Extension作者が扱う構築プリミティブには `defineExecution`、`defineExecutionExtension`、`defineLayer` を使う。依存を解決するFactoryの寿命と、Moduleへの明示的なProvider登録は従来のままとする。
 
-## 移行と実装順序
+HTTP固有のLayerは `http.basicAuth`、`http.bearerAuth`、`http.cors` で構築する。認証失敗に用いるMiddlewareのshort circuitは、Handlerから独立した契約を持つ。アプリをロードするCLIコマンドでは `--entry` で対象を指定する。GraphQLの生成設定には `--config` を使う。
 
-変更を単一の巨大実装PRへまとめず、小さい検証可能なPRへ分割する。
+## Runtimeと組み込みModule
 
-1. **P0: HTTP** Contractが `UsersContract.get.ok` を公開する型・Runtime・Conflict detectionを設計。Handler Resultを `{ schema, body?, headers? }` へ更新。 `ctx.response` 削除、Error mapping、SSE、bodyless、nested responses、OpenAPI/Client/DevTools回帰、Migration Guideを整える。
-2. **P1: MCP** Contract-firstの型計算とOAuth/Tool parityをPoCで検証し、採用後に専用ADR/PRで移行。
-3. **P2: Task/Queue** Triggerの役割分割、driver/queue/Taskの一致を型・Runtimeで確認。
-4. **P3: Core命名/Middleware** 同一原則で一括決定し、aliasを増やさず移行する。
-5. **P4: GraphQL/WS/MessagePort** 新抽象化ではなく境界の明文化と型・DX回帰を中心にする。
-6. **P5: Runtime/CLI/DevTools/Docs** スターター、導線、Migration、公開API smokeを揃える。
+| API                                                       | 資源の所有者と利用方法                                                                  |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `nodeRuntime.create` / `bunRuntime.create`                | Applicationを生成し、呼び出し側が `serve()` と `close()` を管理する                     |
+| `cloudflareWorkersRuntime.bind` / `awsLambdaRuntime.bind` | プラットフォームにfetchまたはLambda handlerを渡す                                       |
+| `electronRuntime.attach`                                  | ホストが所有するMessagePortに接続する                                                   |
+| `bootstrapApplication` / `createKernelApplication`        | 初期化済みKernelを取得する場合と、初期化を個別に制御する場合に使い分ける                |
+| `LoggerModule` / `DevtoolsModule()`                       | Loggerの標準Moduleは定義済みインスタンス。DevToolsは明示的なfactory呼び出しで有効化する |
 
-## 受け入れ条件
-
-### 型テスト
-
-- HTTP: `UsersContract.get.ok` がoperation固有のresponse referenceとして補完され、正しいbody/headers/SSEのみ許可する。
-- HTTP: `schema` に別operation・別Contract・error-mapped responseを渡すと拒否する。 `kind` / `routes` などoperation名衝突を誤解決しない。
-- HTTP: 同じstatusを持つ二つのbody Schemaをreferenceで区別する。単一レスポンスでも直接body返却は型エラー。
-- Classのprototype method、Factoryの文脈型、欠落・余剰handlerを検証。
-- MCP、Queue/Task、MessagePort、WebSocketの各Contract整合性を、個別候補採用時に検証する。
-
-### RuntimeとTooling
-
-- Contract→compiled route→Handlerの参照対応を正しく正規化し、Application複数作成、Branch継承、DevTools replayでもidentityを誤認しない。
-- HTTPの同status別Schema、SSEの逐次検証、Abort/cleanup/lease、204、headers、DomainError mapping、Middleware short circuitを回帰確認する。
-- OpenAPIのContract-only / Application経由projection同値、GraphやCLI diagnostics、GraphQL/MCP raw delegateを維持する。
-- Node、Bun、Cloudflare Workers、AWS Lambda、Electronの既存capability/lifecycle境界を維持する。
-- 最終実装PRで `npm run verify` を実行し、Type-level/Runtime/Examples/Docsを更新する。**本ADRだけのPRでは実装テストの成功を主張しない**。
-
-## 未解決・実装時の論点
-
-1. `UsersContract.get.ok` を公開する際の `kind` / `routes` / Built-in propertyとの名前衝突: compile-time禁止か安全な代替配置か。
-2. Response referenceのnominal identity/brandと、Compiler/Runtime/replay間での安定化。単純なオブジェクト同一性には依存しない。
-3. response definitionが構造的に同型でも型・Runtime双方で別Operation参照を防ぐ保証方法。
-4. HTTP Middlewareのshort circuitとerror mappingの内部Result表現を、公開Handler結果変更にどう追従させるか。
-5. Core/MCP/Trigger/CLIで提案したAPIの採否と移行タイミング。**未確定案は本ADRの採択をもって実装承認と見なさない**。
-
-## 非目標
-
-- このADRのPRで実装、リリース、既存実装の一斉migrationを行うこと。
-- Contract/SDL/Modelを廃止すること。
-- GraphQL/MCPのTransport、WebSocketの接続寿命、各Runtimeの所有権を無理に統一すること。
-- Providerの自動探索、任意のHandler内inject、Decorator/Language Serviceの導入。
-- ADR本文の候補APIを「すでに実装済み」と扱うこと。
+GraphQLはSDLと生成Manifest、WebSocketは接続とcodec、MessagePortはunary/streamとvariantの契約を維持する。それぞれの実行と終了処理はProtocol ExtensionとRuntimeが所有する。

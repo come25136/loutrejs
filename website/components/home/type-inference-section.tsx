@@ -37,11 +37,12 @@ export const AppController = http.implementation({
     greet(ctx) {
       const name = ctx.input.params.name
 
-      return ctx.response.ok({
+      return {
+        schema: AppContract.greet.ok,
         body: {
           message: \`Hello, \${name}!\`,
         },
-      })
+      }
     },
   }),
 })`

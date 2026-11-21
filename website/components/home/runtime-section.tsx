@@ -7,11 +7,11 @@ import { HomeSection } from './shared'
 
 hljs.registerLanguage('typescript', typescript)
 
-const applicationSource = `const application = defineApplication({
+const applicationSource = `const App = application({
   modules: [UsersModule(), HealthModule()],
 })
 
-export default application`
+export default App`
 
 const runtimes = [
   { name: 'Node.js', src: '/runtimes/nodejs.svg', width: 44, height: 50 },

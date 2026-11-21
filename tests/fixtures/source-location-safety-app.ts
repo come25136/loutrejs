@@ -1,4 +1,4 @@
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { EventEmitter } from 'node:events'
 
@@ -22,16 +22,16 @@ const Controller = http.implementation({
   name: 'SafetyController',
   contract: Contract,
   factory: () => ({
-    create(ctx) {
-      return ctx.response.ok({})
+    create() {
+      return { schema: Contract.create.ok }
     },
   }),
 })
 
-const Module = defineModule(() => ({
+const Module = module(() => ({
   name: 'SafetyModule',
   providers: [ExternalAlias],
   executions: [Controller],
 }))
 
-export default defineApplication({ modules: [Module()] })
+export default application({ modules: [Module()] })

@@ -1,8 +1,8 @@
 import { inject } from '@loutrejs/loutre'
-import { bearerAuth } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 import { UserRepository } from '../auth/repository.js'
 
-export const bearerAuthentication = bearerAuth({
+export const bearerAuthentication = http.bearerAuth({
   name: 'bearerAuthentication',
   realm: 'Loutre Example',
   factory: (users = inject(UserRepository)) => ({

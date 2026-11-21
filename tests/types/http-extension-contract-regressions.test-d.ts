@@ -1,6 +1,6 @@
 import { type } from '@loutrejs/loutre'
 import { z } from 'zod'
-import { basicAuth, http } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 
 const bodyWithoutHeaders = {
   create: {
@@ -69,7 +69,7 @@ const nonStringParamInput = {
 // @ts-expect-error raw path parameterはstringなのでschema inputがstringを受理する必要がある
 http.contract(nonStringParamInput)
 
-const authentication = basicAuth({
+const authentication = http.basicAuth({
   realm: 'Loutre',
   factory: () => ({
     authenticate: () => ({ currentUser: { id: 'user-1' } }),
@@ -84,7 +84,7 @@ interface ExplicitAuthState {
   readonly currentUser: { readonly id: string }
 }
 
-const explicitlyTypedAuthentication = basicAuth({
+const explicitlyTypedAuthentication = http.basicAuth({
   realm: 'Loutre Explicit',
   factory: () => ({
     authenticate: (): ExplicitAuthState => ({
@@ -119,7 +119,7 @@ http.implementation({
     profile: (context) => {
       const id: string = context.state.currentUser.id
       void id
-      return context.response.ok({})
+      return { schema: explicitlyTypedContract.profile.ok }
     },
   }),
 })
@@ -169,7 +169,7 @@ http.implementation({
         context.input.headers['content-type']
       void queryValue
       void headerValue
-      return context.response.ok({})
+      return { schema: rawInputContract.inspect.ok }
     },
   }),
 })

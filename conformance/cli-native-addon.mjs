@@ -14,13 +14,13 @@ try {
   await writeFile(
     entry,
     [
-      `import { defineApplication, defineModule, provide } from ${JSON.stringify(loutre)}`,
+      `import { application, module, provide } from ${JSON.stringify(loutre)}`,
       `import { transformSync } from ${JSON.stringify(swc)}`,
       "const result = transformSync('const answer: number = 42', { jsc: { parser: { syntax: 'typescript' } } })",
       "if (!result.code.includes('42') || result.code.includes(': number')) throw new Error('native addonの実行結果が不正です')",
       'class Codec { transform = transformSync }',
-      "const CodecModule = defineModule(() => ({ name: 'Codec', providers: [provide(Codec).useFactory(() => new Codec())] }))()",
-      'export default defineApplication({ modules: [CodecModule] })',
+      "const CodecModule = module(() => ({ name: 'Codec', providers: [provide(Codec).useFactory(() => new Codec())] }))()",
+      'export default application({ modules: [CodecModule] })',
     ].join('\n'),
     'utf8',
   )

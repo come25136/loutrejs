@@ -2,12 +2,6 @@ import { type CompiledTool } from './compiled.js'
 import { type McpContextInput, type McpToolResult } from './types.js'
 import { validateSchema, SchemaValidationError } from '@loutrejs/loutre'
 import { snapshotJson } from './json.js'
-import {
-  type McpToolOptions,
-  type Schema,
-  type McpToolDefinition,
-} from './contract.js'
-
 class PublicToolError extends Error {}
 
 export function toolError(message: string): Error {
@@ -48,20 +42,4 @@ export async function executeTool(
   const value = snapshotJson(await validateSchema(tool.output, result))
   context.signal.throwIfAborted()
   return { kind: 'success', value }
-}
-
-export function defineTool<
-  const TName extends string,
-  TInput extends Schema,
-  TOutput extends Schema,
->(
-  options: McpToolOptions<TName, TInput, TOutput>,
-): McpToolDefinition<TName, TInput, TOutput> {
-  return Object.freeze({
-    name: options.name,
-    description: options.description,
-    scopes: Object.freeze([...options.scopes]),
-    input: options.input,
-    output: options.output,
-  })
 }

@@ -1,4 +1,4 @@
-export { defineApplication } from './definition.js'
+export { application } from './definition.js'
 export type {
   ApplicationArgumentsInput,
   ApplicationDefinition,

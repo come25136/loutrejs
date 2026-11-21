@@ -1,8 +1,8 @@
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { Server } from 'node:http'
 import {
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   provide,
   LoggerService,
   LoggerToken,
@@ -41,9 +41,9 @@ describe('Runtimeの非同期Loggerによる終了失敗の報告', () => {
       if (name === 'Bun') vi.stubGlobal('Bun', { env: {}, version: '1.4.0' })
       const baseline = listeners()
       const output = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const application = defineApplication({
+      const application = createApplication({
         modules: [
-          defineModule({
+          module({
             providers: [
               Resource,
               provide(LoggerToken).useClass(AsyncLoggerService),
@@ -84,11 +84,8 @@ function worker(onShutdown: (signal?: string) => void | Promise<void>) {
       return onShutdown(signal)
     }
   }
-  return defineApplication({
-    modules: [
-      silentLoggingModule,
-      defineModule(() => ({ providers: [Resource] }))(),
-    ],
+  return createApplication({
+    modules: [silentLoggingModule, module(() => ({ providers: [Resource] }))()],
   })
 }
 

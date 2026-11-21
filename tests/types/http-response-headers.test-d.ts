@@ -1,4 +1,4 @@
-import { http } from '@loutrejs/loutre/http'
+import { http, type HttpHandlers } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const Contract = http.contract({
@@ -45,29 +45,41 @@ const Contract = http.contract({
   },
 })
 
+type Handlers = HttpHandlers<typeof Contract>
+
+// @ts-expect-error schemaで必須なresponse headersは省略できない
+const missing: Handlers['dynamic'] = () => ({
+  schema: Contract.dynamic.ok,
+  body: 'ng',
+})
+const override: Handlers['defaults'] = () => ({
+  schema: Contract.defaults.ok,
+  body: 'ng',
+  // @ts-expect-error defaultsはFWが付与するためhandlerから返さない
+  headers: { 'cache-control': 'override' },
+})
+const extra: Handlers['none'] = () => ({
+  schema: Contract.none.ok,
+  body: 'ng',
+  // @ts-expect-error 未宣言のresponse headerは返せない
+  headers: { etag: 'v1' },
+})
+void [missing, override, extra]
+
 http.implementation({
   contract: Contract,
   factory: () => ({
-    dynamic(ctx) {
-      // @ts-expect-error schemaで必須なresponse headersは省略できない
-      ctx.response.ok({ body: 'ng' })
-      return ctx.response.ok({ body: 'ok', headers: { etag: 'v1' } })
-    },
-    defaults(ctx) {
-      ctx.response.ok({
-        body: 'ng',
-        // @ts-expect-error defaultsはFWが付与するためhandlerから返さない
-        headers: { 'cache-control': 'override' },
-      })
-      return ctx.response.ok({ body: 'ok' })
-    },
-    combined(ctx) {
-      return ctx.response.ok({ body: 'ok', headers: { etag: 'v1' } })
-    },
-    none(ctx) {
-      // @ts-expect-error 未宣言のresponse headerは返せない
-      ctx.response.ok({ body: 'ng', headers: { etag: 'v1' } })
-      return ctx.response.ok({ body: 'ok' })
-    },
+    dynamic: () => ({
+      schema: Contract.dynamic.ok,
+      body: 'ok',
+      headers: { etag: 'v1' },
+    }),
+    defaults: () => ({ schema: Contract.defaults.ok, body: 'ok' }),
+    combined: () => ({
+      schema: Contract.combined.ok,
+      body: 'ok',
+      headers: { etag: 'v1' },
+    }),
+    none: () => ({ schema: Contract.none.ok, body: 'ok' }),
   }),
 })

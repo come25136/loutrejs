@@ -24,7 +24,7 @@ export interface EnvClass<TSchema extends EnvSchema = EnvSchema> extends Class<
   ): EnvKey<SchemaOutput<TSchema>[TKey]>
 }
 
-export function defineEnv<TSchema extends EnvSchema>(
+export function env<TSchema extends EnvSchema>(
   schema: TSchema,
 ): EnvClass<TSchema> {
   class DefinedEnv {

@@ -43,14 +43,14 @@ Loutreが所有するdefine APIについて、**その定義を生成したpubli
 
 Canonical mappingは次とする。
 
-- Module: `defineModule(...)` のcallsite
+- Module: `module(...)` のcallsite
 - Provider:
   - class provider: named class declaration。shorthand `[Service]` と `provide(T).useClass(Service)` のどちらもimplementation class identityからsourceを取得し、`useClass(...)` callsite自体はsourceにしない
   - value / factory / conditional provider: `provide(...).use*()` のcallsite
   - `environmentProvider(...)` / `argumentsProvider(...)`: factory callsite
 - HTTP Controller / Execution: `http.implementation(...)` / `defineHttpImplementation(...)` のcallsite
 - HTTP Route: `http.contract(...)` / `defineHttpContract(...)` のcallsite
-- HTTP Middleware: `http.middleware(...)` / `defineHttpMiddleware(...)` / `basicAuth(...)` / `bearerAuth(...)` / `cors(...)` のcallsite
+- HTTP Middleware: `http.middleware(...)` / `defineHttpMiddleware(...)` / `http.basicAuth(...)` / `http.bearerAuth(...)` / `http.cors(...)` のcallsite
 - Handler: Controller / Implementationと同じcallsite
 
 Handler objectのmethod property、factory内return位置、object literal property位置等へさらに細かいsourceを推測しない。
@@ -100,7 +100,7 @@ Source metadataはbest-effortだが、**対応対象として認識するsyntax�
 Loutre public APIはnamed importとnamespace importの両方を認識する。
 
 ```ts
-import { defineModule } from '@loutrejs/loutre'
+import { module } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 ```
 
@@ -110,7 +110,7 @@ import { http } from '@loutrejs/loutre/http'
 import * as loutre from '@loutrejs/loutre'
 import * as httpApi from '@loutrejs/loutre/http'
 
-loutre.defineModule(...)
+loutre.module(...)
 httpApi.http.contract(...)
 httpApi.defineHttpImplementation(...)
 ```
@@ -124,7 +124,7 @@ named class declarationはtop-levelだけに限定せず、function / block内�
 ```ts
 function createModule() {
   class NestedService {}
-  return defineModule(() => ({ providers: [NestedService] }))
+  return module(() => ({ providers: [NestedService] }))
 }
 ```
 

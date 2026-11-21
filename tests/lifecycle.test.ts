@@ -5,8 +5,8 @@ import {
   provide,
   token,
   createKernelApplication,
-  defineApplication,
-  defineModule,
+  application as createApplication,
+  module,
   hook,
 } from '@loutrejs/loutre'
 
@@ -14,7 +14,7 @@ describe('Application Lifecycle', () => {
   it('ModuleのonModuleInit失敗時も対応するonModuleDestroyを実行する', async () => {
     const events: string[] = []
     const failure = new Error('module init failure')
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       lifecycle: {
         onModuleInit: hook({
           inject: [],
@@ -32,7 +32,7 @@ describe('Application Lifecycle', () => {
       },
     }))
     const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     await expect(application.init()).rejects.toBe(failure)
@@ -66,9 +66,9 @@ describe('Application Lifecycle', () => {
         events.push('B.destroy')
       }
     }
-    const Module = defineModule(() => ({ providers: [ProviderA, ProviderB] }))
+    const Module = module(() => ({ providers: [ProviderA, ProviderB] }))
     const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     await expect(application.init()).rejects.toBe(failure)
@@ -87,9 +87,9 @@ describe('Application Lifecycle', () => {
         throw cleanupError
       }
     }
-    const Module = defineModule(() => ({ providers: [Provider] }))
+    const Module = module(() => ({ providers: [Provider] }))
     const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     let thrown: unknown
@@ -116,9 +116,9 @@ describe('Application Lifecycle', () => {
         return Promise.resolve()
       }
     }
-    const Module = defineModule(() => ({ providers: [Provider] }))
+    const Module = module(() => ({ providers: [Provider] }))
     const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
     await application.init()
     await application.close()
@@ -141,9 +141,9 @@ describe('Application Lifecycle', () => {
         throw secondError
       }
     }
-    const Module = defineModule(() => ({ providers: [First, Second] }))
+    const Module = module(() => ({ providers: [First, Second] }))
     const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
     await application.init()
 
@@ -172,7 +172,7 @@ describe('Application Lifecycle', () => {
         events.push(`provider.shutdown:${signal}`)
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       lifecycle: {
         onModuleDestroy: {
@@ -199,7 +199,7 @@ describe('Application Lifecycle', () => {
       },
     }))
     const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
     await application.init()
 
@@ -226,7 +226,7 @@ describe('Application Lifecycle', () => {
         destroyed = true
       }
     }
-    const Module = defineModule(() => ({ providers: [Resource] }))
+    const Module = module(() => ({ providers: [Resource] }))
 
     expect(buildApplicationModel({ modules: [Module()] }).diagnostics).toEqual(
       [],
@@ -251,7 +251,7 @@ describe('Application Lifecycle', () => {
         events.push('service.dispose')
       }
     }
-    const Module = defineModule({
+    const Module = module({
       providers: [Service, Connection],
       lifecycle: {
         onApplicationDispose: hook({
@@ -263,7 +263,7 @@ describe('Application Lifecycle', () => {
       },
     })
     const app = await bootstrapApplication({
-      application: defineApplication({ modules: [Module] }),
+      application: createApplication({ modules: [Module] }),
     })
     await app.close()
     await app.close()
@@ -292,7 +292,7 @@ describe('Application Lifecycle', () => {
       }
     }
     const ALIAS = token<Resource>('resource.alias')
-    const Module = defineModule({
+    const Module = module({
       providers: [
         Resource,
         provide(ALIAS).useFactory({
@@ -302,7 +302,7 @@ describe('Application Lifecycle', () => {
       ],
     })
     const app = await bootstrapApplication({
-      application: defineApplication({ modules: [Module] }),
+      application: createApplication({ modules: [Module] }),
     })
     expect(app.get(ALIAS)).toBe(app.get(Resource))
     await app.close()
@@ -326,9 +326,9 @@ describe('Application Lifecycle', () => {
         if (this.connection instanceof Connection) throw failure
       }
     }
-    const Module = defineModule({ providers: [Broken, Connection] })
+    const Module = module({ providers: [Broken, Connection] })
     const app = createKernelApplication({
-      application: defineApplication({ modules: [Module] }),
+      application: createApplication({ modules: [Module] }),
     })
     await expect(app.init()).rejects.toBe(failure)
     expect(events).toEqual(['destroy', 'dispose'])

@@ -1,20 +1,18 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import {
   bootstrapApplication,
-  defineApplication,
+  application as createApplication,
   defineLayer,
   inject,
-  defineModule,
+  module,
   provide,
   token,
   composeLayers,
   type ApplicationModel,
 } from '@loutrejs/loutre'
 import {
+  trigger,
   bindQueueDriver,
-  consume,
-  cron,
-  fixedDelay,
   queue,
   task,
   type TasksHostApi,
@@ -31,12 +29,12 @@ describe('Task Execution Extension', () => {
         async (name) =>
           `${prefix}:${name}`,
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [provide(PREFIX).useValue('hello')],
       executions: [greet],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     expectTypeOf(application.tasks).toEqualTypeOf<TasksHostApi>()
@@ -66,15 +64,15 @@ describe('Task Execution Extension', () => {
     })
     const declaration = { ...registered.declaration }
     const hostInput = { ...registered, declaration }
-    const trigger = fixedDelay({
+    const schedule = trigger.fixedDelay({
       name: 'snapshot-trigger',
       delay: 10_000,
       task: hostInput,
     })
-    const Module = defineModule(() => ({
-      executions: [trigger],
+    const Module = module(() => ({
+      executions: [schedule],
     }))
-    const definition = defineApplication({ modules: [Module()] })
+    const definition = createApplication({ modules: [Module()] })
     const compiled = definition.model.extensions
       .values()[0]!
       .executions.map((execution) => execution.compiled as object)
@@ -118,14 +116,14 @@ describe('Task Execution Extension', () => {
       name: 'explicit-task',
       factory: () => async () => undefined,
     })
-    const trigger = fixedDelay({
+    const schedule = trigger.fixedDelay({
       name: 'explicit-trigger',
       delay: 10_000,
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [job, trigger] }))
+    const Module = module(() => ({ executions: [job, schedule] }))
 
-    const definition = defineApplication({ modules: [Module()] })
+    const definition = createApplication({ modules: [Module()] })
 
     expect(definition.model.diagnostics).not.toContainEqual(
       expect.objectContaining({ code: 'LUTRE_EXECUTION_ID_COLLISION' }),
@@ -147,19 +145,19 @@ describe('Task Execution Extension', () => {
       name: 'shared-referenced-task',
       factory: () => async () => undefined,
     })
-    const TaskModule = defineModule(() => ({ executions: [job] }))
-    const FirstModule = defineModule(() => ({
+    const TaskModule = module(() => ({ executions: [job] }))
+    const FirstModule = module(() => ({
       executions: [
-        fixedDelay({
+        trigger.fixedDelay({
           name: 'first-shared-trigger',
           delay: 10_000,
           task: job,
         }),
       ],
     }))
-    const SecondModule = defineModule(() => ({
+    const SecondModule = module(() => ({
       executions: [
-        fixedDelay({
+        trigger.fixedDelay({
           name: 'second-shared-trigger',
           delay: 10_000,
           task: job,
@@ -167,7 +165,7 @@ describe('Task Execution Extension', () => {
       ],
     }))
 
-    const definition = defineApplication({
+    const definition = createApplication({
       modules: [FirstModule(), TaskModule(), SecondModule()],
     })
 
@@ -204,19 +202,19 @@ describe('Task Execution Extension', () => {
         async () =>
           dependency,
     })
-    const FirstModule = defineModule(() => ({
+    const FirstModule = module(() => ({
       providers: [provide(DEP).useValue('first')],
       executions: [
-        fixedDelay({
+        trigger.fixedDelay({
           name: 'first-ambiguous-trigger',
           delay: 10_000,
           task: job,
         }),
       ],
     }))
-    const SecondModule = defineModule(() => ({
+    const SecondModule = module(() => ({
       executions: [
-        fixedDelay({
+        trigger.fixedDelay({
           name: 'second-ambiguous-trigger',
           delay: 10_000,
           task: job,
@@ -226,8 +224,8 @@ describe('Task Execution Extension', () => {
     const first = FirstModule()
     const second = SecondModule()
 
-    const forward = defineApplication({ modules: [first, second] }).model
-    const reversed = defineApplication({ modules: [second, first] }).model
+    const forward = createApplication({ modules: [first, second] }).model
+    const reversed = createApplication({ modules: [second, first] }).model
     const codes = (model: ApplicationModel) =>
       model.diagnostics.map(({ code }) => code).toSorted()
 
@@ -243,14 +241,14 @@ describe('Task Execution Extension', () => {
 
   it('close後は保持済みTrigger APIからresourceを再生成できない', async () => {
     const job = task({ name: 'closed-task', factory: () => async () => {} })
-    const trigger = fixedDelay({
+    const schedule = trigger.fixedDelay({
       name: 'closed-trigger',
       delay: 10_000,
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [trigger] }))
+    const Module = module(() => ({ executions: [schedule] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
     const tasks = application.tasks
 
@@ -276,12 +274,12 @@ describe('Task Execution Extension', () => {
           return new Promise<never>(() => undefined)
         },
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [job],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
     const invocation = application.tasks.run(job)
@@ -310,15 +308,15 @@ describe('Task Execution Extension', () => {
         executions.push(new Date())
       },
     })
-    const trigger = cron({
+    const schedule = trigger.cron({
       name: 'cron-day-or-trigger',
       expression: '0 0 1 * 1',
       timezone: 'UTC',
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [trigger] }))
+    const Module = module(() => ({ executions: [schedule] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     try {
@@ -347,15 +345,15 @@ describe('Task Execution Extension', () => {
         executions += 1
       },
     })
-    const trigger = cron({
+    const schedule = trigger.cron({
       name: 'cron-sunday-range-trigger',
       expression: '0 0 * * 1-7',
       timezone: 'UTC',
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [trigger] }))
+    const Module = module(() => ({ executions: [schedule] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     try {
@@ -379,15 +377,15 @@ describe('Task Execution Extension', () => {
         executions += 1
       },
     })
-    const trigger = cron({
+    const schedule = trigger.cron({
       name: 'cron-unrestricted-day-trigger',
       expression: '0 0 */2 * 1',
       timezone: 'UTC',
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [trigger] }))
+    const Module = module(() => ({ executions: [schedule] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     try {
@@ -413,15 +411,15 @@ describe('Task Execution Extension', () => {
         executions.push(new Date())
       },
     })
-    const trigger = cron({
+    const schedule = trigger.cron({
       name: 'cron-fall-back-trigger',
       expression: '30 1 * * *',
       timezone: 'America/New_York',
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [trigger] }))
+    const Module = module(() => ({ executions: [schedule] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     try {
@@ -464,7 +462,7 @@ describe('Task Execution Extension', () => {
           void resource
         },
     })
-    const trigger = consume({
+    const schedule = trigger.consume({
       name: 'shutdown-consumer',
       queue: descriptor,
       task: job,
@@ -482,12 +480,12 @@ describe('Task Execution Extension', () => {
         }
       },
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource, bindQueueDriver(descriptor, driver)],
-      executions: [trigger],
+      executions: [schedule],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
     const startup = application.tasks.start()
@@ -527,17 +525,17 @@ describe('Task Execution Extension', () => {
       name: 'startup-task',
       factory: () => async () => undefined,
     })
-    const FirstConsumer = consume({
+    const FirstConsumer = trigger.consume({
       name: 'first-startup-consumer',
       queue: firstQueue,
       task: job,
     })
-    const SecondConsumer = consume({
+    const SecondConsumer = trigger.consume({
       name: 'second-startup-consumer',
       queue: secondQueue,
       task: job,
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [
         bindQueueDriver(firstQueue, {
           async start() {
@@ -558,7 +556,7 @@ describe('Task Execution Extension', () => {
       executions: [FirstConsumer, SecondConsumer],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     let thrown: unknown
@@ -588,7 +586,7 @@ describe('Task Execution Extension', () => {
       name: 'pending-stop-task',
       factory: () => async () => undefined,
     })
-    const trigger = consume({
+    const schedule = trigger.consume({
       name: 'pending-stop-consumer',
       queue: descriptor,
       task: job,
@@ -598,7 +596,7 @@ describe('Task Execution Extension', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [
         Resource,
         bindQueueDriver(descriptor, {
@@ -612,10 +610,10 @@ describe('Task Execution Extension', () => {
           },
         }),
       ],
-      executions: [trigger],
+      executions: [schedule],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
     await application.tasks.start()

@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   bootstrapApplication,
   createKernelApplication,
-  defineApplication,
+  application as createApplication,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   type ExecutionDefinition,
   type ExecutionLease,
 } from '@loutrejs/loutre'
@@ -17,7 +17,7 @@ interface BrokenHostDefinition extends ExecutionDefinition {
 describe('Application Kernel regression', () => {
   it('asyncDisposeはadapterが差し替えたcloseを呼ぶ', async () => {
     const application = createKernelApplication({
-      application: defineApplication({ modules: [] }),
+      application: createApplication({ modules: [] }),
     })
     const close = vi.fn(application.close.bind(application))
     application.close = close
@@ -67,14 +67,14 @@ describe('Application Kernel regression', () => {
     }
 
     const execution = defineExecution(extension, { id: 'broken.host' })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [execution],
     }))
 
     await expect(
       bootstrapApplication({
-        application: defineApplication({ modules: [Module()] }),
+        application: createApplication({ modules: [Module()] }),
       }),
     ).rejects.toThrow('host creation failed')
 
@@ -113,14 +113,14 @@ describe('Application Kernel regression', () => {
     const second = createExtension('@fixture/second-drain', () => {
       events.push('second.drain')
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       executions: [
         defineExecution(first, { id: 'first.drain' }),
         defineExecution(second, { id: 'second.drain' }),
       ],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
 
     const closing = application.close()
@@ -182,12 +182,12 @@ describe('Application Kernel regression', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [defineExecution(extension, {})],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
     })
     const signal = application.fixture.start()
 
@@ -253,12 +253,12 @@ describe('Application Kernel regression', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [defineExecution(extension, {})],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 5,
     })
     application.fixture.start()
@@ -334,12 +334,12 @@ describe('Application Kernel regression', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [defineExecution(extension, {})],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
     const signal = application.fixture.start()
@@ -402,12 +402,12 @@ describe('Application Kernel regression', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [defineExecution(extension, {})],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
 
@@ -469,12 +469,12 @@ describe('Application Kernel regression', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [defineExecution(extension, {})],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: createApplication({ modules: [Module()] }),
       forceShutdownTimeoutMs: 5,
     })
     application.fixture.start()
@@ -509,7 +509,7 @@ describe('Application Kernel regression', () => {
         throw new Error('initialization failed')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [BrokenProvider, UninitializedProvider],
       lifecycle: {
         onModuleDestroy: {
@@ -519,7 +519,7 @@ describe('Application Kernel regression', () => {
         },
       },
     }))
-    const definition = defineApplication({ modules: [Module()] })
+    const definition = createApplication({ modules: [Module()] })
     constructed = 0
 
     await expect(

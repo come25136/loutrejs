@@ -32,11 +32,11 @@ Loutre separates the Application Definition from runtime-specific startup code a
 For example, register HTTP executions and scheduled Tasks in the same application model:
 
 ```ts
-const WorkerModule = defineModule({
+const WorkerModule = module({
   executions: [cleanup, heartbeat],
 })
 
-export default defineApplication({
+export default application({
   modules: [ApiModule, WorkerModule],
 })
 ```
@@ -114,6 +114,8 @@ Runnable projects are available in [`examples/`](./examples/).
 - [`database-postgres`](./examples/database-postgres/) / [`database-drizzle-postgres`](./examples/database-drizzle-postgres/) / [`database-prisma-postgres`](./examples/database-prisma-postgres/) — Database integration
 
 ## Documentation
+
+- [公開 API 移行ガイド](docs/ja/public-api-migration.md)
 
 - [Website](https://loutrejs.come25136.id)
 - [Getting Started](./docs/getting-started.md) — Project creation, HTTP, Tasks, runtimes, and the CLI

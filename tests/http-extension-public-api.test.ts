@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  defineApplication,
-  defineError,
-  defineModule,
+  application as declareApplication,
+  domainError,
+  module,
   inject,
 } from '@loutrejs/loutre'
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
@@ -24,8 +24,8 @@ async function createApplication<
   factory: Parameters<typeof http.implementation<TContract>>[0]['factory'],
 ) {
   const implementation = http.implementation({ contract, factory })
-  const Module = defineModule(() => ({ executions: [implementation] }))
-  const definition = defineApplication({ modules: [Module()] })
+  const Module = module(() => ({ executions: [implementation] }))
+  const definition = declareApplication({ modules: [Module()] })
   const application = await bootstrapApplication({
     application: definition,
     capabilities: [bindHttpServer({ runtime: 'test' })],
@@ -163,8 +163,10 @@ describe('HTTP Execution Extension public API surface', () => {
     const { application, definition } = await createApplication(
       contract,
       () => ({
-        getUser: (ctx) =>
-          ctx.response.ok({ body: { id: ctx.input.params.id } }),
+        getUser: (ctx) => ({
+          schema: contract.getUser.ok,
+          body: { id: ctx.input.params.id },
+        }),
       }),
     )
     try {
@@ -189,7 +191,7 @@ describe('HTTP Execution Extension public API surface', () => {
   })
 
   it('Domain Errorを宣言responseへmappingする', async () => {
-    const UserNotFound = defineError({
+    const UserNotFound = domainError({
       code: 'USER_NOT_FOUND',
       data: z.object({ userId: z.string() }),
     })
@@ -246,13 +248,13 @@ describe('HTTP Execution Extension public API surface', () => {
     const { application, definition } = await createApplication(
       contract,
       () => ({
-        events: (ctx) =>
-          ctx.response.ok({
-            body: (async function* () {
-              yield { sequence: 1 }
-              yield { sequence: 2 }
-            })(),
-          }),
+        events: () => ({
+          schema: contract.events.ok,
+          body: (async function* () {
+            yield { sequence: 1 }
+            yield { sequence: 2 }
+          })(),
+        }),
       }),
     )
     try {
@@ -396,16 +398,16 @@ describe('HTTP Execution Extension public API surface', () => {
       },
     })
     const { application } = await createApplication(contract, () => ({
-      events: (ctx) =>
-        ctx.response.ok({
-          body: (async function* () {
-            try {
-              yield { sequence: 'invalid' } as never
-            } finally {
-              finalized = true
-            }
-          })(),
-        }),
+      events: () => ({
+        schema: contract.events.ok,
+        body: (async function* () {
+          try {
+            yield { sequence: 'invalid' } as never
+          } finally {
+            finalized = true
+          }
+        })(),
+      }),
     }))
     try {
       const response = await application.http.fetch(
@@ -438,17 +440,17 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: () => ({
-        events: (ctx) =>
-          ctx.response.ok({
-            body: (async function* () {
-              try {
-                let sequence = 0
-                while (true) yield { sequence: sequence++ }
-              } finally {
-                events.push('stream.finalized')
-              }
-            })(),
-          }),
+        events: () => ({
+          schema: contract.events.ok,
+          body: (async function* () {
+            try {
+              let sequence = 0
+              while (true) yield { sequence: sequence++ }
+            } finally {
+              events.push('stream.finalized')
+            }
+          })(),
+        }),
       }),
     })
     class Resource {
@@ -456,12 +458,12 @@ describe('HTTP Execution Extension public API surface', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     const response = await application.http.fetch(
@@ -512,21 +514,22 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: () => ({
-        async events(context) {
+        async events() {
           notifyHandlerStarted()
           await handlerResume
-          return context.response.ok({
+          return {
+            schema: contract.events.ok,
             body: (async function* () {
               let sequence = 0
               while (true) yield sequence++
             })(),
-          })
+          }
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [implementation] }))
+    const Module = module(() => ({ executions: [implementation] }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     const response = application.http.fetch(
@@ -557,7 +560,7 @@ describe('HTTP Execution Extension public API surface', () => {
       },
     })
     const { application } = await createApplication(contract, () => ({
-      health: (context) => context.response.ok({}),
+      health: () => ({ schema: contract.health.ok }),
     }))
 
     const closing = application.close()
@@ -619,7 +622,7 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: () => ({
-        events: (context) => context.response.ok({ body: source }),
+        events: () => ({ schema: contract.events.ok, body: source }),
       }),
     })
     class Resource {
@@ -627,12 +630,12 @@ describe('HTTP Execution Extension public API surface', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 10,
     })
@@ -689,15 +692,18 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: (resource = inject(Resource)) => ({
-        download: (context) => context.response.ok({ body: resource.stream() }),
+        download: () => ({
+          schema: contract.download.ok,
+          body: resource.stream(),
+        }),
       }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
@@ -748,7 +754,7 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: () => ({
-        events: (context) => context.response.ok({ body: source }),
+        events: () => ({ schema: contract.events.ok, body: source }),
       }),
     })
     class Resource {
@@ -756,12 +762,12 @@ describe('HTTP Execution Extension public API surface', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 10,
     })
@@ -845,7 +851,7 @@ describe('HTTP Execution Extension public API surface', () => {
     const implementation = http.implementation({
       contract,
       factory: () => ({
-        events: (context) => context.response.ok({ body: source }),
+        events: () => ({ schema: contract.events.ok, body: source }),
       }),
     })
     class Resource {
@@ -853,12 +859,12 @@ describe('HTTP Execution Extension public API surface', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
     const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: declareApplication({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 10,
     })
