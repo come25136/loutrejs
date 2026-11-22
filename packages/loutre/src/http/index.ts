@@ -45,6 +45,7 @@ export type {
   HttpErrorMapping,
   HttpErrorMatcher,
   HttpExtensionRuntime,
+  HttpHandlerContext,
   HttpHandlers,
   HttpHeaderValue,
   HttpHeaders,

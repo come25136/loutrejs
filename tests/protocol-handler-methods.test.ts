@@ -10,7 +10,7 @@ import {
 import {
   bindHttpServer,
   http,
-  type HttpExecutionContext,
+  type HttpHandlerContext,
   type HttpHandlers,
 } from '@loutrejs/loutre/http'
 import {
@@ -28,7 +28,7 @@ const contract = http.contract({
     responses: { ok: { status: 200, body: z.string() } },
   },
 })
-type HttpContext = HttpExecutionContext<typeof contract.routes.echo>
+type HttpContext = HttpHandlerContext<typeof contract, 'echo'>
 class HttpController {
   #message = '応答'
   echo(_context: HttpContext) {

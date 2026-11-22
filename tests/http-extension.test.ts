@@ -14,7 +14,7 @@ import {
 import {
   bindHttpServer,
   http,
-  type HttpExecutionContext,
+  type HttpHandlerContext,
   type HttpHostApi,
 } from '@loutrejs/loutre/http'
 
@@ -389,9 +389,7 @@ describe('HTTP Execution Extension', () => {
     expectTypeOf(app.http).toEqualTypeOf<HttpHostApi>()
     expectTypeOf<
       Parameters<ReturnType<typeof controller.factory>['getUser']>[0]
-    >().toEqualTypeOf<
-      HttpExecutionContext<(typeof contract.routes)['getUser']>
-    >()
+    >().toEqualTypeOf<HttpHandlerContext<typeof contract, 'getUser'>>()
 
     const response = await app.http.fetch(
       new Request('http://fixture.test/users/42?detail=full'),

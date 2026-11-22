@@ -554,6 +554,11 @@ export type HttpHandlers<TContract extends HttpContract> = {
       >
 }
 
+export type HttpHandlerContext<
+  TContract extends HttpContract,
+  TName extends keyof HttpHandlers<TContract>,
+> = Parameters<HttpHandlers<TContract>[TName]>[0]
+
 export interface HttpImplementationDefinition<
   TContract extends HttpContract = HttpContract,
 > {

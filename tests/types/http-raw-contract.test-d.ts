@@ -1,4 +1,8 @@
-import { http, type HttpContractRawRoute } from '@loutrejs/loutre/http'
+import {
+  http,
+  type HttpHandlerContext,
+  type HttpContractRawRoute,
+} from '@loutrejs/loutre/http'
 const layer = http.middleware<{ tenant: string }>({
   name: 'Tenant',
   factory: () => async (_input, next) => next({ tenant: 'もみじ' }),
@@ -20,6 +24,10 @@ const httpContract = http.contract({
 const path: '/api/graphql' = httpContract.routes.delegated.path
 const raw: HttpContractRawRoute = httpContract.routes.delegated
 void [path, raw]
+// @ts-expect-error rawルートは通常のHTTPハンドラを持たない
+type DelegatedContext = HttpHandlerContext<typeof httpContract, 'delegated'>
+// @ts-expect-error 契約にない操作名を指定できない
+type MissingContext = HttpHandlerContext<typeof httpContract, 'missing'>
 http.implementation({
   contract: httpContract,
   factory: () => ({

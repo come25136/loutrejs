@@ -32,7 +32,7 @@ const UsersHttp = http.implementation({
 - `createHttpClient`、`fetchHttpTransport`、`HttpClientResponseError`、`httpBaseUrl` と関連する型を削除しました。HTTP の呼び出しには標準の `fetch()` などを使えます。サーバーのテストでは `app.http.fetch(new Request(url))` から Handler を実行できます。
 - 継承した応答には最終的なContractのoperationからアクセスします。子Contractと親Contractの参照はそれぞれのContractに属します。`kind` と `routes` は予約名なので、該当するoperation名と実装メソッド名を一緒に変更してください。
 - 業務エラーは `domainError` で定義してthrowし、Contractの `http.error` に対応付けます。Middlewareの認証失敗は従来の `{ response, body }`、raw/delegateはFetchの `Response` を使います。
-- クラスを使う場合、メソッド引数に `Parameters<HttpHandlers<typeof UsersContract>['get']>[0]` を指定できます。別に宣言したクラスへは、Factory内のオブジェクトリテラルに効く文脈型推論が届かないためです。
+- クラスのメソッドでは、`@loutrejs/loutre/http` から `HttpHandlerContext` を型として import し、`get(ctx: HttpHandlerContext<typeof UsersContract, 'get'>)` と書けます。`ctx.input` と `ctx.state` の型は、その操作のリクエストスキーマと Middleware から決まります。
 
 ## MCP
 
