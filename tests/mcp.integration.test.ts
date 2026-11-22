@@ -240,7 +240,12 @@ describe('MCP Streamable HTTP', () => {
           output: z.object({}),
         },
       }),
-    ).toThrow('文字列')
+    ).toThrow('Symbolキー')
+    const toolsWithMetadata = Object.defineProperty({}, Symbol('metadata'), {
+      value: true,
+    })
+    expect(() => mcp.contract(toolsWithMetadata)).toThrow('Symbolキー')
+    expect(mcp.contract({ ...toolsWithMetadata }).tools).toEqual({})
   })
 
   it('MCP入口とOAuthメタデータの両方でHTTPルートの衝突を診断する', () => {

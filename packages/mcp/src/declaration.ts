@@ -51,7 +51,9 @@ export function defineMcpContract<const TTools extends McpTools>(
 }>
 export function defineMcpContract(tools: McpTools): McpContract {
   if (Object.getOwnPropertySymbols(tools).length)
-    throw new TypeError('MCP Tool名には文字列を指定してください。')
+    throw new TypeError(
+      'MCP Tool一覧にSymbolキーが含まれています。Tool名には文字列を指定してください。',
+    )
   const contract = {
     kind: 'mcp-contract' as const,
     [mcpContractBrand]: true as const,

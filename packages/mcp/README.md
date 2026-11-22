@@ -29,6 +29,8 @@ const OrdersMcp = mcp.implementation({
 })
 ```
 
+`mcp.contract` はTool一覧・各Tool定義・`scopes` 配列をコピーして凍結します。`input` と `output` には渡したスキーマをそのまま使うため、宣言後も同じ検証動作を保つスキーマを渡してください。Tool一覧のキーには文字列を使います。列挙できないものを含め、一覧に直接定義されたSymbolキーは宣言時にエラーになります。
+
 `factory`と`context`は必須です。factoryはApplicationごとのendpointにつき一度実体を作り、Contextは認可と入力検証後のTool呼び出しごとに作ります。factoryで保持するtransient Providerもそのendpointの呼び出し間で共有します。
 
 Contextの入力は`request`、middlewareの`state`、検証済みの`principal`、`signal`です。呼び出しごとの可変状態はContextで構築してください。Tool handlerの入出力とContextは契約から型推論されます。

@@ -30,6 +30,10 @@ describe('HTTP handlerのdirect replay', () => {
         await next({ offset: 3 })
       },
     })
+    const calculated = {
+      status: 200,
+      body: z.object({ value: z.number() }),
+    } as const
     const contract = http.contract({
       calculate: {
         method: 'POST',
@@ -41,7 +45,8 @@ describe('HTTP handlerのdirect replay', () => {
           body: z.object({ multiplier: z.number() }),
         },
         responses: {
-          ok: { status: 200, body: z.object({ value: z.number() }) },
+          ok: calculated,
+          cached: calculated,
         },
       },
     })
@@ -85,7 +90,7 @@ describe('HTTP handlerのdirect replay', () => {
       })
       expect(replay).toMatchObject({
         status: 'ok',
-        result: { value: { body: { value: 11 } } },
+        result: { value: { response: 'ok', body: { value: 11 } } },
       })
       const invalid = await instrumentation.replayCapsule({
         requestId: requestId('invalid-replay'),

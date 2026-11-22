@@ -156,6 +156,9 @@ it('同じ403を返す二つの分岐はステータス・ヘッダー・本文�
       },
     },
   })
+  expect(contract.check.permissionDenied).not.toBe(
+    contract.check.accountSuspended,
+  )
   let suspended = false
   const implementation = http.implementation({
     contract,

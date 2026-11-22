@@ -1,5 +1,9 @@
 import { domainError } from '@loutrejs/loutre'
-import { http, type HttpHandlers } from '@loutrejs/loutre/http'
+import {
+  http,
+  type HttpHandlers,
+  type HttpExecutionResponseDefinition,
+} from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const Missing = domainError({ code: 'MISSING', data: z.string() })
@@ -53,3 +57,16 @@ http.implementation({
   }),
 })
 void [badBody, wrongRoute, wrongContract, mapped, bare]
+
+const noContent: HttpExecutionResponseDefinition & { readonly status: 204 } = {
+  status: 204,
+}
+const WidenedContract = http.contract({
+  clear: { method: 'DELETE', path: '/items', responses: { noContent } },
+})
+http.implementation({
+  contract: WidenedContract,
+  factory: () => ({
+    clear: () => ({ schema: WidenedContract.clear.noContent }),
+  }),
+})

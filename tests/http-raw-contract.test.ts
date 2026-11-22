@@ -6,6 +6,7 @@ import {
   isHttpRawContractRoute,
   isHttpContract,
 } from '@loutrejs/loutre/http'
+import { httpContractBrand } from '../packages/loutre/src/http/contract.js'
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 
 function contract() {
@@ -59,6 +60,13 @@ describe('HTTP Contractのrawルート', () => {
     }
     expect(isHttpContract(copy)).toBe(false)
     expect(isHttpContract(Object.create(httpContract))).toBe(false)
+    const inherited = Object.create(httpContract, {
+      [httpContractBrand]: { value: true },
+    })
+    expect(isHttpContract(inherited)).toBe(true)
+    expect(() =>
+      http.implementation({ contract: inherited, factory: () => ({}) }),
+    ).toThrow('http.contract()')
     expect(() =>
       http.implementation({
         contract: copy,

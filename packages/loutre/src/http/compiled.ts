@@ -64,8 +64,9 @@ export function isCompiledHttpContract(
 ): contract is CompiledHttpContract {
   return (
     isHttpContract(contract) &&
-    compiledContractRoutes in contract &&
-    Array.isArray(contract[compiledContractRoutes])
+    Array.isArray(
+      Object.getOwnPropertyDescriptor(contract, compiledContractRoutes)?.value,
+    )
   )
 }
 
