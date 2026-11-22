@@ -20,12 +20,12 @@ export const extension = defineExecutionExtension<
 >({
   kind: 'execution-extension',
   name: 'loutre:mcp',
-  abiVersion: '6',
+  abiVersion: '7',
   compile(definition, context) {
     if (!definition.name.trim() || !definition.version.trim())
       throw new TypeError('MCP endpointのnameとversionを指定してください。')
     if (
-      definition.oauth !== false &&
+      definition.oauth !== undefined &&
       !(definition.oauth.requiredScopes ?? []).every((scope) =>
         oauthScopePattern.test(scope),
       )
@@ -37,7 +37,7 @@ export const extension = defineExecutionExtension<
         left.descriptor.name < right.descriptor.name ? -1 : 1,
       )
     if (
-      definition.oauth === false &&
+      definition.oauth === undefined &&
       tools.some((tool) => tool.scopes.length > 0)
     )
       throw new TypeError(
@@ -54,7 +54,7 @@ export const extension = defineExecutionExtension<
           validateRuntime(
             definition.factory(),
             tools,
-            definition.oauth !== false,
+            definition.oauth !== undefined,
           ),
       },
       {
@@ -73,7 +73,7 @@ export const extension = defineExecutionExtension<
         version: definition.version,
         path: definition.path,
         tools: Object.freeze(tools),
-        oauth: definition.oauth,
+        ...(definition.oauth && { oauth: definition.oauth }),
         allowedHosts: definition.allowedHosts,
         handler,
       }),

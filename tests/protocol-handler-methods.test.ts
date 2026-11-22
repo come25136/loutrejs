@@ -225,6 +225,7 @@ describe('protocolのmethod契約', () => {
           endpoint: { raw: true, method: '*', path: '/mcp' },
         }).routes.endpoint,
         contract: EchoContract,
+        oauth: {},
         factory,
       })
       await using app = await bootstrapApplication({

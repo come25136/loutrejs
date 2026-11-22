@@ -35,9 +35,9 @@ type McpEndpointDefinition = EndpointDefinition &
   ExecutionDefinition<typeof extension>
 
 export interface McpImplementation<
-  TOAuth extends McpOAuthOptions | false = McpOAuthOptions | false,
+  TOAuth extends McpOAuthOptions | undefined = McpOAuthOptions | undefined,
 > extends ExecutionGroup<
-  TOAuth extends false
+  TOAuth extends undefined
     ? readonly [McpEndpointDefinition, HttpRawExecutionDefinition]
     : readonly [
         McpEndpointDefinition,
@@ -90,7 +90,7 @@ export function defineMcpImplementation<
   const TRoute extends HttpContractRawRoute,
   const TContract extends McpContract,
   const THandlers extends object,
-  const TOAuth extends McpOAuthOptions | false = McpOAuthOptions,
+  const TOAuth extends McpOAuthOptions | undefined = undefined,
 >(
   options: McpEndpointOptions<
     TRoute,
@@ -105,7 +105,7 @@ export function defineMcpImplementation(
     readonly factory: () => ProtocolRuntime
   },
 ): ExecutionGroup {
-  const { route, name, version, contract, factory } = options
+  const { route, name, version, contract, factory, oauth } = options
   if (
     !contract ||
     !Object.hasOwn(contract, mcpContractBrand) ||
@@ -114,6 +114,13 @@ export function defineMcpImplementation(
   )
     throw new TypeError(
       'MCP endpointのToolはmcp.contract()で宣言してください。',
+    )
+  if (
+    oauth !== undefined &&
+    (oauth === null || typeof oauth !== 'object' || Array.isArray(oauth))
+  )
+    throw new TypeError(
+      'MCP endpointのoauthには設定オブジェクトを指定してください。',
     )
   if (typeof factory !== 'function')
     throw new TypeError('MCP endpointにはfactoryを指定してください。')
@@ -140,17 +147,12 @@ export function defineMcpImplementation(
     allowedHosts: Object.freeze([
       ...(options.allowedHosts ?? localhostAllowedHostnames()),
     ]),
-    oauth:
-      options.oauth === false
-        ? false
-        : Object.freeze({
-            requiredScopes: Object.freeze([
-              ...(options.oauth?.requiredScopes ?? []),
-            ]),
-            allowedOrigins: Object.freeze([
-              ...(options.oauth?.allowedOrigins ?? []),
-            ]),
-          }),
+    ...(oauth !== undefined && {
+      oauth: Object.freeze({
+        requiredScopes: Object.freeze([...(oauth.requiredScopes ?? [])]),
+        allowedOrigins: Object.freeze([...(oauth.allowedOrigins ?? [])]),
+      }),
+    }),
     factory,
   })
   const transport = http.delegate({
@@ -162,7 +164,7 @@ export function defineMcpImplementation(
     ),
   })
   const executions = [endpoint, transport]
-  if (options.oauth !== false) {
+  if (oauth !== undefined) {
     executions.push(
       http.delegate({
         name: `${name}.mcp.oauth-metadata`,

@@ -33,7 +33,7 @@ export function createMcpHttpRuntime(
   shutdownSignal: AbortSignal,
 ): McpHttpRuntime {
   const auth =
-    endpoint.oauth === false
+    endpoint.oauth === undefined
       ? undefined
       : createOAuth(endpoint.name, endpoint.path, endpoint.oauth, options)
   const hosts = auth ? [auth.hostname] : [...endpoint.allowedHosts]

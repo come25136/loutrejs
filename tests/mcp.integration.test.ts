@@ -196,7 +196,6 @@ describe('MCP Streamable HTTP', () => {
       name: 'anonymous',
       version: '1',
       contract: AnonymousContract,
-      oauth: false,
       allowedHosts: ['orders.example.test'],
       factory: () => ({
         tools: { whoami: ({ principal }) => principal === undefined },
@@ -230,7 +229,6 @@ describe('MCP Streamable HTTP', () => {
       name: 'anonymous',
       version: '1',
       contract: ordersReadContract,
-      oauth: false,
       factory: () => ({
         tools: {
           'orders.read': ({ input }) => ({
@@ -287,6 +285,7 @@ describe('MCP Streamable HTTP', () => {
         name: 'copied',
         version: '1',
         contract: { ...contract, tools: {} },
+        oauth: {},
         factory: () => ({
           oauth: oauthConfiguration(),
           tools: {},
@@ -320,6 +319,7 @@ describe('MCP Streamable HTTP', () => {
       name: 'orders',
       version: '1',
       contract: mcp.contract({}),
+      oauth: {},
       factory: () => ({
         oauth: oauthConfiguration(),
         tools: {},
@@ -650,6 +650,7 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
             version: '1',
             route: route('private'),
             contract: ordersReadContract,
+            oauth: {},
             factory,
           }),
           mcp.implementation({
@@ -657,6 +658,7 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
             version: '1',
             route: route('invalid'),
             contract: invalidInputContract,
+            oauth: {},
             factory: () => ({
               oauth: oauthConfiguration(),
               tools: { invalid: ({ input }) => input },
@@ -680,6 +682,21 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
   ).rejects.toThrow('Application Model is invalid')
 })
 
+it('旧boolean指定を認証なしのendpointとして登録しない', () => {
+  const options = {
+    route: defaultRoute,
+    name: 'invalid',
+    version: '1',
+    contract: mcp.contract({}),
+    oauth: false,
+    factory: () => ({ tools: {} }),
+  }
+  expect(() =>
+    // @ts-expect-error JavaScriptから旧boolean指定を渡した場合も検証する
+    mcp.implementation(options),
+  ).toThrow('設定オブジェクト')
+})
+
 it('OAuthの宣言とfactoryが一致しないendpointを起動時に拒否する', async () => {
   const options = {
     route: defaultRoute,
@@ -690,12 +707,12 @@ it('OAuthの宣言とfactoryが一致しないendpointを起動時に拒否す�
   const endpoints = [
     mcp.implementation({
       ...options,
-      // @ts-expect-error OAuthの省略は認証付きendpointを宣言する
+      oauth: {},
+      // @ts-expect-error 認証付きendpointではfactoryにもoauthが必要
       factory: () => ({ tools: {} }),
     }),
     mcp.implementation({
       ...options,
-      oauth: false,
       // @ts-expect-error 認証なしのendpointはfactoryにoauthを指定できない
       factory: () => ({ oauth: oauthConfiguration(), tools: {} }),
     }),
@@ -721,6 +738,7 @@ it('旧factory.contextを指定したendpointを起動時に拒否する', async
     name: 'legacy',
     version: '1',
     contract: mcp.contract({}),
+    oauth: {},
     // @ts-expect-error 旧factory.contextの形をJavaScriptから渡す場合も検証する
     factory,
   })
@@ -767,6 +785,7 @@ it('Tool実行中の中断を伝え、完了までProviderを維持する', asyn
             name: 'orders',
             version: '1',
             contract: slowOrderContract,
+            oauth: {},
             factory: (dependency = inject(Dependency)) => ({
               oauth: oauthConfiguration(),
               tools: {

@@ -31,6 +31,7 @@ mcp.implementation({
   version: '1',
   route,
   contract: OrdersContract,
+  oauth: {},
   factory: () => ({
     oauth,
     tools: {
@@ -57,7 +58,6 @@ mcp.implementation({
   version: '1',
   route,
   contract: PublicContract,
-  oauth: false,
   factory: () => ({
     tools: {
       greet({ principal, input: { id }, state }) {
@@ -76,6 +76,7 @@ mcp.implementation({
   version: '1',
   route,
   contract: OrdersContract,
+  oauth: {},
   factory: () => ({
     oauth,
     tools: {
@@ -89,6 +90,7 @@ mcp.implementation({
   version: '1',
   route,
   contract: OrdersContract,
+  oauth: {},
   factory: () => ({
     oauth,
     // @ts-expect-error 公開したToolに対応するhandlerが必要
@@ -111,6 +113,7 @@ mcp.implementation({
   version: '1',
   route,
   contract: OrdersContract,
+  oauth: {},
   factory: () => ({
     oauth,
     // @ts-expect-error ContractにないToolを実装できない

@@ -53,7 +53,7 @@ export function validateRuntime(
     )
   if (!useOAuth && 'oauth' in runtime)
     throw new TypeError(
-      'oauth: false のMCP endpointのfactoryにはoauthを指定できません。',
+      '認証なしのMCP endpointのfactoryにはoauthを指定できません。',
     )
   if ('context' in runtime)
     throw new TypeError(

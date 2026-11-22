@@ -75,7 +75,7 @@ type RouteState<TRoute> = TRoute extends {
 export type McpEndpointOptions<
   TRoute extends HttpContractRawRoute,
   TContract extends McpContract,
-  TOAuth extends McpOAuthOptions | false,
+  TOAuth extends McpOAuthOptions | undefined,
   THandlers = unknown,
 > = {
   readonly name: string
@@ -84,20 +84,22 @@ export type McpEndpointOptions<
   readonly contract: TContract
   readonly tools?: never
   readonly oauth?: TOAuth
-  readonly allowedHosts?: TOAuth extends false ? readonly string[] : never
+  readonly allowedHosts?: TOAuth extends undefined ? readonly string[] : never
   readonly factory: () => McpRuntime<
     NoInfer<TContract>,
     RouteState<TRoute>,
-    TOAuth extends false ? undefined : McpPrincipal
+    TOAuth extends undefined ? undefined : McpPrincipal
   > & { readonly tools: THandlers }
-} & (false extends TOAuth ? { readonly oauth: TOAuth } : {})
+} & ([TOAuth] extends [undefined]
+  ? { readonly oauth?: never }
+  : { readonly oauth: McpOAuthOptions })
 
 export type McpImplementationOptions<
   TRoute extends HttpContractRawRoute = HttpContractRawRoute,
   TContract extends McpContract = McpContract,
 > =
   | McpEndpointOptions<TRoute, TContract, McpOAuthOptions>
-  | McpEndpointOptions<TRoute, TContract, false>
+  | McpEndpointOptions<TRoute, TContract, undefined>
 
 import { type HttpRawExecutionContext } from '@loutrejs/loutre/http'
 

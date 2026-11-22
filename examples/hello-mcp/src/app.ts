@@ -22,7 +22,6 @@ const greetingEndpoint = mcp.implementation({
   version: '1.0.0',
   route: ApiContract.routes.mcp,
   contract: GreetingContract,
-  oauth: false,
   factory: () => ({
     tools: {
       greet: ({ input }) => ({ message: `Hello, ${input.name}!` }),
