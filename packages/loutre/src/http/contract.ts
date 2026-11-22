@@ -350,8 +350,9 @@ type HttpResponseReferences<
       ? never
       : TName
   ]: {
+    // 応答参照から宣言元へ定義ジャンプできるよう、元のキーをそのまま写す。
     readonly [
-      TVariant in Exclude<keyof TRoutes[TName]['responses'], symbol>
+      TVariant in keyof TRoutes[TName]['responses']
     ]: HttpResponseReference<
       TRoutes,
       TName,
@@ -503,14 +504,14 @@ type HandlerResult<
   TName extends keyof TRoutes,
   TResponses extends HttpExecutionRouteDefinition['responses'],
 > = {
-  [K in Exclude<keyof TResponses, symbol>]: TResponses[K] extends {
+  [K in keyof TResponses]: TResponses[K] extends {
     readonly error: HttpExecutionResponseDefinition['error']
   }
     ? never
     : {
         readonly schema: HttpResponseReference<TRoutes, TName, K, TResponses[K]>
       } & ResponseValue<TResponses[K]>
-}[Exclude<keyof TResponses, symbol>]
+}[keyof TResponses]
 
 export type HttpExecutionContext<
   TRoute extends HttpExecutionRouteDefinition = HttpExecutionRouteDefinition,
