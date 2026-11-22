@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 const input = z.object({ id: z.string().transform(Number) })
 const output = z.object({ id: z.number().transform(String).pipe(z.string()) })
-const read = mcp.contract({
+const OrdersContract = mcp.contract({
   get_order: {
     description: '注文を取得する',
     scopes: ['read'],
@@ -30,7 +30,7 @@ mcp.implementation({
   name: 'orders',
   version: '1',
   route,
-  contract: read,
+  contract: OrdersContract,
   factory: () => ({
     oauth,
     context({ principal, signal, state, request }) {
@@ -60,7 +60,7 @@ mcp.implementation({
   name: 'invalid',
   version: '1',
   route,
-  contract: read,
+  contract: OrdersContract,
   factory: () => ({
     oauth,
     context: () => ({}),
@@ -74,7 +74,7 @@ mcp.implementation({
   name: 'missing',
   version: '1',
   route,
-  contract: read,
+  contract: OrdersContract,
   factory: () => ({
     oauth,
     context: () => ({}),
@@ -97,7 +97,7 @@ mcp.implementation({
   name: 'extra',
   version: '1',
   route,
-  contract: read,
+  contract: OrdersContract,
   factory: () => ({
     oauth,
     context: () => ({}),
@@ -114,8 +114,8 @@ const mutableTools = {
     output: z.object({}),
   },
 }
-const snapshot = mcp.contract(mutableTools)
+const readonlyToolsContract = mcp.contract(mutableTools)
 // @ts-expect-error スナップショットのscopeは読み取り専用
-snapshot.tools.read.scopes.push('write')
+readonlyToolsContract.tools.read.scopes.push('write')
 // @ts-expect-error スナップショットの定義は読み取り専用
-snapshot.tools.read.description = '変更'
+readonlyToolsContract.tools.read.description = '変更'

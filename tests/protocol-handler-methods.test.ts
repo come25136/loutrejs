@@ -157,7 +157,7 @@ describe('protocolのmethod契約', () => {
     await expect(closed).resolves.toMatchObject({ code: 1000, reason: '応答' })
   })
 
-  const tool = mcp.contract({
+  const EchoContract = mcp.contract({
     echo: {
       description: '確認',
       scopes: [],
@@ -188,7 +188,7 @@ describe('protocolのmethod契約', () => {
       return { text: '応答', count: ++this.#count }
     }
   }
-  class Runtime implements McpRuntime<typeof tool, object> {
+  class Runtime implements McpRuntime<typeof EchoContract, object> {
     readonly oauth = new OAuth()
     readonly tools = new Tools()
     #state = {}
@@ -196,7 +196,10 @@ describe('protocolのmethod契約', () => {
       return this.#state
     }
   }
-  const toolFactories: Record<string, () => McpRuntime<typeof tool, object>> = {
+  const toolFactories: Record<
+    string,
+    () => McpRuntime<typeof EchoContract, object>
+  > = {
     prototype上のmethod: () => new Runtime(),
     非列挙のmethod: () => ({
       oauth: new OAuth(),
@@ -228,7 +231,7 @@ describe('protocolのmethod契約', () => {
         route: http.contract({
           endpoint: { raw: true, method: '*', path: '/mcp' },
         }).routes.endpoint,
-        contract: tool,
+        contract: EchoContract,
         factory,
       })
       await using app = await bootstrapApplication({

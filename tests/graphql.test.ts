@@ -2188,7 +2188,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
   const manifest = manifestFromSchema(schema)
 
   it('未正規化のrawオブジェクトと通常HTTPのルートを拒否する', () => {
-    const normal = http.contract({
+    const regularHttpContract = http.contract({
       normal: {
         method: 'GET',
         path: '/graphql',
@@ -2197,7 +2197,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
     })
     for (const route of [
       { raw: true, method: '*', path: '/graphql' },
-      normal.routes.normal,
+      regularHttpContract.routes.normal,
     ])
       expect(() =>
         graphql.implementation({
@@ -2210,13 +2210,13 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
   })
 
   it('WSのGET要求と矛盾するmethodを拒否し、HTTPのみならそのmethodで公開できる', () => {
-    const Api = http.contract({
+    const ApiContract = http.contract({
       post: { raw: true, method: 'POST', path: '/graphql' },
     })
     expect(() =>
       graphql.implementation({
         name: 'Post',
-        route: Api.routes.post,
+        route: ApiContract.routes.post,
         manifest,
         transports: { websocket: true },
         factory: () => ({ context: () => ({}) }),
@@ -2225,7 +2225,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
     expect(() =>
       graphql.implementation({
         name: 'Post',
-        route: Api.routes.post,
+        route: ApiContract.routes.post,
         manifest,
         factory: () => ({ context: () => ({}) }),
       }),
@@ -2233,7 +2233,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
   })
 
   it('通常HTTPとGraphQLの同じURLへの重複配備を同じModel検証で拒否する', () => {
-    const Api = http.contract({
+    const ApiContract = http.contract({
       normal: {
         method: 'POST',
         path: '/graphql',
@@ -2242,12 +2242,12 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
       delegated: { raw: true, method: '*', path: '/graphql' },
     })
     const regular = http.implementation({
-      contract: Api,
-      factory: () => ({ normal: () => ({ schema: Api.normal.ok }) }),
+      contract: ApiContract,
+      factory: () => ({ normal: () => ({ schema: ApiContract.normal.ok }) }),
     })
     const delegated = graphql.implementation({
       name: 'Delegated',
-      route: Api.routes.delegated,
+      route: ApiContract.routes.delegated,
       manifest,
       factory: () => ({ context: () => ({}) }),
     })

@@ -36,9 +36,11 @@ const CounterContract = mcp.contract({
     output,
   },
 })
-const Api = http.contract({ mcp: { raw: true, method: '*', path: mcpPath } })
+const ApiContract = http.contract({
+  mcp: { raw: true, method: '*', path: mcpPath },
+})
 const counterEndpoint = mcp.implementation({
-  route: Api.routes.mcp,
+  route: ApiContract.routes.mcp,
   name: 'counter',
   version: '1.0.0',
   contract: CounterContract,

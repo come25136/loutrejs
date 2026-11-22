@@ -28,7 +28,7 @@ const OrdersContract = mcp.contract({
 const orders = mcp.implementation({
   name: 'orders',
   version: '1.0.0',
-  route: Api.routes.orders,
+  route: ApiContract.routes.orders,
   contract: OrdersContract,
   oauth: { requiredScopes: ['orders:read'] },
   factory: (service = inject(OrdersService), auth = inject(AuthService)) => ({

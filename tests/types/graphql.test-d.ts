@@ -533,7 +533,7 @@ graphql.implementation({
   route: { raw: true, method: '*', path: '/graphql' },
   factory,
 })
-const normalRoute = http.contract({
+const regularHttpContract = http.contract({
   regular: {
     method: 'GET',
     path: '/regular',
@@ -544,7 +544,7 @@ graphql.implementation({
   name: 'RejectRegularHttpRoute',
   manifest,
   // @ts-expect-error GraphQLの実装にはrawルートを指定する
-  route: normalRoute.routes.regular,
+  route: regularHttpContract.routes.regular,
   factory,
 })
 graphql.implementation({

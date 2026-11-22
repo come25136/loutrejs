@@ -3,7 +3,7 @@ const layer = http.middleware<{ tenant: string }>({
   name: 'Tenant',
   factory: () => async (_input, next) => next({ tenant: 'もみじ' }),
 })
-const api = http.contract({
+const httpContract = http.contract({
   api: {
     path: '/api',
     middlewares: [layer],
@@ -17,21 +17,21 @@ const api = http.contract({
     },
   },
 })
-const path: '/api/graphql' = api.routes.delegated.path
-const raw: HttpContractRawRoute = api.routes.delegated
+const path: '/api/graphql' = httpContract.routes.delegated.path
+const raw: HttpContractRawRoute = httpContract.routes.delegated
 void [path, raw]
 http.implementation({
-  contract: api,
+  contract: httpContract,
   factory: () => ({
     regular: (ctx) => {
       const tenant: string = ctx.state.tenant
       void tenant
-      return { schema: api.regular.ok }
+      return { schema: httpContract.regular.ok }
     },
   }),
 })
 http.raw({
-  route: api.routes.delegated,
+  route: httpContract.routes.delegated,
   factory: () => (ctx) => {
     const tenant: string = ctx.state.tenant
     // @ts-expect-error 宣言していないstateを渡さない

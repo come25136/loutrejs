@@ -4,11 +4,11 @@ import { createOrdersGraphQL } from './graphql/endpoint.js'
 import { createApiContract } from './http/endpoint.js'
 
 export const OrdersModule = module(({ path }: { readonly path: string }) => {
-  const api = createApiContract(path)
+  const apiContract = createApiContract(path)
 
   return {
     providers: [CommerceService],
-    executions: [createOrdersGraphQL(api.routes.graphql)],
+    executions: [createOrdersGraphQL(apiContract.routes.graphql)],
   }
 })
 

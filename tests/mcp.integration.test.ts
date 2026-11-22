@@ -37,7 +37,7 @@ function fixture(
 ) {
   const inputTransform = vi.fn((id: string) => Number(id))
   const outputTransform = vi.fn((id: number) => String(id))
-  const read = mcp.contract({
+  const ordersReadContract = mcp.contract({
     'orders.read': {
       description: '注文を取得する',
       scopes: ['orders:read'],
@@ -55,7 +55,7 @@ function fixture(
       }),
     },
   })
-  const write = mcp.contract({
+  const ordersWriteContract = mcp.contract({
     'orders.write': {
       description: '注文を更新する',
       scopes: ['orders:read', 'orders:write'],
@@ -67,7 +67,10 @@ function fixture(
     route,
     name: 'orders',
     version: '1.0.0',
-    contract: mcp.contract({ ...write.tools, ...read.tools }),
+    contract: mcp.contract({
+      ...ordersWriteContract.tools,
+      ...ordersReadContract.tools,
+    }),
     oauth: { requiredScopes: options.requiredScopes },
     factory: (auth = inject(OAuth), orders = inject(OrdersService)) => ({
       oauth: auth,
@@ -94,7 +97,12 @@ function fixture(
       }),
     ],
   })
-  return { application: appDefinition, inputTransform, outputTransform, read }
+  return {
+    application: appDefinition,
+    inputTransform,
+    outputTransform,
+    ordersReadContract,
+  }
 }
 
 function oauthOptions(expectedResource = resource) {
@@ -236,11 +244,11 @@ describe('MCP Streamable HTTP', () => {
   })
 
   it('MCP入口とOAuthメタデータの両方でHTTPルートの衝突を診断する', () => {
-    const api = http.contract({
+    const httpContract = http.contract({
       mcp: { raw: true, method: '*', path: '/mcp' },
     })
     const endpoint = mcp.implementation({
-      route: api.routes.mcp,
+      route: httpContract.routes.mcp,
       name: 'orders',
       version: '1',
       contract: mcp.contract({}),
@@ -486,7 +494,7 @@ describe('MCP Streamable HTTP', () => {
         await next()
       },
     })
-    const api = http.contract({
+    const httpContract = http.contract({
       api: {
         path: '/api',
         middlewares: [observed],
@@ -496,7 +504,7 @@ describe('MCP Streamable HTTP', () => {
     const nodeResource = 'https://127.0.0.1/api/mcp'
     const { application: mcpApplication } = fixture(
       oauthOptions(nodeResource),
-      api.routes.mcp,
+      httpContract.routes.mcp,
     )
     const other = http.raw({
       route: { method: 'GET', path: '/other' },
@@ -547,8 +555,8 @@ describe('MCP Streamable HTTP', () => {
 })
 
 it('endpointの非公開ProviderとTool契約の不正をModelで診断する', async () => {
-  const { read } = fixture()
-  const invalid = mcp.contract({
+  const { ordersReadContract } = fixture()
+  const invalidInputContract = mcp.contract({
     invalid: {
       description: '不正な入力',
       scopes: [],
@@ -581,14 +589,14 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
             name: 'private',
             version: '1',
             route: route('private'),
-            contract: read,
+            contract: ordersReadContract,
             factory,
           }),
           mcp.implementation({
             name: 'invalid',
             version: '1',
             route: route('invalid'),
-            contract: invalid,
+            contract: invalidInputContract,
             factory: () => ({
               oauth: oauthConfiguration(),
               context: () => ({}),
@@ -632,7 +640,7 @@ it.each(['context', 'handler'])(
         destroy()
       }
     }
-    const slow = mcp.contract({
+    const slowOrderContract = mcp.contract({
       'orders.slow': {
         description: '時間のかかる照会を実行する',
         scopes: ['orders:read'],
@@ -649,7 +657,7 @@ it.each(['context', 'handler'])(
               route: defaultRoute,
               name: 'orders',
               version: '1',
-              contract: slow,
+              contract: slowOrderContract,
               factory: (dependency = inject(Dependency)) => ({
                 oauth: oauthConfiguration(),
                 context: async ({ signal }) => {

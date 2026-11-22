@@ -103,9 +103,9 @@ it('同じstatusのJSONとSSEをそれぞれのmedia typeでOpenAPIに出力す�
 
 it('別Contract・別operation・複製・エラー応答・旧記法の戻り値を拒否する', async () => {
   const contract = http.contract(tree)
-  const other = http.contract(tree)
+  const otherContract = http.contract(tree)
   const invalidResults = [
-    { schema: other.read.empty },
+    { schema: otherContract.read.empty },
     { schema: contract.other.empty },
     { schema: { ...contract.read.empty } },
     { schema: contract.read.missing, body: 'no' },

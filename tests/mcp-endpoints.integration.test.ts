@@ -54,7 +54,7 @@ describe('MCP endpointの所有権', () => {
           async ({ request }, next) =>
             next({ tenant: request.headers.get('x-tenant') ?? '' }),
       })
-      const read = mcp.contract({
+      const CounterReadContract = mcp.contract({
         'counter.read': {
           description: '状態を取得する',
           scopes: ['read'],
@@ -80,7 +80,7 @@ describe('MCP endpointの所有権', () => {
               middlewares: [layer],
             },
           }).routes.endpoint,
-          contract: read,
+          contract: CounterReadContract,
           oauth: { requiredScopes: ['read'] },
           factory: (resource = inject(Resource)) => {
             constructions += 1
@@ -146,7 +146,7 @@ describe('MCP endpointの所有権', () => {
       constructions = 0
       const resultSchema = z.object({
         result: z.object({
-          structuredContent: read.tools['counter.read'].output,
+          structuredContent: CounterReadContract.tools['counter.read'].output,
         }),
       })
       const resources = new Set<number>()

@@ -31,9 +31,11 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
     },
   })
   const resource = 'https://127.0.0.1/mcp'
-  const Api = http.contract({ mcp: { raw: true, method: '*', path: '/mcp' } })
+  const ApiContract = http.contract({
+    mcp: { raw: true, method: '*', path: '/mcp' },
+  })
   const implementation = mcp.implementation({
-    route: Api.routes.mcp,
+    route: ApiContract.routes.mcp,
     name: 'smoke',
     version: '1.0.0',
     contract: CounterContract,

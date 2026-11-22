@@ -31,32 +31,34 @@ function contract() {
 
 describe('HTTP Contractのrawルート', () => {
   it('pathとmiddlewareを継承し、正規化済みの参照を読み取り専用で返す', () => {
-    const api = contract()
-    expect(api.routes.delegated.path).toBe('/api/protocol')
-    expect(api.routes.delegated.middlewares).toHaveLength(1)
-    expect(isHttpRawContractRoute(api.routes.delegated)).toBe(true)
+    const httpContract = contract()
+    expect(httpContract.routes.delegated.path).toBe('/api/protocol')
+    expect(httpContract.routes.delegated.middlewares).toHaveLength(1)
+    expect(isHttpRawContractRoute(httpContract.routes.delegated)).toBe(true)
     expect(
       isHttpRawContractRoute({ raw: true, method: '*', path: '/protocol' }),
     ).toBe(false)
-    expect(isHttpRawContractRoute({ ...api.routes.delegated })).toBe(false)
-    expect(isHttpRawContractRoute(Object.create(api.routes.delegated))).toBe(
+    expect(isHttpRawContractRoute({ ...httpContract.routes.delegated })).toBe(
       false,
     )
-    expect(isHttpRawContractRoute(api.routes.health)).toBe(false)
-    expect(Object.isFrozen(api.routes.delegated)).toBe(true)
+    expect(
+      isHttpRawContractRoute(Object.create(httpContract.routes.delegated)),
+    ).toBe(false)
+    expect(isHttpRawContractRoute(httpContract.routes.health)).toBe(false)
+    expect(Object.isFrozen(httpContract.routes.delegated)).toBe(true)
   })
 
   it('コピーしたContractのルートとコンパイル済みルートを混在させない', () => {
-    const api = contract()
+    const httpContract = contract()
     const copy = {
-      ...api,
+      ...httpContract,
       routes: {
-        ...api.routes,
-        health: { ...api.routes.health, path: '/changed' },
+        ...httpContract.routes,
+        health: { ...httpContract.routes.health, path: '/changed' },
       },
     }
     expect(isHttpContract(copy)).toBe(false)
-    expect(isHttpContract(Object.create(api))).toBe(false)
+    expect(isHttpContract(Object.create(httpContract))).toBe(false)
     expect(() =>
       http.implementation({
         contract: copy,
@@ -68,13 +70,13 @@ describe('HTTP Contractのrawルート', () => {
   })
 
   it('通常HTTPのimplementationとraw処理を同じContractから個別に配備する', async () => {
-    const api = contract()
+    const httpContract = contract()
     const regular = http.implementation({
-      contract: api,
-      factory: () => ({ health: () => ({ schema: api.health.ok }) }),
+      contract: httpContract,
+      factory: () => ({ health: () => ({ schema: httpContract.health.ok }) }),
     })
     const delegated = http.raw({
-      route: api.routes.delegated,
+      route: httpContract.routes.delegated,
       factory: () => (ctx) => Response.json(ctx.state),
     })
     const Module = module(() => ({ executions: [regular, delegated] }))
@@ -113,10 +115,11 @@ describe('HTTP Contractのrawルート', () => {
   })
 
   it('OpenAPIには通常HTTPのルートだけを出す', () => {
-    const api = contract()
+    const httpContract = contract()
     expect(
       Object.keys(
-        generateOpenApi(api, { info: { title: '試験', version: '1' } }).paths,
+        generateOpenApi(httpContract, { info: { title: '試験', version: '1' } })
+          .paths,
       ),
     ).toEqual(['/api/health'])
   })

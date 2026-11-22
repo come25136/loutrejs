@@ -151,7 +151,7 @@ const CounterMcp = mcp.implementation({
   name: 'counter',
   version: '1.0.0',
   contract: CounterContract,
-  route: HttpApi.routes.mcp,
+  route: ApiContract.routes.mcp,
   factory: (counter = inject(CounterService), auth = inject(AuthService)) => ({
     oauth: auth.mcp,
     context: ({ principal }) => ({ principal }),

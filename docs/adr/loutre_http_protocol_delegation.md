@@ -31,7 +31,7 @@ HTTP ContractのrawルートへGraphQL実装を接続するAPIをexampleで示�
 配布パッケージのconsumer検証もgraphql.implementationを公開APIとして確認する。CIのJavaScript式やWebサイトのコード文字列は型チェックだけでは旧APIの残存を検出できないため、tarballだけをインストールしたconsumerで公開APIを検証する。workflowから抜き出した文字列をvm・eval・Function等で実行する単体テストは追加しない。
 
 ```ts
-const Api = http.contract({
+const ApiContract = http.contract({
   health: {
     method: 'GET',
     path: '/health',
@@ -45,14 +45,14 @@ const Api = http.contract({
   },
 })
 const Health = http.implementation({
-  contract: Api,
+  contract: ApiContract,
   factory: () => ({
-    health: () => ({ schema: Api.health.ok }),
+    health: () => ({ schema: ApiContract.health.ok }),
   }),
 })
 const Profile = graphql.implementation({
   name: 'Profile',
-  route: Api.routes.profile,
+  route: ApiContract.routes.profile,
   manifest,
   transports: { http: true, websocket: true },
   factory: (users = inject(Users)) => ({

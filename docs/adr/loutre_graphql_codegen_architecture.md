@@ -76,13 +76,13 @@ import { graphql } from '@loutrejs/graphql'
 import { http } from '@loutrejs/loutre/http'
 import { manifest } from './graphql/manifest.js'
 
-const Api = http.contract({
+const ApiContract = http.contract({
   graphql: { raw: true, method: '*', path: '/graphql' },
 })
 
 graphql.implementation({
   name: 'CommerceApi',
-  route: Api.routes.graphql,
+  route: ApiContract.routes.graphql,
   manifest,
   http: true,
   transports: { http: true, websocket: true },
