@@ -1,4 +1,4 @@
-import { http as contractHttp } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 import { nodeRuntime } from '@loutrejs/node'
 import { application, module } from '@loutrejs/loutre'
 import { graphql } from '@loutrejs/graphql'
@@ -54,7 +54,7 @@ it('手書きBindingの100注文 / 200明細がEager・Lazy・Hybridで一致し
   const calls = vi.spyOn(commerce, 'findProducts')
   const endpoint = graphql.implementation({
     name: 'Orders',
-    route: contractHttp.contract({
+    route: http.contract({
       graphql: { raw: true, method: '*', path: '/graphql' },
     }).routes.graphql,
     manifest,

@@ -326,10 +326,10 @@ describe('Loutre CLI', () => {
     const applicationPath = join(directory, 'app.ts')
     const counterPath = join(directory, 'attempts.txt')
     const source = [
-      "import { application as createApplication, module as createModule } from '../../packages/loutre/src/index.js'",
+      "import { application, module } from '../../packages/loutre/src/index.js'",
       "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
-      'const AppModule = createModule(() => ({ imports: [DevtoolsModule()] }))',
-      'export default createApplication({ modules: [AppModule()] })',
+      'const AppModule = module(() => ({ imports: [DevtoolsModule()] }))',
+      'export default application({ modules: [AppModule()] })',
       '',
     ].join('\n')
     await writeFile(applicationPath, source)
@@ -391,10 +391,10 @@ describe('Loutre CLI', () => {
     const counterPath = join(directory, 'attempts.txt')
     const stopPath = join(directory, 'stop.txt')
     const source = [
-      "import { application as createApplication, module as createModule } from '../../packages/loutre/src/index.js'",
+      "import { application, module } from '../../packages/loutre/src/index.js'",
       "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
-      'const AppModule = createModule(() => ({ imports: [DevtoolsModule()] }))',
-      'export default createApplication({ modules: [AppModule()] })',
+      'const AppModule = module(() => ({ imports: [DevtoolsModule()] }))',
+      'export default application({ modules: [AppModule()] })',
       '',
     ].join('\n')
     await writeFile(applicationPath, source)
@@ -446,27 +446,27 @@ describe('Loutre CLI', () => {
     const applicationPath = join(directory, 'app.ts')
     const counterPath = join(directory, 'attempts.txt')
     const invalidSource = [
-      "import { application as createApplication, module as createModule, inject, token } from '../../packages/loutre/src/index.js'",
+      "import { application, module, inject, token } from '../../packages/loutre/src/index.js'",
       "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
       "const Missing = token('fixture.missing')",
       'class BrokenProvider { constructor(readonly missing = inject(Missing)) {} }',
-      'const AppModule = createModule(() => ({',
+      'const AppModule = module(() => ({',
       '  imports: [DevtoolsModule()],',
       '  providers: [BrokenProvider],',
       '}))',
-      'export default createApplication({ modules: [AppModule()] })',
+      'export default application({ modules: [AppModule()] })',
       '',
     ].join('\n')
     const validSource = [
-      "import { application as createApplication, module as createModule, inject, provide, token } from '../../packages/loutre/src/index.js'",
+      "import { application, module, inject, provide, token } from '../../packages/loutre/src/index.js'",
       "import { DevtoolsModule } from '../../packages/loutre/src/devtools/index.js'",
       "const Missing = token('fixture.missing')",
       'class BrokenProvider { constructor(readonly missing = inject(Missing)) {} }',
-      'const AppModule = createModule(() => ({',
+      'const AppModule = module(() => ({',
       '  imports: [DevtoolsModule()],',
       '  providers: [provide(Missing).useValue({}), BrokenProvider],',
       '}))',
-      'export default createApplication({ modules: [AppModule()] })',
+      'export default application({ modules: [AppModule()] })',
       '',
     ].join('\n')
     await writeFile(applicationPath, invalidSource)

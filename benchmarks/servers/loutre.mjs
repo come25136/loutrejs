@@ -1,4 +1,4 @@
-import { application as createApplication, env, module } from '@loutrejs/loutre'
+import { application, env, module } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
 import { UsersModule } from '../../dist/integrations/http-crud/src/index.js'
@@ -17,10 +17,10 @@ const BenchmarkModule = module(() => ({
   environment: [BenchmarkEnv],
 }))
 
-const application = createApplication({
+const appDefinition = application({
   modules: [UsersModule(), BenchmarkModule()],
 })
-const app = await nodeRuntime.create({ application })
+const app = await nodeRuntime.create({ application: appDefinition })
 const listener = await app.serve({
   hostname: '127.0.0.1',
   port: app.get(BenchmarkEnv).port,

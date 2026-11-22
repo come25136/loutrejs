@@ -1,17 +1,14 @@
-import {
-  createKernelApplication,
-  application as createApplication,
-} from '@loutrejs/loutre'
+import { createKernelApplication, application } from '@loutrejs/loutre'
 
 describe('Application disposal', () => {
   it('await using delegates cleanup to the current close implementation', async () => {
-    const application = createKernelApplication({
-      application: createApplication({ modules: [] }),
+    const app = createKernelApplication({
+      application: application({ modules: [] }),
     })
-    const close = application.close.bind(application)
+    const close = app.close.bind(app)
     let closeCalls = 0
 
-    Object.assign(application, {
+    Object.assign(app, {
       async close(signal?: string) {
         closeCalls += 1
         await close(signal)
@@ -19,8 +16,8 @@ describe('Application disposal', () => {
     })
 
     {
-      await using app = application
-      await app.init()
+      await using scopedApp = app
+      await scopedApp.init()
     }
 
     expect(closeCalls).toBe(1)

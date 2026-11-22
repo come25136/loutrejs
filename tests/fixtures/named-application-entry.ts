@@ -1,5 +1,7 @@
-import { application as createApplication } from '@loutrejs/loutre'
+import { application } from '@loutrejs/loutre'
 
-export const application = createApplication({
+const appDefinition = application({
   modules: [],
 })
+
+export { appDefinition as application }

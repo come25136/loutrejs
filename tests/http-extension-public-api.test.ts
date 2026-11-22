@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  application as declareApplication,
+  application,
   domainError,
   module,
   inject,
@@ -10,7 +10,7 @@ import {
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 import { bindHttpServer, http } from '@loutrejs/loutre/http'
 
-async function createApplication<
+async function bootstrapHttpFixture<
   const TContract extends ReturnType<typeof http.contract>,
 >(
   contract: TContract,
@@ -18,12 +18,12 @@ async function createApplication<
 ) {
   const implementation = http.implementation({ contract, factory })
   const Module = module(() => ({ executions: [implementation] }))
-  const definition = declareApplication({ modules: [Module()] })
-  const application = await bootstrapApplication({
+  const definition = application({ modules: [Module()] })
+  const app = await bootstrapApplication({
     application: definition,
     capabilities: [bindHttpServer({ runtime: 'test' })],
   })
-  return { application, definition }
+  return { app, definition }
 }
 
 describe('HTTP Execution Extension public API surface', () => {
@@ -46,15 +46,12 @@ describe('HTTP Execution Extension public API surface', () => {
         },
       },
     })
-    const { application, definition } = await createApplication(
-      contract,
-      () => ({
-        getUser: (ctx) => ({
-          schema: contract.getUser.ok,
-          body: { id: ctx.input.params.id },
-        }),
+    const { app, definition } = await bootstrapHttpFixture(contract, () => ({
+      getUser: (ctx) => ({
+        schema: contract.getUser.ok,
+        body: { id: ctx.input.params.id },
       }),
-    )
+    }))
     try {
       const document = generateOpenApi(definition.model, {
         info: { title: 'fixture', version: '1.0.0' },
@@ -72,7 +69,7 @@ describe('HTTP Execution Extension public API surface', () => {
         },
       })
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -98,20 +95,20 @@ describe('HTTP Execution Extension public API surface', () => {
         },
       },
     })
-    const { application } = await createApplication(contract, () => ({
+    const { app } = await bootstrapHttpFixture(contract, () => ({
       get(): never {
         throw UserNotFound({ userId: 'missing-user' })
       },
     }))
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('https://fixture.test/missing'),
       )
       expect(response.status).toBe(404)
       expect(response.headers.get('x-error-code')).toBe('USER_NOT_FOUND')
       await expect(response.json()).resolves.toEqual({ userId: 'missing-user' })
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -131,20 +128,17 @@ describe('HTTP Execution Extension public API surface', () => {
         },
       },
     })
-    const { application, definition } = await createApplication(
-      contract,
-      () => ({
-        events: () => ({
-          schema: contract.events.ok,
-          body: (async function* () {
-            yield { sequence: 1 }
-            yield { sequence: 2 }
-          })(),
-        }),
+    const { app, definition } = await bootstrapHttpFixture(contract, () => ({
+      events: () => ({
+        schema: contract.events.ok,
+        body: (async function* () {
+          yield { sequence: 1 }
+          yield { sequence: 2 }
+        })(),
       }),
-    )
+    }))
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('https://fixture.test/events'),
       )
       expect(response.headers.get('content-type')).toBe(
@@ -174,7 +168,7 @@ describe('HTTP Execution Extension public API surface', () => {
         },
       })
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -194,7 +188,7 @@ describe('HTTP Execution Extension public API surface', () => {
         },
       },
     })
-    const { application } = await createApplication(contract, () => ({
+    const { app } = await bootstrapHttpFixture(contract, () => ({
       events: () => ({
         schema: contract.events.ok,
         body: (async function* () {
@@ -207,14 +201,14 @@ describe('HTTP Execution Extension public API surface', () => {
       }),
     }))
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('https://fixture.test/events'),
       )
 
       await expect(response.text()).rejects.toThrow()
       expect(finalized).toBe(true)
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -259,11 +253,11 @@ describe('HTTP Execution Extension public API surface', () => {
       providers: [Resource],
       executions: [implementation],
     }))
-    const application = await bootstrapApplication({
-      application: declareApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('https://fixture.test/events'),
     )
     const reader = response.body!.getReader()
@@ -272,7 +266,7 @@ describe('HTTP Execution Extension public API surface', () => {
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise((_, reject) =>
           setTimeout(
             () => reject(new Error('HTTP server-stream drain timed out')),
@@ -325,16 +319,14 @@ describe('HTTP Execution Extension public API surface', () => {
       }),
     })
     const Module = module(() => ({ executions: [implementation] }))
-    const application = await bootstrapApplication({
-      application: declareApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
-    const response = application.http.fetch(
-      new Request('https://fixture.test/events'),
-    )
+    const response = app.http.fetch(new Request('https://fixture.test/events'))
     await handlerStarted
 
-    const closing = application.close()
+    const closing = app.close()
     resumeHandler()
 
     await expect(
@@ -356,14 +348,12 @@ describe('HTTP Execution Extension public API surface', () => {
         responses: { ok: { status: 204 } },
       },
     })
-    const { application } = await createApplication(contract, () => ({
+    const { app } = await bootstrapHttpFixture(contract, () => ({
       health: () => ({ schema: contract.health.ok }),
     }))
 
-    const closing = application.close()
-    const response = application.http.fetch(
-      new Request('https://fixture.test/health'),
-    )
+    const closing = app.close()
+    const response = app.http.fetch(new Request('https://fixture.test/health'))
 
     await expect(response).resolves.toHaveProperty('status', 503)
     await expect(closing).resolves.toBeUndefined()
@@ -431,12 +421,12 @@ describe('HTTP Execution Extension public API surface', () => {
       providers: [Resource],
       executions: [implementation],
     }))
-    const application = await bootstrapApplication({
-      application: declareApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 10,
     })
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('https://fixture.test/events'),
     )
     const reader = response.body!.getReader()
@@ -444,7 +434,7 @@ describe('HTTP Execution Extension public API surface', () => {
     await expect(reader.read()).resolves.toMatchObject({ done: false })
     await nextStarted
 
-    await expect(application.close()).rejects.toThrow(
+    await expect(app.close()).rejects.toThrow(
       'Application shutdown did not reach a safe cleanup boundary.',
     )
     expect(events).toEqual(['iterator.return'])
@@ -452,7 +442,7 @@ describe('HTTP Execution Extension public API surface', () => {
     resolveNext({ done: true, value: undefined })
     await readerClosed
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(events).toEqual(['iterator.return', 'provider.destroy'])
   })
 
@@ -499,16 +489,16 @@ describe('HTTP Execution Extension public API surface', () => {
       providers: [Resource],
       executions: [implementation],
     }))
-    const application = await bootstrapApplication({
-      application: declareApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('https://fixture.test/download'),
     )
     expect(events).not.toContain('provider.destroy')
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(events.at(-2)).toBe('stream.cancel')
     expect(events.at(-1)).toBe('provider.destroy')
     await expect(response.text()).rejects.toThrow()
@@ -563,12 +553,12 @@ describe('HTTP Execution Extension public API surface', () => {
       providers: [Resource],
       executions: [implementation],
     }))
-    const application = await bootstrapApplication({
-      application: declareApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 10,
     })
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('https://fixture.test/events'),
     )
     const reader = response.body!.getReader()
@@ -577,7 +567,7 @@ describe('HTTP Execution Extension public API surface', () => {
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),
@@ -592,7 +582,7 @@ describe('HTTP Execution Extension public API surface', () => {
     expect(cleanupSteps).toBe(pausedCleanupSteps)
 
     cleanupCanFinish = true
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     await readerClosed
     expect(events).toEqual(['provider.destroy'])
   })
@@ -660,12 +650,12 @@ describe('HTTP Execution Extension public API surface', () => {
       providers: [Resource],
       executions: [implementation],
     }))
-    const application = await bootstrapApplication({
-      application: declareApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 10,
     })
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('https://fixture.test/events'),
     )
     const reader = response.body!.getReader()
@@ -673,7 +663,7 @@ describe('HTTP Execution Extension public API surface', () => {
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),
@@ -686,7 +676,7 @@ describe('HTTP Execution Extension public API surface', () => {
     resolveReturn({ done: true, value: undefined })
     resolveNext({ done: true, value: undefined })
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(events).toEqual(['iterator.return', 'provider.destroy'])
   })
 })

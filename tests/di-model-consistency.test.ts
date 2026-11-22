@@ -4,7 +4,7 @@ import { z } from 'zod'
 import {
   ApplicationKernelRuntime,
   bootstrapApplication,
-  application as createApplication,
+  application,
   env,
   defineExecution,
   defineExecutionExtension,
@@ -51,9 +51,11 @@ describe('canonical Modelと実行時DIの依存照合', () => {
           Consumer,
         ],
       })
-      const application = createApplication({ modules: [hidden, feature] })
-      expect(application.model.diagnostics).toEqual([])
-      await expect(bootstrapApplication({ application })).rejects.toThrow(
+      const appDefinition = application({ modules: [hidden, feature] })
+      expect(appDefinition.model.diagnostics).toEqual([])
+      await expect(
+        bootstrapApplication({ application: appDefinition }),
+      ).rejects.toThrow(
         'LUTRE_DI_UNDECLARED_DEPENDENCY: ConsumerAware requested HiddenDependency',
       )
       expect(createHidden).toHaveBeenCalledTimes(scope === 'transient' ? 0 : 1)
@@ -79,7 +81,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
       class Consumer {
         readonly value = inject(ConsumerAware)
       }
-      const application = createApplication({
+      const appDefinition = application({
         modules: [
           module({ providers: [Hidden] }),
           module({
@@ -93,15 +95,15 @@ describe('canonical Modelと実行時DIの依存照合', () => {
           }),
         ],
       })
-      expect(application.model.nodes).toContainEqual(
+      expect(appDefinition.model.nodes).toContainEqual(
         expect.objectContaining({
           token: ConsumerAware,
           dependencies: [Declared],
         }),
       )
-      await expect(bootstrapApplication({ application })).rejects.toThrow(
-        'ConsumerAware requested Hidden',
-      )
+      await expect(
+        bootstrapApplication({ application: appDefinition }),
+      ).rejects.toThrow('ConsumerAware requested Hidden')
     },
   )
 
@@ -112,7 +114,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
     class Consumer {
       readonly value = inject(ConsumerAware)
     }
-    const application = createApplication({
+    const appDefinition = application({
       modules: [
         module({
           providers: [
@@ -124,9 +126,9 @@ describe('canonical Modelと実行時DIの依存照合', () => {
         }),
       ],
     })
-    await expect(bootstrapApplication({ application })).rejects.toThrow(
-      'ConsumerAware requested LoggerToken',
-    )
+    await expect(
+      bootstrapApplication({ application: appDefinition }),
+    ).rejects.toThrow('ConsumerAware requested LoggerToken')
   })
 
   it('factoryは明示inject配列とmetadata保存を利用できる', async () => {
@@ -138,8 +140,8 @@ describe('canonical Modelと実行時DIの依存照合', () => {
     class Consumer {
       readonly logger = inject(LOG)
     }
-    const application = await bootstrapApplication({
-      application: createApplication({
+    const app = await bootstrapApplication({
+      application: application({
         modules: [
           module({
             providers: [
@@ -156,12 +158,12 @@ describe('canonical Modelと実行時DIの依存照合', () => {
       }),
     })
     try {
-      expect(application.get(Consumer).logger).toEqual({
-        backend: application.get(Backend),
+      expect(app.get(Consumer).logger).toEqual({
+        backend: app.get(Backend),
         consumer: Consumer,
       })
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -171,7 +173,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
     class Consumer {
       readonly value = inject(FACTORY)
     }
-    const application = createApplication({
+    const appDefinition = application({
       modules: [
         module({ providers: [Hidden] }),
         module({
@@ -185,9 +187,9 @@ describe('canonical Modelと実行時DIの依存照合', () => {
         }),
       ],
     })
-    await expect(bootstrapApplication({ application })).rejects.toThrow(
-      InjectionContextError,
-    )
+    await expect(
+      bootstrapApplication({ application: appDefinition }),
+    ).rejects.toThrow(InjectionContextError)
   })
 
   it('conditional providerの選択contractと全候補をModelで検証する', async () => {
@@ -201,7 +203,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
       readonly dependency = inject(Hidden)
     }
     const DRIVER = token<DriverA | DriverB>('driver')
-    const application = createApplication({
+    const appDefinition = application({
       modules: [
         module({ providers: [Hidden] }),
         module({
@@ -216,17 +218,20 @@ describe('canonical Modelと実行時DIの依存照合', () => {
         }),
       ],
     })
-    expect(application.model.nodes).toContainEqual(
+    expect(appDefinition.model.nodes).toContainEqual(
       expect.objectContaining({
         token: DRIVER,
         dependencies: [Env, Shared, Hidden],
       }),
     )
-    expect(application.model.diagnostics).toContainEqual(
+    expect(appDefinition.model.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_MODULE_VISIBILITY' }),
     )
     await expect(
-      bootstrapApplication({ application, environment: { DRIVER: 'a' } }),
+      bootstrapApplication({
+        application: appDefinition,
+        environment: { DRIVER: 'a' },
+      }),
     ).rejects.toThrow('LUTRE_MODULE_VISIBILITY')
   })
 
@@ -238,8 +243,8 @@ describe('canonical Modelと実行時DIの依存照合', () => {
       readonly backend = inject(Backend)
     }
     const DRIVER = token<Driver>('symbol.driver')
-    const application = await bootstrapApplication({
-      application: createApplication({
+    const app = await bootstrapApplication({
+      application: application({
         modules: [
           module({
             environment: [Env],
@@ -253,9 +258,9 @@ describe('canonical Modelと実行時DIの依存照合', () => {
       environment: { DRIVER: selected },
     })
     try {
-      expect(application.get(DRIVER).backend).toBe(application.get(Backend))
+      expect(app.get(DRIVER).backend).toBe(app.get(Backend))
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -269,7 +274,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
     class Consumer {
       readonly driver = inject(DRIVER)
     }
-    const application = createApplication({
+    const appDefinition = application({
       modules: [
         module({ providers: [Hidden] }),
         module({
@@ -285,9 +290,12 @@ describe('canonical Modelと実行時DIの依存照合', () => {
         }),
       ],
     })
-    expect(application.model.diagnostics).toEqual([])
+    expect(appDefinition.model.diagnostics).toEqual([])
     await expect(
-      bootstrapApplication({ application, environment: { DRIVER: 'a' } }),
+      bootstrapApplication({
+        application: appDefinition,
+        environment: { DRIVER: 'a' },
+      }),
     ).rejects.toThrow('driver requested Hidden')
   })
 
@@ -342,7 +350,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
           },
         }),
       }
-      const application = createApplication({
+      const appDefinition = application({
         modules: [
           module({
             providers: [
@@ -358,10 +366,10 @@ describe('canonical Modelと実行時DIの依存照合', () => {
           }),
         ],
       })
-      expect(application.model.diagnostics).toEqual([])
+      expect(appDefinition.model.diagnostics).toEqual([])
       await expect(
         bootstrapApplication({
-          application,
+          application: appDefinition,
           capabilities: [
             bindHttpServer({ runtime: 'test' }),
             bindWebSocketServer({
@@ -409,8 +417,8 @@ describe('canonical Modelと実行時DIの依存照合', () => {
       contract: routeContract,
       factory: () => ({ hello: () => ({ schema: routeContract.hello.ok }) }),
     })
-    const application = await bootstrapApplication({
-      application: createApplication({
+    const app = await bootstrapApplication({
+      application: application({
         modules: [
           module({
             providers: [
@@ -429,13 +437,13 @@ describe('canonical Modelと実行時DIの依存照合', () => {
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {
-      const response = await application.http.fetch(new Request('http://test/'))
+      const response = await app.http.fetch(new Request('http://test/'))
       expect(response.status).toBe(500)
       expect(errors).toHaveLength(1)
       expect(String(errors[0])).toContain('layer-owner requested hidden')
       expect(createHidden).not.toHaveBeenCalled()
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -471,17 +479,17 @@ describe('canonical Modelと実行時DIの依存照合', () => {
         },
       },
     })
-    const definition = createApplication({
+    const definition = application({
       modules: [module({ executions: [defineExecution(extension, {})] })],
     })
-    const application = await bootstrapApplication({ application: definition })
+    const app = await bootstrapApplication({ application: definition })
     try {
       expect(runtimeBinding).toBe(hostBinding)
       expect(runtimeBinding?.execution).toBe(definition.model.executions[0])
       expect(Object.isFrozen(runtimeBinding)).toBe(true)
       expect(definition.model.executions[0]).not.toHaveProperty('resolve')
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -504,7 +512,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
           void dependency
         },
     })
-    const definition = createApplication({
+    const definition = application({
       modules: [
         module({ providers: [Declared], executions: [declared] }),
         module({ providers: [Hidden], executions: [other] }),
@@ -554,7 +562,7 @@ describe('canonical Modelと実行時DIの依存照合', () => {
           void dependency
         },
     })
-    const definition = createApplication({
+    const definition = application({
       modules: [module({ providers: [Dependency], executions: [execution] })],
     })
     const first = new ApplicationKernelRuntime(definition.model)

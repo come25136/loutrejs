@@ -3,7 +3,7 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  application as createApplication,
+  application,
   module,
   inject,
   RuntimeCapabilityRegistry,
@@ -33,19 +33,19 @@ describe('MessagePort Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [handler] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
-    expectTypeOf(application.messagePort).toEqualTypeOf<MessagePortHostApi>()
+    expectTypeOf(app.messagePort).toEqualTypeOf<MessagePortHostApi>()
     await expect(
-      application.messagePort.invoke('greet', { name: 'Loutre' }),
+      app.messagePort.invoke('greet', { name: 'Loutre' }),
     ).resolves.toEqual({
       kind: 'unary',
       response: 'ok',
       value: { message: 'Hello, Loutre' },
     })
-    await application.close()
+    await app.close()
   })
 
   it('Application Model構築後のraw MessagePort Contract mutationをRuntimeへ漏らさない', async () => {
@@ -62,23 +62,21 @@ describe('MessagePort Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [handler] }))
-    const definition = createApplication({ modules: [Module()] })
+    const definition = application({ modules: [Module()] })
 
     ;(route as { input: unknown }).input = z.number()
     ;(route.responses as Record<string, unknown>).ok = z.number()
 
-    const application = await bootstrapApplication({ application: definition })
+    const app = await bootstrapApplication({ application: definition })
     try {
-      await expect(
-        application.messagePort.invoke('echo', 'stable'),
-      ).resolves.toEqual({
+      await expect(app.messagePort.invoke('echo', 'stable')).resolves.toEqual({
         kind: 'unary',
         response: 'ok',
         value: 'stable',
       })
-      await expect(application.messagePort.invoke('echo', 42)).rejects.toThrow()
+      await expect(app.messagePort.invoke('echo', 42)).rejects.toThrow()
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -214,7 +212,7 @@ describe('MessagePort Execution Extension', () => {
         }),
       })
       const Module = module(() => ({ executions: [execution] }))
-      const definition = createApplication({ modules: [Module()] })
+      const definition = application({ modules: [Module()] })
       const group = definition.model.extensions.get(messagePortExtension)!
       const applicationRuntime: ExecutionKernelRuntime = {
         beginExecution() {
@@ -275,10 +273,10 @@ describe('MessagePort Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [execution] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
-    const result = await application.messagePort.invoke('values')
+    const result = await app.messagePort.invoke('values')
     const iterator = (result.value as AsyncIterable<number>)[
       Symbol.asyncIterator
     ]()
@@ -294,7 +292,7 @@ describe('MessagePort Execution Extension', () => {
       value: 'finished',
     })
     expect(events).toEqual(['generator.cleanup.begin', 'generator.cleanup.end'])
-    await application.close()
+    await app.close()
   })
 
   it('shutdownはiterator.returnのdone falseを完了まで進めてからProviderをcleanupする', async () => {
@@ -330,17 +328,17 @@ describe('MessagePort Execution Extension', () => {
       providers: [Resource],
       executions: [execution],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 20,
     })
-    const result = await application.messagePort.invoke('values')
+    const result = await app.messagePort.invoke('values')
     const iterator = (result.value as AsyncIterable<number>)[
       Symbol.asyncIterator
     ]()
     await iterator.next()
 
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(events).toEqual([
       'generator.cleanup.begin',
       'generator.cleanup.end',
@@ -381,11 +379,11 @@ describe('MessagePort Execution Extension', () => {
       providers: [Resource],
       executions: [execution],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 20,
     })
-    const result = await application.messagePort.invoke('values')
+    const result = await app.messagePort.invoke('values')
     const iterator = (result.value as AsyncIterable<number>)[
       Symbol.asyncIterator
     ]()
@@ -395,7 +393,7 @@ describe('MessagePort Execution Extension', () => {
       value: 2,
     })
 
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(events).toEqual([
       'generator.cleanup.begin',
       'generator.cleanup.end',
@@ -456,11 +454,11 @@ describe('MessagePort Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [execution] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 100,
     })
-    const result = await application.messagePort.invoke('values')
+    const result = await app.messagePort.invoke('values')
     const iterator = (result.value as AsyncIterable<number>)[
       Symbol.asyncIterator
     ]()
@@ -468,7 +466,7 @@ describe('MessagePort Execution Extension', () => {
     await validationStarted
 
     const closing = Promise.race([
-      application.close().then(
+      app.close().then(
         () => 'closed' as const,
         () => 'failed' as const,
       ),
@@ -535,10 +533,10 @@ describe('MessagePort Execution Extension', () => {
       providers: [Resource],
       executions: [execution],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
-    const result = await application.messagePort.invoke('values')
+    const result = await app.messagePort.invoke('values')
     const iterator = (result.value as AsyncIterable<number>)[
       Symbol.asyncIterator
     ]()
@@ -547,7 +545,7 @@ describe('MessagePort Execution Extension', () => {
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise((_, reject) =>
           setTimeout(
             () => reject(new Error('MessagePort stream drain timed out')),
@@ -595,13 +593,13 @@ describe('MessagePort Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [execution] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
-    const invocation = application.messagePort.invoke('values')
+    const invocation = app.messagePort.invoke('values')
     await handlerStarted
 
-    const closing = application.close()
+    const closing = app.close()
     resumeHandler()
 
     await expect(
@@ -626,12 +624,12 @@ describe('MessagePort Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [execution] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
-    const closing = application.close()
-    const invocation = application.messagePort.invoke('ping')
+    const closing = app.close()
+    const invocation = app.messagePort.invoke('ping')
 
     await expect(invocation).rejects.toThrow('LUTRE_MESSAGE_PORT_DRAINING')
     await expect(closing).resolves.toBeUndefined()
@@ -682,18 +680,18 @@ describe('MessagePort Execution Extension', () => {
       providers: [Resource],
       executions: [execution],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
-    const result = await application.messagePort.invoke('values')
+    const result = await app.messagePort.invoke('values')
     const iterator = (result.value as AsyncIterable<number>)[
       Symbol.asyncIterator
     ]()
     const pending = iterator.next()
     await nextStarted
 
-    await expect(application.close()).rejects.toThrow(
+    await expect(app.close()).rejects.toThrow(
       'Application shutdown did not reach a safe cleanup boundary.',
     )
     expect(events).toEqual(['iterator.return'])
@@ -701,7 +699,7 @@ describe('MessagePort Execution Extension', () => {
     resolveNext({ done: true, value: undefined })
     await expect(pending).resolves.toMatchObject({ done: true })
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(events).toEqual(['iterator.return', 'provider.destroy'])
   })
 
@@ -745,15 +743,15 @@ describe('MessagePort Execution Extension', () => {
       providers: [Resource],
       executions: [execution],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
-    await application.messagePort.invoke('values')
+    await app.messagePort.invoke('values')
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),
@@ -768,7 +766,7 @@ describe('MessagePort Execution Extension', () => {
     expect(cleanupSteps).toBe(pausedCleanupSteps)
 
     cleanupCanFinish = true
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(events).toEqual(['provider.destroy'])
   })
 
@@ -810,15 +808,15 @@ describe('MessagePort Execution Extension', () => {
       providers: [Resource],
       executions: [execution],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
-    await application.messagePort.invoke('values')
+    await app.messagePort.invoke('values')
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),
@@ -830,7 +828,7 @@ describe('MessagePort Execution Extension', () => {
 
     resolveReturn({ done: true, value: undefined })
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(events).toEqual(['iterator.return', 'provider.destroy'])
   })
 })

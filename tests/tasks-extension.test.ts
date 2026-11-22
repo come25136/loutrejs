@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import {
   bootstrapApplication,
-  application as createApplication,
+  application,
   defineLayer,
   inject,
   module,
@@ -33,28 +33,26 @@ describe('Task Execution Extension', () => {
       providers: [provide(PREFIX).useValue('hello')],
       executions: [greet],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
-    expectTypeOf(application.tasks).toEqualTypeOf<TasksHostApi>()
-    await expect(application.tasks.run(greet, 'loutre')).resolves.toBe(
-      'hello:loutre',
-    )
+    expectTypeOf(app.tasks).toEqualTypeOf<TasksHostApi>()
+    await expect(app.tasks.run(greet, 'loutre')).resolves.toBe('hello:loutre')
     const unregistered = task<string, string>({
       name: 'greet',
       factory: () => async (name) => `unregistered:${name}`,
     })
-    await expect(application.tasks.run(unregistered, 'loutre')).rejects.toThrow(
+    await expect(app.tasks.run(unregistered, 'loutre')).rejects.toThrow(
       'LUTRE_TASK_NOT_REGISTERED',
     )
-    expect(application.graph.edges).toContainEqual(
+    expect(app.graph.edges).toContainEqual(
       expect.objectContaining({
         from: 'task.greet',
         kind: 'injects',
       }),
     )
-    await application.close()
+    await app.close()
   })
 
   it('Host境界でraw Taskをcanonical identityへ解決しRuntime・Trigger・Graphへ持ち込まない', async () => {
@@ -72,7 +70,7 @@ describe('Task Execution Extension', () => {
     const Module = module(() => ({
       executions: [schedule],
     }))
-    const definition = createApplication({ modules: [Module()] })
+    const definition = application({ modules: [Module()] })
     const compiled = definition.model.extensions
       .values()[0]!
       .executions.map((execution) => execution.compiled as object)
@@ -101,13 +99,11 @@ describe('Task Execution Extension', () => {
       kind: 'references',
     })
 
-    const application = await bootstrapApplication({ application: definition })
+    const app = await bootstrapApplication({ application: definition })
     try {
-      await expect(application.tasks.run(hostInput)).resolves.toBe(
-        'compiled-runtime',
-      )
+      await expect(app.tasks.run(hostInput)).resolves.toBe('compiled-runtime')
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -123,7 +119,7 @@ describe('Task Execution Extension', () => {
     })
     const Module = module(() => ({ executions: [job, schedule] }))
 
-    const definition = createApplication({ modules: [Module()] })
+    const definition = application({ modules: [Module()] })
 
     expect(definition.model.diagnostics).not.toContainEqual(
       expect.objectContaining({ code: 'LUTRE_EXECUTION_ID_COLLISION' }),
@@ -165,7 +161,7 @@ describe('Task Execution Extension', () => {
       ],
     }))
 
-    const definition = createApplication({
+    const definition = application({
       modules: [FirstModule(), TaskModule(), SecondModule()],
     })
 
@@ -224,8 +220,8 @@ describe('Task Execution Extension', () => {
     const first = FirstModule()
     const second = SecondModule()
 
-    const forward = createApplication({ modules: [first, second] }).model
-    const reversed = createApplication({ modules: [second, first] }).model
+    const forward = application({ modules: [first, second] }).model
+    const reversed = application({ modules: [second, first] }).model
     const codes = (model: ApplicationModel) =>
       model.diagnostics.map(({ code }) => code).toSorted()
 
@@ -251,7 +247,7 @@ describe('Task Execution Extension', () => {
     })
     try {
       await using app = await bootstrapApplication({
-        application: createApplication({
+        application: application({
           modules: [module({ executions: [schedule] })],
         }),
       })
@@ -277,12 +273,12 @@ describe('Task Execution Extension', () => {
       task: job,
     })
     const Module = module(() => ({ executions: [schedule] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
-    const tasks = application.tasks
+    const tasks = app.tasks
 
-    await application.close()
+    await app.close()
 
     await expect(tasks.start()).rejects.toThrow('LUTRE_TASKS_STOPPED')
     await expect(tasks.stop()).resolves.toBeUndefined()
@@ -308,15 +304,15 @@ describe('Task Execution Extension', () => {
       providers: [Resource],
       executions: [job],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
-    const invocation = application.tasks.run(job)
+    const invocation = app.tasks.run(job)
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),
@@ -345,12 +341,12 @@ describe('Task Execution Extension', () => {
       task: job,
     })
     const Module = module(() => ({ executions: [schedule] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
     try {
-      await application.tasks.start()
+      await app.tasks.start()
       await vi.advanceTimersByTimeAsync(0)
       vi.setSystemTime(new Date('2026-09-07T00:00:00.000Z'))
       await vi.advanceTimersByTimeAsync(1_000)
@@ -360,7 +356,7 @@ describe('Task Execution Extension', () => {
         new Date('2026-09-07T00:00:01.000Z'),
       ])
     } finally {
-      await application.close()
+      await app.close()
       vi.useRealTimers()
     }
   })
@@ -382,17 +378,17 @@ describe('Task Execution Extension', () => {
       task: job,
     })
     const Module = module(() => ({ executions: [schedule] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
     try {
-      await application.tasks.start()
+      await app.tasks.start()
       await vi.advanceTimersByTimeAsync(0)
 
       expect(executions).toBe(1)
     } finally {
-      await application.close()
+      await app.close()
       vi.useRealTimers()
     }
   })
@@ -414,19 +410,19 @@ describe('Task Execution Extension', () => {
       task: job,
     })
     const Module = module(() => ({ executions: [schedule] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
     try {
-      await application.tasks.start()
+      await app.tasks.start()
       await vi.advanceTimersByTimeAsync(0)
       vi.setSystemTime(new Date('2026-09-14T00:00:00.000Z'))
       await vi.advanceTimersByTimeAsync(1_000)
 
       expect(executions).toBe(0)
     } finally {
-      await application.close()
+      await app.close()
       vi.useRealTimers()
     }
   })
@@ -448,12 +444,12 @@ describe('Task Execution Extension', () => {
       task: job,
     })
     const Module = module(() => ({ executions: [schedule] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
     try {
-      await application.tasks.start()
+      await app.tasks.start()
       await vi.advanceTimersByTimeAsync(0)
       vi.setSystemTime(new Date('2026-11-01T06:30:00.000Z'))
       await vi.advanceTimersByTimeAsync(1_000)
@@ -463,7 +459,7 @@ describe('Task Execution Extension', () => {
         new Date('2026-11-01T06:30:01.000Z'),
       ])
     } finally {
-      await application.close()
+      await app.close()
       vi.useRealTimers()
     }
   })
@@ -514,16 +510,16 @@ describe('Task Execution Extension', () => {
       providers: [Resource, bindQueueDriver(descriptor, driver)],
       executions: [schedule],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
-    const startup = application.tasks.start()
+    const startup = app.tasks.start()
     await started
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),
@@ -536,7 +532,7 @@ describe('Task Execution Extension', () => {
     releaseStart()
     await expect(startup).rejects.toThrow('LUTRE_TASKS_DRAINING')
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(events).toEqual([
       'driver.start',
       'driver.started',
@@ -585,13 +581,13 @@ describe('Task Execution Extension', () => {
       ],
       executions: [FirstConsumer, SecondConsumer],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
     let thrown: unknown
     try {
-      await application.tasks.start()
+      await app.tasks.start()
     } catch (error) {
       thrown = error
     }
@@ -601,12 +597,12 @@ describe('Task Execution Extension', () => {
       startupError,
       cleanupError,
     ])
-    await expect(application.tasks.start()).rejects.toThrow(
+    await expect(app.tasks.start()).rejects.toThrow(
       'LUTRE_TRIGGERS_ALREADY_STARTED',
     )
-    await expect(application.tasks.stop()).resolves.toBeUndefined()
+    await expect(app.tasks.stop()).resolves.toBeUndefined()
     expect(stopAttempts).toBe(2)
-    await application.close()
+    await app.close()
   })
 
   it('Trigger stopが永久pendingならshutdown timeout後もProvider cleanupへ進まない', async () => {
@@ -642,15 +638,15 @@ describe('Task Execution Extension', () => {
       ],
       executions: [schedule],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
-    await application.tasks.start()
+    await app.tasks.start()
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),

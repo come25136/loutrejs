@@ -48,4 +48,14 @@ const UsersHttp = http.implementation({
 | `basicAuth` / `bearerAuth` / `cors`        | `http.basicAuth` / `http.bearerAuth` / `http.cors`        | `@loutrejs/loutre/http` から `http` をimport      |
 | `loutre build src/app.ts`                  | `loutre build --entry src/app.ts`                         | package.jsonのscripts、CI、デプロイコマンドも更新 |
 
+アプリの宣言には公開名の `module` と `application` をそのまま使います。定義を `AppModule`・`appDefinition`、起動済みインスタンスを `app` と呼び分けると、同じスコープで扱えます。
+
+```ts
+import { application, bootstrapApplication, module } from '@loutrejs/loutre'
+
+const AppModule = module({ executions: [UsersHttp] })
+const appDefinition = application({ modules: [AppModule] })
+await using app = await bootstrapApplication({ application: appDefinition })
+```
+
 `task` は処理本体、`queue` はpayloadとdriverの定義です。TriggerとProviderは各Moduleへ明示的に登録します。Runtimeの起動・接続とExtension作者向けAPIについては[設計判断](../adr/loutre_framework_public_api_redesign.md)を参照してください。

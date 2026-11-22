@@ -1,6 +1,6 @@
 import {
   bootstrapApplication,
-  application as createApplication,
+  application,
   module,
   type StandardSchemaV1,
 } from '@loutrejs/loutre'
@@ -64,16 +64,16 @@ describe('streaming validate.body', () => {
     const Module = module(() => ({
       executions: [Implementation],
     }))
-    const definition = createApplication({
+    const definition = application({
       modules: [silentLoggingModule, Module()],
     })
 
-    const application = await bootstrapApplication({
+    const app = await bootstrapApplication({
       application: definition,
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('https://fixture.test/upload', {
           method: 'POST',
           headers: { 'content-type': 'application/octet-stream' },
@@ -83,12 +83,12 @@ describe('streaming validate.body', () => {
       expect(response.status).toBe(202)
       expect(await response.json()).toEqual({ bytes: 4 })
     } finally {
-      await application.close()
+      await app.close()
     }
 
     const port = await reserveHttpPort()
-    const app = await nodeRuntime.create({ application: definition })
-    await app.serve({
+    const nodeApp = await nodeRuntime.create({ application: definition })
+    await nodeApp.serve({
       port,
       hostname: '127.0.0.1',
     })
@@ -101,7 +101,7 @@ describe('streaming validate.body', () => {
       expect(nodeResponse.status).toBe(202)
       expect(await nodeResponse.json()).toEqual({ bytes: 5 })
     } finally {
-      await app.close()
+      await nodeApp.close()
     }
   })
 })

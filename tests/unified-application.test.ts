@@ -1,6 +1,6 @@
 import {
   bootstrapApplication,
-  application as createApplication,
+  application,
   args,
   module,
   inject,
@@ -25,20 +25,20 @@ describe('Task/Trigger Application', () => {
       providers: [Service],
       executions: [calculate],
     }))
-    const definition = createApplication({ modules: [Module()] })
+    const definition = application({ modules: [Module()] })
     constructions = 0
-    const application = await bootstrapApplication({ application: definition })
+    const app = await bootstrapApplication({ application: definition })
 
-    await expect(application.tasks.run(calculate, 2)).resolves.toBe(42)
-    await expect(application.tasks.run(calculate, 3)).resolves.toBe(43)
+    await expect(app.tasks.run(calculate, 2)).resolves.toBe(42)
+    await expect(app.tasks.run(calculate, 3)).resolves.toBe(43)
     expect(constructions).toBe(1)
-    expect(application.graph.executions).toContainEqual(
+    expect(app.graph.executions).toContainEqual(
       expect.objectContaining({
         id: 'task.calculate',
         executionKind: 'task.invocation',
       }),
     )
-    await application.close()
+    await app.close()
   })
 
   test('Task errorをそのまま返す', async () => {
@@ -49,11 +49,11 @@ describe('Task/Trigger Application', () => {
       },
     })
     const Module = module(() => ({ executions: [fail] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
-    await expect(application.tasks.run(fail)).rejects.toThrow('domain failure')
-    await application.close()
+    await expect(app.tasks.run(fail)).rejects.toThrow('domain failure')
+    await app.close()
   })
 
   test('Argumentsをbootstrap前にvalidationしてDIする', async () => {
@@ -68,24 +68,24 @@ describe('Task/Trigger Application', () => {
           input.workers,
     })
     const Module = module(() => ({ executions: [read] }))
-    const definition = createApplication({
+    const definition = application({
       modules: [Module()],
       arguments: AppArgs,
     })
-    const application = await bootstrapApplication({
+    const app = await bootstrapApplication({
       application: definition,
       arguments: { workers: '8' },
     })
 
-    await expect(application.tasks.run(read)).resolves.toBe(8)
-    expect(application.get(AppArgs).workers).toBe(8)
-    expect(application.graph.edges).toContainEqual(
+    await expect(app.tasks.run(read)).resolves.toBe(8)
+    expect(app.get(AppArgs).workers).toBe(8)
+    expect(app.graph.edges).toContainEqual(
       expect.objectContaining({
         from: 'task.arguments.read',
         kind: 'injects',
       }),
     )
-    await application.close()
+    await app.close()
   })
 
   test('明示したnullのArgumentsを既定値で上書きしない', async () => {
@@ -93,16 +93,16 @@ describe('Task/Trigger Application', () => {
       z.null().transform(() => ({ source: 'null' as const })),
     ) {}
     const Module = module(() => ({ providers: [] }))
-    const application = await bootstrapApplication({
-      application: createApplication({
+    const app = await bootstrapApplication({
+      application: application({
         modules: [Module()],
         arguments: AppArgs,
       }),
       arguments: null,
     })
 
-    expect(application.get(AppArgs)).toEqual({ source: 'null' })
-    await application.close()
+    expect(app.get(AppArgs)).toEqual({ source: 'null' })
+    await app.close()
   })
 
   test('closeはactive executionを待ち、新規executionを拒否する', async () => {
@@ -115,28 +115,24 @@ describe('Task/Trigger Application', () => {
       factory: () => async () => blocker,
     })
     const Module = module(() => ({ executions: [job] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
-    const execution = application.tasks.run(job)
+    const execution = app.tasks.run(job)
     await Promise.resolve()
-    const closing = application.close()
+    const closing = app.close()
     let closed = false
     void closing.then(() => {
       closed = true
     })
     await Promise.resolve()
     expect(closed).toBe(false)
-    await expect(application.tasks.run(job)).rejects.toThrow(
-      'LUTRE_TASKS_DRAINING',
-    )
+    await expect(app.tasks.run(job)).rejects.toThrow('LUTRE_TASKS_DRAINING')
     release()
     await execution
     await closing
-    await expect(application.tasks.run(job)).rejects.toThrow(
-      'LUTRE_TASKS_STOPPED',
-    )
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.tasks.run(job)).rejects.toThrow('LUTRE_TASKS_STOPPED')
+    await expect(app.close()).resolves.toBeUndefined()
   })
 
   test('Cron / fixed-delay / Queue ConsumerをExecution RootとしてTaskへ接続する', async () => {
@@ -188,11 +184,11 @@ describe('Task/Trigger Application', () => {
       ],
       executions: [nightly, polling, orderConsumer],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
-    expect(application.graph.executions).toEqual(
+    expect(app.graph.executions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: 'trigger.cleanup.nightly',
@@ -209,7 +205,7 @@ describe('Task/Trigger Application', () => {
       ]),
     )
     expect(
-      application.graph.executions.find(
+      app.graph.executions.find(
         (execution) => execution.id === 'trigger.orders.consumer',
       )?.extension?.metadata,
     ).toEqual({
@@ -219,13 +215,13 @@ describe('Task/Trigger Application', () => {
       task: 'orders.process',
     })
 
-    await application.tasks.start()
-    await expect(application.tasks.start()).rejects.toThrow(
+    await app.tasks.start()
+    await expect(app.tasks.start()).rejects.toThrow(
       'LUTRE_TRIGGERS_ALREADY_STARTED',
     )
     await expect(consumePayload?.({ id: 'one' })).resolves.toBeUndefined()
     expect(processed).toEqual(['one'])
-    await application.close()
+    await app.close()
   })
 
   test('referenced Taskを自動登録しportable cron違反・timezone違反だけをdiagnosticにする', () => {
@@ -240,7 +236,7 @@ describe('Task/Trigger Application', () => {
       task: cleanup,
     })
     const Module = module(() => ({ executions: [invalidCron] }))
-    const definition = createApplication({ modules: [Module()] })
+    const definition = application({ modules: [Module()] })
     expect(definition.model.diagnostics.map(({ code }) => code)).toEqual(
       expect.arrayContaining([
         'LUTRE_TRIGGER_INVALID_CRON',

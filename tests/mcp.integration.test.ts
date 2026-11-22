@@ -1,6 +1,6 @@
 import {
   bootstrapApplication,
-  application as createApplication,
+  application,
   module,
   inject,
   provide,
@@ -86,7 +86,7 @@ function fixture(
       },
     }),
   })
-  const application = createApplication({
+  const appDefinition = application({
     modules: [
       module({
         providers: [OrdersService, provide(OAuth).useValue(options)],
@@ -94,7 +94,7 @@ function fixture(
       }),
     ],
   })
-  return { application, inputTransform, outputTransform, read }
+  return { application: appDefinition, inputTransform, outputTransform, read }
 }
 
 function oauthOptions(expectedResource = resource) {
@@ -180,9 +180,9 @@ describe('MCP Streamable HTTP', () => {
   it('Tool呼び出しをHTTP Execution配下のoperationとして追跡する', async () => {
     const executions: string[] = []
     const operations: string[] = []
-    const { application } = fixture()
+    const { application: appDefinition } = fixture()
     await using app = await bootstrapApplication({
-      application,
+      application: appDefinition,
       capabilities,
       instrumentation: {
         beginExecution(event) {
@@ -250,7 +250,7 @@ describe('MCP Streamable HTTP', () => {
         tools: {},
       }),
     })
-    const application = createApplication({
+    const appDefinition = application({
       modules: [
         module({
           executions: [
@@ -272,7 +272,7 @@ describe('MCP Streamable HTTP', () => {
     })
 
     expect(
-      application.model.diagnostics.filter(
+      appDefinition.model.diagnostics.filter(
         ({ code }) => code === 'LUTRE_HTTP_DUPLICATE_ROUTE',
       ),
     ).toHaveLength(2)
@@ -317,8 +317,15 @@ describe('MCP Streamable HTTP', () => {
 
   it('同じscopeで一覧と直接呼び出しを制御し、endpointのDIと呼び出しごとのContextを使う', async () => {
     const options = oauthOptions()
-    const { application, inputTransform, outputTransform } = fixture(options)
-    await using app = await bootstrapApplication({ application, capabilities })
+    const {
+      application: appDefinition,
+      inputTransform,
+      outputTransform,
+    } = fixture(options)
+    await using app = await bootstrapApplication({
+      application: appDefinition,
+      capabilities,
+    })
 
     const readList = await app.http.fetch(rpc('tools/list'))
     expect(await readList.json()).toMatchObject({
@@ -495,11 +502,11 @@ describe('MCP Streamable HTTP', () => {
       route: { method: 'GET', path: '/other' },
       factory: () => () => new Response('通常のHTTPルート'),
     })
-    const application = createApplication({
+    const appDefinition = application({
       modules: [...mcpApplication.modules, module({ executions: [other] })],
     })
     await using app = await nodeRuntime.create({
-      application,
+      application: appDefinition,
       shutdownHooks: false,
     })
     const { port } = await app.serve({ port: 0, hostname: '127.0.0.1' })
@@ -565,7 +572,7 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
       }),
     },
   })
-  const application = createApplication({
+  const appDefinition = application({
     modules: [
       module({
         imports: [privateModule],
@@ -592,18 +599,18 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
       }),
     ],
   })
-  expect(application.model.diagnostics.map(({ code }) => code)).toEqual(
+  expect(appDefinition.model.diagnostics.map(({ code }) => code)).toEqual(
     expect.arrayContaining([
       'LUTRE_MODULE_VISIBILITY',
       'LUTRE_EXTENSION_COMPILE',
     ]),
   )
-  expect(application.model.diagnostics.map(({ message }) => message)).toEqual(
+  expect(appDefinition.model.diagnostics.map(({ message }) => message)).toEqual(
     expect.arrayContaining([expect.stringContaining('入力はオブジェクト')]),
   )
-  await expect(bootstrapApplication({ application })).rejects.toThrow(
-    'Application Model is invalid',
-  )
+  await expect(
+    bootstrapApplication({ application: appDefinition }),
+  ).rejects.toThrow('Application Model is invalid')
 })
 
 it.each(['context', 'handler'])(
@@ -633,7 +640,7 @@ it.each(['context', 'handler'])(
         output: z.string(),
       },
     })
-    const application = createApplication({
+    const appDefinition = application({
       modules: [
         module({
           providers: [Dependency],
@@ -662,7 +669,10 @@ it.each(['context', 'handler'])(
         }),
       ],
     })
-    await using app = await bootstrapApplication({ application, capabilities })
+    await using app = await bootstrapApplication({
+      application: appDefinition,
+      capabilities,
+    })
     const controller = new AbortController()
     const calling = app.http.fetch(
       new Request(rpc('tools/call', { name: 'orders.slow' }), {

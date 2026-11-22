@@ -122,7 +122,7 @@ namespace bindingについてもlexical binding identityを使い、同名parame
 named class declarationはtop-levelだけに限定せず、function / block内を含むAST全体から収集する。
 
 ```ts
-function createModule() {
+function nestedServiceModule() {
   class NestedService {}
   return module(() => ({ providers: [NestedService] }))
 }

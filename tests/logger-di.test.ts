@@ -2,7 +2,7 @@ import { z } from 'zod'
 import {
   bootstrapApplication,
   createKernelApplication,
-  application as createApplication,
+  application,
   env,
   module,
   hook,
@@ -42,7 +42,7 @@ describe('ApplicationのLogger DI', () => {
     }
     const Alias = token<LoggerService>('logger.alias')
     const app = await bootstrapApplication({
-      application: createApplication({
+      application: application({
         modules: [
           module({
             providers: [provide(LoggerToken).useClass(CustomLoggerService)],
@@ -92,7 +92,7 @@ describe('ApplicationのLogger DI', () => {
     }
     const root = new FrozenLoggerService()
     const app = await bootstrapApplication({
-      application: createApplication({
+      application: application({
         modules: [
           module({
             providers: [provide(LoggerToken).useValue(root), Consumer],
@@ -148,7 +148,7 @@ describe('ApplicationのLogger DI', () => {
     class Second {
       readonly logger = inject(LoggerToken)
     }
-    const application = createApplication({
+    const appDefinition = application({
       modules: [
         module({
           providers: [
@@ -160,7 +160,7 @@ describe('ApplicationのLogger DI', () => {
         module({ providers: [First, Second] }),
       ],
     })
-    const app = await bootstrapApplication({ application })
+    const app = await bootstrapApplication({ application: appDefinition })
     try {
       const root = app.get(LoggerToken)
       if (!(root instanceof CustomLoggerService))
@@ -200,7 +200,7 @@ describe('ApplicationのLogger DI', () => {
     class Consumer {
       readonly logger = inject(LoggerToken)
     }
-    const definition = createApplication({
+    const definition = application({
       modules: [LoggerModule, module({ providers: [Consumer] })],
     })
     expect(definition.model.diagnostics).toEqual([])
@@ -216,7 +216,7 @@ describe('ApplicationのLogger DI', () => {
       expect(consumer.backend).toBe(root.backend)
       expect(second.get(LoggerToken)).not.toBe(root)
       expect(second.get(LoggerToken).backend).not.toBe(root.backend)
-      const implicit = createApplication({ modules: [] }).model.providers
+      const implicit = application({ modules: [] }).model.providers
       expect(
         definition.model.providers.filter(
           (provider) => provider.provide !== Consumer,
@@ -317,7 +317,7 @@ describe('ApplicationのLogger DI', () => {
         }),
       },
     })
-    const definition = createApplication({
+    const definition = application({
       modules: [App, Logging],
     })
     expect(definition.model.diagnostics).toEqual([])
@@ -388,7 +388,7 @@ describe('ApplicationのLogger DI', () => {
   })
 
   it('同じDefinitionから起動してもrootとbackendをApplication間で共有しない', async () => {
-    const definition = createApplication({ modules: [] })
+    const definition = application({ modules: [] })
     const first = await bootstrapApplication({ application: definition })
     const second = await bootstrapApplication({ application: definition })
     try {
@@ -438,7 +438,7 @@ describe('ApplicationのLogger DI', () => {
       exports: [ROOT],
     })
     const app = createKernelApplication({
-      application: createApplication({ modules: [Logging] }),
+      application: application({ modules: [Logging] }),
     })
     await expect(app.init()).rejects.toMatchObject({
       errors: [failure, cleanupFailure],
@@ -479,7 +479,7 @@ describe('ApplicationのLogger DI', () => {
     })
     await expect(
       bootstrapApplication({
-        application: createApplication({ modules: [Logging] }),
+        application: application({ modules: [Logging] }),
       }),
     ).rejects.toBe(failure)
     expect(events).toEqual(['dispose'])
@@ -498,7 +498,7 @@ describe('ApplicationのLogger DI', () => {
     try {
       await expect(
         bootstrapApplication({
-          application: createApplication({ modules: [Logging] }),
+          application: application({ modules: [Logging] }),
           environment: {},
         }),
       ).rejects.toThrow()
@@ -531,7 +531,7 @@ describe('ApplicationのLogger DI', () => {
       readonly logger = inject(LoggerToken)
     }
     const app = await bootstrapApplication({
-      application: createApplication({
+      application: application({
         modules: [Logging, module({ providers: [Consumer] })],
       }),
     })
@@ -575,7 +575,7 @@ describe('ApplicationのLogger DI', () => {
       ],
       exports: [ROOT],
     })
-    const definition = createApplication({ modules: [Logging] })
+    const definition = application({ modules: [Logging] })
     expect(definition.model.diagnostics).toContainEqual(
       expect.objectContaining({
         code: 'LUTRE_LOGGER_CYCLE',
@@ -595,13 +595,13 @@ describe('ApplicationのLogger DI', () => {
         }),
       ],
     })
-    const model = createApplication({
+    const model = application({
       modules: [privateRoot],
     }).model
     expect(model.diagnostics.map((item) => item.code)).toEqual(
       expect.arrayContaining(['LUTRE_LOGGER_SCOPE', 'LUTRE_LOGGER_VISIBILITY']),
     )
-    const duplicate = createApplication({
+    const duplicate = application({
       modules: [
         module({
           providers: [
@@ -633,7 +633,7 @@ describe('ApplicationのLogger DI', () => {
       exports: [ROOT],
     })
     const Root = module({ imports: [Logging], exports: [ROOT] })
-    expect(createApplication({ modules: [Root] }).model.diagnostics).toEqual([])
+    expect(application({ modules: [Root] }).model.diagnostics).toEqual([])
     class Leaking {
       readonly backend = inject(Backend)
     }
@@ -643,7 +643,7 @@ describe('ApplicationのLogger DI', () => {
       exports: [ROOT],
     })
     expect(
-      createApplication({ modules: [Invalid] }).model.diagnostics,
+      application({ modules: [Invalid] }).model.diagnostics,
     ).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_MODULE_VISIBILITY' }),
     )
@@ -651,14 +651,14 @@ describe('ApplicationのLogger DI', () => {
 
   it('tokenでない設定とLoggerを返さないfactoryを明確に拒否する', async () => {
     const legacyOptions = {
-      application: createApplication({ modules: [] }),
+      application: application({ modules: [] }),
       logger: new LoggerService(),
     }
     expect(() => createKernelApplication(legacyOptions)).toThrow(
       'LUTRE_LOGGER_CONFIGURATION',
     )
     const legacyDefinition = { modules: [], logger: new LoggerService() }
-    expect(() => createApplication(legacyDefinition)).toThrow(
+    expect(() => application(legacyDefinition)).toThrow(
       'LUTRE_LOGGER_CONFIGURATION',
     )
     const ROOT = LoggerToken
@@ -670,7 +670,7 @@ describe('ApplicationのLogger DI', () => {
     })
     await expect(
       bootstrapApplication({
-        application: createApplication({ modules: [Logging] }),
+        application: application({ modules: [Logging] }),
       }),
     ).rejects.toThrow('LUTRE_LOGGER_VALUE')
   })
@@ -700,7 +700,7 @@ describe('ApplicationのLogger DI', () => {
       exports: [ROOT],
     })
     const app = await bootstrapApplication({
-      application: createApplication({ modules: [Logging] }),
+      application: application({ modules: [Logging] }),
       environment: { DRIVER: 'a' },
     })
     try {
@@ -716,7 +716,7 @@ describe('ApplicationのLogger DI', () => {
     class Service {
       readonly logger = inject(CustomLogger)
     }
-    const model = createApplication({
+    const model = application({
       modules: [module({ providers: [Service] })],
     }).model
     expect(model.diagnostics).toContainEqual(
@@ -730,7 +730,7 @@ describe('ApplicationのLogger DI', () => {
   it('クラス自身の登録と予約tokenへのuseClass登録を区別する', async () => {
     class CustomLoggerService extends LoggerService {}
     const named = await bootstrapApplication({
-      application: createApplication({
+      application: application({
         modules: [module({ providers: [CustomLoggerService] })],
       }),
     })
@@ -742,7 +742,7 @@ describe('ApplicationのLogger DI', () => {
     }
 
     const reserved = await bootstrapApplication({
-      application: createApplication({
+      application: application({
         modules: [
           module({
             providers: [provide(LoggerToken).useClass(CustomLoggerService)],
@@ -764,7 +764,7 @@ describe('ApplicationのLogger DI', () => {
       readonly logger = inject(LoggerToken)
     }
     const app = await bootstrapApplication({
-      application: createApplication({
+      application: application({
         modules: [
           module({
             providers: [LoggerService, Service],

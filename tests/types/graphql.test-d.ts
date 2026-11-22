@@ -1,4 +1,3 @@
-import { http as contractHttp } from '@loutrejs/loutre/http'
 import { parse, type GraphQLError, type GraphQLFormattedError } from 'graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
 import {
@@ -19,7 +18,7 @@ const manifest = bindManifest({
 const factory = () => ({ context: () => ({}) })
 const httpOnly = graphql.implementation({
   name: 'Http',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -28,7 +27,7 @@ const httpOnly = graphql.implementation({
 const websocketOnly = graphql.implementation({
   name: 'WebSocket',
   transports: { http: false, websocket: true },
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -37,7 +36,7 @@ const websocketOnly = graphql.implementation({
 })
 const both = graphql.implementation({
   name: 'Both',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -146,14 +145,14 @@ websocket.contract({ route: invalidWebSocketRoute })
 // @ts-expect-error factoryは必須
 graphql.implementation({
   name: 'MissingFactory',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
 })
 graphql.implementation({
   name: 'MissingContext',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -162,7 +161,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'Legacy',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -171,7 +170,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'AsyncFormatter',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -183,7 +182,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'MissingMessage',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -219,7 +218,7 @@ const tenantState = http.middleware<{ tenantId: string }>({
 })
 graphql.implementation({
   name: 'TypedMiddlewareState',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: {
       raw: true,
       method: '*',
@@ -261,7 +260,7 @@ graphql.implementation({
 
 graphql.implementation({
   name: 'TransportState',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: {
       raw: true,
       method: '*',
@@ -314,7 +313,7 @@ graphql.implementation({
 graphql.implementation({
   name: 'WebSocketState',
   transports: { http: false, websocket: true },
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/ws' },
   }).routes.graphql,
   manifest,
@@ -342,7 +341,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'HttpState',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: {
       raw: true,
       method: '*',
@@ -364,7 +363,7 @@ graphql.implementation({
 
 graphql.implementation({
   name: 'AsyncConnectionInitState',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/async' },
   }).routes.graphql,
   manifest,
@@ -394,7 +393,7 @@ graphql.implementation({
 
 graphql.implementation({
   name: 'WebSocketKeepsHttpEnabled',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/both' },
   }).routes.graphql,
   manifest,
@@ -408,7 +407,7 @@ graphql.implementation({
 })
 const defaultHttpWithWs = graphql.implementation({
   name: 'DefaultHttpWithWebSocket',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/both' },
   }).routes.graphql,
   manifest,
@@ -424,7 +423,7 @@ defaultApp.websocket.upgrade(new Request('http://test'))
 
 graphql.implementation({
   name: 'MissingWebSocketEnablement',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/missing' },
   }).routes.graphql,
   manifest,
@@ -436,7 +435,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'DisabledWebSocket',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/disabled' },
   }).routes.graphql,
   manifest,
@@ -449,7 +448,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'RejectHttpResponseFromWebSocket',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/response' },
   }).routes.graphql,
   manifest,
@@ -464,7 +463,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'RequiredConnectionState',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/void' },
   }).routes.graphql,
   manifest,
@@ -513,7 +512,7 @@ rejection.reason = '変更'
 void publicReason
 graphql.implementation({
   name: 'RejectBooleanConnectionResult',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/boolean' },
   }).routes.graphql,
   manifest,
@@ -551,7 +550,7 @@ graphql.implementation({
 graphql.implementation({
   name: 'ContractOwnsPath',
   manifest,
-  route: contractHttp.contract({
+  route: http.contract({
     raw: { raw: true, method: '*', path: '/graphql' },
   }).routes.raw,
   // @ts-expect-error pathはHTTP Contractが所有する
@@ -561,7 +560,7 @@ graphql.implementation({
 graphql.implementation({
   name: 'ContractOwnsMiddleware',
   manifest,
-  route: contractHttp.contract({
+  route: http.contract({
     raw: { raw: true, method: '*', path: '/graphql' },
   }).routes.raw,
   // @ts-expect-error middlewareはHTTP Contractが所有する

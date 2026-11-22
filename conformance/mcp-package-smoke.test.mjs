@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import {
-  application as createApplication,
-  module,
-  inject,
-} from '@loutrejs/loutre'
+import { application, module, inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { mcp } from '@loutrejs/mcp'
 import { nodeRuntime } from '@loutrejs/node'
@@ -68,10 +64,13 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
       },
     }),
   })
-  const application = createApplication({
+  const appDefinition = application({
     modules: [module({ providers: [Counter], executions: [implementation] })],
   })
-  const app = await nodeRuntime.create({ application, shutdownHooks: false })
+  const app = await nodeRuntime.create({
+    application: appDefinition,
+    shutdownHooks: false,
+  })
   try {
     const { port } = await app.serve({ hostname: '127.0.0.1', port: 0 })
     const endpoint = new URL(`http://127.0.0.1:${port}/mcp`)

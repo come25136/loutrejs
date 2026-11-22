@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { mcp } from '@loutrejs/mcp'
-import {
-  application as createApplication,
-  module,
-  inject,
-  provide,
-} from '@loutrejs/loutre'
+import { application, module, inject, provide } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { nodeRuntime } from '@loutrejs/node'
 
@@ -122,7 +117,7 @@ describe('MCP endpointの所有権', () => {
             }
           },
         })
-      const application = createApplication({
+      const appDefinition = application({
         modules: [
           module({
             providers: [
@@ -137,14 +132,14 @@ describe('MCP endpointの所有権', () => {
           }),
         ],
       })
-      expect(application.model.diagnostics).toEqual([])
+      expect(appDefinition.model.diagnostics).toEqual([])
       expect(
-        application.model.executions.filter(
+        appDefinition.model.executions.filter(
           (node) => node.executionKind === 'mcp.endpoint',
         ),
       ).toHaveLength(2)
       expect(
-        application.model.executions.some(
+        appDefinition.model.executions.some(
           (node) => node.executionKind === 'mcp.tool',
         ),
       ).toBe(false)
@@ -157,7 +152,7 @@ describe('MCP endpointの所有権', () => {
       const resources = new Set<number>()
       for (let index = 0; index < 2; index += 1) {
         await using app = await nodeRuntime.create({
-          application,
+          application: appDefinition,
           shutdownHooks: false,
         })
         const { port } = await app.serve({ hostname: '127.0.0.1', port: 0 })

@@ -1,4 +1,4 @@
-import { http as contractHttp } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 import type { VariablesOf, ResultOf } from '@graphql-typed-document-node/core'
 import type {
   Resolvers,
@@ -165,7 +165,7 @@ void invalidResult
 data.loaded(undefined)
 graphql.implementation({
   name: 'InvalidContext',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,

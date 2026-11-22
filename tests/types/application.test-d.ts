@@ -1,9 +1,9 @@
 import {
   createKernelApplication,
   buildApplicationModel,
-  application as createApplication,
+  application,
   args,
-  env as declareEnv,
+  env,
   defineExecution,
   defineExecutionExtension,
   module,
@@ -30,9 +30,9 @@ void asModuleInstance
 const removedRuntime: RuntimeEngine = 'deno'
 void removedRuntime
 
-class AppEnv extends declareEnv(
-  z.object({ PORT: z.coerce.number().default(3000) }).transform((env) => ({
-    port: env.PORT,
+class AppEnv extends env(
+  z.object({ PORT: z.coerce.number().default(3000) }).transform((values) => ({
+    port: values.PORT,
   })),
 ) {}
 class HealthService {}
@@ -98,13 +98,13 @@ const WorkerModule = module(() => ({
   executions: [calculate, nightly, poll, orderConsumer],
 }))
 
-const httpDefinition = createApplication({ modules: [ImportedHttpModule()] })
+const httpDefinition = application({ modules: [ImportedHttpModule()] })
 const httpApplication = createKernelApplication({ application: httpDefinition })
 httpApplication.http.fetch(new Request('http://localhost/health'))
 // @ts-expect-error HTTP ApplicationにはTasks Host APIは無い
 httpApplication.tasks
 
-const workerDefinition = createApplication({
+const workerDefinition = application({
   modules: [WorkerModule()],
   arguments: AppArgs,
 })
@@ -122,7 +122,7 @@ workerApplication.http
 // @ts-expect-error required ArgumentsはKernel Application生成時に必要
 createKernelApplication({ application: workerDefinition })
 
-const defaultArgsDefinition = createApplication({
+const defaultArgsDefinition = application({
   modules: [],
   arguments: DefaultArgs,
 })
@@ -130,9 +130,9 @@ createKernelApplication({ application: defaultArgsDefinition })
 createKernelApplication({ application: defaultArgsDefinition, arguments: {} })
 
 nodeRuntime.create({ application: httpDefinition }).then((app) => {
-  const env: AppEnv = app.get(AppEnv)
+  const appEnv: AppEnv = app.get(AppEnv)
   const health: HealthService = app.get(HealthService)
-  void env
+  void appEnv
   void health
   app.serve({ port: 3000 })
   app.serve({ shutdownHooks: false })
@@ -172,7 +172,7 @@ const customHttpExecution = defineExecution(customHttpExtension, {})
 const customHttpModule = module(() => ({
   executions: [customHttpExecution],
 }))
-const customHttpDefinition = createApplication({
+const customHttpDefinition = application({
   modules: [customHttpModule()],
 })
 nodeRuntime.create({
@@ -226,7 +226,7 @@ const customMessagePortExecution = defineExecution(
 const customMessagePortModule = module(() => ({
   executions: [customMessagePortExecution],
 }))
-const customMessagePortDefinition = createApplication({
+const customMessagePortDefinition = application({
   modules: [customMessagePortModule()],
 })
 electronRuntime.attach({
@@ -277,7 +277,7 @@ const StaticRootModule = module({
   imports: [StaticHttpModule, DynamicWorkerModule('Worker')],
 })
 const staticApp = createKernelApplication({
-  application: createApplication({ modules: [StaticRootModule] }),
+  application: application({ modules: [StaticRootModule] }),
 })
 staticApp.http.fetch(new Request('http://localhost/health'))
 const taskResult: Promise<number> = staticApp.tasks.run(calculate, 1)
@@ -287,17 +287,17 @@ StaticHttpModule()
 // @ts-expect-error 動的Moduleの引数はstring
 DynamicWorkerModule(123)
 // @ts-expect-error 動的Moduleは引数を渡してからApplicationへ登録する
-createApplication({ modules: [DynamicWorkerModule] })
+application({ modules: [DynamicWorkerModule] })
 // @ts-expect-error 動的Moduleは引数を渡してからimportsへ登録する
 module({ imports: [DynamicWorkerModule] })
 const staticHttpApp = createKernelApplication({
-  application: createApplication({ modules: [StaticHttpModule] }),
+  application: application({ modules: [StaticHttpModule] }),
 })
 staticHttpApp.http.fetch(new Request('http://localhost/health'))
 // @ts-expect-error HTTPのみの静的ModuleにはTasks Host APIは無い
 staticHttpApp.tasks
 // @ts-expect-error 引数なしtemplateも生成してからApplicationへ登録する。
-createApplication({ modules: [HttpModule] })
+application({ modules: [HttpModule] })
 // @ts-expect-error 引数なしtemplateも生成してからimportsへ登録する。
 module({ imports: [HttpModule] })
 // @ts-expect-error Modelも未生成templateを正規化しない。

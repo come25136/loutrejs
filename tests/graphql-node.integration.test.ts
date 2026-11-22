@@ -1,4 +1,4 @@
-import { http as contractHttp } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 import { manifestFromSchema } from './helpers/graphql-manifest.js'
 import { request as httpRequest } from 'node:http'
 import { once } from 'node:events'
@@ -15,7 +15,7 @@ import { nodeRuntime } from '@loutrejs/node'
 import { serverAudits } from 'graphql-http'
 
 async function create(
-  http: boolean | undefined,
+  httpEnabled: boolean | undefined,
   hooks: GraphQLWebSocketHooks = {},
 ) {
   const schema = buildSchema(
@@ -29,11 +29,11 @@ async function create(
   hello.resolve = (event: string) => event
   const endpoint = graphql.implementation({
     name: 'Native',
-    route: contractHttp.contract({
+    route: http.contract({
       graphql: { raw: true, method: '*', path: '/graphql' },
     }).routes.graphql,
     manifest: manifestFromSchema(schema),
-    transports: { http: http, websocket: true },
+    transports: { http: httpEnabled, websocket: true },
     factory: () => ({ context: () => ({}), ws: hooks }),
   })
   const Module = module(() => ({ executions: [endpoint] }))
@@ -115,8 +115,8 @@ describe('Node native HTTP/WebSocket', () => {
 
   it.each([true, false, undefined])(
     'HTTP=%sで同一serverのupgradeに接続しprotocolとQueryを確認する',
-    async (http) => {
-      const { app, url } = await create(http)
+    async (httpEnabled) => {
+      const { app, url } = await create(httpEnabled)
       const socket = new WebSocket(url.replace('http:', 'ws:'), [
         'other',
         'graphql-transport-ws',
@@ -143,7 +143,7 @@ describe('Node native HTTP/WebSocket', () => {
           payload: { data: { hello: 'Hello World' } },
         })
         const response = await fetch(`${url}?query=%7Bhello%7D`)
-        expect(response.status).toBe(http !== false ? 200 : 404)
+        expect(response.status).toBe(httpEnabled !== false ? 200 : 404)
         await response.text()
         const closing = once(socket, 'close')
         await app.close()

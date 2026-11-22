@@ -1,7 +1,7 @@
 import * as fixture from './helpers/identities.js'
 import {
   LoggerToken,
-  module as createModule,
+  module,
   application,
   composeLayers,
   defineLayer,
@@ -31,7 +31,7 @@ class ClockReader {
 }
 
 function containerFor(providers: readonly ProviderDeclaration[]): Container {
-  const Module = createModule(() => ({ providers }))
+  const Module = module(() => ({ providers }))
   return new Container(
     (Module().definition.providers ?? []).map(normalizeProvider),
   )
@@ -70,11 +70,11 @@ describe('同期DI Container', () => {
         this.after = inject(CLOCK)
       }
     }
-    const module = createModule(() => ({
+    const moduleInstance = module(() => ({
       providers: [provide(CLOCK).useValue({ id: 1 }), Nested, Consumer],
     }))()
     const container = new Container(
-      (module.definition.providers ?? []).map(normalizeProvider),
+      (moduleInstance.definition.providers ?? []).map(normalizeProvider),
     )
 
     expect(container.resolve(Consumer).after.id).toBe(1)
@@ -191,14 +191,14 @@ describe('依存元consumerの取得', () => {
     class Service {
       readonly logger = inject(AppLogger)
     }
-    const module = createModule(() => ({
+    const moduleInstance = module(() => ({
       providers: [
         provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),
         Service,
       ],
     }))()
     const app = await bootstrapApplication({
-      application: application({ modules: [module] }),
+      application: application({ modules: [moduleInstance] }),
     })
     try {
       expect(app.get(Service).logger.consumer).toBe(Service)
@@ -408,11 +408,11 @@ describe('consumer metadataとModelの依存宣言', () => {
       class Service {
         readonly logger = inject(AppLogger)
       }
-      const repository = createModule({
+      const repository = module({
         providers: [Repository],
         exports: exported ? [Repository] : [],
       })
-      const feature = createModule({
+      const feature = module({
         imports: [repository],
         providers: [
           provide(AppLogger).useClass(AppLogger, { scope: 'transient' }),

@@ -5,7 +5,7 @@ import {
   provide,
   token,
   createKernelApplication,
-  application as createApplication,
+  application,
   module,
   hook,
 } from '@loutrejs/loutre'
@@ -31,11 +31,11 @@ describe('Application Lifecycle', () => {
         }),
       },
     }))
-    const application = createKernelApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
 
-    await expect(application.init()).rejects.toBe(failure)
+    await expect(app.init()).rejects.toBe(failure)
     expect(events).toEqual(['module.init', 'module.destroy'])
   })
 
@@ -67,13 +67,13 @@ describe('Application Lifecycle', () => {
       }
     }
     const Module = module(() => ({ providers: [ProviderA, ProviderB] }))
-    const application = createKernelApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
 
-    await expect(application.init()).rejects.toBe(failure)
+    await expect(app.init()).rejects.toBe(failure)
     expect(events).toEqual(['A.init', 'B.init', 'B.destroy', 'A.destroy'])
-    await expect(application.init()).rejects.toThrow('LUTRE_APPLICATION_STATE')
+    await expect(app.init()).rejects.toThrow('LUTRE_APPLICATION_STATE')
   })
 
   it('初期化errorとcleanup errorをoriginal先頭のAggregateErrorにする', async () => {
@@ -88,13 +88,13 @@ describe('Application Lifecycle', () => {
       }
     }
     const Module = module(() => ({ providers: [Provider] }))
-    const application = createKernelApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
 
     let thrown: unknown
     try {
-      await application.init()
+      await app.init()
     } catch (error) {
       thrown = error
     }
@@ -117,11 +117,11 @@ describe('Application Lifecycle', () => {
       }
     }
     const Module = module(() => ({ providers: [Provider] }))
-    const application = createKernelApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
-    await application.init()
-    await application.close()
+    await app.init()
+    await app.close()
     expect(events).toEqual(['destroy'])
   })
 
@@ -142,21 +142,21 @@ describe('Application Lifecycle', () => {
       }
     }
     const Module = module(() => ({ providers: [First, Second] }))
-    const application = createKernelApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
-    await application.init()
+    await app.init()
 
     let thrown: unknown
     try {
-      await application.close()
+      await app.close()
     } catch (error) {
       thrown = error
     }
     expect(events).toEqual(['second', 'first'])
     expect(thrown).toBeInstanceOf(AggregateError)
     expect((thrown as AggregateError).errors).toEqual([secondError, firstError])
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
   })
 
   it('shutdown lifecycleをonModuleDestroyから既存順序で実行する', async () => {
@@ -198,12 +198,12 @@ describe('Application Lifecycle', () => {
         },
       },
     }))
-    const application = createKernelApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
-    await application.init()
+    await app.init()
 
-    await application.close('SIGTERM')
+    await app.close('SIGTERM')
 
     expect(events).toEqual([
       'provider.destroy',
@@ -263,7 +263,7 @@ describe('Application Lifecycle', () => {
       },
     })
     const app = await bootstrapApplication({
-      application: createApplication({ modules: [Module] }),
+      application: application({ modules: [Module] }),
     })
     await app.close()
     await app.close()
@@ -302,7 +302,7 @@ describe('Application Lifecycle', () => {
       ],
     })
     const app = await bootstrapApplication({
-      application: createApplication({ modules: [Module] }),
+      application: application({ modules: [Module] }),
     })
     expect(app.get(ALIAS)).toBe(app.get(Resource))
     await app.close()
@@ -328,7 +328,7 @@ describe('Application Lifecycle', () => {
     }
     const Module = module({ providers: [Broken, Connection] })
     const app = createKernelApplication({
-      application: createApplication({ modules: [Module] }),
+      application: application({ modules: [Module] }),
     })
     await expect(app.init()).rejects.toBe(failure)
     expect(events).toEqual(['destroy', 'dispose'])

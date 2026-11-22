@@ -1,5 +1,5 @@
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
-import { application as createApplication, module } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -9,7 +9,7 @@ function applicationFor<TContract extends ReturnType<typeof http.contract>>(
 ) {
   const execution = http.implementation({ contract, factory })
   const Module = module(() => ({ executions: [execution] }))
-  return createApplication({ modules: [Module()] })
+  return application({ modules: [Module()] })
 }
 
 describe('OpenAPI generation', () => {
@@ -39,7 +39,7 @@ describe('OpenAPI generation', () => {
         },
       },
     })
-    const application = applicationFor(contract, () => ({
+    const appDefinition = applicationFor(contract, () => ({
       get: (ctx) => ({
         schema: contract.get.found,
         body: { id: ctx.input.params.id },
@@ -50,7 +50,7 @@ describe('OpenAPI generation', () => {
       }),
     }))
 
-    const document = generateOpenApi(application.model, {
+    const document = generateOpenApi(appDefinition.model, {
       info: { title: 'Users API', version: '1.0.0' },
     })
     expect(document.openapi).toBe('3.2.0')
@@ -156,7 +156,7 @@ describe('OpenAPI generation', () => {
         responses: { ok: response },
       },
     })
-    const application = applicationFor(contract, () => ({
+    const appDefinition = applicationFor(contract, () => ({
       get: () => ({ schema: contract.get.ok }),
     }))
 
@@ -168,7 +168,7 @@ describe('OpenAPI generation', () => {
       info: { title: 'Projection API', version: '1.0.0' },
     }
     const contractDocument = generateOpenApi(contract, options)
-    const applicationDocument = generateOpenApi(application.model, options)
+    const applicationDocument = generateOpenApi(appDefinition.model, options)
 
     expect(contractDocument).toEqual(applicationDocument)
     const operation = contractDocument.paths['/items']?.get as Record<
@@ -189,10 +189,10 @@ describe('OpenAPI generation', () => {
         responses: { ok: { status: 200, body: z.string() } },
       },
     })
-    const application = applicationFor(contract, () => ({
+    const appDefinition = applicationFor(contract, () => ({
       get: (ctx) => ({ schema: contract.get.ok, body: ctx.input.params.id }),
     }))
-    const document = generateOpenApi(application.model, {
+    const document = generateOpenApi(appDefinition.model, {
       info: { title: 'Users API', version: '1.0.0' },
       operationId: ({ method, procedure }) =>
         `${method.toLowerCase()}.${procedure}`,
@@ -220,10 +220,10 @@ describe('OpenAPI generation', () => {
         },
       },
     })
-    const application = applicationFor(contract, () => ({
+    const appDefinition = applicationFor(contract, () => ({
       copy: () => ({ schema: contract.copy.ok, body: { ok: true as const } }),
     }))
-    const document = generateOpenApi(application.model, {
+    const document = generateOpenApi(appDefinition.model, {
       info: { title: 'Search API', version: '1.0.0' },
     })
     const operation = (
@@ -283,10 +283,10 @@ describe('OpenAPI generation', () => {
         },
       },
     })
-    const application = applicationFor(contract, () => ({
+    const appDefinition = applicationFor(contract, () => ({
       create: () => ({ schema: contract.create.ok, body: { ok: true } }),
     }))
-    const document = generateOpenApi(application.model, {
+    const document = generateOpenApi(appDefinition.model, {
       info: { title: 'Representations API', version: '1.0.0' },
     })
     const operation = document.paths['/representations']?.post as
@@ -321,14 +321,14 @@ describe('OpenAPI generation', () => {
         },
       },
     })
-    const application = applicationFor(contract, () => ({
+    const appDefinition = applicationFor(contract, () => ({
       get: () => ({
         schema: contract.get.ok,
         body: 'ok',
         headers: { etag: 'v1' },
       }),
     }))
-    const document = generateOpenApi(application.model, {
+    const document = generateOpenApi(appDefinition.model, {
       info: { title: 'Response Headers API', version: '1.0.0' },
     })
     const operation = document.paths['/headers']?.get as Record<string, any>
@@ -359,13 +359,13 @@ describe('OpenAPI generation', () => {
         responses: { ok: { status: 200, body: z.object({ ok: z.boolean() }) } },
       },
     } as any)
-    const application = applicationFor(contract, () => ({
+    const appDefinition = applicationFor(contract, () => ({
       create: () => {
         throw new Error('OpenAPI projection only')
       },
     }))
     expect(() =>
-      generateOpenApi(application.model, {
+      generateOpenApi(appDefinition.model, {
         info: { title: 'Dynamic API', version: '1.0.0' },
       }),
     ).toThrow('LUTRE_OPENAPI_CONTENT_TYPE_002')

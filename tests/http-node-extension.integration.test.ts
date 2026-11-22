@@ -2,7 +2,7 @@ import { nodeRuntime } from '@loutrejs/node'
 import type { Server } from 'node:http'
 import {
   bindRuntimeCapability,
-  application as createApplication,
+  application,
   defineExecution,
   defineExecutionExtension,
   module,
@@ -41,12 +41,12 @@ describe('Node runtime + HTTP Execution Extension', () => {
       }),
     })
     const AppModule = module(() => ({ executions: [controller] }))
-    const definition = createApplication({ modules: [AppModule()] })
+    const definition = application({ modules: [AppModule()] })
     const port = await reserveHttpPort()
-    const application = await nodeRuntime.create({ application: definition })
+    const app = await nodeRuntime.create({ application: definition })
 
     try {
-      await application.serve({
+      await app.serve({
         port,
         hostname: '127.0.0.1',
         shutdownHooks: false,
@@ -58,7 +58,7 @@ describe('Node runtime + HTTP Execution Extension', () => {
         message: 'Hello, Loutre!',
       })
     } finally {
-      await application.close('test')
+      await app.close('test')
     }
   })
 
@@ -104,13 +104,13 @@ describe('Node runtime + HTTP Execution Extension', () => {
         defineExecution(extension, { id: 'fixture.node-extra' }),
       ],
     }))
-    const application = await nodeRuntime.create({
-      application: createApplication({ modules: [Module()] }),
+    const app = await nodeRuntime.create({
+      application: application({ modules: [Module()] }),
       capabilities: [bindRuntimeCapability(EXTRA_DRIVER, { value: 'bound' })],
     })
 
     expect(createRuntime).toHaveBeenCalledTimes(1)
-    await application.close('test')
+    await app.close('test')
   })
 
   it('await usingはadapterのcloseへ委譲してlistenerとshutdown hookを閉じる', async () => {
@@ -126,7 +126,7 @@ describe('Node runtime + HTTP Execution Extension', () => {
       factory: () => ({ health: () => ({ schema: contract.health.ok }) }),
     })
     const AppModule = module(() => ({ executions: [controller] }))
-    const definition = createApplication({ modules: [AppModule()] })
+    const definition = application({ modules: [AppModule()] })
     const port = await reserveHttpPort()
     const signalListeners = {
       SIGINT: process.listenerCount('SIGINT'),
@@ -135,10 +135,10 @@ describe('Node runtime + HTTP Execution Extension', () => {
     let server: Server | undefined
 
     {
-      await using application = await nodeRuntime.create({
+      await using app = await nodeRuntime.create({
         application: definition,
       })
-      server = (await application.serve({ port, hostname: '127.0.0.1' })).server
+      server = (await app.serve({ port, hostname: '127.0.0.1' })).server
       expect(server.listening).toBe(true)
       expect(process.listenerCount('SIGINT')).toBe(signalListeners.SIGINT + 1)
       expect(process.listenerCount('SIGTERM')).toBe(signalListeners.SIGTERM + 1)

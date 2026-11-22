@@ -3,7 +3,7 @@ import { parse } from 'graphql'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  application as createApplication,
+  application,
   module,
   inject,
 } from '@loutrejs/loutre'
@@ -115,8 +115,8 @@ async function fixture(
   })
   let channel: WebSocketDriverChannel | undefined
   const sent: { type: string; id?: string | undefined }[] = []
-  const application = await bootstrapApplication({
-    application: createApplication({
+  const app = await bootstrapApplication({
+    application: application({
       modules: [module({ providers: [Resource], executions: [endpoint] })],
     }),
     capabilities: [
@@ -160,12 +160,12 @@ async function fixture(
     },
   })
   return {
-    application,
+    application: app,
     events,
     sent,
     completedOperations,
     request(query: string, signal?: AbortSignal) {
-      return application.http.fetch(
+      return app.http.fetch(
         new Request(
           `http://fixture.test/graphql?query=${encodeURIComponent(query)}`,
           signal ? { signal } : {},
@@ -173,7 +173,7 @@ async function fixture(
       )
     },
     async open() {
-      await application.websocket.upgrade(
+      await app.websocket.upgrade(
         new Request('http://fixture.test/graphql', {
           headers: { 'sec-websocket-protocol': 'graphql-transport-ws' },
         }),

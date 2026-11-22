@@ -6,7 +6,7 @@ import {
   bindRuntimeCapability,
   bootstrapApplication,
   buildApplicationModel,
-  application as createApplication,
+  application,
   env,
   defineExecution,
   defineExecutionExtension,
@@ -157,9 +157,7 @@ describe('Application Model', () => {
       ),
     })
     const Source = module({ executions: [source] })
-    expect(
-      createApplication({ modules: [Source] }).model.diagnostics,
-    ).toContainEqual(
+    expect(application({ modules: [Source] }).model.diagnostics).toContainEqual(
       expect.objectContaining({
         code: 'LUTRE_EXECUTION_DELEGATE_MISSING',
         path: 'http.source',
@@ -167,14 +165,14 @@ describe('Application Model', () => {
     )
 
     const Target = module({ executions: [target] })
-    const application = createApplication({ modules: [Source, Target] })
-    expect(application.model.edges).toContainEqual({
+    const appDefinition = application({ modules: [Source, Target] })
+    expect(appDefinition.model.edges).toContainEqual({
       from: 'http.source',
       to: 'probe.target',
       kind: 'delegates',
     })
     await using app = await bootstrapApplication({
-      application,
+      application: appDefinition,
       capabilities: [
         bindHttpServer({ runtime: 'test' }),
         bindRuntimeCapability(PROBE_DRIVER, { invoke: async (name) => name }),
@@ -225,7 +223,7 @@ describe('Application Model', () => {
       environment: [SharedEnv],
       exports: [SharedEnv],
     }))
-    const definition = createApplication({
+    const definition = application({
       modules: [FirstModule(), SecondModule()],
     })
 
@@ -247,12 +245,12 @@ describe('Application Model', () => {
       ),
     ).toHaveLength(2)
 
-    const application = await bootstrapApplication({
+    const app = await bootstrapApplication({
       application: definition,
       environment: { VALUE: 'shared' },
     })
-    expect(application.get(SharedEnv).VALUE).toBe('shared')
-    await application.close()
+    expect(app.get(SharedEnv).VALUE).toBe('shared')
+    await app.close()
   })
 
   it('Application DefinitionのLoggerをProviderへ引き継ぐ', async () => {
@@ -262,18 +260,18 @@ describe('Application Model', () => {
       readonly logger = inject(LoggerToken)
     }
     const Module = module(() => ({ providers: [Service] }))
-    const application = await bootstrapApplication({
-      application: createApplication({
+    const app = await bootstrapApplication({
+      application: application({
         modules: [Module(), logging.module],
       }),
     })
 
-    application.get(Service).logger.info('Kernel Loggerを利用しました')
+    app.get(Service).logger.info('Kernel Loggerを利用しました')
 
     expect(records).toContainEqual(
       expect.objectContaining({ message: 'Kernel Loggerを利用しました' }),
     )
-    await application.close()
+    await app.close()
   })
 
   it('Runtime Capability identityをbundle境界で共有できる', () => {
@@ -296,11 +294,11 @@ describe('Application Model', () => {
       dispatch: 'hello',
     })
     const Module = module(() => ({ executions: [execution] }))
-    const definition = createApplication({ modules: [Module()] })
+    const definition = application({ modules: [Module()] })
 
     const firstGraph = projectApplicationModel(definition.model)
     const secondGraph = projectApplicationModel(definition.model)
-    const application = await bootstrapApplication({
+    const app = await bootstrapApplication({
       application: definition,
       capabilities: [
         bindRuntimeCapability(PROBE_DRIVER, {
@@ -312,9 +310,9 @@ describe('Application Model', () => {
     expect(firstGraph).toEqual(secondGraph)
     expect(fixture.compile).toHaveBeenCalledTimes(1)
     expect(fixture.createRuntime).toHaveBeenCalledTimes(1)
-    expect(await application.probe.invoke('probe.hello')).toBe('pong:hello')
-    expectTypeOf(application.probe).toEqualTypeOf<ProbeHostApi>()
-    await application.close()
+    expect(await app.probe.invoke('probe.hello')).toBe('pong:hello')
+    expectTypeOf(app.probe).toEqualTypeOf<ProbeHostApi>()
+    await app.close()
   })
 
   it('Extension Registryからcompiled型付きexecutionを取得する', () => {

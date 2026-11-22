@@ -1,9 +1,5 @@
 import * as fixture from './helpers/identities.js'
-import {
-  application as createApplication,
-  module,
-  inject,
-} from '@loutrejs/loutre'
+import { application, module, inject } from '@loutrejs/loutre'
 import { DevtoolsModule } from '@loutrejs/loutre/devtools'
 import { http } from '@loutrejs/loutre/http'
 import { nodeRuntime } from '@loutrejs/node'
@@ -62,9 +58,9 @@ const AppModule = module(() => ({
   executions: [PingController, ReplayTask],
 }))
 
-const application = createApplication({ modules: [AppModule()] })
+const appDefinition = application({ modules: [AppModule()] })
 
-const replayProviderNode = application.model.nodes.find(
+const replayProviderNode = appDefinition.model.nodes.find(
   (node) => node.kind === 'provider' && node.token === ReplayRepository,
 )
 if (!replayProviderNode || replayProviderNode.kind !== 'provider') {
@@ -233,7 +229,7 @@ describe('Node runtime DevTools bridge', () => {
     vi.stubEnv('LOUTRE_DEV_ENDPOINT', endpoint)
     vi.stubEnv('LOUTRE_DEV_RUN_ID', 'run_configured_endpoint')
     try {
-      const session = createNodeDevtoolsSession(application)
+      const session = createNodeDevtoolsSession(appDefinition)
       expect(session).toBeDefined()
       expect(connect).toHaveBeenCalledExactlyOnceWith(endpoint)
       session?.dispose()
@@ -269,7 +265,7 @@ describe('Node runtime DevTools bridge', () => {
         resolve()
       })
     })
-    const session = createNodeDevtoolsSession(application)
+    const session = createNodeDevtoolsSession(appDefinition)
     if (!session) throw new Error('DevTools session was not created.')
 
     try {
@@ -336,7 +332,7 @@ describe('Node runtime DevTools bridge', () => {
         })
       | undefined
     try {
-      app = await nodeRuntime.create({ application })
+      app = await nodeRuntime.create({ application: appDefinition })
       const listener = await app.serve({ port: 0, shutdownHooks: false })
       const address = listener.server.address()
       if (!address || typeof address === 'string') {
@@ -474,7 +470,7 @@ describe('Node runtime DevTools bridge', () => {
         )
       })
 
-      const repositoryNode = application.model.nodes.find(
+      const repositoryNode = appDefinition.model.nodes.find(
         (node) => node.kind === 'provider' && node.token === ReplayRepository,
       )
       if (!repositoryNode || repositoryNode.kind !== 'provider') {

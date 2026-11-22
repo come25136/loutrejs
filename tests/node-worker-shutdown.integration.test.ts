@@ -1,7 +1,7 @@
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { Server } from 'node:http'
 import {
-  application as createApplication,
+  application,
   module,
   provide,
   LoggerService,
@@ -41,7 +41,7 @@ describe('Runtimeの非同期Loggerによる終了失敗の報告', () => {
       if (name === 'Bun') vi.stubGlobal('Bun', { env: {}, version: '1.4.0' })
       const baseline = listeners()
       const output = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const application = createApplication({
+      const appDefinition = application({
         modules: [
           module({
             providers: [
@@ -53,7 +53,7 @@ describe('Runtimeの非同期Loggerによる終了失敗の報告', () => {
         ],
       })
       const app = await (name === 'Node' ? nodeRuntime : bunRuntime).create({
-        application,
+        application: appDefinition,
       })
       try {
         const handler = process
@@ -84,7 +84,7 @@ function worker(onShutdown: (signal?: string) => void | Promise<void>) {
       return onShutdown(signal)
     }
   }
-  return createApplication({
+  return application({
     modules: [silentLoggingModule, module(() => ({ providers: [Resource] }))()],
   })
 }

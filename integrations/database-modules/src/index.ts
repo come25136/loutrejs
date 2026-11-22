@@ -1,7 +1,7 @@
 import {
   bootstrapApplication,
-  application as createApplication,
-  env as declareEnv,
+  application,
+  env,
   module,
   hook,
   provide,
@@ -23,7 +23,7 @@ const AppEnvSchema = z.object({
   ANALYTICS_DATABASE_URL: z.string(),
 })
 
-export class AppEnv extends declareEnv(AppEnvSchema) {}
+export class AppEnv extends env(AppEnvSchema) {}
 
 export class Database
   implements
@@ -94,10 +94,10 @@ export const DatabaseModule = module<DatabaseModuleArgs>((args) => ({
   providers: [
     provide(args.provide).useFactory({
       inject: [AppEnv, LIFECYCLE_EVENTS],
-      use: (env: AppEnv, events: string[]) =>
+      use: (appEnv: AppEnv, events: string[]) =>
         new Database(
           args.name,
-          env[args.url.key as keyof AppEnv] as string,
+          appEnv[args.url.key as keyof AppEnv] as string,
           events,
         ),
     }),
@@ -150,11 +150,11 @@ export async function createDatabaseIntegration(
       }),
     ],
   }))
-  const application = createApplication({ modules: [AppModule()] })
+  const appDefinition = application({ modules: [AppModule()] })
   const runtime = await bootstrapApplication({
-    application,
+    application: appDefinition,
     environment: environmentSource,
   })
-  const env = runtime.get(AppEnv)
-  return { runtime, events, env, model: application.model }
+  const appEnv = runtime.get(AppEnv)
+  return { runtime, events, env: appEnv, model: appDefinition.model }
 }

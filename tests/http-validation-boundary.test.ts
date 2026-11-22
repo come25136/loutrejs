@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import {
-  bootstrapApplication,
-  application as createApplication,
-  module,
-} from '@loutrejs/loutre'
+import { bootstrapApplication, application, module } from '@loutrejs/loutre'
 import {
   bindHttpServer,
   http,
@@ -20,7 +16,7 @@ async function createHttpApplication<const TContract extends HttpContract>(
   const implementation = http.implementation({ contract, factory })
   const Module = module(() => ({ executions: [implementation] }))
   return bootstrapApplication({
-    application: createApplication({ modules: [Module()] }),
+    application: application({ modules: [Module()] }),
     capabilities: [bindHttpServer({ runtime: 'test' })],
   })
 }
@@ -65,7 +61,7 @@ describe('HTTP validate.body boundary', () => {
         responses: { ok: { status: 200, body: Body } },
       },
     })
-    const application = await createHttpApplication(contract, () => ({
+    const app = await createHttpApplication(contract, () => ({
       create: (context) => ({
         schema: contract.create.ok,
         body: context.input.body,
@@ -73,7 +69,7 @@ describe('HTTP validate.body boundary', () => {
     }))
 
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/items', {
           method: 'POST',
           headers: { 'content-type': 'application/json; charset=utf-8' },
@@ -84,7 +80,7 @@ describe('HTTP validate.body boundary', () => {
       await expect(response.json()).resolves.toEqual({ value: 'loutre' })
       expect(observations).toEqual(['before:raw', 'after:decoded'])
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -111,7 +107,7 @@ describe('HTTP validate.body boundary', () => {
         responses: { ok: { status: 200, body: Body } },
       },
     })
-    const application = await createHttpApplication(contract, () => ({
+    const app = await createHttpApplication(contract, () => ({
       create: (context) => ({
         schema: contract.create.ok,
         body: context.input.body,
@@ -119,7 +115,7 @@ describe('HTTP validate.body boundary', () => {
     }))
 
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/items', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -129,7 +125,7 @@ describe('HTTP validate.body boundary', () => {
       expect(middlewareSawRawBody).toBe(true)
       await expect(response.json()).resolves.toEqual({ value: 'implicit' })
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -151,7 +147,7 @@ describe('HTTP validate.body boundary', () => {
         responses: { ok: { status: 200, body: z.number() } },
       },
     })
-    const application = await createHttpApplication(contract, () => ({
+    const app = await createHttpApplication(contract, () => ({
       async upload(context) {
         const reader = context.input.body.getReader()
         let length = 0
@@ -165,7 +161,7 @@ describe('HTTP validate.body boundary', () => {
     }))
 
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/upload', {
           method: 'POST',
           headers: { 'content-type': 'application/octet-stream' },
@@ -175,7 +171,7 @@ describe('HTTP validate.body boundary', () => {
       expect(response.status).toBe(200)
       await expect(response.json()).resolves.toBe(4)
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -192,12 +188,12 @@ describe('HTTP validate.body boundary', () => {
         responses: { ok: { status: 204 } },
       },
     })
-    const application = await createHttpApplication(contract, () => ({
+    const app = await createHttpApplication(contract, () => ({
       create: () => ({ schema: contract.create.ok }),
     }))
 
     try {
-      const malformed = await application.http.fetch(
+      const malformed = await app.http.fetch(
         new Request('http://fixture.test/items', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -209,7 +205,7 @@ describe('HTTP validate.body boundary', () => {
         error: 'Invalid request',
       })
 
-      const invalid = await application.http.fetch(
+      const invalid = await app.http.fetch(
         new Request('http://fixture.test/items', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -221,7 +217,7 @@ describe('HTTP validate.body boundary', () => {
         error: 'Validation failed',
       })
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 

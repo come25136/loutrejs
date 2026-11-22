@@ -1,10 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { z } from 'zod'
-import {
-  bootstrapApplication,
-  application as createApplication,
-  module,
-} from '@loutrejs/loutre'
+import { bootstrapApplication, application, module } from '@loutrejs/loutre'
 import { http, bindHttpServer } from '@loutrejs/loutre/http'
 import {
   RuntimeDevtoolsInstrumentation,
@@ -61,15 +57,15 @@ describe('HTTP handlerのdirect replay', () => {
         },
       }),
     })
-    const application = await bootstrapApplication({
-      application: createApplication({
+    const app = await bootstrapApplication({
+      application: application({
         modules: [module({ executions: [controller] })],
       }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       instrumentation,
     })
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('https://example.test/items/2', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -102,7 +98,7 @@ describe('HTTP handlerのdirect replay', () => {
       })
       expect(calls).toEqual([11, 11])
     } finally {
-      await application.close()
+      await app.close()
       instrumentation.close()
     }
   })

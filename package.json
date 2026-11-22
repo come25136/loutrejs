@@ -20,7 +20,7 @@
     "benchmark:http": "npm run build && node benchmarks/run.mjs",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "lint": "oxlint",
+    "lint": "oxlint && node scripts/check-public-api-imports.mjs",
     "lint:fix": "oxlint --fix",
     "precheck": "npm run generate:prisma-example",
     "check": "tsc --noEmit --pretty false",

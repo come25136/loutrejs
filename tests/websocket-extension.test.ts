@@ -4,7 +4,7 @@ import { http } from '@loutrejs/loutre/http'
 import {
   bootstrapApplication,
   collectInjectedDependencies,
-  application as createApplication,
+  application,
   defineExecution,
   defineExecutionExtension,
   module,
@@ -215,7 +215,7 @@ describe('WebSocket Execution Extension', () => {
         }),
       })
       await using app = await bootstrapApplication({
-        application: createApplication({
+        application: application({
           modules: [module({ executions: [implementation] })],
         }),
         capabilities: [bindWebSocketServer(fixtureDriver(connection))],
@@ -290,7 +290,7 @@ describe('WebSocket Execution Extension', () => {
         providers: [Service],
         executions: [target],
       })
-      const definition = createApplication({
+      const definition = application({
         modules: reverse
           ? [targetModule, sourceModule]
           : [sourceModule, targetModule],
@@ -351,7 +351,7 @@ describe('WebSocket Execution Extension', () => {
       runtime.handlers(id),
     )
     const source = websocket.delegate({ contract, delegate })
-    const missing = createApplication({
+    const missing = application({
       modules: [module({ executions: [source] })],
     })
     expect(missing.model.diagnostics).toContainEqual(
@@ -386,7 +386,7 @@ describe('WebSocket Execution Extension', () => {
       ),
     })
     await using app = await bootstrapApplication({
-      application: createApplication({
+      application: application({
         modules: [module({ executions: [source, target] })],
       }),
       capabilities: [bindWebSocketServer({ runtime: 'test', upgrade })],
@@ -416,7 +416,7 @@ describe('WebSocket Execution Extension', () => {
       ),
     })
     await using app = await bootstrapApplication({
-      application: createApplication({
+      application: application({
         modules: [module({ executions: [source, target] })],
       }),
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
@@ -461,7 +461,7 @@ describe('WebSocket Execution Extension', () => {
       ),
     })
     const app = await bootstrapApplication({
-      application: createApplication({
+      application: application({
         modules: [
           module({ providers: [Service], executions: [source, target] }),
         ],
@@ -531,13 +531,13 @@ describe('WebSocket Execution Extension', () => {
       factory: () => ({ route: handler }),
     })
     const Module = module(() => ({ executions: [execution] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindWebSocketServer({ runtime: 'test', upgrade })],
       instrumentation: { beginExecution: () => ({ complete: completed }) },
     })
     try {
-      const response = application.websocket.upgrade(
+      const response = app.websocket.upgrade(
         new Request('http://fixture.test/socket', {
           signal: controller.signal,
         }),
@@ -549,7 +549,7 @@ describe('WebSocket Execution Extension', () => {
       expect(handler).not.toHaveBeenCalled()
       expect(completed).toHaveBeenCalledTimes(1)
     } finally {
-      await application.close()
+      await app.close()
     }
   })
   it('nested route名を型安全なhandler keyとして公開する', () => {
@@ -608,7 +608,7 @@ describe('WebSocket Execution Extension', () => {
       executions: [invalidPath, invalidParams, duplicateNestedName],
     }))
 
-    const diagnostics = createApplication({
+    const diagnostics = application({
       modules: [Module()],
     }).model.diagnostics
 
@@ -668,13 +668,13 @@ describe('WebSocket Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [controller] }))
-    const definition = createApplication({ modules: [Module()] })
-    const application = await bootstrapApplication({
+    const definition = application({ modules: [Module()] })
+    const app = await bootstrapApplication({
       application: definition,
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
     })
 
-    expectTypeOf(application.websocket).toEqualTypeOf<WebSocketHostApi>()
+    expectTypeOf(app.websocket).toEqualTypeOf<WebSocketHostApi>()
     expectTypeOf<
       Parameters<ReturnType<typeof controller.factory>['chat']>[0]
     >().toEqualTypeOf<
@@ -684,7 +684,7 @@ describe('WebSocket Execution Extension', () => {
       [...definition.model.extensions].map(({ extension }) => extension.name),
     ).toEqual(['loutre:websocket'])
 
-    const response = await application.websocket.upgrade(
+    const response = await app.websocket.upgrade(
       new Request('http://fixture.test/rooms/room-1/chat'),
     )
     expect(response.status).toBe(200)
@@ -700,7 +700,7 @@ describe('WebSocket Execution Extension', () => {
     expect(connection.closeRequests).toEqual([
       { code: 1000, reason: 'complete' },
     ])
-    await application.close()
+    await app.close()
   })
 
   it('Application Model構築後のraw WebSocket Contract mutationをRuntimeへ漏らさない', async () => {
@@ -719,22 +719,22 @@ describe('WebSocket Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [controller] }))
-    const definition = createApplication({ modules: [Module()] })
+    const definition = application({ modules: [Module()] })
 
     ;(route.handshake.params as Record<string, unknown>).roomId = z.number()
 
-    const application = await bootstrapApplication({
+    const app = await bootstrapApplication({
       application: definition,
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
     })
     try {
-      const response = await application.websocket.upgrade(
+      const response = await app.websocket.upgrade(
         new Request('http://fixture.test/snapshot/stable'),
       )
       expect(response.status).toBe(200)
       await connection.closed
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -767,18 +767,18 @@ describe('WebSocket Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
     })
 
-    const response = await application.websocket.upgrade(
+    const response = await app.websocket.upgrade(
       new Request('http://fixture.test/rooms/me?tag=first&tag=second'),
     )
     expect(response.status).toBe(200)
     await connection.closed
     expect(selected).toEqual(['current:first,second'])
-    await application.close()
+    await app.close()
   })
 
   it('decodeできないpath parameterを400として返す', async () => {
@@ -796,8 +796,8 @@ describe('WebSocket Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [
         bindWebSocketServer({
           runtime: 'test',
@@ -809,13 +809,13 @@ describe('WebSocket Execution Extension', () => {
       ],
     })
 
-    const response = await application.websocket.upgrade(
+    const response = await app.websocket.upgrade(
       new Request('http://fixture.test/rooms/%E0%A4%A'),
     )
 
     expect(response.status).toBe(400)
     expect(upgrades).toBe(0)
-    await application.close()
+    await app.close()
   })
 
   it('closedがrejectしてもexecution leaseを解放する', async () => {
@@ -832,14 +832,14 @@ describe('WebSocket Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
     })
-    await application.websocket.upgrade(new Request('http://fixture.test/wait'))
+    await app.websocket.upgrade(new Request('http://fixture.test/wait'))
 
     connection.fail(new Error('transport failure'))
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
   })
 
   it('複数sessionのdrain失敗をすべて保持する', async () => {
@@ -887,8 +887,8 @@ describe('WebSocket Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [
         bindWebSocketServer({
           runtime: 'test',
@@ -901,10 +901,10 @@ describe('WebSocket Execution Extension', () => {
         }),
       ],
     })
-    await application.websocket.upgrade(new Request('http://fixture.test/wait'))
-    await application.websocket.upgrade(new Request('http://fixture.test/wait'))
+    await app.websocket.upgrade(new Request('http://fixture.test/wait'))
+    await app.websocket.upgrade(new Request('http://fixture.test/wait'))
 
-    await expect(application.close()).rejects.toSatisfy(
+    await expect(app.close()).rejects.toSatisfy(
       (error: unknown) =>
         error instanceof AggregateError &&
         error.errors.some(
@@ -933,13 +933,13 @@ describe('WebSocket Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
     })
-    await application.websocket.upgrade(new Request('http://fixture.test/wait'))
+    await app.websocket.upgrade(new Request('http://fixture.test/wait'))
 
-    await application.close()
+    await app.close()
 
     expect(connection.closeRequests).toEqual([
       { code: 1001, reason: 'Going Away' },
@@ -975,8 +975,8 @@ describe('WebSocket Execution Extension', () => {
         }),
       })
       const Module = module(() => ({ executions: [controller] }))
-      const application = await bootstrapApplication({
-        application: createApplication({ modules: [Module()] }),
+      const app = await bootstrapApplication({
+        application: application({ modules: [Module()] }),
         capabilities: [
           bindWebSocketServer({
             runtime: 'test',
@@ -986,11 +986,9 @@ describe('WebSocket Execution Extension', () => {
           }),
         ],
       })
-      await application.websocket.upgrade(
-        new Request('http://fixture.test/wait'),
-      )
+      await app.websocket.upgrade(new Request('http://fixture.test/wait'))
 
-      const closing = application.close()
+      const closing = app.close()
       await vi.advanceTimersByTimeAsync(5_000)
 
       await expect(closing).resolves.toBeUndefined()
@@ -1021,16 +1019,16 @@ describe('WebSocket Execution Extension', () => {
       providers: [Resource],
       executions: [controller],
     }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindWebSocketServer(fixtureDriver(connection))],
       forceShutdownTimeoutMs: 10,
     })
-    await application.websocket.upgrade(new Request('http://fixture.test/wait'))
+    await app.websocket.upgrade(new Request('http://fixture.test/wait'))
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),
@@ -1057,8 +1055,8 @@ describe('WebSocket Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [
         bindWebSocketServer({
           runtime: 'test',
@@ -1070,8 +1068,8 @@ describe('WebSocket Execution Extension', () => {
       ],
     })
 
-    const closing = application.close()
-    const response = application.websocket.upgrade(
+    const closing = app.close()
+    const response = app.websocket.upgrade(
       new Request('http://fixture.test/wait'),
     )
 
@@ -1094,8 +1092,8 @@ describe('WebSocket Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [
         bindWebSocketServer({
           runtime: 'test',
@@ -1110,12 +1108,12 @@ describe('WebSocket Execution Extension', () => {
         }),
       ],
     })
-    const upgrade = application.websocket.upgrade(
+    const upgrade = app.websocket.upgrade(
       new Request('http://fixture.test/wait'),
     )
     await upgradeStarted.promise
 
-    const closing = application.close()
+    const closing = app.close()
     resumeUpgrade.resolve()
 
     await expect(
@@ -1161,8 +1159,8 @@ describe('WebSocket Execution Extension', () => {
       }),
     })
     const Module = module(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: createApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [
         bindWebSocketServer({
           runtime: 'test',
@@ -1173,14 +1171,14 @@ describe('WebSocket Execution Extension', () => {
       ],
       forceShutdownTimeoutMs: 10,
     })
-    await application.websocket.upgrade(new Request('http://fixture.test/wait'))
+    await app.websocket.upgrade(new Request('http://fixture.test/wait'))
 
-    await expect(application.close()).rejects.toThrow(
+    await expect(app.close()).rejects.toThrow(
       'Application shutdown did not reach a safe cleanup boundary.',
     )
     expect(terminateAttempts).toBe(1)
 
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(terminateAttempts).toBe(2)
   })
 })

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { graphql } from '@loutrejs/graphql'
 import {
   bootstrapApplication,
-  application as createApplication,
+  application,
   module,
   inject,
   projectApplicationModel,
@@ -77,7 +77,7 @@ describe('GraphQL endpointへの委任', () => {
         })
       const first = createEndpoint('First', '/first')
       const second = createEndpoint('Second', '/second')
-      const application = createApplication({
+      const appDefinition = application({
         modules: [
           module({
             providers: [
@@ -92,8 +92,8 @@ describe('GraphQL endpointへの委任', () => {
           }),
         ],
       })
-      expect(application.model.diagnostics).toEqual([])
-      const graph = projectApplicationModel(application.model)
+      expect(appDefinition.model.diagnostics).toEqual([])
+      const graph = projectApplicationModel(appDefinition.model)
       const endpoints = graph.executions.filter(
         (node) => node.executionKind === 'graphql.endpoint',
       )
@@ -116,7 +116,7 @@ describe('GraphQL endpointへの委任', () => {
       const resources = new Set<number>()
       for (let index = 0; index < 2; index += 1) {
         await using app = await nodeRuntime.create({
-          application,
+          application: appDefinition,
           shutdownHooks: false,
         })
         const { port } = await app.serve({ hostname: '127.0.0.1', port: 0 })
@@ -186,13 +186,13 @@ describe('GraphQL endpointへの委任', () => {
         return { context: () => ({}) }
       },
     })
-    const application = createApplication({
+    const appDefinition = application({
       modules: [module({ providers: [Resource], executions: [endpoint] })],
     })
-    expect(application.model.diagnostics).toEqual([])
+    expect(appDefinition.model.diagnostics).toEqual([])
     await expect(
       bootstrapApplication({
-        application,
+        application: appDefinition,
         capabilities: [bindHttpServer({ runtime: 'test' })],
       }),
     ).rejects.toBe(failure)

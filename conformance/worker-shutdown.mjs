@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {
-  application as createApplication,
+  application,
   module,
   inject,
   LoggerService,
@@ -68,8 +68,8 @@ class ShutdownLogger extends LoggerService {
   }
 }
 
-const application = await runtime.create({
-  application: createApplication({
+const app = await runtime.create({
+  application: application({
     modules: [
       module({
         providers: [Resource, provide(LoggerToken).useClass(ShutdownLogger)],
@@ -80,7 +80,7 @@ const application = await runtime.create({
   }),
   forceShutdownTimeoutMs: 5,
 })
-const running = application.tasks.run(job)
+const running = app.tasks.run(job)
 await started.promise
 process.kill(process.pid, 'SIGTERM')
 await timeout.promise

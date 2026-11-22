@@ -1,7 +1,7 @@
 import * as loutre from '@loutrejs/loutre'
 import * as httpApi from '@loutrejs/loutre/http'
 
-function createModule() {
+function nestedServiceModule() {
   class NestedService {}
 
   const Contract = httpApi.http.contract({
@@ -29,6 +29,6 @@ function createModule() {
   }))
 }
 
-const Module = createModule()
+const Module = nestedServiceModule()
 
 export default loutre.application({ modules: [Module()] })

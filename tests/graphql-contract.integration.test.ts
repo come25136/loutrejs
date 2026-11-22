@@ -5,7 +5,7 @@ import WebSocket from 'ws'
 import { nodeRuntime } from '@loutrejs/node'
 import { graphql, ConnectionRejected } from '@loutrejs/graphql'
 import {
-  application as createApplication,
+  application,
   module,
   inject,
   projectApplicationModel,
@@ -77,22 +77,22 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
     providers: [Greeting],
     executions: [regular, delegated],
   }))
-  const application = createApplication({ modules: [Module()] })
-  expect(application.model.diagnostics).toEqual([])
-  for (const source of [Api, application.model])
+  const appDefinition = application({ modules: [Module()] })
+  expect(appDefinition.model.diagnostics).toEqual([])
+  for (const source of [Api, appDefinition.model])
     expect(
       Object.keys(
         generateOpenApi(source, { info: { title: '試験', version: '1' } })
           .paths,
       ),
     ).toEqual(['/api/health'])
-  const graph = projectApplicationModel(application.model)
+  const graph = projectApplicationModel(appDefinition.model)
   expect(
     graph.executions.filter(
       (node) => node.executionKind === 'websocket.session',
     ),
   ).toHaveLength(1)
-  const app = await nodeRuntime.create({ application })
+  const app = await nodeRuntime.create({ application: appDefinition })
   const { server } = await app.serve({
     port: 0,
     hostname: '127.0.0.1',
@@ -204,8 +204,8 @@ it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒�
     providers: [Gate],
     executions: [execution],
   }))
-  const application = createApplication({ modules: [Module()] })
-  const graph = projectApplicationModel(application.model)
+  const appDefinition = application({ modules: [Module()] })
+  const graph = projectApplicationModel(appDefinition.model)
   const ws = graph.executions.find(
     (node) => node.executionKind === 'websocket.session',
   )!
@@ -213,7 +213,7 @@ it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒�
   expect(
     graph.edges.some((edge) => edge.from === ws.id && edge.to === provider.id),
   ).toBe(true)
-  const app = await nodeRuntime.create({ application })
+  const app = await nodeRuntime.create({ application: appDefinition })
   const gate = app.get(Gate)
   const { server } = await app.serve({
     port: 0,
