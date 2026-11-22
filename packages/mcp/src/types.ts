@@ -6,7 +6,11 @@ export interface McpPrincipal {
   readonly scopes: readonly string[]
 }
 
-export interface McpToolContext<TState extends object = object> {
+export interface McpToolContext<
+  TInput = unknown,
+  TState extends object = object,
+> {
+  readonly input: TInput
   readonly request: Request
   readonly state: Readonly<TState>
   readonly principal: McpPrincipal
@@ -27,5 +31,5 @@ export type McpToolResult =
 export interface McpToolRuntime {
   readonly descriptor: McpToolDescriptor
   readonly scopes: readonly string[]
-  invoke(input: unknown, context: McpToolContext): Promise<McpToolResult>
+  invoke(context: McpToolContext): Promise<McpToolResult>
 }

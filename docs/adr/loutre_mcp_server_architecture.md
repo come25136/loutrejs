@@ -34,7 +34,7 @@ const orders = mcp.implementation({
   factory: (service = inject(OrdersService), auth = inject(AuthService)) => ({
     oauth: auth.mcp,
     tools: {
-      'orders.read': async ({ id }, { principal, signal }) => ({
+      'orders.read': async ({ input: { id }, principal, signal }) => ({
         status: await service.status(id, { principal, signal }),
       }),
     },
@@ -66,9 +66,9 @@ GraphQLと同様に、Modelに登録する宣言と呼び出し時のoperation�
 | factoryで注入して保持するtransient Provider                      | endpoint生成時に取得し、そのendpointの呼び出し間で共有する |
 | application scopeのProvider                                      | 同じProvider登録を利用するApplication内で共有する          |
 | middleware state、検証済みprincipal、期限と中断signal            | HTTP requestごと                                           |
-| ToolのContext                                                    | Tool呼び出しごとにRuntimeがhandlerの第2引数として渡す      |
+| ToolのContext                                                    | Tool呼び出しごとにRuntimeがhandlerの単一の引数として渡す   |
 
-Tool呼び出しでは、認可と入力検証を通った一つのhandlerに `request`、middlewareの `state`、検証済みの `principal`、中断用の `signal` を直接渡す。呼び出し固有の計算にはhandlerのローカル変数や関数を使えるため、endpointにContext生成用のhookを設ける必要はない。
+Tool呼び出しでは、認可と入力検証を通ったhandlerに検証後の `input`、`request`、middlewareの `state`、検証済みの `principal`、中断用の `signal` をひとつのオブジェクトで渡す。呼び出し固有の計算にはhandlerのローカル変数や関数を使えるため、endpointにContext生成用のhookを設ける必要はない。
 
 factoryは依存収集でも呼ばれるため、外部I/Oを行わない。実体の生成は起動時にendpointごとに一度行い、Definitionやmodule-levelのcacheへ保存しない。
 

@@ -103,10 +103,7 @@ describe('MCP endpointの所有権', () => {
                 allowInvocation: () => true,
               },
               tools: {
-                'counter.read': (
-                  _input,
-                  { principal, state, signal, request },
-                ) => {
+                'counter.read': ({ principal, state, signal, request }) => {
                   invocations += 1
                   expect(new URL(request.url).pathname).toBe(`/${name}/mcp`)
                   signal.throwIfAborted()

@@ -68,7 +68,9 @@ const counterEndpoint = mcp.implementation({
       },
       tools: {
         'counter.get': () => ({ value: counter.get() }),
-        'counter.increment': ({ by }) => ({ value: counter.increment(by) }),
+        'counter.increment': ({ input: { by } }) => ({
+          value: counter.increment(by),
+        }),
       },
     }
   },

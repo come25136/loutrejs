@@ -14,19 +14,18 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
     value = 0
   }
 
-  const input = z.strictObject({})
   const output = z.object({ value: z.number() })
   const CounterContract = mcp.contract({
     'counter.get': {
       description: '現在値を取得する',
       scopes: ['counter:read'],
-      input,
+      input: z.strictObject({}),
       output,
     },
     'counter.increment': {
-      description: '現在値に 1 を加算する',
+      description: '指定した数を加算する',
       scopes: ['counter:write'],
-      input,
+      input: z.strictObject({ by: z.number() }),
       output,
     },
   })
@@ -61,7 +60,10 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
       },
       tools: {
         'counter.get': () => ({ value: counter.value }),
-        'counter.increment': () => ({ value: ++counter.value }),
+        'counter.increment': ({ input }) => {
+          counter.value += input.by
+          return { value: counter.value }
+        },
       },
     }),
   })
@@ -131,16 +133,18 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
 
     const denied = await request('tools/call', 'read', {
       name: 'counter.increment',
+      arguments: { by: 3 },
     })
     assert.equal(denied.status, 403)
     assert.equal((await denied.json()).error, 'insufficient_scope')
 
     const changed = await result('tools/call', 'write', {
       name: 'counter.increment',
+      arguments: { by: 3 },
     })
-    assert.deepEqual(changed.structuredContent, { value: 1 })
+    assert.deepEqual(changed.structuredContent, { value: 3 })
     const current = await result('tools/call', 'read', { name: 'counter.get' })
-    assert.deepEqual(current.structuredContent, { value: 1 })
+    assert.deepEqual(current.structuredContent, { value: 3 })
   } finally {
     await app.close()
   }

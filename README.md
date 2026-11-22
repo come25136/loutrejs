@@ -115,8 +115,6 @@ Runnable projects are available in [`examples/`](./examples/).
 
 ## Documentation
 
-- [公開 API 移行ガイド](docs/ja/public-api-migration.md)
-
 - [Website](https://loutrejs.come25136.id)
 - [Getting Started](./docs/getting-started.md) — Project creation, HTTP, Tasks, runtimes, and the CLI
 - [GraphQL Type Generation](./docs/graphql-codegen.md) — Shared SDL, typed resolvers, domain mapping, and client operations

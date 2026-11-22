@@ -10,14 +10,13 @@ export function toolError(message: string): Error {
 
 export async function executeTool(
   tool: CompiledTool,
-  input: unknown,
   context: McpToolContext,
-  handler: (input: unknown, context: McpToolContext) => unknown,
+  handler: (context: McpToolContext) => unknown,
 ): Promise<McpToolResult> {
   context.signal.throwIfAborted()
   let parsed
   try {
-    parsed = await validateSchema(tool.input, input)
+    parsed = await validateSchema(tool.input, context.input)
   } catch (error) {
     if (error instanceof SchemaValidationError)
       return {
@@ -29,7 +28,7 @@ export async function executeTool(
   context.signal.throwIfAborted()
   let result: unknown
   try {
-    result = await handler(parsed, context)
+    result = await handler({ ...context, input: parsed })
   } catch (error) {
     if (error instanceof PublicToolError)
       return { kind: 'error', message: error.message }

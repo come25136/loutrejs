@@ -29,10 +29,8 @@ export function createEndpointRuntime({
       tools.set(tool.descriptor.name, {
         descriptor: tool.descriptor,
         scopes: tool.scopes,
-        invoke: (input, context) =>
-          executeTool(tool, input, context, (value, toolContext) =>
-            handler(value, toolContext),
-          ),
+        invoke: (context) =>
+          executeTool(tool, context, (args) => handler(args)),
       })
     }
     const shutdown = new AbortController()

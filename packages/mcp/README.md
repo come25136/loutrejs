@@ -20,7 +20,7 @@ const OrdersMcp = mcp.implementation({
   factory: (orders = inject(OrdersService), auth = inject(AuthService)) => ({
     oauth: auth.mcp,
     tools: {
-      'orders.read': async ({ id }, { principal, signal }) => ({
+      'orders.read': async ({ input: { id }, principal, signal }) => ({
         status: await orders.status(id, { principal, signal }),
       }),
     },
@@ -32,7 +32,7 @@ const OrdersMcp = mcp.implementation({
 
 endpoint の `factory` は `oauth` と `tools` を返します。factory で注入した Provider は、同じ Application のその endpoint 内で共有します。
 
-Tool ハンドラの第1引数は検証後の入力です。第2引数の `McpToolContext` から `request`、HTTP middleware の `state`、検証済みの `principal`、中断用の `signal` を取得できます。`state` の型は endpoint の HTTP ルートから推論されます。Tool が入力だけで完結する場合は、第2引数を省略できます。
+Tool ハンドラは1つのオブジェクトを受け取ります。`input` は Tool のスキーマで検証・変換した値です。必要に応じて、同じ引数から検証済みの `principal`、中断用の `signal`、HTTP の `request`、middleware の `state` を取り出せます。`state` の型は endpoint の HTTP ルートから推論されます。
 
 `runtime.oauth`には`publicOrigin`、`authorizationServers`、`verifyAccessToken`、`allowInvocation`を指定します。署名またはイントロスペクションの結果を検証し、トークンの主体・発行元・リソース・期限・scopeを返してください。一覧と直接呼び出しには同じscope条件を適用します。
 

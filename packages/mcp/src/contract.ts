@@ -37,8 +37,10 @@ export type McpToolHandlers<
   TState extends object = object,
 > = {
   readonly [K in keyof TContract['tools']]: (
-    input: SchemaOutput<TContract['tools'][K]['input']>,
-    context: McpToolContext<TState>,
+    context: McpToolContext<
+      SchemaOutput<TContract['tools'][K]['input']>,
+      TState
+    >,
   ) =>
     | SchemaInput<TContract['tools'][K]['output']>
     | Promise<SchemaInput<TContract['tools'][K]['output']>>

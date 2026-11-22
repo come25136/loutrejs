@@ -13,8 +13,6 @@ LoutreのPublic APIはContract-first、明示的なModule境界、canonical Appl
 
 これは「すべて同じメソッド名にする」問題ではない。Protocolごとの意味、Schemaの選択、DIの所有権、Runtimeの寿命を保ったまま、同じ意味の重複表現を減らす。破壊的変更は許容し、最終的な正規APIは一種類にする。
 
-アプリ作者向けの変更と移行手順は[公開 API 移行ガイド](../ja/public-api-migration.md)を参照。
-
 ## 不変条件
 
 1. Contract / SDL / Schemaが表す情報をImplementationへ二重宣言させない。
@@ -24,7 +22,7 @@ LoutreのPublic APIはContract-first、明示的なModule境界、canonical Appl
 5. Runtime、Host、Protocol Extensionの境界を維持し、動的探索/暗黙Provider登録/Decorator scanは追加しない。
 6. HTTP、WebSocket、MessagePort、MCP、GraphQL、Taskなどで意味の異なる情報を、見た目の統一だけのために同じDSLへ押し込まない。
 7. Contract単独ToolingとApplication Model起点Toolingは既存ADRの境界を維持し、OpenAPIのprojection同値性を崩さない。
-8. 最終移行後に旧記法を別の「推奨API」として残さない。Breaking changeにはMigration Guideと型・Runtime回帰テストを必須とする。
+8. 最終移行後に旧記法を別の「推奨API」として残さない。Breaking changeは型・Runtime回帰テストで検証する。
 
 ## 決定1: HTTP Contractは維持し、短いResponse Referenceを公開する（採用）
 
@@ -156,13 +154,15 @@ const CounterMcp = mcp.implementation({
     oauth: auth.mcp,
     tools: {
       'counter.get': () => ({ value: counter.get() }),
-      'counter.increment': ({ by }) => ({ value: counter.increment(by) }),
+      'counter.increment': ({ input: { by } }) => ({
+        value: counter.increment(by),
+      }),
     },
   }),
 })
 ```
 
-キーをTool名の正本とし、必須・余剰Tool・型の不一致を検査する。各Toolは第2引数で検証済みのprincipal、signal、request、HTTP middlewareのstateを受け取る。OAuth、requiredScopes、Endpoint ownership、HTTP delegate、JSON Schema対応は維持。Toolを個別Executionに分けず、同名Toolの異なるEndpoint間共存を許す。旧tool配列との併用による二重source of truthは認めない。
+キーをTool名の正本とし、必須・余剰Tool・型の不一致を検査する。各Toolは検証後のinput、検証済みのprincipal、signal、request、HTTP middlewareのstateをひとつのオブジェクトで受け取る。OAuth、requiredScopes、Endpoint ownership、HTTP delegate、JSON Schema対応は維持。Toolを個別Executionに分けず、同名Toolの異なるEndpoint間共存を許す。旧tool配列との併用による二重source of truthは認めない。
 
 ## 決定4: Task / Trigger / Queueの意味境界
 

@@ -34,7 +34,7 @@ mcp.implementation({
   factory: () => ({
     oauth,
     tools: {
-      get_order({ id }, { principal, signal, state, request }) {
+      get_order({ principal, input: { id }, signal, state, request }) {
         const tenant: string = state.tenant
         const original: Request = request
         const subject: string = principal.subject

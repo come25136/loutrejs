@@ -74,10 +74,10 @@ function fixture(
     factory: (auth = inject(OAuth), orders = inject(OrdersService)) => ({
       oauth: auth,
       tools: {
-        'orders.read': ({ id }, context) => ({
+        'orders.read': ({ input: { id }, principal }) => ({
           id,
           count: ++orders.count,
-          subject: context.principal.subject,
+          subject: principal.subject,
         }),
         'orders.write': (): true => {
           orders.count++
@@ -566,7 +566,7 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
   const factory = (orders = inject(OrdersService)) => ({
     oauth: oauthConfiguration(),
     tools: {
-      'orders.read': ({ id }: { id: number }) => ({
+      'orders.read': ({ input: { id } }: { input: { id: number } }) => ({
         id,
         count: orders.count,
         subject: 'read',
@@ -592,7 +592,7 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
             contract: invalidInputContract,
             factory: () => ({
               oauth: oauthConfiguration(),
-              tools: { invalid: (value) => value },
+              tools: { invalid: ({ input }) => input },
             }),
           }),
         ],
@@ -673,7 +673,7 @@ it('Tool実行中の中断を伝え、完了までProviderを維持する', asyn
             factory: (dependency = inject(Dependency)) => ({
               oauth: oauthConfiguration(),
               tools: {
-                'orders.slow': async (_input, { signal }) => {
+                'orders.slow': async ({ signal }) => {
                   void dependency
                   await wait(signal)
                   return '完了'

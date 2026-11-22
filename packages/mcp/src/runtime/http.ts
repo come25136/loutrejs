@@ -130,7 +130,8 @@ export function createMcpHttpRuntime(
             })
             try {
               const run = () =>
-                tool.invoke(params.arguments ?? {}, {
+                tool.invoke({
+                  input: params.arguments ?? {},
                   principal,
                   signal,
                   request: state.request,

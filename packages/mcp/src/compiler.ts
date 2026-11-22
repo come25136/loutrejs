@@ -53,7 +53,7 @@ export function validateRuntime(
   }
   if ('context' in runtime)
     throw new TypeError(
-      'MCPのfactory.contextは廃止されました。Toolの第2引数を使ってください。',
+      'MCPのfactory.contextは廃止されました。Toolハンドラの引数からprincipalやstateを取得してください。',
     )
   assertDeclaredExecutionMethods(
     runtime.tools,
