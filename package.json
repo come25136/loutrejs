@@ -20,8 +20,8 @@
     "benchmark:http": "npm run build && node benchmarks/run.mjs",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "lint": "oxlint && node scripts/check-public-api-imports.mjs",
-    "lint:fix": "oxlint --fix",
+    "lint": "oxlint && node scripts/check-public-api-conventions.mjs",
+    "lint:fix": "oxlint --fix && node scripts/check-public-api-conventions.mjs",
     "precheck": "npm run generate:prisma-example",
     "check": "tsc --noEmit --pretty false",
     "test": "npm run test:unit && npm run test:integration",
@@ -47,6 +47,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
+    "@lezer/javascript": "^1.5.6",
     "@swc/core": "^1.16.22",
     "@types/node": "^26.6.6",
     "dependency-cruiser": "^18.7.2",

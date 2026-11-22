@@ -49,6 +49,6 @@ export default defineConfig({
   test: {
     globals: true,
     server: { deps: { inline: ['graphql', 'graphql-http', 'graphql-ws'] } },
-    include: ['tests/**/*.test.ts', 'website/tests/**/*.test.ts'],
+    include: ['tests/**/*.test.{ts,mjs}', 'website/tests/**/*.test.ts'],
   },
 })

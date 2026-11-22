@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import { contractNameViolations } from './contract-names.mjs'
+
 const root = resolve(import.meta.dirname, '..')
 const publicNames = new Map([
   ['@loutrejs/loutre', ['application', 'module', 'env', 'args', 'domainError']],
@@ -24,6 +26,13 @@ for (const file of files) {
   const path = resolve(root, file)
   if (!existsSync(path)) continue
   const source = readFileSync(path, 'utf8')
+  for (const { name, offset } of contractNameViolations(source, file)) {
+    const line = source.slice(0, offset).split('\n').length
+    console.error(
+      `${file}:${line}  契約全体を表す ${name} は contract または対象名に Contract を付けた名前にしてください。`,
+    )
+    process.exitCode = 1
+  }
   for (const match of source.matchAll(namedImport)) {
     const [, specifiers, from] = match
     const entry = from.replace(

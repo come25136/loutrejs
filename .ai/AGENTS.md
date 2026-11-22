@@ -34,6 +34,10 @@ Markdownも同じ責務分離を意識すること。ドキュメントを、コ
 - 影響範囲の小ささを優先して局所的な例外処理を足さない。必要なら同じ責務を持つ呼び出し元とRuntimeを含めて構造から修正する。
 - テスト成功だけで設計の妥当性を判断しない。将来の拡張を妨げる暗黙依存や共有状態を避け、重要な設計判断はADRへ記録する。
 
+# Contractの変数名
+
+このリポジトリでは、HTTP・MCP・WebSocket・MessagePortの契約全体を束縛する変数を `contract` または `OrdersContract` のように `Contract` で終わる名前にする。個々のToolやルートは操作に沿って命名する。ドキュメントのコード例もルートの `npm run lint` で検査する。
+
 # 型assertion
 
 - `as unknown`と`<unknown>`による型assertionは禁止する。`any`や汎用cast関数を経由した迂回も行わず、入力の検証、型付きの戻り値の構築、または型宣言の修正で解決する。brandの付与に必要な単一assertionは、そのdomainの生成・検証・変換関数に限定する。
