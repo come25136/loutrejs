@@ -402,8 +402,7 @@ describe('Node runtime DevTools bridge', () => {
           expect(handlerEnd).toMatchObject({
             result: {
               value: {
-                kind: 'http-result',
-                response: 'ok',
+                schema: 'ok',
                 body: { ok: true },
               },
             },
@@ -430,7 +429,7 @@ describe('Node runtime DevTools bridge', () => {
       expect(await httpReplay.json()).toMatchObject({
         status: 'ok',
         result: {
-          value: { kind: 'http-result', response: 'ok', body: { ok: true } },
+          value: { schema: 'ok', body: { ok: true } },
         },
       })
       await vi.waitFor(async () => {

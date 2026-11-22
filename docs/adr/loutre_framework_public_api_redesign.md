@@ -98,7 +98,7 @@ SSEのbodyは対応する `AsyncIterable<SchemaOutput<...>>`。要素単位のSc
 
 - Contractのoperation keyとresponse keyを補完し、`schema` 参照とbody/headers/streamの型相関を保持する。誤ったレスポンス、別operation/別Contractのreference、型不一致を拒否する。
 - 現行 `HttpContract` は `kind` / `routes` を持つ。これらとoperation名の衝突を無言で上書きせず、型とRuntimeで安全に扱う（両方を予約名として型と実行時に拒否）。
-- Contract作成時にoperationごとの応答定義を個別にスナップショット化する。HTTP実行とreplayは同じcompiled routeを使用し、そのルートの成功応答に登録された参照だけを受け付ける。同じ入力オブジェクトで二つのContractを作っても、その所属は別になる。
+- Contract作成時にoperationごとの応答定義を個別にスナップショット化する。HTTP実行とreplayは同じcompiled routeを使用し、そのルートの成功応答に登録された参照だけを受け付ける。DevToolsの `http.handler` の実行記録とreplay結果では、選択された応答参照を `schema` にその名前で表示する。同じ入力オブジェクトで二つのContractを作っても、その所属は別になる。
 - 型のbrandにはルート集合・operation名・response名を含める。全く同じ宣言から複数回生成した値にはTypeScriptが同じ型を推論するため、インスタンス間の所属検証はRuntimeで行う。
 - Branch継承のresponseも短縮参照で型安全に取得できる。raw route、GraphQL/MCP委譲、OpenAPIの既存契約を維持する。
 - 従来の `ctx.response.*` を公開Contract Handlerから削除し、deprecated aliasを残さない。HTTP Middlewareのshort circuitは別責務として明示的に保持する。

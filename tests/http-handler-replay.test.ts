@@ -18,6 +18,7 @@ describe('HTTP handlerのdirect replay', () => {
       observer: {
         executionStarted: (event) => events.push(event),
         spanStarted: (event) => events.push(event),
+        spanEnded: (event) => events.push(event),
       },
       context: {
         run: (value, operation) => context.run(value, operation),
@@ -84,14 +85,20 @@ describe('HTTP handlerのdirect replay', () => {
       )
       if (handler?.type !== 'span.started' || !handler.capsuleId)
         throw new Error('HTTP handlerのcapsuleがありません。')
+      const expectedResult = { schema: 'ok', body: { value: 11 } }
+      const completed = events.find(
+        (event) =>
+          event.type === 'span.ended' && event.spanId === handler.spanId,
+      )
+      if (completed?.type !== 'span.ended')
+        throw new Error('HTTP handlerの完了イベントがありません。')
+      expect(completed.result?.value).toEqual(expectedResult)
       const replay = await instrumentation.replayCapsule({
         requestId: requestId('replay'),
         capsuleId: handler.capsuleId,
       })
-      expect(replay).toMatchObject({
-        status: 'ok',
-        result: { value: { response: 'ok', body: { value: 11 } } },
-      })
+      expect(replay.status).toBe('ok')
+      expect(replay.result?.value).toEqual(expectedResult)
       const invalid = await instrumentation.replayCapsule({
         requestId: requestId('invalid-replay'),
         capsuleId: handler.capsuleId,
