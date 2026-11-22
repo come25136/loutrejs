@@ -188,11 +188,7 @@ function resolveHttpContractRoutes(
           )
           continue
         } else {
-          assertNoInheritedResponseCollision(
-            name,
-            inheritedResponses,
-            node.responses,
-          )
+          assertValidResponseNames(name, inheritedResponses, node.responses)
         }
         resolved[name] = inheritSourceLocation(
           {
@@ -219,11 +215,7 @@ function resolveHttpContractRoutes(
       }
       const branchPath = node.path ?? ''
       if (branchPath !== '') parseHttpPath(branchPath)
-      assertNoInheritedResponseCollision(
-        name,
-        inheritedResponses,
-        node.responses ?? {},
-      )
+      assertValidResponseNames(name, inheritedResponses, node.responses ?? {})
       visit(
         node.routes,
         joinHttpPath(pathPrefix, branchPath),
@@ -244,11 +236,13 @@ function joinHttpPath(prefix: string, path: string): string {
   return `${prefix}${path}`
 }
 
-function assertNoInheritedResponseCollision(
+function assertValidResponseNames(
   nodeName: string,
   inherited: Readonly<Record<string, HttpExecutionResponseDefinition>>,
   declared: Readonly<Record<string, HttpExecutionResponseDefinition>>,
 ): void {
+  if (Object.getOwnPropertySymbols(declared).length > 0)
+    throw new TypeError(`HTTP response names at ${nodeName} must be strings.`)
   for (const name of Object.keys(declared)) {
     if (Object.hasOwn(inherited, name)) {
       throw new TypeError(

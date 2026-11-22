@@ -192,3 +192,79 @@ it('同じ403を返す二つの分岐はステータス・ヘッダー・本文�
   suspended = true
   expect(await read()).toEqual(first)
 })
+
+it('通常応答・エラーマッピング・SSEのbodyを送信時に入力型から変換する', async () => {
+  const numericBody = z.string().transform(Number)
+  const contract = http.contract({
+    number: {
+      method: 'GET',
+      path: '/number',
+      responses: { ok: { status: 200, body: numericBody } },
+    },
+    missing: {
+      method: 'GET',
+      path: '/missing',
+      responses: {
+        missing: { status: 404, body: numericBody, error: http.error(Missing) },
+      },
+    },
+    events: {
+      method: 'GET',
+      path: '/events',
+      responses: {
+        stream: { status: 200, body: numericBody, stream: 'server' },
+      },
+    },
+  })
+  async function* values() {
+    yield '42'
+  }
+  const implementation = http.implementation({
+    contract,
+    factory: () => ({
+      number: () => ({ schema: contract.number.ok, body: '42' }),
+      missing: () => {
+        throw Missing('42')
+      },
+      events: () => ({ schema: contract.events.stream, body: values() }),
+    }),
+  })
+  await using app = await bootstrapApplication({
+    application: application({
+      modules: [module({ executions: [implementation] })],
+    }),
+    capabilities: [bindHttpServer({ runtime: 'test' })],
+  })
+  const fetchRoute = (path: string) =>
+    app.http.fetch(new Request(`https://fixture.test/${path}`))
+  const number = await fetchRoute('number')
+  expect(number.status).toBe(200)
+  expect(await number.json()).toBe(42)
+  const missing = await fetchRoute('missing')
+  expect(missing.status).toBe(404)
+  expect(await missing.json()).toBe(42)
+  const events = await fetchRoute('events')
+  expect(events.status).toBe(200)
+  expect(await events.text()).toBe('data:42\n\n')
+})
+
+it.each([true, false])(
+  '列挙可能性が %s のSymbol応答名をルートと親の宣言時に拒否する',
+  (enumerable) => {
+    const responses = Object.defineProperty(
+      { ok: { status: 204 } } as const,
+      Symbol('selected'),
+      {
+        value: { status: 204 },
+        enumerable,
+      },
+    )
+    const lookup = { method: 'GET', path: '/', responses: {} } as const
+    expect(() => http.contract({ lookup: { ...lookup, responses } })).toThrow(
+      'response names at lookup must be strings',
+    )
+    expect(() =>
+      http.contract({ group: { responses, routes: { lookup } } }),
+    ).toThrow('response names at group must be strings')
+  },
+)

@@ -2,6 +2,7 @@ import { type HttpRequestHeadDefinition } from './request-head.js'
 import {
   type StandardSchemaV1,
   type GenericLayer,
+  type SchemaInput,
   type SchemaOutput,
   type ExecutionContextView,
   type LayerState,
@@ -60,6 +61,10 @@ export interface HttpValidationMiddleware<
   readonly part: TPart
 }
 
+type HttpResponseDefinitions = Readonly<
+  Record<string, HttpExecutionResponseDefinition> & Record<symbol, never>
+>
+
 export interface HttpExecutionRouteDefinition {
   readonly raw?: false
   readonly method: string
@@ -69,7 +74,7 @@ export interface HttpExecutionRouteDefinition {
   readonly tags?: readonly string[]
   readonly deprecated?: boolean
   readonly request?: HttpExecutionRequestDefinition
-  readonly responses: Readonly<Record<string, HttpExecutionResponseDefinition>>
+  readonly responses: HttpResponseDefinitions
   readonly middlewares?: readonly HttpRouteMiddleware[]
   readonly interaction?: 'unary' | 'server-stream'
 }
@@ -82,7 +87,7 @@ export type HttpRouteMiddleware = AnyHttpMiddleware | HttpValidationMiddleware
 
 export interface HttpContractBranchDefinition {
   readonly path?: string
-  readonly responses?: Readonly<Record<string, HttpExecutionResponseDefinition>>
+  readonly responses?: HttpResponseDefinitions
   readonly middlewares?: readonly AnyHttpMiddleware[]
   readonly routes: HttpContractRouteTree
 }
@@ -346,7 +351,7 @@ type HttpResponseReferences<
       : TName
   ]: {
     readonly [
-      TVariant in keyof TRoutes[TName]['responses']
+      TVariant in Exclude<keyof TRoutes[TName]['responses'], symbol>
     ]: HttpResponseReference<
       TRoutes,
       TName,
@@ -455,20 +460,20 @@ export type HttpResponseResult<TBody, THeaders = unknown> = {
   readonly body: TBody
 } & HttpResultHeaders<THeaders>
 
-export type ResponseBodyOutput<
+export type ResponseBodyInput<
   TResponse extends HttpExecutionResponseDefinition,
 > = TResponse extends {
   readonly stream: 'server'
   readonly body: infer TBody extends StandardSchemaV1
 }
-  ? AsyncIterable<SchemaOutput<TBody>>
+  ? AsyncIterable<SchemaInput<TBody>>
   : TResponse['body'] extends StandardSchemaV1
-    ? SchemaOutput<TResponse['body']>
+    ? SchemaInput<TResponse['body']>
     : undefined
 
 type ResponseValue<TResponse extends HttpExecutionResponseDefinition> =
   (TResponse['body'] extends StandardSchemaV1
-    ? { readonly body: ResponseBodyOutput<TResponse> }
+    ? { readonly body: ResponseBodyInput<TResponse> }
     : { readonly body?: undefined }) &
     HttpResultHeaders<ResponseHeadersOutput<TResponse>>
 
@@ -477,7 +482,7 @@ type DeclaredHttpResponseResult<
   TResponse extends HttpExecutionResponseDefinition,
 > = HttpExecutionResult<
   TVariant,
-  ResponseBodyOutput<TResponse>,
+  ResponseBodyInput<TResponse>,
   ResponseHeadersOutput<TResponse>
 >
 
@@ -498,14 +503,14 @@ type HandlerResult<
   TName extends keyof TRoutes,
   TResponses extends HttpExecutionRouteDefinition['responses'],
 > = {
-  [K in keyof TResponses]: TResponses[K] extends {
+  [K in Exclude<keyof TResponses, symbol>]: TResponses[K] extends {
     readonly error: HttpExecutionResponseDefinition['error']
   }
     ? never
     : {
         readonly schema: HttpResponseReference<TRoutes, TName, K, TResponses[K]>
       } & ResponseValue<TResponses[K]>
-}[keyof TResponses]
+}[Exclude<keyof TResponses, symbol>]
 
 export type HttpExecutionContext<
   TRoute extends HttpExecutionRouteDefinition = HttpExecutionRouteDefinition,

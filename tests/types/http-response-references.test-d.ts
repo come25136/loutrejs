@@ -70,3 +70,47 @@ http.implementation({
     clear: () => ({ schema: WidenedContract.clear.noContent }),
   }),
 })
+
+const numericBody = z.string().transform(Number)
+const NumberContract = http.contract({
+  read: {
+    method: 'GET',
+    path: '/number',
+    responses: {
+      ok: { status: 200, body: numericBody },
+      events: { status: 200, body: numericBody, stream: 'server' },
+    },
+  },
+})
+type ReadNumber = HttpHandlers<typeof NumberContract>['read']
+const stringInput: ReadNumber = () => ({
+  schema: NumberContract.read.ok,
+  body: '42',
+})
+const numericOutput = { schema: NumberContract.read.ok, body: 42 }
+// @ts-expect-error 変換後の数値を文字列スキーマに入力できない
+const badNumber: ReadNumber = () => numericOutput
+async function* numericEvents() {
+  yield 42
+}
+const numericStream = {
+  schema: NumberContract.read.events,
+  body: numericEvents(),
+}
+// @ts-expect-error SSEの各要素も変換前の文字列を渡す
+const badStream: ReadNumber = () => numericStream
+void [stringInput, badNumber, badStream]
+
+const selected = Symbol('selected')
+const symbolResponses = {
+  ok: { status: 204 },
+  [selected]: { status: 204 },
+} as const
+http.contract({
+  // @ts-expect-error SymbolはHTTP応答名に使えない
+  lookup: { method: 'GET', path: '/', responses: symbolResponses },
+})
+http.contract({
+  // @ts-expect-error 親から継承する応答名にも同じ制約がある
+  group: { responses: symbolResponses, routes: { lookup: routes.one } },
+})

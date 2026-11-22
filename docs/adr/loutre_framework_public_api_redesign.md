@@ -92,11 +92,11 @@ const EventsHttp = http.implementation({
 })
 ```
 
-SSEのbodyは対応する `AsyncIterable<SchemaOutput<...>>`。要素単位のSchema検証、SSE framing、Content-Type、Abort/Drain、Iterator cleanup、Execution leaseを維持する。別statusのstreamも `EventsContract.events.partial` を指定すれば一意に決まる。bodylessな204等は `{ schema: Contract.operation.noContent }`、動的headersは `{ schema, body, headers }` とし、Contractのheaders定義・defaultsへ従う。通常Contract HandlerからFetch `Response` を直接返して型保証を迂回しない（raw/delegateは別経路）。
+Handlerとエラーマッピングはbodyスキーマの入力型を返し、HTTP Runtimeが検証・変換した出力を送信する。SSEのbodyは対応する `AsyncIterable<SchemaInput<...>>`。要素単位のSchema検証、SSE framing、Content-Type、Abort/Drain、Iterator cleanup、Execution leaseを維持する。別statusのstreamも `EventsContract.events.partial` を指定すれば一意に決まる。bodylessな204等は `{ schema: Contract.operation.noContent }`、動的headersは `{ schema, body, headers }` とし、Contractのheaders定義・defaultsへ従う。通常Contract HandlerからFetch `Response` を直接返して型保証を迂回しない（raw/delegateは別経路）。
 
 ### 応答の所属と検証
 
-- Contractのoperation keyとresponse keyを補完し、`schema` 参照とbody/headers/streamの型相関を保持する。誤ったレスポンス、別operation/別Contractのreference、型不一致を拒否する。
+- 応答名には文字列を使い、SymbolキーはContract宣言時に拒否する。Contractのoperation keyとresponse keyを補完し、`schema` 参照とbody/headers/streamの型相関を保持する。誤ったレスポンス、別operation/別Contractのreference、型不一致を拒否する。
 - 現行 `HttpContract` は `kind` / `routes` を持つ。これらとoperation名の衝突を無言で上書きせず、型とRuntimeで安全に扱う（両方を予約名として型と実行時に拒否）。
 - Contract作成時にoperationごとの応答定義を個別にスナップショット化する。HTTP実行とreplayは同じcompiled routeを使用し、そのルートの成功応答に登録された参照だけを受け付ける。DevToolsの `http.handler` の実行記録とreplay結果では、選択された応答参照を `schema` にその名前で表示する。同じ入力オブジェクトで二つのContractを作っても、その所属は別になる。
 - 型のbrandにはルート集合・operation名・response名を含める。全く同じ宣言から複数回生成した値にはTypeScriptが同じ型を推論するため、インスタンス間の所属検証はRuntimeで行う。
