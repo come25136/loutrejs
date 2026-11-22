@@ -45,15 +45,16 @@ export function validateRuntime(
 ): ProtocolRuntime {
   if (
     !runtime ||
-    typeof runtime.context !== 'function' ||
     !runtime.tools ||
     typeof runtime.tools !== 'object' ||
     !runtime.oauth
   ) {
-    throw new TypeError(
-      'MCPのfactoryにはoauth、context、toolsを指定してください。',
-    )
+    throw new TypeError('MCPのfactoryにはoauthとtoolsを指定してください。')
   }
+  if ('context' in runtime)
+    throw new TypeError(
+      'MCPのfactory.contextは廃止されました。Toolの第2引数を使ってください。',
+    )
   assertDeclaredExecutionMethods(
     runtime.tools,
     tools.map((tool) => tool.descriptor.name),
@@ -70,7 +71,6 @@ export function validateRuntime(
   }
   return {
     oauth: runtime.oauth,
-    context: runtime.context.bind(runtime),
     tools: Object.fromEntries(handlers),
   }
 }

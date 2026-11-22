@@ -154,7 +154,6 @@ const CounterMcp = mcp.implementation({
   route: ApiContract.routes.mcp,
   factory: (counter = inject(CounterService), auth = inject(AuthService)) => ({
     oauth: auth.mcp,
-    context: ({ principal }) => ({ principal }),
     tools: {
       'counter.get': () => ({ value: counter.get() }),
       'counter.increment': ({ by }) => ({ value: counter.increment(by) }),
@@ -163,7 +162,7 @@ const CounterMcp = mcp.implementation({
 })
 ```
 
-キーをTool名の正本とし、必須・余剰Tool・型の不一致を検査する。OAuth、requiredScopes、Tool context、Endpoint ownership、HTTP delegate、JSON Schema対応は維持。Toolを個別Executionに分けず、同名Toolの異なるEndpoint間共存を許す。旧tool配列との併用による二重source of truthは認めない。
+キーをTool名の正本とし、必須・余剰Tool・型の不一致を検査する。各Toolは第2引数で検証済みのprincipal、signal、request、HTTP middlewareのstateを受け取る。OAuth、requiredScopes、Endpoint ownership、HTTP delegate、JSON Schema対応は維持。Toolを個別Executionに分けず、同名Toolの異なるEndpoint間共存を許す。旧tool配列との併用による二重source of truthは認めない。
 
 ## 決定4: Task / Trigger / Queueの意味境界
 

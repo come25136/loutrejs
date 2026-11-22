@@ -79,15 +79,11 @@ export function defineMcpContract(tools: McpTools): McpContract {
 export function defineMcpImplementation<
   const TRoute extends HttpContractRawRoute,
   const TContract extends McpContract,
-  TContext extends object,
   const THandlers extends object,
 >(
-  options: Omit<
-    McpImplementationOptions<TRoute, TContract, TContext>,
-    'factory'
-  > & {
+  options: Omit<McpImplementationOptions<TRoute, TContract>, 'factory'> & {
     readonly factory: () => ReturnType<
-      McpImplementationOptions<TRoute, NoInfer<TContract>, TContext>['factory']
+      McpImplementationOptions<TRoute, NoInfer<TContract>>['factory']
     > & {
       readonly tools: THandlers &
         NoInfer<DeclaredExecutionMethods<THandlers, TContract['tools']>>

@@ -30,12 +30,8 @@ export function createEndpointRuntime({
         descriptor: tool.descriptor,
         scopes: tool.scopes,
         invoke: (input, context) =>
-          executeTool(
-            tool,
-            input,
-            context,
-            (value) => runtime.context(value),
-            (value, state) => handler(value, state),
+          executeTool(tool, input, context, (value, toolContext) =>
+            handler(value, toolContext),
           ),
       })
     }

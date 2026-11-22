@@ -1,5 +1,5 @@
 import { type CompiledTool } from './compiled.js'
-import { type McpContextInput, type McpToolResult } from './types.js'
+import { type McpToolContext, type McpToolResult } from './types.js'
 import { validateSchema, SchemaValidationError } from '@loutrejs/loutre'
 import { snapshotJson } from './json.js'
 class PublicToolError extends Error {}
@@ -11,9 +11,8 @@ export function toolError(message: string): Error {
 export async function executeTool(
   tool: CompiledTool,
   input: unknown,
-  context: McpContextInput<object>,
-  createContext: (input: McpContextInput<object>) => object | Promise<object>,
-  handler: (input: unknown, context: object) => unknown,
+  context: McpToolContext,
+  handler: (input: unknown, context: McpToolContext) => unknown,
 ): Promise<McpToolResult> {
   context.signal.throwIfAborted()
   let parsed
@@ -28,11 +27,9 @@ export async function executeTool(
     throw error
   }
   context.signal.throwIfAborted()
-  const state = await createContext(context)
-  context.signal.throwIfAborted()
   let result: unknown
   try {
-    result = await handler(parsed, state)
+    result = await handler(parsed, context)
   } catch (error) {
     if (error instanceof PublicToolError)
       return { kind: 'error', message: error.message }

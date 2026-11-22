@@ -57,7 +57,7 @@ const UsersHttp = http.implementation({
 
 ## MCP
 
-`mcp.tool({ name, description, scopes, input, output })` と実装の `tools: [...]` を、名前をキーにした `mcp.contract({ [name]: { description, scopes, input, output } })` と `mcp.implementation({ contract, ... })` に置き換えます。Factoryの `tools` に対応するメソッドを実装します。OAuth、HTTP raw route、呼び出しごとのContextの設定例は[MCPガイド](../../packages/mcp/README.md)を参照してください。
+`mcp.tool({ name, description, scopes, input, output })` と実装の `tools: [...]` を、名前をキーにした `mcp.contract({ [name]: { description, scopes, input, output } })` と `mcp.implementation({ contract, ... })` に置き換えます。Factoryの `tools` に対応するメソッドを実装します。旧 `factory.context` を削除し、Tool の第2引数 `McpToolContext` から `principal`、`signal`、`request`、middleware の `state` を直接取得してください。旧フックで作っていた値は Tool 内か共通関数で計算できます。OAuth と HTTP raw route の設定例は[MCPガイド](../../packages/mcp/README.md)を参照してください。
 
 ## importとCLI
 

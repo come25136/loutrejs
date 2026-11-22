@@ -19,10 +19,9 @@ const OrdersMcp = mcp.implementation({
   oauth: { requiredScopes: ['orders:read'] },
   factory: (orders = inject(OrdersService), auth = inject(AuthService)) => ({
     oauth: auth.mcp,
-    context: ({ principal, signal, state }) => ({ principal, signal, state }),
     tools: {
-      'orders.read': async ({ id }, context) => ({
-        status: await orders.status(id, context),
+      'orders.read': async ({ id }, { principal, signal }) => ({
+        status: await orders.status(id, { principal, signal }),
       }),
     },
   }),
@@ -31,9 +30,9 @@ const OrdersMcp = mcp.implementation({
 
 `mcp.contract` はTool一覧・各Tool定義・`scopes` 配列をコピーして凍結します。`input` と `output` には渡したスキーマをそのまま使うため、宣言後も同じ検証動作を保つスキーマを渡してください。Tool一覧のキーには文字列を使います。列挙できないものを含め、一覧に直接定義されたSymbolキーは宣言時にエラーになります。
 
-`factory`と`context`は必須です。factoryはApplicationごとのendpointにつき一度実体を作り、Contextは認可と入力検証後のTool呼び出しごとに作ります。factoryで保持するtransient Providerもそのendpointの呼び出し間で共有します。
+endpoint の `factory` は `oauth` と `tools` を返します。factory で注入した Provider は、同じ Application のその endpoint 内で共有します。
 
-Contextの入力は`request`、middlewareの`state`、検証済みの`principal`、`signal`です。呼び出しごとの可変状態はContextで構築してください。Tool handlerの入出力とContextは契約から型推論されます。
+Tool ハンドラの第1引数は検証後の入力です。第2引数の `McpToolContext` から `request`、HTTP middleware の `state`、検証済みの `principal`、中断用の `signal` を取得できます。`state` の型は endpoint の HTTP ルートから推論されます。Tool が入力だけで完結する場合は、第2引数を省略できます。
 
 `runtime.oauth`には`publicOrigin`、`authorizationServers`、`verifyAccessToken`、`allowInvocation`を指定します。署名またはイントロスペクションの結果を検証し、トークンの主体・発行元・リソース・期限・scopeを返してください。一覧と直接呼び出しには同じscope条件を適用します。
 

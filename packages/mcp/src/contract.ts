@@ -6,7 +6,7 @@ import {
   type LayerState,
 } from '@loutrejs/loutre'
 import { type McpOAuthRuntime, type McpOAuthOptions } from './oauth.js'
-import { type McpContextInput } from './types.js'
+import { type McpToolContext } from './types.js'
 import { type HttpContractRawRoute } from '@loutrejs/loutre/http'
 
 export type Schema = StandardSchemaV1 & StandardJSONSchemaV1
@@ -34,11 +34,11 @@ export interface McpContract<TTools extends McpTools = McpTools> {
 
 export type McpToolHandlers<
   TContract extends McpContract,
-  TContext extends object,
+  TState extends object = object,
 > = {
   readonly [K in keyof TContract['tools']]: (
     input: SchemaOutput<TContract['tools'][K]['input']>,
-    context: TContext,
+    context: McpToolContext<TState>,
   ) =>
     | SchemaInput<TContract['tools'][K]['output']>
     | Promise<SchemaInput<TContract['tools'][K]['output']>>
@@ -46,17 +46,15 @@ export type McpToolHandlers<
 
 export interface McpRuntime<
   TContract extends McpContract = McpContract,
-  TContext extends object = object,
   TState extends object = object,
 > {
   readonly oauth: McpOAuthRuntime
-  context(input: McpContextInput<TState>): TContext | Promise<TContext>
-  readonly tools: McpToolHandlers<TContract, NoInfer<TContext>>
+  readonly context?: never
+  readonly tools: McpToolHandlers<TContract, TState>
 }
 
 export interface ProtocolRuntime {
   readonly oauth: McpOAuthRuntime
-  context(input: McpContextInput<object>): object | Promise<object>
   readonly tools: Readonly<Record<string, unknown>>
 }
 
@@ -71,7 +69,6 @@ type RouteState<TRoute> = TRoute extends {
 export interface McpImplementationOptions<
   TRoute extends HttpContractRawRoute = HttpContractRawRoute,
   TContract extends McpContract = McpContract,
-  TContext extends object = object,
 > {
   readonly name: string
   readonly version: string
@@ -79,11 +76,7 @@ export interface McpImplementationOptions<
   readonly contract: TContract
   readonly tools?: never
   readonly oauth?: McpOAuthOptions
-  readonly factory: () => McpRuntime<
-    NoInfer<TContract>,
-    TContext,
-    RouteState<TRoute>
-  >
+  readonly factory: () => McpRuntime<NoInfer<TContract>, RouteState<TRoute>>
 }
 import { type HttpRawExecutionContext } from '@loutrejs/loutre/http'
 

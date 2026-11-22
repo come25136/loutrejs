@@ -66,7 +66,6 @@ const counterEndpoint = mcp.implementation({
         },
         allowInvocation: () => true,
       },
-      context: ({ principal, signal }) => ({ principal, signal }),
       tools: {
         'counter.get': () => ({ value: counter.get() }),
         'counter.increment': ({ by }) => ({ value: counter.increment(by) }),

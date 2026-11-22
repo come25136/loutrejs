@@ -190,22 +190,14 @@ describe('protocolのmethod契約', () => {
       return { text: '応答', count: ++this.#count }
     }
   }
-  class Runtime implements McpRuntime<typeof EchoContract, object> {
+  class Runtime implements McpRuntime<typeof EchoContract> {
     readonly oauth = new OAuth()
     readonly tools = new Tools()
-    #state = {}
-    context() {
-      return this.#state
-    }
   }
-  const toolFactories: Record<
-    string,
-    () => McpRuntime<typeof EchoContract, object>
-  > = {
+  const toolFactories: Record<string, () => McpRuntime<typeof EchoContract>> = {
     prototype上のmethod: () => new Runtime(),
     非列挙のmethod: () => ({
       oauth: new OAuth(),
-      context: () => ({}),
       tools: Object.defineProperty(
         { echo: () => ({ text: '応答', count: 1 }) },
         'echo',
@@ -214,7 +206,6 @@ describe('protocolのmethod契約', () => {
     }),
     契約外のプロパティ: () => ({
       oauth: new OAuth(),
-      context: () => ({}),
       tools: {
         echo: () => ({ text: '応答', count: 1 }),
         metadata: '設定',

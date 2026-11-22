@@ -33,23 +33,16 @@ mcp.implementation({
   contract: OrdersContract,
   factory: () => ({
     oauth,
-    context({ principal, signal, state, request }) {
-      const tenant: string = state.tenant
-      const original: Request = request
-      // @ts-expect-error middlewareが宣言していないstateを使わない
-      void state.secret
-      signal.throwIfAborted()
-      void original
-      return { tenant, subject: principal.subject }
-    },
     tools: {
-      get_order({ id }, context) {
+      get_order({ id }, { principal, signal, state, request }) {
+        const tenant: string = state.tenant
+        const original: Request = request
+        const subject: string = principal.subject
         const orderId: number = id
-        const subject: string = context.subject
-        const tenant: string = context.tenant
-        void tenant
-        // @ts-expect-error Contextが返していない値は使わない
-        void context.secret
+        // @ts-expect-error middlewareが宣言していないstateを使わない
+        void state.secret
+        signal.throwIfAborted()
+        void [tenant, original]
         return { id: orderId + subject.length }
       },
     },
@@ -63,7 +56,6 @@ mcp.implementation({
   contract: OrdersContract,
   factory: () => ({
     oauth,
-    context: () => ({}),
     tools: {
       // @ts-expect-error 出力schemaへの入力にはnumberが必要
       get_order: () => ({ id: '17' }),
@@ -77,7 +69,6 @@ mcp.implementation({
   contract: OrdersContract,
   factory: () => ({
     oauth,
-    context: () => ({}),
     // @ts-expect-error 公開したToolに対応するhandlerが必要
     tools: {},
   }),
@@ -100,7 +91,6 @@ mcp.implementation({
   contract: OrdersContract,
   factory: () => ({
     oauth,
-    context: () => ({}),
     // @ts-expect-error ContractにないToolを実装できない
     tools: { get_order: () => ({ id: 1 }), other: () => ({ id: 2 }) },
   }),

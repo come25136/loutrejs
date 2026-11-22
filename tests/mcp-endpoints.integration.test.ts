@@ -42,7 +42,7 @@ describe('MCP endpointの所有権', () => {
     '初期化順が逆=%sでも同じlistener上のendpointごとにDI・OAuth・Context・Tool名を分離する',
     async (reverse) => {
       let constructions = 0
-      let contexts = 0
+      let invocations = 0
       let nextResource = 0
       class Resource {
         readonly id = ++nextResource
@@ -102,18 +102,23 @@ describe('MCP endpointの所有権', () => {
                 },
                 allowInvocation: () => true,
               },
-              context: ({ principal, state, signal }) => {
-                contexts += 1
-                signal.throwIfAborted()
-                return {
-                  endpoint: name,
-                  count: ++count,
-                  resource: resource.id,
-                  tenant: state.tenant,
-                  subject: principal.subject,
-                }
+              tools: {
+                'counter.read': (
+                  _input,
+                  { principal, state, signal, request },
+                ) => {
+                  invocations += 1
+                  expect(new URL(request.url).pathname).toBe(`/${name}/mcp`)
+                  signal.throwIfAborted()
+                  return {
+                    endpoint: name,
+                    count: ++count,
+                    resource: resource.id,
+                    tenant: state.tenant,
+                    subject: principal.subject,
+                  }
+                },
               },
-              tools: { 'counter.read': (_input, context) => context },
             }
           },
         })
@@ -166,7 +171,7 @@ describe('MCP endpointの所有権', () => {
           expect(await metadata.json()).toMatchObject({
             resource: `https://127.0.0.1/${name}/mcp`,
           })
-          const before = contexts
+          const before = invocations
           expect(
             (
               await call(
@@ -176,7 +181,7 @@ describe('MCP endpointの所有権', () => {
               )
             ).status,
           ).toBe(401)
-          expect(contexts).toBe(before)
+          expect(invocations).toBe(before)
           const first = resultSchema.parse(
             await (await call(`${origin}/${name}/mcp`, name, 'tenant1')).json(),
           ).result.structuredContent

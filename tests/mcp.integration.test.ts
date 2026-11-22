@@ -50,7 +50,6 @@ function fixture(
       output: z.object({
         id: z.number().transform(outputTransform).pipe(z.string()),
         count: z.number(),
-        call: z.number(),
         subject: z.string(),
       }),
     },
@@ -74,12 +73,10 @@ function fixture(
     oauth: { requiredScopes: options.requiredScopes },
     factory: (auth = inject(OAuth), orders = inject(OrdersService)) => ({
       oauth: auth,
-      context: ({ principal, signal }) => ({ principal, signal, call: 0 }),
       tools: {
         'orders.read': ({ id }, context) => ({
           id,
           count: ++orders.count,
-          call: ++context.call,
           subject: context.principal.subject,
         }),
         'orders.write': (): true => {
@@ -225,7 +222,6 @@ describe('MCP Streamable HTTP', () => {
         contract: { ...contract, tools: {} },
         factory: () => ({
           oauth: oauthConfiguration(),
-          context: () => ({}),
           tools: {},
         }),
       }),
@@ -259,7 +255,6 @@ describe('MCP Streamable HTTP', () => {
       contract: mcp.contract({}),
       factory: () => ({
         oauth: oauthConfiguration(),
-        context: () => ({}),
         tools: {},
       }),
     })
@@ -369,27 +364,22 @@ describe('MCP Streamable HTTP', () => {
     expect(app.get(OrdersService).count).toBe(0)
     expect(options.allowInvocation).not.toHaveBeenCalled()
 
-    const call = () =>
-      app.http.fetch(
-        rpc('tools/call', { name: 'orders.read', arguments: { id: '17' } }),
-      )
+    const tokens = ['read', 'write']
     const results = await Promise.all(
-      [call(), call()].map(async (value) => (await value).json()),
+      tokens.map(async (token) => {
+        const response = await app.http.fetch(
+          rpc(
+            'tools/call',
+            { name: 'orders.read', arguments: { id: '17' } },
+            token,
+          ),
+        )
+        return (await response.json()).result.structuredContent
+      }),
     )
-    expect(results).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          result: expect.objectContaining({
-            structuredContent: { id: '17', count: 1, call: 1, subject: 'read' },
-          }),
-        }),
-        expect.objectContaining({
-          result: expect.objectContaining({
-            structuredContent: { id: '17', count: 2, call: 1, subject: 'read' },
-          }),
-        }),
-      ]),
-    )
+    expect(results.map(({ subject }) => subject)).toEqual(tokens)
+    expect(results.map(({ count }) => count).toSorted()).toEqual([1, 2])
+    expect(results.map(({ id }) => id)).toEqual(['17', '17'])
     expect(inputTransform).toHaveBeenCalledTimes(2)
     expect(outputTransform).toHaveBeenCalledTimes(2)
     expect(app.get(OrdersService).count).toBe(2)
@@ -575,12 +565,10 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
       .routes.endpoint
   const factory = (orders = inject(OrdersService)) => ({
     oauth: oauthConfiguration(),
-    context: () => ({}),
     tools: {
       'orders.read': ({ id }: { id: number }) => ({
         id,
         count: orders.count,
-        call: 1,
         subject: 'read',
       }),
     },
@@ -604,7 +592,6 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
             contract: invalidInputContract,
             factory: () => ({
               oauth: oauthConfiguration(),
-              context: () => ({}),
               tools: { invalid: (value) => value },
             }),
           }),
@@ -626,85 +613,100 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
   ).rejects.toThrow('Application Model is invalid')
 })
 
-it.each(['context', 'handler'])(
-  '%s実行中の中断を伝え、完了までProviderを維持する',
-  async (phase) => {
-    const entered = Promise.withResolvers<void>()
-    const cancelled = Promise.withResolvers<void>()
-    const finish = Promise.withResolvers<void>()
-    const destroy = vi.fn()
-    const wait = async (signal: AbortSignal) => {
-      signal.addEventListener('abort', () => cancelled.resolve(), {
-        once: true,
-      })
-      entered.resolve()
-      await finish.promise
-    }
-    class Dependency {
-      onModuleDestroy() {
-        destroy()
-      }
-    }
-    const slowOrderContract = mcp.contract({
-      'orders.slow': {
-        description: '時間のかかる照会を実行する',
-        scopes: ['orders:read'],
-        input: z.object({}),
-        output: z.string(),
-      },
+it('旧factory.contextを指定したendpointを起動時に拒否する', async () => {
+  const factory = () => ({
+    oauth: oauthConfiguration(),
+    context: () => ({}),
+    tools: {},
+  })
+  const endpoint = mcp.implementation({
+    route: defaultRoute,
+    name: 'legacy',
+    version: '1',
+    contract: mcp.contract({}),
+    // @ts-expect-error 旧factory.contextの形をJavaScriptから渡す場合も検証する
+    factory,
+  })
+  const appDefinition = application({
+    modules: [module({ executions: [endpoint] })],
+  })
+  await expect(
+    bootstrapApplication({ application: appDefinition, capabilities }),
+  ).rejects.toThrow(/factory\.context/)
+})
+
+it('Tool実行中の中断を伝え、完了までProviderを維持する', async () => {
+  const entered = Promise.withResolvers<void>()
+  const cancelled = Promise.withResolvers<void>()
+  const finish = Promise.withResolvers<void>()
+  const destroy = vi.fn()
+  const wait = async (signal: AbortSignal) => {
+    signal.addEventListener('abort', () => cancelled.resolve(), {
+      once: true,
     })
-    const appDefinition = application({
-      modules: [
-        module({
-          providers: [Dependency],
-          executions: [
-            mcp.implementation({
-              route: defaultRoute,
-              name: 'orders',
-              version: '1',
-              contract: slowOrderContract,
-              factory: (dependency = inject(Dependency)) => ({
-                oauth: oauthConfiguration(),
-                context: async ({ signal }) => {
-                  if (phase === 'context') await wait(signal)
-                  return { signal }
+    entered.resolve()
+    await finish.promise
+  }
+  class Dependency {
+    onModuleDestroy() {
+      destroy()
+    }
+  }
+  const slowOrderContract = mcp.contract({
+    'orders.slow': {
+      description: '時間のかかる照会を実行する',
+      scopes: ['orders:read'],
+      input: z.object({}),
+      output: z.string(),
+    },
+  })
+  const appDefinition = application({
+    modules: [
+      module({
+        providers: [Dependency],
+        executions: [
+          mcp.implementation({
+            route: defaultRoute,
+            name: 'orders',
+            version: '1',
+            contract: slowOrderContract,
+            factory: (dependency = inject(Dependency)) => ({
+              oauth: oauthConfiguration(),
+              tools: {
+                'orders.slow': async (_input, { signal }) => {
+                  void dependency
+                  await wait(signal)
+                  return '完了'
                 },
-                tools: {
-                  'orders.slow': async (_input, { signal }) => {
-                    void dependency
-                    if (phase === 'handler') await wait(signal)
-                    return '完了'
-                  },
-                },
-              }),
+              },
             }),
-          ],
-        }),
-      ],
-    })
-    await using app = await bootstrapApplication({
-      application: appDefinition,
-      capabilities,
-    })
-    const controller = new AbortController()
-    const calling = app.http.fetch(
-      new Request(rpc('tools/call', { name: 'orders.slow' }), {
-        signal: controller.signal,
+          }),
+        ],
       }),
-    )
-    await entered.promise
-    try {
-      controller.abort()
-      await cancelled.promise
-      const closing = app.close()
-      expect((await app.http.fetch(rpc('tools/list'))).status).toBe(503)
-      expect(destroy).not.toHaveBeenCalled()
-      finish.resolve()
-      await closing
-      expect(destroy).toHaveBeenCalledOnce()
-    } finally {
-      finish.resolve()
-      await calling
-    }
-  },
-)
+    ],
+  })
+  await using app = await bootstrapApplication({
+    application: appDefinition,
+    capabilities,
+  })
+  const controller = new AbortController()
+  const calling = app.http.fetch(
+    new Request(rpc('tools/call', { name: 'orders.slow' }), {
+      signal: controller.signal,
+    }),
+  )
+  await entered.promise
+  try {
+    controller.abort()
+    await cancelled.promise
+    const closing = app.close()
+    expect((await app.http.fetch(rpc('tools/list'))).status).toBe(503)
+    expect(destroy).not.toHaveBeenCalled()
+    finish.resolve()
+    await closing
+    expect(destroy).toHaveBeenCalledOnce()
+  } finally {
+    finish.resolve()
+    await calling
+  }
+})

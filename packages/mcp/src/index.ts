@@ -21,4 +21,4 @@ export const mcp = Object.freeze({
   toolError,
 })
 
-export type { McpPrincipal, McpContextInput } from './types.js'
+export type { McpPrincipal, McpToolContext } from './types.js'

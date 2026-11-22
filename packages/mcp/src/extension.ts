@@ -20,7 +20,7 @@ export const extension = defineExecutionExtension<
 >({
   kind: 'execution-extension',
   name: 'loutre:mcp',
-  abiVersion: '3',
+  abiVersion: '4',
   compile(definition, context) {
     if (!definition.name.trim() || !definition.version.trim())
       throw new TypeError('MCP endpointのnameとversionを指定してください。')

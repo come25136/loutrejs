@@ -59,7 +59,6 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
         },
         allowInvocation: () => true,
       },
-      context: ({ principal, signal }) => ({ principal, signal }),
       tools: {
         'counter.get': () => ({ value: counter.value }),
         'counter.increment': () => ({ value: ++counter.value }),
