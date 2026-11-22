@@ -30,9 +30,11 @@ const contract = http.contract({
 })
 type HttpContext = HttpHandlerContext<typeof contract, 'echo'>
 class HttpController {
-  #message = '応答'
+  #message() {
+    return '応答'
+  }
   echo(_context: HttpContext) {
-    return { schema: contract.echo.ok, body: this.#message }
+    return { schema: contract.echo.ok, body: this.#message() }
   }
 }
 const factories: Record<string, () => HttpHandlers<typeof contract>> = {
