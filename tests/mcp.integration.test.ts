@@ -182,6 +182,73 @@ function rpc(
 }
 
 describe('MCP Streamable HTTP', () => {
+  it('OAuthなしのendpointでHostとOriginを検査し、Toolには認証主体を渡さない', async () => {
+    const AnonymousContract = mcp.contract({
+      whoami: {
+        description: '匿名呼び出しの確認',
+        scopes: [],
+        input: z.object({}),
+        output: z.boolean(),
+      },
+    })
+    const endpoint = mcp.implementation({
+      route: defaultRoute,
+      name: 'anonymous',
+      version: '1',
+      contract: AnonymousContract,
+      oauth: false,
+      allowedHosts: ['orders.example.test'],
+      factory: () => ({
+        tools: { whoami: ({ principal }) => principal === undefined },
+      }),
+    })
+    await using app = await bootstrapApplication({
+      application: application({
+        modules: [module({ executions: [endpoint] })],
+      }),
+      capabilities,
+    })
+    const call = (headers: Record<string, string> = {}) =>
+      rpc('tools/call', { name: 'whoami' }, '', headers)
+    expect((await app.http.fetch(call({ host: 'other.example' }))).status).toBe(
+      403,
+    )
+    expect(
+      (await app.http.fetch(call({ origin: 'https://other.example' }))).status,
+    ).toBe(403)
+    const response = await app.http.fetch(call())
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      result: { structuredContent: true },
+    })
+  })
+
+  it('OAuthなしのendpointはscope付きToolの契約を拒否する', () => {
+    const { ordersReadContract } = fixture()
+    const endpoint = mcp.implementation({
+      route: defaultRoute,
+      name: 'anonymous',
+      version: '1',
+      contract: ordersReadContract,
+      oauth: false,
+      factory: () => ({
+        tools: {
+          'orders.read': ({ input }) => ({
+            id: input.id,
+            count: 0,
+            subject: '',
+          }),
+        },
+      }),
+    })
+    const appDefinition = application({
+      modules: [module({ executions: [endpoint] })],
+    })
+    expect(
+      appDefinition.model.diagnostics.map(({ message }) => message),
+    ).toContainEqual(expect.stringContaining('scope付きTool'))
+  })
+
   it('Tool呼び出しをHTTP Execution配下のoperationとして追跡する', async () => {
     const executions: string[] = []
     const operations: string[] = []
@@ -611,6 +678,36 @@ it('endpointの非公開ProviderとTool契約の不正をModelで診断する', 
   await expect(
     bootstrapApplication({ application: appDefinition }),
   ).rejects.toThrow('Application Model is invalid')
+})
+
+it('OAuthの宣言とfactoryが一致しないendpointを起動時に拒否する', async () => {
+  const options = {
+    route: defaultRoute,
+    name: 'mismatch',
+    version: '1',
+    contract: mcp.contract({}),
+  }
+  const endpoints = [
+    mcp.implementation({
+      ...options,
+      // @ts-expect-error OAuthの省略は認証付きendpointを宣言する
+      factory: () => ({ tools: {} }),
+    }),
+    mcp.implementation({
+      ...options,
+      oauth: false,
+      // @ts-expect-error 認証なしのendpointはfactoryにoauthを指定できない
+      factory: () => ({ oauth: oauthConfiguration(), tools: {} }),
+    }),
+  ]
+  for (const endpoint of endpoints) {
+    const appDefinition = application({
+      modules: [module({ executions: [endpoint] })],
+    })
+    await expect(
+      bootstrapApplication({ application: appDefinition, capabilities }),
+    ).rejects.toThrow(/factoryにはoauth/)
+  }
 })
 
 it('旧factory.contextを指定したendpointを起動時に拒否する', async () => {

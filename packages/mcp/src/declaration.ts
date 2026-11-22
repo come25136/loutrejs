@@ -22,18 +22,28 @@ import {
   type McpToolOptions,
   type McpContract,
   type ProtocolRuntime,
+  type McpEndpointOptions,
 } from './contract.js'
-import { getOAuthProtectedResourceMetadataUrl } from '@modelcontextprotocol/server'
+import {
+  getOAuthProtectedResourceMetadataUrl,
+  localhostAllowedHostnames,
+} from '@modelcontextprotocol/server'
+
+import type { McpOAuthOptions } from './oauth.js'
 
 type McpEndpointDefinition = EndpointDefinition &
   ExecutionDefinition<typeof extension>
 
-export interface McpImplementation extends ExecutionGroup<
-  readonly [
-    McpEndpointDefinition,
-    HttpRawExecutionDefinition,
-    HttpRawExecutionDefinition,
-  ]
+export interface McpImplementation<
+  TOAuth extends McpOAuthOptions | false = McpOAuthOptions | false,
+> extends ExecutionGroup<
+  TOAuth extends false
+    ? readonly [McpEndpointDefinition, HttpRawExecutionDefinition]
+    : readonly [
+        McpEndpointDefinition,
+        HttpRawExecutionDefinition,
+        HttpRawExecutionDefinition,
+      ]
 > {}
 
 export function defineMcpContract<const TTools extends McpTools>(
@@ -80,16 +90,15 @@ export function defineMcpImplementation<
   const TRoute extends HttpContractRawRoute,
   const TContract extends McpContract,
   const THandlers extends object,
+  const TOAuth extends McpOAuthOptions | false = McpOAuthOptions,
 >(
-  options: Omit<McpImplementationOptions<TRoute, TContract>, 'factory'> & {
-    readonly factory: () => ReturnType<
-      McpImplementationOptions<TRoute, NoInfer<TContract>>['factory']
-    > & {
-      readonly tools: THandlers &
-        NoInfer<DeclaredExecutionMethods<THandlers, TContract['tools']>>
-    }
-  },
-): McpImplementation
+  options: McpEndpointOptions<
+    TRoute,
+    TContract,
+    TOAuth,
+    THandlers & NoInfer<DeclaredExecutionMethods<THandlers, TContract['tools']>>
+  >,
+): McpImplementation<TOAuth>
 
 export function defineMcpImplementation(
   options: Omit<McpImplementationOptions, 'factory'> & {
@@ -119,8 +128,6 @@ export function defineMcpImplementation(
     parseHttpPath(route.path).some((segment) => segment.kind === 'param')
   )
     throw new TypeError('MCPには正規化済みの静的なHTTPパスを指定してください。')
-  const metadataPath = new URL(getOAuthProtectedResourceMetadataUrl(routeUrl))
-    .pathname
   const endpoint = defineExecution(extension, {
     name,
     version,
@@ -130,33 +137,51 @@ export function defineMcpImplementation(
         Object.freeze({ ...tool, name: toolName }),
       ),
     ),
-    oauth: Object.freeze({
-      requiredScopes: Object.freeze([...(options.oauth?.requiredScopes ?? [])]),
-      allowedOrigins: Object.freeze([...(options.oauth?.allowedOrigins ?? [])]),
-    }),
+    allowedHosts: Object.freeze([
+      ...(options.allowedHosts ?? localhostAllowedHostnames()),
+    ]),
+    oauth:
+      options.oauth === false
+        ? false
+        : Object.freeze({
+            requiredScopes: Object.freeze([
+              ...(options.oauth?.requiredScopes ?? []),
+            ]),
+            allowedOrigins: Object.freeze([
+              ...(options.oauth?.allowedOrigins ?? []),
+            ]),
+          }),
     factory,
   })
-  return Object.freeze({
-    kind: 'execution-group',
-    name,
-    executions: Object.freeze([
+  const transport = http.delegate({
+    name: `${name}.mcp.http`,
+    route: inheritSourceLocation({ ...route, protocol: 'mcp' }, route),
+    delegate: delegateExecution(
       endpoint,
-      http.delegate({
-        name: `${name}.mcp.http`,
-        route: inheritSourceLocation({ ...route, protocol: 'mcp' }, route),
-        delegate: delegateExecution(
-          endpoint,
-          (runtime, id) => runtime.endpoint(id).request,
-        ),
-      }),
+      (runtime, id) => runtime.endpoint(id).request,
+    ),
+  })
+  const executions = [endpoint, transport]
+  if (options.oauth !== false) {
+    executions.push(
       http.delegate({
         name: `${name}.mcp.oauth-metadata`,
-        route: { method: 'GET', path: metadataPath, protocol: 'mcp' },
+        route: {
+          method: 'GET',
+          path: new URL(getOAuthProtectedResourceMetadataUrl(routeUrl))
+            .pathname,
+          protocol: 'mcp',
+        },
         delegate: delegateExecution(
           endpoint,
           (runtime, id) => runtime.endpoint(id).metadata,
         ),
       }),
-    ]),
+    )
+  }
+  return Object.freeze({
+    kind: 'execution-group',
+    name,
+    executions: Object.freeze(executions),
   })
 }

@@ -162,7 +162,7 @@ const CounterMcp = mcp.implementation({
 })
 ```
 
-キーをTool名の正本とし、必須・余剰Tool・型の不一致を検査する。各Toolは検証後のinput、検証済みのprincipal、signal、request、HTTP middlewareのstateをひとつのオブジェクトで受け取る。OAuth、requiredScopes、Endpoint ownership、HTTP delegate、JSON Schema対応は維持。Toolを個別Executionに分けず、同名Toolの異なるEndpoint間共存を許す。旧tool配列との併用による二重source of truthは認めない。
+キーをTool名の正本とし、必須・余剰Tool・型の不一致を検査する。各Toolは検証後のinput、検証済みのprincipal、signal、request、HTTP middlewareのstateをひとつのオブジェクトで受け取る。認証なしのendpointは `oauth: false` で明示し、principalは `undefined` となる。OAuth、requiredScopes、Endpoint ownership、HTTP delegate、JSON Schema対応は維持。Toolを個別Executionに分けず、同名Toolの異なるEndpoint間共存を許す。旧tool配列との併用による二重source of truthは認めない。
 
 ## 決定4: Task / Trigger / Queueの意味境界
 

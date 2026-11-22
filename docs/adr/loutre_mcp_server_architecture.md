@@ -74,7 +74,9 @@ factoryは依存収集でも呼ばれるため、外部I/Oを行わない。実�
 
 ## 認可とTool実行
 
-Streamable HTTPとOAuthリソースサーバーを提供する。HTTP Contractは静的なrawルートを所有し、endpointはそこからProtected Resource MetadataのGETルートを導出する。通常HTTP、MCP入口、メタデータは同じルート表で衝突を検証する。
+Streamable HTTPとOAuthリソースサーバーを提供する。HTTP Contractは静的なrawルートを所有し、OAuthを使うendpointはそこからProtected Resource MetadataのGETルートを導出する。通常HTTP、MCP入口、メタデータは同じルート表で衝突を検証する。
+
+認証なしのendpointは `oauth: false` で明示する。factoryはToolの実装を返し、Toolのprincipalは `undefined` となる。scope付きToolはModel構築時に拒否し、OAuthメタデータのルートは生成しない。HostとOriginの検査は両モードで行う。
 
 Bearer tokenの発行元、対象リソース、有効期限、scopeを確認する。`runtime.oauth`が公開HTTPS origin、認可サーバー、`verifyAccessToken`、`allowInvocation`を供給する。各endpointは自身の公開URLと検証設定を使う。
 

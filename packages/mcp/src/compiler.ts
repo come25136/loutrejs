@@ -42,15 +42,19 @@ export function compileTool(tool: McpToolDefinition): CompiledTool {
 export function validateRuntime(
   runtime: ProtocolRuntime,
   tools: readonly CompiledTool[],
+  useOAuth: boolean,
 ): ProtocolRuntime {
-  if (
-    !runtime ||
-    !runtime.tools ||
-    typeof runtime.tools !== 'object' ||
-    !runtime.oauth
-  ) {
-    throw new TypeError('MCPのfactoryにはoauthとtoolsを指定してください。')
+  if (!runtime || !runtime.tools || typeof runtime.tools !== 'object') {
+    throw new TypeError('MCPのfactoryにはtoolsを指定してください。')
   }
+  if (useOAuth && !runtime.oauth)
+    throw new TypeError(
+      '認証付きMCP endpointのfactoryにはoauthを指定してください。',
+    )
+  if (!useOAuth && 'oauth' in runtime)
+    throw new TypeError(
+      'oauth: false のMCP endpointのfactoryにはoauthを指定できません。',
+    )
   if ('context' in runtime)
     throw new TypeError(
       'MCPのfactory.contextは廃止されました。Toolハンドラの引数からprincipalやstateを取得してください。',
@@ -70,7 +74,7 @@ export function validateRuntime(
     handlers.set(name, handler)
   }
   return {
-    oauth: runtime.oauth,
+    ...(runtime.oauth && { oauth: runtime.oauth }),
     tools: Object.fromEntries(handlers),
   }
 }

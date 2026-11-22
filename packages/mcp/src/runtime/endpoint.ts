@@ -37,10 +37,8 @@ export function createEndpointRuntime({
     endpoints.set(execution.id, {
       shutdown,
       http: createMcpHttpRuntime(
-        { name: compiled.name, version: compiled.version },
+        compiled,
         tools,
-        compiled.path,
-        compiled.oauth,
         runtime.oauth,
         shutdown.signal,
       ),

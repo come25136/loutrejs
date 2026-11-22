@@ -18,7 +18,8 @@ export interface EndpointDefinition extends ExecutionDefinition {
   readonly version: string
   readonly path: string
   readonly tools: readonly McpToolDefinition[]
-  readonly oauth: McpOAuthOptions
+  readonly allowedHosts: readonly string[]
+  readonly oauth: false | McpOAuthOptions
   readonly factory: () => ProtocolRuntime
 }
 
@@ -34,7 +35,8 @@ export interface CompiledEndpoint {
   readonly version: string
   readonly path: string
   readonly tools: readonly CompiledTool[]
-  readonly oauth: McpOAuthOptions
+  readonly allowedHosts: readonly string[]
+  readonly oauth: false | McpOAuthOptions
   readonly handler: ExecutionHandlerResolver<ProtocolRuntime>
 }
 

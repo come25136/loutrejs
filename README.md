@@ -105,6 +105,8 @@ See [Getting Started](./docs/getting-started.md) and [Architecture](./docs/archi
 Runnable projects are available in [`examples/`](./examples/).
 
 - [`hello-http`](./examples/hello-http/) — An HTTP application using Contracts, Implementations, and DI
+- [`hello-mcp`](./examples/hello-mcp/) — Call a greeting Tool over Streamable HTTP without OAuth
+- [`mcp-counter`](./examples/mcp-counter/) — Access a counter using OAuth scopes
 - [`hello-cli`](./examples/hello-cli/) — An application that accepts Arguments and runs a Task
 - [`hello-worker`](./examples/hello-worker/) — A worker that runs a Task periodically with a `fixedDelay` Trigger
 - [`graphql-orders`](./examples/graphql-orders/) — An orders server comparing Eager / Lazy / Hybrid strategies with a generated Manifest and Typed Field Builder

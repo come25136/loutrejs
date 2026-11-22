@@ -49,6 +49,28 @@ mcp.implementation({
   }),
 })
 
+const PublicContract = mcp.contract({
+  greet: { description: '挨拶', scopes: [], input, output },
+})
+mcp.implementation({
+  name: 'public',
+  version: '1',
+  route,
+  contract: PublicContract,
+  oauth: false,
+  factory: () => ({
+    tools: {
+      greet({ principal, input: { id }, state }) {
+        const anonymous: undefined = principal
+        // @ts-expect-error 匿名の呼び出しに認証主体はない
+        void principal.subject
+        void anonymous
+        return { id: id + state.tenant.length }
+      },
+    },
+  }),
+})
+
 mcp.implementation({
   name: 'invalid',
   version: '1',

@@ -1,5 +1,9 @@
 import { type CompiledTool } from './compiled.js'
-import { type McpToolContext, type McpToolResult } from './types.js'
+import {
+  type McpPrincipal,
+  type McpToolContext,
+  type McpToolResult,
+} from './types.js'
 import { validateSchema, SchemaValidationError } from '@loutrejs/loutre'
 import { snapshotJson } from './json.js'
 class PublicToolError extends Error {}
@@ -8,10 +12,12 @@ export function toolError(message: string): Error {
   return new PublicToolError(message)
 }
 
+type Invocation = McpToolContext<unknown, object, McpPrincipal | undefined>
+
 export async function executeTool(
   tool: CompiledTool,
-  context: McpToolContext,
-  handler: (context: McpToolContext) => unknown,
+  context: Invocation,
+  handler: (context: Invocation) => unknown,
 ): Promise<McpToolResult> {
   context.signal.throwIfAborted()
   let parsed

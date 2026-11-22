@@ -1,13 +1,8 @@
+import type { CompiledEndpoint } from '../compiled.js'
 import { type McpPrincipal, type McpToolRuntime } from '../types.js'
 import { type ExecutionContextView } from '@loutrejs/loutre'
+import { type McpOAuthRuntime } from '../oauth.js'
 import {
-  type McpOAuthOptions,
-  type McpOAuthRuntime,
-  httpsUrl,
-  type McpVerifiedAccessToken,
-} from '../oauth.js'
-import {
-  getOAuthProtectedResourceMetadataUrl,
   createMcpHandler,
   McpServer,
   ProtocolError,
@@ -15,15 +10,13 @@ import {
   type CallToolResult,
   hostHeaderValidationResponse,
   originValidationResponse,
-  requireBearerAuth,
-  OAuthError,
-  OAuthErrorCode,
 } from '@modelcontextprotocol/server'
+import { createOAuth } from './oauth.js'
 import { match } from 'ts-pattern'
 import { type McpHttpRuntime } from '../contract.js'
 
 interface RequestState {
-  readonly principal: McpPrincipal
+  readonly principal: McpPrincipal | undefined
   rateLimited: boolean
   readonly request: Request
   readonly state: Readonly<Record<string, unknown>>
@@ -34,53 +27,39 @@ interface RequestState {
 const requestTimeoutMs = 30_000
 
 export function createMcpHttpRuntime(
-  info: { readonly name: string; readonly version: string },
+  endpoint: CompiledEndpoint,
   tools: ReadonlyMap<string, McpToolRuntime>,
-  path: string,
-  oauth: McpOAuthOptions,
-  options: McpOAuthRuntime,
+  options: McpOAuthRuntime | undefined,
   shutdownSignal: AbortSignal,
 ): McpHttpRuntime {
-  const origin = httpsUrl(options.publicOrigin)
-  if (origin.pathname !== '/') {
-    throw new TypeError('MCP OAuthのpublicOriginにはパスを含められません。')
-  }
-  const resource = new URL(path, origin)
-  const resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(resource)
-  const authorizationServers = [...new Set(options.authorizationServers)]
-  if (authorizationServers.length === 0) {
-    throw new TypeError('MCP OAuthの認可サーバーを指定してください。')
-  }
-  for (const issuer of authorizationServers) httpsUrl(issuer)
-  const origins = [...(oauth.allowedOrigins ?? [])]
+  const auth =
+    endpoint.oauth === false
+      ? undefined
+      : createOAuth(endpoint.name, endpoint.path, endpoint.oauth, options)
+  const hosts = auth ? [auth.hostname] : [...endpoint.allowedHosts]
   const requestStates = new WeakMap<Request, RequestState>()
-  const requiredScopes = [...new Set(oauth.requiredScopes ?? [])].toSorted()
-  const metadataDocument = JSON.stringify({
-    resource: resource.href,
-    resource_name: info.name,
-    ...(requiredScopes.length > 0 ? { scopes_supported: requiredScopes } : {}),
-    authorization_servers: authorizationServers,
-    bearer_methods_supported: ['header'],
-  })
 
   const handler = createMcpHandler(
     ({ requestInfo }) => {
       const state = requestInfo && requestStates.get(requestInfo)
-      if (!state) throw new Error('MCPリクエストの認証状態がありません。')
+      if (!state) throw new Error('MCPリクエストの状態がありません。')
       const { principal } = state
       const permits = (scopes: readonly string[]) =>
-        scopes.every((scope) => principal.scopes.includes(scope))
-      const server = new McpServer(info, {
-        capabilities: { tools: { listChanged: false } },
-      })
+        scopes.every((scope) => principal?.scopes.includes(scope))
+      const server = new McpServer(
+        { name: endpoint.name, version: endpoint.version },
+        {
+          capabilities: { tools: { listChanged: false } },
+        },
+      )
       // SDKのTool登録で契約を再構築すると、Graphと応答の正本が分かれる。
       server.resolveScopeChallenge = ({ request }) => {
         const name = request.params?.name
         if (request.method !== 'tools/call' || typeof name !== 'string') return
         const scopes = tools.get(name)?.scopes
-        if (scopes?.length && !permits(scopes)) {
+        if (auth && scopes?.length && !permits(scopes)) {
           const [first, ...rest] = [
-            ...new Set([...requiredScopes, ...scopes]),
+            ...new Set([...auth.requiredScopes, ...scopes]),
           ].toSorted()
           return { scopes: [first!, ...rest] }
         }
@@ -113,7 +92,9 @@ export function createMcpHttpRuntime(
             let allowed: boolean
             try {
               signal.throwIfAborted()
-              allowed = await options.allowInvocation(principal, signal)
+              allowed = auth
+                ? !!principal && (await auth.allowInvocation(principal, signal))
+                : true
             } catch {
               throw new ProtocolError(
                 ProtocolErrorCode.InternalError,
@@ -175,14 +156,15 @@ export function createMcpHttpRuntime(
   )
 
   const validateRequest = (request: Request) =>
-    hostHeaderValidationResponse(request, [resource.hostname]) ??
-    originValidationResponse(request, origins)
+    hostHeaderValidationResponse(request, hosts) ??
+    originValidationResponse(request, auth?.origins ?? [])
 
   return {
     metadata({ request }) {
+      if (!auth) return new Response(null, { status: 404 })
       return (
         validateRequest(request) ??
-        new Response(metadataDocument, {
+        new Response(auth.metadataDocument, {
           headers: { 'content-type': 'application/json' },
         })
       )
@@ -197,59 +179,13 @@ export function createMcpHttpRuntime(
           shutdownSignal,
           AbortSignal.timeout(requestTimeoutMs),
         ])
-        let principal: McpPrincipal | undefined
-        const authInfo = await requireBearerAuth({
-          resourceMetadataUrl,
-          requiredScopes,
-          verifier: {
-            async verifyAccessToken(token) {
-              const header = request.headers.get('authorization')
-              if (!header || !/^Bearer [A-Za-z0-9._~+/-]+=*$/i.test(header)) {
-                throw new OAuthError(
-                  OAuthErrorCode.InvalidToken,
-                  'Invalid access token',
-                )
-              }
-              let verified: McpVerifiedAccessToken | undefined
-              try {
-                verified = await options.verifyAccessToken(token, signal)
-              } catch {
-                throw new Error('MCPアクセストークンの検証に失敗しました。')
-              }
-              if (
-                !verified ||
-                !verified.subject ||
-                !authorizationServers.includes(verified.issuer) ||
-                verified.resource !== resource.href ||
-                !Number.isFinite(verified.expiresAt) ||
-                verified.expiresAt <= Date.now() / 1_000
-              )
-                throw new OAuthError(
-                  OAuthErrorCode.InvalidToken,
-                  'Invalid access token',
-                )
-              principal = Object.freeze({
-                subject: verified.subject,
-                issuer: verified.issuer,
-                scopes: Object.freeze([...verified.scopes]),
-              })
-              return {
-                token,
-                clientId: verified.subject,
-                scopes: [...principal.scopes],
-                expiresAt: verified.expiresAt,
-                resource,
-              }
-            },
-          },
-        })(request)
-        if (authInfo instanceof Response) return authInfo
+        const authentication = await auth?.authenticate(request, signal)
+        if (authentication instanceof Response) return authentication
         signal.throwIfAborted()
 
         const exchange = new Request(request, { signal })
-        if (!principal) throw new Error('MCPリクエストの認証主体がありません。')
         const state: RequestState = {
-          principal,
+          principal: authentication?.principal,
           rateLimited: false,
           request,
           state: middlewareState,
@@ -258,7 +194,10 @@ export function createMcpHttpRuntime(
         }
         requestStates.set(exchange, state)
         try {
-          const response = await handler.fetch(exchange, { authInfo })
+          const response = await handler.fetch(
+            exchange,
+            authentication && { authInfo: authentication.authInfo },
+          )
           if (!state.rateLimited) {
             response.headers.set('cache-control', 'no-store')
             return response
