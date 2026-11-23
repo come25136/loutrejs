@@ -6,7 +6,11 @@ import {
 import { oauthScopePattern } from './oauth.js'
 import { type CompiledTool } from './compiled.js'
 import { snapshotJson, isJsonObject, type JsonObject } from './json.js'
-import { resolveExecutionMethod, type ExecutionMethod } from '@loutrejs/loutre'
+import {
+  assertDeclaredExecutionMethods,
+  resolveExecutionMethod,
+  type ExecutionMethod,
+} from '@loutrejs/loutre'
 
 export function compileTool(tool: McpToolDefinition): CompiledTool {
   if (!/^[A-Za-z0-9_.-]{1,128}$/.test(tool.name) || !tool.description.trim()) {
@@ -38,18 +42,27 @@ export function compileTool(tool: McpToolDefinition): CompiledTool {
 export function validateRuntime(
   runtime: ProtocolRuntime,
   tools: readonly CompiledTool[],
+  useOAuth: boolean,
 ): ProtocolRuntime {
-  if (
-    !runtime ||
-    typeof runtime.context !== 'function' ||
-    !runtime.tools ||
-    typeof runtime.tools !== 'object' ||
-    !runtime.oauth
-  ) {
-    throw new TypeError(
-      'MCPのfactoryにはoauth、context、toolsを指定してください。',
-    )
+  if (!runtime || !runtime.tools || typeof runtime.tools !== 'object') {
+    throw new TypeError('MCPのfactoryにはtoolsを指定してください。')
   }
+  if (useOAuth && !runtime.oauth)
+    throw new TypeError(
+      '認証付きMCP endpointのfactoryにはoauthを指定してください。',
+    )
+  if (!useOAuth && runtime.oauth !== undefined)
+    throw new TypeError(
+      '認証なしのMCP endpointのfactoryにはoauthを指定できません。',
+    )
+  if ('context' in runtime)
+    throw new TypeError(
+      'MCPのfactory.contextは廃止されました。Toolハンドラの引数からprincipalやstateを取得してください。',
+    )
+  assertDeclaredExecutionMethods(
+    runtime.tools,
+    tools.map((tool) => tool.descriptor.name),
+  )
   const handlers = new Map<string, ExecutionMethod>()
   for (const {
     descriptor: { name },
@@ -61,8 +74,7 @@ export function validateRuntime(
     handlers.set(name, handler)
   }
   return {
-    oauth: runtime.oauth,
-    context: runtime.context.bind(runtime),
+    ...(runtime.oauth && { oauth: runtime.oauth }),
     tools: Object.fromEntries(handlers),
   }
 }

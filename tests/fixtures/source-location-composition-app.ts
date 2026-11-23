@@ -1,12 +1,7 @@
 #!/usr/bin/env node
 'use strict'
 
-import {
-  defineApplication,
-  defineModule,
-  provide,
-  token,
-} from '@loutrejs/loutre'
+import { application, module, provide, token } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { EventEmitter } from 'node:events'
 
@@ -32,13 +27,13 @@ const Controller = http.implementation({
   name: 'ComposedController',
   contract: Contract,
   factory: () => ({
-    create(ctx) {
-      return ctx.response.ok({})
+    create() {
+      return { schema: Contract.create.ok }
     },
   }),
 })
 
-const Module = defineModule(() => ({
+const Module = module(() => ({
   name: 'ComposedModule',
   providers,
   executions: [Controller],
@@ -46,4 +41,4 @@ const Module = defineModule(() => ({
 
 void __loutreSource
 
-export default defineApplication({ modules: [Module()] })
+export default application({ modules: [Module()] })

@@ -20,9 +20,42 @@ export interface McpOAuthRuntime {
   ) => Awaitable<boolean>
 }
 
-export interface McpOAuthOptions {
-  readonly requiredScopes?: readonly string[]
-  readonly allowedOrigins?: readonly string[]
+export type McpOAuthOptions =
+  | {
+      readonly requiredScopes: readonly string[]
+      readonly allowedOrigins?: readonly string[]
+    }
+  | {
+      readonly requiredScopes?: readonly string[]
+      readonly allowedOrigins: readonly string[]
+    }
+
+export function snapshotOAuthOptions(
+  options: McpOAuthOptions,
+): McpOAuthOptions {
+  if (!options || typeof options !== 'object' || Array.isArray(options))
+    throw new TypeError(
+      'MCP endpointのoauthには設定オブジェクトを指定してください。',
+    )
+  const { requiredScopes, allowedOrigins } = options
+  if (requiredScopes === undefined && allowedOrigins === undefined)
+    throw new TypeError(
+      'MCP endpointのoauthにはrequiredScopesまたはallowedOriginsを指定してください。',
+    )
+  for (const values of [requiredScopes, allowedOrigins]) {
+    if (
+      values !== undefined &&
+      (!Array.isArray(values) ||
+        values.some((value) => typeof value !== 'string'))
+    )
+      throw new TypeError(
+        'MCP OAuthのrequiredScopesとallowedOriginsには文字列の配列を指定してください。',
+      )
+  }
+  return Object.freeze({
+    requiredScopes: Object.freeze([...(requiredScopes ?? [])]),
+    allowedOrigins: Object.freeze([...(allowedOrigins ?? [])]),
+  })
 }
 
 export const oauthScopePattern = /^[\x21\x23-\x5B\x5D-\x7E]+$/

@@ -1,4 +1,3 @@
-import { http as contractHttp } from '@loutrejs/loutre/http'
 import { manifestFromSchema } from './helpers/graphql-manifest.js'
 import { describe, expect, it, vi } from 'vitest'
 import {
@@ -18,17 +17,17 @@ import {
 } from '@loutrejs/graphql'
 import {
   bootstrapApplication,
-  defineApplication,
+  application,
   projectApplicationModel,
   type ProviderDeclaration,
-  defineModule,
+  module,
   inject,
   token,
   provide,
   type as stateType,
   type RuntimeInstrumentation,
 } from '@loutrejs/loutre'
-import { bearerAuth, bindHttpServer, http } from '@loutrejs/loutre/http'
+import { bindHttpServer, http } from '@loutrejs/loutre/http'
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 import {
   bindWebSocketServer,
@@ -175,7 +174,7 @@ async function fixture(
   trips.resolve = (event: { trips: unknown }) => event.trips
   const endpoint = graphql.implementation({
     name: 'Api',
-    route: contractHttp.contract({
+    route: http.contract({
       graphql: {
         raw: true,
         method: '*',
@@ -211,14 +210,14 @@ async function fixture(
       },
     }),
   })
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     providers: [
       provide(Service).useValue('hello DI'),
       ...(options.providers ?? []),
     ],
     executions: [endpoint],
   }))
-  const definition = defineApplication({ modules: [Module()] })
+  const definition = application({ modules: [Module()] })
   const trace = instrumentation()
   const connections: {
     channel: WebSocketDriverChannel
@@ -564,7 +563,7 @@ describe('GraphQL HTTP', () => {
   })
 
   it('標準bearerAuth middlewareでGraphQL HTTPを認証しchallengeとstateを保つ', async () => {
-    const auth = bearerAuth({
+    const auth = http.bearerAuth({
       realm: 'GraphQL',
       factory: () => ({
         authenticate(accessToken: string) {
@@ -1585,15 +1584,15 @@ describe('GraphQLのresolver契約', () => {
       const endpoint = graphql.implementation({
         name: 'InvalidHooks',
         transports: { websocket: true },
-        route: contractHttp.contract({
+        route: http.contract({
           graphql: { raw: true, method: '*', path: '/graphql' },
         }).routes.graphql,
         manifest: manifestFromSchema(schema),
         factory: (() => ({ context: () => ({}), ws: hooks })) as never,
       })
-      const Module = defineModule(() => ({ executions: [endpoint] }))
-      const application = defineApplication({ modules: [Module()] })
-      expect(application.model.diagnostics).toContainEqual(
+      const Module = module(() => ({ executions: [endpoint] }))
+      const appDefinition = application({ modules: [Module()] })
+      expect(appDefinition.model.diagnostics).toContainEqual(
         expect.objectContaining({ message: expect.stringContaining(name) }),
       )
     },
@@ -1603,7 +1602,7 @@ describe('GraphQLのresolver契約', () => {
     expect(() =>
       graphql.implementation({
         name: 'Missing',
-        route: contractHttp.contract({
+        route: http.contract({
           graphql: { raw: true, method: '*', path: '/graphql' },
         }).routes.graphql,
         manifest: manifestFromSchema(
@@ -1630,7 +1629,7 @@ describe('GraphQLのresolver契約', () => {
       expect(() =>
         graphql.implementation({
           name: 'Missing',
-          route: contractHttp.contract({
+          route: http.contract({
             graphql: { raw: true, method: '*', path: '/graphql' },
           }).routes.graphql,
           manifest: manifestFromSchema(schema),
@@ -1647,7 +1646,7 @@ describe('GraphQLのresolver契約', () => {
       schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
       const endpoint = graphql.implementation({
         name: 'Legacy',
-        route: contractHttp.contract({
+        route: http.contract({
           graphql: { raw: true, method: '*', path: '/graphql' },
         }).routes.graphql,
         manifest: manifestFromSchema(schema),
@@ -1656,9 +1655,9 @@ describe('GraphQLのresolver契約', () => {
             ? { context: () => ({}), rootValue: {} }
             : {}) as never,
       })
-      const Module = defineModule(() => ({ executions: [endpoint] }))
-      const application = defineApplication({ modules: [Module()] })
-      expect(application.model.diagnostics).toContainEqual(
+      const Module = module(() => ({ executions: [endpoint] }))
+      const appDefinition = application({ modules: [Module()] })
+      expect(appDefinition.model.diagnostics).toContainEqual(
         expect.objectContaining({ message: expect.stringContaining(invalid) }),
       )
     },
@@ -1672,15 +1671,15 @@ describe('GraphQLのresolver契約', () => {
     schema.getMutationType()!.getFields().value!.resolve = () => 42
     const endpoint = graphql.implementation({
       name: 'Separate',
-      route: contractHttp.contract({
+      route: http.contract({
         graphql: { raw: true, method: '*', path: '/graphql' },
       }).routes.graphql,
       manifest: manifestFromSchema(schema),
       factory: () => ({ context: () => ({}) }),
     })
-    const Module = defineModule(() => ({ executions: [endpoint] }))
+    const Module = module(() => ({ executions: [endpoint] }))
     const app = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {
@@ -1721,7 +1720,7 @@ it.each([false, true])(
     const create = () =>
       graphql.implementation({
         name: 'Scalar',
-        route: contractHttp.contract({
+        route: http.contract({
           graphql: { raw: true, method: '*', path: '/graphql' },
         }).routes.graphql,
         manifest: manifestFromSchema(schema),
@@ -2057,7 +2056,7 @@ describe('GraphQLの設定と型に沿った実行', () => {
       expect(() =>
         graphql.implementation({
           name: 'InvalidTransportConfiguration',
-          route: contractHttp.contract({
+          route: http.contract({
             graphql: { raw: true, method: '*', path: '/graphql' },
           }).routes.graphql,
           manifest: manifestFromSchema(schema),
@@ -2074,7 +2073,7 @@ describe('GraphQLの設定と型に沿った実行', () => {
     expect(() =>
       graphql.implementation({
         name: 'DisabledTransports',
-        route: contractHttp.contract({
+        route: http.contract({
           graphql: { raw: true, method: '*', path: '/graphql' },
         }).routes.graphql,
         manifest: manifestFromSchema(schema),
@@ -2112,7 +2111,7 @@ describe('GraphQLの設定と型に沿った実行', () => {
       schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
       const endpoint = graphql.implementation({
         name: 'Invalid',
-        route: contractHttp.contract({
+        route: http.contract({
           graphql: { raw: true, method: '*', path: '/graphql' },
         }).routes.graphql,
         manifest: manifestFromSchema(schema),
@@ -2122,8 +2121,8 @@ describe('GraphQLの設定と型に沿った実行', () => {
           ws: { connectionInit: () => ({}) },
         })) as never,
       })
-      const Module = defineModule(() => ({ executions: [endpoint] }))
-      const app = defineApplication({ modules: [Module()] })
+      const Module = module(() => ({ executions: [endpoint] }))
+      const app = application({ modules: [Module()] })
       expect(app.model.diagnostics).toContainEqual(
         expect.objectContaining({
           message: expect.stringContaining('Enable transports.websocket'),
@@ -2139,16 +2138,16 @@ describe('GraphQLの設定と型に沿った実行', () => {
       schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
       const endpoint = graphql.implementation({
         name: 'Defaults',
-        route: contractHttp.contract({
+        route: http.contract({
           graphql: { raw: true, method: '*', path: '/graphql' },
         }).routes.graphql,
         manifest: manifestFromSchema(schema),
         transports: { websocket: ws },
         factory: () => ({ context: () => ({}) }),
       })
-      const Module = defineModule(() => ({ executions: [endpoint] }))
+      const Module = module(() => ({ executions: [endpoint] }))
       const app = await bootstrapApplication({
-        application: defineApplication({ modules: [Module()] }),
+        application: application({ modules: [Module()] }),
         capabilities: [
           bindHttpServer({ runtime: 'test' }),
           bindWebSocketServer({
@@ -2189,7 +2188,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
   const manifest = manifestFromSchema(schema)
 
   it('未正規化のrawオブジェクトと通常HTTPのルートを拒否する', () => {
-    const normal = http.contract({
+    const regularHttpContract = http.contract({
       normal: {
         method: 'GET',
         path: '/graphql',
@@ -2198,7 +2197,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
     })
     for (const route of [
       { raw: true, method: '*', path: '/graphql' },
-      normal.routes.normal,
+      regularHttpContract.routes.normal,
     ])
       expect(() =>
         graphql.implementation({
@@ -2211,13 +2210,13 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
   })
 
   it('WSのGET要求と矛盾するmethodを拒否し、HTTPのみならそのmethodで公開できる', () => {
-    const Api = http.contract({
+    const ApiContract = http.contract({
       post: { raw: true, method: 'POST', path: '/graphql' },
     })
     expect(() =>
       graphql.implementation({
         name: 'Post',
-        route: Api.routes.post,
+        route: ApiContract.routes.post,
         manifest,
         transports: { websocket: true },
         factory: () => ({ context: () => ({}) }),
@@ -2226,7 +2225,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
     expect(() =>
       graphql.implementation({
         name: 'Post',
-        route: Api.routes.post,
+        route: ApiContract.routes.post,
         manifest,
         factory: () => ({ context: () => ({}) }),
       }),
@@ -2234,7 +2233,7 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
   })
 
   it('通常HTTPとGraphQLの同じURLへの重複配備を同じModel検証で拒否する', () => {
-    const Api = http.contract({
+    const ApiContract = http.contract({
       normal: {
         method: 'POST',
         path: '/graphql',
@@ -2243,18 +2242,18 @@ describe('HTTP ContractへのGraphQL実装の委任', () => {
       delegated: { raw: true, method: '*', path: '/graphql' },
     })
     const regular = http.implementation({
-      contract: Api,
-      factory: () => ({ normal: (ctx) => ctx.response.ok({}) }),
+      contract: ApiContract,
+      factory: () => ({ normal: () => ({ schema: ApiContract.normal.ok }) }),
     })
     const delegated = graphql.implementation({
       name: 'Delegated',
-      route: Api.routes.delegated,
+      route: ApiContract.routes.delegated,
       manifest,
       factory: () => ({ context: () => ({}) }),
     })
-    const Module = defineModule(() => ({ executions: [regular, delegated] }))
+    const Module = module(() => ({ executions: [regular, delegated] }))
     expect(
-      defineApplication({ modules: [Module()] }).model.diagnostics,
+      application({ modules: [Module()] }).model.diagnostics,
     ).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_HTTP_DUPLICATE_ROUTE' }),
     )

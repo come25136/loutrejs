@@ -1,7 +1,7 @@
 import {
-  defineApplication,
+  application,
   defineLayer,
-  defineModule,
+  module,
   type GenericLayerContext,
 } from '@loutrejs/loutre'
 import { http, type HttpMiddlewareContext } from '@loutrejs/loutre/http'
@@ -94,21 +94,22 @@ export const AccountController = http.implementation({
   contract: AccountContract,
   factory: () => ({
     get(ctx) {
-      return ctx.response.found({
+      return {
+        schema: AccountContract.get.found,
         body: {
           userId: ctx.state.session.principal.id,
           tenantId: ctx.state.currentTenant.id,
         },
-      })
+      }
     },
   }),
 })
 
-export const AccountModule = defineModule(() => ({
+export const AccountModule = module(() => ({
   description: 'Bearer authentication and Execution Context integration',
   executions: [AccountController],
 }))
 
 export function createAccountApplication() {
-  return defineApplication({ modules: [AccountModule()] })
+  return application({ modules: [AccountModule()] })
 }

@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { mcp } from '@loutrejs/mcp'
-import {
-  defineApplication,
-  defineModule,
-  inject,
-  provide,
-} from '@loutrejs/loutre'
+import { application, module, inject, provide } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { nodeRuntime } from '@loutrejs/node'
 
@@ -47,7 +42,7 @@ describe('MCP endpointの所有権', () => {
     '初期化順が逆=%sでも同じlistener上のendpointごとにDI・OAuth・Context・Tool名を分離する',
     async (reverse) => {
       let constructions = 0
-      let contexts = 0
+      let invocations = 0
       let nextResource = 0
       class Resource {
         readonly id = ++nextResource
@@ -59,18 +54,19 @@ describe('MCP endpointの所有権', () => {
           async ({ request }, next) =>
             next({ tenant: request.headers.get('x-tenant') ?? '' }),
       })
-      const read = mcp.tool({
-        name: 'counter.read',
-        description: '状態を取得する',
-        scopes: ['read'],
-        input: z.strictObject({}),
-        output: z.object({
-          endpoint: z.string(),
-          count: z.number(),
-          resource: z.number(),
-          tenant: z.string(),
-          subject: z.string(),
-        }),
+      const CounterReadContract = mcp.contract({
+        'counter.read': {
+          description: '状態を取得する',
+          scopes: ['read'],
+          input: z.strictObject({}),
+          output: z.object({
+            endpoint: z.string(),
+            count: z.number(),
+            resource: z.number(),
+            tenant: z.string(),
+            subject: z.string(),
+          }),
+        },
       })
       const create = (name: string) =>
         mcp.implementation({
@@ -84,7 +80,7 @@ describe('MCP endpointの所有権', () => {
               middlewares: [layer],
             },
           }).routes.endpoint,
-          tools: [read],
+          contract: CounterReadContract,
           oauth: { requiredScopes: ['read'] },
           factory: (resource = inject(Resource)) => {
             constructions += 1
@@ -106,24 +102,26 @@ describe('MCP endpointの所有権', () => {
                 },
                 allowInvocation: () => true,
               },
-              context: ({ principal, state, signal }) => {
-                contexts += 1
-                signal.throwIfAborted()
-                return {
-                  endpoint: name,
-                  count: ++count,
-                  resource: resource.id,
-                  tenant: state.tenant,
-                  subject: principal.subject,
-                }
+              tools: {
+                'counter.read': ({ principal, state, signal, request }) => {
+                  invocations += 1
+                  expect(new URL(request.url).pathname).toBe(`/${name}/mcp`)
+                  signal.throwIfAborted()
+                  return {
+                    endpoint: name,
+                    count: ++count,
+                    resource: resource.id,
+                    tenant: state.tenant,
+                    subject: principal.subject,
+                  }
+                },
               },
-              tools: { 'counter.read': (_input, context) => context },
             }
           },
         })
-      const application = defineApplication({
+      const appDefinition = application({
         modules: [
-          defineModule({
+          module({
             providers: [
               provide(Resource).useClass(Resource, { scope: 'transient' }),
             ],
@@ -136,25 +134,27 @@ describe('MCP endpointの所有権', () => {
           }),
         ],
       })
-      expect(application.model.diagnostics).toEqual([])
+      expect(appDefinition.model.diagnostics).toEqual([])
       expect(
-        application.model.executions.filter(
+        appDefinition.model.executions.filter(
           (node) => node.executionKind === 'mcp.endpoint',
         ),
       ).toHaveLength(2)
       expect(
-        application.model.executions.some(
+        appDefinition.model.executions.some(
           (node) => node.executionKind === 'mcp.tool',
         ),
       ).toBe(false)
       constructions = 0
       const resultSchema = z.object({
-        result: z.object({ structuredContent: read.output }),
+        result: z.object({
+          structuredContent: CounterReadContract.tools['counter.read'].output,
+        }),
       })
       const resources = new Set<number>()
       for (let index = 0; index < 2; index += 1) {
         await using app = await nodeRuntime.create({
-          application,
+          application: appDefinition,
           shutdownHooks: false,
         })
         const { port } = await app.serve({ hostname: '127.0.0.1', port: 0 })
@@ -168,7 +168,7 @@ describe('MCP endpointの所有権', () => {
           expect(await metadata.json()).toMatchObject({
             resource: `https://127.0.0.1/${name}/mcp`,
           })
-          const before = contexts
+          const before = invocations
           expect(
             (
               await call(
@@ -178,7 +178,7 @@ describe('MCP endpointの所有権', () => {
               )
             ).status,
           ).toBe(401)
-          expect(contexts).toBe(before)
+          expect(invocations).toBe(before)
           const first = resultSchema.parse(
             await (await call(`${origin}/${name}/mcp`, name, 'tenant1')).json(),
           ).result.structuredContent

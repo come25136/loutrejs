@@ -1,7 +1,7 @@
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application,
+  module,
   inject,
   provide,
   token as createToken,
@@ -37,42 +37,47 @@ function fixture(
 ) {
   const inputTransform = vi.fn((id: string) => Number(id))
   const outputTransform = vi.fn((id: number) => String(id))
-  const read = mcp.tool({
-    name: 'orders.read',
-    description: '注文を取得する',
-    scopes: ['orders:read'],
-    input: z.object({
-      id: z.string().pipe(z.string().regex(/^\d+$/)).transform(inputTransform),
-    }),
-    output: z.object({
-      id: z.number().transform(outputTransform).pipe(z.string()),
-      count: z.number(),
-      call: z.number(),
-      subject: z.string(),
-    }),
+  const ordersReadContract = mcp.contract({
+    'orders.read': {
+      description: '注文を取得する',
+      scopes: ['orders:read'],
+      input: z.object({
+        id: z
+          .string()
+          .pipe(z.string().regex(/^\d+$/))
+          .transform(inputTransform),
+      }),
+      output: z.object({
+        id: z.number().transform(outputTransform).pipe(z.string()),
+        count: z.number(),
+        subject: z.string(),
+      }),
+    },
   })
-  const write = mcp.tool({
-    name: 'orders.write',
-    description: '注文を更新する',
-    scopes: ['orders:read', 'orders:write'],
-    input: z.object({}),
-    output: z.literal(true),
+  const ordersWriteContract = mcp.contract({
+    'orders.write': {
+      description: '注文を更新する',
+      scopes: ['orders:read', 'orders:write'],
+      input: z.object({}),
+      output: z.literal(true),
+    },
   })
   const server = mcp.implementation({
     route,
     name: 'orders',
     version: '1.0.0',
-    tools: [write, read],
+    contract: mcp.contract({
+      ...ordersWriteContract.tools,
+      ...ordersReadContract.tools,
+    }),
     oauth: { requiredScopes: options.requiredScopes },
     factory: (auth = inject(OAuth), orders = inject(OrdersService)) => ({
       oauth: auth,
-      context: ({ principal, signal }) => ({ principal, signal, call: 0 }),
       tools: {
-        'orders.read': ({ id }, context) => ({
+        'orders.read': ({ input: { id }, principal }) => ({
           id,
           count: ++orders.count,
-          call: ++context.call,
-          subject: context.principal.subject,
+          subject: principal.subject,
         }),
         'orders.write': (): true => {
           orders.count++
@@ -81,15 +86,20 @@ function fixture(
       },
     }),
   })
-  const application = defineApplication({
+  const appDefinition = application({
     modules: [
-      defineModule({
+      module({
         providers: [OrdersService, provide(OAuth).useValue(options)],
         executions: [server],
       }),
     ],
   })
-  return { application, inputTransform, outputTransform, read }
+  return {
+    application: appDefinition,
+    inputTransform,
+    outputTransform,
+    ordersReadContract,
+  }
 }
 
 function oauthOptions(expectedResource = resource) {
@@ -172,12 +182,79 @@ function rpc(
 }
 
 describe('MCP Streamable HTTP', () => {
+  it('OAuthなしのendpointでHostとOriginを検査し、Toolには認証主体を渡さない', async () => {
+    const AnonymousContract = mcp.contract({
+      whoami: {
+        description: '匿名呼び出しの確認',
+        scopes: [],
+        input: z.object({}),
+        output: z.boolean(),
+      },
+    })
+    const endpoint = mcp.implementation({
+      route: defaultRoute,
+      name: 'anonymous',
+      version: '1',
+      contract: AnonymousContract,
+      oauth: undefined,
+      allowedHosts: ['orders.example.test'],
+      factory: () => ({
+        oauth: undefined,
+        tools: { whoami: ({ principal }) => principal === undefined },
+      }),
+    })
+    await using app = await bootstrapApplication({
+      application: application({
+        modules: [module({ executions: [endpoint] })],
+      }),
+      capabilities,
+    })
+    const call = (headers: Record<string, string> = {}) =>
+      rpc('tools/call', { name: 'whoami' }, '', headers)
+    expect((await app.http.fetch(call({ host: 'other.example' }))).status).toBe(
+      403,
+    )
+    expect(
+      (await app.http.fetch(call({ origin: 'https://other.example' }))).status,
+    ).toBe(403)
+    const response = await app.http.fetch(call())
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      result: { structuredContent: true },
+    })
+  })
+
+  it('OAuthなしのendpointはscope付きToolの契約を拒否する', () => {
+    const { ordersReadContract } = fixture()
+    const endpoint = mcp.implementation({
+      route: defaultRoute,
+      name: 'anonymous',
+      version: '1',
+      contract: ordersReadContract,
+      factory: () => ({
+        tools: {
+          'orders.read': ({ input }) => ({
+            id: input.id,
+            count: 0,
+            subject: '',
+          }),
+        },
+      }),
+    })
+    const appDefinition = application({
+      modules: [module({ executions: [endpoint] })],
+    })
+    expect(
+      appDefinition.model.diagnostics.map(({ message }) => message),
+    ).toContainEqual(expect.stringContaining('scope付きTool'))
+  })
+
   it('Tool呼び出しをHTTP Execution配下のoperationとして追跡する', async () => {
     const executions: string[] = []
     const operations: string[] = []
-    const { application } = fixture()
+    const { application: appDefinition } = fixture()
     await using app = await bootstrapApplication({
-      application,
+      application: appDefinition,
       capabilities,
       instrumentation: {
         beginExecution(event) {
@@ -199,24 +276,60 @@ describe('MCP Streamable HTTP', () => {
     expect(operations).toContain('mcp.tool')
   })
 
+  it('生成後にコピーされたContractから別のTool集合を登録できない', () => {
+    const route = http.contract({
+      endpoint: { raw: true, method: '*', path: '/mcp' },
+    }).routes.endpoint
+    const contract = mcp.contract({})
+    expect(() =>
+      mcp.implementation({
+        route,
+        name: 'copied',
+        version: '1',
+        contract: { ...contract, tools: {} },
+        oauth: { requiredScopes: ['orders:read'] },
+        factory: () => ({
+          oauth: oauthConfiguration(),
+          tools: {},
+        }),
+      }),
+    ).toThrow('mcp.contract()')
+    expect(() =>
+      // @ts-expect-error MCPで列挙できないキーは型と実行時の両方で拒否する
+      mcp.contract({
+        [Symbol('tool')]: {
+          description: '確認',
+          scopes: [],
+          input: z.object({}),
+          output: z.object({}),
+        },
+      }),
+    ).toThrow('Symbolキー')
+    const toolsWithMetadata = Object.defineProperty({}, Symbol('metadata'), {
+      value: true,
+    })
+    expect(() => mcp.contract(toolsWithMetadata)).toThrow('Symbolキー')
+    expect(mcp.contract({ ...toolsWithMetadata }).tools).toEqual({})
+  })
+
   it('MCP入口とOAuthメタデータの両方でHTTPルートの衝突を診断する', () => {
-    const api = http.contract({
+    const httpContract = http.contract({
       mcp: { raw: true, method: '*', path: '/mcp' },
     })
     const endpoint = mcp.implementation({
-      route: api.routes.mcp,
+      route: httpContract.routes.mcp,
       name: 'orders',
       version: '1',
-      tools: [],
+      contract: mcp.contract({}),
+      oauth: { requiredScopes: ['orders:read'] },
       factory: () => ({
         oauth: oauthConfiguration(),
-        context: () => ({}),
         tools: {},
       }),
     })
-    const application = defineApplication({
+    const appDefinition = application({
       modules: [
-        defineModule({
+        module({
           executions: [
             endpoint,
             http.raw({
@@ -236,7 +349,7 @@ describe('MCP Streamable HTTP', () => {
     })
 
     expect(
-      application.model.diagnostics.filter(
+      appDefinition.model.diagnostics.filter(
         ({ code }) => code === 'LUTRE_HTTP_DUPLICATE_ROUTE',
       ),
     ).toHaveLength(2)
@@ -281,8 +394,15 @@ describe('MCP Streamable HTTP', () => {
 
   it('同じscopeで一覧と直接呼び出しを制御し、endpointのDIと呼び出しごとのContextを使う', async () => {
     const options = oauthOptions()
-    const { application, inputTransform, outputTransform } = fixture(options)
-    await using app = await bootstrapApplication({ application, capabilities })
+    const {
+      application: appDefinition,
+      inputTransform,
+      outputTransform,
+    } = fixture(options)
+    await using app = await bootstrapApplication({
+      application: appDefinition,
+      capabilities,
+    })
 
     const readList = await app.http.fetch(rpc('tools/list'))
     expect(await readList.json()).toMatchObject({
@@ -313,27 +433,22 @@ describe('MCP Streamable HTTP', () => {
     expect(app.get(OrdersService).count).toBe(0)
     expect(options.allowInvocation).not.toHaveBeenCalled()
 
-    const call = () =>
-      app.http.fetch(
-        rpc('tools/call', { name: 'orders.read', arguments: { id: '17' } }),
-      )
+    const tokens = ['read', 'write']
     const results = await Promise.all(
-      [call(), call()].map(async (value) => (await value).json()),
+      tokens.map(async (token) => {
+        const response = await app.http.fetch(
+          rpc(
+            'tools/call',
+            { name: 'orders.read', arguments: { id: '17' } },
+            token,
+          ),
+        )
+        return (await response.json()).result.structuredContent
+      }),
     )
-    expect(results).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          result: expect.objectContaining({
-            structuredContent: { id: '17', count: 1, call: 1, subject: 'read' },
-          }),
-        }),
-        expect.objectContaining({
-          result: expect.objectContaining({
-            structuredContent: { id: '17', count: 2, call: 1, subject: 'read' },
-          }),
-        }),
-      ]),
-    )
+    expect(results.map(({ subject }) => subject)).toEqual(tokens)
+    expect(results.map(({ count }) => count).toSorted()).toEqual([1, 2])
+    expect(results.map(({ id }) => id)).toEqual(['17', '17'])
     expect(inputTransform).toHaveBeenCalledTimes(2)
     expect(outputTransform).toHaveBeenCalledTimes(2)
     expect(app.get(OrdersService).count).toBe(2)
@@ -443,7 +558,7 @@ describe('MCP Streamable HTTP', () => {
         await next()
       },
     })
-    const api = http.contract({
+    const httpContract = http.contract({
       api: {
         path: '/api',
         middlewares: [observed],
@@ -453,20 +568,17 @@ describe('MCP Streamable HTTP', () => {
     const nodeResource = 'https://127.0.0.1/api/mcp'
     const { application: mcpApplication } = fixture(
       oauthOptions(nodeResource),
-      api.routes.mcp,
+      httpContract.routes.mcp,
     )
     const other = http.raw({
       route: { method: 'GET', path: '/other' },
       factory: () => () => new Response('通常のHTTPルート'),
     })
-    const application = defineApplication({
-      modules: [
-        ...mcpApplication.modules,
-        defineModule({ executions: [other] }),
-      ],
+    const appDefinition = application({
+      modules: [...mcpApplication.modules, module({ executions: [other] })],
     })
     await using app = await nodeRuntime.create({
-      application,
+      application: appDefinition,
       shutdownHooks: false,
     })
     const { port } = await app.serve({ port: 0, hostname: '127.0.0.1' })
@@ -507,156 +619,230 @@ describe('MCP Streamable HTTP', () => {
 })
 
 it('endpointの非公開ProviderとTool契約の不正をModelで診断する', async () => {
-  const { read } = fixture()
-  const invalid = mcp.tool({
-    name: 'invalid',
-    description: '不正な入力',
-    scopes: [],
-    input: z.string(),
-    output: z.string(),
+  const { ordersReadContract } = fixture()
+  const invalidInputContract = mcp.contract({
+    invalid: {
+      description: '不正な入力',
+      scopes: [],
+      input: z.string(),
+      output: z.string(),
+    },
   })
-  const privateModule = defineModule({ providers: [OrdersService] })
+  const privateModule = module({ providers: [OrdersService] })
   const route = (name: string) =>
     http.contract({ endpoint: { raw: true, method: '*', path: `/${name}` } })
       .routes.endpoint
   const factory = (orders = inject(OrdersService)) => ({
     oauth: oauthConfiguration(),
-    context: () => ({}),
     tools: {
-      'orders.read': ({ id }: { id: number }) => ({
+      'orders.read': ({ input: { id } }: { input: { id: number } }) => ({
         id,
         count: orders.count,
-        call: 1,
         subject: 'read',
       }),
     },
   })
-  const application = defineApplication({
+  const appDefinition = application({
     modules: [
-      defineModule({
+      module({
         imports: [privateModule],
         executions: [
           mcp.implementation({
             name: 'private',
             version: '1',
             route: route('private'),
-            tools: [read],
-            factory,
-          }),
-          mcp.implementation({
-            name: 'duplicate',
-            version: '1',
-            route: route('duplicate'),
-            tools: [read, read],
+            contract: ordersReadContract,
+            oauth: { requiredScopes: ['orders:read'] },
             factory,
           }),
           mcp.implementation({
             name: 'invalid',
             version: '1',
             route: route('invalid'),
-            tools: [invalid],
+            contract: invalidInputContract,
+            oauth: { requiredScopes: ['orders:read'] },
             factory: () => ({
               oauth: oauthConfiguration(),
-              context: () => ({}),
-              tools: { invalid: (value) => value },
+              tools: { invalid: ({ input }) => input },
             }),
           }),
         ],
       }),
     ],
   })
-  expect(application.model.diagnostics.map(({ code }) => code)).toEqual(
+  expect(appDefinition.model.diagnostics.map(({ code }) => code)).toEqual(
     expect.arrayContaining([
       'LUTRE_MODULE_VISIBILITY',
       'LUTRE_EXTENSION_COMPILE',
     ]),
   )
-  expect(application.model.diagnostics.map(({ message }) => message)).toEqual(
-    expect.arrayContaining([
-      expect.stringContaining('Tool名が重複'),
-      expect.stringContaining('入力はオブジェクト'),
-    ]),
+  expect(appDefinition.model.diagnostics.map(({ message }) => message)).toEqual(
+    expect.arrayContaining([expect.stringContaining('入力はオブジェクト')]),
   )
-  await expect(bootstrapApplication({ application })).rejects.toThrow(
-    'Application Model is invalid',
-  )
+  await expect(
+    bootstrapApplication({ application: appDefinition }),
+  ).rejects.toThrow('Application Model is invalid')
 })
 
-it.each(['context', 'handler'])(
-  '%s実行中の中断を伝え、完了までProviderを維持する',
-  async (phase) => {
-    const entered = Promise.withResolvers<void>()
-    const cancelled = Promise.withResolvers<void>()
-    const finish = Promise.withResolvers<void>()
-    const destroy = vi.fn()
-    const wait = async (signal: AbortSignal) => {
-      signal.addEventListener('abort', () => cancelled.resolve(), {
-        once: true,
-      })
-      entered.resolve()
-      await finish.promise
+it('旧boolean指定を認証なしのendpointとして登録しない', () => {
+  const options = {
+    route: defaultRoute,
+    name: 'invalid',
+    version: '1',
+    contract: mcp.contract({}),
+    oauth: false,
+    factory: () => ({ tools: {} }),
+  }
+  expect(() =>
+    // @ts-expect-error JavaScriptから旧boolean指定を渡した場合も検証する
+    mcp.implementation(options),
+  ).toThrow('設定オブジェクト')
+})
+
+it.each([{}, { requiredScopes: undefined }, { scopes: ['read'] }])(
+  'OAuthの設定に有効な項目がない場合は宣言時に拒否する (%j)',
+  (oauth) => {
+    const options = {
+      route: defaultRoute,
+      name: 'invalid',
+      version: '1',
+      contract: mcp.contract({}),
+      oauth,
+      factory: () => ({ oauth: oauthConfiguration(), tools: {} }),
     }
-    class Dependency {
-      onModuleDestroy() {
-        destroy()
-      }
+    expect(() =>
+      // @ts-expect-error JavaScriptから空の設定や未知の項目だけの設定を渡した場合も検証する
+      mcp.implementation(options),
+    ).toThrow('requiredScopesまたはallowedOrigins')
+  },
+)
+
+it('OAuthの宣言とfactoryが一致しないendpointを起動時に拒否する', async () => {
+  const options = {
+    route: defaultRoute,
+    name: 'mismatch',
+    version: '1',
+    contract: mcp.contract({}),
+  }
+  const endpoints = [
+    mcp.implementation({
+      ...options,
+      oauth: { requiredScopes: ['orders:read'] },
+      // @ts-expect-error 認証付きendpointではfactoryにもoauthが必要
+      factory: () => ({ tools: {} }),
+    }),
+    mcp.implementation({
+      ...options,
+      // @ts-expect-error 認証なしのendpointはfactoryにoauthを指定できない
+      factory: () => ({ oauth: oauthConfiguration(), tools: {} }),
+    }),
+  ]
+  for (const endpoint of endpoints) {
+    const appDefinition = application({
+      modules: [module({ executions: [endpoint] })],
+    })
+    await expect(
+      bootstrapApplication({ application: appDefinition, capabilities }),
+    ).rejects.toThrow(/factoryにはoauth/)
+  }
+})
+
+it('旧factory.contextを指定したendpointを起動時に拒否する', async () => {
+  const factory = () => ({
+    oauth: oauthConfiguration(),
+    context: () => ({}),
+    tools: {},
+  })
+  const endpoint = mcp.implementation({
+    route: defaultRoute,
+    name: 'legacy',
+    version: '1',
+    contract: mcp.contract({}),
+    oauth: { requiredScopes: ['orders:read'] },
+    // @ts-expect-error 旧factory.contextの形をJavaScriptから渡す場合も検証する
+    factory,
+  })
+  const appDefinition = application({
+    modules: [module({ executions: [endpoint] })],
+  })
+  await expect(
+    bootstrapApplication({ application: appDefinition, capabilities }),
+  ).rejects.toThrow(/factory\.context/)
+})
+
+it('Tool実行中の中断を伝え、完了までProviderを維持する', async () => {
+  const entered = Promise.withResolvers<void>()
+  const cancelled = Promise.withResolvers<void>()
+  const finish = Promise.withResolvers<void>()
+  const destroy = vi.fn()
+  const wait = async (signal: AbortSignal) => {
+    signal.addEventListener('abort', () => cancelled.resolve(), {
+      once: true,
+    })
+    entered.resolve()
+    await finish.promise
+  }
+  class Dependency {
+    onModuleDestroy() {
+      destroy()
     }
-    const slow = mcp.tool({
-      name: 'orders.slow',
+  }
+  const slowOrderContract = mcp.contract({
+    'orders.slow': {
       description: '時間のかかる照会を実行する',
       scopes: ['orders:read'],
       input: z.object({}),
       output: z.string(),
-    })
-    const application = defineApplication({
-      modules: [
-        defineModule({
-          providers: [Dependency],
-          executions: [
-            mcp.implementation({
-              route: defaultRoute,
-              name: 'orders',
-              version: '1',
-              tools: [slow],
-              factory: (dependency = inject(Dependency)) => ({
-                oauth: oauthConfiguration(),
-                context: async ({ signal }) => {
-                  if (phase === 'context') await wait(signal)
-                  return { signal }
+    },
+  })
+  const appDefinition = application({
+    modules: [
+      module({
+        providers: [Dependency],
+        executions: [
+          mcp.implementation({
+            route: defaultRoute,
+            name: 'orders',
+            version: '1',
+            contract: slowOrderContract,
+            oauth: { requiredScopes: ['orders:read'] },
+            factory: (dependency = inject(Dependency)) => ({
+              oauth: oauthConfiguration(),
+              tools: {
+                'orders.slow': async ({ signal }) => {
+                  void dependency
+                  await wait(signal)
+                  return '完了'
                 },
-                tools: {
-                  'orders.slow': async (_input, { signal }) => {
-                    void dependency
-                    if (phase === 'handler') await wait(signal)
-                    return '完了'
-                  },
-                },
-              }),
+              },
             }),
-          ],
-        }),
-      ],
-    })
-    await using app = await bootstrapApplication({ application, capabilities })
-    const controller = new AbortController()
-    const calling = app.http.fetch(
-      new Request(rpc('tools/call', { name: 'orders.slow' }), {
-        signal: controller.signal,
+          }),
+        ],
       }),
-    )
-    await entered.promise
-    try {
-      controller.abort()
-      await cancelled.promise
-      const closing = app.close()
-      expect((await app.http.fetch(rpc('tools/list'))).status).toBe(503)
-      expect(destroy).not.toHaveBeenCalled()
-      finish.resolve()
-      await closing
-      expect(destroy).toHaveBeenCalledOnce()
-    } finally {
-      finish.resolve()
-      await calling
-    }
-  },
-)
+    ],
+  })
+  await using app = await bootstrapApplication({
+    application: appDefinition,
+    capabilities,
+  })
+  const controller = new AbortController()
+  const calling = app.http.fetch(
+    new Request(rpc('tools/call', { name: 'orders.slow' }), {
+      signal: controller.signal,
+    }),
+  )
+  await entered.promise
+  try {
+    controller.abort()
+    await cancelled.promise
+    const closing = app.close()
+    expect((await app.http.fetch(rpc('tools/list'))).status).toBe(503)
+    expect(destroy).not.toHaveBeenCalled()
+    finish.resolve()
+    await closing
+    expect(destroy).toHaveBeenCalledOnce()
+  } finally {
+    finish.resolve()
+    await calling
+  }
+})

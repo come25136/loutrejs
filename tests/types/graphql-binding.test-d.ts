@@ -1,4 +1,4 @@
-import { http as contractHttp } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 import { graphql, getFieldSelection } from '@loutrejs/graphql'
 import type { GraphQLResolveInfo } from 'graphql'
 import { bindManifest } from '../../examples/graphql-counter/src/graphql/generated/bindings.js'
@@ -140,7 +140,7 @@ const custom = bindManifest<{ readonly label: string }>({
 })
 graphql.implementation({
   name: 'Custom',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest: custom,
@@ -148,7 +148,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'MissingCustomContext',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest: custom,
@@ -157,7 +157,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'MissingContext',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest: explicit,

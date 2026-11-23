@@ -1,4 +1,4 @@
-import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
+import { application, module, inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -56,19 +56,21 @@ export const UsersController = http.implementation({
   contract: UsersContract,
   factory: (users = inject(UsersService)) => ({
     async get(ctx) {
-      return ctx.response.found({
+      return {
+        schema: UsersContract.get.found,
         body: { id: ctx.input.params.id, name: 'test' },
-      })
+      }
     },
     async create(ctx) {
-      return ctx.response.created({
+      return {
+        schema: UsersContract.create.created,
         body: users.create(ctx.input.body.name),
-      })
+      }
     },
   }),
 })
 
-export const UsersModule = defineModule(() => ({
+export const UsersModule = module(() => ({
   name: 'UsersModule',
   description: 'HTTP CRUD integration',
   providers: [UsersService],
@@ -76,7 +78,7 @@ export const UsersModule = defineModule(() => ({
 }))
 
 export function createUsersApplication() {
-  return defineApplication({
+  return application({
     modules: [UsersModule()],
   })
 }

@@ -1,10 +1,10 @@
-﻿import { defineApplication, defineModule } from '@loutrejs/loutre'
+﻿import { application, module } from '@loutrejs/loutre'
 
 class BomService {}
 
-const Module = defineModule(() => ({
+const Module = module(() => ({
   name: 'BomModule',
   providers: [BomService],
 }))
 
-export default defineApplication({ modules: [Module()] })
+export default application({ modules: [Module()] })

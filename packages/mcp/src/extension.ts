@@ -20,11 +20,12 @@ export const extension = defineExecutionExtension<
 >({
   kind: 'execution-extension',
   name: 'loutre:mcp',
-  abiVersion: '2',
+  abiVersion: '7',
   compile(definition, context) {
     if (!definition.name.trim() || !definition.version.trim())
       throw new TypeError('MCP endpointのnameとversionを指定してください。')
     if (
+      definition.oauth !== undefined &&
       !(definition.oauth.requiredScopes ?? []).every((scope) =>
         oauthScopePattern.test(scope),
       )
@@ -35,6 +36,13 @@ export const extension = defineExecutionExtension<
       .toSorted((left, right) =>
         left.descriptor.name < right.descriptor.name ? -1 : 1,
       )
+    if (
+      definition.oauth === undefined &&
+      tools.some((tool) => tool.scopes.length > 0)
+    )
+      throw new TypeError(
+        'OAuthなしのMCP endpointにはscope付きToolを登録できません。',
+      )
     const names = tools.map((tool) => tool.descriptor.name)
     if (new Set(names).size !== names.length)
       throw new TypeError('MCP endpoint内のTool名が重複しています。')
@@ -42,7 +50,12 @@ export const extension = defineExecutionExtension<
     const handler = context.compileHandler(
       {
         kind: 'factory',
-        factory: () => validateRuntime(definition.factory(), tools),
+        factory: () =>
+          validateRuntime(
+            definition.factory(),
+            tools,
+            definition.oauth !== undefined,
+          ),
       },
       {
         kind: 'execution',
@@ -60,7 +73,8 @@ export const extension = defineExecutionExtension<
         version: definition.version,
         path: definition.path,
         tools: Object.freeze(tools),
-        oauth: definition.oauth,
+        ...(definition.oauth && { oauth: definition.oauth }),
+        allowedHosts: definition.allowedHosts,
         handler,
       }),
     }

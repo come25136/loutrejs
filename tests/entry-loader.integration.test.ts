@@ -83,11 +83,11 @@ describe('Node互換entry loader', () => {
     await writeFile(
       entry,
       [
-        `import { defineApplication, defineModule, provide } from ${JSON.stringify(resolve('packages/loutre/src/index.ts'))}`,
+        `import { application, module, provide } from ${JSON.stringify(resolve('packages/loutre/src/index.ts'))}`,
         "import { compile } from 'native-codec'",
         'class Codec { compile = compile }',
-        "const CodecModule = defineModule(() => ({ name: 'Codec', providers: [provide(Codec).useFactory(() => new Codec())] }))()",
-        'export default defineApplication({ modules: [CodecModule] })',
+        "const CodecModule = module(() => ({ name: 'Codec', providers: [provide(Codec).useFactory(() => new Codec())] }))()",
+        'export default application({ modules: [CodecModule] })',
       ].join('\n'),
     )
     const stdout: string[] = []

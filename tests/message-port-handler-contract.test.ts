@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  defineApplication,
+  application,
   defineExecution,
-  defineModule,
+  module,
 } from '@loutrejs/loutre'
 import {
   messagePort,
@@ -50,24 +50,22 @@ const factories: Record<string, () => MessagePortHandlers<typeof contract>> = {
 describe('MessagePortのhandler契約', () => {
   it.each(Object.entries(factories))('%s', async (_, factory) => {
     const execution = messagePort.implementation({ contract, factory })
-    const application = await bootstrapApplication({
-      application: defineApplication({
-        modules: [defineModule({ executions: [execution] })],
+    const app = await bootstrapApplication({
+      application: application({
+        modules: [module({ executions: [execution] })],
       }),
     })
     try {
-      await expect(
-        application.messagePort.invoke('echo', '確認'),
-      ).resolves.toEqual({
+      await expect(app.messagePort.invoke('echo', '確認')).resolves.toEqual({
         kind: 'unary',
         response: 'ok',
         value: '応答:確認',
       })
-      await expect(application.messagePort.invoke('metadata')).rejects.toThrow(
+      await expect(app.messagePort.invoke('metadata')).rejects.toThrow(
         'LUTRE_MESSAGE_PORT_METHOD_NOT_FOUND: metadata',
       )
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -81,8 +79,8 @@ describe('MessagePortのhandler契約', () => {
       })
       await expect(
         bootstrapApplication({
-          application: defineApplication({
-            modules: [defineModule({ executions: [execution] })],
+          application: application({
+            modules: [module({ executions: [execution] })],
           }),
         }),
       ).rejects.toThrow('MessagePort handler echoは関数である必要があります。')

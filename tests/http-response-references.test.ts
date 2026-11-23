@@ -1,0 +1,270 @@
+import { expect, it } from 'vitest'
+import { z } from 'zod'
+import {
+  application,
+  bootstrapApplication,
+  domainError,
+  module,
+} from '@loutrejs/loutre'
+import { bindHttpServer, http } from '@loutrejs/loutre/http'
+import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
+
+const Missing = domainError({ code: 'MISSING', data: z.string() })
+const tree = {
+  api: {
+    middlewares: [
+      http.cors({ origin: 'https://app.test', exposeHeaders: ['x-page'] }),
+    ],
+    responses: { empty: { status: 204 } },
+    routes: {
+      read: {
+        method: 'GET',
+        path: '/read',
+        responses: {
+          basic: { status: 200, body: z.strictObject({ id: z.string() }) },
+          detail: {
+            status: 200,
+            body: z.object({ id: z.string(), value: z.number() }),
+          },
+          events: { status: 200, stream: 'server', body: z.number() },
+          missing: {
+            status: 404,
+            body: z.string(),
+            error: http.error(Missing),
+          },
+        },
+      },
+      other: { method: 'GET', path: '/other', responses: {} },
+    },
+  },
+} as const
+
+it('同じstatusの応答を参照で選択し、継承した応答を複数のApplicationで利用できる', async () => {
+  const contract = http.contract(tree)
+  const implementation = http.implementation({
+    contract,
+    factory: () => ({
+      read: () => ({
+        schema: contract.read.detail,
+        body: { id: 'one', value: 42 },
+      }),
+      other: () => ({ schema: contract.other.empty }),
+    }),
+  })
+  const definition = application({
+    modules: [module({ executions: [implementation] })],
+  })
+  const options = {
+    application: definition,
+    capabilities: [bindHttpServer({ runtime: 'test' })],
+  }
+  await using first = await bootstrapApplication(options)
+  await using second = await bootstrapApplication(options)
+  for (const app of [first, second]) {
+    const response = await app.http.fetch(
+      new Request('https://fixture.test/read', {
+        headers: { origin: 'https://app.test' },
+      }),
+    )
+    expect(response.headers.has('loutre-response')).toBe(false)
+    expect(
+      response.headers.get('access-control-expose-headers')?.split(', '),
+    ).toEqual(['x-page'])
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ id: 'one', value: 42 })
+    expect(
+      (await app.http.fetch(new Request('https://fixture.test/other'))).status,
+    ).toBe(204)
+  }
+  const info = { info: { title: '参照の確認', version: '1' } }
+  expect(generateOpenApi(contract, info)).toEqual(
+    generateOpenApi(definition.model, info),
+  )
+})
+
+it('同じstatusのJSONとSSEをそれぞれのmedia typeでOpenAPIに出力する', () => {
+  const contract = http.contract(tree)
+  const document = generateOpenApi(contract, {
+    info: { title: '混合応答', version: '1' },
+  })
+  expect(document.paths['/read']).toMatchObject({
+    get: {
+      responses: {
+        200: {
+          content: {
+            'application/json': { schema: { anyOf: expect.any(Array) } },
+            'text/event-stream': { itemSchema: expect.any(Object) },
+          },
+        },
+      },
+    },
+  })
+})
+
+it('別Contract・別operation・複製・エラー応答・旧記法の戻り値を拒否する', async () => {
+  const contract = http.contract(tree)
+  const otherContract = http.contract(tree)
+  const invalidResults = [
+    { schema: otherContract.read.empty },
+    { schema: contract.other.empty },
+    { schema: { ...contract.read.empty } },
+    { schema: contract.read.missing, body: 'no' },
+    { schema: contract.read.empty, body: 42 },
+    { schema: contract.read.detail, body: { id: 42 } },
+    { kind: 'http-result', response: 'empty', body: undefined },
+    new Response('unvalidated'),
+  ]
+  for (const result of invalidResults) {
+    const implementation = http.implementation({
+      contract,
+      factory: () => ({
+        // @ts-expect-error JavaScript利用側が型検査を経由しない場合も検証する
+        read: () => result,
+        other: () => ({ schema: contract.other.empty }),
+      }),
+    })
+    await using app = await bootstrapApplication({
+      application: application({
+        modules: [module({ executions: [implementation] })],
+      }),
+      capabilities: [bindHttpServer({ runtime: 'test' })],
+    })
+    expect(
+      (await app.http.fetch(new Request('https://fixture.test/read'))).status,
+    ).toBe(500)
+  }
+})
+
+it.each(['kind', 'routes'])(
+  '予約名 %s は入れ子でもContract構築時に拒否する',
+  (name) => {
+    expect(() =>
+      http.contract({ nested: { routes: { [name]: tree.api.routes.read } } }),
+    ).toThrow('Reserved HTTP operation name')
+  },
+)
+
+it('同じ403を返す二つの分岐はステータス・ヘッダー・本文が一致する', async () => {
+  const denied = { status: 403, body: z.string() } as const
+  const contract = http.contract({
+    check: {
+      method: 'GET',
+      path: '/check',
+      responses: {
+        permissionDenied: denied,
+        accountSuspended: denied,
+      },
+    },
+  })
+  expect(contract.check.permissionDenied).not.toBe(
+    contract.check.accountSuspended,
+  )
+  let suspended = false
+  const implementation = http.implementation({
+    contract,
+    factory: () => ({
+      check: () =>
+        suspended
+          ? { schema: contract.check.accountSuspended, body: 'Forbidden' }
+          : { schema: contract.check.permissionDenied, body: 'Forbidden' },
+    }),
+  })
+  await using app = await bootstrapApplication({
+    application: application({
+      modules: [module({ executions: [implementation] })],
+    }),
+    capabilities: [bindHttpServer({ runtime: 'test' })],
+  })
+  const read = async () => {
+    const response = await app.http.fetch(
+      new Request('https://fixture.test/check'),
+    )
+    return {
+      status: response.status,
+      headers: Object.fromEntries(response.headers),
+      body: await response.text(),
+    }
+  }
+  const first = await read()
+  expect(first.status).toBe(403)
+  expect(first.body).toBe('Forbidden')
+  expect(first.headers).not.toHaveProperty('loutre-response')
+  suspended = true
+  expect(await read()).toEqual(first)
+})
+
+it('通常応答・エラーマッピング・SSEのbodyを送信時に入力型から変換する', async () => {
+  const numericBody = z.string().transform(Number)
+  const contract = http.contract({
+    number: {
+      method: 'GET',
+      path: '/number',
+      responses: { ok: { status: 200, body: numericBody } },
+    },
+    missing: {
+      method: 'GET',
+      path: '/missing',
+      responses: {
+        missing: { status: 404, body: numericBody, error: http.error(Missing) },
+      },
+    },
+    events: {
+      method: 'GET',
+      path: '/events',
+      responses: {
+        stream: { status: 200, body: numericBody, stream: 'server' },
+      },
+    },
+  })
+  async function* values() {
+    yield '42'
+  }
+  const implementation = http.implementation({
+    contract,
+    factory: () => ({
+      number: () => ({ schema: contract.number.ok, body: '42' }),
+      missing: () => {
+        throw Missing('42')
+      },
+      events: () => ({ schema: contract.events.stream, body: values() }),
+    }),
+  })
+  await using app = await bootstrapApplication({
+    application: application({
+      modules: [module({ executions: [implementation] })],
+    }),
+    capabilities: [bindHttpServer({ runtime: 'test' })],
+  })
+  const fetchRoute = (path: string) =>
+    app.http.fetch(new Request(`https://fixture.test/${path}`))
+  const number = await fetchRoute('number')
+  expect(number.status).toBe(200)
+  expect(await number.json()).toBe(42)
+  const missing = await fetchRoute('missing')
+  expect(missing.status).toBe(404)
+  expect(await missing.json()).toBe(42)
+  const events = await fetchRoute('events')
+  expect(events.status).toBe(200)
+  expect(await events.text()).toBe('data:42\n\n')
+})
+
+it.each([true, false])(
+  '列挙可能性が %s のSymbol応答名をルートと親の宣言時に拒否する',
+  (enumerable) => {
+    const responses = Object.defineProperty(
+      { ok: { status: 204 } } as const,
+      Symbol('selected'),
+      {
+        value: { status: 204 },
+        enumerable,
+      },
+    )
+    const lookup = { method: 'GET', path: '/', responses: {} } as const
+    expect(() => http.contract({ lookup: { ...lookup, responses } })).toThrow(
+      'response names at lookup must be strings',
+    )
+    expect(() =>
+      http.contract({ group: { responses, routes: { lookup } } }),
+    ).toThrow('response names at group must be strings')
+  },
+)

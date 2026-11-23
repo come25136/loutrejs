@@ -1,5 +1,7 @@
 export { bindQueueDriver, queue } from './queue.js'
-export { consume, cron, fixedDelay, task } from './declaration.js'
+import { consume, cron, fixedDelay } from './declaration.js'
+export { task } from './declaration.js'
+export const trigger = Object.freeze({ cron, fixedDelay, consume })
 export { tasksExtension } from './extension.js'
 export type {
   CronOverlap,

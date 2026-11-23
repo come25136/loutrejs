@@ -18,7 +18,7 @@ describe('トップページのHTTP型推論の紹介', () => {
       expect(html).toContain('hljs-keyword')
       const text = load(html).text()
       expect(text).toContain('ctx.input.params.name')
-      expect(text).toContain('ctx.response.ok')
+      expect(text).toContain('AppContract.greet.ok')
       expect(text).not.toContain('TERMINAL')
       expect(text).not.toContain('UTF-8')
       expect(text).not.toContain(' — Loutre')

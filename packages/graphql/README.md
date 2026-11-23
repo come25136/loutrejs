@@ -20,13 +20,13 @@ import { CounterStore } from './domain/counter.js'
 
 const manifest = bindManifest<AppContext>({ schemaDocument, resolvers })
 
-const Api = http.contract({
+const ApiContract = http.contract({
   graphql: { raw: true, method: '*', path: '/graphql' },
 })
 
 export const endpoint = graphql.implementation({
   name: 'Counter',
-  route: Api.routes.graphql,
+  route: ApiContract.routes.graphql,
   manifest,
   transports: { http: true, websocket: { connectionInitWaitTimeout: 3_000 } },
   factory: (counter = inject(CounterStore)) => ({
@@ -66,9 +66,9 @@ const httpAuthentication = http.middleware<{ currentUser?: { id: string } }>({
   },
 })
 
-const Api = http.contract({ profile: { raw: true, method: '*', path: '/graphql', middlewares: [httpAuthentication] } })
+const ApiContract = http.contract({ profile: { raw: true, method: '*', path: '/graphql', middlewares: [httpAuthentication] } })
 
-route: Api.routes.profile,
+route: ApiContract.routes.profile,
 transports: { http: true, websocket: true },
 factory: (users = inject(Users)) => ({
   ws: {

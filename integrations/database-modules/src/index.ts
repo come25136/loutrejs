@@ -1,8 +1,8 @@
 import {
   bootstrapApplication,
-  defineApplication,
-  defineEnv,
-  defineModule,
+  application,
+  env,
+  module,
   hook,
   provide,
   token,
@@ -23,7 +23,7 @@ const AppEnvSchema = z.object({
   ANALYTICS_DATABASE_URL: z.string(),
 })
 
-export class AppEnv extends defineEnv(AppEnvSchema) {}
+export class AppEnv extends env(AppEnvSchema) {}
 
 export class Database
   implements
@@ -88,16 +88,16 @@ interface DatabaseModuleArgs {
   readonly url: EnvKey<string>
 }
 
-export const DatabaseModule = defineModule<DatabaseModuleArgs>((args) => ({
+export const DatabaseModule = module<DatabaseModuleArgs>((args) => ({
   imports: [args.dependencies],
   description: `${args.name} database`,
   providers: [
     provide(args.provide).useFactory({
       inject: [AppEnv, LIFECYCLE_EVENTS],
-      use: (env: AppEnv, events: string[]) =>
+      use: (appEnv: AppEnv, events: string[]) =>
         new Database(
           args.name,
-          env[args.url.key as keyof AppEnv] as string,
+          appEnv[args.url.key as keyof AppEnv] as string,
           events,
         ),
     }),
@@ -120,13 +120,13 @@ export async function createDatabaseIntegration(
     PRIMARY_DATABASE_URL: 'primary://example',
     ANALYTICS_DATABASE_URL: 'analytics://example',
   }
-  const DependenciesModule = defineModule(() => ({
+  const DependenciesModule = module(() => ({
     environment: [AppEnv],
     providers: [provide(LIFECYCLE_EVENTS).useValue(events)],
     exports: [AppEnv, LIFECYCLE_EVENTS],
   }))
   const dependencies = DependenciesModule()
-  const AppModule = defineModule(() => ({
+  const AppModule = module(() => ({
     description: 'Database modules integration application',
     imports: [
       dependencies,
@@ -150,11 +150,11 @@ export async function createDatabaseIntegration(
       }),
     ],
   }))
-  const application = defineApplication({ modules: [AppModule()] })
+  const appDefinition = application({ modules: [AppModule()] })
   const runtime = await bootstrapApplication({
-    application,
+    application: appDefinition,
     environment: environmentSource,
   })
-  const env = runtime.get(AppEnv)
-  return { runtime, events, env, model: application.model }
+  const appEnv = runtime.get(AppEnv)
+  return { runtime, events, env: appEnv, model: appDefinition.model }
 }

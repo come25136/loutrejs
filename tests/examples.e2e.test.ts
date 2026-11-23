@@ -20,6 +20,31 @@ const nestedContractAuthWorkspace = '@loutrejs/example-nested-contract-auth'
 const helloWorkerWorkspace = '@loutrejs/example-hello-worker'
 
 describe('example projects', { concurrent: false }, () => {
+  it('Hello MCPのTool一覧と挨拶を認証なしで取得する', async () => {
+    const workspace = '@loutrejs/example-hello-mcp'
+    const port = await reserveHttpPort()
+    const env = { PORT: String(port) }
+    const example = startWorkspace(workspace, 'start', env)
+    try {
+      await waitForPort(port)
+      const result = runWorkspaceCommand(workspace, 'client', ['Momo'], env)
+      expect(result.status, result.stderr || result.stdout).toBe(0)
+      expect(
+        result.stdout
+          .trim()
+          .split('\n')
+          .slice(-2)
+          .map((line) => JSON.parse(line)),
+      ).toEqual([['greet'], { message: 'Hello, Momo!' }])
+      const metadata = await fetch(
+        `http://127.0.0.1:${port}/.well-known/oauth-protected-resource/mcp`,
+      )
+      expect(metadata.status).toBe(404)
+    } finally {
+      await example.stop()
+    }
+  })
+
   it('MCP カウンターの一覧と呼び出しを scope で制御する', async () => {
     const checked = runWorkspaceCommand(mcpCounterWorkspace, 'check')
     expect(checked.status, checked.stderr || checked.stdout).toBe(0)

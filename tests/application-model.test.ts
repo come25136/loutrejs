@@ -6,12 +6,12 @@ import {
   bindRuntimeCapability,
   bootstrapApplication,
   buildApplicationModel,
-  defineApplication,
-  defineEnv,
+  application,
+  env,
   defineExecution,
   defineExecutionExtension,
   delegateExecution,
-  defineModule,
+  module,
   inject,
   hook,
   projectApplicationModel,
@@ -156,25 +156,23 @@ describe('Application Model', () => {
         (runtime, id) => async () => new Response(await runtime.invoke(id)),
       ),
     })
-    const Source = defineModule({ executions: [source] })
-    expect(
-      defineApplication({ modules: [Source] }).model.diagnostics,
-    ).toContainEqual(
+    const Source = module({ executions: [source] })
+    expect(application({ modules: [Source] }).model.diagnostics).toContainEqual(
       expect.objectContaining({
         code: 'LUTRE_EXECUTION_DELEGATE_MISSING',
         path: 'http.source',
       }),
     )
 
-    const Target = defineModule({ executions: [target] })
-    const application = defineApplication({ modules: [Source, Target] })
-    expect(application.model.edges).toContainEqual({
+    const Target = module({ executions: [target] })
+    const appDefinition = application({ modules: [Source, Target] })
+    expect(appDefinition.model.edges).toContainEqual({
       from: 'http.source',
       to: 'probe.target',
       kind: 'delegates',
     })
     await using app = await bootstrapApplication({
-      application,
+      application: appDefinition,
       capabilities: [
         bindHttpServer({ runtime: 'test' }),
         bindRuntimeCapability(PROBE_DRIVER, { invoke: async (name) => name }),
@@ -198,7 +196,7 @@ describe('Application Model', () => {
       dispatch: 'parent',
       reference: child,
     })
-    const Module = defineModule(() => ({ executions: [parent] }))
+    const Module = module(() => ({ executions: [parent] }))
 
     const model = buildApplicationModel({ modules: [Module()] })
 
@@ -216,16 +214,16 @@ describe('Application Model', () => {
   })
 
   it('同一Environment Contractを複数Moduleで共有する', async () => {
-    class SharedEnv extends defineEnv(z.object({ VALUE: z.string() })) {}
-    const FirstModule = defineModule(() => ({
+    class SharedEnv extends env(z.object({ VALUE: z.string() })) {}
+    const FirstModule = module(() => ({
       environment: [SharedEnv],
       exports: [SharedEnv],
     }))
-    const SecondModule = defineModule(() => ({
+    const SecondModule = module(() => ({
       environment: [SharedEnv],
       exports: [SharedEnv],
     }))
-    const definition = defineApplication({
+    const definition = application({
       modules: [FirstModule(), SecondModule()],
     })
 
@@ -247,12 +245,12 @@ describe('Application Model', () => {
       ),
     ).toHaveLength(2)
 
-    const application = await bootstrapApplication({
+    const app = await bootstrapApplication({
       application: definition,
       environment: { VALUE: 'shared' },
     })
-    expect(application.get(SharedEnv).VALUE).toBe('shared')
-    await application.close()
+    expect(app.get(SharedEnv).VALUE).toBe('shared')
+    await app.close()
   })
 
   it('Application DefinitionのLoggerをProviderへ引き継ぐ', async () => {
@@ -261,19 +259,19 @@ describe('Application Model', () => {
     class Service {
       readonly logger = inject(LoggerToken)
     }
-    const Module = defineModule(() => ({ providers: [Service] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({
+    const Module = module(() => ({ providers: [Service] }))
+    const app = await bootstrapApplication({
+      application: application({
         modules: [Module(), logging.module],
       }),
     })
 
-    application.get(Service).logger.info('Kernel Loggerを利用しました')
+    app.get(Service).logger.info('Kernel Loggerを利用しました')
 
     expect(records).toContainEqual(
       expect.objectContaining({ message: 'Kernel Loggerを利用しました' }),
     )
-    await application.close()
+    await app.close()
   })
 
   it('Runtime Capability identityをbundle境界で共有できる', () => {
@@ -295,12 +293,12 @@ describe('Application Model', () => {
       id: 'probe.hello',
       dispatch: 'hello',
     })
-    const Module = defineModule(() => ({ executions: [execution] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [execution] }))
+    const definition = application({ modules: [Module()] })
 
     const firstGraph = projectApplicationModel(definition.model)
     const secondGraph = projectApplicationModel(definition.model)
-    const application = await bootstrapApplication({
+    const app = await bootstrapApplication({
       application: definition,
       capabilities: [
         bindRuntimeCapability(PROBE_DRIVER, {
@@ -312,14 +310,14 @@ describe('Application Model', () => {
     expect(firstGraph).toEqual(secondGraph)
     expect(fixture.compile).toHaveBeenCalledTimes(1)
     expect(fixture.createRuntime).toHaveBeenCalledTimes(1)
-    expect(await application.probe.invoke('probe.hello')).toBe('pong:hello')
-    expectTypeOf(application.probe).toEqualTypeOf<ProbeHostApi>()
-    await application.close()
+    expect(await app.probe.invoke('probe.hello')).toBe('pong:hello')
+    expectTypeOf(app.probe).toEqualTypeOf<ProbeHostApi>()
+    await app.close()
   })
 
   it('Extension Registryからcompiled型付きexecutionを取得する', () => {
     const fixture = createProbeExtension()
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       executions: [
         defineExecution(fixture.extension, {
           id: 'probe.typed',
@@ -340,7 +338,7 @@ describe('Application Model', () => {
     class Service {
       readonly repository = inject(Repository)
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Repository, Service],
       lifecycle: {
         onModuleInit: hook({ inject: [Service], run: () => undefined }),
@@ -375,11 +373,11 @@ describe('Application Model', () => {
     class Service {
       readonly repository = inject(PrivateRepository)
     }
-    const RepositoryModule = defineModule(() => ({
+    const RepositoryModule = module(() => ({
       providers: [PrivateRepository],
     }))
     const repositoryModule = RepositoryModule()
-    const ServiceModule = defineModule(() => ({
+    const ServiceModule = module(() => ({
       imports: [repositoryModule],
       providers: [Service],
     }))
@@ -396,7 +394,7 @@ describe('Application Model', () => {
 
   it('Extension単位のglobal validationをApplication diagnosticsへ統合する', () => {
     const fixture = createProbeExtension()
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       executions: [
         defineExecution(fixture.extension, {
           id: 'probe.first',
@@ -418,7 +416,7 @@ describe('Application Model', () => {
 
   it('不足CapabilityをExtension Runtime生成前に拒否する async', async () => {
     const fixture = createProbeExtension()
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       executions: [
         defineExecution(fixture.extension, {
           id: 'probe.hello',
@@ -466,7 +464,7 @@ describe('Application Model', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [
         defineExecution(fixture.extension, {

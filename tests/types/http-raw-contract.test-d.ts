@@ -1,13 +1,13 @@
 import {
   http,
-  createHttpClient,
+  type HttpHandlerContext,
   type HttpContractRawRoute,
 } from '@loutrejs/loutre/http'
 const layer = http.middleware<{ tenant: string }>({
   name: 'Tenant',
   factory: () => async (_input, next) => next({ tenant: 'もみじ' }),
 })
-const api = http.contract({
+const httpContract = http.contract({
   api: {
     path: '/api',
     middlewares: [layer],
@@ -21,21 +21,25 @@ const api = http.contract({
     },
   },
 })
-const path: '/api/graphql' = api.routes.delegated.path
-const raw: HttpContractRawRoute = api.routes.delegated
+const path: '/api/graphql' = httpContract.routes.delegated.path
+const raw: HttpContractRawRoute = httpContract.routes.delegated
 void [path, raw]
+// @ts-expect-error rawルートは通常のHTTPハンドラを持たない
+type DelegatedContext = HttpHandlerContext<typeof httpContract, 'delegated'>
+// @ts-expect-error 契約にない操作名を指定できない
+type MissingContext = HttpHandlerContext<typeof httpContract, 'missing'>
 http.implementation({
-  contract: api,
+  contract: httpContract,
   factory: () => ({
     regular: (ctx) => {
       const tenant: string = ctx.state.tenant
       void tenant
-      return ctx.response.ok({})
+      return { schema: httpContract.regular.ok }
     },
   }),
 })
 http.raw({
-  route: api.routes.delegated,
+  route: httpContract.routes.delegated,
   factory: () => (ctx) => {
     const tenant: string = ctx.state.tenant
     // @ts-expect-error 宣言していないstateを渡さない
@@ -43,13 +47,6 @@ http.raw({
     return new Response(tenant)
   },
 })
-const client = createHttpClient(api, async () => ({
-  status: 204,
-  body: undefined,
-}))
-client.regular()
-// @ts-expect-error rawルートは型付きHTTP clientから呼び出さない
-client.delegated()
 // @ts-expect-error rawを明示せずresponsesを省略しない
 http.contract({ invalid: { method: 'GET', path: '/invalid' } })
 http.contract({

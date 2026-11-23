@@ -1,6 +1,6 @@
 # Loutre v0.3 Architecture Direction
 
-ステータス: Proposed
+ステータス: Proposed（第1項の HTTP クライアント案は[公開 API 再設計](./loutre_framework_public_api_redesign.md)で撤回）
 
 ## Context
 

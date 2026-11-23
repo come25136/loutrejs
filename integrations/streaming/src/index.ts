@@ -1,4 +1,4 @@
-import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
+import { application, module, inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { messagePort } from '@loutrejs/loutre/message-port'
 import { z } from 'zod'
@@ -40,8 +40,11 @@ export const EventsController = http.implementation({
   name: 'EventsController',
   contract: EventsHttpContract,
   factory: (streams = inject(EventStreamService)) => ({
-    subscribe(ctx) {
-      return ctx.response.events({ body: streams.events() })
+    subscribe() {
+      return {
+        schema: EventsHttpContract.subscribe.events,
+        body: streams.events(),
+      }
     },
   }),
 })
@@ -67,14 +70,14 @@ export const EventsMessageHandler = messagePort.implementation({
   }),
 })
 
-export const EventsHttpModule = defineModule(() => ({
+export const EventsHttpModule = module(() => ({
   name: 'EventsHttpModule',
   description: 'HTTP server-stream integration',
   providers: [EventStreamService],
   executions: [EventsController],
 }))
 
-export const EventsMessagePortModule = defineModule(() => ({
+export const EventsMessagePortModule = module(() => ({
   name: 'EventsMessagePortModule',
   description: 'MessagePort server-stream integration',
   providers: [EventStreamService],
@@ -82,9 +85,9 @@ export const EventsMessagePortModule = defineModule(() => ({
 }))
 
 export function createEventsHttpDefinition() {
-  return defineApplication({ modules: [EventsHttpModule()] })
+  return application({ modules: [EventsHttpModule()] })
 }
 
 export function createEventsMessagePortDefinition() {
-  return defineApplication({ modules: [EventsMessagePortModule()] })
+  return application({ modules: [EventsMessagePortModule()] })
 }

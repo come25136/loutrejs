@@ -1,8 +1,8 @@
 import * as fixture from './helpers/identities.js'
 import {
   LoggerToken,
-  defineApplication,
-  defineModule,
+  application,
+  module,
   provide,
   token,
   type RuntimeInstrumentation,
@@ -17,8 +17,8 @@ describe('Runtime instrumentation boundary', () => {
       }
     }
 
-    const application = defineApplication({
-      modules: [defineModule(() => ({ providers: [Repository] }))()],
+    const appDefinition = application({
+      modules: [module(() => ({ providers: [Repository] }))()],
     })
     const calls: string[] = []
     let executionInvocation: unknown
@@ -61,7 +61,7 @@ describe('Runtime instrumentation boundary', () => {
         calls.push('close')
       },
     }
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation,
     })
     await runtime.initialize()
@@ -116,15 +116,15 @@ describe('Runtime instrumentation boundary', () => {
   it('useValue providerもproviderCreatedへ通知する', async () => {
     const Service = token<{ ping(): string }>('runtime-instrumentation-value')
     const service = { ping: () => 'pong' }
-    const application = defineApplication({
+    const appDefinition = application({
       modules: [
-        defineModule(() => ({
+        module(() => ({
           providers: [provide(Service).useValue(service)],
         }))(),
       ],
     })
     const created: unknown[] = []
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: {
         providerCreated(_metadata, value) {
           created.push(value)
@@ -148,10 +148,10 @@ describe('Runtime instrumentation boundary', () => {
         return 42
       }
     }
-    const application = defineApplication({
-      modules: [defineModule(() => ({ providers: [Repository] }))()],
+    const appDefinition = application({
+      modules: [module(() => ({ providers: [Repository] }))()],
     })
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: {
         providerCreated() {
           throw new Error('provider instrumentation failed')
@@ -191,11 +191,11 @@ describe('Runtime instrumentation boundary', () => {
         throw new Error('init failed')
       }
     }
-    const application = defineApplication({
-      modules: [defineModule(() => ({ providers: [BrokenProvider] }))()],
+    const appDefinition = application({
+      modules: [module(() => ({ providers: [BrokenProvider] }))()],
     })
     let closeCount = 0
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: {
         close() {
           closeCount += 1

@@ -5,8 +5,8 @@ import {
   provide,
   token,
   createKernelApplication,
-  defineApplication,
-  defineModule,
+  application,
+  module,
   hook,
 } from '@loutrejs/loutre'
 
@@ -14,7 +14,7 @@ describe('Application Lifecycle', () => {
   it('ModuleのonModuleInit失敗時も対応するonModuleDestroyを実行する', async () => {
     const events: string[] = []
     const failure = new Error('module init failure')
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       lifecycle: {
         onModuleInit: hook({
           inject: [],
@@ -31,11 +31,11 @@ describe('Application Lifecycle', () => {
         }),
       },
     }))
-    const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
 
-    await expect(application.init()).rejects.toBe(failure)
+    await expect(app.init()).rejects.toBe(failure)
     expect(events).toEqual(['module.init', 'module.destroy'])
   })
 
@@ -66,14 +66,14 @@ describe('Application Lifecycle', () => {
         events.push('B.destroy')
       }
     }
-    const Module = defineModule(() => ({ providers: [ProviderA, ProviderB] }))
-    const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ providers: [ProviderA, ProviderB] }))
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
 
-    await expect(application.init()).rejects.toBe(failure)
+    await expect(app.init()).rejects.toBe(failure)
     expect(events).toEqual(['A.init', 'B.init', 'B.destroy', 'A.destroy'])
-    await expect(application.init()).rejects.toThrow('LUTRE_APPLICATION_STATE')
+    await expect(app.init()).rejects.toThrow('LUTRE_APPLICATION_STATE')
   })
 
   it('初期化errorとcleanup errorをoriginal先頭のAggregateErrorにする', async () => {
@@ -87,14 +87,14 @@ describe('Application Lifecycle', () => {
         throw cleanupError
       }
     }
-    const Module = defineModule(() => ({ providers: [Provider] }))
-    const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ providers: [Provider] }))
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
 
     let thrown: unknown
     try {
-      await application.init()
+      await app.init()
     } catch (error) {
       thrown = error
     }
@@ -116,12 +116,12 @@ describe('Application Lifecycle', () => {
         return Promise.resolve()
       }
     }
-    const Module = defineModule(() => ({ providers: [Provider] }))
-    const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ providers: [Provider] }))
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
-    await application.init()
-    await application.close()
+    await app.init()
+    await app.close()
     expect(events).toEqual(['destroy'])
   })
 
@@ -141,22 +141,22 @@ describe('Application Lifecycle', () => {
         throw secondError
       }
     }
-    const Module = defineModule(() => ({ providers: [First, Second] }))
-    const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ providers: [First, Second] }))
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
-    await application.init()
+    await app.init()
 
     let thrown: unknown
     try {
-      await application.close()
+      await app.close()
     } catch (error) {
       thrown = error
     }
     expect(events).toEqual(['second', 'first'])
     expect(thrown).toBeInstanceOf(AggregateError)
     expect((thrown as AggregateError).errors).toEqual([secondError, firstError])
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
   })
 
   it('shutdown lifecycleをonModuleDestroyから既存順序で実行する', async () => {
@@ -172,7 +172,7 @@ describe('Application Lifecycle', () => {
         events.push(`provider.shutdown:${signal}`)
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       lifecycle: {
         onModuleDestroy: {
@@ -198,12 +198,12 @@ describe('Application Lifecycle', () => {
         },
       },
     }))
-    const application = createKernelApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = createKernelApplication({
+      application: application({ modules: [Module()] }),
     })
-    await application.init()
+    await app.init()
 
-    await application.close('SIGTERM')
+    await app.close('SIGTERM')
 
     expect(events).toEqual([
       'provider.destroy',
@@ -226,7 +226,7 @@ describe('Application Lifecycle', () => {
         destroyed = true
       }
     }
-    const Module = defineModule(() => ({ providers: [Resource] }))
+    const Module = module(() => ({ providers: [Resource] }))
 
     expect(buildApplicationModel({ modules: [Module()] }).diagnostics).toEqual(
       [],
@@ -251,7 +251,7 @@ describe('Application Lifecycle', () => {
         events.push('service.dispose')
       }
     }
-    const Module = defineModule({
+    const Module = module({
       providers: [Service, Connection],
       lifecycle: {
         onApplicationDispose: hook({
@@ -263,7 +263,7 @@ describe('Application Lifecycle', () => {
       },
     })
     const app = await bootstrapApplication({
-      application: defineApplication({ modules: [Module] }),
+      application: application({ modules: [Module] }),
     })
     await app.close()
     await app.close()
@@ -292,7 +292,7 @@ describe('Application Lifecycle', () => {
       }
     }
     const ALIAS = token<Resource>('resource.alias')
-    const Module = defineModule({
+    const Module = module({
       providers: [
         Resource,
         provide(ALIAS).useFactory({
@@ -302,7 +302,7 @@ describe('Application Lifecycle', () => {
       ],
     })
     const app = await bootstrapApplication({
-      application: defineApplication({ modules: [Module] }),
+      application: application({ modules: [Module] }),
     })
     expect(app.get(ALIAS)).toBe(app.get(Resource))
     await app.close()
@@ -326,9 +326,9 @@ describe('Application Lifecycle', () => {
         if (this.connection instanceof Connection) throw failure
       }
     }
-    const Module = defineModule({ providers: [Broken, Connection] })
+    const Module = module({ providers: [Broken, Connection] })
     const app = createKernelApplication({
-      application: defineApplication({ modules: [Module] }),
+      application: application({ modules: [Module] }),
     })
     await expect(app.init()).rejects.toBe(failure)
     expect(events).toEqual(['destroy', 'dispose'])

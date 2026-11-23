@@ -1,11 +1,11 @@
 # CORS Example
 
-Add `cors()` to an HTTP route's `middlewares` to serve an API that can be called from a different browser origin.
+Add `http.cors()` to an HTTP route's `middlewares` to serve an API that can be called from a different browser origin.
 
 The CORS policy is part of the HTTP Contract. A separate `OPTIONS` route is not required: browser preflight requests are handled by the HTTP Extension from the target route's CORS middleware before the Controller runs.
 
 ```ts
-const corsMiddleware = cors({
+const corsMiddleware = http.cors({
   origin: ['http://localhost:5173'],
   allowMethods: ['POST'],
   allowHeaders: ['content-type'],
@@ -37,7 +37,7 @@ export const MessageContract = http.contract({
 })
 ```
 
-If every origin is allowed without additional restrictions, `cors()` with no options is enough.
+If every origin is allowed without additional restrictions, `http.cors()` with no options is enough.
 
 To apply the same CORS policy to multiple routes, create one middleware and reuse it in each route's `middlewares`.
 

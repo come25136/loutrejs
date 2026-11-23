@@ -92,13 +92,13 @@ Schemaとresolverの結合は[GraphQL Codegen ADR](loutre_graphql_codegen_archit
 ```ts
 import { manifest } from './graphql/manifest.js'
 
-const Api = http.contract({
+const ApiContract = http.contract({
   graphql: { raw: true, method: '*', path: '/graphql' },
 })
 
 const GraphQLApi = graphql.implementation({
   name: 'GraphQLApi',
-  route: Api.routes.graphql,
+  route: ApiContract.routes.graphql,
   manifest,
   transports: {
     http: true,
@@ -143,7 +143,7 @@ GraphQL over HTTPは既存のresponse variant contractへ押し込まず、HTTP 
 ```ts
 http.delegate({
   name: 'GraphQLApi.http',
-  route: { ...Api.routes.graphql, protocol: 'graphql' },
+  route: { ...ApiContract.routes.graphql, protocol: 'graphql' },
   delegate: delegateExecution(
     endpoint,
     (runtime, id) => runtime.endpoint(id).http,

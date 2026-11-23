@@ -1,10 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { z } from 'zod'
-import {
-  bootstrapApplication,
-  defineApplication,
-  defineModule,
-} from '@loutrejs/loutre'
+import { bootstrapApplication, application, module } from '@loutrejs/loutre'
 import { http, bindHttpServer } from '@loutrejs/loutre/http'
 import {
   RuntimeDevtoolsInstrumentation,
@@ -22,6 +18,7 @@ describe('HTTP handlerのdirect replay', () => {
       observer: {
         executionStarted: (event) => events.push(event),
         spanStarted: (event) => events.push(event),
+        spanEnded: (event) => events.push(event),
       },
       context: {
         run: (value, operation) => context.run(value, operation),
@@ -34,6 +31,10 @@ describe('HTTP handlerのdirect replay', () => {
         await next({ offset: 3 })
       },
     })
+    const calculated = {
+      status: 200,
+      body: z.object({ value: z.number() }),
+    } as const
     const contract = http.contract({
       calculate: {
         method: 'POST',
@@ -45,7 +46,8 @@ describe('HTTP handlerのdirect replay', () => {
           body: z.object({ multiplier: z.number() }),
         },
         responses: {
-          ok: { status: 200, body: z.object({ value: z.number() }) },
+          ok: calculated,
+          cached: calculated,
         },
       },
     })
@@ -54,22 +56,22 @@ describe('HTTP handlerのdirect replay', () => {
       name: 'Calculator',
       contract,
       factory: () => ({
-        calculate({ input, response, state }) {
+        calculate({ input, state }) {
           const value = input.params.id * input.body.multiplier + state.offset
           calls.push(value)
-          return response.ok({ body: { value } })
+          return { schema: contract.calculate.ok, body: { value } }
         },
       }),
     })
-    const application = await bootstrapApplication({
-      application: defineApplication({
-        modules: [defineModule({ executions: [controller] })],
+    const app = await bootstrapApplication({
+      application: application({
+        modules: [module({ executions: [controller] })],
       }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       instrumentation,
     })
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('https://example.test/items/2', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -83,14 +85,20 @@ describe('HTTP handlerのdirect replay', () => {
       )
       if (handler?.type !== 'span.started' || !handler.capsuleId)
         throw new Error('HTTP handlerのcapsuleがありません。')
+      const expectedResult = { schema: 'ok', body: { value: 11 } }
+      const completed = events.find(
+        (event) =>
+          event.type === 'span.ended' && event.spanId === handler.spanId,
+      )
+      if (completed?.type !== 'span.ended')
+        throw new Error('HTTP handlerの完了イベントがありません。')
+      expect(completed.result?.value).toEqual(expectedResult)
       const replay = await instrumentation.replayCapsule({
         requestId: requestId('replay'),
         capsuleId: handler.capsuleId,
       })
-      expect(replay).toMatchObject({
-        status: 'ok',
-        result: { value: { body: { value: 11 } } },
-      })
+      expect(replay.status).toBe('ok')
+      expect(replay.result?.value).toEqual(expectedResult)
       const invalid = await instrumentation.replayCapsule({
         requestId: requestId('invalid-replay'),
         capsuleId: handler.capsuleId,
@@ -102,7 +110,7 @@ describe('HTTP handlerのdirect replay', () => {
       })
       expect(calls).toEqual([11, 11])
     } finally {
-      await application.close()
+      await app.close()
       instrumentation.close()
     }
   })

@@ -6,10 +6,15 @@ export interface McpPrincipal {
   readonly scopes: readonly string[]
 }
 
-export interface McpContextInput<TState extends object = object> {
+export interface McpToolContext<
+  TInput = unknown,
+  TState extends object = object,
+  TPrincipal extends McpPrincipal | undefined = McpPrincipal,
+> {
+  readonly input: TInput
   readonly request: Request
   readonly state: Readonly<TState>
-  readonly principal: McpPrincipal
+  readonly principal: TPrincipal
   readonly signal: AbortSignal
 }
 
@@ -28,7 +33,6 @@ export interface McpToolRuntime {
   readonly descriptor: McpToolDescriptor
   readonly scopes: readonly string[]
   invoke(
-    input: unknown,
-    context: McpContextInput<object>,
+    context: McpToolContext<unknown, object, McpPrincipal | undefined>,
   ): Promise<McpToolResult>
 }

@@ -2,14 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application,
+  module,
   inject,
 } from '@loutrejs/loutre'
 import {
-  basicAuth,
   bindHttpServer,
-  cors,
   http,
   type HttpContract,
   type HttpImplementationDefinition,
@@ -21,9 +19,9 @@ async function createHttpApplication<const TContract extends HttpContract>(
   factory: HttpImplementationDefinition<TContract>['factory'],
 ) {
   const implementation = http.implementation({ contract, factory })
-  const Module = defineModule(() => ({ executions: [implementation] }))
+  const Module = module(() => ({ executions: [implementation] }))
   return bootstrapApplication({
-    application: defineApplication({ modules: [Module()] }),
+    application: application({ modules: [Module()] }),
     capabilities: [bindHttpServer({ runtime: 'test' })],
   })
 }
@@ -67,22 +65,22 @@ describe('HTTP Execution Extension regression', () => {
     const implementation = http.implementation({
       contract,
       factory: (resource = inject(Resource)) => ({
-        events: (context) => {
+        events: () => {
           void resource
-          return context.response.ok({ body: source })
+          return { schema: contract.events.ok, body: source }
         },
       }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [implementation],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 20,
     })
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('http://fixture.test/events'),
     )
     if (!response.body) throw new Error('SSE response body is missing')
@@ -90,7 +88,7 @@ describe('HTTP Execution Extension regression', () => {
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 200),
         ),
@@ -119,20 +117,21 @@ describe('HTTP Execution Extension regression', () => {
         },
       },
     })
-    const application = await createHttpApplication(contract, () => ({
+    const app = await createHttpApplication(contract, () => ({
       inspect: (context) => {
         const tag = context.input.query.tag
-        return context.response.ok({
+        return {
+          schema: contract.inspect.ok,
           body: {
             tags:
               tag === undefined ? '' : typeof tag === 'string' ? tag : [...tag],
             contentType: context.input.headers['content-type'] ?? '',
           },
-        })
+        }
       },
     }))
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/inspect?tag=a&tag=b', {
           headers: { 'content-type': 'text/plain; charset=utf-8' },
         }),
@@ -142,7 +141,7 @@ describe('HTTP Execution Extension regression', () => {
         contentType: 'text/plain; charset=utf-8',
       })
     } finally {
-      await application.close()
+      await app.close()
     }
   })
   it('path decode errorを400にする', async () => {
@@ -153,11 +152,11 @@ describe('HTTP Execution Extension regression', () => {
         responses: { ok: { status: 204 } },
       },
     })
-    const application = await createHttpApplication(contract, () => ({
-      user: (context) => context.response.ok({}),
+    const app = await createHttpApplication(contract, () => ({
+      user: () => ({ schema: contract.user.ok }),
     }))
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/users/%E0%A4%A'),
       )
       expect(response.status).toBe(400)
@@ -165,7 +164,7 @@ describe('HTTP Execution Extension regression', () => {
         error: 'Invalid request',
       })
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -182,17 +181,17 @@ describe('HTTP Execution Extension regression', () => {
         responses: { ok: { status: 200, body: z.string() } },
       },
     })
-    const application = await createHttpApplication(contract, () => ({
-      dynamic: (context) => context.response.ok({ body: 'dynamic' }),
-      static: (context) => context.response.ok({ body: 'static' }),
+    const app = await createHttpApplication(contract, () => ({
+      dynamic: () => ({ schema: contract.dynamic.ok, body: 'dynamic' }),
+      static: () => ({ schema: contract.static.ok, body: 'static' }),
     }))
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/users/new'),
       )
       expect(await response.text()).toBe('static')
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -206,16 +205,19 @@ describe('HTTP Execution Extension regression', () => {
         responses: { ok: { status: 200, body: Query } },
       },
     })
-    const application = await createHttpApplication(contract, () => ({
-      search: (context) => context.response.ok({ body: context.input.query }),
+    const app = await createHttpApplication(contract, () => ({
+      search: (context) => ({
+        schema: contract.search.ok,
+        body: context.input.query,
+      }),
     }))
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/search?tags=a&tags=b'),
       )
       await expect(response.json()).resolves.toEqual({ tags: ['a', 'b'] })
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -235,11 +237,14 @@ describe('HTTP Execution Extension regression', () => {
         responses: { ok: { status: 200, body: Body } },
       },
     })
-    const application = await createHttpApplication(contract, () => ({
-      create: (context) => context.response.ok({ body: context.input.body }),
+    const app = await createHttpApplication(contract, () => ({
+      create: (context) => ({
+        schema: contract.create.ok,
+        body: context.input.body,
+      }),
     }))
     try {
-      const normalized = await application.http.fetch(
+      const normalized = await app.http.fetch(
         new Request('http://fixture.test/items', {
           method: 'POST',
           headers: { 'content-type': 'Application/JSON ; charset=UTF-8' },
@@ -249,7 +254,7 @@ describe('HTTP Execution Extension regression', () => {
       expect(normalized.status).toBe(200)
       await expect(normalized.json()).resolves.toEqual({ value: 'normalized' })
 
-      const suffix = await application.http.fetch(
+      const suffix = await app.http.fetch(
         new Request('http://fixture.test/items', {
           method: 'POST',
           headers: { 'content-type': 'application/problem+json' },
@@ -259,7 +264,7 @@ describe('HTTP Execution Extension regression', () => {
       expect(suffix.status).toBe(200)
       await expect(suffix.json()).resolves.toEqual({ value: 'suffix' })
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -278,14 +283,16 @@ describe('HTTP Execution Extension regression', () => {
         responses: { ok: { status: 200, body: z.string() } },
       },
     })
-    const application = await createHttpApplication(contract, () => ({
-      upload: (context) =>
-        context.response.ok({ body: String(context.input.body.get('name')) }),
+    const app = await createHttpApplication(contract, () => ({
+      upload: (context) => ({
+        schema: contract.upload.ok,
+        body: String(context.input.body.get('name')),
+      }),
     }))
     try {
       const form = new FormData()
       form.set('name', 'loutre')
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/upload', {
           method: 'POST',
           body: form,
@@ -294,12 +301,12 @@ describe('HTTP Execution Extension regression', () => {
       expect(response.status).toBe(200)
       expect(await response.text()).toBe('loutre')
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
   it('CORS preflightをOPTIONS routeなしで204完結する', async () => {
-    const middleware = cors({ origin: ['https://app.example.com'] })
+    const middleware = http.cors({ origin: ['https://app.example.com'] })
     const contract = http.contract({
       create: {
         method: 'POST',
@@ -308,11 +315,11 @@ describe('HTTP Execution Extension regression', () => {
         middlewares: [middleware],
       },
     })
-    const application = await createHttpApplication(contract, () => ({
-      create: (context) => context.response.ok({}),
+    const app = await createHttpApplication(contract, () => ({
+      create: () => ({ schema: contract.create.ok }),
     }))
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/messages', {
           method: 'OPTIONS',
           headers: {
@@ -337,7 +344,7 @@ describe('HTTP Execution Extension regression', () => {
         'Access-Control-Request-Headers',
       )
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -350,7 +357,7 @@ describe('HTTP Execution Extension regression', () => {
     const originDecision = new Promise<boolean>((resolve) => {
       resolveOrigin = resolve
     })
-    const middleware = cors({
+    const middleware = http.cors({
       origin: async () => {
         markOriginStarted()
         return originDecision
@@ -366,15 +373,15 @@ describe('HTTP Execution Extension regression', () => {
     })
     const implementation = http.implementation({
       contract,
-      factory: () => ({ create: (context) => context.response.ok({}) }),
+      factory: () => ({ create: () => ({ schema: contract.create.ok }) }),
     })
-    const Module = defineModule(() => ({ executions: [implementation] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [implementation] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
       forceShutdownTimeoutMs: 10,
     })
-    const preflight = application.http.fetch(
+    const preflight = app.http.fetch(
       new Request('http://fixture.test/messages', {
         method: 'OPTIONS',
         headers: {
@@ -388,7 +395,7 @@ describe('HTTP Execution Extension regression', () => {
     try {
       await expect(
         Promise.race([
-          application.close(),
+          app.close(),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('shutdown hung')), 100),
           ),
@@ -399,12 +406,12 @@ describe('HTTP Execution Extension regression', () => {
     } finally {
       resolveOrigin(true)
       await preflight.catch(() => undefined)
-      await application.close().catch(() => undefined)
+      await app.close().catch(() => undefined)
     }
   })
 
   it('CORS denyでもVary: Originを返しpredicate originを許可する', async () => {
-    const middleware = cors({
+    const middleware = http.cors({
       origin: async (origin) => origin.endsWith('.example.com'),
     })
     const contract = http.contract({
@@ -415,11 +422,11 @@ describe('HTTP Execution Extension regression', () => {
         middlewares: [middleware],
       },
     })
-    const application = await createHttpApplication(contract, () => ({
-      get: (context) => context.response.ok({}),
+    const app = await createHttpApplication(contract, () => ({
+      get: () => ({ schema: contract.get.ok }),
     }))
     try {
-      const denied = await application.http.fetch(
+      const denied = await app.http.fetch(
         new Request('http://fixture.test/resource', {
           headers: { origin: 'https://evil.invalid' },
         }),
@@ -427,7 +434,7 @@ describe('HTTP Execution Extension regression', () => {
       expect(denied.headers.get('access-control-allow-origin')).toBeNull()
       expect(denied.headers.get('vary')).toBe('Origin')
 
-      const allowed = await application.http.fetch(
+      const allowed = await app.http.fetch(
         new Request('http://fixture.test/resource', {
           headers: { origin: 'https://app.example.com' },
         }),
@@ -436,17 +443,17 @@ describe('HTTP Execution Extension regression', () => {
         'https://app.example.com',
       )
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
   it('CORS optionとauthentication realmを定義時に検証する', () => {
-    expect(() => cors({ allowMethods: ['not a method'] })).toThrow(
+    expect(() => http.cors({ allowMethods: ['not a method'] })).toThrow(
       'invalid HTTP token',
     )
-    expect(() => cors({ maxAge: -1 })).toThrow('non-negative safe integer')
+    expect(() => http.cors({ maxAge: -1 })).toThrow('non-negative safe integer')
     expect(() =>
-      basicAuth({
+      http.basicAuth({
         realm: 'bad\r\nrealm',
         factory: () => ({
           authenticate: () => undefined,
@@ -465,10 +472,10 @@ describe('HTTP Execution Extension regression', () => {
     const contract = http.contract({ snapshot: route })
     const implementation = http.implementation({
       contract,
-      factory: () => ({ snapshot: (context) => context.response.ok({}) }),
+      factory: () => ({ snapshot: () => ({ schema: contract.snapshot.ok }) }),
     })
-    const Module = defineModule(() => ({ executions: [implementation] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [implementation] }))
+    const definition = application({ modules: [Module()] })
 
     ;(route as { method: string }).method = 'POST'
     ;(route as { path: string }).path = '/mutated'
@@ -484,17 +491,17 @@ describe('HTTP Execution Extension regression', () => {
         ?.responses,
     ).toHaveProperty('200')
 
-    const application = await bootstrapApplication({
+    const app = await bootstrapApplication({
       application: definition,
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/snapshot'),
       )
       expect(response.status).toBe(200)
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 

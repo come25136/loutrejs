@@ -1,21 +1,5 @@
-export {
-  createHttpClient,
-  fetchHttpTransport,
-  HttpClientResponseError,
-} from './client.js'
-export type {
-  FetchHttpTransportOptions,
-  HttpClient,
-  HttpClientRequest,
-  HttpClientResponse,
-  HttpClientTransport,
-  HttpClientTransportRequest,
-  HttpClientTransportResponse,
-} from './client.js'
-export { cors } from './cors.js'
 export { isWebSocketUpgrade } from './websocket-upgrade.js'
 export type { CorsLayerDescriptor, CorsOptions, CorsOrigin } from './cors.js'
-export { basicAuth, bearerAuth } from './auth.js'
 export type {
   BasicAuthContext,
   BasicAuthCredentials,
@@ -61,6 +45,7 @@ export type {
   HttpErrorMapping,
   HttpErrorMatcher,
   HttpExtensionRuntime,
+  HttpHandlerContext,
   HttpHandlers,
   HttpHeaderValue,
   HttpHeaders,

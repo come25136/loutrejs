@@ -1,8 +1,8 @@
 import { inject } from '@loutrejs/loutre'
-import { basicAuth } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 import { UserRepository } from '../auth/repository.js'
 
-export const basicAuthentication = basicAuth({
+export const basicAuthentication = http.basicAuth({
   name: 'basicAuthentication',
   realm: 'Loutre Example',
   factory: (users = inject(UserRepository)) => ({

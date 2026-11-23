@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   bootstrapApplication,
   createKernelApplication,
-  defineApplication,
+  application,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   type ExecutionDefinition,
   type ExecutionLease,
 } from '@loutrejs/loutre'
@@ -16,12 +16,12 @@ interface BrokenHostDefinition extends ExecutionDefinition {
 
 describe('Application Kernel regression', () => {
   it('asyncDisposeはadapterが差し替えたcloseを呼ぶ', async () => {
-    const application = createKernelApplication({
-      application: defineApplication({ modules: [] }),
+    const app = createKernelApplication({
+      application: application({ modules: [] }),
     })
-    const close = vi.fn(application.close.bind(application))
-    application.close = close
-    await application[Symbol.asyncDispose]()
+    const close = vi.fn(app.close.bind(app))
+    app.close = close
+    await app[Symbol.asyncDispose]()
     expect(close).toHaveBeenCalledOnce()
   })
 
@@ -67,14 +67,14 @@ describe('Application Kernel regression', () => {
     }
 
     const execution = defineExecution(extension, { id: 'broken.host' })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [execution],
     }))
 
     await expect(
       bootstrapApplication({
-        application: defineApplication({ modules: [Module()] }),
+        application: application({ modules: [Module()] }),
       }),
     ).rejects.toThrow('host creation failed')
 
@@ -113,17 +113,17 @@ describe('Application Kernel regression', () => {
     const second = createExtension('@fixture/second-drain', () => {
       events.push('second.drain')
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       executions: [
         defineExecution(first, { id: 'first.drain' }),
         defineExecution(second, { id: 'second.drain' }),
       ],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
-    const closing = application.close()
+    const closing = app.close()
 
     expect(events).toEqual(['first.drain', 'second.drain'])
     releaseFirstDrain()
@@ -182,18 +182,18 @@ describe('Application Kernel regression', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [defineExecution(extension, {})],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
-    const signal = application.fixture.start()
+    const signal = app.fixture.start()
 
     let thrown: unknown
     try {
-      await application.close()
+      await app.close()
     } catch (error) {
       thrown = error
     }
@@ -207,7 +207,7 @@ describe('Application Kernel regression', () => {
     ])
     expect(thrown).toBeInstanceOf(AggregateError)
     expect((thrown as AggregateError).errors).toContain(drainError)
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
   })
 
   it('drain成功後もactive execution待機をforce shutdown timeoutで打ち切る', async () => {
@@ -253,19 +253,19 @@ describe('Application Kernel regression', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [defineExecution(extension, {})],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 5,
     })
-    application.fixture.start()
+    app.fixture.start()
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),
@@ -277,7 +277,7 @@ describe('Application Kernel regression', () => {
     expect(events).toEqual(['extension.drain'])
 
     activeLease?.complete()
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(events).toEqual([
       'extension.drain',
       'extension.close',
@@ -334,18 +334,18 @@ describe('Application Kernel regression', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [defineExecution(extension, {})],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
-    const signal = application.fixture.start()
+    const signal = app.fixture.start()
 
     const close = Promise.race([
-      application.close(),
+      app.close(),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('shutdown hung')), 100),
       ),
@@ -402,21 +402,21 @@ describe('Application Kernel regression', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [defineExecution(extension, {})],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
 
-    await expect(application.close()).rejects.toThrow(
+    await expect(app.close()).rejects.toThrow(
       'Application shutdown did not reach a safe cleanup boundary.',
     )
     expect(drainCalls).toBe(1)
 
-    const retry = application.close()
+    const retry = app.close()
     expect(drainCalls).toBe(1)
     resolveDrain()
 
@@ -469,26 +469,24 @@ describe('Application Kernel regression', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [defineExecution(extension, {})],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 5,
     })
-    application.fixture.start()
+    app.fixture.start()
 
-    await expect(application.close()).rejects.toThrow(
+    await expect(app.close()).rejects.toThrow(
       'Application shutdown did not reach a safe cleanup boundary.',
     )
     expect(activeLease?.signal.aborted).toBe(true)
     expect(events).toEqual(['extension.drain'])
 
     activeLease?.complete()
-    await expect(application.close()).rejects.toThrow(
-      'Application shutdown failed.',
-    )
+    await expect(app.close()).rejects.toThrow('Application shutdown failed.')
     expect(events).toEqual([
       'extension.drain',
       'extension.drain',
@@ -509,7 +507,7 @@ describe('Application Kernel regression', () => {
         throw new Error('initialization failed')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [BrokenProvider, UninitializedProvider],
       lifecycle: {
         onModuleDestroy: {
@@ -519,7 +517,7 @@ describe('Application Kernel regression', () => {
         },
       },
     }))
-    const definition = defineApplication({ modules: [Module()] })
+    const definition = application({ modules: [Module()] })
     constructed = 0
 
     await expect(

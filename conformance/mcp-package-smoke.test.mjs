@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
+import { application, module, inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { mcp } from '@loutrejs/mcp'
 import { nodeRuntime } from '@loutrejs/node'
@@ -14,29 +14,30 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
     value = 0
   }
 
-  const input = z.strictObject({})
   const output = z.object({ value: z.number() })
-  const read = mcp.tool({
-    name: 'counter.get',
-    description: '現在値を取得する',
-    scopes: ['counter:read'],
-    input,
-    output,
-  })
-  const write = mcp.tool({
-    name: 'counter.increment',
-    description: '現在値に 1 を加算する',
-    scopes: ['counter:write'],
-    input,
-    output,
+  const CounterContract = mcp.contract({
+    'counter.get': {
+      description: '現在値を取得する',
+      scopes: ['counter:read'],
+      input: z.strictObject({}),
+      output,
+    },
+    'counter.increment': {
+      description: '指定した数を加算する',
+      scopes: ['counter:write'],
+      input: z.strictObject({ by: z.number() }),
+      output,
+    },
   })
   const resource = 'https://127.0.0.1/mcp'
-  const Api = http.contract({ mcp: { raw: true, method: '*', path: '/mcp' } })
+  const ApiContract = http.contract({
+    mcp: { raw: true, method: '*', path: '/mcp' },
+  })
   const implementation = mcp.implementation({
-    route: Api.routes.mcp,
+    route: ApiContract.routes.mcp,
     name: 'smoke',
     version: '1.0.0',
-    tools: [read, write],
+    contract: CounterContract,
     oauth: { requiredScopes: ['counter:read'] },
     factory: (counter = inject(Counter)) => ({
       oauth: {
@@ -57,19 +58,22 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
         },
         allowInvocation: () => true,
       },
-      context: ({ principal, signal }) => ({ principal, signal }),
       tools: {
         'counter.get': () => ({ value: counter.value }),
-        'counter.increment': () => ({ value: ++counter.value }),
+        'counter.increment': ({ input }) => {
+          counter.value += input.by
+          return { value: counter.value }
+        },
       },
     }),
   })
-  const application = defineApplication({
-    modules: [
-      defineModule({ providers: [Counter], executions: [implementation] }),
-    ],
+  const appDefinition = application({
+    modules: [module({ providers: [Counter], executions: [implementation] })],
   })
-  const app = await nodeRuntime.create({ application, shutdownHooks: false })
+  const app = await nodeRuntime.create({
+    application: appDefinition,
+    shutdownHooks: false,
+  })
   try {
     const { port } = await app.serve({ hostname: '127.0.0.1', port: 0 })
     const endpoint = new URL(`http://127.0.0.1:${port}/mcp`)
@@ -129,16 +133,18 @@ test('配布パッケージで MCP Tool を公開し、scope に応じて実行�
 
     const denied = await request('tools/call', 'read', {
       name: 'counter.increment',
+      arguments: { by: 3 },
     })
     assert.equal(denied.status, 403)
     assert.equal((await denied.json()).error, 'insufficient_scope')
 
     const changed = await result('tools/call', 'write', {
       name: 'counter.increment',
+      arguments: { by: 3 },
     })
-    assert.deepEqual(changed.structuredContent, { value: 1 })
+    assert.deepEqual(changed.structuredContent, { value: 3 })
     const current = await result('tools/call', 'read', { name: 'counter.get' })
-    assert.deepEqual(current.structuredContent, { value: 1 })
+    assert.deepEqual(current.structuredContent, { value: 3 })
   } finally {
     await app.close()
   }

@@ -1,20 +1,18 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import {
   bootstrapApplication,
-  defineApplication,
+  application,
   defineLayer,
   inject,
-  defineModule,
+  module,
   provide,
   token,
   composeLayers,
   type ApplicationModel,
 } from '@loutrejs/loutre'
 import {
+  trigger,
   bindQueueDriver,
-  consume,
-  cron,
-  fixedDelay,
   queue,
   task,
   type TasksHostApi,
@@ -31,32 +29,30 @@ describe('Task Execution Extension', () => {
         async (name) =>
           `${prefix}:${name}`,
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [provide(PREFIX).useValue('hello')],
       executions: [greet],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
-    expectTypeOf(application.tasks).toEqualTypeOf<TasksHostApi>()
-    await expect(application.tasks.run(greet, 'loutre')).resolves.toBe(
-      'hello:loutre',
-    )
+    expectTypeOf(app.tasks).toEqualTypeOf<TasksHostApi>()
+    await expect(app.tasks.run(greet, 'loutre')).resolves.toBe('hello:loutre')
     const unregistered = task<string, string>({
       name: 'greet',
       factory: () => async (name) => `unregistered:${name}`,
     })
-    await expect(application.tasks.run(unregistered, 'loutre')).rejects.toThrow(
+    await expect(app.tasks.run(unregistered, 'loutre')).rejects.toThrow(
       'LUTRE_TASK_NOT_REGISTERED',
     )
-    expect(application.graph.edges).toContainEqual(
+    expect(app.graph.edges).toContainEqual(
       expect.objectContaining({
         from: 'task.greet',
         kind: 'injects',
       }),
     )
-    await application.close()
+    await app.close()
   })
 
   it('Host境界でraw Taskをcanonical identityへ解決しRuntime・Trigger・Graphへ持ち込まない', async () => {
@@ -66,15 +62,15 @@ describe('Task Execution Extension', () => {
     })
     const declaration = { ...registered.declaration }
     const hostInput = { ...registered, declaration }
-    const trigger = fixedDelay({
+    const schedule = trigger.fixedDelay({
       name: 'snapshot-trigger',
       delay: 10_000,
       task: hostInput,
     })
-    const Module = defineModule(() => ({
-      executions: [trigger],
+    const Module = module(() => ({
+      executions: [schedule],
     }))
-    const definition = defineApplication({ modules: [Module()] })
+    const definition = application({ modules: [Module()] })
     const compiled = definition.model.extensions
       .values()[0]!
       .executions.map((execution) => execution.compiled as object)
@@ -103,13 +99,11 @@ describe('Task Execution Extension', () => {
       kind: 'references',
     })
 
-    const application = await bootstrapApplication({ application: definition })
+    const app = await bootstrapApplication({ application: definition })
     try {
-      await expect(application.tasks.run(hostInput)).resolves.toBe(
-        'compiled-runtime',
-      )
+      await expect(app.tasks.run(hostInput)).resolves.toBe('compiled-runtime')
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -118,14 +112,14 @@ describe('Task Execution Extension', () => {
       name: 'explicit-task',
       factory: () => async () => undefined,
     })
-    const trigger = fixedDelay({
+    const schedule = trigger.fixedDelay({
       name: 'explicit-trigger',
       delay: 10_000,
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [job, trigger] }))
+    const Module = module(() => ({ executions: [job, schedule] }))
 
-    const definition = defineApplication({ modules: [Module()] })
+    const definition = application({ modules: [Module()] })
 
     expect(definition.model.diagnostics).not.toContainEqual(
       expect.objectContaining({ code: 'LUTRE_EXECUTION_ID_COLLISION' }),
@@ -147,19 +141,19 @@ describe('Task Execution Extension', () => {
       name: 'shared-referenced-task',
       factory: () => async () => undefined,
     })
-    const TaskModule = defineModule(() => ({ executions: [job] }))
-    const FirstModule = defineModule(() => ({
+    const TaskModule = module(() => ({ executions: [job] }))
+    const FirstModule = module(() => ({
       executions: [
-        fixedDelay({
+        trigger.fixedDelay({
           name: 'first-shared-trigger',
           delay: 10_000,
           task: job,
         }),
       ],
     }))
-    const SecondModule = defineModule(() => ({
+    const SecondModule = module(() => ({
       executions: [
-        fixedDelay({
+        trigger.fixedDelay({
           name: 'second-shared-trigger',
           delay: 10_000,
           task: job,
@@ -167,7 +161,7 @@ describe('Task Execution Extension', () => {
       ],
     }))
 
-    const definition = defineApplication({
+    const definition = application({
       modules: [FirstModule(), TaskModule(), SecondModule()],
     })
 
@@ -204,19 +198,19 @@ describe('Task Execution Extension', () => {
         async () =>
           dependency,
     })
-    const FirstModule = defineModule(() => ({
+    const FirstModule = module(() => ({
       providers: [provide(DEP).useValue('first')],
       executions: [
-        fixedDelay({
+        trigger.fixedDelay({
           name: 'first-ambiguous-trigger',
           delay: 10_000,
           task: job,
         }),
       ],
     }))
-    const SecondModule = defineModule(() => ({
+    const SecondModule = module(() => ({
       executions: [
-        fixedDelay({
+        trigger.fixedDelay({
           name: 'second-ambiguous-trigger',
           delay: 10_000,
           task: job,
@@ -226,8 +220,8 @@ describe('Task Execution Extension', () => {
     const first = FirstModule()
     const second = SecondModule()
 
-    const forward = defineApplication({ modules: [first, second] }).model
-    const reversed = defineApplication({ modules: [second, first] }).model
+    const forward = application({ modules: [first, second] }).model
+    const reversed = application({ modules: [second, first] }).model
     const codes = (model: ApplicationModel) =>
       model.diagnostics.map(({ code }) => code).toSorted()
 
@@ -241,20 +235,50 @@ describe('Task Execution Extension', () => {
     )
   })
 
+  it('長いfixedDelayは指定時刻まで待ち、次の待機中に停止できる', async () => {
+    vi.useFakeTimers()
+    const run = vi.fn(async () => {})
+    const job = task({ name: 'monthly', factory: () => run })
+    const delay = 2 ** 31 + 100
+    const schedule = trigger.fixedDelay({
+      name: 'monthly-trigger',
+      delay,
+      task: job,
+    })
+    try {
+      await using app = await bootstrapApplication({
+        application: application({
+          modules: [module({ executions: [schedule] })],
+        }),
+      })
+      await app.tasks.start()
+      await vi.advanceTimersByTimeAsync(delay - 1)
+      expect(run).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(run).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(2 ** 31 - 1)
+      await app.tasks.stop()
+      await vi.advanceTimersByTimeAsync(delay)
+      expect(run).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('close後は保持済みTrigger APIからresourceを再生成できない', async () => {
     const job = task({ name: 'closed-task', factory: () => async () => {} })
-    const trigger = fixedDelay({
+    const schedule = trigger.fixedDelay({
       name: 'closed-trigger',
       delay: 10_000,
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [trigger] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [schedule] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
-    const tasks = application.tasks
+    const tasks = app.tasks
 
-    await application.close()
+    await app.close()
 
     await expect(tasks.start()).rejects.toThrow('LUTRE_TASKS_STOPPED')
     await expect(tasks.stop()).resolves.toBeUndefined()
@@ -276,19 +300,19 @@ describe('Task Execution Extension', () => {
           return new Promise<never>(() => undefined)
         },
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource],
       executions: [job],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
-    const invocation = application.tasks.run(job)
+    const invocation = app.tasks.run(job)
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),
@@ -310,19 +334,19 @@ describe('Task Execution Extension', () => {
         executions.push(new Date())
       },
     })
-    const trigger = cron({
+    const schedule = trigger.cron({
       name: 'cron-day-or-trigger',
       expression: '0 0 1 * 1',
       timezone: 'UTC',
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [trigger] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [schedule] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
     try {
-      await application.tasks.start()
+      await app.tasks.start()
       await vi.advanceTimersByTimeAsync(0)
       vi.setSystemTime(new Date('2026-09-07T00:00:00.000Z'))
       await vi.advanceTimersByTimeAsync(1_000)
@@ -332,7 +356,7 @@ describe('Task Execution Extension', () => {
         new Date('2026-09-07T00:00:01.000Z'),
       ])
     } finally {
-      await application.close()
+      await app.close()
       vi.useRealTimers()
     }
   })
@@ -347,24 +371,24 @@ describe('Task Execution Extension', () => {
         executions += 1
       },
     })
-    const trigger = cron({
+    const schedule = trigger.cron({
       name: 'cron-sunday-range-trigger',
       expression: '0 0 * * 1-7',
       timezone: 'UTC',
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [trigger] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [schedule] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
     try {
-      await application.tasks.start()
+      await app.tasks.start()
       await vi.advanceTimersByTimeAsync(0)
 
       expect(executions).toBe(1)
     } finally {
-      await application.close()
+      await app.close()
       vi.useRealTimers()
     }
   })
@@ -379,26 +403,26 @@ describe('Task Execution Extension', () => {
         executions += 1
       },
     })
-    const trigger = cron({
+    const schedule = trigger.cron({
       name: 'cron-unrestricted-day-trigger',
       expression: '0 0 */2 * 1',
       timezone: 'UTC',
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [trigger] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [schedule] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
     try {
-      await application.tasks.start()
+      await app.tasks.start()
       await vi.advanceTimersByTimeAsync(0)
       vi.setSystemTime(new Date('2026-09-14T00:00:00.000Z'))
       await vi.advanceTimersByTimeAsync(1_000)
 
       expect(executions).toBe(0)
     } finally {
-      await application.close()
+      await app.close()
       vi.useRealTimers()
     }
   })
@@ -413,19 +437,19 @@ describe('Task Execution Extension', () => {
         executions.push(new Date())
       },
     })
-    const trigger = cron({
+    const schedule = trigger.cron({
       name: 'cron-fall-back-trigger',
       expression: '30 1 * * *',
       timezone: 'America/New_York',
       task: job,
     })
-    const Module = defineModule(() => ({ executions: [trigger] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [schedule] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
     try {
-      await application.tasks.start()
+      await app.tasks.start()
       await vi.advanceTimersByTimeAsync(0)
       vi.setSystemTime(new Date('2026-11-01T06:30:00.000Z'))
       await vi.advanceTimersByTimeAsync(1_000)
@@ -435,7 +459,7 @@ describe('Task Execution Extension', () => {
         new Date('2026-11-01T06:30:01.000Z'),
       ])
     } finally {
-      await application.close()
+      await app.close()
       vi.useRealTimers()
     }
   })
@@ -464,7 +488,7 @@ describe('Task Execution Extension', () => {
           void resource
         },
     })
-    const trigger = consume({
+    const schedule = trigger.consume({
       name: 'shutdown-consumer',
       queue: descriptor,
       task: job,
@@ -482,20 +506,20 @@ describe('Task Execution Extension', () => {
         }
       },
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [Resource, bindQueueDriver(descriptor, driver)],
-      executions: [trigger],
+      executions: [schedule],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
-    const startup = application.tasks.start()
+    const startup = app.tasks.start()
     await started
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),
@@ -508,7 +532,7 @@ describe('Task Execution Extension', () => {
     releaseStart()
     await expect(startup).rejects.toThrow('LUTRE_TASKS_DRAINING')
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
     expect(events).toEqual([
       'driver.start',
       'driver.started',
@@ -527,17 +551,17 @@ describe('Task Execution Extension', () => {
       name: 'startup-task',
       factory: () => async () => undefined,
     })
-    const FirstConsumer = consume({
+    const FirstConsumer = trigger.consume({
       name: 'first-startup-consumer',
       queue: firstQueue,
       task: job,
     })
-    const SecondConsumer = consume({
+    const SecondConsumer = trigger.consume({
       name: 'second-startup-consumer',
       queue: secondQueue,
       task: job,
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [
         bindQueueDriver(firstQueue, {
           async start() {
@@ -557,13 +581,13 @@ describe('Task Execution Extension', () => {
       ],
       executions: [FirstConsumer, SecondConsumer],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
     })
 
     let thrown: unknown
     try {
-      await application.tasks.start()
+      await app.tasks.start()
     } catch (error) {
       thrown = error
     }
@@ -573,12 +597,12 @@ describe('Task Execution Extension', () => {
       startupError,
       cleanupError,
     ])
-    await expect(application.tasks.start()).rejects.toThrow(
+    await expect(app.tasks.start()).rejects.toThrow(
       'LUTRE_TRIGGERS_ALREADY_STARTED',
     )
-    await expect(application.tasks.stop()).resolves.toBeUndefined()
+    await expect(app.tasks.stop()).resolves.toBeUndefined()
     expect(stopAttempts).toBe(2)
-    await application.close()
+    await app.close()
   })
 
   it('Trigger stopが永久pendingならshutdown timeout後もProvider cleanupへ進まない', async () => {
@@ -588,7 +612,7 @@ describe('Task Execution Extension', () => {
       name: 'pending-stop-task',
       factory: () => async () => undefined,
     })
-    const trigger = consume({
+    const schedule = trigger.consume({
       name: 'pending-stop-consumer',
       queue: descriptor,
       task: job,
@@ -598,7 +622,7 @@ describe('Task Execution Extension', () => {
         events.push('provider.destroy')
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [
         Resource,
         bindQueueDriver(descriptor, {
@@ -612,17 +636,17 @@ describe('Task Execution Extension', () => {
           },
         }),
       ],
-      executions: [trigger],
+      executions: [schedule],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       forceShutdownTimeoutMs: 10,
     })
-    await application.tasks.start()
+    await app.tasks.start()
 
     await expect(
       Promise.race([
-        application.close(),
+        app.close(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('shutdown hung')), 100),
         ),

@@ -1,9 +1,9 @@
-import { createKernelApplication, defineApplication } from '@loutrejs/loutre'
+import { createKernelApplication, application } from '@loutrejs/loutre'
 
-const application = createKernelApplication({
-  application: defineApplication({ modules: [] }),
+const app = createKernelApplication({
+  application: application({ modules: [] }),
 })
-const disposable: AsyncDisposable = application
+const disposable: AsyncDisposable = app
 
 void disposable
-void application[Symbol.asyncDispose]()
+void app[Symbol.asyncDispose]()

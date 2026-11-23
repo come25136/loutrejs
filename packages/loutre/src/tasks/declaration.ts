@@ -97,13 +97,9 @@ export function fixedDelay<const TTask extends AnyTaskDefinition>(
     readonly task: TTask
   } & VoidTaskConstraint<TTask>,
 ): FixedDelayTriggerDefinition<TTask> {
-  if (
-    !Number.isFinite(declaration.delay) ||
-    !Number.isInteger(declaration.delay) ||
-    declaration.delay < 0
-  ) {
+  if (!Number.isSafeInteger(declaration.delay) || declaration.delay < 0) {
     throw new Error(
-      'LUTRE_TRIGGER_INVALID_FIXED_DELAY: fixedDelay.delay must be a non-negative finite integer.',
+      'LUTRE_TRIGGER_INVALID_FIXED_DELAY: fixedDelay.delay must be a non-negative safe integer.',
     )
   }
   return defineExecution(tasksExtension, {

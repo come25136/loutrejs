@@ -5,10 +5,11 @@ export const AppController = http.implementation({
   name: 'AppController',
   contract: AppContract,
   factory: () => ({
-    async hello(ctx) {
-      return ctx.response.ok({
+    async hello() {
+      return {
+        schema: AppContract.hello.ok,
         body: { message: 'Hello from Loutre!' },
-      })
+      }
     },
   }),
 })

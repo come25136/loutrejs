@@ -1,4 +1,4 @@
-import { defineApplication } from '@loutrejs/loutre'
+import { application } from '@loutrejs/loutre'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-workers'
@@ -10,11 +10,11 @@ import { assertSupportedBunVersion } from '@loutrejs/loutre/runtime'
 import { silentLoggingModule } from './helpers/silent-logger.js'
 
 const usersDefinition = () =>
-  defineApplication({
+  application({
     modules: [silentLoggingModule, UsersModule()],
   })
 const eventsDefinition = () =>
-  defineApplication({
+  application({
     modules: [silentLoggingModule, EventsMessagePortModule()],
   })
 

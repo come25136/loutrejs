@@ -1,5 +1,5 @@
 import { nodeRuntime } from '@loutrejs/node'
-import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
+import { application, module, inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { bunRuntime } from '@loutrejs/loutre/runtime/bun'
 import { z } from 'zod'
@@ -19,11 +19,11 @@ describe('runtime streaming shutdown lifetime', () => {
   it('Nodeはlistener closeを開始してからKernel drainで未完了SSEを回収する', async () => {
     const fixture = blockingSseFixture()
     const port = await reserveHttpPort()
-    const application = await nodeRuntime.create({
+    const app = await nodeRuntime.create({
       application: fixture.definition,
       forceShutdownTimeoutMs: 50,
     })
-    const listener = await application.serve({
+    const listener = await app.serve({
       port,
       hostname: '127.0.0.1',
       shutdownHooks: false,
@@ -33,9 +33,7 @@ describe('runtime streaming shutdown lifetime', () => {
     if (!reader) throw new Error('SSE response body is missing')
     await reader.read()
 
-    await expect(
-      withHangGuard(application.close(), 500),
-    ).resolves.toBeUndefined()
+    await expect(withHangGuard(app.close(), 500)).resolves.toBeUndefined()
 
     expect(listener.server.listening).toBe(false)
     expect(fixture.events).toEqual(['iterator.return', 'provider.destroy'])
@@ -66,18 +64,18 @@ describe('runtime streaming shutdown lifetime', () => {
         }
       },
     })
-    const application = await bunRuntime.create({
+    const app = await bunRuntime.create({
       application: fixture.definition,
       forceShutdownTimeoutMs: 50,
     })
-    await application.serve({ port: 3000, shutdownHooks: false })
+    await app.serve({ port: 3000, shutdownHooks: false })
     const response = await handler!(
       new Request('http://127.0.0.1:3000/events'),
       undefined as never,
     )
     const reader = response!.body!.getReader()
     await reader.read()
-    const closing = application.close()
+    const closing = app.close()
     let settled = false
     void closing.then(() => {
       settled = true
@@ -86,7 +84,7 @@ describe('runtime streaming shutdown lifetime', () => {
     expect(settled).toBe(false)
     completeNativeStop!()
     await expect(withHangGuard(closing, 500)).resolves.toBeUndefined()
-    await application.close()
+    await app.close()
     expect(fixture.events).toEqual([
       'server.stop(false)',
       'iterator.return',
@@ -140,19 +138,19 @@ function blockingSseFixture() {
   const controller = http.implementation({
     contract,
     factory: (resource = inject(Resource)) => ({
-      events: (context) => {
+      events: () => {
         void resource
-        return context.response.events({ body: source })
+        return { schema: contract.events.events, body: source }
       },
     }),
   })
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     providers: [Resource],
     executions: [controller],
   }))
 
   return {
-    definition: defineApplication({
+    definition: application({
       modules: [silentLoggingModule, Module()],
     }),
     events,

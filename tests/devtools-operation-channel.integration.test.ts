@@ -2,11 +2,7 @@ import { createServer } from 'node:http'
 import { parse } from 'graphql'
 import { createClient } from 'graphql-ws'
 import WebSocket from 'ws'
-import {
-  defineApplication,
-  defineModule,
-  syntheticExecutionId,
-} from '@loutrejs/loutre'
+import { application, module, syntheticExecutionId } from '@loutrejs/loutre'
 import { DevtoolsModule } from '@loutrejs/loutre/devtools'
 import { http } from '@loutrejs/loutre/http'
 import { graphql } from '@loutrejs/graphql'
@@ -32,10 +28,8 @@ const endpoint = graphql.implementation({
   transports: { http: false, websocket: true },
   factory: () => ({ context: () => ({}) }),
 })
-const application = defineApplication({
-  modules: [
-    defineModule({ imports: [DevtoolsModule()], executions: [endpoint] }),
-  ],
+const appDefinition = application({
+  modules: [module({ imports: [DevtoolsModule()], executions: [endpoint] })],
 })
 
 async function startChannel() {
@@ -76,7 +70,7 @@ it('実GraphQL WSのoperationをApplication channelへ送り、終了後もDevTo
   let app: Awaited<ReturnType<typeof nodeRuntime.create>> | undefined
   let client: ReturnType<typeof createClient> | undefined
   try {
-    app = await nodeRuntime.create({ application })
+    app = await nodeRuntime.create({ application: appDefinition })
     const listener = await app.serve({
       port: 0,
       hostname: '127.0.0.1',
@@ -126,7 +120,7 @@ it('実GraphQL WSのoperationをApplication channelへ送り、終了後もDevTo
 
 it('独自operationの生成イベントをApplication channelへ送り、後続のexecutionも受信する', async () => {
   const channel = await startChannel()
-  const session = createNodeDevtoolsSession(application)
+  const session = createNodeDevtoolsSession(appDefinition)
   try {
     if (!session) throw new Error('DevTools session was not created.')
     const root = session.instrumentation.beginExecution({

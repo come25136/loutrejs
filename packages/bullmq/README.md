@@ -13,8 +13,8 @@ npm install @loutrejs/loutre @loutrejs/bullmq bullmq
 ## Usage
 
 ```ts
-import { defineApplication, defineModule } from '@loutrejs/loutre'
-import { consume, queue, task } from '@loutrejs/loutre/tasks'
+import { application, module } from '@loutrejs/loutre'
+import { trigger, queue, task } from '@loutrejs/loutre/tasks'
 import { bindBullMqQueue } from '@loutrejs/bullmq'
 import { z } from 'zod'
 
@@ -32,13 +32,13 @@ const processOrder = task<{ id: string }, void>({
     },
 })
 
-const orderConsumer = consume({
+const orderConsumer = trigger.consume({
   name: 'orders.consumer',
   queue: orders,
   task: processOrder,
 })
 
-const QueueModule = defineModule({
+const QueueModule = module({
   providers: [
     bindBullMqQueue(orders, {
       connection: { host: '127.0.0.1', port: 6379 },
@@ -47,7 +47,7 @@ const QueueModule = defineModule({
   executions: [orderConsumer],
 })
 
-export default defineApplication({ modules: [QueueModule] })
+export default application({ modules: [QueueModule] })
 ```
 
 Trigger execution is started through the Tasks Extension Host API:

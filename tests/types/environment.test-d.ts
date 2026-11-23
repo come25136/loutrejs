@@ -1,4 +1,4 @@
-import { defineEnv } from '@loutrejs/loutre'
+import { env } from '@loutrejs/loutre'
 import { z } from 'zod'
 
 const TransformedSchema = z
@@ -11,11 +11,11 @@ const TransformedSchema = z
     driver: raw.DRIVER,
   }))
 
-class AppEnv extends defineEnv(TransformedSchema) {}
-declare const env: AppEnv
+class AppEnv extends env(TransformedSchema) {}
+declare const appEnv: AppEnv
 
-const port: number = env.port
-const driver: 'memory' | 's3' = env.driver
+const port: number = appEnv.port
+const driver: 'memory' | 's3' = appEnv.driver
 void port
 void driver
 
@@ -25,4 +25,4 @@ AppEnv.key('driver')
 AppEnv.key('PORT')
 
 // @ts-expect-error Environment schemaのoutputはobjectでなければならない
-defineEnv(z.string())
+env(z.string())

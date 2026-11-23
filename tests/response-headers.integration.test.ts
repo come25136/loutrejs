@@ -1,4 +1,4 @@
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { awsLambdaRuntime } from '@loutrejs/loutre/runtime/aws-lambda'
 import { nodeRuntime } from '@loutrejs/node'
@@ -58,19 +58,19 @@ function cookieApplication() {
     name: 'CookieController',
     contract: Contract,
     factory: () => ({
-      get: (ctx) =>
-        ctx.response.ok({
-          body: 'ok',
-          headers: {
-            'set-cookie': ['first=one; Path=/', 'second=two; Path=/'],
-          },
-        }),
+      get: () => ({
+        schema: Contract.get.ok,
+        body: 'ok',
+        headers: {
+          'set-cookie': ['first=one; Path=/', 'second=two; Path=/'],
+        },
+      }),
     }),
   })
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     executions: [Controller],
   }))
-  return defineApplication({
+  return application({
     modules: [silentLoggingModule, Module()],
   })
 }

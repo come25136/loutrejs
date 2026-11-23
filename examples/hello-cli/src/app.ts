@@ -1,12 +1,12 @@
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 import { AppArgs } from './config/args.js'
 import { hello } from './hello/task.js'
 
-const AppModule = defineModule({
+const AppModule = module({
   executions: [hello],
 })
 
-export default defineApplication({
+export default application({
   modules: [AppModule],
   arguments: AppArgs,
 })

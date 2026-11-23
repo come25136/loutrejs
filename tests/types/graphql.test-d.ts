@@ -1,4 +1,3 @@
-import { http as contractHttp } from '@loutrejs/loutre/http'
 import { parse, type GraphQLError, type GraphQLFormattedError } from 'graphql'
 import { bindManifest } from '@loutrejs/graphql/runtime'
 import {
@@ -8,11 +7,7 @@ import {
   type GraphQLConnectionInitHandler,
   type GraphQLOperationId,
 } from '@loutrejs/graphql'
-import {
-  defineApplication,
-  defineModule,
-  createKernelApplication,
-} from '@loutrejs/loutre'
+import { application, module, createKernelApplication } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { websocket, type WebSocketSessionId } from '@loutrejs/loutre/websocket'
 
@@ -23,7 +18,7 @@ const manifest = bindManifest({
 const factory = () => ({ context: () => ({}) })
 const httpOnly = graphql.implementation({
   name: 'Http',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -32,7 +27,7 @@ const httpOnly = graphql.implementation({
 const websocketOnly = graphql.implementation({
   name: 'WebSocket',
   transports: { http: false, websocket: true },
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -41,7 +36,7 @@ const websocketOnly = graphql.implementation({
 })
 const both = graphql.implementation({
   name: 'Both',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -103,23 +98,23 @@ const both = graphql.implementation({
     },
   }),
 })
-const HttpModule = defineModule(() => ({ executions: [httpOnly] }))
-const WsModule = defineModule(() => ({ executions: [websocketOnly] }))
-const BothModule = defineModule(() => ({ executions: [both] }))
+const HttpModule = module(() => ({ executions: [httpOnly] }))
+const WsModule = module(() => ({ executions: [websocketOnly] }))
+const BothModule = module(() => ({ executions: [both] }))
 const httpApp = createKernelApplication({
-  application: defineApplication({ modules: [HttpModule()] }),
+  application: application({ modules: [HttpModule()] }),
 })
 httpApp.http.fetch(new Request('http://test'))
 // @ts-expect-error HTTPのみのendpointにWebSocket hostを公開しない
 httpApp.websocket
 const wsApp = createKernelApplication({
-  application: defineApplication({ modules: [WsModule()] }),
+  application: application({ modules: [WsModule()] }),
 })
 wsApp.websocket.upgrade(new Request('http://test'))
 // @ts-expect-error WebSocketのみのendpointにHTTP hostを公開しない
 wsApp.http
 const bothApp = createKernelApplication({
-  application: defineApplication({ modules: [BothModule()] }),
+  application: application({ modules: [BothModule()] }),
 })
 bothApp.http.fetch(new Request('http://test'))
 bothApp.websocket.upgrade(new Request('http://test'))
@@ -150,14 +145,14 @@ websocket.contract({ route: invalidWebSocketRoute })
 // @ts-expect-error factoryは必須
 graphql.implementation({
   name: 'MissingFactory',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
 })
 graphql.implementation({
   name: 'MissingContext',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -166,7 +161,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'Legacy',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -175,7 +170,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'AsyncFormatter',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -187,7 +182,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'MissingMessage',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/graphql' },
   }).routes.graphql,
   manifest,
@@ -223,7 +218,7 @@ const tenantState = http.middleware<{ tenantId: string }>({
 })
 graphql.implementation({
   name: 'TypedMiddlewareState',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: {
       raw: true,
       method: '*',
@@ -265,7 +260,7 @@ graphql.implementation({
 
 graphql.implementation({
   name: 'TransportState',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: {
       raw: true,
       method: '*',
@@ -318,7 +313,7 @@ graphql.implementation({
 graphql.implementation({
   name: 'WebSocketState',
   transports: { http: false, websocket: true },
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/ws' },
   }).routes.graphql,
   manifest,
@@ -346,7 +341,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'HttpState',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: {
       raw: true,
       method: '*',
@@ -368,7 +363,7 @@ graphql.implementation({
 
 graphql.implementation({
   name: 'AsyncConnectionInitState',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/async' },
   }).routes.graphql,
   manifest,
@@ -398,7 +393,7 @@ graphql.implementation({
 
 graphql.implementation({
   name: 'WebSocketKeepsHttpEnabled',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/both' },
   }).routes.graphql,
   manifest,
@@ -412,23 +407,23 @@ graphql.implementation({
 })
 const defaultHttpWithWs = graphql.implementation({
   name: 'DefaultHttpWithWebSocket',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/both' },
   }).routes.graphql,
   manifest,
   transports: { websocket: true },
   factory,
 })
-const DefaultModule = defineModule(() => ({ executions: [defaultHttpWithWs] }))
+const DefaultModule = module(() => ({ executions: [defaultHttpWithWs] }))
 const defaultApp = createKernelApplication({
-  application: defineApplication({ modules: [DefaultModule()] }),
+  application: application({ modules: [DefaultModule()] }),
 })
 defaultApp.http.fetch(new Request('http://test'))
 defaultApp.websocket.upgrade(new Request('http://test'))
 
 graphql.implementation({
   name: 'MissingWebSocketEnablement',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/missing' },
   }).routes.graphql,
   manifest,
@@ -440,7 +435,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'DisabledWebSocket',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/disabled' },
   }).routes.graphql,
   manifest,
@@ -453,7 +448,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'RejectHttpResponseFromWebSocket',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/response' },
   }).routes.graphql,
   manifest,
@@ -468,7 +463,7 @@ graphql.implementation({
 })
 graphql.implementation({
   name: 'RequiredConnectionState',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/void' },
   }).routes.graphql,
   manifest,
@@ -517,7 +512,7 @@ rejection.reason = '変更'
 void publicReason
 graphql.implementation({
   name: 'RejectBooleanConnectionResult',
-  route: contractHttp.contract({
+  route: http.contract({
     graphql: { raw: true, method: '*', path: '/boolean' },
   }).routes.graphql,
   manifest,
@@ -538,7 +533,7 @@ graphql.implementation({
   route: { raw: true, method: '*', path: '/graphql' },
   factory,
 })
-const normalRoute = http.contract({
+const regularHttpContract = http.contract({
   regular: {
     method: 'GET',
     path: '/regular',
@@ -549,13 +544,13 @@ graphql.implementation({
   name: 'RejectRegularHttpRoute',
   manifest,
   // @ts-expect-error GraphQLの実装にはrawルートを指定する
-  route: normalRoute.routes.regular,
+  route: regularHttpContract.routes.regular,
   factory,
 })
 graphql.implementation({
   name: 'ContractOwnsPath',
   manifest,
-  route: contractHttp.contract({
+  route: http.contract({
     raw: { raw: true, method: '*', path: '/graphql' },
   }).routes.raw,
   // @ts-expect-error pathはHTTP Contractが所有する
@@ -565,7 +560,7 @@ graphql.implementation({
 graphql.implementation({
   name: 'ContractOwnsMiddleware',
   manifest,
-  route: contractHttp.contract({
+  route: http.contract({
     raw: { raw: true, method: '*', path: '/graphql' },
   }).routes.raw,
   // @ts-expect-error middlewareはHTTP Contractが所有する

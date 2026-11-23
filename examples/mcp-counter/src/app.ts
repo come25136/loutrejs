@@ -1,4 +1,4 @@
-import { defineApplication, defineModule, inject } from '@loutrejs/loutre'
+import { application, module, inject } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { mcp } from '@loutrejs/mcp'
 import { z } from 'zod'
@@ -22,26 +22,28 @@ class CounterService {
 
 const output = z.object({ value: z.number() })
 
-const get = mcp.tool({
-  name: 'counter.get',
-  description: 'カウンターの現在値を取得する',
-  scopes: [readScope],
-  input: z.strictObject({}),
-  output,
+const CounterContract = mcp.contract({
+  'counter.get': {
+    description: 'カウンターの現在値を取得する',
+    scopes: [readScope],
+    input: z.strictObject({}),
+    output,
+  },
+  'counter.increment': {
+    description: '指定した数をカウンターに加算する',
+    scopes: [writeScope],
+    input: z.strictObject({ by: z.number().int().positive() }),
+    output,
+  },
 })
-const increment = mcp.tool({
-  name: 'counter.increment',
-  description: '指定した数をカウンターに加算する',
-  scopes: [writeScope],
-  input: z.strictObject({ by: z.number().int().positive() }),
-  output,
+const ApiContract = http.contract({
+  mcp: { raw: true, method: '*', path: mcpPath },
 })
-const Api = http.contract({ mcp: { raw: true, method: '*', path: mcpPath } })
 const counterEndpoint = mcp.implementation({
-  route: Api.routes.mcp,
+  route: ApiContract.routes.mcp,
   name: 'counter',
   version: '1.0.0',
-  tools: [get, increment],
+  contract: CounterContract,
   oauth: { requiredScopes: [readScope] },
   factory: (counter = inject(CounterService)) => {
     const issuer = 'https://issuer.example'
@@ -64,17 +66,18 @@ const counterEndpoint = mcp.implementation({
         },
         allowInvocation: () => true,
       },
-      context: ({ principal, signal }) => ({ principal, signal }),
       tools: {
         'counter.get': () => ({ value: counter.get() }),
-        'counter.increment': ({ by }) => ({ value: counter.increment(by) }),
+        'counter.increment': ({ input: { by } }) => ({
+          value: counter.increment(by),
+        }),
       },
     }
   },
 })
-export default defineApplication({
+export default application({
   modules: [
-    defineModule({
+    module({
       providers: [CounterService],
       executions: [counterEndpoint],
     }),

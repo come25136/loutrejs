@@ -2,26 +2,28 @@
 
 ステータス: Accepted
 
+関連: [Contract-first Tooling](./loutre_contract_first_tooling_architecture.md)、[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)
+
 ## 決定
 
 Loutre は、実行可能な HTTP Contract から OpenAPI 3.2.0 ドキュメントを生成する。
 
-どの HTTP Execution が実行可能かは canonical Application Model が決定する。一方、method、path、request schema、response schema、Content-Type、streaming interaction といった HTTP wire-level の情報は HTTP Extension が所有する compiled execution を source of truth とする。RuntimeやOpenAPI toolingが生のApplication Definitionを別経路で再解釈してはならない。実行時の schema object 自体は serializable な Graph IR には埋め込まない。
+**旧来の「compiled HTTP Executionのみ」「Application ModelのみがOpenAPIの入力」という制約は、[Contract-first Tooling ADR](./loutre_contract_first_tooling_architecture.md)により上書きされた。** HTTP wire-levelのmethod、path、request/response schema、Content-Type、streaming interactionの正本はcanonicalな`HttpContract`である。Application全体の実行可能性、Module、DI、Capabilityはcanonical Application Modelが所有する。どちらの経路も生のApplication Definitionを独自に再解釈しない。Runtime Schema objectはserializable Graph IRへ埋め込まない。
 
-公開APIは`@loutrejs/loutre/http/openapi`だけから提供する。
+公開APIは`@loutrejs/loutre/http/openapi`から提供し、`HttpContract`または`ApplicationModel`を受け付ける。
 
 ```ts
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 
-const document = generateOpenApi(application.model, {
-  info: {
-    title: 'Example API',
-    version: '1.0.0',
-  },
-})
+const options = {
+  info: { title: 'Example API', version: '1.0.0' },
+}
+
+const contractDocument = generateOpenApi(UsersContract, options)
+const applicationDocument = generateOpenApi(application.model, options)
 ```
 
-CLI からも同じ HTTP-owned projection を利用し、loadしたApplicationの`application.model`だけを渡す。CLI自身はHTTP/OpenAPI toolingへ依存してよいが、CoreからHTTPへの依存は作らない。
+CLIの`openapi --entry`もdefault exportが`HttpContract`または`ApplicationDefinition`のいずれかを受け付ける。他のApplication-awareコマンドまでContract単独に広げない。CLI自身はHTTP/OpenAPI toolingへ依存してよいが、CoreからHTTPへの依存は作らない。
 
 ```sh
 loutre openapi --entry src/application.ts
@@ -63,7 +65,7 @@ request: {
 }
 ```
 
-旧`body: { contentType, schema }`形式は廃止する。`Content-Type`はwire上のheaderであり、typed client、runtime validation、body decode、OpenAPI projectionが同じheader宣言をsource of truthとして利用する。
+旧`body: { contentType, schema }`形式は廃止する。`Content-Type`はwire上のheaderであり、runtime validation、body decode、OpenAPI projectionが同じheader宣言をsource of truthとして利用する。
 
 bodyを宣言するrequestでは、`request.headers`のinput/output型がrequiredな`content-type: string`を持つ必要がある。`validate.body`は`validate.headers`より後に置く。runtimeはheader validation時に`Content-Type`から`charset`やmultipart `boundary`などのparameterを除いてmedia typeへ正規化し、その値をheader schemaへ渡す。header validation後に`validate.body`へ到達した時点で、実際のmedia typeに応じてbodyをdecodeしてbody schemaを検証する。
 
@@ -78,20 +80,22 @@ OpenAPI生成時は`request.headers`のStandard JSON Schema input projectionか�
 HTTP Contract は transport に関係するドキュメント metadata を宣言できる。
 
 ```ts
-http({
-  method: 'GET',
-  path: '/users/{id}',
-  summary: 'ユーザー取得',
-  description: 'IDで指定したユーザーを返す。',
-  tags: ['Users'],
-  deprecated: false,
-  // ...
+const UsersContract = http.contract({
+  getUser: {
+    method: 'GET',
+    path: '/users/{id}',
+    summary: 'ユーザー取得',
+    description: 'IDで指定したユーザーを返す。',
+    tags: ['Users'],
+    deprecated: false,
+    responses: { ok: { status: 200, body: UserSchema } },
+  },
 })
 ```
 
-response variant は `description` を宣言できる。
+名前付きresponse definitionは`description`を宣言できる。
 
-名前付き Contract の `operationId` は `<contract>.<procedure>` から安定して生成する。anonymous Contract では、順序依存の人工的な ID を生成せず `operationId` 自体を省略する。
+`operationId`は`generateOpenApi(..., { operationId: ({ procedure, method, path }) => ... })`で呼び出し側が明示指定する。callbackが未指定または`undefined`を返した場合は省略される。ContractとApplication Modelの両経路で、同じoptionsを渡せば同じoperationのprojectionは同等になる。
 
 ## Projection ルール
 
@@ -100,7 +104,7 @@ response variant は `description` を宣言できる。
 - header schema は top-level `properties` を持つ object JSON Schema へ変換可能である必要があり、各 property を Parameter Object へ投影する
 - request bodyは`request.headers`の`content-type`有限集合を`requestBody.content`へ投影し、bodyのStandard JSON Schema input schemaを各media typeで共有する
 - unary response は `application/json` と Standard JSON Schema の output schema を使う
-- 同じ HTTP status を持つ複数の response variant は `oneOf` にまとめる
+- 同じ HTTP status を持つ複数の response variant は、重なる Schema も有効なため 同じ media type の中で `anyOf` にまとめる
 - server-stream response は `text/event-stream` とし、event payload を `itemSchema` で表現する
 - custom HTTP method は `additionalOperations` へ出力する
 
@@ -113,7 +117,6 @@ response variant は `description` を宣言できる。
 - Standard JSON Schema を実装していない schema
 - JSON Schema 変換の失敗
 - named header として表現できない request / response header schema
-- 同じ HTTP status に streaming と non-streaming の互換性がない variant が混在している場合
 - `operationId` の衝突
 
 したがって生成成功は、対応している OpenAPI surface の範囲内で、出力ドキュメントが Loutre HTTP Contract の忠実な projection であることを意味する。

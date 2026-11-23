@@ -1,11 +1,5 @@
 import * as fixture from './helpers/identities.js'
-import {
-  defineApplication,
-  defineModule,
-  inject,
-  provide,
-  token,
-} from '@loutrejs/loutre'
+import { application, module, inject, provide, token } from '@loutrejs/loutre'
 import {
   DevtoolsModule,
   devtoolsOptionsOf,
@@ -52,7 +46,7 @@ function createTestInstrumentation(
 
 describe('DevTools runtime observation', () => {
   it('DevtoolsModule optionsをApplication Modelから取得できる', () => {
-    const AppModule = defineModule(() => ({
+    const AppModule = module(() => ({
       imports: [
         DevtoolsModule({
           capture: { providerMethods: false },
@@ -60,20 +54,20 @@ describe('DevTools runtime observation', () => {
         }),
       ],
     }))
-    const application = defineApplication({ modules: [AppModule()] })
+    const appDefinition = application({ modules: [AppModule()] })
 
-    expect(devtoolsOptionsOf(application.model)).toEqual({
+    expect(devtoolsOptionsOf(appDefinition.model)).toEqual({
       capture: { providerMethods: false },
       replay: { enabled: true },
     })
   })
 
   it('Execution rootのstart/endとerrorをobserverへ通知する', async () => {
-    const application = defineApplication({
-      modules: [defineModule(() => ({}))()],
+    const appDefinition = application({
+      modules: [module(() => ({}))()],
     })
     const events: RuntimeEvent[] = []
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: createTestInstrumentation(events),
     })
     await runtime.initialize()
@@ -159,11 +153,11 @@ describe('DevTools runtime observation', () => {
   })
 
   it('observerの例外はApplication executionを壊さない', async () => {
-    const application = defineApplication({
-      modules: [defineModule(() => ({}))()],
+    const appDefinition = application({
+      modules: [module(() => ({}))()],
     })
     const instrumentation = createTestInstrumentation([])
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: {
         beginExecution(metadata, invocation) {
           const scope = instrumentation.beginExecution(metadata, invocation)
@@ -191,11 +185,11 @@ describe('DevTools runtime observation', () => {
   })
 
   it('metadataのないExecutionTracker leaseはtraceとして公開しない', async () => {
-    const application = defineApplication({
-      modules: [defineModule(() => ({}))()],
+    const appDefinition = application({
+      modules: [module(() => ({}))()],
     })
     const events: RuntimeEvent[] = []
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: createTestInstrumentation(events),
     })
     await runtime.initialize()
@@ -300,20 +294,20 @@ describe('DevTools runtime observation', () => {
       }
     }
 
-    const RepositoryModule = defineModule(() => ({ providers: [Repository] }))
-    const application = defineApplication({ modules: [RepositoryModule()] })
+    const RepositoryModule = module(() => ({ providers: [Repository] }))
+    const appDefinition = application({ modules: [RepositoryModule()] })
     const events: RuntimeEvent[] = []
     const instrumentation = createTestInstrumentation(
       events,
       {},
       fixture.runId('run_provider'),
     )
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation,
     })
     await runtime.initialize()
     const repository = runtime.get(Repository)
-    const providerNode = application.model.nodes.find(
+    const providerNode = appDefinition.model.nodes.find(
       (node) => node.kind === 'provider' && node.token === Repository,
     )
     if (!providerNode || providerNode.kind !== 'provider') {
@@ -444,10 +438,10 @@ describe('DevTools runtime observation', () => {
         return resolved
       }
     }
-    const Module = defineModule(() => ({ providers: [Repository] }))
-    const application = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ providers: [Repository] }))
+    const appDefinition = application({ modules: [Module()] })
     const events: RuntimeEvent[] = []
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: createTestInstrumentation(events),
     })
     await runtime.initialize()
@@ -482,11 +476,11 @@ describe('DevTools runtime observation', () => {
       },
     }
     const original = service.ping
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [provide(Service).useValue(service)],
     }))
-    const application = defineApplication({ modules: [Module()] })
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const appDefinition = application({ modules: [Module()] })
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: createTestInstrumentation([]),
     })
 
@@ -506,12 +500,12 @@ describe('DevTools runtime observation', () => {
       },
     }
     const original = service.ping
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [provide(Service).useFactory({ use: () => service })],
     }))
-    const application = defineApplication({ modules: [Module()] })
+    const appDefinition = application({ modules: [Module()] })
     const events: RuntimeEvent[] = []
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: createTestInstrumentation(events),
     })
 
@@ -545,15 +539,15 @@ describe('DevTools runtime observation', () => {
       },
     }
     const original = shared.ping
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [
         provide(FactoryService).useFactory({ use: () => shared }),
         provide(ValueService).useValue(shared),
       ],
     }))
-    const application = defineApplication({ modules: [Module()] })
+    const appDefinition = application({ modules: [Module()] })
     const events: RuntimeEvent[] = []
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: createTestInstrumentation(events),
     })
     await runtime.initialize()
@@ -587,15 +581,15 @@ describe('DevTools runtime observation', () => {
       },
     }
     const original = shared.ping
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [
         provide(First).useFactory({ use: () => shared }),
         provide(Second).useFactory({ use: () => shared }),
       ],
     }))
-    const application = defineApplication({ modules: [Module()] })
+    const appDefinition = application({ modules: [Module()] })
     const events: RuntimeEvent[] = []
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: createTestInstrumentation(events),
     })
     await runtime.initialize()
@@ -635,9 +629,9 @@ describe('DevTools runtime observation', () => {
         return lazyThenable
       }
     }
-    const Module = defineModule(() => ({ providers: [Repository] }))
-    const application = defineApplication({ modules: [Module()] })
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const Module = module(() => ({ providers: [Repository] }))
+    const appDefinition = application({ modules: [Module()] })
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: createTestInstrumentation([]),
     })
     await runtime.initialize()
@@ -683,9 +677,9 @@ describe('DevTools runtime observation', () => {
         return values.length
       }
     }
-    const Module = defineModule(() => ({ providers: [Repository] }))
-    const application = defineApplication({ modules: [Module()] })
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const Module = module(() => ({ providers: [Repository] }))
+    const appDefinition = application({ modules: [Module()] })
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: createTestInstrumentation([]),
     })
     await runtime.initialize()
@@ -717,7 +711,7 @@ describe('DevTools runtime observation', () => {
         return this.repository.read(value)
       }
     }
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [
         provide(TransientRepository).useClass(TransientRepository, {
           scope: 'transient',
@@ -725,9 +719,9 @@ describe('DevTools runtime observation', () => {
         Service,
       ],
     }))
-    const application = defineApplication({ modules: [Module()] })
+    const appDefinition = application({ modules: [Module()] })
     const events: RuntimeEvent[] = []
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: createTestInstrumentation(events),
     })
     await runtime.initialize()
@@ -766,10 +760,10 @@ describe('DevTools runtime observation', () => {
         return 42
       }
     }
-    const Module = defineModule(() => ({ providers: [FrozenRepository] }))
-    const application = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ providers: [FrozenRepository] }))
+    const appDefinition = application({ modules: [Module()] })
     const events: RuntimeEvent[] = []
-    const runtime = new ApplicationKernelRuntime(application.model, {
+    const runtime = new ApplicationKernelRuntime(appDefinition.model, {
       instrumentation: createTestInstrumentation(events),
     })
     await runtime.initialize()

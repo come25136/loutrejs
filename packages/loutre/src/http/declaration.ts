@@ -1,5 +1,8 @@
+import { basicAuth, bearerAuth } from './auth.js'
+import { cors } from './cors.js'
 import {
   type ExecutionDefinition,
+  type DeclaredExecutionMethods,
   defineExecution,
   type ExecutionDelegation,
   inheritSourceLocation,
@@ -20,12 +23,19 @@ import {
   httpContractBrand,
   type HttpContractRouteDefinition,
   type HttpExecutionResponseDefinition,
+  type HttpHandlers,
   type HttpMiddleware,
   type HttpMiddlewareContext,
   type HttpMiddlewareOutcome,
   type HttpValidationMiddleware,
 } from './contract.js'
-import { type HttpDefinition } from './compiled.js'
+import {
+  type HttpDefinition,
+  compiledContractRoutes,
+  isCompiledHttpContract,
+  type CompiledHttpContract,
+  type CompiledHttpContractRoute,
+} from './compiled.js'
 import { type HttpContractConstraint } from './constraints.js'
 import { snapshotHttpContractRawRoute, compileHttpRoute } from './compiler.js'
 import { parseHttpPath } from './path.js'
@@ -82,6 +92,12 @@ export type HttpExecutionDefinition<
 
 export function defineHttpContract<const TTree extends HttpContractRouteTree>(
   routes: TTree &
+    (Extract<
+      keyof ResolvedHttpContractRoutes<TTree>,
+      'kind' | 'routes'
+    > extends never
+      ? unknown
+      : never) &
     (IsHttpContractTreeInheritanceValid<TTree> extends true ? unknown : never) &
     (ResolvedHttpContractRoutes<TTree> extends HttpContractConstraint<
       ResolvedHttpContractRoutes<TTree>
@@ -92,27 +108,41 @@ export function defineHttpContract<const TTree extends HttpContractRouteTree>(
 
 export function defineHttpContract(
   routes: HttpContractRouteTree,
-): HttpContract {
+): CompiledHttpContract {
   const resolvedRoutes = resolveHttpContractRoutes(routes)
+  const compiled: CompiledHttpContractRoute[] = []
   const canonicalRoutes = Object.fromEntries(
-    Object.entries(resolvedRoutes).map(([name, route]) => [
-      name,
-      route.raw === true
-        ? snapshotHttpContractRawRoute(route)
-        : compileHttpRoute(name, route).definition,
-    ]),
+    Object.entries(resolvedRoutes).map(([name, route]) => {
+      if (name === 'kind' || name === 'routes')
+        throw new TypeError(`Reserved HTTP operation name: ${name}`)
+      if (route.raw === true)
+        return [name, snapshotHttpContractRawRoute(route)] as const
+      const operation = compileHttpRoute(name, route)
+      compiled.push(operation)
+      return [name, operation.definition] as const
+    }),
   )
-  return Object.freeze({
-    kind: 'http-contract',
+  const contract = {
+    ...Object.fromEntries(
+      compiled.map((route) => [route.name, route.definition.responses]),
+    ),
+    [compiledContractRoutes]: Object.freeze(compiled),
+    kind: 'http-contract' as const,
     [httpContractBrand]: true as const,
     routes: Object.freeze(canonicalRoutes),
+  }
+  Object.defineProperties(contract, {
+    [httpContractBrand]: { enumerable: false },
+    [compiledContractRoutes]: { enumerable: false },
   })
+  return Object.freeze(contract)
 }
 
 function resolveHttpContractRoutes(
   tree: HttpContractRouteTree,
 ): Record<string, HttpContractRouteDefinition> {
-  const resolved: Record<string, HttpContractRouteDefinition> = {}
+  const resolved: Record<string, HttpContractRouteDefinition> =
+    Object.create(null)
 
   const visit = (
     current: HttpContractRouteTree,
@@ -129,7 +159,7 @@ function resolveHttpContractRoutes(
             `HTTP Contract node ${name} must be either a branch or a leaf route.`,
           )
         }
-        if (resolved[name]) {
+        if (Object.hasOwn(resolved, name)) {
           throw new TypeError(`Duplicate nested HTTP route name: ${name}`)
         }
         if (node.raw === true) {
@@ -158,11 +188,7 @@ function resolveHttpContractRoutes(
           )
           continue
         } else {
-          assertNoInheritedResponseCollision(
-            name,
-            inheritedResponses,
-            node.responses,
-          )
+          assertValidResponseNames(name, inheritedResponses, node.responses)
         }
         resolved[name] = inheritSourceLocation(
           {
@@ -189,11 +215,7 @@ function resolveHttpContractRoutes(
       }
       const branchPath = node.path ?? ''
       if (branchPath !== '') parseHttpPath(branchPath)
-      assertNoInheritedResponseCollision(
-        name,
-        inheritedResponses,
-        node.responses ?? {},
-      )
+      assertValidResponseNames(name, inheritedResponses, node.responses ?? {})
       visit(
         node.routes,
         joinHttpPath(pathPrefix, branchPath),
@@ -214,13 +236,15 @@ function joinHttpPath(prefix: string, path: string): string {
   return `${prefix}${path}`
 }
 
-function assertNoInheritedResponseCollision(
+function assertValidResponseNames(
   nodeName: string,
   inherited: Readonly<Record<string, HttpExecutionResponseDefinition>>,
   declared: Readonly<Record<string, HttpExecutionResponseDefinition>>,
 ): void {
+  if (Object.getOwnPropertySymbols(declared).length > 0)
+    throw new TypeError(`HTTP response names at ${nodeName} must be strings.`)
   for (const name of Object.keys(declared)) {
-    if (name in inherited) {
+    if (Object.hasOwn(inherited, name)) {
       throw new TypeError(
         `Duplicate inherited HTTP response ${name} at ${nodeName}.`,
       )
@@ -230,10 +254,13 @@ function assertNoInheritedResponseCollision(
 
 export function defineHttpImplementation<
   const TContract extends HttpContract,
+  const THandlers extends object = {},
 >(definition: {
   readonly name?: string
   readonly contract: TContract
-  readonly factory: HttpImplementationDefinition<TContract>['factory']
+  readonly factory: () => HttpHandlers<TContract> &
+    THandlers &
+    NoInfer<DeclaredExecutionMethods<THandlers, HttpHandlers<TContract>>>
 }): HttpExecutionDefinition<TContract>
 
 export function defineHttpImplementation(definition: {
@@ -241,6 +268,10 @@ export function defineHttpImplementation(definition: {
   readonly contract: HttpContract
   readonly factory: () => unknown
 }): ExecutionDefinition<typeof httpExecutionExtension> {
+  if (!isCompiledHttpContract(definition.contract))
+    throw new TypeError(
+      'http.implementation() requires a Contract created by http.contract().',
+    )
   return defineExecution(httpExecutionExtension, {
     ...definition,
     name: definition.name ?? '',
@@ -274,6 +305,9 @@ export const validate = Object.freeze({
 
 export const executionHttp = Object.freeze({
   isWebSocketUpgrade,
+  basicAuth,
+  bearerAuth,
+  cors,
   raw: defineHttpRaw,
   delegate: defineHttpDelegate,
   contract: defineHttpContract,

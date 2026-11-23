@@ -2,10 +2,10 @@ import { nodeRuntime } from '@loutrejs/node'
 import type { Server } from 'node:http'
 import {
   bindRuntimeCapability,
-  defineApplication,
+  application,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   runtimeCapability,
   type ExecutionDefinition,
 } from '@loutrejs/loutre'
@@ -34,19 +34,19 @@ describe('Node runtime + HTTP Execution Extension', () => {
       name: 'hello.http',
       contract,
       factory: () => ({
-        hello: (context) =>
-          context.response.ok({
-            body: { message: `Hello, ${context.input.params.name}!` },
-          }),
+        hello: (context) => ({
+          schema: contract.hello.ok,
+          body: { message: `Hello, ${context.input.params.name}!` },
+        }),
       }),
     })
-    const AppModule = defineModule(() => ({ executions: [controller] }))
-    const definition = defineApplication({ modules: [AppModule()] })
+    const AppModule = module(() => ({ executions: [controller] }))
+    const definition = application({ modules: [AppModule()] })
     const port = await reserveHttpPort()
-    const application = await nodeRuntime.create({ application: definition })
+    const app = await nodeRuntime.create({ application: definition })
 
     try {
-      await application.serve({
+      await app.serve({
         port,
         hostname: '127.0.0.1',
         shutdownHooks: false,
@@ -58,7 +58,7 @@ describe('Node runtime + HTTP Execution Extension', () => {
         message: 'Hello, Loutre!',
       })
     } finally {
-      await application.close('test')
+      await app.close('test')
     }
   })
 
@@ -96,21 +96,21 @@ describe('Node runtime + HTTP Execution Extension', () => {
     })
     const controller = http.implementation({
       contract,
-      factory: () => ({ health: (context) => context.response.ok({}) }),
+      factory: () => ({ health: () => ({ schema: contract.health.ok }) }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       executions: [
         controller,
         defineExecution(extension, { id: 'fixture.node-extra' }),
       ],
     }))
-    const application = await nodeRuntime.create({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await nodeRuntime.create({
+      application: application({ modules: [Module()] }),
       capabilities: [bindRuntimeCapability(EXTRA_DRIVER, { value: 'bound' })],
     })
 
     expect(createRuntime).toHaveBeenCalledTimes(1)
-    await application.close('test')
+    await app.close('test')
   })
 
   it('await usingはadapterのcloseへ委譲してlistenerとshutdown hookを閉じる', async () => {
@@ -123,10 +123,10 @@ describe('Node runtime + HTTP Execution Extension', () => {
     })
     const controller = http.implementation({
       contract,
-      factory: () => ({ health: (context) => context.response.ok({}) }),
+      factory: () => ({ health: () => ({ schema: contract.health.ok }) }),
     })
-    const AppModule = defineModule(() => ({ executions: [controller] }))
-    const definition = defineApplication({ modules: [AppModule()] })
+    const AppModule = module(() => ({ executions: [controller] }))
+    const definition = application({ modules: [AppModule()] })
     const port = await reserveHttpPort()
     const signalListeners = {
       SIGINT: process.listenerCount('SIGINT'),
@@ -135,10 +135,10 @@ describe('Node runtime + HTTP Execution Extension', () => {
     let server: Server | undefined
 
     {
-      await using application = await nodeRuntime.create({
+      await using app = await nodeRuntime.create({
         application: definition,
       })
-      server = (await application.serve({ port, hostname: '127.0.0.1' })).server
+      server = (await app.serve({ port, hostname: '127.0.0.1' })).server
       expect(server.listening).toBe(true)
       expect(process.listenerCount('SIGINT')).toBe(signalListeners.SIGINT + 1)
       expect(process.listenerCount('SIGTERM')).toBe(signalListeners.SIGTERM + 1)

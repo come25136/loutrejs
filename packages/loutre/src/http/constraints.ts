@@ -5,7 +5,7 @@ import {
   type HttpHeaders,
   type HttpErrorMapping,
   type HttpResponseResult,
-  type ResponseBodyOutput,
+  type ResponseBodyInput,
   type ResponseHeadersOutput,
   httpMiddlewareShortCircuit,
   type HttpRouteMiddleware,
@@ -96,7 +96,7 @@ type IsErrorMappingCompatible<TResponse> =
     ? TResponse extends { readonly error: HttpErrorMapping<any, any> }
       ? TResponse extends { readonly body: StandardSchemaV1 }
         ? ErrorMappingResult<TResponse> extends HttpResponseResult<
-            ResponseBodyOutput<TResponse>,
+            ResponseBodyInput<TResponse>,
             ResponseHeadersOutput<TResponse>
           >
           ? true

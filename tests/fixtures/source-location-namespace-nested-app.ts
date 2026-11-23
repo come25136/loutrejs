@@ -1,7 +1,7 @@
 import * as loutre from '@loutrejs/loutre'
 import * as httpApi from '@loutrejs/loutre/http'
 
-function createModule() {
+function nestedServiceModule() {
   class NestedService {}
 
   const Contract = httpApi.http.contract({
@@ -16,19 +16,19 @@ function createModule() {
     name: 'NamespaceNestedController',
     contract: Contract,
     factory: () => ({
-      create(ctx) {
-        return ctx.response.ok({})
+      create() {
+        return { schema: Contract.create.ok }
       },
     }),
   })
 
-  return loutre.defineModule(() => ({
+  return loutre.module(() => ({
     name: 'NamespaceNestedModule',
     providers: [NestedService],
     executions: [Controller],
   }))
 }
 
-const Module = createModule()
+const Module = nestedServiceModule()
 
-export default loutre.defineApplication({ modules: [Module()] })
+export default loutre.application({ modules: [Module()] })

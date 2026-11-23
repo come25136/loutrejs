@@ -29,24 +29,16 @@ export function createEndpointRuntime({
       tools.set(tool.descriptor.name, {
         descriptor: tool.descriptor,
         scopes: tool.scopes,
-        invoke: (input, context) =>
-          executeTool(
-            tool,
-            input,
-            context,
-            (value) => runtime.context(value),
-            (value, state) => handler(value, state),
-          ),
+        invoke: (context) =>
+          executeTool(tool, context, (args) => handler(args)),
       })
     }
     const shutdown = new AbortController()
     endpoints.set(execution.id, {
       shutdown,
       http: createMcpHttpRuntime(
-        { name: compiled.name, version: compiled.version },
+        compiled,
         tools,
-        compiled.path,
-        compiled.oauth,
         runtime.oauth,
         shutdown.signal,
       ),

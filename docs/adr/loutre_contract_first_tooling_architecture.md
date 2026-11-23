@@ -34,7 +34,7 @@ const implementation = http.implementation({
   factory: () => ({/* ... */}),
 })
 
-export default defineApplication({
+export default application({
   modules: [/* ... */],
 })
 ```
@@ -151,7 +151,7 @@ Contract-first toolingが受け取るのは任意のroute-like objectではな�
 
 `http.contract()`はnested routeの解決、path validation、response inheritanceなど、Contract単体で確定できるHTTP semanticsを構築時に確定する。
 
-そのためOpenAPI toolingは生の`HttpContractRouteTree`を再解釈しない。resolved `HttpContract.routes`をconsumeする。
+そのためOpenAPI toolingは生の`HttpContractRouteTree`を再解釈しない。resolved `HttpContract.routes`をconsumeする。後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)が定義する`UsersContract.get.ok`は通常HTTP Handler向けの短縮response referenceであり、OpenAPIの正本、GraphQL/MCPのraw route参照、Contract constructionを変えない。
 
 ```text
 HttpContractRouteTree
@@ -208,7 +208,7 @@ entry loaderはexportされた値のdomain semanticsを判定しない。bundle�
 Loutre CLI entryはdefault exportだけをcanonical entryとする。
 
 ```ts
-export default defineApplication({/* ... */})
+export default application({/* ... */})
 ```
 
 ```ts

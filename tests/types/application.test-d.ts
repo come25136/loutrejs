@@ -1,12 +1,12 @@
 import {
   createKernelApplication,
   buildApplicationModel,
-  defineApplication,
-  defineArgs,
-  defineEnv,
+  application,
+  args,
+  env,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   type ExecutionDefinition,
 } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
@@ -16,7 +16,7 @@ import { cloudflareWorkersRuntime } from '@loutrejs/loutre/runtime/cloudflare-wo
 import { electronRuntime } from '@loutrejs/loutre/runtime/electron'
 import { nodeRuntime } from '@loutrejs/node'
 import type { MessagePortHostApi } from '@loutrejs/loutre/message-port'
-import { consume, cron, fixedDelay, queue, task } from '@loutrejs/loutre/tasks'
+import { trigger, queue, task } from '@loutrejs/loutre/tasks'
 import { z } from 'zod'
 import type { RuntimeEngine } from '@loutrejs/loutre/runtime'
 // @ts-expect-error 未生成Moduleを受け付ける互換用unionは公開しない。
@@ -30,18 +30,16 @@ void asModuleInstance
 const removedRuntime: RuntimeEngine = 'deno'
 void removedRuntime
 
-class AppEnv extends defineEnv(
-  z.object({ PORT: z.coerce.number().default(3000) }).transform((env) => ({
-    port: env.PORT,
+class AppEnv extends env(
+  z.object({ PORT: z.coerce.number().default(3000) }).transform((values) => ({
+    port: values.PORT,
   })),
 ) {}
 class HealthService {}
-class AppArgs extends defineArgs(
+class AppArgs extends args(
   z.object({ instance: z.string(), workers: z.number().default(4) }),
 ) {}
-class DefaultArgs extends defineArgs(
-  z.object({ workers: z.number().default(4) }),
-) {}
+class DefaultArgs extends args(z.object({ workers: z.number().default(4) })) {}
 
 const HealthContract = http.contract({
   get: {
@@ -54,15 +52,15 @@ const HealthHttp = http.implementation({
   name: 'HealthHttp',
   contract: HealthContract,
   factory: () => ({
-    get: (context) => context.response.ok({ body: 'ok' }),
+    get: () => ({ schema: HealthContract.get.ok, body: 'ok' }),
   }),
 })
-const HttpModule = defineModule(() => ({
+const HttpModule = module(() => ({
   environment: [AppEnv],
   providers: [HealthService],
   executions: [HealthHttp],
 }))
-const ImportedHttpModule = defineModule(() => ({ imports: [HttpModule()] }))
+const ImportedHttpModule = module(() => ({ imports: [HttpModule()] }))
 
 const cleanup = task<void, void>({
   name: 'maintenance.cleanup',
@@ -76,13 +74,13 @@ const processOrder = task<{ readonly id: string }, void>({
   name: 'orders.process',
   factory: () => async () => undefined,
 })
-const nightly = cron({
+const nightly = trigger.cron({
   name: 'maintenance.cleanup.nightly',
   expression: '0 3 * * *',
   timezone: 'Asia/Tokyo',
   task: cleanup,
 })
-const poll = fixedDelay({
+const poll = trigger.fixedDelay({
   name: 'maintenance.poll',
   delay: 1000,
   task: cleanup,
@@ -91,22 +89,22 @@ const orders = queue({
   name: 'orders',
   payload: z.object({ id: z.string() }),
 })
-const orderConsumer = consume({
+const orderConsumer = trigger.consume({
   name: 'orders.process.consumer',
   queue: orders,
   task: processOrder,
 })
-const WorkerModule = defineModule(() => ({
+const WorkerModule = module(() => ({
   executions: [calculate, nightly, poll, orderConsumer],
 }))
 
-const httpDefinition = defineApplication({ modules: [ImportedHttpModule()] })
+const httpDefinition = application({ modules: [ImportedHttpModule()] })
 const httpApplication = createKernelApplication({ application: httpDefinition })
 httpApplication.http.fetch(new Request('http://localhost/health'))
 // @ts-expect-error HTTP ApplicationにはTasks Host APIは無い
 httpApplication.tasks
 
-const workerDefinition = defineApplication({
+const workerDefinition = application({
   modules: [WorkerModule()],
   arguments: AppArgs,
 })
@@ -124,7 +122,7 @@ workerApplication.http
 // @ts-expect-error required ArgumentsはKernel Application生成時に必要
 createKernelApplication({ application: workerDefinition })
 
-const defaultArgsDefinition = defineApplication({
+const defaultArgsDefinition = application({
   modules: [],
   arguments: DefaultArgs,
 })
@@ -132,9 +130,9 @@ createKernelApplication({ application: defaultArgsDefinition })
 createKernelApplication({ application: defaultArgsDefinition, arguments: {} })
 
 nodeRuntime.create({ application: httpDefinition }).then((app) => {
-  const env: AppEnv = app.get(AppEnv)
+  const appEnv: AppEnv = app.get(AppEnv)
   const health: HealthService = app.get(HealthService)
-  void env
+  void appEnv
   void health
   app.serve({ port: 3000 })
   app.serve({ shutdownHooks: false })
@@ -171,10 +169,10 @@ const customHttpExtension = defineExecutionExtension<
   },
 })
 const customHttpExecution = defineExecution(customHttpExtension, {})
-const customHttpModule = defineModule(() => ({
+const customHttpModule = module(() => ({
   executions: [customHttpExecution],
 }))
-const customHttpDefinition = defineApplication({
+const customHttpDefinition = application({
   modules: [customHttpModule()],
 })
 nodeRuntime.create({
@@ -225,10 +223,10 @@ const customMessagePortExecution = defineExecution(
   customMessagePortExtension,
   {},
 )
-const customMessagePortModule = defineModule(() => ({
+const customMessagePortModule = module(() => ({
   executions: [customMessagePortExecution],
 }))
-const customMessagePortDefinition = defineApplication({
+const customMessagePortDefinition = application({
   modules: [customMessagePortModule()],
 })
 electronRuntime.attach({
@@ -257,29 +255,29 @@ const wrongInput = task<string, void>({
   factory: () => () => undefined,
 })
 // @ts-expect-error Queue payloadとTask inputは一致させる
-consume({ name: 'wrong.consumer', queue: orders, task: wrongInput })
+trigger.consume({ name: 'wrong.consumer', queue: orders, task: wrongInput })
 const wrongTrigger = task<string, void>({
   name: 'wrong.trigger',
   factory: () => () => undefined,
 })
 // @ts-expect-error Cron Taskはvoid inputのみを受け付ける
-cron({
+trigger.cron({
   name: 'wrong.trigger',
   expression: '* * * * *',
   timezone: 'UTC',
   task: wrongTrigger,
 })
 
-const StaticHttpModule = defineModule({ executions: [HealthHttp] })
-const DynamicWorkerModule = defineModule((name: string) => ({
+const StaticHttpModule = module({ executions: [HealthHttp] })
+const DynamicWorkerModule = module((name: string) => ({
   name,
   executions: [calculate],
 }))
-const StaticRootModule = defineModule({
+const StaticRootModule = module({
   imports: [StaticHttpModule, DynamicWorkerModule('Worker')],
 })
 const staticApp = createKernelApplication({
-  application: defineApplication({ modules: [StaticRootModule] }),
+  application: application({ modules: [StaticRootModule] }),
 })
 staticApp.http.fetch(new Request('http://localhost/health'))
 const taskResult: Promise<number> = staticApp.tasks.run(calculate, 1)
@@ -289,19 +287,19 @@ StaticHttpModule()
 // @ts-expect-error 動的Moduleの引数はstring
 DynamicWorkerModule(123)
 // @ts-expect-error 動的Moduleは引数を渡してからApplicationへ登録する
-defineApplication({ modules: [DynamicWorkerModule] })
+application({ modules: [DynamicWorkerModule] })
 // @ts-expect-error 動的Moduleは引数を渡してからimportsへ登録する
-defineModule({ imports: [DynamicWorkerModule] })
+module({ imports: [DynamicWorkerModule] })
 const staticHttpApp = createKernelApplication({
-  application: defineApplication({ modules: [StaticHttpModule] }),
+  application: application({ modules: [StaticHttpModule] }),
 })
 staticHttpApp.http.fetch(new Request('http://localhost/health'))
 // @ts-expect-error HTTPのみの静的ModuleにはTasks Host APIは無い
 staticHttpApp.tasks
 // @ts-expect-error 引数なしtemplateも生成してからApplicationへ登録する。
-defineApplication({ modules: [HttpModule] })
+application({ modules: [HttpModule] })
 // @ts-expect-error 引数なしtemplateも生成してからimportsへ登録する。
-defineModule({ imports: [HttpModule] })
+module({ imports: [HttpModule] })
 // @ts-expect-error Modelも未生成templateを正規化しない。
 buildApplicationModel({ modules: [HttpModule] })
 nodeRuntime.create({

@@ -5,8 +5,8 @@ import WebSocket from 'ws'
 import { nodeRuntime } from '@loutrejs/node'
 import { graphql, ConnectionRejected } from '@loutrejs/graphql'
 import {
-  defineApplication,
-  defineModule,
+  application,
+  module,
   inject,
   projectApplicationModel,
 } from '@loutrejs/loutre'
@@ -31,7 +31,7 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
         return next({ user: '利用者' })
       },
   })
-  const Api = http.contract({
+  const ApiContract = http.contract({
     api: {
       path: '/api',
       routes: {
@@ -55,12 +55,12 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
   ) => context.greeting + context.user
   const regular = http.implementation({
     name: 'Health',
-    contract: Api,
-    factory: () => ({ health: (ctx) => ctx.response.ok({}) }),
+    contract: ApiContract,
+    factory: () => ({ health: () => ({ schema: ApiContract.health.ok }) }),
   })
   const delegated = graphql.implementation({
     name: 'Profile',
-    route: Api.routes.profile,
+    route: ApiContract.routes.profile,
     manifest: manifestFromSchema(schema),
     transports: { websocket: true },
     factory: (greeting = inject(Greeting)) => ({
@@ -73,26 +73,26 @@ it('同じHTTP Contractから通常HTTPとGraphQL HTTPとWSを配備し、継承
       context: ({ state }) => ({ greeting: greeting.text, user: state.user }),
     }),
   })
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     providers: [Greeting],
     executions: [regular, delegated],
   }))
-  const application = defineApplication({ modules: [Module()] })
-  expect(application.model.diagnostics).toEqual([])
-  for (const source of [Api, application.model])
+  const appDefinition = application({ modules: [Module()] })
+  expect(appDefinition.model.diagnostics).toEqual([])
+  for (const source of [ApiContract, appDefinition.model])
     expect(
       Object.keys(
         generateOpenApi(source, { info: { title: '試験', version: '1' } })
           .paths,
       ),
     ).toEqual(['/api/health'])
-  const graph = projectApplicationModel(application.model)
+  const graph = projectApplicationModel(appDefinition.model)
   expect(
     graph.executions.filter(
       (node) => node.executionKind === 'websocket.session',
     ),
   ).toHaveLength(1)
-  const app = await nodeRuntime.create({ application })
+  const app = await nodeRuntime.create({ application: appDefinition })
   const { server } = await app.serve({
     port: 0,
     hostname: '127.0.0.1',
@@ -184,7 +184,7 @@ it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒�
         gate.events.push('終了')
       },
   })
-  const Api = http.contract({
+  const ApiContract = http.contract({
     api: {
       path: '/api',
       middlewares: [layer],
@@ -195,17 +195,17 @@ it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒�
   schema.getQueryType()!.getFields().hello!.resolve = () => 'hello'
   const execution = graphql.implementation({
     name: 'Middleware',
-    route: Api.routes.graphql,
+    route: ApiContract.routes.graphql,
     manifest: manifestFromSchema(schema),
     transports: { http: false, websocket: true },
     factory: () => ({ context: () => ({}) }),
   })
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     providers: [Gate],
     executions: [execution],
   }))
-  const application = defineApplication({ modules: [Module()] })
-  const graph = projectApplicationModel(application.model)
+  const appDefinition = application({ modules: [Module()] })
+  const graph = projectApplicationModel(appDefinition.model)
   const ws = graph.executions.find(
     (node) => node.executionKind === 'websocket.session',
   )!
@@ -213,7 +213,7 @@ it('Upgradeでも継承したmiddlewareをDIして順番に実行し、HTTP拒�
   expect(
     graph.edges.some((edge) => edge.from === ws.id && edge.to === provider.id),
   ).toBe(true)
-  const app = await nodeRuntime.create({ application })
+  const app = await nodeRuntime.create({ application: appDefinition })
   const gate = app.get(Gate)
   const { server } = await app.serve({
     port: 0,

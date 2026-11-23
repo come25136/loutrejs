@@ -6,18 +6,15 @@ import type { LogRecord } from '@loutrejs/loutre/runtime'
 import {
   bootstrapApplication,
   type ApplicationExtensions,
-  defineApplication,
-  defineModule,
+  application,
+  module,
   inject,
   type,
 } from '@loutrejs/loutre'
 import {
-  basicAuth,
-  bearerAuth,
   bindHttpServer,
-  cors,
   http,
-  type HttpExecutionContext,
+  type HttpHandlerContext,
   type HttpHostApi,
 } from '@loutrejs/loutre/http'
 
@@ -46,22 +43,22 @@ describe('HTTP Execution Extension', () => {
       name: 'HelloController',
       contract,
       factory: (logger = inject(LoggerToken)) => ({
-        hello(context) {
+        hello() {
           logger.info('handler')
-          return context.response.ok({})
+          return { schema: contract.hello.ok }
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({
+    const Module = module(() => ({ executions: [controller] }))
+    const app = await bootstrapApplication({
+      application: application({
         modules: [Module(), logging.module],
       }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/hello'),
       )
       expect(response.status).toBe(204)
@@ -78,7 +75,7 @@ describe('HTTP Execution Extension', () => {
         ]),
       )
     } finally {
-      await application.close()
+      await app.close()
     }
   })
   it('typeで宣言したMiddleware stateをhandlerへ渡す', async () => {
@@ -100,22 +97,24 @@ describe('HTTP Execution Extension', () => {
     const controller = http.implementation({
       contract,
       factory: () => ({
-        profile: (context) =>
-          context.response.ok({ body: context.state.userId }),
+        profile: (context) => ({
+          schema: contract.profile.ok,
+          body: context.state.userId,
+        }),
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [controller] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/profile'),
       )
       expect(await response.text()).toBe('user-42')
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -152,13 +151,15 @@ describe('HTTP Execution Extension', () => {
     const controller = http.implementation({
       contract,
       factory: () => ({
-        profile: (context) =>
-          context.response.ok({ body: context.state.userId }),
+        profile: (context) => ({
+          schema: contract.profile.ok,
+          body: context.state.userId,
+        }),
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [controller] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
@@ -168,13 +169,13 @@ describe('HTTP Execution Extension', () => {
         'unavailable',
         'ok',
       ])
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://fixture.test/api/me/profile'),
       )
       expect(response.status).toBe(200)
       await expect(response.text()).resolves.toBe('user-42')
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -235,13 +236,13 @@ describe('HTTP Execution Extension', () => {
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [controller] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('http://fixture.test/failure'),
     )
 
@@ -249,15 +250,15 @@ describe('HTTP Execution Extension', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'Internal Server Error',
     })
-    await application.close()
+    await app.close()
   })
 
   it('credential CORSのwildcardを拒否し特定originへVaryを付与する', async () => {
-    expect(() => cors({ credentials: true })).toThrow(
+    expect(() => http.cors({ credentials: true })).toThrow(
       'CORS origin cannot be a wildcard',
     )
 
-    const corsMiddleware = cors({ origin: ['https://app.example.com'] })
+    const corsMiddleware = http.cors({ origin: ['https://app.example.com'] })
     const contract = http.contract({
       hello: {
         method: 'GET',
@@ -268,15 +269,15 @@ describe('HTTP Execution Extension', () => {
     })
     const controller = http.implementation({
       contract,
-      factory: () => ({ hello: (context) => context.response.ok({}) }),
+      factory: () => ({ hello: () => ({ schema: contract.hello.ok }) }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [controller] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('http://fixture.test/hello', {
         headers: { origin: 'https://app.example.com' },
       }),
@@ -286,7 +287,7 @@ describe('HTTP Execution Extension', () => {
       'https://app.example.com',
     )
     expect(response.headers.get('vary')).toBe('Origin')
-    await application.close()
+    await app.close()
   })
 
   it('固定headerと動的headerをheadersで統一してmergeする', async () => {
@@ -315,23 +316,23 @@ describe('HTTP Execution Extension', () => {
     const controller = http.implementation({
       contract,
       factory: () => ({
-        headers: (context) =>
-          context.response.ok({
-            body: { ok: true },
-            headers: {
-              'x-dynamic': 'dynamic',
-              'x-overridden': 'dynamic',
-            },
-          }),
+        headers: () => ({
+          schema: contract.headers.ok,
+          body: { ok: true },
+          headers: {
+            'x-dynamic': 'dynamic',
+            'x-overridden': 'dynamic',
+          },
+        }),
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [controller] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('http://fixture.test/headers'),
     )
 
@@ -339,7 +340,7 @@ describe('HTTP Execution Extension', () => {
     expect(response.headers.get('x-static')).toBe('static')
     expect(response.headers.get('x-dynamic')).toBe('dynamic')
     expect(response.headers.get('x-overridden')).toBe('dynamic')
-    await application.close()
+    await app.close()
   })
 
   it('HTTP semanticsをExtension内でcompileしてdispatchする', async () => {
@@ -365,33 +366,32 @@ describe('HTTP Execution Extension', () => {
       factory: () => ({
         getUser: async (context) => {
           expect('request' in context).toBe(false)
-          return context.response.found({
+          return {
+            schema: contract.getUser.found,
             body: {
               id: context.input.params.id,
               detail: context.input.query.detail,
             },
-          })
+          }
         },
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [controller] }))
+    const definition = application({ modules: [Module()] })
     const extensionTypeCheck: ApplicationExtensions<typeof definition> =
       controller.extension
     expect(extensionTypeCheck).toBe(http.extension)
-    const application = await bootstrapApplication({
+    const app = await bootstrapApplication({
       application: definition,
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
-    expectTypeOf(application.http).toEqualTypeOf<HttpHostApi>()
+    expectTypeOf(app.http).toEqualTypeOf<HttpHostApi>()
     expectTypeOf<
       Parameters<ReturnType<typeof controller.factory>['getUser']>[0]
-    >().toEqualTypeOf<
-      HttpExecutionContext<(typeof contract.routes)['getUser']>
-    >()
+    >().toEqualTypeOf<HttpHandlerContext<typeof contract, 'getUser'>>()
 
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('http://fixture.test/users/42?detail=full'),
     )
 
@@ -400,14 +400,14 @@ describe('HTTP Execution Extension', () => {
       id: '42',
       detail: 'full',
     })
-    expect(application.graph.executions).toContainEqual(
+    expect(app.graph.executions).toContainEqual(
       expect.objectContaining({
         id: 'users.http',
         executionKind: 'http.request',
         extension: expect.objectContaining({ name: 'loutre:http' }),
       }),
     )
-    await application.close()
+    await app.close()
   })
 
   it('重複routeをHTTP Extensionのglobal validationで拒否する', () => {
@@ -427,13 +427,13 @@ describe('HTTP Execution Extension', () => {
       name: 'duplicate.http',
       contract,
       factory: () => ({
-        first: (context) => context.response.ok({}),
-        second: (context) => context.response.ok({}),
+        first: () => ({ schema: contract.first.ok }),
+        second: () => ({ schema: contract.second.ok }),
       }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
+    const Module = module(() => ({ executions: [controller] }))
 
-    const definition = defineApplication({ modules: [Module()] })
+    const definition = application({ modules: [Module()] })
 
     expect(definition.model.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_HTTP_DUPLICATE_ROUTE' }),
@@ -448,7 +448,7 @@ describe('HTTP Execution Extension', () => {
       }
     }
 
-    const authentication = basicAuth({
+    const authentication = http.basicAuth({
       name: 'profile.basic-auth',
       realm: 'Loutre Test',
       factory: (users = inject(UserRepository)) => ({
@@ -486,20 +486,22 @@ describe('HTTP Execution Extension', () => {
       name: 'profile.http',
       contract,
       factory: () => ({
-        profile: (context) =>
-          context.response.ok({ body: context.state.currentUser }),
+        profile: (context) => ({
+          schema: contract.profile.ok,
+          body: context.state.currentUser,
+        }),
       }),
     })
-    const Module = defineModule(() => ({
+    const Module = module(() => ({
       providers: [UserRepository],
       executions: [controller],
     }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
-    const unauthorized = await application.http.fetch(
+    const unauthorized = await app.http.fetch(
       new Request('http://fixture.test/profile'),
     )
     expect(unauthorized.status).toBe(401)
@@ -507,7 +509,7 @@ describe('HTTP Execution Extension', () => {
       'Basic realm="Loutre Test", charset="UTF-8"',
     )
 
-    const authorized = await application.http.fetch(
+    const authorized = await app.http.fetch(
       new Request('http://fixture.test/profile', {
         headers: {
           authorization: `basic ${base64Utf8('かわうそ:秘密')}`,
@@ -519,11 +521,11 @@ describe('HTTP Execution Extension', () => {
       id: 'user-1',
       name: 'Loutre User',
     })
-    await application.close()
+    await app.close()
   })
 
   it('Bearer schemeを大小文字に依存せず解釈する', async () => {
-    const authentication = bearerAuth({
+    const authentication = http.bearerAuth({
       realm: 'Loutre Test',
       factory: () => ({
         authenticate: (token: string) =>
@@ -551,22 +553,22 @@ describe('HTTP Execution Extension', () => {
     })
     const controller = http.implementation({
       contract,
-      factory: () => ({ profile: (context) => context.response.ok({}) }),
+      factory: () => ({ profile: () => ({ schema: contract.profile.ok }) }),
     })
-    const Module = defineModule(() => ({ executions: [controller] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [controller] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
 
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('http://fixture.test/bearer-profile', {
         headers: { authorization: 'bearer valid-token' },
       }),
     )
 
     expect(response.status).toBe(204)
-    await application.close()
+    await app.close()
   })
 })
 

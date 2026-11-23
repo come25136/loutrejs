@@ -1,4 +1,4 @@
-import { cors, http } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
 const CreateMessageBody = z.object({
@@ -10,7 +10,7 @@ const Message = z.object({
   text: z.string(),
 })
 
-const corsMiddleware = cors({
+const corsMiddleware = http.cors({
   origin: ['http://localhost:5173'],
   allowMethods: ['POST'],
   allowHeaders: ['content-type'],

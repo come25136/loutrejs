@@ -1,8 +1,8 @@
 import { expect, expectTypeOf, it } from 'vitest'
 import {
   bootstrapApplication,
-  defineApplication,
-  defineModule,
+  application,
+  module,
   inject,
   provide,
   token,
@@ -25,26 +25,26 @@ it('nested ExecutionGroupをcompile前にflattenしhost APIとDI ownershipを保
     kind: 'execution-group' as const,
     executions: [{ kind: 'execution-group' as const, executions: [raw] }],
   }
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     providers: [provide(Greeting).useValue('hello')],
     executions: [group],
   }))
-  const definition = defineApplication({ modules: [Module()] })
+  const definition = application({ modules: [Module()] })
   expect(definition.model.executions.map((execution) => execution.id)).toEqual([
     'raw',
   ])
-  const application = await bootstrapApplication({
+  const app = await bootstrapApplication({
     application: definition,
     capabilities: [bindHttpServer({ runtime: 'test' })],
   })
-  expectTypeOf(application.http).toEqualTypeOf<HttpHostApi>()
+  expectTypeOf(app.http).toEqualTypeOf<HttpHostApi>()
   try {
-    const response = await application.http.fetch(
+    const response = await app.http.fetch(
       new Request('http://test/raw', { method: 'DELETE' }),
     )
     expect(await response.text()).toBe('hello:DELETE')
   } finally {
-    await application.close()
+    await app.close()
   }
 })
 
@@ -52,10 +52,8 @@ it('循環ExecutionGroupをModel diagnosticにし、未知のdeclarationを既�
   const executions: ExecutionGroup[] = []
   const group: ExecutionGroup = { kind: 'execution-group', executions }
   executions.push(group)
-  const Module = defineModule(() => ({ executions: [group] }))
-  expect(
-    defineApplication({ modules: [Module()] }).model.diagnostics,
-  ).toContainEqual(
+  const Module = module(() => ({ executions: [group] }))
+  expect(application({ modules: [Module()] }).model.diagnostics).toContainEqual(
     expect.objectContaining({ code: 'LUTRE_EXECUTION_GROUP_INVALID' }),
   )
 })
@@ -80,9 +78,9 @@ it('wildcard methodはrawだけで許可し同じpathのmethod routeとの衝突
     route: { method: 'GET', path: '/raw' },
     factory: () => async () => new Response(),
   })
-  const conflicting = defineModule(() => ({ executions: [get, raw] }))
+  const conflicting = module(() => ({ executions: [get, raw] }))
   expect(
-    defineApplication({ modules: [conflicting()] }).model.diagnostics,
+    application({ modules: [conflicting()] }).model.diagnostics,
   ).toContainEqual(
     expect.objectContaining({ code: 'LUTRE_HTTP_DUPLICATE_ROUTE' }),
   )
@@ -107,10 +105,10 @@ it('raw middlewareのstateを型推論しbodyを事前消費せずhandlerへ渡�
       )
     },
   })
-  const Module = defineModule(() => ({ executions: [raw] }))
+  const Module = module(() => ({ executions: [raw] }))
   const handlerInvocations: unknown[] = []
   const app = await bootstrapApplication({
-    application: defineApplication({ modules: [Module()] }),
+    application: application({ modules: [Module()] }),
     capabilities: [bindHttpServer({ runtime: 'test' })],
     instrumentation: {
       beginOperation(metadata, invocation) {
@@ -149,9 +147,9 @@ it('raw response streamをExecutionLeaseとdrainで管理する', async () => {
         }),
       ),
   })
-  const Module = defineModule(() => ({ executions: [raw] }))
+  const Module = module(() => ({ executions: [raw] }))
   const app = await bootstrapApplication({
-    application: defineApplication({ modules: [Module()] }),
+    application: application({ modules: [Module()] }),
     capabilities: [bindHttpServer({ runtime: 'test' })],
   })
   const response = await app.http.fetch(new Request('http://test/raw'))

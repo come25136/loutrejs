@@ -27,7 +27,11 @@ import {
 } from '../cors-internal.js'
 import { syntheticExecutionId } from '../../core/identity.js'
 import { applyFrameworkHeadersToResponse } from '../codecs/response.js'
-import { createHttpContext, replayHttpHandler } from './context.js'
+import {
+  createHttpContext,
+  describeHttpHandlerResult,
+  replayHttpHandler,
+} from './context.js'
 import {
   HttpUnsupportedMediaTypeError,
   HttpInputDecodeError,
@@ -57,10 +61,7 @@ export function createHttpExtensionRuntime(
       patternMatch(compiled)
         .with({ kind: 'raw' }, () => createRawHttpHandlers(resolveHandler))
         .with({ kind: 'contract' }, ({ routes }) =>
-          createHttpHandlers(
-            resolveHandler(),
-            routes.map((route) => route.name),
-          ),
+          createHttpHandlers(resolveHandler(), routes),
         )
         .exhaustive(),
     )
@@ -343,7 +344,6 @@ export function createHttpExtensionRuntime(
                     handler({
                       kind: 'contract',
                       input: middlewareContext.input,
-                      response: middlewareContext.response,
                       signal: middlewareContext.signal,
                       state: middlewareContext.state,
                     }),
@@ -369,18 +369,17 @@ export function createHttpExtensionRuntime(
                   )
                   .exhaustive()
               let result: HttpMiddlewareOutcome | undefined
-              let hasResult = false
               try {
                 result = await (handlerOperation?.run
                   ? handlerOperation.run(invoke)
                   : invoke())
-                hasResult = true
                 return result
               } catch (error) {
                 handlerOperation?.fail?.(error)
                 throw error
               } finally {
-                if (hasResult) handlerOperation?.complete(result)
+                if (result !== undefined)
+                  handlerOperation?.complete(describeHttpHandlerResult(result))
                 else handlerOperation?.complete()
               }
             },

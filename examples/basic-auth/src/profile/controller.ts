@@ -6,7 +6,7 @@ export const ProfileController = http.implementation({
   contract: ProfileContract,
   factory: () => ({
     get(ctx) {
-      return ctx.response.ok({ body: ctx.state.currentUser })
+      return { schema: ProfileContract.get.ok, body: ctx.state.currentUser }
     },
   }),
 })

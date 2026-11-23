@@ -1,10 +1,10 @@
-import { defineMcpImplementation } from './declaration.js'
-import { defineTool, toolError } from './tool.js'
+import { defineMcpContract, defineMcpImplementation } from './declaration.js'
+import { toolError } from './tool.js'
 
 export type { McpImplementation } from './declaration.js'
 export type {
   McpImplementationOptions,
-  McpToolDefinition,
+  McpContract,
   McpToolOptions,
   McpToolHandlers,
   McpRuntime,
@@ -16,9 +16,9 @@ export type {
 } from './oauth.js'
 
 export const mcp = Object.freeze({
-  tool: defineTool,
+  contract: defineMcpContract,
   implementation: defineMcpImplementation,
   toolError,
 })
 
-export type { McpPrincipal, McpContextInput } from './types.js'
+export type { McpPrincipal, McpToolContext } from './types.js'

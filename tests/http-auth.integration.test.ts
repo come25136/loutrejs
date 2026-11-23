@@ -1,8 +1,4 @@
-import {
-  bootstrapApplication,
-  defineApplication,
-  defineModule,
-} from '@loutrejs/loutre'
+import { bootstrapApplication, application, module } from '@loutrejs/loutre'
 import { bindHttpServer, http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 import {
@@ -12,12 +8,12 @@ import {
 
 describe('HTTP auth integration', () => {
   it('Layerが生成したContext propertyをControllerのctxから取得する', async () => {
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [AccountModule()] }),
+    const app = await bootstrapApplication({
+      application: application({ modules: [AccountModule()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://example.test/account', {
           headers: { authorization: 'Bearer example-token' },
         }),
@@ -28,7 +24,7 @@ describe('HTTP auth integration', () => {
         tenantId: 'tenant-user-1',
       })
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 
@@ -56,21 +52,21 @@ describe('HTTP auth integration', () => {
     })
     const Controller = http.implementation({
       contract: Contract,
-      factory: () => ({ get: (ctx) => ctx.response.ok({}) }),
+      factory: () => ({ get: () => ({ schema: Contract.get.ok }) }),
     })
-    const Module = defineModule(() => ({ executions: [Controller] }))
-    const application = await bootstrapApplication({
-      application: defineApplication({ modules: [Module()] }),
+    const Module = module(() => ({ executions: [Controller] }))
+    const app = await bootstrapApplication({
+      application: application({ modules: [Module()] }),
       capabilities: [bindHttpServer({ runtime: 'test' })],
     })
     try {
-      const response = await application.http.fetch(
+      const response = await app.http.fetch(
         new Request('http://example.test/validated-account'),
       )
       expect(response.status).toBe(400)
       expect(middlewareRan).toBe(false)
     } finally {
-      await application.close()
+      await app.close()
     }
   })
 })

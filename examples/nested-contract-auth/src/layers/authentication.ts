@@ -1,6 +1,6 @@
-import { basicAuth } from '@loutrejs/loutre/http'
+import { http } from '@loutrejs/loutre/http'
 
-export const authentication = basicAuth({
+export const authentication = http.basicAuth({
   name: 'authentication',
   realm: 'Loutre Nested Contract Example',
   factory: () => ({

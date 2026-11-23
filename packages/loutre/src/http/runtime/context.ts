@@ -8,7 +8,7 @@ import {
   type ExecutionKernelRuntime,
 } from '../../core/index.js'
 import { decodeQuery, validateRequestHeaders } from '../codecs/request.js'
-import { createHttpResponseHelpers, isHttpInputRecord } from '../result.js'
+import { isHttpInputRecord } from '../result.js'
 import {
   type InitialHttpContext,
   type RuntimeHttpContext,
@@ -52,17 +52,19 @@ export async function createHttpContext(
       )
     : Object.fromEntries(request.headers.entries())
   const body = definition?.body ? request.body : undefined
-  const response = patternMatch(route)
-    .with({ kind: 'contract' }, ({ definition: routeDefinition }) =>
-      createHttpResponseHelpers(routeDefinition.responses),
-    )
-    .with({ kind: 'raw' }, () => createHttpResponseHelpers({}))
-    .exhaustive()
   return {
     request,
     input: { params, query, headers, body },
-    response,
     signal,
+  }
+}
+
+export function describeHttpHandlerResult(result: HttpMiddlewareOutcome) {
+  if (result instanceof Response) return result
+  return {
+    schema: result.response,
+    ...(result.body === undefined ? {} : { body: result.body }),
+    ...(result.headers === undefined ? {} : { headers: result.headers }),
   }
 }
 
@@ -77,7 +79,7 @@ export async function replayHttpHandler(
   },
   input: unknown,
   state: Readonly<Record<string, unknown>>,
-): Promise<HttpMiddlewareOutcome> {
+) {
   if (!isHttpInputRecord(input) || !isHttpInputRecord(input.params)) {
     throw new TypeError('LUTRE_DEVTOOLS_HTTP_HANDLER_INPUT_REQUIRED')
   }
@@ -97,21 +99,20 @@ export async function replayHttpHandler(
         headers: input.headers,
         body: input.body,
       },
-      response: createHttpResponseHelpers(match.route.definition.responses),
       signal: lease.signal,
       state,
     })
-  let result: HttpMiddlewareOutcome | undefined
-  let hasResult = false
+  let result: ReturnType<typeof describeHttpHandlerResult> | undefined
   try {
-    result = await (lease.run ? lease.run(invoke) : invoke())
-    hasResult = true
+    result = describeHttpHandlerResult(
+      await (lease.run ? lease.run(invoke) : invoke()),
+    )
     return result
   } catch (error) {
     lease.fail?.(error)
     throw error
   } finally {
-    if (hasResult) lease.complete(result)
+    if (result !== undefined) lease.complete(result)
     else lease.complete()
   }
 }

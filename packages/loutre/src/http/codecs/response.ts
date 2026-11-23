@@ -124,7 +124,7 @@ export function applyFrameworkResponseHeaders(
   }
 }
 
-function isHttpHeaders(value: unknown): value is HttpHeaders {
+export function isHttpHeaders(value: unknown): value is HttpHeaders {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false
   }

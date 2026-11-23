@@ -32,14 +32,11 @@ type AstNode = {
 interface ImportedApis {
   readonly loutreNamespaces: Set<string>
   readonly httpNamespaces: Set<string>
-  readonly defineModule: Set<string>
+  readonly module: Set<string>
   readonly providerBuilders: Set<string>
   readonly providerFactories: Set<string>
   readonly httpObjects: Set<string>
-  readonly httpContract: Set<string>
-  readonly httpImplementation: Set<string>
-  readonly httpMiddleware: Set<string>
-  readonly httpMiddlewareFactories: Set<string>
+  readonly httpFactories: Set<string>
 }
 
 interface SourcePoint {
@@ -123,22 +120,13 @@ export function instrumentSourceLocations(
   walkAst(program, (node) => {
     if (node.type === 'CallExpression') {
       if (
-        isHttpCall(node, apis, 'contract') ||
-        isHttpCall(node, apis, 'implementation') ||
-        isHttpCall(node, apis, 'middleware') ||
-        isApiCall(node, apis.httpMiddlewareFactories, apis.httpNamespaces, [
-          'basicAuth',
-          'bearerAuth',
-          'cors',
-        ]) ||
+        isHttpCall(node, apis) ||
         isApiCall(node, apis.providerFactories, apis.loutreNamespaces, [
           'environmentProvider',
           'argumentsProvider',
         ]) ||
         isProviderBuilderCall(node, apis) ||
-        isApiCall(node, apis.defineModule, apis.loutreNamespaces, [
-          'defineModule',
-        ])
+        isApiCall(node, apis.module, apis.loutreNamespaces, ['module'])
       ) {
         wrapSource(node)
       }
@@ -244,14 +232,11 @@ function collectImportedApis(program: AstNode): ImportedApis {
   const apis: ImportedApis = {
     loutreNamespaces: new Set(),
     httpNamespaces: new Set(),
-    defineModule: new Set(),
+    module: new Set(),
     providerBuilders: new Set(),
     providerFactories: new Set(),
     httpObjects: new Set(),
-    httpContract: new Set(),
-    httpImplementation: new Set(),
-    httpMiddleware: new Set(),
-    httpMiddlewareFactories: new Set(),
+    httpFactories: new Set(),
   }
   for (const statement of program.body ?? []) {
     if (statement.type !== 'ImportDeclaration' || statement.typeOnly === true) {
@@ -280,7 +265,7 @@ function collectImportedApis(program: AstNode): ImportedApis {
       const imported = specifier.imported?.value ?? local?.value
       if (!key || typeof imported !== 'string') continue
       if (source === '@loutrejs/loutre') {
-        if (imported === 'defineModule') apis.defineModule.add(key)
+        if (imported === 'module') apis.module.add(key)
         if (imported === 'provide') apis.providerBuilders.add(key)
         if (
           imported === 'environmentProvider' ||
@@ -291,18 +276,7 @@ function collectImportedApis(program: AstNode): ImportedApis {
       }
       if (source === '@loutrejs/loutre/http') {
         if (imported === 'http') apis.httpObjects.add(key)
-        if (imported === 'defineHttpContract') apis.httpContract.add(key)
-        if (imported === 'defineHttpImplementation') {
-          apis.httpImplementation.add(key)
-        }
-        if (imported === 'defineHttpMiddleware') apis.httpMiddleware.add(key)
-        if (
-          imported === 'basicAuth' ||
-          imported === 'bearerAuth' ||
-          imported === 'cors'
-        ) {
-          apis.httpMiddlewareFactories.add(key)
-        }
+        if (httpFactoryExports.includes(imported)) apis.httpFactories.add(key)
       }
     }
   }
@@ -381,31 +355,30 @@ function isProviderBuilderCall(call: AstNode, apis: ImportedApis): boolean {
   )
 }
 
-function isHttpCall(
-  call: AstNode,
-  apis: ImportedApis,
-  member: 'contract' | 'implementation' | 'middleware',
-): boolean {
-  const directBindings =
-    member === 'contract'
-      ? apis.httpContract
-      : member === 'implementation'
-        ? apis.httpImplementation
-        : apis.httpMiddleware
-  const directMember =
-    member === 'contract'
-      ? 'defineHttpContract'
-      : member === 'implementation'
-        ? 'defineHttpImplementation'
-        : 'defineHttpMiddleware'
-  if (isApiCall(call, directBindings, apis.httpNamespaces, [directMember])) {
+const httpFactoryExports = [
+  'defineHttpContract',
+  'defineHttpImplementation',
+  'defineHttpMiddleware',
+]
+const httpFacadeFactories = [
+  'contract',
+  'implementation',
+  'middleware',
+  'basicAuth',
+  'bearerAuth',
+  'cors',
+]
+
+function isHttpCall(call: AstNode, apis: ImportedApis): boolean {
+  if (
+    isApiCall(call, apis.httpFactories, apis.httpNamespaces, httpFactoryExports)
+  )
     return true
-  }
   const callee = unwrapExpression(call.callee as AstNode | undefined)
   return (
     callee?.type === 'MemberExpression' &&
     callee.property?.type === 'Identifier' &&
-    callee.property.value === member &&
+    httpFacadeFactories.includes(callee.property.value) &&
     isApiReference(
       callee.object as AstNode | undefined,
       apis.httpObjects,

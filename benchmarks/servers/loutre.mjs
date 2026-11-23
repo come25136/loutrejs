@@ -1,4 +1,4 @@
-import { defineApplication, defineEnv, defineModule } from '@loutrejs/loutre'
+import { application, env, module } from '@loutrejs/loutre'
 import { nodeRuntime } from '@loutrejs/node'
 import { z } from 'zod'
 import { UsersModule } from '../../dist/integrations/http-crud/src/index.js'
@@ -7,20 +7,20 @@ const BenchmarkEnvSchema = z
   .object({
     BENCHMARK_PORT: z.coerce.number().int().min(1).max(65_535).default(43110),
   })
-  .transform((env) => ({
-    port: env.BENCHMARK_PORT,
+  .transform((values) => ({
+    port: values.BENCHMARK_PORT,
   }))
 
-class BenchmarkEnv extends defineEnv(BenchmarkEnvSchema) {}
+class BenchmarkEnv extends env(BenchmarkEnvSchema) {}
 
-const BenchmarkModule = defineModule(() => ({
+const BenchmarkModule = module(() => ({
   environment: [BenchmarkEnv],
 }))
 
-const application = defineApplication({
+const appDefinition = application({
   modules: [UsersModule(), BenchmarkModule()],
 })
-const app = await nodeRuntime.create({ application })
+const app = await nodeRuntime.create({ application: appDefinition })
 const listener = await app.serve({
   hostname: '127.0.0.1',
   port: app.get(BenchmarkEnv).port,

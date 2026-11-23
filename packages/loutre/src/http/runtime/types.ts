@@ -3,7 +3,6 @@ import {
   type HttpRawExecutionContext,
   type HttpMiddlewareOutcome,
 } from '../contract.js'
-import { createHttpResponseHelpers } from '../result.js'
 import { type DependencyResolver } from '../../core/index.js'
 import { type ExecutionNodeId } from '../../core/model/identity.js'
 import { type CompiledHttpRoute } from '../compiled.js'
@@ -12,7 +11,6 @@ import { type EpochMs } from '../../core/units.js'
 interface RuntimeHttpContractContext {
   readonly kind: 'contract'
   readonly input: HttpMiddlewareContext['input']
-  readonly response: ReturnType<typeof createHttpResponseHelpers>
   readonly signal: AbortSignal
   readonly state: Readonly<Record<string, unknown>>
 }
@@ -21,8 +19,7 @@ export type RuntimeHttpContext =
   | RuntimeHttpContractContext
   | (HttpRawExecutionContext & { readonly kind: 'raw' })
 
-export type InitialHttpContext = HttpMiddlewareContext &
-  Pick<RuntimeHttpContractContext, 'response'>
+export type InitialHttpContext = HttpMiddlewareContext
 
 export interface RuntimeHttpHandlers {
   readonly [name: string]: (

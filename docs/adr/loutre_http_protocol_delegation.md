@@ -2,6 +2,8 @@
 
 ステータス: Accepted
 
+HTTP Handlerの戻り値は後続の[Framework-wide Public API Redesign](./loutre_framework_public_api_redesign.md)が移行先を定義する。ここで採用したGraphQL/MCP raw route委譲と公開URLの所有権は変更しない。
+
 ## 背景
 
 GraphQL endpointが独立してpathを持つと、通常HTTPとGraphQLの公開URL、middleware、階層が別の宣言へ分散する。ルートを一覧して変更・監査したい利用者は、HTTP Contractだけでは公開範囲を把握できない。
@@ -29,7 +31,7 @@ HTTP ContractのrawルートへGraphQL実装を接続するAPIをexampleで示�
 配布パッケージのconsumer検証もgraphql.implementationを公開APIとして確認する。CIのJavaScript式やWebサイトのコード文字列は型チェックだけでは旧APIの残存を検出できないため、tarballだけをインストールしたconsumerで公開APIを検証する。workflowから抜き出した文字列をvm・eval・Function等で実行する単体テストは追加しない。
 
 ```ts
-const Api = http.contract({
+const ApiContract = http.contract({
   health: {
     method: 'GET',
     path: '/health',
@@ -43,12 +45,14 @@ const Api = http.contract({
   },
 })
 const Health = http.implementation({
-  contract: Api,
-  factory: () => ({ health: (ctx) => ctx.response.ok({}) }),
+  contract: ApiContract,
+  factory: () => ({
+    health: () => ({ schema: ApiContract.health.ok }),
+  }),
 })
 const Profile = graphql.implementation({
   name: 'Profile',
-  route: Api.routes.profile,
+  route: ApiContract.routes.profile,
   manifest,
   transports: { http: true, websocket: true },
   factory: (users = inject(Users)) => ({
@@ -70,7 +74,7 @@ const Profile = graphql.implementation({
 })
 ```
 
-raw: trueはHTTP request/responseの処理を委任する明示的な印である。responsesの書き忘れをrawとして受け付けない。rawルートはHTTP response variantとrequest body schemaを持たず、HTTP implementationのhandler一覧、型付きHTTP client、OpenAPIのoperationから除外する。単独のraw処理は既存のhttp.rawへ同じルートを渡して実装できる。raw: trueの参照はhttp.contractで正規化したものに限定し、未正規化のpathやmiddlewareをGraphQLへ直接渡す経路を設けない。
+raw: trueはHTTP request/responseの処理を委任する明示的な印である。responsesの書き忘れをrawとして受け付けない。rawルートはHTTP response variantとrequest body schemaを持たず、HTTP implementationのhandler一覧とOpenAPIのoperationから除外する。単独のraw処理は既存のhttp.rawへ同じルートを渡して実装できる。raw: trueの参照はhttp.contractで正規化したものに限定し、未正規化のpathやmiddlewareをGraphQLへ直接渡す経路を設けない。
 
 branchのpathとmiddlewareはrawルートにも継承する。branchで宣言したresponse variantは通常HTTP用であり、rawルートへ継承する組合せは型と実行時の両方で拒否する。GraphQLのHTTP入出力はmanifestとprotocolが所有するためである。
 

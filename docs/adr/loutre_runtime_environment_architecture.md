@@ -42,7 +42,7 @@ Environment schema は Module が宣言し、raw Environment source は Runtime 
 Environment は HTTP / MessagePort 等の protocol の責務ではない。
 
 ```ts
-const AppModule = defineModule(() => ({
+const AppModule = module(() => ({
   name: 'Application',
   environment: [AppEnv],
   providers: [Database],
@@ -91,7 +91,7 @@ const AppEnvSchema = z
     cacheTtlMs: env.CACHE_TTL * 1000,
   }))
 
-class AppEnv extends defineEnv(AppEnvSchema) {}
+class AppEnv extends env(AppEnvSchema) {}
 ```
 
 Application から見えるのは transform 後 output である。
@@ -124,7 +124,7 @@ provide(STORAGE).select(AppEnv.key('storageDriver'), {
 
 ---
 
-## 3. `defineEnv()` の型
+## 3. `env()` の型
 
 Environment schema の input と output は同一である必要がない。
 
@@ -141,7 +141,7 @@ const Schema = z
     storageDriver: env.STORAGE_DRIVER,
   }))
 
-class AppEnv extends defineEnv(Schema) {}
+class AppEnv extends env(Schema) {}
 
 AppEnv.key('storageDriver')
 ```
@@ -363,7 +363,7 @@ Prisma CLI が直接実行する `prisma.config.ts` は Loutre Application runti
 - [x] `ModuleDefinition.environment` で Environment Contract を宣言できる
 - [x] Standard Schema input / output が異なってよい
 - [x] parse / coerce / cross-field validation / transform / derived values が利用できる
-- [x] `defineEnv()` output は object に制約される
+- [x] `env()` output は object に制約される
 - [x] `AppEnv.key()` は transform 後 output key を参照する
 - [x] Runtime Adapter が raw Environment source を供給する
 - [x] Environment validation 後に runtime Provider / Implementation / Layer を構築する

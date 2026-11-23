@@ -18,10 +18,10 @@ npm create loutre@latest my-app
 
 ## Application Model
 
-Applicationの構成は`defineApplication()`でcanonical `Application Model`へcompileされます。
+Applicationの構成は`application()`でcanonical `Application Model`へcompileされます。
 
 ```ts
-import { defineApplication, defineModule } from '@loutrejs/loutre'
+import { application, module } from '@loutrejs/loutre'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -39,15 +39,15 @@ const HealthHttp = http.implementation({
   name: 'HealthHttp',
   contract: HealthContract,
   factory: () => ({
-    health: (ctx) => ctx.response.ok({ body: 'ok' }),
+    health: (ctx) => ({ schema: HealthContract.health.ok, body: 'ok' }),
   }),
 })
 
-const AppModule = defineModule({
+const AppModule = module({
   executions: [HealthHttp],
 })
 
-export default defineApplication({ modules: [AppModule] })
+export default application({ modules: [AppModule] })
 ```
 
 ## Kernel bootstrap

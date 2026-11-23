@@ -1,4 +1,4 @@
-import { buildApplicationModel, defineModule, inject } from '@loutrejs/loutre'
+import { buildApplicationModel, module, inject } from '@loutrejs/loutre'
 
 describe('Module re-export', () => {
   it('importしたexportを明示的にre-exportできる', () => {
@@ -6,17 +6,17 @@ describe('Module re-export', () => {
     class Service {
       constructor(readonly repository = inject(Repository)) {}
     }
-    const repositoryModule = defineModule(() => ({
+    const repositoryModule = module(() => ({
       name: 'RepositoryModule',
       providers: [Repository],
       exports: [Repository],
     }))()
-    const domainModule = defineModule(() => ({
+    const domainModule = module(() => ({
       name: 'DomainModule',
       imports: [repositoryModule],
       exports: [Repository],
     }))()
-    const applicationModule = defineModule(() => ({
+    const applicationModule = module(() => ({
       name: 'ApplicationModule',
       imports: [domainModule],
       providers: [Service],
@@ -29,13 +29,13 @@ describe('Module re-export', () => {
 
   it('宣言もimportもしていないtokenのexportを拒否する', () => {
     class Repository {}
-    const module = defineModule(() => ({
+    const invalidModule = module(() => ({
       name: 'InvalidModule',
       exports: [Repository],
     }))()
 
     expect(
-      buildApplicationModel({ modules: [module] }).diagnostics,
+      buildApplicationModel({ modules: [invalidModule] }).diagnostics,
     ).toContainEqual(
       expect.objectContaining({ code: 'LUTRE_MODULE_EXPORT_UNRESOLVED' }),
     )

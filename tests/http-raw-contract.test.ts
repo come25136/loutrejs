@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import {
-  bootstrapApplication,
-  defineApplication,
-  defineModule,
-} from '@loutrejs/loutre'
+import { bootstrapApplication, application, module } from '@loutrejs/loutre'
 import {
   bindHttpServer,
-  createHttpClient,
   http,
   isHttpRawContractRoute,
+  isHttpContract,
 } from '@loutrejs/loutre/http'
+import { httpContractBrand } from '../packages/loutre/src/http/contract.js'
 import { generateOpenApi } from '@loutrejs/loutre/http/openapi'
 
 function contract() {
@@ -35,29 +32,63 @@ function contract() {
 
 describe('HTTP Contractのrawルート', () => {
   it('pathとmiddlewareを継承し、正規化済みの参照を読み取り専用で返す', () => {
-    const api = contract()
-    expect(api.routes.delegated.path).toBe('/api/protocol')
-    expect(api.routes.delegated.middlewares).toHaveLength(1)
-    expect(isHttpRawContractRoute(api.routes.delegated)).toBe(true)
+    const httpContract = contract()
+    expect(httpContract.routes.delegated.path).toBe('/api/protocol')
+    expect(httpContract.routes.delegated.middlewares).toHaveLength(1)
+    expect(isHttpRawContractRoute(httpContract.routes.delegated)).toBe(true)
     expect(
       isHttpRawContractRoute({ raw: true, method: '*', path: '/protocol' }),
     ).toBe(false)
-    expect(isHttpRawContractRoute(api.routes.health)).toBe(false)
-    expect(Object.isFrozen(api.routes.delegated)).toBe(true)
+    expect(isHttpRawContractRoute({ ...httpContract.routes.delegated })).toBe(
+      false,
+    )
+    expect(
+      isHttpRawContractRoute(Object.create(httpContract.routes.delegated)),
+    ).toBe(false)
+    expect(isHttpRawContractRoute(httpContract.routes.health)).toBe(false)
+    expect(Object.isFrozen(httpContract.routes.delegated)).toBe(true)
+  })
+
+  it('コピーしたContractのルートとコンパイル済みルートを混在させない', () => {
+    const httpContract = contract()
+    const copy = {
+      ...httpContract,
+      routes: {
+        ...httpContract.routes,
+        health: { ...httpContract.routes.health, path: '/changed' },
+      },
+    }
+    expect(isHttpContract(copy)).toBe(false)
+    expect(isHttpContract(Object.create(httpContract))).toBe(false)
+    const inherited = Object.create(httpContract, {
+      [httpContractBrand]: { value: true },
+    })
+    expect(isHttpContract(inherited)).toBe(true)
+    expect(() =>
+      http.implementation({ contract: inherited, factory: () => ({}) }),
+    ).toThrow('http.contract()')
+    expect(() =>
+      http.implementation({
+        contract: copy,
+        factory: () => {
+          throw new Error('呼び出される前に拒否される')
+        },
+      }),
+    ).toThrow('http.contract()')
   })
 
   it('通常HTTPのimplementationとraw処理を同じContractから個別に配備する', async () => {
-    const api = contract()
+    const httpContract = contract()
     const regular = http.implementation({
-      contract: api,
-      factory: () => ({ health: (ctx) => ctx.response.ok({}) }),
+      contract: httpContract,
+      factory: () => ({ health: () => ({ schema: httpContract.health.ok }) }),
     })
     const delegated = http.raw({
-      route: api.routes.delegated,
+      route: httpContract.routes.delegated,
       factory: () => (ctx) => Response.json(ctx.state),
     })
-    const Module = defineModule(() => ({ executions: [regular, delegated] }))
-    const definition = defineApplication({ modules: [Module()] })
+    const Module = module(() => ({ executions: [regular, delegated] }))
+    const definition = application({ modules: [Module()] })
     expect(definition.model.executions.map(({ compiled }) => compiled)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -91,18 +122,14 @@ describe('HTTP Contractのrawルート', () => {
     }
   })
 
-  it('OpenAPIと型付きHTTP clientには通常HTTPのルートだけを出す', () => {
-    const api = contract()
+  it('OpenAPIには通常HTTPのルートだけを出す', () => {
+    const httpContract = contract()
     expect(
       Object.keys(
-        generateOpenApi(api, { info: { title: '試験', version: '1' } }).paths,
+        generateOpenApi(httpContract, { info: { title: '試験', version: '1' } })
+          .paths,
       ),
     ).toEqual(['/api/health'])
-    const client = createHttpClient(api, async () => ({
-      status: 204,
-      body: undefined,
-    }))
-    expect(Object.keys(client)).toEqual(['health'])
   })
 
   it('rawでないルートのresponsesの書き忘れを拒否する', () => {

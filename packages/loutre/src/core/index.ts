@@ -4,7 +4,7 @@ export {
   AsyncIteratorLifecycle,
   AsyncIteratorCleanupDeadlineError,
 } from './async-iterator-lifecycle.js'
-export { defineArgs, isArgsClass, loadArgs } from './args.js'
+export { args, isArgsClass, loadArgs } from './args.js'
 export type { ArgsClass, ArgsKey, ArgsSchema } from './args.js'
 export {
   diagnostic,
@@ -12,9 +12,9 @@ export {
   isErrorDiagnostic,
 } from './diagnostic.js'
 export type { Diagnostic } from './diagnostic.js'
-export { defineEnv, isEnvClass, loadEnv } from './env.js'
+export { env, isEnvClass, loadEnv } from './env.js'
 export type { EnvClass, EnvKey, EnvSchema } from './env.js'
-export { defineError, DomainError } from './error.js'
+export { domainError, DomainError } from './error.js'
 export type { ErrorDefinition } from './error.js'
 export {
   bindRuntimeCapability,
@@ -117,7 +117,7 @@ export type {
   ModuleModelNode,
   ProviderModelNode,
 } from './model.js'
-export { defineModule, moduleTypeInfo } from './module.js'
+export { module, moduleTypeInfo } from './module.js'
 export type {
   AnyModuleTemplate,
   ExtensionsOfModuleDefinition,
@@ -197,5 +197,13 @@ export type {
   SourceLine,
   SourceColumn,
 } from './source-location.js'
-export { compileExecutionHandler, resolveExecutionMethod } from './handler.js'
-export type { CompiledExecutionHandler, ExecutionMethod } from './handler.js'
+export {
+  assertDeclaredExecutionMethods,
+  compileExecutionHandler,
+  resolveExecutionMethod,
+} from './handler.js'
+export type {
+  DeclaredExecutionMethods,
+  CompiledExecutionHandler,
+  ExecutionMethod,
+} from './handler.js'

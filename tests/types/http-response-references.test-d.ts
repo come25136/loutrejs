@@ -1,0 +1,116 @@
+import { domainError } from '@loutrejs/loutre'
+import {
+  http,
+  type HttpHandlers,
+  type HttpExecutionResponseDefinition,
+} from '@loutrejs/loutre/http'
+import { z } from 'zod'
+
+const Missing = domainError({ code: 'MISSING', data: z.string() })
+const routes = {
+  one: {
+    method: 'GET',
+    path: '/one',
+    responses: {
+      small: { status: 200, body: z.string() },
+      large: { status: 200, body: z.number() },
+      failed: { status: 404, body: z.string(), error: http.error(Missing) },
+    },
+  },
+  two: {
+    method: 'GET',
+    path: '/two',
+    responses: { small: { status: 200, body: z.string() } },
+  },
+} as const
+const httpContract = http.contract(routes)
+const otherContract = http.contract({
+  ...routes,
+  two: { ...routes.two, path: '/other' },
+})
+type One = HttpHandlers<typeof httpContract>['one']
+const good: One = async () => ({ schema: httpContract.one.large, body: 5 })
+// @ts-expect-error statusが同じでもbodyは選んだ応答に従う
+const badBody: One = () => ({ schema: httpContract.one.small, body: 5 })
+// @ts-expect-error 他のoperationに属する同じ形の応答
+const wrongRoute: One = () => ({ schema: httpContract.two.small, body: 'ok' })
+const wrongContract: One = () => ({
+  // @ts-expect-error 他のContractに属する応答
+  schema: otherContract.one.small,
+  body: 'ok',
+})
+// @ts-expect-error DomainErrorに対応する応答はthrowで選択する
+const mapped: One = () => ({ schema: httpContract.one.failed, body: 'error' })
+// @ts-expect-error 成功応答でもbody直接returnは許可しない
+const bare: One = () => 'ok'
+// @ts-expect-error kindはContractの予約名
+http.contract({ kind: routes.two })
+// @ts-expect-error 階層化したoperationにも予約名が適用される
+http.contract({ api: { routes: { routes: routes.two } } })
+http.implementation({
+  contract: httpContract,
+  // @ts-expect-error 未宣言のhandlerを実装できない
+  factory: () => ({
+    one: good,
+    two: () => ({ schema: httpContract.two.small, body: 'ok' }),
+    third: () => 'extra',
+  }),
+})
+void [badBody, wrongRoute, wrongContract, mapped, bare]
+
+const noContent: HttpExecutionResponseDefinition & { readonly status: 204 } = {
+  status: 204,
+}
+const WidenedContract = http.contract({
+  clear: { method: 'DELETE', path: '/items', responses: { noContent } },
+})
+http.implementation({
+  contract: WidenedContract,
+  factory: () => ({
+    clear: () => ({ schema: WidenedContract.clear.noContent }),
+  }),
+})
+
+const numericBody = z.string().transform(Number)
+const NumberContract = http.contract({
+  read: {
+    method: 'GET',
+    path: '/number',
+    responses: {
+      ok: { status: 200, body: numericBody },
+      events: { status: 200, body: numericBody, stream: 'server' },
+    },
+  },
+})
+type ReadNumber = HttpHandlers<typeof NumberContract>['read']
+const stringInput: ReadNumber = () => ({
+  schema: NumberContract.read.ok,
+  body: '42',
+})
+const numericOutput = { schema: NumberContract.read.ok, body: 42 }
+// @ts-expect-error 変換後の数値を文字列スキーマに入力できない
+const badNumber: ReadNumber = () => numericOutput
+async function* numericEvents() {
+  yield 42
+}
+const numericStream = {
+  schema: NumberContract.read.events,
+  body: numericEvents(),
+}
+// @ts-expect-error SSEの各要素も変換前の文字列を渡す
+const badStream: ReadNumber = () => numericStream
+void [stringInput, badNumber, badStream]
+
+const selected = Symbol('selected')
+const symbolResponses = {
+  ok: { status: 204 },
+  [selected]: { status: 204 },
+} as const
+http.contract({
+  // @ts-expect-error SymbolはHTTP応答名に使えない
+  lookup: { method: 'GET', path: '/', responses: symbolResponses },
+})
+http.contract({
+  // @ts-expect-error 親から継承する応答名にも同じ制約がある
+  group: { responses: symbolResponses, routes: { lookup: routes.one } },
+})

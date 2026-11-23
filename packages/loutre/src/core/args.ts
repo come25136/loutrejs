@@ -24,7 +24,7 @@ export interface ArgsClass<
   ): ArgsKey<SchemaOutput<TSchema>[TKey]>
 }
 
-export function defineArgs<TSchema extends ArgsSchema>(
+export function args<TSchema extends ArgsSchema>(
   schema: TSchema,
 ): ArgsClass<TSchema> {
   class DefinedArgs {

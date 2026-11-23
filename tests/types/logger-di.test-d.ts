@@ -1,7 +1,7 @@
 import {
   createKernelApplication,
-  defineApplication,
-  defineModule,
+  application,
+  module,
   provide,
   inject,
   LoggerModule,
@@ -18,14 +18,14 @@ void Logger
 void CoreLogger
 
 class CustomLoggerService extends LoggerService {}
-const Logging = defineModule({
+const Logging = module({
   providers: [provide(LoggerToken).useClass(CustomLoggerService)],
   exports: [LoggerToken],
 })
-const definition = defineApplication({ modules: [Logging] })
+const definition = application({ modules: [Logging] })
 const app = createKernelApplication({ application: definition })
 const logger: LoggerService = app.get(LoggerToken)
-defineApplication({ modules: [LoggerModule] })
+application({ modules: [LoggerModule] })
 provide(LoggerToken).useClass(LoggerService)
 const disposable: OnApplicationDispose = logger
 void disposable
@@ -39,7 +39,7 @@ void Consumer
 logger.child({ source: 'Consumer' })
 
 // @ts-expect-error rootの選択はModule.providersで宣言する。
-defineApplication({ modules: [], logger: LoggerService })
+application({ modules: [], logger: LoggerService })
 class Invalid {
   readonly value = 'message'
 }

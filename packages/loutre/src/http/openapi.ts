@@ -389,26 +389,43 @@ function createResponse(
   }[],
   registry: SchemaRegistry,
 ): OpenApiObject {
-  const streamKinds = new Set(
-    entries.map(({ response }) => response.stream === 'server'),
-  )
-  if (streamKinds.size > 1) {
-    throw openApiError(
-      'LUTRE_OPENAPI_RESPONSE_STREAM_001',
-      `${describeTarget(target)} declares streaming and non-streaming responses with the same status.`,
-    )
-  }
-  const schemas = entries
-    .filter(({ response }) => response.body !== undefined)
-    .map(({ name, response }) =>
+  const media = new Map<string, JsonSchema[]>()
+  for (const { name, response } of entries) {
+    if (!response.body) continue
+    const type =
+      response.stream === 'server' ? 'text/event-stream' : 'application/json'
+    const schemas = media.get(type) ?? []
+    schemas.push(
       registry.reference(
-        response.body!,
+        response.body,
         'output',
         componentName(target, `Response_${name}_Output`),
       ),
     )
-  const payloadSchema = schemas.length === 1 ? schemas[0]! : { oneOf: schemas }
-  const streaming = entries[0]?.response.stream === 'server'
+    media.set(type, schemas)
+  }
+  const content = Object.fromEntries(
+    [...media].map(([type, schemas]) => {
+      const schema = schemas.length === 1 ? schemas[0]! : { anyOf: schemas }
+      if (type === 'application/json') return [type, { schema }]
+      return [
+        type,
+        {
+          itemSchema: {
+            type: 'object',
+            required: ['data'],
+            properties: {
+              data: {
+                type: 'string',
+                contentMediaType: 'application/json',
+                contentSchema: schema,
+              },
+            },
+          },
+        },
+      ]
+    }),
+  )
   const headers = mergeResponseHeaders(entries, registry, target)
   const descriptions = [
     ...new Set(
@@ -419,31 +436,7 @@ function createResponse(
   return {
     description: descriptions.join(' / '),
     ...(headers === undefined ? {} : { headers }),
-    ...(schemas.length === 0
-      ? {}
-      : {
-          content: streaming
-            ? {
-                'text/event-stream': {
-                  itemSchema: {
-                    type: 'object',
-                    required: ['data'],
-                    properties: {
-                      data: {
-                        type: 'string',
-                        contentMediaType: 'application/json',
-                        contentSchema: payloadSchema,
-                      },
-                    },
-                  },
-                },
-              }
-            : {
-                'application/json': {
-                  schema: payloadSchema,
-                },
-              },
-        }),
+    ...(media.size ? { content } : {}),
   }
 }
 
@@ -491,7 +484,7 @@ function mergeResponseHeaders(
         schema:
           schemas.length === 1
             ? schemas[0]!
-            : { oneOf: dedupeJsonSchemas(schemas) },
+            : { anyOf: dedupeJsonSchemas(schemas) },
       },
     ]),
   )

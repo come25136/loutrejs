@@ -41,10 +41,10 @@ Graph outputは`text`、`json`、`mermaid`に対応しています。
 Applicationへ`DevtoolsModule()`を追加し、`loutre dev`から普段のApplication commandを起動します。CLIはApplication ModelからGraphを構築し、子Application processへlocal DevTools channelを渡します。
 
 ```ts
-import { defineModule } from '@loutrejs/loutre'
+import { module } from '@loutrejs/loutre'
 import { DevtoolsModule } from '@loutrejs/loutre/devtools'
 
-const AppModule = defineModule({
+const AppModule = module({
   imports: [DevtoolsModule()],
 })
 ```
@@ -69,13 +69,13 @@ source変更時はApplication Graphを再構築し、Browserへpushします。w
 ## Build
 
 ```sh
-npm exec loutre -- build src/app.ts --out-dir dist/loutre
+npm exec loutre -- build --entry src/app.ts --out-dir dist/loutre
 ```
 
 `aws-lambda`、`cloudflare-workers`ではdeployment entryも生成できます。
 
 ```sh
-npm exec loutre -- build src/app.ts --runtime aws-lambda
+npm exec loutre -- build --entry src/app.ts --runtime aws-lambda
 ```
 
 ## OpenAPI

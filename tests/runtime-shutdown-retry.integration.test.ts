@@ -1,9 +1,9 @@
 import { nodeRuntime } from '@loutrejs/node'
 import {
-  defineApplication,
+  application,
   defineExecution,
   defineExecutionExtension,
-  defineModule,
+  module,
   type ExecutionDefinition,
   type ExecutionLease,
 } from '@loutrejs/loutre'
@@ -23,67 +23,61 @@ describe('runtime shutdown retry', () => {
 
   it('Node adapterはsafe boundary到達失敗後のcloseをKernelへ再試行する', async () => {
     const fixture = retryableShutdownFixture()
-    const application = await nodeRuntime.create({
+    const app = await nodeRuntime.create({
       application: fixture.definition,
       forceShutdownTimeoutMs: 1,
     })
-    fixture.start(application)
+    fixture.start(app)
 
-    const firstClose = application.close()
-    expect(application.close()).toBe(firstClose)
+    const firstClose = app.close()
+    expect(app.close()).toBe(firstClose)
     await expect(firstClose).rejects.toThrow('Node runtime shutdown failed')
     expect(fixture.events).toEqual(['extension.drain'])
 
     fixture.complete()
-    await expect(application.close()).rejects.toThrow(
-      'Node runtime shutdown failed',
-    )
+    await expect(app.close()).rejects.toThrow('Node runtime shutdown failed')
     expect(fixture.events).toEqual([
       'extension.drain',
       'extension.drain',
       'extension.close',
       'provider.destroy',
     ])
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
   })
 
   it('Nodeはsafe boundary未到達時にnative closeを無期限に待たず、再serveも拒否する', async () => {
     const fixture = retryableShutdownFixture()
-    const application = await nodeRuntime.create({
+    const app = await nodeRuntime.create({
       application: fixture.definition,
       forceShutdownTimeoutMs: 1,
     })
-    const listener = await application.serve({ port: 0, shutdownHooks: false })
+    const listener = await app.serve({ port: 0, shutdownHooks: false })
     const originalClose = listener.server.close.bind(listener.server)
     let completeNativeClose: (() => void) | undefined
     listener.server.close = ((callback?: (error?: Error) => void) =>
       originalClose((error) => {
         completeNativeClose = () => callback?.(error)
       })) as typeof listener.server.close
-    fixture.start(application)
+    fixture.start(app)
     try {
-      await expect(application.close()).rejects.toMatchObject({
+      await expect(app.close()).rejects.toMatchObject({
         errors: [
           expect.objectContaining({ safeCleanupBoundaryReached: false }),
         ],
       })
       expect(fixture.events).toEqual(['extension.drain'])
-      await expect(application.serve({ port: 0 })).rejects.toThrow(
-        'LUTRE_APP_STOPPED',
-      )
+      await expect(app.serve({ port: 0 })).rejects.toThrow('LUTRE_APP_STOPPED')
       await vi.waitFor(() => expect(completeNativeClose).toBeDefined())
       completeNativeClose!()
       fixture.complete()
-      await expect(application.close()).rejects.toThrow(
-        'Node runtime shutdown failed',
-      )
-      await application.close()
+      await expect(app.close()).rejects.toThrow('Node runtime shutdown failed')
+      await app.close()
       expect(fixture.events).toContain('provider.destroy')
     } finally {
       completeNativeClose?.()
       fixture.complete()
-      await application.close().catch(() => {})
-      await application.close()
+      await app.close().catch(() => {})
+      await app.close()
     }
   })
 
@@ -99,44 +93,40 @@ describe('runtime shutdown retry', () => {
       serve: () => ({ port: 43210, stop }),
     })
     const fixture = retryableShutdownFixture()
-    const application = await bunRuntime.create({
+    const app = await bunRuntime.create({
       application: fixture.definition,
       forceShutdownTimeoutMs: 1,
     })
-    await application.serve({ port: 0, shutdownHooks: false })
-    fixture.start(application)
+    await app.serve({ port: 0, shutdownHooks: false })
+    fixture.start(app)
     try {
-      await expect(application.close()).rejects.toMatchObject({
+      await expect(app.close()).rejects.toMatchObject({
         errors: [
           expect.objectContaining({ safeCleanupBoundaryReached: false }),
         ],
       })
       expect(stop).toHaveBeenCalledExactlyOnceWith(false)
       expect(fixture.events).toEqual(['extension.drain'])
-      await expect(application.serve({ port: 0 })).rejects.toThrow(
-        'LUTRE_APP_STOPPED',
-      )
+      await expect(app.serve({ port: 0 })).rejects.toThrow('LUTRE_APP_STOPPED')
       completeNativeStop!()
       fixture.complete()
-      await expect(application.close()).rejects.toThrow(
-        'Bun runtime shutdown failed',
-      )
-      await application.close()
+      await expect(app.close()).rejects.toThrow('Bun runtime shutdown failed')
+      await app.close()
       expect(stop).toHaveBeenCalledExactlyOnceWith(false)
       expect(fixture.events).toContain('provider.destroy')
     } finally {
       completeNativeStop?.()
       fixture.complete()
-      await application.close().catch(() => {})
-      await application.close()
+      await app.close().catch(() => {})
+      await app.close()
     }
   })
 
   it('Node adapterはserver closeの一時失敗後にcloseを再試行する', async () => {
-    const application = await nodeRuntime.create({
+    const app = await nodeRuntime.create({
       application: httpOnlyDefinition(),
     })
-    const listener = await application.serve({
+    const listener = await app.serve({
       port: 0,
       shutdownHooks: false,
     })
@@ -151,38 +141,32 @@ describe('runtime shutdown retry', () => {
       return closeServer(callback)
     }) as typeof listener.server.close
 
-    await expect(application.close()).rejects.toThrow(
-      'Node runtime shutdown failed',
-    )
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).rejects.toThrow('Node runtime shutdown failed')
+    await expect(app.close()).resolves.toBeUndefined()
     expect(closeAttempts).toBe(2)
   })
 
   it('Bun adapterはsafe boundary到達失敗後のcloseをKernelへ再試行する', async () => {
     vi.stubGlobal('Bun', { env: {}, version: '1.4.0' })
     const fixture = retryableShutdownFixture()
-    const application = await bunRuntime.create({
+    const app = await bunRuntime.create({
       application: fixture.definition,
       forceShutdownTimeoutMs: 1,
     })
-    fixture.start(application)
+    fixture.start(app)
 
-    await expect(application.close()).rejects.toThrow(
-      'Bun runtime shutdown failed',
-    )
+    await expect(app.close()).rejects.toThrow('Bun runtime shutdown failed')
     expect(fixture.events).toEqual(['extension.drain'])
 
     fixture.complete()
-    await expect(application.close()).rejects.toThrow(
-      'Bun runtime shutdown failed',
-    )
+    await expect(app.close()).rejects.toThrow('Bun runtime shutdown failed')
     expect(fixture.events).toEqual([
       'extension.drain',
       'extension.drain',
       'extension.close',
       'provider.destroy',
     ])
-    await expect(application.close()).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
   })
 })
 
@@ -196,10 +180,10 @@ function httpOnlyDefinition() {
   })
   const controller = http.implementation({
     contract,
-    factory: () => ({ health: (context) => context.response.ok({}) }),
+    factory: () => ({ health: () => ({ schema: contract.health.ok }) }),
   })
-  const Module = defineModule(() => ({ executions: [controller] }))
-  return defineApplication({
+  const Module = module(() => ({ executions: [controller] }))
+  return application({
     modules: [silentLoggingModule, Module()],
   })
 }
@@ -255,29 +239,29 @@ function retryableShutdownFixture() {
   })
   const controller = http.implementation({
     contract,
-    factory: () => ({ health: (context) => context.response.ok({}) }),
+    factory: () => ({ health: () => ({ schema: contract.health.ok }) }),
   })
   class Resource {
     onModuleDestroy() {
       events.push('provider.destroy')
     }
   }
-  const Module = defineModule(() => ({
+  const Module = module(() => ({
     providers: [Resource],
     executions: [
       controller,
       defineExecution(blockingExtension, { id: 'blocking.execution' }),
     ],
   }))
-  const definition = defineApplication({
+  const definition = application({
     modules: [silentLoggingModule, Module()],
   })
 
   return {
     definition,
     events,
-    start(application: { readonly blocking: { start(): void } }) {
-      application.blocking.start()
+    start(app: { readonly blocking: { start(): void } }) {
+      app.blocking.start()
     },
     complete() {
       activeLease?.complete()
