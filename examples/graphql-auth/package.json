@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@loutrejs/cli": "0.11.1",
-    "graphql-ws": "^6.4.1",
+    "graphql-ws": "^6.4.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
