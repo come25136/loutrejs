@@ -1,4 +1,4 @@
-import { mcp } from '@loutrejs/mcp'
+import { mcp, type McpOAuthOptions } from '@loutrejs/mcp'
 import { http } from '@loutrejs/loutre/http'
 import { z } from 'zod'
 
@@ -31,7 +31,7 @@ mcp.implementation({
   version: '1',
   route,
   contract: OrdersContract,
-  oauth: {},
+  oauth: { requiredScopes: ['read'] },
   factory: () => ({
     oauth,
     tools: {
@@ -50,6 +50,9 @@ mcp.implementation({
   }),
 })
 
+// @ts-expect-error 認証を有効にするにはscopeまたはOriginの設定が必要
+void ({} satisfies McpOAuthOptions)
+
 const PublicContract = mcp.contract({
   greet: { description: '挨拶', scopes: [], input, output },
 })
@@ -58,6 +61,7 @@ mcp.implementation({
   version: '1',
   route,
   contract: PublicContract,
+  oauth: undefined,
   factory: () => ({
     tools: {
       greet({ principal, input: { id }, state }) {
@@ -76,7 +80,7 @@ mcp.implementation({
   version: '1',
   route,
   contract: OrdersContract,
-  oauth: {},
+  oauth: { requiredScopes: ['read'] },
   factory: () => ({
     oauth,
     tools: {
@@ -90,7 +94,7 @@ mcp.implementation({
   version: '1',
   route,
   contract: OrdersContract,
-  oauth: {},
+  oauth: { requiredScopes: ['read'] },
   factory: () => ({
     oauth,
     // @ts-expect-error 公開したToolに対応するhandlerが必要
@@ -113,7 +117,7 @@ mcp.implementation({
   version: '1',
   route,
   contract: OrdersContract,
-  oauth: {},
+  oauth: { requiredScopes: ['read'] },
   factory: () => ({
     oauth,
     // @ts-expect-error ContractにないToolを実装できない

@@ -29,7 +29,7 @@ import {
   localhostAllowedHostnames,
 } from '@modelcontextprotocol/server'
 
-import type { McpOAuthOptions } from './oauth.js'
+import { type McpOAuthOptions, snapshotOAuthOptions } from './oauth.js'
 
 type McpEndpointDefinition = EndpointDefinition &
   ExecutionDefinition<typeof extension>
@@ -115,13 +115,6 @@ export function defineMcpImplementation(
     throw new TypeError(
       'MCP endpointのToolはmcp.contract()で宣言してください。',
     )
-  if (
-    oauth !== undefined &&
-    (oauth === null || typeof oauth !== 'object' || Array.isArray(oauth))
-  )
-    throw new TypeError(
-      'MCP endpointのoauthには設定オブジェクトを指定してください。',
-    )
   if (typeof factory !== 'function')
     throw new TypeError('MCP endpointにはfactoryを指定してください。')
   if (!isHttpRawContractRoute(route) || route.method !== '*')
@@ -147,12 +140,7 @@ export function defineMcpImplementation(
     allowedHosts: Object.freeze([
       ...(options.allowedHosts ?? localhostAllowedHostnames()),
     ]),
-    ...(oauth !== undefined && {
-      oauth: Object.freeze({
-        requiredScopes: Object.freeze([...(oauth.requiredScopes ?? [])]),
-        allowedOrigins: Object.freeze([...(oauth.allowedOrigins ?? [])]),
-      }),
-    }),
+    ...(oauth !== undefined && { oauth: snapshotOAuthOptions(oauth) }),
     factory,
   })
   const transport = http.delegate({

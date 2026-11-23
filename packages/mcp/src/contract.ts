@@ -53,14 +53,14 @@ export type McpRuntime<
   TState extends object = object,
   TPrincipal extends McpPrincipal | undefined = McpPrincipal,
 > = ([TPrincipal] extends [undefined]
-  ? { readonly oauth?: never }
+  ? { readonly oauth?: undefined }
   : { readonly oauth: McpOAuthRuntime }) & {
   readonly context?: never
   readonly tools: McpToolHandlers<TContract, TState, TPrincipal>
 }
 
 export interface ProtocolRuntime {
-  readonly oauth?: McpOAuthRuntime
+  readonly oauth?: McpOAuthRuntime | undefined
   readonly tools: Readonly<Record<string, unknown>>
 }
 
@@ -91,7 +91,7 @@ export type McpEndpointOptions<
     TOAuth extends undefined ? undefined : McpPrincipal
   > & { readonly tools: THandlers }
 } & ([TOAuth] extends [undefined]
-  ? { readonly oauth?: never }
+  ? { readonly oauth?: undefined }
   : { readonly oauth: McpOAuthOptions })
 
 export type McpImplementationOptions<

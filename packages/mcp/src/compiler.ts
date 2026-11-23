@@ -51,7 +51,7 @@ export function validateRuntime(
     throw new TypeError(
       '認証付きMCP endpointのfactoryにはoauthを指定してください。',
     )
-  if (!useOAuth && 'oauth' in runtime)
+  if (!useOAuth && runtime.oauth !== undefined)
     throw new TypeError(
       '認証なしのMCP endpointのfactoryにはoauthを指定できません。',
     )
