@@ -12,14 +12,14 @@
     "client": "tsx src/client.ts"
   },
   "dependencies": {
-    "@loutrejs/loutre": "0.12.0",
-    "@loutrejs/mcp": "0.12.0",
-    "@loutrejs/node": "0.12.0",
+    "@loutrejs/loutre": "0.12.1",
+    "@loutrejs/mcp": "0.12.1",
+    "@loutrejs/node": "0.12.1",
     "@modelcontextprotocol/client": "2.4.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@loutrejs/cli": "0.12.0",
+    "@loutrejs/cli": "0.12.1",
     "tsx": "^4.23.15"
   }
 }
