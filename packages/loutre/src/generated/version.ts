@@ -1,2 +1,2 @@
 // package manifestとのずれを避けるため、scripts/generate-version.mjsがbuild前に更新する。
-export const LOUTRE_VERSION = '0.12.0'
+export const LOUTRE_VERSION = '0.12.1'

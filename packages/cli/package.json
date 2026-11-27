@@ -1,6 +1,6 @@
 {
   "name": "@loutrejs/cli",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -29,7 +29,7 @@
     "@graphql-codegen/typescript": "^7.0.1",
     "@graphql-codegen/typescript-operations": "^7.0.1",
     "@graphql-codegen/typescript-resolvers": "^7.0.1",
-    "@loutrejs/loutre": "^0.12.0",
+    "@loutrejs/loutre": "^0.12.1",
     "@swc/core": "^1.16.22",
     "chokidar": "^6.0.0",
     "esbuild": "^0.28.2",
