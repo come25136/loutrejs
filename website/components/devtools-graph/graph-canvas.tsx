@@ -6,9 +6,8 @@ import {
   MarkerType,
   MiniMap,
   ReactFlow,
-  applyNodeChanges,
   type ReactFlowInstance,
-  type NodeChange,
+  type OnNodesChange,
   useEdgesState,
   useNodesState,
 } from '@xyflow/react'
@@ -181,12 +180,11 @@ export function GraphCanvas({
     requestDragLayoutFrame()
   }
 
-  const onNodesChange = useCallback(
-    (changes: NodeChange<LoutreFlowNode>[]) => {
+  const onNodesChange = useCallback<OnNodesChange<LoutreFlowNode>>(
+    (changes) => {
       setNodes((currentNodes) => {
-        let nextNodes = applyNodeChanges(changes, currentNodes)
-        for (const change of changes) {
-          if (change.type !== 'position') continue
+        let nextNodes = changes.applyTo(currentNodes)
+        for (const change of changes.getByType('position')) {
           const movedNode = nextNodes.find((node) => node.id === change.id)
           if (movedNode) nextNodes = resizeModuleGroups(nextNodes, movedNode)
         }
